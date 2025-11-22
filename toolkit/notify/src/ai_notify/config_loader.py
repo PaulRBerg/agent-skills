@@ -4,8 +4,11 @@ Configuration loader for ai-notify with YAML file support.
 
 import yaml
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from pydantic import BaseModel, Field, field_validator
+from pydantic.fields import FieldInfo
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 from loguru import logger
 
 
@@ -87,6 +90,58 @@ class AINotifyConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
 
+def _get_field_description(model: type[BaseModel], field_name: str) -> Optional[str]:
+    """
+    Extract description from a Pydantic field.
+
+    Args:
+        model: Pydantic model class
+        field_name: Name of the field
+
+    Returns:
+        Field description or None
+    """
+    field_info = model.model_fields.get(field_name)
+    if field_info and isinstance(field_info, FieldInfo):
+        return field_info.description
+    return None
+
+
+def _create_commented_map(data: dict[str, Any], model: type[BaseModel]) -> CommentedMap:
+    """
+    Create a CommentedMap with inline comments from Pydantic field descriptions.
+
+    Args:
+        data: Dictionary data to convert
+        model: Pydantic model class to extract descriptions from
+
+    Returns:
+        CommentedMap with inline comments
+    """
+    cm = CommentedMap()
+
+    for key, value in data.items():
+        # Convert nested BaseModel instances or dicts
+        if isinstance(value, dict):
+            # Get the nested model type if available
+            field_info = model.model_fields.get(key)
+            if field_info and hasattr(field_info.annotation, "model_fields"):
+                cm[key] = _create_commented_map(value, field_info.annotation)
+            else:
+                cm[key] = CommentedMap(value)
+        elif isinstance(value, list):
+            cm[key] = value
+        else:
+            cm[key] = value
+
+        # Add inline comment from field description
+        description = _get_field_description(model, key)
+        if description:
+            cm.yaml_add_eol_comment(description, key)
+
+    return cm
+
+
 class ConfigLoader:
     """Loads and manages ai-notify configuration from YAML file."""
 
@@ -128,7 +183,7 @@ class ConfigLoader:
 
     def save(self, config: Optional[AINotifyConfig] = None) -> None:
         """
-        Save configuration to YAML file.
+        Save configuration to YAML file with helpful inline comments.
 
         Args:
             config: Configuration to save (default: current loaded config)
@@ -156,8 +211,17 @@ class ConfigLoader:
 
         config_dict = path_to_str(config_dict)
 
+        # Create CommentedMap with inline comments from Pydantic field descriptions
+        commented_config = _create_commented_map(config_dict, AINotifyConfig)
+
+        # Write YAML with comments using ruamel.yaml
+        yaml_writer = YAML()
+        yaml_writer.default_flow_style = False
+        yaml_writer.preserve_quotes = True
+        yaml_writer.width = 4096  # Prevent line wrapping
+
         with open(self.config_path, "w") as f:
-            yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
+            yaml_writer.dump(commented_config, f)
 
         logger.info(f"Configuration saved to {self.config_path}")
 

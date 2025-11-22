@@ -10,6 +10,7 @@
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "pyyaml>=6.0",
+    "ruamel.yaml>=0.18",
     "tabulate>=0.9",
   ]
   description = "Desktop notification system for Claude Code"
