@@ -1,0 +1,9 @@
+# https://docs.astral.sh/ruff/configuration/
+line-length = 100
+target-version = "py312"
+
+include = ["src/**/*.py", "tests/**/*.py", "pyproject.toml"]
+
+[format]
+  docstring-code-format = true
+  docstring-code-line-length = "dynamic"

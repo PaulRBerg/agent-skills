@@ -1,0 +1,13 @@
+# Directories
+__pycache__/
+htmlcov/
+.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Files
+.coverage
+.env
+*.log
+*.pyc

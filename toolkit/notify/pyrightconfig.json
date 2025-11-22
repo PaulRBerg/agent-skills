@@ -1,0 +1,9 @@
+{
+  "include": ["src", "tests"],
+  "exclude": [".venv", "**/__pycache__"],
+  "reportUnusedImport": true,
+  "reportUnusedVariable": true,
+  "pythonPlatform": "All",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic"
+}
