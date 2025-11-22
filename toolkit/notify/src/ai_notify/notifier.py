@@ -155,7 +155,7 @@ class MacNotifier:
         Returns:
             True if notification was sent successfully
         """
-        subtitle = f"job#{job_number} done, duration: {duration_str}"
+        subtitle = f"Prompt #{job_number} completed in {duration_str}"
         return self.send_notification(
             title=project_name,
             subtitle=subtitle,
@@ -164,7 +164,7 @@ class MacNotifier:
     def notify_permission_request(
         self,
         project_name: str,
-        message: str = "Permission requested",
+        message: str = "Claude is waiting for permission",
     ) -> bool:
         """
         Send permission request notification.
@@ -178,7 +178,7 @@ class MacNotifier:
         """
         return self.send_notification(
             title=project_name,
-            subtitle="Permission Request",
+            subtitle="Approval needed",
             message=message,
         )
 

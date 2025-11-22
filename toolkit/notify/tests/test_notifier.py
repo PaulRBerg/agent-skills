@@ -59,7 +59,7 @@ class TestMacNotifier:
         assert "Subtitle" in cmd
         assert "-activate" in cmd
         assert "-sound" in cmd
-        assert "-appIcon" in cmd
+        assert "-contentImage" in cmd
 
     def test_send_notification_with_message(self, notifier, mocker):
         notifier._available = True
@@ -92,9 +92,9 @@ class TestMacNotifier:
         result = notifier.send_notification("Test", "Subtitle")
         assert result is True
 
-        # Verify -appIcon is not in command
+        # Verify -contentImage is not in command
         cmd = mock_run.call_args[0][0]
-        assert "-appIcon" not in cmd
+        assert "-contentImage" not in cmd
 
     def test_send_notification_with_sound(self, notifier, mocker):
         notifier._available = True
