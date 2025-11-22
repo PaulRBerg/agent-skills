@@ -6,6 +6,7 @@ key events.
 ## Features
 
 - **Smart Notifications**: Only notifies for jobs exceeding a configurable duration threshold (default: 10s)
+- **Prompt Filtering**: Exclude specific prompt patterns (e.g., slash commands like `/commit`) from notifications
 - **Session Tracking**: SQLite database tracks prompts, durations, and job numbers
 - **Auto-cleanup**: Automatic data cleanup with optional export before deletion
 - **Event Handlers**: CLI subcommands for Claude Code hook integration
@@ -83,6 +84,10 @@ notification:
   threshold_seconds: 10 # Minimum job duration to trigger notification
   sound: default # Notification sound from /System/Library/Sounds/ (e.g., "default", "Bottle", "Glass")
   app_bundle: dev.warp.Warp-Stable # App bundle ID to focus when notification is clicked
+  exclude_patterns: # List of prompt prefixes to exclude from notifications (case-sensitive)
+    - /commit # Exclude prompts starting with /commit (e.g., /commit, /commit --all, etc.)
+    - /update-pr # Exclude prompts starting with /update-pr
+    - /fix-issue # Exclude prompts starting with /fix-issue
 
 database:
   path: ~/.config/ai-notify/ai-notify.db
@@ -96,6 +101,17 @@ logging:
   level: INFO # DEBUG, INFO, WARNING, ERROR, CRITICAL
   path: ~/.config/ai-notify/ai-notify.log
 ```
+
+**Prompt Pattern Filtering**
+
+The `exclude_patterns` configuration allows you to filter out notifications for specific prompts:
+
+- **Prefix matching**: Patterns match prompts that _start with_ the pattern (case-sensitive)
+- **Common use case**: Exclude slash commands like `/commit`, `/update-pr`, etc.
+- **Examples**:
+  - Pattern `/commit` matches: `/commit`, `/commit --all`, `/commit -m "message"`
+  - Pattern `/commit` does NOT match: `Commit changes`, `run /commit`, `/Commit` (different case)
+- **Default**: Empty list (no filtering)
 
 ## Usage
 
@@ -171,7 +187,8 @@ For more information about Claude Code hooks, see the
 2. **Stop**: When Claude finishes (or you stop it), ai-notify:
    - Calculates the duration
    - Checks if duration >= threshold
-   - Sends notification only if threshold is met (by default, whether the job took longer than >10 seconds)
+   - Checks if prompt starts with any excluded pattern
+   - Sends notification only if both checks pass (by default, whether the job took longer than >10 seconds)
    - Optionally runs auto-cleanup (every 24 hours)
 3. **Notification**: Suppresses "waiting for input" notifications (the Stop handler will send job completion)
 4. **PermissionRequest**: Sends immediate notification when Claude requests permissions

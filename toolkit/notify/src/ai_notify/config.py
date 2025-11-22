@@ -79,7 +79,7 @@ WHERE id = (
 """
 
 SQL_GET_JOB_INFO = """--sql
-SELECT job_number, duration_seconds
+SELECT job_number, duration_seconds, prompt
 FROM sessions
 WHERE session_id = ?
   AND stopped_at IS NOT NULL

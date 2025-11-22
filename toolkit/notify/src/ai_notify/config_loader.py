@@ -28,6 +28,10 @@ class NotificationConfig(BaseModel):
         default="dev.warp.Warp-Stable",
         description="Application bundle ID to focus on notification click",
     )
+    exclude_patterns: list[str] = Field(
+        default_factory=list,
+        description="List of prompt prefixes to exclude from notifications (case-sensitive)",
+    )
 
 
 class DatabaseConfig(BaseModel):

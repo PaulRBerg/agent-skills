@@ -70,10 +70,11 @@ class TestUserPromptToStopWorkflow:
         tracker.mark_stopped(session_id)
 
         # Step 4: Verify job info
-        job_number, duration_seconds = tracker.get_job_info(session_id)
+        job_number, duration_seconds, prompt_result = tracker.get_job_info(session_id)
         assert job_number == 1
         assert duration_seconds is not None
         assert duration_seconds >= 14  # Should be ~15 seconds (allow for rounding)
+        assert prompt_result == prompt
 
         # Step 5: Verify notification would be sent (duration >= 10s threshold)
         loader = config_loader.ConfigLoader(temp_config_file)
@@ -102,15 +103,150 @@ class TestUserPromptToStopWorkflow:
         tracker.mark_stopped(session_id)
 
         # Verify job info
-        job_number, duration_seconds = tracker.get_job_info(session_id)
+        job_number, duration_seconds, prompt_result = tracker.get_job_info(session_id)
         assert job_number == 1
         assert duration_seconds is not None
         assert duration_seconds >= 4  # Should be ~5 seconds (allow for rounding)
+        assert prompt_result == prompt
 
         # Verify notification would NOT be sent (duration < 10s threshold)
         loader = config_loader.ConfigLoader(temp_config_file)
         cfg = loader.load()
         assert duration_seconds < cfg.notification.threshold_seconds
+
+
+class TestPatternFilteringWorkflow:
+    """Test complete workflow with prompt pattern filtering."""
+
+    @pytest.fixture
+    def temp_config(self):
+        """Create temporary config with test database."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = Config()
+            cfg.db_path = Path(tmpdir) / "test.db"
+            cfg.config_dir = Path(tmpdir)
+            yield cfg
+
+    @pytest.fixture
+    def temp_config_with_patterns(self):
+        """Create temporary config file with exclude patterns."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.yaml"
+            # Create config with exclude patterns
+            cfg = config_loader.AINotifyConfig(
+                notification=config_loader.NotificationConfig(
+                    threshold_seconds=10,
+                    exclude_patterns=["/commit", "/update-pr"],
+                )
+            )
+            loader = config_loader.ConfigLoader(config_path)
+            loader.save(cfg)
+            yield config_path
+
+    def test_workflow_excluded_pattern_filtered(self, temp_config, temp_config_with_patterns):
+        """Test that prompts matching exclude patterns are filtered even if duration is sufficient."""
+        session_id = "test-session-excluded"
+        prompt = "/commit --all"
+        cwd = "/Users/test/project"
+
+        # Track prompt with excluded pattern
+        tracker = SessionTracker(temp_config)
+        tracker.track_prompt(session_id, prompt, cwd)
+
+        # Simulate 15 seconds passing (above threshold)
+        with tracker._get_connection() as conn:
+            conn.execute(
+                "UPDATE sessions SET created_at = datetime('now', '-15 seconds') WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.commit()
+
+        # Mark as stopped
+        tracker.mark_stopped(session_id)
+
+        # Verify job info
+        job_number, duration_seconds, prompt_result = tracker.get_job_info(session_id)
+        assert job_number == 1
+        assert duration_seconds is not None
+        assert duration_seconds >= 14
+        assert prompt_result == prompt
+
+        # Verify that despite meeting duration threshold, notification should be filtered
+        loader = config_loader.ConfigLoader(temp_config_with_patterns)
+        cfg = loader.load()
+        from ai_notify.helpers.filters import should_send_notification
+
+        assert not should_send_notification(prompt_result or "", duration_seconds, cfg)
+
+    def test_workflow_excluded_pattern_prefix_match(self, temp_config, temp_config_with_patterns):
+        """Test that prefix matching works for exclude patterns."""
+        session_id = "test-session-prefix"
+        prompt = "/update-pr with new changes"
+        cwd = "/Users/test/project"
+
+        # Track prompt starting with excluded pattern
+        tracker = SessionTracker(temp_config)
+        tracker.track_prompt(session_id, prompt, cwd)
+
+        # Simulate 15 seconds passing (above threshold)
+        with tracker._get_connection() as conn:
+            conn.execute(
+                "UPDATE sessions SET created_at = datetime('now', '-15 seconds') WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.commit()
+
+        # Mark as stopped
+        tracker.mark_stopped(session_id)
+
+        # Verify job info
+        job_number, duration_seconds, prompt_result = tracker.get_job_info(session_id)
+        assert job_number == 1
+        assert duration_seconds is not None
+        assert duration_seconds >= 14
+        assert prompt_result == prompt
+
+        # Verify notification is filtered
+        loader = config_loader.ConfigLoader(temp_config_with_patterns)
+        cfg = loader.load()
+        from ai_notify.helpers.filters import should_send_notification
+
+        assert not should_send_notification(prompt_result or "", duration_seconds, cfg)
+
+    def test_workflow_non_excluded_pattern_sent(self, temp_config, temp_config_with_patterns):
+        """Test that prompts not matching exclude patterns trigger notifications."""
+        session_id = "test-session-allowed"
+        prompt = "Fix the authentication bug"
+        cwd = "/Users/test/project"
+
+        # Track prompt without excluded pattern
+        tracker = SessionTracker(temp_config)
+        tracker.track_prompt(session_id, prompt, cwd)
+
+        # Simulate 15 seconds passing (above threshold)
+        with tracker._get_connection() as conn:
+            conn.execute(
+                "UPDATE sessions SET created_at = datetime('now', '-15 seconds') WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.commit()
+
+        # Mark as stopped
+        tracker.mark_stopped(session_id)
+
+        # Verify job info
+        job_number, duration_seconds, prompt_result = tracker.get_job_info(session_id)
+        assert job_number == 1
+        assert duration_seconds is not None
+        assert duration_seconds >= 14
+        assert prompt_result == prompt
+
+        # Verify notification should be sent
+        loader = config_loader.ConfigLoader(temp_config_with_patterns)
+        cfg = loader.load()
+        from ai_notify.helpers.filters import should_send_notification
+
+        assert should_send_notification(prompt_result or "", duration_seconds, cfg)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from loguru import logger
 from ai_notify.config import get_runtime_config
 from ai_notify.database import SessionTracker
 from ai_notify.helpers.cleanup import mark_cleanup_done, should_run_auto_cleanup
+from ai_notify.helpers.filters import should_send_notification
 from ai_notify.notifier import MacNotifier
 from ai_notify.utils import format_duration
 
@@ -37,15 +38,14 @@ def handle_stop(data: dict) -> None:
     tracker.mark_stopped(session_id)
 
     # Get job info for notification
-    job_number, duration_seconds = tracker.get_job_info(session_id)
+    job_number, duration_seconds, prompt = tracker.get_job_info(session_id)
 
     if job_number is not None and duration_seconds is not None:
-        # Get runtime config for notification threshold
+        # Get runtime config for filtering
         runtime_config = get_runtime_config()
-        threshold = runtime_config.notification.threshold_seconds
 
-        # Smart filtering: only notify if duration meets threshold
-        if duration_seconds >= threshold:
+        # Smart filtering: check duration threshold and exclude patterns
+        if should_send_notification(prompt or "", duration_seconds, runtime_config):
             # Send notification
             notifier = MacNotifier()
             project_name = notifier.get_project_name(cwd)
@@ -54,12 +54,9 @@ def handle_stop(data: dict) -> None:
             notifier.notify_job_done(project_name, job_number, duration_str)
             logger.info(f"Job #{job_number} completed in {duration_str}")
         else:
-            # Skip notification for short-duration jobs
+            # Notification filtered (logged in should_send_notification)
             duration_str = format_duration(duration_seconds)
-            logger.debug(
-                f"Skipping notification for job #{job_number} "
-                f"(duration {duration_str} < threshold {threshold}s)"
-            )
+            logger.debug(f"Job #{job_number} completed in {duration_str} (notification filtered)")
     else:
         logger.warning(f"No job info found for session {session_id}")
 

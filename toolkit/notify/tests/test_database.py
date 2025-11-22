@@ -70,10 +70,11 @@ class TestSessionTracker:
         tracker.track_prompt("session-1", "test", "/Users/test/project")
         tracker.mark_stopped("session-1")
 
-        job_number, duration = tracker.get_job_info("session-1")
+        job_number, duration, prompt = tracker.get_job_info("session-1")
         assert job_number == 1
         assert duration is not None
         assert duration >= 0
+        assert prompt == "test"
 
 
 class TestDataCleanup:

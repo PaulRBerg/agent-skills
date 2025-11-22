@@ -110,26 +110,26 @@ class SessionTracker:
         except sqlite3.Error as e:
             logger.error(f"Failed to mark waiting: {e}")
 
-    def get_job_info(self, session_id: str) -> tuple[Optional[int], Optional[int]]:
+    def get_job_info(self, session_id: str) -> tuple[Optional[int], Optional[int], Optional[str]]:
         """
-        Get job number and duration for most recent completed job.
+        Get job number, duration, and prompt for most recent completed job.
 
         Args:
             session_id: Session identifier
 
         Returns:
-            Tuple of (job_number, duration_seconds) or (None, None) if not found
+            Tuple of (job_number, duration_seconds, prompt) or (None, None, None) if not found
         """
         try:
             with self._get_connection() as conn:
                 cursor = conn.execute(SQL_GET_JOB_INFO, (session_id,))
                 result = cursor.fetchone()
                 if result:
-                    return result[0], result[1]
-                return None, None
+                    return result[0], result[1], result[2]
+                return None, None, None
         except sqlite3.Error as e:
             logger.error(f"Failed to get job info: {e}")
-            return None, None
+            return None, None, None
 
     def export_to_json(self, output_path: Path, days: Optional[int] = None) -> int:
         """
