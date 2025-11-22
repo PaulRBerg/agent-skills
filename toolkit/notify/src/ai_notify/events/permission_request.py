@@ -4,6 +4,7 @@ PermissionRequest event handler.
 
 from loguru import logger
 
+from ai_notify.database import SessionTracker
 from ai_notify.notifier import MacNotifier
 
 
@@ -12,17 +13,24 @@ def handle_permission(data: dict) -> None:
     Handle PermissionRequest event.
 
     Sends a notification for permission requests with details about the
-    requested tool or command.
+    requested tool or command and the job number if available.
 
     Args:
-        data: Event data containing cwd and tool_input
+        data: Event data containing session_id, cwd, and tool_input
 
     Raises:
         Exception: For failures during permission notification handling
     """
     # Extract required fields
+    session_id = data.get("session_id", "")
     cwd = data.get("cwd", "")
     tool_input = data.get("tool_input", {})
+
+    # Look up job number for this session
+    job_number = None
+    if session_id:
+        tracker = SessionTracker()
+        job_number = tracker.get_active_job_number(session_id)
 
     # Get permission details
     if isinstance(tool_input, dict):
@@ -46,6 +54,6 @@ def handle_permission(data: dict) -> None:
     # Send notification
     notifier = MacNotifier()
     project_name = notifier.get_project_name(cwd)
-    notifier.notify_permission_request(project_name, message)
+    notifier.notify_permission_request(project_name, message, job_number)
 
-    logger.info(f"Permission request notification sent: {message}")
+    logger.info(f"Permission request notification sent: {message} (job #{job_number})")

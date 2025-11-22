@@ -14,6 +14,7 @@ from loguru import logger
 from ai_notify.config import (
     DB_SCHEMA,
     EXPORT_DIR,
+    SQL_GET_ACTIVE_JOB_NUMBER,
     SQL_GET_JOB_INFO,
     SQL_INSERT_PROMPT,
     SQL_UPDATE_STOPPED,
@@ -130,6 +131,27 @@ class SessionTracker:
         except sqlite3.Error as e:
             logger.error(f"Failed to get job info: {e}")
             return None, None, None
+
+    def get_active_job_number(self, session_id: str) -> Optional[int]:
+        """
+        Get job number for the most recent active (not stopped) session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Job number or None if not found
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.execute(SQL_GET_ACTIVE_JOB_NUMBER, (session_id,))
+                result = cursor.fetchone()
+                if result and result[0] is not None:
+                    return result[0]
+                return None
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get active job number: {e}")
+            return None
 
     def export_to_json(self, output_path: Path, days: Optional[int] = None) -> int:
         """

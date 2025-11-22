@@ -165,6 +165,7 @@ class MacNotifier:
         self,
         project_name: str,
         message: str = "Claude is waiting for permission",
+        job_number: Optional[int] = None,
     ) -> bool:
         """
         Send permission request notification.
@@ -172,13 +173,20 @@ class MacNotifier:
         Args:
             project_name: Project name (from cwd)
             message: Permission request message
+            job_number: Optional job number for this prompt
 
         Returns:
             True if notification was sent successfully
         """
+        # Build subtitle with job number if available
+        if job_number is not None:
+            subtitle = f"Prompt #{job_number} needs approval"
+        else:
+            subtitle = "Approval needed"
+
         return self.send_notification(
             title=project_name,
-            subtitle="Approval needed",
+            subtitle=subtitle,
             message=message,
         )
 

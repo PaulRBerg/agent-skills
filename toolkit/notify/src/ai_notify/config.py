@@ -87,6 +87,15 @@ ORDER BY created_at DESC
 LIMIT 1
 """
 
+SQL_GET_ACTIVE_JOB_NUMBER = """--sql
+SELECT job_number
+FROM sessions
+WHERE session_id = ?
+  AND stopped_at IS NULL
+ORDER BY id DESC
+LIMIT 1
+"""
+
 # Runtime configuration constants (loaded from YAML config)
 _runtime_config = None
 

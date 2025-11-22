@@ -76,6 +76,40 @@ class TestSessionTracker:
         assert duration >= 0
         assert prompt == "test"
 
+    def test_get_active_job_number(self, temp_config):
+        """Test getting job number for active sessions."""
+        tracker = SessionTracker(temp_config)
+
+        # Track first prompt (should be job #1)
+        tracker.track_prompt("session-1", "prompt 1", "/Users/test/project")
+        job_number = tracker.get_active_job_number("session-1")
+        assert job_number == 1
+
+        # Track second prompt (should be job #2)
+        tracker.track_prompt("session-1", "prompt 2", "/Users/test/project")
+        job_number = tracker.get_active_job_number("session-1")
+        assert job_number == 2
+
+        # Mark first prompt as stopped - should still return job #2 (the active one)
+        with tracker._get_connection() as conn:
+            conn.execute(
+                "UPDATE sessions SET stopped_at = CURRENT_TIMESTAMP WHERE session_id = ? AND job_number = 1",
+                ("session-1",),
+            )
+            conn.commit()
+
+        job_number = tracker.get_active_job_number("session-1")
+        assert job_number == 2
+
+        # Mark all sessions as stopped - should return None
+        tracker.mark_stopped("session-1")
+        job_number = tracker.get_active_job_number("session-1")
+        assert job_number is None
+
+        # Non-existent session should return None
+        job_number = tracker.get_active_job_number("non-existent")
+        assert job_number is None
+
 
 class TestDataCleanup:
     """Test data cleanup functionality."""

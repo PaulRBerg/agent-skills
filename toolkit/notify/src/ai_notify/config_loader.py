@@ -4,7 +4,7 @@ Configuration loader for ai-notify with YAML file support.
 
 import yaml
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, cast
 from pydantic import BaseModel, Field, field_validator
 from pydantic.fields import FieldInfo
 from ruamel.yaml import YAML
@@ -126,7 +126,7 @@ def _create_commented_map(data: dict[str, Any], model: type[BaseModel]) -> Comme
             # Get the nested model type if available
             field_info = model.model_fields.get(key)
             if field_info and hasattr(field_info.annotation, "model_fields"):
-                cm[key] = _create_commented_map(value, field_info.annotation)
+                cm[key] = _create_commented_map(value, cast(type[BaseModel], field_info.annotation))
             else:
                 cm[key] = CommentedMap(value)
         elif isinstance(value, list):
@@ -210,6 +210,7 @@ class ConfigLoader:
             return obj
 
         config_dict = path_to_str(config_dict)
+        assert isinstance(config_dict, dict)  # config.model_dump() always returns dict
 
         # Create CommentedMap with inline comments from Pydantic field descriptions
         commented_config = _create_commented_map(config_dict, AINotifyConfig)

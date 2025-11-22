@@ -187,6 +187,48 @@ class TestMacNotifier:
         icon_path = notifier._get_icon_path()
         assert icon_path is None
 
+    def test_notify_permission_request_with_job_number(self, notifier, mocker):
+        """Test permission notification with job number."""
+        notifier._available = True
+
+        mock_run = mocker.patch("ai_notify.notifier.subprocess.run")
+        mock_run.return_value.returncode = 0
+
+        # Mock icon path
+        mocker.patch.object(notifier, "_get_icon_path", return_value=None)
+
+        result = notifier.notify_permission_request(
+            "test-project", "Command: npm install", job_number=3
+        )
+        assert result is True
+
+        # Verify command includes job number in subtitle
+        cmd = mock_run.call_args[0][0]
+        message_idx = cmd.index("-message") + 1
+        message = cmd[message_idx]
+        assert "Prompt #3 needs approval" in message
+        assert "Command: npm install" in message
+
+    def test_notify_permission_request_without_job_number(self, notifier, mocker):
+        """Test permission notification without job number."""
+        notifier._available = True
+
+        mock_run = mocker.patch("ai_notify.notifier.subprocess.run")
+        mock_run.return_value.returncode = 0
+
+        # Mock icon path
+        mocker.patch.object(notifier, "_get_icon_path", return_value=None)
+
+        result = notifier.notify_permission_request("test-project", "Command: npm install")
+        assert result is True
+
+        # Verify command uses default subtitle
+        cmd = mock_run.call_args[0][0]
+        message_idx = cmd.index("-message") + 1
+        message = cmd[message_idx]
+        assert "Approval needed" in message
+        assert "Command: npm install" in message
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
