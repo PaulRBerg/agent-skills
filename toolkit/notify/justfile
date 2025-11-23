@@ -9,12 +9,13 @@ set unstable
 # ---------------------------------------------------------------------------- #
 
 # Install dependencies
-install:
+install-cli:
     uv tool install --reinstall-package ai-notify .
+alias ic := install-cli
 
 # Run tests with pytest
-test:
-    uv run pytest
+test *args:
+    uv run pytest {{ args }}
 
 # ---------------------------------------------------------------------------- #
 #                                    CHECKS                                    #
