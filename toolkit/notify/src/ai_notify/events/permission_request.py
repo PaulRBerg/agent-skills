@@ -4,7 +4,9 @@ PermissionRequest event handler.
 
 from loguru import logger
 
+from ai_notify.config import get_runtime_config
 from ai_notify.database import SessionTracker
+from ai_notify.helpers.filters import should_send_permission_notification
 from ai_notify.notifier import MacNotifier
 
 
@@ -25,6 +27,11 @@ def handle_permission(data: dict) -> None:
     session_id = data.get("session_id", "")
     cwd = data.get("cwd", "")
     tool_input = data.get("tool_input", {})
+
+    # Early exit if permission notifications disabled
+    runtime_config = get_runtime_config()
+    if not should_send_permission_notification(runtime_config):
+        return
 
     # Look up job number for this session
     job_number = None

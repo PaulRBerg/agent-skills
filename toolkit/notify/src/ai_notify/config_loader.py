@@ -3,6 +3,7 @@ Configuration loader for ai-notify with YAML file support.
 """
 
 import yaml
+from enum import Enum
 from pathlib import Path
 from typing import Optional, Any, cast
 from pydantic import BaseModel, Field, field_validator
@@ -18,9 +19,21 @@ DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.yaml"
 DEFAULT_EXPORT_DIR = DEFAULT_CONFIG_DIR / "exports"
 
 
+class NotificationMode(str, Enum):
+    """Notification modes for granular control."""
+
+    ALL = "all"
+    PERMISSION_ONLY = "permission_only"
+    DISABLED = "disabled"
+
+
 class NotificationConfig(BaseModel):
     """Notification-related configuration."""
 
+    mode: NotificationMode = Field(
+        default=NotificationMode.ALL,
+        description="Notification mode: 'all' (default), 'permission_only', or 'disabled'",
+    )
     threshold_seconds: int = Field(
         default=10,
         ge=0,
@@ -199,10 +212,12 @@ class ConfigLoader:
         # Convert Pydantic model to dict for YAML serialization
         config_dict = config.model_dump(mode="python")
 
-        # Convert Path objects to strings
+        # Convert Path objects and Enums to strings
         def path_to_str(obj):
             if isinstance(obj, Path):
                 return str(obj)
+            elif isinstance(obj, Enum):
+                return obj.value
             elif isinstance(obj, dict):
                 return {k: path_to_str(v) for k, v in obj.items()}
             elif isinstance(obj, list):
