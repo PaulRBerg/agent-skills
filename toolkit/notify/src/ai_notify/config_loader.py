@@ -5,7 +5,7 @@ Configuration loader for ai-notify with YAML file support.
 import yaml
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Any, cast
+from typing import Optional, Any, cast, Union
 from pydantic import BaseModel, Field, field_validator
 from pydantic.fields import FieldInfo
 from ruamel.yaml import YAML
@@ -58,6 +58,14 @@ class DatabaseConfig(BaseModel):
         description="Path to SQLite database file",
     )
 
+    @field_validator("path", mode="before")
+    @classmethod
+    def expand_path(cls, v: Union[str, Path]) -> Path:
+        """Expand ~ in path."""
+        if isinstance(v, str):
+            return Path(v).expanduser()
+        return v.expanduser()
+
 
 class CleanupConfig(BaseModel):
     """Data cleanup configuration."""
@@ -83,6 +91,14 @@ class LoggingConfig(BaseModel):
         default=Path.home() / ".config" / "ai-notify" / "ai-notify.log",
         description="Path to log file",
     )
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def expand_path(cls, v: Union[str, Path]) -> Path:
+        """Expand ~ in path."""
+        if isinstance(v, str):
+            return Path(v).expanduser()
+        return v.expanduser()
 
     @field_validator("level")
     @classmethod
@@ -215,7 +231,11 @@ class ConfigLoader:
         # Convert Path objects and Enums to strings
         def path_to_str(obj):
             if isinstance(obj, Path):
-                return str(obj)
+                home = str(Path.home())
+                path_str = str(obj)
+                if path_str.startswith(home):
+                    return "~" + path_str[len(home) :]
+                return path_str
             elif isinstance(obj, Enum):
                 return obj.value
             elif isinstance(obj, dict):
