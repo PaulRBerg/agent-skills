@@ -80,26 +80,27 @@ ai-notify config reset
 ### Configuration options
 
 ```yaml
-notification:
-  threshold_seconds: 10 # Minimum job duration to trigger notification
-  sound: default # Notification sound from /System/Library/Sounds/ (e.g., "default", "Bottle", "Glass")
-  app_bundle: dev.warp.Warp-Stable # App bundle ID to focus when notification is clicked
-  exclude_patterns: # List of prompt prefixes to exclude from notifications (case-sensitive)
-    - /commit # Exclude prompts starting with /commit (e.g., /commit, /commit --all, etc.)
-    - /update-pr # Exclude prompts starting with /update-pr
-    - /fix-issue # Exclude prompts starting with /fix-issue
+cleanup:
+  auto_cleanup_enabled: true # Enable automatic cleanup of old data
+  export_before_cleanup: true # Export data before cleanup
+  retention_days: 30 # Number of days to retain session data (older data will be auto-cleaned)
 
 database:
-  path: ~/.config/ai-notify/ai-notify.db
-
-cleanup:
-  retention_days: 30 # Days to retain session data
-  auto_cleanup_enabled: true # Auto-cleanup on stop events
-  export_before_cleanup: true # Export before cleanup
+  path: ~/.config/ai-notify/ai-notify.db # Path to SQLite database file
 
 logging:
-  level: INFO # DEBUG, INFO, WARNING, ERROR, CRITICAL
-  path: ~/.config/ai-notify/ai-notify.log
+  level: INFO # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  path: ~/.config/ai-notify/ai-notify.log # Path to log file
+
+notification:
+  app_bundle: dev.warp.Warp-Stable # Application bundle ID to focus on notification click
+  mode: all # Notification mode: 'all' (default), 'permission_only', or 'disabled'
+  sound: default # Notification sound to use
+  threshold_seconds: 10 # Minimum job duration in seconds to trigger notification (0 = notify all)
+  exclude_patterns: # List of prompt prefixes to exclude from notifications (case-sensitive)
+    - /commit
+    - /update-pr
+    - /fix-issue
 ```
 
 **Prompt Pattern Filtering**

@@ -30,19 +30,19 @@ class NotificationMode(str, Enum):
 class NotificationConfig(BaseModel):
     """Notification-related configuration."""
 
+    app_bundle: str = Field(
+        default="dev.warp.Warp-Stable",
+        description="Application bundle ID to focus on notification click",
+    )
     mode: NotificationMode = Field(
         default=NotificationMode.ALL,
         description="Notification mode: 'all' (default), 'permission_only', or 'disabled'",
     )
+    sound: str = Field(default="default", description="Notification sound to use")
     threshold_seconds: int = Field(
         default=10,
         ge=0,
         description="Minimum job duration in seconds to trigger notification (0 = notify all)",
-    )
-    sound: str = Field(default="default", description="Notification sound to use")
-    app_bundle: str = Field(
-        default="dev.warp.Warp-Stable",
-        description="Application bundle ID to focus on notification click",
     )
     exclude_patterns: list[str] = Field(
         default_factory=list,
@@ -70,15 +70,15 @@ class DatabaseConfig(BaseModel):
 class CleanupConfig(BaseModel):
     """Data cleanup configuration."""
 
+    auto_cleanup_enabled: bool = Field(
+        default=True, description="Enable automatic cleanup of old data"
+    )
+    export_before_cleanup: bool = Field(default=True, description="Export data before cleanup")
     retention_days: int = Field(
         default=30,
         ge=1,
         description="Number of days to retain session data (older data will be auto-cleaned)",
     )
-    auto_cleanup_enabled: bool = Field(
-        default=True, description="Enable automatic cleanup of old data"
-    )
-    export_before_cleanup: bool = Field(default=True, description="Export data before cleanup")
 
 
 class LoggingConfig(BaseModel):
@@ -113,10 +113,10 @@ class LoggingConfig(BaseModel):
 class AINotifyConfig(BaseModel):
     """Complete ai-notify configuration."""
 
-    notification: NotificationConfig = Field(default_factory=NotificationConfig)
-    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     cleanup: CleanupConfig = Field(default_factory=CleanupConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    notification: NotificationConfig = Field(default_factory=NotificationConfig)
 
 
 def _get_field_description(model: type[BaseModel], field_name: str) -> Optional[str]:
