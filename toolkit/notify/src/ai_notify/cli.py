@@ -45,9 +45,11 @@ def config_show(path):
 
         # Build configuration table
         config_data = [
-            ["Notification Threshold", f"{cfg.notification.threshold_seconds}s"],
-            ["Notification Sound", cfg.notification.sound],
             ["App Bundle", cfg.notification.app_bundle],
+            ["Exclude Patterns", ", ".join(cfg.notification.exclude_patterns) or "None"],
+            ["Notification Mode", cfg.notification.mode.value],
+            ["Notification Sound", cfg.notification.sound],
+            ["Notification Threshold", f"{cfg.notification.threshold_seconds}s"],
             ["Database Path", str(cfg.database.path)],
             ["Retention Days", f"{cfg.cleanup.retention_days} days"],
             ["Auto-cleanup Enabled", "Yes" if cfg.cleanup.auto_cleanup_enabled else "No"],
