@@ -8,9 +8,9 @@ set unstable
 #                                   COMMANDS                                   #
 # ---------------------------------------------------------------------------- #
 
-# Install dependencies
+# Install CLI globally
 install-cli:
-    uv tool install --reinstall-package ai-notify .
+    uv tool install --force .
 alias ic := install-cli
 
 # Run tests with pytest

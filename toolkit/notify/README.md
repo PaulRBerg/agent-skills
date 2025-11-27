@@ -1,7 +1,32 @@
 # ai-notify
 
-Desktop notification system for Claude Code that intelligently tracks session activity and sends macOS notifications for
-key events.
+Desktop notification system for Claude Code that tracks session activity and sends macOS notifications for key events.
+
+![ai-notify notification demo](demo.png)
+
+## Installation
+
+> [!NOTE]
+>
+> This CLI works only on macOS at the moment.
+
+### Prerequisites
+
+- Python 3.12+
+- [uv](https://github.com/astral-sh/uv) package manager
+- [terminal-notifier](https://github.com/julienXX/terminal-notifier) app: Install with `brew install terminal-notifier`
+
+### Installation
+
+At the moment, the CLI can only be installed from source. You have to clone the repository and run the install command:
+
+```bash
+git clone https://github.com/PaulRBerg/ai-notify.git
+cd ai-notify
+uv tool install --force .
+```
+
+To update, `git pull` and re-run the install command.
 
 ## Features
 
@@ -13,47 +38,15 @@ key events.
 - **Configuration**: YAML-based configuration with sensible defaults
 - **Rich Notifications**: Custom Claude icon, configurable sounds, and click-to-focus terminal support
 
-## Installation
+### Comparison with CCNotify
 
-### Prerequisites
+Inspired by [CCNotify](https://github.com/dazuiba/CCNotify) with key improvements:
 
-- **macOS only** (terminal-notifier is macOS-specific)
-- Python 3.12+
-- [uv](https://github.com/astral-sh/uv) package manager
-- [terminal-notifier](https://github.com/julienXX/terminal-notifier): Install with `brew install terminal-notifier`
-
-### Install from source
-
-For end users (installs globally for Claude Code hooks):
-
-```bash
-# Clone the repository
-git clone https://github.com/PaulRBerg/ai-notify.git
-cd ai-notify
-
-# Install globally with uv
-uv tool install .
-
-# Verify installation
-ai-notify --version
-```
-
-**Note**: Claude Code hooks require global installation via `uv tool install .` to make the `ai-notify` command
-available system-wide.
-
-### Updating an existing installation
-
-If you already have `ai-notify` installed and need to update to a newer version:
-
-```bash
-# Pull latest changes
-git pull
-
-# Reinstall with rebuild
-uv tool install --reinstall-package ai-notify .
-```
-
-The `--reinstall-package` flag forces `uv` to rebuild the package from source instead of using a cached version.
+- **Independent CLI** — installable via `uv tool install`, not a script symlink
+- **Fully configurable** — YAML config with `ai-notify config` commands
+- **More events** — supports `PermissionRequest` (4 events vs 3)
+- **Smart filtering** — configurable duration threshold and prompt exclusion patterns
+- **Notification modes** — all/permission_only/disabled
 
 ## Configuration
 
