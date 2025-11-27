@@ -20,6 +20,13 @@ from ai_notify.notifier import MacNotifier
 from ai_notify.utils import setup_logging, read_stdin_json, validate_input
 
 
+def path_with_tilde(path: Path) -> str:
+    """Convert path to string, replacing home directory with ~."""
+    home = str(Path.home())
+    path_str = str(path)
+    return "~" + path_str[len(home) :] if path_str.startswith(home) else path_str
+
+
 @click.group()
 @click.version_option(version="1.0.0", prog_name="ai-notify")
 def cli():
@@ -50,17 +57,17 @@ def config_show(path):
             ["Notification Mode", cfg.notification.mode.value],
             ["Notification Sound", cfg.notification.sound],
             ["Notification Threshold", f"{cfg.notification.threshold_seconds}s"],
-            ["Database Path", str(cfg.database.path)],
+            ["Database Path", path_with_tilde(cfg.database.path)],
             ["Retention Days", f"{cfg.cleanup.retention_days} days"],
             ["Auto-cleanup Enabled", "Yes" if cfg.cleanup.auto_cleanup_enabled else "No"],
             ["Export Before Cleanup", "Yes" if cfg.cleanup.export_before_cleanup else "No"],
             ["Log Level", cfg.logging.level],
-            ["Log Path", str(cfg.logging.path)],
+            ["Log Path", path_with_tilde(cfg.logging.path)],
         ]
 
         click.echo("\n" + click.style("Current Configuration:", bold=True))
         click.echo(tabulate(config_data, headers=["Setting", "Value"], tablefmt="simple"))
-        click.echo(f"\nConfig file: {loader.config_path}")
+        click.echo(f"\nConfig file: {path_with_tilde(loader.config_path)}")
 
         if not loader.config_path.exists():
             click.echo(
