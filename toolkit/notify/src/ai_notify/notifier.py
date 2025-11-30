@@ -190,6 +190,34 @@ class MacNotifier:
             message=message,
         )
 
+    def notify_question(
+        self,
+        project_name: str,
+        message: str = "Claude is asking a question",
+        job_number: Optional[int] = None,
+    ) -> bool:
+        """
+        Send question notification.
+
+        Args:
+            project_name: Project name (from cwd)
+            message: Question text
+            job_number: Optional job number for this prompt
+
+        Returns:
+            True if notification was sent successfully
+        """
+        if job_number is not None:
+            subtitle = f"Prompt #{job_number} has a question"
+        else:
+            subtitle = "Question for you"
+
+        return self.send_notification(
+            title=project_name,
+            subtitle=subtitle,
+            message=message,
+        )
+
     @staticmethod
     def get_project_name(cwd: str) -> str:
         """

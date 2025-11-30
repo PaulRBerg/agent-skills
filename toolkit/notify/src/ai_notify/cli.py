@@ -15,7 +15,13 @@ from tabulate import tabulate
 
 from ai_notify.config_loader import ConfigLoader, DEFAULT_EXPORT_DIR
 from ai_notify.database import SessionTracker
-from ai_notify.events import handle_notification, handle_permission, handle_stop, handle_user_prompt
+from ai_notify.events import (
+    handle_ask_user_question,
+    handle_notification,
+    handle_permission,
+    handle_stop,
+    handle_user_prompt,
+)
 from ai_notify.notifier import MacNotifier
 from ai_notify.utils import setup_logging, read_stdin_json, validate_input
 
@@ -67,6 +73,9 @@ def config_show(path):
 
         click.echo("\n" + click.style("Current Configuration:", bold=True))
         click.echo(tabulate(config_data, headers=["Setting", "Value"], tablefmt="simple"))
+        click.echo(
+            click.style("\nHint: macOS sounds are located at /System/Library/Sounds", dim=True)
+        )
         click.echo(f"\nConfig file: {path_with_tilde(loader.config_path)}")
 
         if not loader.config_path.exists():
@@ -290,6 +299,23 @@ def event_permission_request():
 
     except Exception as e:
         logger.error(f"PermissionRequest handler failed: {e}")
+        sys.exit(1)
+
+
+@event.command("ask-user-question")
+def event_ask_user_question():
+    """Handle PreToolUse/AskUserQuestion event."""
+    try:
+        # Read and validate input
+        data = read_stdin_json()
+        validate_input(data)
+
+        # Call handler
+        handle_ask_user_question(data)
+        sys.exit(0)
+
+    except Exception as e:
+        logger.error(f"AskUserQuestion handler failed: {e}")
         sys.exit(1)
 
 
