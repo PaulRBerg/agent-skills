@@ -88,7 +88,7 @@ logging:
 notification:
   app_bundle: dev.warp.Warp-Stable # Application bundle ID to focus on notification click
   mode: all # Notification mode: 'all' (default), 'permission_only', or 'disabled'
-  sound: default # Notification sound to use
+  sound: default # Notification sound (see /System/Library/Sounds for options)
   threshold_seconds: 10 # Minimum job duration in seconds to trigger notification (0 = notify all)
   exclude_patterns: # List of prompt prefixes to exclude from notifications (case-sensitive)
     - /commit

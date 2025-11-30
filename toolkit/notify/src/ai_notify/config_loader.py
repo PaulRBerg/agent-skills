@@ -38,7 +38,9 @@ class NotificationConfig(BaseModel):
         default=NotificationMode.ALL,
         description="Notification mode: 'all' (default), 'permission_only', or 'disabled'",
     )
-    sound: str = Field(default="default", description="Notification sound to use")
+    sound: str = Field(
+        default="default", description="Notification sound (see /System/Library/Sounds for options)"
+    )
     threshold_seconds: int = Field(
         default=10,
         ge=0,
