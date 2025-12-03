@@ -2,6 +2,7 @@
 Configuration loader for ai-notify with YAML file support.
 """
 
+import os
 import yaml
 from enum import Enum
 from pathlib import Path
@@ -13,8 +14,16 @@ from ruamel.yaml.comments import CommentedMap
 from loguru import logger
 
 
+def get_xdg_config_home() -> Path:
+    """Get XDG config home directory, defaulting to ~/.config if unset."""
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg)
+    return Path.home() / ".config"
+
+
 # Default configuration paths
-DEFAULT_CONFIG_DIR = Path.home() / ".config" / "ai-notify"
+DEFAULT_CONFIG_DIR = get_xdg_config_home() / "ai-notify"
 DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.yaml"
 DEFAULT_EXPORT_DIR = DEFAULT_CONFIG_DIR / "exports"
 
@@ -56,7 +65,7 @@ class DatabaseConfig(BaseModel):
     """Database-related configuration."""
 
     path: Path = Field(
-        default=Path.home() / ".config" / "ai-notify" / "ai-notify.db",
+        default_factory=lambda: DEFAULT_CONFIG_DIR / "ai-notify.db",
         description="Path to SQLite database file",
     )
 
@@ -90,7 +99,7 @@ class LoggingConfig(BaseModel):
         default="INFO", description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
     )
     path: Path = Field(
-        default=Path.home() / ".config" / "ai-notify" / "ai-notify.log",
+        default_factory=lambda: DEFAULT_CONFIG_DIR / "ai-notify.log",
         description="Path to log file",
     )
 

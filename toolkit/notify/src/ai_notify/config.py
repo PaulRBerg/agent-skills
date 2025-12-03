@@ -5,10 +5,10 @@ Configuration and constants for ai-notify.
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
-from ai_notify.config_loader import get_config, DEFAULT_EXPORT_DIR
+from ai_notify.config_loader import get_config, get_xdg_config_home, DEFAULT_EXPORT_DIR
 
 # Paths
-CONFIG_DIR = Path.home() / ".config" / "ai-notify"
+CONFIG_DIR = get_xdg_config_home() / "ai-notify"
 DB_PATH = CONFIG_DIR / "ai-notify.db"
 LOG_PATH = CONFIG_DIR / "ai-notify.log"
 
