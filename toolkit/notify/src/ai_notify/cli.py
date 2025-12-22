@@ -3,6 +3,7 @@
 ai-notify CLI - Command-line interface for managing ai-notify.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -13,15 +14,19 @@ import click
 from loguru import logger
 from tabulate import tabulate
 
+from ai_notify.codex_config import set_codex_notify
+from ai_notify.claude_hooks import ensure_claude_hooks
 from ai_notify.config_loader import ConfigLoader, DEFAULT_EXPORT_DIR
 from ai_notify.database import SessionTracker
 from ai_notify.events import (
     handle_ask_user_question,
+    handle_codex_notify,
     handle_notification,
     handle_permission,
     handle_stop,
     handle_user_prompt,
 )
+from ai_notify.integrations import inspect_claude_hooks, inspect_codex_notify
 from ai_notify.notifier import MacNotifier
 from ai_notify.utils import setup_logging, read_stdin_json, validate_input
 
@@ -36,7 +41,7 @@ def path_with_tilde(path: Path) -> str:
 @click.group()
 @click.version_option(version="1.0.0", prog_name="ai-notify")
 def cli():
-    """ai-notify - Notification hook for Claude Code."""
+    """ai-notify - Notification hook for Claude Code and Codex CLI."""
     setup_logging()
 
 
@@ -161,6 +166,135 @@ def test():
         sys.exit(1)
 
 
+@cli.group("codex", invoke_without_command=True)
+@click.option("--stdin", "use_stdin", is_flag=True, help="Read JSON payload from stdin")
+@click.argument("payload", required=False)
+@click.pass_context
+def codex(ctx, use_stdin, payload):
+    """Codex CLI notify handler."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    try:
+        if use_stdin:
+            payload = sys.stdin.read()
+
+        if not payload:
+            raise click.UsageError("Missing JSON payload (use --stdin or pass as argument)")
+
+        data = json.loads(payload)
+        validate_input(data)
+        handle_codex_notify(data)
+        sys.exit(0)
+
+    except Exception as e:
+        logger.error(f"Codex notify handler failed: {e}")
+        sys.exit(1)
+
+
+@cli.group()
+def link():
+    """Link ai-notify to supported CLIs."""
+    pass
+
+
+@link.command("claude")
+@click.option(
+    "--path",
+    type=click.Path(path_type=Path),
+    default=Path.home() / ".claude" / "hooks" / "hooks.json",
+    show_default=True,
+    help="Path to Claude Code hooks.json",
+)
+@click.option("--force", is_flag=True, help="Overwrite existing hook commands")
+@click.option("--dry-run", is_flag=True, help="Show changes without writing")
+def link_claude(path: Path, force: bool, dry_run: bool):
+    """Install ai-notify hooks for Claude Code."""
+    try:
+        result = ensure_claude_hooks(path, force=force, dry_run=dry_run)
+        if result.changed:
+            click.echo(f"Updated hooks in {path_with_tilde(result.path)}")
+        else:
+            click.echo(f"Hooks already set in {path_with_tilde(result.path)}")
+        if result.skipped:
+            click.echo("Skipped existing hooks:")
+            for event, command in result.skipped.items():
+                click.echo(f"  - {event}: {command}")
+        if result.errors:
+            click.echo("Errors:")
+            for error in result.errors:
+                click.echo(f"  - {error}")
+    except Exception as e:
+        logger.error(f"Claude hook install failed: {e}")
+        sys.exit(1)
+
+
+@link.command("codex")
+@click.option(
+    "--path",
+    type=click.Path(path_type=Path),
+    default=Path.home() / ".codex" / "config.toml",
+    show_default=True,
+    help="Path to Codex CLI config.toml",
+)
+@click.option("--profile", help="Codex profile name (e.g. quiet)")
+def link_codex(path: Path, profile: str | None):
+    """Update Codex CLI notify command to use ai-notify."""
+    try:
+        update = set_codex_notify(path, ["ai-notify", "codex"], profile=profile)
+        target = f"profile '{profile}'" if profile else "root config"
+        if update.changed:
+            click.echo(f"Updated {target} notify in {path_with_tilde(update.path)}")
+        else:
+            click.echo(f"{target} notify already set in {path_with_tilde(update.path)}")
+    except Exception as e:
+        logger.error(f"Codex config update failed: {e}")
+        sys.exit(1)
+
+
+@cli.command()
+def check():
+    """Check Claude Code hooks and Codex CLI notify integration."""
+    claude_report = inspect_claude_hooks(Path.home() / ".claude", Path.cwd())
+    codex_report = inspect_codex_notify(Path.home() / ".codex")
+
+    click.echo("\nIntegration status:")
+
+    if claude_report.status == "ok":
+        claude_status = click.style("OK", fg="green")
+    elif claude_report.status == "partial":
+        claude_status = click.style("PARTIAL", fg="yellow")
+    else:
+        claude_status = click.style("MISSING", fg="red")
+
+    click.echo(f"Claude Code hooks: {claude_status}")
+    if claude_report.path:
+        click.echo(f"  Config: {path_with_tilde(claude_report.path)}")
+    if claude_report.missing_events:
+        click.echo(f"  Missing events: {', '.join(claude_report.missing_events)}")
+    if claude_report.errors:
+        click.echo("  Errors:")
+        for path, error in claude_report.errors.items():
+            click.echo(f"    - {path_with_tilde(path)}: {error}")
+
+    if codex_report.status == "ok":
+        codex_status = click.style("OK", fg="green")
+    elif codex_report.status == "partial":
+        codex_status = click.style("PARTIAL", fg="yellow")
+    elif codex_report.status == "error":
+        codex_status = click.style("ERROR", fg="red")
+    else:
+        codex_status = click.style("MISSING", fg="red")
+
+    click.echo(f"Codex CLI notify: {codex_status}")
+    if codex_report.path:
+        click.echo(f"  Config: {path_with_tilde(codex_report.path)}")
+    if codex_report.notify is not None:
+        click.echo(f"  notify: {codex_report.notify}")
+    if codex_report.error:
+        click.echo(f"  Error: {codex_report.error}")
+
+
 @cli.command()
 @click.option("--days", type=int, help="Days of data to retain (default: from config)")
 @click.option(
@@ -230,7 +364,7 @@ def cleanup(days, dry_run, no_export):
 # Event handler subcommands
 @cli.group()
 def event():
-    """Event handlers for Claude Code hooks."""
+    """Event handlers for Claude Code hooks (Codex uses `ai-notify codex`)."""
     pass
 
 

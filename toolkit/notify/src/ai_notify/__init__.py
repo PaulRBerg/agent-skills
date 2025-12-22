@@ -1,7 +1,7 @@
 """
-ai-notify: Desktop notification system for Claude Code.
+ai-notify: Desktop notification system for Claude Code and Codex CLI.
 
-Tracks Claude Code session activity and sends macOS notifications for key events.
+Tracks session activity and sends macOS notifications for key events.
 """
 
 __version__ = "1.0.0"

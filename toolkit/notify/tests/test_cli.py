@@ -12,7 +12,9 @@ from click.testing import CliRunner
 
 from ai_notify import cli
 from ai_notify import config_loader
+from ai_notify.claude_hooks import ClaudeHooksUpdate
 from ai_notify.config import Config
+from ai_notify.codex_config import CodexNotifyUpdate
 from ai_notify.database import SessionTracker
 
 
@@ -93,6 +95,74 @@ class TestCLICommands:
                 assert result.exit_code == 0
                 assert "DRY RUN MODE" in result.output
                 assert "No data will be deleted" in result.output
+
+    def test_link_codex_updates_notify(self, runner, tmp_path):
+        """Test link codex updates notify setting."""
+        config_path = tmp_path / "config.toml"
+
+        with patch("ai_notify.cli.set_codex_notify") as mock_set:
+            mock_set.return_value = CodexNotifyUpdate(
+                path=config_path,
+                changed=True,
+                profile=None,
+            )
+
+            result = runner.invoke(cli.cli, ["link", "codex", "--path", str(config_path)])
+
+        assert result.exit_code == 0
+        mock_set.assert_called_once_with(config_path, ["ai-notify", "codex"], profile=None)
+        assert "Updated root config notify" in result.output
+
+    def test_link_codex_no_change(self, runner, tmp_path):
+        """Test link codex reports already set."""
+        config_path = tmp_path / "config.toml"
+
+        with patch("ai_notify.cli.set_codex_notify") as mock_set:
+            mock_set.return_value = CodexNotifyUpdate(
+                path=config_path,
+                changed=False,
+                profile="quiet",
+            )
+
+            result = runner.invoke(
+                cli.cli, ["link", "codex", "--path", str(config_path), "--profile", "quiet"]
+            )
+
+        assert result.exit_code == 0
+        mock_set.assert_called_once_with(config_path, ["ai-notify", "codex"], profile="quiet")
+        assert "profile 'quiet' notify already set" in result.output
+
+    def test_link_claude_installs_hooks(self, runner, tmp_path):
+        """Test link claude installs hooks and reports skips."""
+        hooks_path = tmp_path / "hooks.json"
+
+        with patch("ai_notify.cli.ensure_claude_hooks") as mock_ensure:
+            mock_ensure.return_value = ClaudeHooksUpdate(
+                path=hooks_path,
+                changed=True,
+                added=["Stop"],
+                updated=[],
+                skipped={"Notification": "echo notify"},
+                errors=[],
+            )
+
+            result = runner.invoke(cli.cli, ["link", "claude", "--path", str(hooks_path)])
+
+        assert result.exit_code == 0
+        mock_ensure.assert_called_once_with(hooks_path, force=False, dry_run=False)
+        assert "Updated hooks" in result.output
+        assert "Skipped existing hooks" in result.output
+        assert "Notification" in result.output
+
+    def test_codex_notify_cli_invokes_handler(self, runner):
+        """Test codex notify handler invocation."""
+        payload = '{"type": "agent-turn-complete", "input-messages": ["hi"]}'
+
+        with patch("ai_notify.cli.handle_codex_notify") as mock_handler:
+            result = runner.invoke(cli.cli, ["codex", payload])
+
+        assert result.exit_code == 0
+        assert mock_handler.called
 
 
 class TestAutoCleanup:

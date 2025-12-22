@@ -1,6 +1,6 @@
 # Context
 
-Desktop notification system for Claude Code with intelligent session tracking.
+Desktop notification system for Claude Code and Codex CLI with intelligent session tracking.
 
 ## Project Structure
 
@@ -64,13 +64,16 @@ just fw    # Auto-fix all issues (full-write)
 
 The CLI uses Click with command groups:
 
-- **Top-level commands**: `test`, `cleanup`
+- **Top-level commands**: `test`, `cleanup`, `check`
+- **`codex` group**: notify handler (run via `ai-notify codex`)
+- **`link` group**: `claude`, `codex`
 - **`config` group**: `show`, `edit`, `reset`
-- **`event` group**: `user-prompt-submit`, `stop`, `notification`, `permission-request`
+- **`event` group**: `user-prompt-submit`, `stop`, `notification`, `permission-request` (Claude Code hooks only)
 
 ### Event Handlers
 
-Event handlers are CLI subcommands that read JSON from stdin (Claude Code hook format):
+Event handlers are CLI subcommands that read JSON from stdin (Claude Code hook format). Codex CLI notify payloads are
+handled by the `ai-notify codex` command.
 
 - `ai-notify event user-prompt-submit`: Tracks new prompts
 - `ai-notify event stop`: Marks sessions complete, sends notifications

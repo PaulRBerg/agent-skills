@@ -1,6 +1,7 @@
 # ai-notify
 
-Desktop notification system for Claude Code that tracks session activity and sends macOS notifications for key events.
+Desktop notification system for Claude Code and Codex CLI that tracks session activity and sends macOS notifications for
+key events.
 
 ![ai-notify notification demo](demo.png)
 
@@ -34,7 +35,7 @@ To update, `git pull` and re-run the install command.
 - **Prompt Filtering**: Exclude specific prompt patterns (e.g., slash commands like `/commit`) from notifications
 - **Session Tracking**: SQLite database tracks prompts, durations, and job numbers
 - **Auto-cleanup**: Automatic data cleanup with optional export before deletion
-- **Event Handlers**: CLI subcommands for Claude Code hook integration
+- **Event Handlers**: CLI subcommands for Claude Code hooks and Codex CLI notify integration
 - **Configuration**: YAML-based configuration with sensible defaults
 - **Rich Notifications**: Custom Claude icon, configurable sounds, and click-to-focus terminal support
 
@@ -149,9 +150,16 @@ ai-notify event notification < event_data.json
 ai-notify event permission-request < event_data.json
 ```
 
+For Codex CLI, use `ai-notify codex` via the `notify` setting (see below).
+
 ## Claude Code Hook Integration
 
-To integrate ai-notify with Claude Code, update your `~/.claude/hooks/hooks.json`.
+To integrate ai-notify with Claude Code, update your `~/.claude/hooks/hooks.json`. You can also install the hooks
+automatically:
+
+```bash
+ai-notify link claude
+```
 
 For more information about Claude Code hooks, see the
 [official documentation](https://docs.claude.com/en/docs/claude-code/hooks).
@@ -175,6 +183,37 @@ For more information about Claude Code hooks, see the
 }
 ```
 
+## Codex CLI Integration
+
+Codex CLI can invoke ai-notify through the `notify` setting in your root config file (`~/.codex/config.toml`).
+
+```toml
+notify = ["ai-notify", "codex"]
+```
+
+You can also set this automatically:
+
+```bash
+ai-notify link codex
+```
+
+Codex appends the JSON payload as the final CLI argument, so the effective command looks like:
+
+```bash
+ai-notify codex '<json payload>'
+```
+
+The Codex notify payload does not include job duration, so `notification.threshold_seconds` is not applied for Codex
+notifications. Exclude patterns and notification mode still apply.
+
+## Integration Check
+
+Use the built-in checker to see whether Claude Code hooks and Codex notify are configured:
+
+```bash
+ai-notify check
+```
+
 ## How It Works
 
 1. **UserPromptSubmit**: When you submit a prompt to Claude Code, ai-notify tracks it in the database
@@ -186,6 +225,9 @@ For more information about Claude Code hooks, see the
    - Optionally runs auto-cleanup (every 24 hours)
 3. **Notification**: Suppresses "waiting for input" notifications (the Stop handler will send job completion)
 4. **PermissionRequest**: Sends immediate notification when Claude requests permissions
+
+For Codex CLI, ai-notify runs on the `agent-turn-complete` notify event and sends a completion notification with the
+latest assistant message as context.
 
 ## File Structure
 
@@ -201,6 +243,7 @@ For more information about Claude Code hooks, see the
 
 - [Claude Code](https://code.claude.com/docs/en/overview)
 - [Hooks](https://docs.claude.com/en/docs/claude-code/hooks)
+- [Codex CLI configuration](https://developers.openai.com/codex/local-config)
 
 ## License
 

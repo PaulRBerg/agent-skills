@@ -81,3 +81,35 @@ def should_send_permission_notification(config: AINotifyConfig) -> bool:
         True if permission notifications should be sent, False otherwise
     """
     return config.notification.mode != NotificationMode.DISABLED
+
+
+def should_send_codex_notification(prompt: str, config: AINotifyConfig) -> bool:
+    """
+    Determine whether to send a Codex CLI notification.
+
+    Codex notify payloads do not include job duration, so we only apply mode
+    and exclude pattern filtering.
+
+    Args:
+        prompt: User prompt text
+        config: Runtime configuration
+
+    Returns:
+        True if notification should be sent, False otherwise
+    """
+    if config.notification.mode == NotificationMode.DISABLED:
+        return False
+
+    if config.notification.mode == NotificationMode.PERMISSION_ONLY:
+        return False
+
+    exclude_patterns = config.notification.exclude_patterns
+    if exclude_patterns and prompt:
+        for pattern in exclude_patterns:
+            if prompt.startswith(pattern):
+                logger.debug(
+                    f"Skipping Codex notification: prompt starts with excluded pattern '{pattern}'"
+                )
+                return False
+
+    return True

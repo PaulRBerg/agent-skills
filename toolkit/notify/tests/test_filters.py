@@ -2,8 +2,8 @@
 Tests for notification filtering logic.
 """
 
-from ai_notify.config_loader import AINotifyConfig, NotificationConfig
-from ai_notify.helpers.filters import should_send_notification
+from ai_notify.config_loader import AINotifyConfig, NotificationConfig, NotificationMode
+from ai_notify.helpers.filters import should_send_codex_notification, should_send_notification
 
 
 class TestNotificationFiltering:
@@ -177,3 +177,25 @@ class TestNotificationFiltering:
         # Pattern in middle should NOT be filtered
         assert should_send_notification("Run /commit command", 15, config)
         assert should_send_notification("Please /commit the changes", 15, config)
+
+
+class TestCodexNotificationFiltering:
+    """Test should_send_codex_notification() function."""
+
+    def test_disabled_mode_blocks_codex_notifications(self):
+        config = AINotifyConfig(notification=NotificationConfig(mode=NotificationMode.DISABLED))
+        assert not should_send_codex_notification("prompt", config)
+
+    def test_permission_only_mode_blocks_codex_notifications(self):
+        config = AINotifyConfig(
+            notification=NotificationConfig(mode=NotificationMode.PERMISSION_ONLY)
+        )
+        assert not should_send_codex_notification("prompt", config)
+
+    def test_exclude_patterns_block_codex_notifications(self):
+        config = AINotifyConfig(
+            notification=NotificationConfig(exclude_patterns=["/skip", "/ignore"])
+        )
+        assert not should_send_codex_notification("/skip this", config)
+        assert not should_send_codex_notification("/ignore", config)
+        assert should_send_codex_notification("do work", config)
