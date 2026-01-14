@@ -65,7 +65,7 @@ class TestCLICommands:
 
     def test_test_command(self, runner):
         """Test the test notification command."""
-        with patch("ai_notify.cli.MacNotifier") as mock_notifier:
+        with patch("ai_notify.notifier.MacNotifier") as mock_notifier:
             mock_instance = MagicMock()
             mock_notifier.return_value = mock_instance
 
@@ -87,7 +87,7 @@ class TestCLICommands:
             tracker = SessionTracker(cfg)
             tracker.track_prompt("test-1", "prompt", "/test")
 
-            with patch("ai_notify.cli.SessionTracker") as mock_tracker:
+            with patch("ai_notify.database.SessionTracker") as mock_tracker:
                 mock_tracker.return_value = tracker
 
                 result = runner.invoke(cli.cli, ["cleanup", "--dry-run"])
@@ -100,7 +100,7 @@ class TestCLICommands:
         """Test link codex updates notify setting."""
         config_path = tmp_path / "config.toml"
 
-        with patch("ai_notify.cli.set_codex_notify") as mock_set:
+        with patch("ai_notify.codex_config.set_codex_notify") as mock_set:
             mock_set.return_value = CodexNotifyUpdate(
                 path=config_path,
                 changed=True,
@@ -117,7 +117,7 @@ class TestCLICommands:
         """Test link codex reports already set."""
         config_path = tmp_path / "config.toml"
 
-        with patch("ai_notify.cli.set_codex_notify") as mock_set:
+        with patch("ai_notify.codex_config.set_codex_notify") as mock_set:
             mock_set.return_value = CodexNotifyUpdate(
                 path=config_path,
                 changed=False,
@@ -136,7 +136,7 @@ class TestCLICommands:
         """Test link claude installs hooks and reports skips."""
         hooks_path = tmp_path / "hooks.json"
 
-        with patch("ai_notify.cli.ensure_claude_hooks") as mock_ensure:
+        with patch("ai_notify.claude_hooks.ensure_claude_hooks") as mock_ensure:
             mock_ensure.return_value = ClaudeHooksUpdate(
                 path=hooks_path,
                 changed=True,
@@ -158,7 +158,7 @@ class TestCLICommands:
         """Test codex notify handler invocation."""
         payload = '{"type": "agent-turn-complete", "input-messages": ["hi"]}'
 
-        with patch("ai_notify.cli.handle_codex_notify") as mock_handler:
+        with patch("ai_notify.events.codex.handle_codex_notify") as mock_handler:
             result = runner.invoke(cli.cli, ["codex", payload])
 
         assert result.exit_code == 0

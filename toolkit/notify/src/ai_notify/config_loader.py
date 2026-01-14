@@ -3,15 +3,15 @@ Configuration loader for ai-notify with YAML file support.
 """
 
 import os
-import yaml
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Any, cast, Union
+from typing import Optional, Any, cast, Union, TYPE_CHECKING
 from pydantic import BaseModel, Field, field_validator
 from pydantic.fields import FieldInfo
-from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedMap
 from loguru import logger
+
+if TYPE_CHECKING:
+    from ruamel.yaml.comments import CommentedMap
 
 
 def get_xdg_config_home() -> Path:
@@ -147,7 +147,7 @@ def _get_field_description(model: type[BaseModel], field_name: str) -> Optional[
     return None
 
 
-def _create_commented_map(data: dict[str, Any], model: type[BaseModel]) -> CommentedMap:
+def _create_commented_map(data: dict[str, Any], model: type[BaseModel]) -> "CommentedMap":
     """
     Create a CommentedMap with inline comments from Pydantic field descriptions.
 
@@ -158,6 +158,8 @@ def _create_commented_map(data: dict[str, Any], model: type[BaseModel]) -> Comme
     Returns:
         CommentedMap with inline comments
     """
+    from ruamel.yaml.comments import CommentedMap
+
     cm = CommentedMap()
 
     for key, value in data.items():
@@ -207,6 +209,8 @@ class ConfigLoader:
 
         if self.config_path.exists():
             try:
+                import yaml
+
                 with open(self.config_path, "r") as f:
                     yaml_data = yaml.safe_load(f) or {}
                 self._config = AINotifyConfig(**yaml_data)
@@ -262,6 +266,8 @@ class ConfigLoader:
         commented_config = _create_commented_map(config_dict, AINotifyConfig)
 
         # Write YAML with comments using ruamel.yaml
+        from ruamel.yaml import YAML
+
         yaml_writer = YAML()
         yaml_writer.default_flow_style = False
         yaml_writer.preserve_quotes = True

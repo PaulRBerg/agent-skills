@@ -26,6 +26,8 @@ from ai_notify.config import (
 class SessionTracker:
     """Tracks Claude Code sessions in SQLite database."""
 
+    _schema_version = 1
+
     def __init__(self, config: Optional[Config] = None):
         """
         Initialize session tracker.
@@ -35,17 +37,38 @@ class SessionTracker:
         """
         self.config = config or Config()
         self.config.ensure_directories()
+        self._connection: Optional[sqlite3.Connection] = None
         self._init_database()
 
     def _init_database(self) -> None:
         """Initialize database schema if it doesn't exist."""
         try:
             with self._get_connection() as conn:
+                cursor = conn.execute("PRAGMA user_version")
+                user_version = cursor.fetchone()[0]
+                if user_version >= self._schema_version:
+                    return
+
                 conn.executescript(DB_SCHEMA)
+                conn.execute(f"PRAGMA user_version = {self._schema_version}")
                 conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Failed to initialize database: {e}")
             raise
+
+    def _configure_connection(self, conn: sqlite3.Connection) -> None:
+        """Apply performance-friendly connection settings."""
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA temp_store=MEMORY")
+        conn.execute("PRAGMA busy_timeout=3000")
+
+    def _connect(self) -> sqlite3.Connection:
+        """Create or return a cached connection."""
+        if self._connection is None:
+            self._connection = sqlite3.connect(str(self.config.db_path), timeout=3)
+            self._configure_connection(self._connection)
+        return self._connection
 
     @contextmanager
     def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
@@ -55,11 +78,21 @@ class SessionTracker:
         Yields:
             SQLite connection
         """
-        conn = sqlite3.connect(str(self.config.db_path))
+        conn = self._connect()
         try:
             yield conn
-        finally:
-            conn.close()
+        except Exception:
+            try:
+                conn.rollback()
+            except sqlite3.Error:
+                pass
+            raise
+
+    def close(self) -> None:
+        """Close the cached connection, if any."""
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
 
     def track_prompt(self, session_id: str, prompt: str, cwd: str) -> None:
         """
@@ -243,14 +276,16 @@ class SessionTracker:
                 stats["rows_deleted"] = cursor.rowcount
                 conn.commit()
 
-                # VACUUM to reclaim space
-                conn.execute("VACUUM")
+                # VACUUM to reclaim space only when deletions occurred
+                if stats["rows_deleted"] > 0:
+                    conn.execute("VACUUM")
 
             # Get database size after cleanup
             db_size_after = (
                 self.config.db_path.stat().st_size if self.config.db_path.exists() else 0
             )
-            stats["space_freed_kb"] = max(0, (db_size_before - db_size_after) // 1024)
+            if stats["rows_deleted"] > 0:
+                stats["space_freed_kb"] = max(0, (db_size_before - db_size_after) // 1024)
 
             logger.info(
                 f"Cleanup complete: deleted {stats['rows_deleted']} sessions, "

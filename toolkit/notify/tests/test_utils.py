@@ -2,9 +2,12 @@
 Tests for utility functions.
 """
 
-import pytest
+from unittest.mock import patch
 
-from ai_notify.utils import format_duration, validate_input
+import pytest
+from loguru import logger
+
+from ai_notify.utils import format_duration, load_json_payload, setup_logging, validate_input
 
 
 class TestFormatDuration:
@@ -55,6 +58,27 @@ class TestValidateInput:
         data = {"session_id": "x" * 256}
         with pytest.raises(ValueError, match="Invalid session_id"):
             validate_input(data)
+
+
+class TestJsonParsing:
+    """Test JSON parsing helpers."""
+
+    def test_load_json_payload_str(self):
+        assert load_json_payload('{"ok": true, "n": 1}') == {"ok": True, "n": 1}
+
+    def test_load_json_payload_bytes(self):
+        assert load_json_payload(b'{"ok": true, "n": 1}') == {"ok": True, "n": 1}
+
+
+class TestLoggingSetup:
+    """Test logging setup behavior."""
+
+    def test_setup_logging_disabled(self, monkeypatch):
+        monkeypatch.setenv("AI_NOTIFY_LOG", "0")
+        with patch.object(logger, "remove") as remove_mock, patch.object(logger, "add") as add_mock:
+            setup_logging()
+            assert remove_mock.called
+            add_mock.assert_not_called()
 
 
 if __name__ == "__main__":

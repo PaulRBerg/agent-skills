@@ -3,32 +3,15 @@
 ai-notify CLI - Command-line interface for managing ai-notify.
 """
 
-import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import click
 from loguru import logger
-from tabulate import tabulate
 
-from ai_notify.codex_config import set_codex_notify
-from ai_notify.claude_hooks import ensure_claude_hooks
-from ai_notify.config_loader import ConfigLoader, DEFAULT_EXPORT_DIR
-from ai_notify.database import SessionTracker
-from ai_notify.events import (
-    handle_ask_user_question,
-    handle_codex_notify,
-    handle_notification,
-    handle_permission,
-    handle_stop,
-    handle_user_prompt,
-)
-from ai_notify.integrations import inspect_claude_hooks, inspect_codex_notify
-from ai_notify.notifier import MacNotifier
-from ai_notify.utils import setup_logging, read_stdin_json, validate_input
+from ai_notify.utils import setup_logging
 
 
 def path_with_tilde(path: Path) -> str:
@@ -58,6 +41,10 @@ def config():
 def config_show(path):
     """Show current configuration."""
     try:
+        from tabulate import tabulate
+
+        from ai_notify.config_loader import ConfigLoader
+
         loader = ConfigLoader(path)
         cfg = loader.load()
 
@@ -100,6 +87,8 @@ def config_show(path):
 def config_edit(path):
     """Edit configuration file in $EDITOR."""
     try:
+        from ai_notify.config_loader import ConfigLoader
+
         loader = ConfigLoader(path)
         config_path = loader.config_path
 
@@ -133,6 +122,8 @@ def config_edit(path):
 def config_reset(path):
     """Reset configuration to defaults."""
     try:
+        from ai_notify.config_loader import ConfigLoader
+
         loader = ConfigLoader(path)
         loader.reset_to_defaults()
         click.echo(
@@ -147,6 +138,8 @@ def config_reset(path):
 def test():
     """Test notification system."""
     try:
+        from ai_notify.notifier import MacNotifier
+
         click.echo("Sending test notification...")
 
         notifier = MacNotifier()
@@ -176,13 +169,16 @@ def codex(ctx, use_stdin, payload):
         return
 
     try:
+        from ai_notify.events.codex import handle_codex_notify
+        from ai_notify.utils import load_json_payload, validate_input
+
         if use_stdin:
             payload = sys.stdin.read()
 
         if not payload:
             raise click.UsageError("Missing JSON payload (use --stdin or pass as argument)")
 
-        data = json.loads(payload)
+        data = load_json_payload(payload)
         validate_input(data)
         handle_codex_notify(data)
         sys.exit(0)
@@ -211,6 +207,8 @@ def link():
 def link_claude(path: Path, force: bool, dry_run: bool):
     """Install ai-notify hooks for Claude Code."""
     try:
+        from ai_notify.claude_hooks import ensure_claude_hooks
+
         result = ensure_claude_hooks(path, force=force, dry_run=dry_run)
         if result.changed:
             click.echo(f"Updated hooks in {path_with_tilde(result.path)}")
@@ -241,6 +239,8 @@ def link_claude(path: Path, force: bool, dry_run: bool):
 def link_codex(path: Path, profile: str | None):
     """Update Codex CLI notify command to use ai-notify."""
     try:
+        from ai_notify.codex_config import set_codex_notify
+
         update = set_codex_notify(path, ["ai-notify", "codex"], profile=profile)
         target = f"profile '{profile}'" if profile else "root config"
         if update.changed:
@@ -255,6 +255,8 @@ def link_codex(path: Path, profile: str | None):
 @cli.command()
 def check():
     """Check Claude Code hooks and Codex CLI notify integration."""
+    from ai_notify.integrations import inspect_claude_hooks, inspect_codex_notify
+
     claude_report = inspect_claude_hooks(Path.home() / ".claude", Path.cwd())
     codex_report = inspect_codex_notify(Path.home() / ".codex")
 
@@ -304,6 +306,13 @@ def check():
 def cleanup(days, dry_run, no_export):
     """Clean up old session data."""
     try:
+        from datetime import datetime, timedelta
+
+        from tabulate import tabulate
+
+        from ai_notify.config_loader import ConfigLoader, DEFAULT_EXPORT_DIR
+        from ai_notify.database import SessionTracker
+
         # Load config
         loader = ConfigLoader()
         cfg = loader.load()
@@ -372,6 +381,9 @@ def event():
 def event_user_prompt_submit():
     """Handle UserPromptSubmit event."""
     try:
+        from ai_notify.events.user_prompt_submit import handle_user_prompt
+        from ai_notify.utils import read_stdin_json, validate_input
+
         # Read and validate input
         data = read_stdin_json()
         validate_input(data)
@@ -389,6 +401,9 @@ def event_user_prompt_submit():
 def event_stop():
     """Handle Stop event."""
     try:
+        from ai_notify.events.stop import handle_stop
+        from ai_notify.utils import read_stdin_json, validate_input
+
         # Read and validate input
         data = read_stdin_json()
         validate_input(data)
@@ -406,6 +421,9 @@ def event_stop():
 def event_notification():
     """Handle Notification event."""
     try:
+        from ai_notify.events.notification import handle_notification
+        from ai_notify.utils import read_stdin_json, validate_input
+
         # Read and validate input
         data = read_stdin_json()
         validate_input(data)
@@ -423,6 +441,9 @@ def event_notification():
 def event_permission_request():
     """Handle PermissionRequest event."""
     try:
+        from ai_notify.events.permission_request import handle_permission
+        from ai_notify.utils import read_stdin_json, validate_input
+
         # Read and validate input
         data = read_stdin_json()
         validate_input(data)
@@ -440,6 +461,9 @@ def event_permission_request():
 def event_ask_user_question():
     """Handle PreToolUse/AskUserQuestion event."""
     try:
+        from ai_notify.events.ask_user_question import handle_ask_user_question
+        from ai_notify.utils import read_stdin_json, validate_input
+
         # Read and validate input
         data = read_stdin_json()
         validate_input(data)

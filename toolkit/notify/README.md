@@ -97,6 +97,12 @@ notification:
     - /fix-issue
 ```
 
+**Database durability note**
+
+ai-notify uses SQLite WAL mode with `synchronous=NORMAL` for speed. In the event of a sudden power loss or crash, the
+latest session writes can be lost. This is acceptable for transient session tracking data, but be aware if you require
+strict durability.
+
 **Prompt Pattern Filtering**
 
 The `exclude_patterns` configuration allows you to filter out notifications for specific prompts:

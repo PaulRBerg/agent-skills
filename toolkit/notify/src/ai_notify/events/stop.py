@@ -39,11 +39,9 @@ def handle_stop(data: dict) -> None:
 
     # Get job info for notification
     job_number, duration_seconds, prompt = tracker.get_job_info(session_id)
+    runtime_config = get_runtime_config()
 
     if job_number is not None and duration_seconds is not None:
-        # Get runtime config for filtering
-        runtime_config = get_runtime_config()
-
         # Smart filtering: check mode, duration threshold and exclude patterns
         if should_send_completion_notification(prompt or "", duration_seconds, runtime_config):
             # Send notification
@@ -57,7 +55,6 @@ def handle_stop(data: dict) -> None:
         logger.warning(f"No job info found for session {session_id}")
 
     # Auto-cleanup if enabled and enough time has passed
-    runtime_config = get_runtime_config()
     if runtime_config.cleanup.auto_cleanup_enabled and should_run_auto_cleanup():
         logger.info("Running auto-cleanup...")
         stats = tracker.cleanup_old_data(

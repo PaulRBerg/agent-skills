@@ -3,6 +3,7 @@ Utility functions for ai-notify.
 """
 
 import json
+import os
 import sys
 from typing import Any
 
@@ -53,6 +54,11 @@ def setup_logging() -> None:
 
     Configures loguru to write to the configured log file with rotation.
     """
+    disable_log = os.getenv("AI_NOTIFY_LOG", "").strip().lower()
+    if disable_log in {"0", "false", "no", "off"}:
+        logger.remove()
+        return
+
     config = Config()
     config.ensure_directories()
 
@@ -90,6 +96,28 @@ def validate_input(data: dict[str, Any]) -> None:
             raise ValueError("Invalid session_id")
 
 
+def _loads_json(payload: str | bytes) -> dict[str, Any]:
+    try:
+        import orjson  # type: ignore[import-not-found]
+    except Exception:
+        try:
+            return json.loads(payload)
+        except Exception as e:
+            raise ValueError(f"Failed to parse JSON: {e}") from e
+
+    try:
+        return orjson.loads(payload)
+    except Exception as e:
+        raise ValueError(f"Failed to parse JSON: {e}") from e
+
+
+def load_json_payload(payload: str | bytes) -> dict[str, Any]:
+    """
+    Parse a JSON payload string/bytes, using orjson if available.
+    """
+    return _loads_json(payload)
+
+
 def read_stdin_json() -> dict[str, Any]:
     """
     Read and parse JSON from stdin.
@@ -101,9 +129,14 @@ def read_stdin_json() -> dict[str, Any]:
         ValueError: If JSON parsing fails
     """
     try:
-        data = json.load(sys.stdin)
-        return data
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse JSON from stdin: {e}")
+        if hasattr(sys.stdin, "buffer"):
+            payload = sys.stdin.buffer.read()
+        else:
+            payload = sys.stdin.read()
+        if not payload:
+            raise ValueError("No input received on stdin")
+        return _loads_json(payload)
+    except ValueError:
+        raise
     except Exception as e:
         raise ValueError(f"Failed to read stdin: {e}")
