@@ -1,6 +1,6 @@
 # Agent Skills
 
-Personal skills for Claude Code.
+PRB's collection of agent skills for Claude Code, Codex, etc.
 
 ## Installation
 
@@ -27,3 +27,14 @@ npx skills add PaulRBerg/agent-skills
 | oracle-codex    | executable    | Codex oracle for planning                |
 | oss             | executable    | OSS contribution workflows               |
 | refine-prompt   | executable    | LLM prompt optimization                  |
+
+## References
+
+- [Skills Issues](https://github.com/vercel-labs/skills/issues)
+- [Introducing Skills](https://vercel.com/changelog/introducing-skills-the-open-agent-skills-ecosystem)
+- [dot-claude](https://github.com/PaulRBerg/dot-claude)
+- [dot-agents](https://github.com/PaulRBerg/dot-agents)
+
+## License
+
+MIT
