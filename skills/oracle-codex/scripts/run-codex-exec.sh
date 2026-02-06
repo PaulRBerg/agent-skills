@@ -5,7 +5,7 @@
 # and prints the output to stdout. If CODEX_OUTPUT is unset, uses a temp file.
 #
 # Environment variables:
-#   MODEL         - Codex model (default: gpt-5.2-codex)
+#   MODEL         - Codex model (default: codex-5.3-gpt)
 #   EFFORT        - Reasoning effort (default: medium)
 #   SANDBOX       - Sandbox mode (default: read-only)
 #   CODEX_SEARCH  - Set to 1 to enable web search
@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-MODEL="${MODEL:-gpt-5.2-codex}"
+MODEL="${MODEL:-codex-5.3-gpt}"
 EFFORT="${EFFORT:-medium}"
 SANDBOX="${SANDBOX:-read-only}"
 CODEX_SEARCH="${CODEX_SEARCH:-0}"

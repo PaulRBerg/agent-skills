@@ -4,7 +4,7 @@
 
 | Model           | Description                          |
 | --------------- | ------------------------------------ |
-| `gpt-5.2-codex` | Latest frontier agentic coding model |
+| `codex-5.3-gpt` | Latest frontier agentic coding model |
 
 ## Reasoning Effort (`-c model_reasoning_effort=`)
 
@@ -86,7 +86,7 @@ codex review --commit abc1234
 ```bash
 CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 codex exec \
-  -m gpt-5.2-codex \
+  -m codex-5.3-gpt \
   -c model_reasoning_effort=high \
   -s read-only \
   -o "$CODEX_OUTPUT" \
@@ -110,7 +110,7 @@ codex review --base main "Check for SQL injection and XSS vulnerabilities"
 ```bash
 CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 codex exec \
-  -m gpt-5.2-codex \
+  -m codex-5.3-gpt \
   -c model_reasoning_effort=medium \
   -s read-only \
   --search \
@@ -124,7 +124,7 @@ EOF
 
 Override defaults by specifying in the prompt:
 
-- "Use model gpt-5.2-codex"
+- "Use model codex-5.3-gpt"
 - "Use medium reasoning effort"
 - "With high reasoning"
 - "Enable web search"

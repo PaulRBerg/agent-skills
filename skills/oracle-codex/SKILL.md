@@ -32,7 +32,7 @@ For `codex exec`, prefer the wrapper script (handles flag compatibility and surf
 
 | Setting   | Default                       | User Override                                 |
 | --------- | ----------------------------- | --------------------------------------------- |
-| Model     | `gpt-5.2-codex`               | "use model X" or "with gpt-5.2-codex"         |
+| Model     | `codex-5.3-gpt`               | "use model X" or "with codex-5.3-gpt"         |
 | Reasoning | Dynamic (based on complexity) | "use medium reasoning" or "with xhigh effort" |
 | Sandbox   | `read-only`                   | Not overridable (safety constraint)           |
 | Timeout   | 5 minutes minimum             | Estimate based on task complexity             |
@@ -170,7 +170,7 @@ CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 ```bash
 # Select EFFORT based on complexity assessment (low/medium/high/xhigh)
 # Bash tool timeout: 5-20 minutes based on complexity
-MODEL="${MODEL:-gpt-5.2-codex}" \
+MODEL="${MODEL:-codex-5.3-gpt}" \
 EFFORT="${EFFORT}" \
 CODEX_OUTPUT="$CODEX_OUTPUT" \
 ~/.agents/skills/oracle-codex/scripts/run-codex-exec.sh <<'EOF'
@@ -206,7 +206,7 @@ Format the output with clear attribution:
 [Codex output from the temp file]
 
 ---
-Model: gpt-5.2-codex | Reasoning: [selected effort level]
+Model: codex-5.3-gpt | Reasoning: [selected effort level]
 ```
 
 For very large outputs (>5000 lines), summarize key sections rather than displaying everything.
@@ -276,7 +276,7 @@ User: "Ask Codex to plan how to add authentication to this app"
 2. Gather relevant codebase context
 3. Assess complexity → auth spans multiple modules → `high` reasoning
 4. Construct planning prompt with auth requirements
-5. Execute Codex with `gpt-5.2-codex` and `high`
+5. Execute Codex with `codex-5.3-gpt` and `high`
 6. Present Codex's architecture recommendations
 7. Synthesize into Claude plan format
 
