@@ -2,7 +2,7 @@
 name: oss
 argument-hint: <create-pr|update-pr|create-issue|create-discussion> [options]
 user-invocable: true
-description: This skill should be used when the user asks to "create a pull request", "create PR", "open PR", "update a pull request", "update PR", "create an issue", "file an issue", "create a GitHub issue", "create a Claude Code issue", "report a bug in Claude Code", "create a Codex issue", "report a bug in Codex CLI", "create a discussion", "start a GitHub discussion", or mentions OSS contribution workflows.
+description: This skill should be used when the user asks to "create a pull request", "create PR", "open PR", "update a pull request", "update PR", "create an issue", "file an issue", "create a GitHub issue", "create a Claude Code issue", "report a bug in Claude Code", "create a Codex issue", "report a bug in Codex CLI", "create a Sablier issue", "file an issue in sablier-labs", "create a discussion", "start a GitHub discussion", or mentions OSS contribution workflows.
 ---
 
 # OSS Contribution Workflows
@@ -339,6 +339,44 @@ Return the issue URL to the user.
 
 For the complete Codex CLI issue workflow with template examples and environment gathering scripts, refer to `./references/issue-codex-cli.md`.
 
+## Sablier Issues
+
+Create issues in `sablier-labs/*` repositories with automatic label application. Since the user is the org owner, labels are always applied across four dimensions: Type, Work (Cynefin), Priority, and Effort. The `sablier-labs/command-center` repository additionally supports Scope labels for domain categorization.
+
+### Workflow Steps
+
+**Parse Repository**
+
+The first argument token is the repo name (without org prefix). It maps to `sablier-labs/{repo_name}`.
+
+**Apply Labels**
+
+Always applied (org owner). Analyze issue content to determine:
+
+- Type (bug, feature, docs, etc.)
+- Work complexity (clear, complicated, complex, chaotic)
+- Priority (0-3)
+- Effort (low, medium, high, epic)
+- Scope (frontend, backend, evm, solana, etc. — command-center only)
+
+**Generate Issue Body**
+
+Uses a default template with Problem, Solution, and Files Affected sections. No YAML/Markdown template detection—Sablier repos don't use GitHub issue templates.
+
+**Create in sablier-labs/{repo_name}**
+
+```bash
+gh issue create \
+  --repo "sablier-labs/{repo_name}" \
+  --title "$title" \
+  --body "$body" \
+  --label "type: feature,work: clear,priority: 2,effort: medium"
+```
+
+Return the issue URL to the user.
+
+For the complete Sablier issue workflow with label reference tables, scope labels, and examples, refer to `./references/issue-sablier.md`.
+
 ## Discussions
 
 Create GitHub discussions using the GraphQL API with automatic category selection. Discussions are ideal for Q&A, ideas, announcements, and general community conversations that don't fit the issue format.
@@ -552,6 +590,7 @@ For detailed workflows, examples, and edge case handling, refer to these referen
 - **`./references/create-issue.md`** - Complete issue creation workflow including template parsing, label application strategies, and duplicate detection
 - **`./references/issue-claude-code.md`** - Claude Code-specific issue creation including all template formats, environment gathering scripts, and submission guidelines
 - **`./references/issue-codex-cli.md`** - Codex CLI-specific issue creation including bug reports, feature requests, docs issues, and VS Code extension templates
+- **`./references/issue-sablier.md`** - Sablier-specific issue creation for `sablier-labs/*` repos including label taxonomy, scope labels for command-center, and default template
 - **`./references/issue-biome.md`** - Biome-specific issue creation including playground reproduction links, formatter/linter bug templates, and environment detection
 - **`./references/create-discussion.md`** - GitHub discussions workflow including GraphQL queries, category selection logic, and search strategies
 
