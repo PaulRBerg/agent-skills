@@ -172,7 +172,7 @@ On failure: show error and suggest fix
 Gather environment information for bug reports and extension issues:
 
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
-- **Platform**: `~/.agents/helpers/get_macos_version.sh` (macOS) or `uname -mprs` (Linux) or PowerShell for Windows
+- **Platform**: macOS version, `uname -mprs` (Linux), or PowerShell for Windows
 - **IDE** (for extension issues): Ask user or infer from context
 
 ## Examples
