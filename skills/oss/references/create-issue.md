@@ -121,10 +121,11 @@ ELSE:
 
 Extract the owner from the repository (the part before the `/`).
 
-IF owner matches `$AUTHENTICATED_USER`:
+IF owner matches `$AUTHENTICATED_USER` OR owner is `sablier-labs`:
 
 - **APPLY LABELS**: The user has permission to add labels
 - Continue to apply labels
+- IF owner is `sablier-labs`: also apply Scope labels for `command-center` (see `./references/issue-sablier.md` for the full Sablier label taxonomy)
 
 ELSE:
 
@@ -133,7 +134,7 @@ ELSE:
 
 ## Apply Labels
 
-**ONLY if owner matches $AUTHENTICATED_USER:**
+**ONLY if owner matches $AUTHENTICATED_USER or owner is `sablier-labs`:**
 
 From content analysis, determine:
 
@@ -300,7 +301,7 @@ Refactor the authentication module to use JWT tokens.
 - Deduplicate labels (e.g., don't add "bug" twice if template and auto-labels both include it)
 - Template labels always apply regardless of repository owner
 
-**IF owner matches $AUTHENTICATED_USER:**
+**IF owner matches $AUTHENTICATED_USER or owner is `sablier-labs`:**
 
 ```bash
 gh issue create \
@@ -310,7 +311,7 @@ gh issue create \
   --label "template-label1,auto-label1,auto-label2"
 ```
 
-**IF owner does not match $AUTHENTICATED_USER:**
+**IF owner does not match $AUTHENTICATED_USER and owner is not `sablier-labs`:**
 
 ```bash
 # If YAML template has labels defined:
