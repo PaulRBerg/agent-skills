@@ -84,17 +84,19 @@ Run the check script. On failure, report the installation instructions and abort
 For code review requests, prefer the dedicated `codex review` subcommand:
 
 ```bash
+MODEL="${MODEL:-codex-5.3-gpt}"
+
 # Review uncommitted changes
-codex review --uncommitted
+codex -m "$MODEL" review --uncommitted
 
 # Review changes against a base branch
-codex review --base main
+codex -m "$MODEL" review --base main
 
 # Review a specific commit
-codex review --commit <SHA>
+codex -m "$MODEL" review --commit <SHA>
 
 # With custom focus instructions
-codex review --base main "Focus on security and error handling"
+codex -m "$MODEL" review --base main "Focus on security and error handling"
 ```
 
 **Important**: Before using `--uncommitted`, verify there are changes to review:

@@ -57,6 +57,12 @@ The `codex review` subcommand provides a streamlined interface for code reviews:
 codex review [OPTIONS] [PROMPT]
 ```
 
+Model selection for review uses the global model flag before the subcommand:
+
+```bash
+codex -m <MODEL> review [OPTIONS] [PROMPT]
+```
+
 | Flag              | Description                             |
 | ----------------- | --------------------------------------- |
 | `--uncommitted`   | Review uncommitted working tree changes |
@@ -66,17 +72,19 @@ codex review [OPTIONS] [PROMPT]
 **Examples:**
 
 ```bash
+MODEL="${MODEL:-codex-5.3-gpt}"
+
 # Review uncommitted changes
-codex review --uncommitted
+codex -m "$MODEL" review --uncommitted
 
 # Review changes against main branch
-codex review --base main
+codex -m "$MODEL" review --base main
 
 # Review with specific focus
-codex review --base main "Focus on security vulnerabilities"
+codex -m "$MODEL" review --base main "Focus on security vulnerabilities"
 
 # Review a specific commit
-codex review --commit abc1234
+codex -m "$MODEL" review --commit abc1234
 ```
 
 ## Example Commands
@@ -98,11 +106,13 @@ EOF
 ### Code Review with `codex review`
 
 ```bash
+MODEL="${MODEL:-codex-5.3-gpt}"
+
 # Simple review of uncommitted changes
-codex review --uncommitted
+codex -m "$MODEL" review --uncommitted
 
 # Review against main with custom instructions
-codex review --base main "Check for SQL injection and XSS vulnerabilities"
+codex -m "$MODEL" review --base main "Check for SQL injection and XSS vulnerabilities"
 ```
 
 ### Planning Query with Web Search
