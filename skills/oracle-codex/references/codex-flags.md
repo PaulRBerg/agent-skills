@@ -49,44 +49,6 @@ These flags are specific to `codex exec`:
 | `--output-schema <FILE>` | Structured output schema          |
 | `--skip-git-repo-check`  | Bypass git repository requirement |
 
-## Review Subcommand
-
-The `codex review` subcommand provides a streamlined interface for code reviews:
-
-```bash
-codex review [OPTIONS] [PROMPT]
-```
-
-Model selection for review uses the global model flag before the subcommand:
-
-```bash
-codex -m <MODEL> review [OPTIONS] [PROMPT]
-```
-
-| Flag              | Description                             |
-| ----------------- | --------------------------------------- |
-| `--uncommitted`   | Review uncommitted working tree changes |
-| `--base <BRANCH>` | Review changes compared to base branch  |
-| `--commit <SHA>`  | Review a specific commit                |
-
-**Examples:**
-
-```bash
-MODEL="${MODEL:-codex-5.3-gpt}"
-
-# Review uncommitted changes
-codex -m "$MODEL" review --uncommitted
-
-# Review changes against main branch
-codex -m "$MODEL" review --base main
-
-# Review with specific focus
-codex -m "$MODEL" review --base main "Focus on security vulnerabilities"
-
-# Review a specific commit
-codex -m "$MODEL" review --commit abc1234
-```
-
 ## Example Commands
 
 ### Planning Query (High Complexity → `high`)
@@ -103,16 +65,19 @@ Analyze this codebase and design an implementation plan for [feature].
 EOF
 ```
 
-### Code Review with `codex review`
+### Code Review with `codex exec`
 
 ```bash
-MODEL="${MODEL:-codex-5.3-gpt}"
-
-# Simple review of uncommitted changes
-codex -m "$MODEL" review --uncommitted
-
-# Review against main with custom instructions
-codex -m "$MODEL" review --base main "Check for SQL injection and XSS vulnerabilities"
+CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
+codex exec \
+  -m codex-5.3-gpt \
+  -c model_reasoning_effort=medium \
+  -s read-only \
+  -o "$CODEX_OUTPUT" \
+  2>/dev/null <<'EOF'
+Review the recent changes for security vulnerabilities, focusing on SQL injection and XSS.
+Include file paths and line references for each finding.
+EOF
 ```
 
 ### Planning Query with Web Search

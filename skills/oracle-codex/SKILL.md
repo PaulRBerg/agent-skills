@@ -3,7 +3,7 @@ name: oracle-codex
 argument-hint: '[--model] [--reasoning]'
 context: fork
 user-invocable: false
-description: This skill should be used when the user asks to "use Codex", "ask Codex", "consult Codex", "Codex review", "use GPT for planning", "ask GPT to review", "get GPT's opinion", "what does GPT think", "second opinion on code", "consult the oracle", "ask the oracle", or mentions using an AI oracle for planning or code review. NOT for implementation tasks.
+description: This skill should be used when the user asks to "use Codex", "ask Codex", "consult Codex", "use GPT for planning", "ask GPT to review", "get GPT's opinion", "what does GPT think", "second opinion on code", "consult the oracle", "ask the oracle", or mentions using an AI oracle for planning or code review. NOT for implementation tasks.
 ---
 
 # Codex Oracle
@@ -77,44 +77,6 @@ Run the check script. On failure, report the installation instructions and abort
 
 - **Planning mode**: User wants architecture, implementation approach, or design decisions
 - **Review mode**: User wants code analysis, bug detection, or improvement suggestions
-  - **Preferred**: Use `codex review` subcommand (simpler, see below)
-
-### 2b. Quick Review with `codex review`
-
-For code review requests, prefer the dedicated `codex review` subcommand:
-
-```bash
-MODEL="${MODEL:-codex-5.3-gpt}"
-
-# Review uncommitted changes
-codex -m "$MODEL" review --uncommitted
-
-# Review changes against a base branch
-codex -m "$MODEL" review --base main
-
-# Review a specific commit
-codex -m "$MODEL" review --commit <SHA>
-
-# With custom focus instructions
-codex -m "$MODEL" review --base main "Focus on security and error handling"
-```
-
-**Important**: Before using `--uncommitted`, verify there are changes to review:
-
-```bash
-# Check for uncommitted changes (staged or unstaged)
-if git diff --quiet && git diff --cached --quiet; then
-  echo "No uncommitted changes to review"
-  # Fall back to --base or inform user
-fi
-```
-
-If there are no uncommitted changes, either:
-
-1. Use `--base <branch>` to review committed changes against a branch
-2. Inform the user there's nothing to review
-
-This is simpler than `codex exec` for review workflows. Fall back to `codex exec` when more control is needed (custom prompts, specific reasoning effort, output redirection).
 
 ### 3. Construct Prompt
 
@@ -245,13 +207,6 @@ The check script returns specific exit codes:
 | 2         | Codex not responding    | Suggest running `codex --version` manually       |
 | 3         | Codex not authenticated | Show login instructions from check script        |
 
-The `codex review` command returns:
-
-| Exit Code | Meaning                                    | Response                                  |
-| --------- | ------------------------------------------ | ----------------------------------------- |
-| 0         | Review completed                           | Present results                           |
-| 2         | Nothing to review (e.g., no changes found) | Inform user; suggest alternative (--base) |
-
 The `codex exec` command returns:
 
 | Exit Code | Meaning                                                    | Response                                                       |
@@ -289,8 +244,8 @@ User: "Have Codex review the changes in src/auth/"
 1. Validate Codex CLI available
 2. Read files in `src/auth/` directory
 3. Assess complexity → single directory, focused review → `medium` reasoning
-4. Construct review prompt with file contents
-5. Execute Codex review with `medium`
+4. Construct review prompt with file contents and diff context
+5. Execute via `run-codex-exec.sh` with `EFFORT=medium`
 6. Present findings with file/line references
 7. Summarize critical issues and recommendations
 
