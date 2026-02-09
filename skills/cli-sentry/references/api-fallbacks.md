@@ -27,7 +27,7 @@ GET /issues/{issue_id}/events/latest/
 Returns the most recent event including full stack traces. Essential for triage categorization - the `exception.values[].stacktrace.frames` array reveals whether the error originates from application code or third-party extensions.
 
 ```bash
-bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/events/latest/ | jq '.exception'
+bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/events/latest/ | jq '.exception // {note: "no exception data"}'
 ```
 
 ### List Events

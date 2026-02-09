@@ -139,7 +139,7 @@ bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/ |
 ### Get Latest Event / Stack Trace (API)
 
 ```bash
-bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/events/latest/ | jq '.exception'
+bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/events/latest/ | jq '.exception // {note: "no exception data"}'
 ```
 
 ### Resolve / Mute / Unresolve (CLI)
@@ -213,7 +213,7 @@ Errors originating from browser extensions or external scripts. See `~/.agents/s
 3. **Inspect** - For each issue, fetch its latest event to examine the stack trace:
    ```bash
    bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/events/latest/ \
-     | jq '.exception.values[0].stacktrace.frames'
+     | jq '.exception.values[0].stacktrace.frames // empty'
    ```
    Check `culprit`, `title`, `metadata`, `lastSeen`, and event count
 4. **Categorize** - Assign each issue to Valid, False Positive, Already Resolved, or Third Party
