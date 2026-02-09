@@ -12,6 +12,10 @@ Use OpenAI Codex CLI as a **planning oracle** and **code reviewer**. Codex provi
 
 **Critical**: This skill is for planning and review ONLY. Never use Codex to implement changes.
 
+## Agent Compatibility
+
+**Claude Code only.** This skill depends on Claude Code features (`ExitPlanMode`, `AskUserQuestion`, plan mode). If you are not Claude Code — e.g., you are Codex CLI, GPT, or another agent — stop immediately and inform the user that this skill requires Claude Code.
+
 ## Prerequisites
 
 Before invoking Codex, validate availability:
@@ -78,6 +82,11 @@ Run the check script. On failure, report the installation instructions and abort
 - **Planning mode**: User wants architecture, implementation approach, or design decisions
 - **Review mode**: User wants code analysis, bug detection, or improvement suggestions
 
+**Plan mode detection**: If Claude Code is running in plan mode (a plan file path was provided in the system prompt), the review target changes:
+
+- **Normal mode** → review uncommitted changes (`git diff` + `git diff --staged`)
+- **Plan mode** → read the plan file and review its contents instead of uncommitted changes
+
 ### 3. Construct Prompt
 
 Build a focused prompt for Codex based on mode:
@@ -93,22 +102,37 @@ Focus on:
 - Implementation sequence
 - Potential risks or blockers
 
-Do NOT implement anything. Provide analysis and recommendations only.
+Do not implement anything. Provide analysis and recommendations only.
 ```
 
-**Review prompt template:**
+**Review prompt template (normal mode — uncommitted changes):**
 
 ```
-Review the following code for:
+Review the following code changes for:
 - Bugs and logic errors
 - Security vulnerabilities
 - Performance issues
 - Code quality and maintainability
 - Adherence to best practices
 
-[code or file paths]
+[git diff output]
 
 Provide specific, actionable feedback with file locations and line references.
+```
+
+**Review prompt template (plan mode — plan file):**
+
+```
+Review the following implementation plan for:
+- Completeness and feasibility
+- Architectural soundness
+- Missing edge cases or risks
+- Ordering and dependency issues
+- Alignment with stated goals
+
+[plan file contents]
+
+Provide specific, actionable feedback on the plan. Identify gaps, risks, and improvements.
 ```
 
 ### 4. Assess Complexity and Execute Codex
