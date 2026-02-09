@@ -35,7 +35,7 @@ For pull request workflows, also verify:
 
 ## Related Skills
 
-For detailed GitHub CLI command syntax, flags, and patterns, activate the `gh-cli` skill. That skill covers the full gh command surface including issue management, PR operations, repository queries, workflow triggers, and API interactions.
+For detailed GitHub CLI command syntax, flags, and patterns, activate the `cli-gh` skill. That skill covers the full gh command surface including issue management, PR operations, repository queries, workflow triggers, and API interactions.
 
 ## Pull Requests
 
