@@ -19,6 +19,8 @@
 
 set -euo pipefail
 
+source "$(dirname "$0")/lib.sh"
+
 # Defaults
 ORG=""
 PROJECT=""
@@ -41,11 +43,11 @@ Options:
 Config resolution (first wins):
   1. CLI flags (--org, --project)
   2. Environment variables (SENTRY_ORG, SENTRY_PROJECT)
-  3. .sentryclirc file
+  3. ~/.sentryclirc file
 
 Auth token resolution:
   1. SENTRY_AUTH_TOKEN environment variable
-  2. .sentryclirc [auth] token
+  2. ~/.sentryclirc [auth] token
 EOF
 }
 
@@ -61,55 +63,27 @@ for arg in "$@"; do
     esac
 done
 
-# Resolve org: flag > env > .sentryclirc
-if [[ -z "$ORG" ]]; then
-    ORG="${SENTRY_ORG:-}"
-fi
-if [[ -z "$ORG" ]]; then
-    for rc in .sentryclirc ~/.sentryclirc; do
-        if [[ -f "$rc" ]]; then
-            ORG=$(grep -E '^\s*org\s*=' "$rc" 2>/dev/null | head -1 | sed 's/.*=\s*//' | tr -d '[:space:]') || true
-            [[ -n "$ORG" ]] && break
-        fi
-    done
-fi
-
-# Resolve project: flag > env > .sentryclirc
-if [[ -z "$PROJECT" ]]; then
-    PROJECT="${SENTRY_PROJECT:-}"
-fi
-if [[ -z "$PROJECT" ]]; then
-    for rc in .sentryclirc ~/.sentryclirc; do
-        if [[ -f "$rc" ]]; then
-            PROJECT=$(grep -E '^\s*project\s*=' "$rc" 2>/dev/null | head -1 | sed 's/.*=\s*//' | tr -d '[:space:]') || true
-            [[ -n "$PROJECT" ]] && break
-        fi
-    done
-fi
-
-# Resolve auth token: env > .sentryclirc
-TOKEN="${SENTRY_AUTH_TOKEN:-}"
-if [[ -z "$TOKEN" ]]; then
-    for rc in .sentryclirc ~/.sentryclirc; do
-        if [[ -f "$rc" ]]; then
-            TOKEN=$(grep -E '^\s*token\s*=' "$rc" 2>/dev/null | head -1 | sed 's/.*=\s*//' | tr -d '[:space:]') || true
-            [[ -n "$TOKEN" ]] && break
-        fi
-    done
-fi
+# Resolve config: flag > env > ~/.sentryclirc
+ORG="${ORG:-${SENTRY_ORG:-$(rc_value defaults org)}}"
+PROJECT="${PROJECT:-${SENTRY_PROJECT:-$(rc_value defaults project)}}"
+TOKEN="${SENTRY_AUTH_TOKEN:-$(rc_value auth token)}"
 
 # Validate
 if [[ -z "$TOKEN" ]]; then
     echo "Error: No auth token found." >&2
-    echo "Set SENTRY_AUTH_TOKEN or add token to .sentryclirc" >&2
+    echo "Set SENTRY_AUTH_TOKEN or add token to ~/.sentryclirc" >&2
     exit 1
 fi
 
 if [[ -z "$ORG" || -z "$PROJECT" ]]; then
     echo "Error: Organization and project are required." >&2
-    echo "Use --org=<org> --project=<project>, set SENTRY_ORG/SENTRY_PROJECT, or configure .sentryclirc" >&2
+    echo "Use --org=<org> --project=<project>, set SENTRY_ORG/SENTRY_PROJECT, or configure ~/.sentryclirc" >&2
     exit 2
 fi
+
+# Validate parameters
+[[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "Error: --limit must be a positive integer" >&2; exit 1; }
+[[ "$STATS_PERIOD" =~ ^[0-9]+[dhm]$ ]] || { echo "Error: --stats-period must be a duration like 14d, 24h, or 30m" >&2; exit 1; }
 
 # Fetch issues
 URL="https://sentry.io/api/0/projects/${ORG}/${PROJECT}/issues/?query=is:unresolved&statsPeriod=${STATS_PERIOD}&limit=${LIMIT}"

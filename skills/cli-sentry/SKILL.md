@@ -42,50 +42,63 @@ Expert guidance for managing Sentry issues via the CLI and API. Use this skill f
 
 ## Prerequisites
 
-### Required Environment Variables
+### Configuration (`~/.sentryclirc`)
 
-The following env vars **must** be set before running any Sentry operations. Add them to your project's `.envrc`:
+Sentry credentials are stored in `~/.sentryclirc` (the native sentry-cli config file):
 
-```bash
-export SENTRY_AUTH_TOKEN=sntrys_...  # or sntryu_...
-export SENTRY_ORG=<your-org-slug>
-export SENTRY_PROJECT=<your-project-slug>
+```ini
+[auth]
+token=sntrys_...
+
+[defaults]
+org=your-org-slug
+project=your-project-slug
 ```
 
-- **`SENTRY_AUTH_TOKEN`** — Org token (`sntrys_`) or user token (`sntryu_`). Both use `Authorization: Bearer`. Generate at https://sentry.io/settings/account/api/auth-tokens/
-- **`SENTRY_ORG`** — Your organization slug in Sentry
-- **`SENTRY_PROJECT`** — Your project slug in Sentry
+- **`token`** — Org token (`sntrys_`) or user token (`sntryu_`). Both use `Authorization: Bearer`. Generate at https://sentry.io/settings/account/api/auth-tokens/
+- **`org`** — Your organization slug in Sentry
+- **`project`** — Your project slug in Sentry
 
-> These are the native sentry-cli env var names. The CLI reads them automatically, so setting them in `.envrc` (and running `direnv allow`) means you don't need to pass `--org`, `--project`, or `--auth-token` flags.
+> Environment variables (`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`) override rc file values when set. The rc file is the primary persistent store.
 
-### Preflight Check
+### Setup: Missing Configuration
 
-Run the preflight check before any Sentry operations:
+Before running any Sentry operation, run the preflight check:
 
 ```bash
 bash ~/.agents/skills/cli-sentry/scripts/check-sentry.sh -v
 ```
 
-This validates env vars, sentry-cli installation, and authentication.
+If the preflight check fails with exit code 4 (missing config), prompt the user for each missing value using `AskUserQuestion`, then write the values to `~/.sentryclirc`:
+
+- If the file doesn't exist, create it with `[auth]` and `[defaults]` sections
+- If the file exists, add missing keys under the appropriate section (`token` → `[auth]`, `org`/`project` → `[defaults]`)
+- Re-run the preflight check to confirm
 
 ### Configuration Resolution Order
 
 Settings resolve in this order (first wins):
 
-1. CLI flags (`--org`, `--project`, `--auth-token`)
+1. CLI flags (`--org`, `--project`)
 2. Environment variables (`SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`)
-3. `.sentryclirc` file (project root or `~/.sentryclirc`)
+3. `~/.sentryclirc`
 
 ## Issue Management
 
 ### List Issues (CLI)
 
 ```bash
-# List unresolved issues
+# List all issues
 sentry-cli issues list --project <project>
 
 # List with status filter
 sentry-cli issues list --project <project> --status unresolved
+
+# Full search syntax (Sentry query language)
+sentry-cli issues list --project <project> --query "is:unresolved browser.name:Chrome"
+
+# Pagination control (default: 5 pages)
+sentry-cli issues list --project <project> --pages 10
 ```
 
 ### List Issues (API - Richer Data)
@@ -122,6 +135,9 @@ sentry-cli issues mute --project <project> -i <issue_id>
 
 # Unresolve
 sentry-cli issues unresolve --project <project> -i <issue_id>
+
+# Resolve in next release only
+sentry-cli issues resolve --project <project> -i <issue_id> --next-release
 ```
 
 ## Issue Categorization
@@ -174,7 +190,7 @@ Errors originating from browser extensions or external scripts. See `~/.agents/s
 
 ## Triage Workflow
 
-1. **Preflight** - Run `bash ~/.agents/skills/cli-sentry/scripts/check-sentry.sh -v` to verify sentry-cli and auth
+1. **Preflight** - Run `bash ~/.agents/skills/cli-sentry/scripts/check-sentry.sh -v` to verify config and auth. If missing, prompt the user and write to `~/.sentryclirc`
 2. **Fetch** - Run `bash ~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<org> --project=<project>` to get all unresolved issues
 3. **Inspect** - For each issue, fetch its latest event to examine the stack trace:
    ```bash
@@ -240,14 +256,14 @@ curl -X PUT -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
 | Issue details      | API    | `GET /issues/{id}/`                                                           |
 | Latest event       | API    | `GET /issues/{id}/events/latest/`                                             |
 | Event list         | API    | `GET /issues/{id}/events/`                                                    |
-| Resolve            | CLI    | `sentry-cli issues resolve -i <id>`                                           |
-| Mute               | CLI    | `sentry-cli issues mute -i <id>`                                              |
-| Unresolve          | CLI    | `sentry-cli issues unresolve -i <id>`                                         |
+| Resolve            | CLI    | `sentry-cli issues resolve --project <p> -i <id>`                             |
+| Mute               | CLI    | `sentry-cli issues mute --project <p> -i <id>`                                |
+| Unresolve          | CLI    | `sentry-cli issues unresolve --project <p> -i <id>`                           |
 | Bulk update        | API    | `PUT /projects/{org}/{project}/issues/?id=...`                                |
 
 ## Additional Resources
 
-- **`~/.agents/skills/cli-sentry/scripts/check-sentry.sh`** - Preflight validation (installation, responsiveness, auth)
+- **`~/.agents/skills/cli-sentry/scripts/check-sentry.sh`** - Preflight validation (config, installation, responsiveness, auth)
 - **`~/.agents/skills/cli-sentry/scripts/fetch-issues.sh`** - Fetch unresolved issues with rich JSON
 - **`~/.agents/skills/cli-sentry/references/api-fallbacks.md`** - API endpoints for operations sentry-cli can't handle
 - **`~/.agents/skills/cli-sentry/references/extension-patterns.md`** - Browser extension error detection patterns
