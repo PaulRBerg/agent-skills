@@ -43,15 +43,15 @@ The following env vars **must** be set before running any Sentry operations. Add
 
 ```bash
 export SENTRY_AUTH_TOKEN=sntrys_...
+export SENTRY_ORG=<your-org-slug>
 export SENTRY_PROJECT=<your-project-slug>
 ```
 
-Then run `direnv allow` to load them.
-
 - **`SENTRY_AUTH_TOKEN`** — Generate at https://sentry.io/settings/account/api/auth-tokens/
+- **`SENTRY_ORG`** — Your organization slug in Sentry
 - **`SENTRY_PROJECT`** — Your project slug in Sentry
 
-> These are the native sentry-cli env var names. The CLI reads them automatically, so setting them in `.envrc` means you don't need to pass `--project` or `--auth-token` flags.
+> These are the native sentry-cli env var names. The CLI reads them automatically, so setting them in `.envrc` (and running `direnv allow`) means you don't need to pass `--org`, `--project`, or `--auth-token` flags.
 
 ### Preflight Check
 
@@ -70,7 +70,6 @@ Settings resolve in this order (first wins):
 1. CLI flags (`--org`, `--project`, `--auth-token`)
 2. Environment variables (`SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`)
 3. `.sentryclirc` file (project root or `~/.sentryclirc`)
-
 
 ## Issue Management
 

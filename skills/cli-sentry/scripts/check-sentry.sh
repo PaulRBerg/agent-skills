@@ -6,7 +6,7 @@
 #   1 - sentry-cli is not installed
 #   2 - sentry-cli is not responding (timeout)
 #   3 - sentry-cli is not authenticated
-#   4 - missing required env vars (SENTRY_AUTH_TOKEN, SENTRY_PROJECT)
+#   4 - missing required env vars (SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT)
 #
 # Options:
 #   -v, --verbose   Show detailed status
@@ -14,6 +14,11 @@
 #   --skip-auth     Skip authentication check
 
 set -euo pipefail
+
+if ((BASH_VERSINFO[0] < 4)); then
+    echo "ERROR: bash 4+ required (found ${BASH_VERSION})" >&2
+    exit 1
+fi
 
 VERBOSE=0
 QUIET=0
@@ -37,6 +42,7 @@ Exit codes:
   1  sentry-cli is not installed
   2  sentry-cli is not responding
   3  sentry-cli is not authenticated
+  4  missing required env vars
 EOF
 }
 
@@ -63,27 +69,29 @@ log_error() {
 }
 
 # Check 0: Required environment variables
+declare -A REQUIRED_VARS=(
+    [SENTRY_AUTH_TOKEN]="sntrys_..."
+    [SENTRY_ORG]="<your-org-slug>"
+    [SENTRY_PROJECT]="<your-project-slug>"
+)
+# bash associative arrays don't preserve insertion order
+REQUIRED_VAR_ORDER=(SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT)
+
 MISSING_VARS=()
-
-if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
-    MISSING_VARS+=("SENTRY_AUTH_TOKEN")
-fi
-
-if [[ -z "${SENTRY_PROJECT:-}" ]]; then
-    MISSING_VARS+=("SENTRY_PROJECT")
-fi
+for var in "${REQUIRED_VAR_ORDER[@]}"; do
+    if [[ -z "${!var:-}" ]]; then
+        MISSING_VARS+=("$var")
+    fi
+done
 
 if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
     log_error "ERROR: Missing required environment variable(s): ${MISSING_VARS[*]}"
     log_error ""
     log_error "Add them to your project's .envrc file:"
     log_error ""
-    if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
-        log_error "  export SENTRY_AUTH_TOKEN=sntrys_..."
-    fi
-    if [[ -z "${SENTRY_PROJECT:-}" ]]; then
-        log_error "  export SENTRY_PROJECT=<your-project-id>"
-    fi
+    for var in "${MISSING_VARS[@]}"; do
+        log_error "  export ${var}=${REQUIRED_VARS[$var]}"
+    done
     log_error ""
     log_error "Then run: direnv allow"
     log_error ""
@@ -92,8 +100,13 @@ if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
     exit 4
 fi
 
-log_verbose "SENTRY_AUTH_TOKEN: set"
-log_verbose "SENTRY_PROJECT: $SENTRY_PROJECT"
+for var in "${REQUIRED_VAR_ORDER[@]}"; do
+    if [[ "$var" == "SENTRY_AUTH_TOKEN" ]]; then
+        log_verbose "SENTRY_AUTH_TOKEN: set"
+    else
+        log_verbose "${var}: ${!var}"
+    fi
+done
 
 # Check 1: Is sentry-cli installed?
 if ! command -v sentry-cli &>/dev/null; then
