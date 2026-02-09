@@ -8,7 +8,7 @@ description: This skill should be used when the user asks to "fetch Sentry issue
 
 > **Compatibility**: This skill is compatible with `sentry-cli` v3 only.
 >
-> **Important**: `sentry-cli api` was removed in v3. Do **not** use `sentry-cli api` for anything. Use `curl` with the Sentry REST API instead (see [API Fallbacks](#api-fallbacks) and `~/.agents/skills/cli-sentry/scripts/fetch-issues.sh`).
+> **Important**: `sentry-cli api` was removed in v3. Do **not** use `sentry-cli api` for anything. Use `~/.agents/skills/cli-sentry/scripts/sentry-api.sh` for API calls (see [API Access](#api-access) and [API Fallbacks](#api-fallbacks)).
 >
 > **File paths**: All `scripts/` and `references/` paths in this skill resolve under `~/.agents/skills/cli-sentry/`. Do not look for them in the current working directory.
 
@@ -27,7 +27,7 @@ Expert guidance for managing Sentry issues via the CLI and API. Use this skill f
 
 **Prohibited operations:**
 
-- `sentry-cli api` — Removed in v3. Use `curl` with the Sentry REST API instead
+- `sentry-cli api` — Removed in v3. Use `sentry-api.sh` instead
 - `DELETE /issues/{id}/` - Issue deletion (irreversible)
 - Project or release deletion
 - Bulk status changes without explicit user confirmation
@@ -39,6 +39,26 @@ Expert guidance for managing Sentry issues via the CLI and API. Use this skill f
 - Resolving issues (reversible via unresolve)
 - Muting/ignoring issues (reversible via unmute)
 - Fetching event details and stack traces
+
+## API Access
+
+> **NEVER manually parse `~/.sentryclirc` or construct `Authorization` headers.**
+> All Sentry API calls MUST go through one of these scripts:
+>
+> - `~/.agents/skills/cli-sentry/scripts/fetch-issues.sh` — list unresolved issues with rich JSON
+> - `~/.agents/skills/cli-sentry/scripts/sentry-api.sh` — general-purpose authenticated API wrapper
+>
+> These scripts handle credential resolution internally. Do not use `$SENTRY_AUTH_TOKEN` directly.
+
+### `sentry-api.sh` Usage
+
+```bash
+bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh METHOD PATH [BODY]
+```
+
+- `METHOD`: GET, PUT, POST (DELETE is rejected)
+- `PATH`: Sentry API path — `{org}` and `{project}` placeholders are auto-substituted from config
+- `BODY`: optional JSON string for PUT/POST
 
 ## Prerequisites
 
@@ -113,15 +133,13 @@ bash ~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<org> --project=<
 ### Get Issue Details (API)
 
 ```bash
-curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  "https://sentry.io/api/0/issues/{issue_id}/" | jq
+bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/ | jq
 ```
 
 ### Get Latest Event / Stack Trace (API)
 
 ```bash
-curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  "https://sentry.io/api/0/issues/{issue_id}/events/latest/" | jq '.exception'
+bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/events/latest/ | jq '.exception'
 ```
 
 ### Resolve / Mute / Unresolve (CLI)
@@ -194,8 +212,8 @@ Errors originating from browser extensions or external scripts. See `~/.agents/s
 2. **Fetch** - Run `bash ~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<org> --project=<project>` to get all unresolved issues
 3. **Inspect** - For each issue, fetch its latest event to examine the stack trace:
    ```bash
-   curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-     "https://sentry.io/api/0/issues/{issue_id}/events/latest/" | jq '.exception.values[0].stacktrace.frames'
+   bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{issue_id}/events/latest/ \
+     | jq '.exception.values[0].stacktrace.frames'
    ```
    Check `culprit`, `title`, `metadata`, `lastSeen`, and event count
 4. **Categorize** - Assign each issue to Valid, False Positive, Already Resolved, or Third Party
@@ -235,38 +253,29 @@ After triage, resolve or mute issues in bulk. Always confirm with the user befor
 
 ```bash
 # Bulk resolve via API
-curl -X PUT -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "resolved"}' \
-  "https://sentry.io/api/0/projects/{org}/{project}/issues/?id=123&id=456&id=789"
+bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh PUT \
+  "/projects/{org}/{project}/issues/?id=123&id=456&id=789" \
+  '{"status": "resolved"}'
 
 # Bulk ignore/mute via API
-curl -X PUT -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "ignored"}' \
-  "https://sentry.io/api/0/projects/{org}/{project}/issues/?id=123&id=456&id=789"
+bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh PUT \
+  "/projects/{org}/{project}/issues/?id=123&id=456&id=789" \
+  '{"status": "ignored"}'
 ```
 
 ## Quick Reference
 
-| Operation          | Method | Command / Endpoint                                                            |
-| ------------------ | ------ | ----------------------------------------------------------------------------- |
-| List issues        | CLI    | `sentry-cli issues list --project <p>`                                        |
-| List issues (rich) | Script | `~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<o> --project=<p>` |
-| Issue details      | API    | `GET /issues/{id}/`                                                           |
-| Latest event       | API    | `GET /issues/{id}/events/latest/`                                             |
-| Event list         | API    | `GET /issues/{id}/events/`                                                    |
-| Resolve            | CLI    | `sentry-cli issues resolve --project <p> -i <id>`                             |
-| Mute               | CLI    | `sentry-cli issues mute --project <p> -i <id>`                                |
-| Unresolve          | CLI    | `sentry-cli issues unresolve --project <p> -i <id>`                           |
-| Bulk update        | API    | `PUT /projects/{org}/{project}/issues/?id=...`                                |
-
-## Additional Resources
-
-- **`~/.agents/skills/cli-sentry/scripts/check-sentry.sh`** - Preflight validation (config, installation, responsiveness, auth)
-- **`~/.agents/skills/cli-sentry/scripts/fetch-issues.sh`** - Fetch unresolved issues with rich JSON
-- **`~/.agents/skills/cli-sentry/references/api-fallbacks.md`** - API endpoints for operations sentry-cli can't handle
-- **`~/.agents/skills/cli-sentry/references/extension-patterns.md`** - Browser extension error detection patterns
+| Operation          | Method | Command / Endpoint                                                                                                               |
+| ------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| List issues        | CLI    | `sentry-cli issues list --project <p>`                                                                                           |
+| List issues (rich) | Script | `bash ~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<o> --project=<p>`                                               |
+| Issue details      | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/`                                                       |
+| Latest event       | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/events/latest/`                                         |
+| Event list         | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/events/`                                                |
+| Resolve            | CLI    | `sentry-cli issues resolve --project <p> -i <id>`                                                                                |
+| Mute               | CLI    | `sentry-cli issues mute --project <p> -i <id>`                                                                                   |
+| Unresolve          | CLI    | `sentry-cli issues unresolve --project <p> -i <id>`                                                                              |
+| Bulk update        | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh PUT "/projects/{org}/{project}/issues/?id=..." '{"status":"resolved"}'`   |
 
 ## Tips
 
