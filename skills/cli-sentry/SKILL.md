@@ -265,17 +265,17 @@ bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh PUT \
 
 ## Quick Reference
 
-| Operation          | Method | Command / Endpoint                                                                                                               |
-| ------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| List issues        | CLI    | `sentry-cli issues list --project <p>`                                                                                           |
-| List issues (rich) | Script | `bash ~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<o> --project=<p>`                                               |
-| Issue details      | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/`                                                       |
-| Latest event       | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/events/latest/`                                         |
-| Event list         | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/events/`                                                |
-| Resolve            | CLI    | `sentry-cli issues resolve --project <p> -i <id>`                                                                                |
-| Mute               | CLI    | `sentry-cli issues mute --project <p> -i <id>`                                                                                   |
-| Unresolve          | CLI    | `sentry-cli issues unresolve --project <p> -i <id>`                                                                              |
-| Bulk update        | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh PUT "/projects/{org}/{project}/issues/?id=..." '{"status":"resolved"}'`   |
+| Operation          | Method | Command / Endpoint                                                                                                              |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| List issues        | CLI    | `sentry-cli issues list --project <p>`                                                                                          |
+| List issues (rich) | Script | `bash ~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<o> --project=<p>`                                              |
+| Issue details      | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/`                                                      |
+| Latest event       | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/events/latest/`                                        |
+| Event list         | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh GET /issues/{id}/events/`                                               |
+| Resolve            | CLI    | `sentry-cli issues resolve --project <p> -i <id>`                                                                               |
+| Mute               | CLI    | `sentry-cli issues mute --project <p> -i <id>`                                                                                  |
+| Unresolve          | CLI    | `sentry-cli issues unresolve --project <p> -i <id>`                                                                             |
+| Bulk update        | Script | `bash ~/.agents/skills/cli-sentry/scripts/sentry-api.sh PUT "/projects/{org}/{project}/issues/?id=..." '{"status":"resolved"}'` |
 
 ## Tips
 

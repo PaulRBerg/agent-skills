@@ -38,7 +38,8 @@ if [[ -z "$METHOD" || -z "$PATH_ARG" ]]; then
     exit 1
 fi
 
-METHOD="${METHOD^^}"
+# Bash 3.2 compatibility: `${var^^}` is Bash 4+, so use `tr` instead.
+METHOD="$(printf '%s' "$METHOD" | tr '[:lower:]' '[:upper:]')"
 
 # --- Safety: reject DELETE ---
 if [[ "$METHOD" == "DELETE" ]]; then
