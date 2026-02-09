@@ -72,6 +72,13 @@ For regular releases only, in the `CHANGELOG.md` file, generate changelog entrie
 - **Removed** - Removed functionality
 - **Fixed** - Bug fixes
 
+Every entry must begin with a verb in its base form. Examples:
+
+- "Update minimum Node.js version to 20"
+- "Add `createLinear` function for linear streams"
+- "Remove deprecated `cancelStream` method"
+- "Fix incorrect unlock time calculation in `withdrawMax`"
+
 ## Inclusion Criteria
 
 For regular releases only (changelog generation is skipped for beta releases):
