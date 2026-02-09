@@ -6,6 +6,8 @@ description: This skill should be used when the user asks to "fetch Sentry issue
 
 # Sentry CLI Issue Management
 
+> **Compatibility**: This skill is compatible with `sentry-cli` v3 only.
+
 ## Overview
 
 Expert guidance for managing Sentry issues via the CLI and API. Use this skill for fetching, triaging, categorizing, and resolving Sentry issues.
@@ -109,13 +111,13 @@ curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
 
 ```bash
 # Resolve
-sentry-cli issues resolve <issue_id> --project <project>
+sentry-cli issues resolve --project <project> -i <issue_id>
 
 # Mute (ignore)
-sentry-cli issues mute <issue_id> --project <project>
+sentry-cli issues mute --project <project> -i <issue_id>
 
 # Unresolve
-sentry-cli issues unresolve <issue_id> --project <project>
+sentry-cli issues unresolve --project <project> -i <issue_id>
 ```
 
 ## Issue Categorization
@@ -234,9 +236,9 @@ curl -X PUT -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
 | Issue details      | API    | `GET /issues/{id}/`                               |
 | Latest event       | API    | `GET /issues/{id}/events/latest/`                 |
 | Event list         | API    | `GET /issues/{id}/events/`                        |
-| Resolve            | CLI    | `sentry-cli issues resolve <id>`                  |
-| Mute               | CLI    | `sentry-cli issues mute <id>`                     |
-| Unresolve          | CLI    | `sentry-cli issues unresolve <id>`                |
+| Resolve            | CLI    | `sentry-cli issues resolve -i <id>`               |
+| Mute               | CLI    | `sentry-cli issues mute -i <id>`                  |
+| Unresolve          | CLI    | `sentry-cli issues unresolve -i <id>`             |
 | Bulk update        | API    | `PUT /projects/{org}/{project}/issues/?id=...`    |
 
 ## Additional Resources
