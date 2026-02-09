@@ -6,6 +6,8 @@ description: This skill should be used ONLY when the user asks to update README.
 
 # Markdown Documentation Management
 
+> **File paths**: All `references/` paths in this skill resolve under `~/.agents/skills/md-docs/`. Do not look for them in the current working directory.
+
 ## Overview
 
 Manage project documentation for Claude Code workflows including context files, READMEs, and agent instructions. This skill provides structured automation for maintaining accurate, up-to-date documentation that aligns with actual codebase structure and functionality. Use this skill when initializing new projects, updating existing documentation, or ensuring context files accurately reflect current code.
@@ -159,7 +161,7 @@ When optional files are absent:
 ⊘ CONTRIBUTING.md not found (skipped)
 ```
 
-For the complete update context files workflow with verification strategies, diff examples, and edge cases, refer to `./references/update-agents.md`.
+For the complete update context files workflow with verification strategies, diff examples, and edge cases, refer to `~/.agents/skills/md-docs/references/update-agents.md`.
 
 ## Update README
 
@@ -266,7 +268,7 @@ Display summary:
   - Added badges for license and version
 ```
 
-For the complete update README workflow with section templates, metadata extraction strategies, and formatting examples, refer to `./references/update-readme.md`.
+For the complete update README workflow with section templates, metadata extraction strategies, and formatting examples, refer to `~/.agents/skills/md-docs/references/update-readme.md`.
 
 ## Update CONTRIBUTING
 
@@ -345,7 +347,7 @@ Display summary:
 ⊘ Policy sections preserved (CLA, review process)
 ```
 
-For the complete update CONTRIBUTING workflow with verification strategies and examples, refer to `./references/update-contributing.md`.
+For the complete update CONTRIBUTING workflow with verification strategies and examples, refer to `~/.agents/skills/md-docs/references/update-contributing.md`.
 
 ## Initialize Context
 
@@ -426,7 +428,7 @@ Display summary:
   - Added testing section for Jest
 ```
 
-For the complete initialize context workflow with language-specific templates, detection strategies, and customization options, refer to `./references/init-agents.md`.
+For the complete initialize context workflow with language-specific templates, detection strategies, and customization options, refer to `~/.agents/skills/md-docs/references/init-agents.md`.
 
 ### DOCS.md Initialization
 
@@ -442,10 +444,10 @@ The update context workflow will suggest creating DOCS.md if it detects signific
 
 For detailed workflows, examples, and implementation guidance, refer to these reference documents:
 
-- **`./references/common-patterns.md`** - Argument parsing, backup handling, writing style, report formatting, file detection, and metadata extraction
-- **`./references/update-agents.md`** - Complete context file update workflow including verification strategies, diff generation, and discrepancy detection
-- **`./references/update-readme.md`** - Complete README update workflow including section templates, metadata extraction, and formatting conventions
-- **`./references/update-contributing.md`** - Complete CONTRIBUTING.md update workflow including scope, templates, and validation (only when CONTRIBUTING.md exists)
-- **`./references/init-agents.md`** - Complete context initialization workflow including language-specific templates, detection strategies, and customization options
+- **`~/.agents/skills/md-docs/references/common-patterns.md`** - Argument parsing, backup handling, writing style, report formatting, file detection, and metadata extraction
+- **`~/.agents/skills/md-docs/references/update-agents.md`** - Complete context file update workflow including verification strategies, diff generation, and discrepancy detection
+- **`~/.agents/skills/md-docs/references/update-readme.md`** - Complete README update workflow including section templates, metadata extraction, and formatting conventions
+- **`~/.agents/skills/md-docs/references/update-contributing.md`** - Complete CONTRIBUTING.md update workflow including scope, templates, and validation (only when CONTRIBUTING.md exists)
+- **`~/.agents/skills/md-docs/references/init-agents.md`** - Complete context initialization workflow including language-specific templates, detection strategies, and customization options
 
 These references provide implementation details, code examples, and troubleshooting guidance for each workflow type.

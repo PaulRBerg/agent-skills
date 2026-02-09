@@ -15,11 +15,6 @@
 
 set -euo pipefail
 
-if ((BASH_VERSINFO[0] < 4)); then
-    echo "ERROR: bash 4+ required (found ${BASH_VERSION})" >&2
-    exit 1
-fi
-
 VERBOSE=0
 QUIET=0
 SKIP_AUTH=0
@@ -69,28 +64,30 @@ log_error() {
 }
 
 # Check 0: Required environment variables
-declare -A REQUIRED_VARS=(
-    [SENTRY_AUTH_TOKEN]="sntrys_..."
-    [SENTRY_ORG]="<your-org-slug>"
-    [SENTRY_PROJECT]="<your-project-slug>"
-)
-# bash associative arrays don't preserve insertion order
-REQUIRED_VAR_ORDER=(SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT)
+REQUIRED_VARS="SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT"
+REQUIRED_HINTS="SENTRY_AUTH_TOKEN=sntrys_..._or_sntryu_... SENTRY_ORG=<your-org-slug> SENTRY_PROJECT=<your-project-slug>"
 
-MISSING_VARS=()
-for var in "${REQUIRED_VAR_ORDER[@]}"; do
-    if [[ -z "${!var:-}" ]]; then
-        MISSING_VARS+=("$var")
+MISSING_VARS=""
+for var in $REQUIRED_VARS; do
+    eval "val=\${${var}:-}"
+    if [[ -z "$val" ]]; then
+        MISSING_VARS="${MISSING_VARS:+$MISSING_VARS }$var"
     fi
 done
 
-if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
-    log_error "ERROR: Missing required environment variable(s): ${MISSING_VARS[*]}"
+if [[ -n "$MISSING_VARS" ]]; then
+    log_error "ERROR: Missing required environment variable(s): $MISSING_VARS"
     log_error ""
     log_error "Add them to your project's .envrc file:"
     log_error ""
-    for var in "${MISSING_VARS[@]}"; do
-        log_error "  export ${var}=${REQUIRED_VARS[$var]}"
+    for pair in $REQUIRED_HINTS; do
+        var="${pair%%=*}"
+        hint="${pair#*=}"
+        for m in $MISSING_VARS; do
+            if [[ "$m" == "$var" ]]; then
+                log_error "  export ${var}=${hint}"
+            fi
+        done
     done
     log_error ""
     log_error "Then run: direnv allow"
@@ -100,11 +97,11 @@ if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
     exit 4
 fi
 
-for var in "${REQUIRED_VAR_ORDER[@]}"; do
+for var in $REQUIRED_VARS; do
     if [[ "$var" == "SENTRY_AUTH_TOKEN" ]]; then
         log_verbose "SENTRY_AUTH_TOKEN: set"
     else
-        log_verbose "${var}: ${!var}"
+        eval "log_verbose \"\${var}: \${${var}}\""
     fi
 done
 

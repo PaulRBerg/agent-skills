@@ -6,6 +6,8 @@ description: This skill should be used when the user mentions "gh CLI", "gh comm
 
 # GitHub CLI (gh)
 
+> **File paths**: All `~/.agents/skills/cli-gh/references/` paths in this skill resolve under `~/.agents/skills/cli-gh/`. Do not look for them in the current working directory.
+
 ## Overview
 
 Expert guidance for GitHub CLI (gh) operations and workflows. Use this skill for command-line GitHub operations including pull request management, issue tracking, repository operations, workflow automation, and codespace management.
@@ -443,10 +445,10 @@ Common gh operations at a glance:
 
 For detailed patterns and advanced usage, see:
 
-- **[Workflows & Actions](references/workflows-actions.md)** - GitHub Actions workflows, runs, cache management, and CI/CD integration patterns
-- **[Advanced Features](references/advanced-features.md)** - Aliases, API access, extensions, secrets, SSH/GPG keys, organizations, projects, and advanced scripting
-- **[Automation Workflows](references/automation-workflows.md)** - Common automation patterns, daily reports, release automation, and team collaboration workflows
-- **[Troubleshooting](references/troubleshooting.md)** - Solutions for authentication, permissions, rate limiting, and common errors
+- **[Workflows & Actions](~/.agents/skills/cli-gh/references/workflows-actions.md)** - GitHub Actions workflows, runs, cache management, and CI/CD integration patterns
+- **[Advanced Features](~/.agents/skills/cli-gh/references/advanced-features.md)** - Aliases, API access, extensions, secrets, SSH/GPG keys, organizations, projects, and advanced scripting
+- **[Automation Workflows](~/.agents/skills/cli-gh/references/automation-workflows.md)** - Common automation patterns, daily reports, release automation, and team collaboration workflows
+- **[Troubleshooting](~/.agents/skills/cli-gh/references/troubleshooting.md)** - Solutions for authentication, permissions, rate limiting, and common errors
 
 ### Example Scripts
 

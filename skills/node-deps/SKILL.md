@@ -7,6 +7,8 @@ description: This skill should be used when the user asks to "update dependencie
 
 # Node Dependencies Update Skill
 
+> **File paths**: All `scripts/` paths in this skill resolve under `~/.agents/skills/node-deps/`. Do not look for them in the current working directory.
+
 Update Node.js dependencies using taze CLI with smart prompting: auto-apply MINOR/PATCH updates, prompt for MAJOR updates individually, skip fixed-version packages.
 
 ## Prerequisites
@@ -134,10 +136,10 @@ Packages shown with `--include-locked` that have no `^` or `~` are fixed version
 
 ## Script Reference
 
-| Script                     | Purpose                                              |
-| -------------------------- | ---------------------------------------------------- |
-| `./scripts/run-taze.sh`    | Run taze in non-interactive mode, check installation |
-| `./scripts/run-taze.sh -r` | Same with recursive monorepo scanning                |
+| Script                                              | Purpose                                              |
+| --------------------------------------------------- | ---------------------------------------------------- |
+| `~/.agents/skills/node-deps/scripts/run-taze.sh`    | Run taze in non-interactive mode, check installation |
+| `~/.agents/skills/node-deps/scripts/run-taze.sh -r` | Same with recursive monorepo scanning                |
 
 ## Important Notes
 

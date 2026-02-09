@@ -8,6 +8,8 @@ description: This skill should be used when the user asks to "use Codex", "ask C
 
 # Codex Oracle
 
+> **File paths**: All `scripts/` and `references/` paths in this skill resolve under `~/.agents/skills/oracle-codex/`. Do not look for them in the current working directory.
+
 Use OpenAI Codex CLI as a **planning oracle** and **code reviewer**. Codex provides analysis and recommendations; Claude synthesizes and presents to the user.
 
 **Critical**: This skill is for planning and review ONLY. Never use Codex to implement changes.
@@ -69,7 +71,7 @@ Select reasoning effort based on task complexity:
 - **`high`**: Task spans multiple modules or requires architectural thinking
 - **`xhigh`**: Task requires comprehensive codebase understanding or critical decisions
 
-For available models and reasoning levels, consult `references/codex-flags.md`.
+For available models and reasoning levels, consult `~/.agents/skills/oracle-codex/references/codex-flags.md`.
 
 ## Workflow
 
@@ -277,8 +279,8 @@ User: "Have Codex review the changes in src/auth/"
 
 ### Reference Files
 
-- **`references/codex-flags.md`** - Complete model and flag documentation
+- **`~/.agents/skills/oracle-codex/references/codex-flags.md`** - Complete model and flag documentation
 
 ### Scripts
 
-- **`scripts/check-codex.sh`** - Prerequisite validation (run before any Codex command)
+- **`~/.agents/skills/oracle-codex/scripts/check-codex.sh`** - Prerequisite validation (run before any Codex command)

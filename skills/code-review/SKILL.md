@@ -8,6 +8,8 @@ description: This skill should be used when the user asks to "review code", "rev
 
 # Code Review Skill
 
+> **File paths**: All `~/.agents/skills/code-review/references/` paths in this skill resolve under `~/.agents/skills/code-review/`. Do not look for them in the current working directory.
+
 ## Overview
 
 Perform expert-level code review focusing on security vulnerabilities, correctness, performance implications, and maintainability. Support multiple languages and ecosystems including TypeScript, React, Node.js, Python, Bash, Solidity, and Solana. Apply industry best practices, security standards, and language-specific idioms. Prioritize findings by severity and provide actionable recommendations with evidence-based reasoning. Keep reviews thorough yet pragmatic, distinguishing between critical issues requiring immediate attention and minor improvements that can be addressed later.
@@ -46,7 +48,7 @@ Apply these language-agnostic patterns to every code review:
 
 **Maintainability Standards**: Assess coupling—changes should be localized, not rippling across modules. Verify single responsibility—functions and classes should have one reason to change. Check for magic numbers and strings—extract named constants. Review error messages for actionability—include context for debugging.
 
-**Naming Quality**: Names should reveal intent—verb phrases for functions (`validateOrder`, not `process`), descriptive nouns for variables (`userCount`, not `n`), boolean prefixes (`is`, `has`, `can`). See `references/naming.md` for detailed conventions by language and common anti-patterns.
+**Naming Quality**: Names should reveal intent—verb phrases for functions (`validateOrder`, not `process`), descriptive nouns for variables (`userCount`, not `n`), boolean prefixes (`is`, `has`, `can`). See `~/.agents/skills/code-review/references/naming.md` for detailed conventions by language and common anti-patterns.
 
 ## Relative Change Analysis
 
@@ -107,18 +109,18 @@ Structure reviews consistently:
 
 Consult specialized reference documents for in-depth guidance on specific review areas:
 
-- **references/configuration.md** - Configuration file review patterns including environment-specific validation, secrets management, and limit tuning
-- **references/security.md** - Comprehensive security review covering OWASP Top 10, authentication patterns, authorization models, cryptography, input validation, and secure defaults
-- **references/typescript-react.md** - Frontend and Node.js patterns including React hooks, state management, TypeScript type safety, async handling, and API design
-- **references/python.md** - Python-specific patterns covering type hints, async/await, exception handling, context managers, and common library pitfalls
-- **references/smart-contracts.md** - Blockchain security for Solidity and Solana including reentrancy, integer overflow, access control, and economic attack vectors
-- **references/shell.md** - Bash script review covering quoting, error handling, portability, security risks from command injection and path traversal
-- **references/data-formats.md** - CSV, JSON, and data format handling including parsing safety, schema validation, and encoding issues
-- **references/naming.md** - Naming conventions covering functions, variables, files, classes, and constants with language-specific patterns and common anti-patterns
+- **~/.agents/skills/code-review/references/configuration.md** - Configuration file review patterns including environment-specific validation, secrets management, and limit tuning
+- **~/.agents/skills/code-review/references/security.md** - Comprehensive security review covering OWASP Top 10, authentication patterns, authorization models, cryptography, input validation, and secure defaults
+- **~/.agents/skills/code-review/references/typescript-react.md** - Frontend and Node.js patterns including React hooks, state management, TypeScript type safety, async handling, and API design
+- **~/.agents/skills/code-review/references/python.md** - Python-specific patterns covering type hints, async/await, exception handling, context managers, and common library pitfalls
+- **~/.agents/skills/code-review/references/smart-contracts.md** - Blockchain security for Solidity and Solana including reentrancy, integer overflow, access control, and economic attack vectors
+- **~/.agents/skills/code-review/references/shell.md** - Bash script review covering quoting, error handling, portability, security risks from command injection and path traversal
+- **~/.agents/skills/code-review/references/data-formats.md** - CSV, JSON, and data format handling including parsing safety, schema validation, and encoding issues
+- **~/.agents/skills/code-review/references/naming.md** - Naming conventions covering functions, variables, files, classes, and constants with language-specific patterns and common anti-patterns
 
 Reference these documents when reviewing code in their respective domains for detailed checklists and language-specific vulnerabilities.
 
 ### Examples
 
-- **references/example-good-review.md** - Exemplary review output demonstrating proper structure, severity grouping, and actionable recommendations
-- **references/example-bad-review.md** - Anti-patterns to avoid including fabricated line numbers, vague findings, and opinion without evidence
+- **~/.agents/skills/code-review/references/example-good-review.md** - Exemplary review output demonstrating proper structure, severity grouping, and actionable recommendations
+- **~/.agents/skills/code-review/references/example-bad-review.md** - Anti-patterns to avoid including fabricated line numbers, vague findings, and opinion without evidence

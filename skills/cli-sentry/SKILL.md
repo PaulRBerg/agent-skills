@@ -233,17 +233,17 @@ curl -X PUT -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
 
 ## Quick Reference
 
-| Operation          | Method | Command / Endpoint                                |
-| ------------------ | ------ | ------------------------------------------------- |
-| List issues        | CLI    | `sentry-cli issues list --project <p>`            |
+| Operation          | Method | Command / Endpoint                                                            |
+| ------------------ | ------ | ----------------------------------------------------------------------------- |
+| List issues        | CLI    | `sentry-cli issues list --project <p>`                                        |
 | List issues (rich) | Script | `~/.agents/skills/cli-sentry/scripts/fetch-issues.sh --org=<o> --project=<p>` |
-| Issue details      | API    | `GET /issues/{id}/`                               |
-| Latest event       | API    | `GET /issues/{id}/events/latest/`                 |
-| Event list         | API    | `GET /issues/{id}/events/`                        |
-| Resolve            | CLI    | `sentry-cli issues resolve -i <id>`               |
-| Mute               | CLI    | `sentry-cli issues mute -i <id>`                  |
-| Unresolve          | CLI    | `sentry-cli issues unresolve -i <id>`             |
-| Bulk update        | API    | `PUT /projects/{org}/{project}/issues/?id=...`    |
+| Issue details      | API    | `GET /issues/{id}/`                                                           |
+| Latest event       | API    | `GET /issues/{id}/events/latest/`                                             |
+| Event list         | API    | `GET /issues/{id}/events/`                                                    |
+| Resolve            | CLI    | `sentry-cli issues resolve -i <id>`                                           |
+| Mute               | CLI    | `sentry-cli issues mute -i <id>`                                              |
+| Unresolve          | CLI    | `sentry-cli issues unresolve -i <id>`                                         |
+| Bulk update        | API    | `PUT /projects/{org}/{project}/issues/?id=...`                                |
 
 ## Additional Resources
 
