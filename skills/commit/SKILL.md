@@ -1,15 +1,14 @@
 ---
 name: commit
-argument-hint: '[--all] [--deep] [--push] [--stack]'
-disable-model-invocation: true
-description: Create atomic git commits with heuristic analysis, conventional-commit formatting, staging rules, optional deep analysis, Graphite stack commits, and optional push. Use when the user asks to craft a commit message, commit changes, stage/commit only session edits, or run a commit workflow with flags like --all, --deep, --push, or --stack.
+argument-hint: '[--all] [--deep] [--push]'
+description: Create atomic git commits with heuristic analysis, conventional-commit formatting, staging rules, optional deep analysis, and optional push. Use when the user asks to craft a commit message, commit changes, stage/commit only session edits, or run a commit workflow with flags like --all, --deep, or --push.
 ---
 
 # Git Commit
 
 ## Overview
 
-Create atomic commits by staging the right files, analyzing the staged diff, composing a conventional commit message, and optionally pushing or using Graphite.
+Create atomic commits by staging the right files, analyzing the staged diff, composing a conventional commit message, and optionally pushing.
 
 ## Workflow
 
@@ -51,7 +50,6 @@ Note: The staged diff may become stale after staging changes; re-read `git diff 
   - `--all` commit all changes
   - `--deep` deep analysis, breaking changes, concise body
   - `--push` push after commit
-  - `--stack` use `gt create` instead of `git commit` (requires Graphite CLI)
 - Value arguments:
   - Type keyword (any conventional type) overrides inferred type
   - Quoted text overrides inferred description
@@ -105,20 +103,14 @@ Conventional types: feat, fix, docs, style, refactor, test, chore, build, ci, pe
 
 ### 6) Commit
 
-- If `--stack`:
-  - Check `command -v gt`; if missing, error "Graphite CLI (gt) not found. Install: https://graphite.dev/docs/installing-the-cli"
-  - Use `gt create -m "subject"` (add `-m "body"` only if body is non-empty)
-- Else:
-  - Use `git commit -m "subject"` (add `-m "body"` only if body is non-empty)
+- Use `git commit -m "subject"` (add `-m "body"` only if body is non-empty)
 - Output: commit hash + subject + file count summary
 - If failed: show error + suggest fix
 
 ### 7) Push (if `--push`)
 
-- If `--stack`: `gt stack submit`
-- Else:
-  - If upstream exists: `git push`
-  - If no upstream: `git push -u origin HEAD`
+- If upstream exists: `git push`
+- If no upstream: `git push -u origin HEAD`
 - If failed: show error + suggest fix (pull/rebase first, set upstream, check auth)
 
 ## Examples
