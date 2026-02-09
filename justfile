@@ -16,6 +16,8 @@ install-uv:
 
 mdformat-check:
     uvx --with mdformat-gfm --with mdformat-frontmatter mdformat --check .
+alias mc := mdformat-check
 
 mdformat-write:
     uvx --with mdformat-gfm --with mdformat-frontmatter mdformat .
+alias mw := mdformat-write
