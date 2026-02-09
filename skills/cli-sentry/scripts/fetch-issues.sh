@@ -88,7 +88,7 @@ fi
 # Fetch issues
 URL="https://sentry.io/api/0/projects/${ORG}/${PROJECT}/issues/?query=is:unresolved&statsPeriod=${STATS_PERIOD}&limit=${LIMIT}"
 
-TMPFILE=$(mktemp /tmp/sentry-issues.XXXXXX.json)
+TMPFILE=$(mktemp "${TMPDIR:-/tmp}/sentry-issues.XXXXXX")
 trap 'rm -f "$TMPFILE"' EXIT
 
 HTTP_CODE=$(curl -s -o "$TMPFILE" -w "%{http_code}" \

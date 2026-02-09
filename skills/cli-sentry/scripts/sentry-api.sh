@@ -72,7 +72,7 @@ fi
 # --- Build curl command ---
 URL="${BASE_URL}${PATH_ARG}"
 
-TMPFILE=$(mktemp /tmp/sentry-api.XXXXXX.json)
+TMPFILE=$(mktemp "${TMPDIR:-/tmp}/sentry-api.XXXXXX")
 trap 'rm -f "$TMPFILE"' EXIT
 
 CURL_ARGS=(
