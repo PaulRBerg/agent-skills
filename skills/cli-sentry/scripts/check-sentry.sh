@@ -6,6 +6,7 @@
 #   1 - sentry-cli is not installed
 #   2 - sentry-cli is not responding (timeout)
 #   3 - sentry-cli is not authenticated
+#   4 - missing required env vars (SENTRY_AUTH_TOKEN, SENTRY_PROJECT)
 #
 # Options:
 #   -v, --verbose   Show detailed status
@@ -60,6 +61,39 @@ log_verbose() {
 log_error() {
     echo "$@" >&2
 }
+
+# Check 0: Required environment variables
+MISSING_VARS=()
+
+if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
+    MISSING_VARS+=("SENTRY_AUTH_TOKEN")
+fi
+
+if [[ -z "${SENTRY_PROJECT:-}" ]]; then
+    MISSING_VARS+=("SENTRY_PROJECT")
+fi
+
+if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
+    log_error "ERROR: Missing required environment variable(s): ${MISSING_VARS[*]}"
+    log_error ""
+    log_error "Add them to your project's .envrc file:"
+    log_error ""
+    if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
+        log_error "  export SENTRY_AUTH_TOKEN=sntrys_..."
+    fi
+    if [[ -z "${SENTRY_PROJECT:-}" ]]; then
+        log_error "  export SENTRY_PROJECT=<your-project-id>"
+    fi
+    log_error ""
+    log_error "Then run: direnv allow"
+    log_error ""
+    log_error "Generate an auth token at: https://sentry.io/settings/account/api/auth-tokens/"
+    log_error "Find your project ID in Sentry under Settings > Projects > <project> > General"
+    exit 4
+fi
+
+log_verbose "SENTRY_AUTH_TOKEN: set"
+log_verbose "SENTRY_PROJECT: $SENTRY_PROJECT"
 
 # Check 1: Is sentry-cli installed?
 if ! command -v sentry-cli &>/dev/null; then

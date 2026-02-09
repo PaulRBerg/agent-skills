@@ -35,27 +35,40 @@ Expert guidance for managing Sentry issues via the CLI and API. Use this skill f
 
 ## Prerequisites
 
+### Required Environment Variables
+
+The following env vars **must** be set before running any Sentry operations. Add them to your project's `.envrc`:
+
+```bash
+export SENTRY_AUTH_TOKEN=sntrys_...
+export SENTRY_PROJECT=<your-project-slug>
+```
+
+Then run `direnv allow` to load them.
+
+- **`SENTRY_AUTH_TOKEN`** — Generate at https://sentry.io/settings/account/api/auth-tokens/
+- **`SENTRY_PROJECT`** — Your project slug in Sentry
+
+> These are the native sentry-cli env var names. The CLI reads them automatically, so setting them in `.envrc` means you don't need to pass `--project` or `--auth-token` flags.
+
+### Preflight Check
+
 Run the preflight check before any Sentry operations:
 
 ```bash
 bash scripts/check-sentry.sh -v
 ```
 
+This validates env vars, sentry-cli installation, and authentication.
+
 ### Configuration Resolution Order
 
 Settings resolve in this order (first wins):
 
-1. CLI flags (`--org`, `--project`)
+1. CLI flags (`--org`, `--project`, `--auth-token`)
 2. Environment variables (`SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`)
 3. `.sentryclirc` file (project root or `~/.sentryclirc`)
 
-### Auth Token Sources
-
-| Source               | Example                                          |
-| -------------------- | ------------------------------------------------ |
-| Environment variable | `export SENTRY_AUTH_TOKEN=sntrys_...`            |
-| `.sentryclirc` file  | `[auth]` section with `token=sntrys_...`         |
-| `.env.local` file    | `SENTRY_AUTH_TOKEN=sntrys_...` (source it first) |
 
 ## Issue Management
 
@@ -235,8 +248,7 @@ curl -X PUT -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
 
 ## Tips
 
-1. Set `SENTRY_ORG` and `SENTRY_PROJECT` in your shell profile to avoid passing flags repeatedly
-2. Run `sentry-cli info` to verify configuration and auth status from any source
-3. Pipe API responses through `jq` for readable output: `... | jq '.[] | {shortId, title, count, lastSeen}'`
-4. Triage Third Party issues first - they are the easiest to identify and often the most numerous
-5. Check `references/extension-patterns.md` before categorizing ambiguous stack traces
+1. Run `sentry-cli info` to verify configuration and auth status from any source
+2. Pipe API responses through `jq` for readable output: `... | jq '.[] | {shortId, title, count, lastSeen}'`
+3. Triage Third Party issues first - they are the easiest to identify and often the most numerous
+4. Check `references/extension-patterns.md` before categorizing ambiguous stack traces
