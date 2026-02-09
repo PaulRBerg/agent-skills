@@ -10,23 +10,24 @@ npx skills add PaulRBerg/agent-skills
 
 ## Skills
 
-| Skill           | Type          | Description                              |
-| --------------- | ------------- | ---------------------------------------- |
-| biome-js        | non-invocable | BiomeJS linting/formatting guidance      |
-| bump-release    | executable    | Release workflow with changelog, tagging |
-| code-review     | executable    | Expert code review                       |
-| cli-gh          | non-invocable | GitHub CLI operations                    |
-| cli-just        | non-invocable | Just command runner guidance             |
-| code-simplify   | executable    | Code simplification and refactoring      |
-| commit          | executable    | Git commit with conventional commits     |
-| delayed-command | executable    | Wait and execute bash command            |
-| ls-lint         | non-invocable | Directory/filename linting               |
-| md-docs         | executable    | Markdown documentation management        |
-| node-deps       | executable    | Node.js dependency updates               |
-| openclaw        | non-invocable | OpenClaw CLI guidance                    |
-| oracle-codex    | executable    | Codex oracle for planning                |
-| oss             | executable    | OSS contribution workflows               |
-| refine-prompt   | executable    | LLM prompt optimization                  |
+| Skill           | Description                              |
+| --------------- | ---------------------------------------- |
+| biome-js        | BiomeJS linting/formatting guidance      |
+| bump-release    | Release workflow with changelog, tagging |
+| code-review     | Expert code review                       |
+| cli-gh          | GitHub CLI operations                    |
+| cli-just        | Just command runner guidance             |
+| cli-sentry      | Sentry CLI issue management              |
+| code-simplify   | Code simplification and refactoring      |
+| commit          | Git commit with conventional commits     |
+| delayed-command | Wait and execute bash command            |
+| ls-lint         | Directory/filename linting               |
+| md-docs         | Markdown documentation management        |
+| node-deps       | Node.js dependency updates               |
+| openclaw        | OpenClaw CLI guidance                    |
+| oracle-codex    | Codex oracle for planning                |
+| oss             | OSS contribution workflows               |
+| refine-prompt   | LLM prompt optimization                  |
 
 ## References
 
