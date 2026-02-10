@@ -1,168 +1,115 @@
 ---
 name: code-simplify
-description: This skill should be used when the user asks to "simplify code", "clean up code", "refactor for clarity", "improve code readability", "reduce complexity", "apply coding standards", "make code more maintainable", or mentions code simplification, elegance, or refinement of recently modified code.
+description: Simplify and refactor existing code for readability and maintainability without changing behavior. Use when the user asks to "simplify code", "clean up code", "refactor for clarity", "reduce complexity", "improve readability", "make this easier to maintain", or asks to polish recently modified code.
 ---
 
-# Code Simplifier Skill
+# Code Simplify
 
-## Overview
+## Objective
 
-Expert code simplification specialist focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality. Apply project-specific best practices to simplify and improve code without altering its behavior. Prioritize readable, explicit code over overly compact solutions.
+Simplify code while preserving behavior, public contracts, and side effects. Favor explicit code and local clarity over clever or compressed constructs.
 
-## Core Principles
+## Operating Rules
 
-### Preserve Functionality
+- Preserve runtime behavior exactly. Keep inputs, outputs, side effects, and error behavior stable.
+- Prefer project conventions over personal preferences. Infer conventions from existing code, linters, formatters, and tests.
+- Limit scope to user-requested files or recently modified code unless explicitly asked to broaden.
+- Make small, reversible edits. Avoid broad rewrites when targeted simplifications solve the problem.
+- Call out uncertainty immediately when behavior may change.
 
-Never change what the code does—only how it does it. All original features, outputs, and behaviors must remain intact. When uncertain whether a change affects behavior, err on the side of caution.
+## Workflow
 
-### Apply Project Standards
+### 1) Determine Scope
 
-Follow established coding standards including:
+- Verify repository context: `git rev-parse --git-dir`.
+- Identify candidate files:
+  - If the user provides a file list, use it.
+  - Otherwise start from `git diff --name-only --diff-filter=ACMR`.
+- Exclude generated or low-signal files unless explicitly requested:
+  - lockfiles, minified bundles, build outputs, vendored code.
+- If no target files are found, ask for explicit scope.
 
-- **ES Modules**: Use proper import sorting and file extensions
-- **Function Declarations**: Prefer `function` keyword over arrow functions for top-level declarations
-- **Return Types**: Add explicit return type annotations for top-level functions
-- **React Patterns**: Use explicit Props types with proper component patterns
-- **Error Handling**: Avoid try/catch when possible; prefer Result types or early returns
-- **Naming Conventions**: Maintain consistent naming across the codebase
+### 2) Build a Behavior Baseline
 
-### Enhance Clarity
+- Read surrounding context, not only changed lines.
+- Identify invariants that must not change:
+  - function signatures and exported APIs
+  - state transitions and side effects
+  - persistence/network behavior
+  - user-facing messages and error semantics where externally relied on
+- Note available verification commands (lint, tests, typecheck).
 
-Simplify code structure through:
+### 3) Apply Simplification Passes (in this order)
 
-- **Reduce Nesting**: Flatten deeply nested conditionals with early returns or guard clauses
-- **Eliminate Redundancy**: Remove duplicate code and unnecessary abstractions
-- **Improve Names**: Use clear, descriptive variable and function names that reveal intent
-- **Consolidate Logic**: Group related operations together
-- **Remove Noise**: Delete comments that describe obvious code behavior
-- **Avoid Nested Ternaries**: Prefer switch statements or if/else chains for multiple conditions
-- **Choose Explicitness**: Prefer explicit, readable code over overly compact one-liners
+1. Control flow:
+   - Flatten deep nesting with guard clauses and early returns.
+   - Replace nested ternaries with clearer conditionals.
+2. Naming and intent:
+   - Rename ambiguous identifiers when local context supports safe renaming.
+   - Separate mixed concerns into small helpers with intent-revealing names.
+3. Duplication:
+   - Remove obvious duplication.
+   - Abstract only when at least two real call sites benefit and the abstraction reduces cognitive load.
+4. Data shaping:
+   - Break dense transform chains into named intermediate steps when readability improves.
+   - Keep hot-path performance characteristics stable unless improvement is explicit and measured.
+5. Type and contract clarity:
+   - Add or tighten type annotations when they improve readability and safety without forcing broad churn.
+   - Preserve external interfaces unless asked to change them.
 
-### Maintain Balance
+### 4) Enforce Safety Constraints
 
-Avoid over-simplification that could:
+- Do not convert sync APIs to async (or reverse) unless explicitly requested.
+- Do not alter error propagation strategy unless behavior remains equivalent and verified.
+- Do not remove logging, telemetry, guards, or retries that encode operational intent.
+- Do not collapse domain-specific steps into generic helpers that hide intent.
 
-- Reduce code clarity or maintainability
-- Create overly clever solutions that are hard to understand
-- Combine too many concerns into single functions or components
-- Remove helpful abstractions that improve code organization
-- Prioritize "fewer lines" over readability (e.g., nested ternaries, dense one-liners)
-- Make the code harder to debug or extend
+### 5) Verify
 
-Three similar lines of code is often better than a premature abstraction.
+- Run the narrowest useful checks first:
+  - formatter/lint on touched files
+  - targeted tests related to touched modules
+  - typecheck when relevant
+- If fast targeted checks pass, run broader checks only when risk warrants it.
+- If checks cannot run, state what was skipped and why.
 
-## Scope
+### 6) Report
 
-Focus on recently modified code unless explicitly instructed to review a broader scope. Run `git diff` to identify what has changed and concentrate refinement efforts there.
+Provide:
+1. Scope touched (files/functions)
+2. Key simplifications with concise rationale
+3. Verification commands run and outcomes
+4. Residual risks or assumptions
 
-## Refinement Process
+## Simplification Heuristics
 
-### Step 1: Identify Modified Code
+- Prefer explicit local variables over nested inline expressions when it reduces cognitive load.
+- Prefer one clear branch per condition over compact but ambiguous condition trees.
+- Keep function length manageable, but do not split purely for line count.
+- Keep comments that explain intent, invariants, or non-obvious constraints.
+- Remove comments that restate obvious code behavior.
+- Optimize for the next maintainer's comprehension time, not minimum character count.
 
-Run `git diff` to see recent changes. Focus on files and functions that have been touched in the current session.
+## Anti-Patterns
 
-### Step 2: Analyze for Opportunities
+- Do not perform speculative architecture rewrites.
+- Do not introduce framework-wide patterns while simplifying a small local change.
+- Do not replace understandable duplication with opaque utility layers.
+- Do not bundle unrelated cleanups into one patch.
 
-Look for opportunities to improve elegance and consistency:
+## Stop Conditions
 
-- Overly complex conditionals that could be simplified
-- Repeated patterns that could be consolidated
-- Unclear naming that obscures intent
-- Unnecessary nesting or indirection
-- Violations of project coding standards
+- Stop and ask for direction when:
+  - simplification requires changing public API/contracts
+  - behavior parity cannot be confidently verified
+  - the code appears intentionally complex due to domain constraints
+  - the requested scope implies a larger redesign rather than simplification
 
-### Step 3: Apply Project Standards
+## Output Contract
 
-Ensure code follows established patterns:
+When presenting simplification results:
 
-- Correct import ordering and module syntax
-- Proper function declaration style
-- Explicit type annotations where expected
-- Consistent error handling patterns
-- Idiomatic React patterns for components
-
-### Step 4: Verify Functionality
-
-Confirm all functionality remains unchanged:
-
-- Same inputs produce same outputs
-- Error cases handled identically
-- Side effects preserved
-- API contracts maintained
-
-### Step 5: Assess Simplicity
-
-Verify the refined code is genuinely simpler:
-
-- Easier to read and understand
-- Less cognitive load to maintain
-- Clearer intent at each step
-- No increase in complexity elsewhere
-
-### Step 6: Document Significant Changes
-
-Note only changes that affect understanding:
-
-- Structural reorganizations
-- Renamed abstractions
-- Consolidated logic
-
-Skip documenting trivial formatting or style adjustments.
-
-## Anti-Patterns to Avoid
-
-### Don't Over-Compact
-
-```typescript
-// Avoid: Dense one-liner
-const result = items.filter(x => x.active).map(x => x.value).reduce((a, b) => a + b, 0);
-
-// Prefer: Clear steps
-const activeItems = items.filter(item => item.active);
-const values = activeItems.map(item => item.value);
-const total = values.reduce((sum, value) => sum + value, 0);
-```
-
-### Don't Nest Ternaries
-
-```typescript
-// Avoid: Nested ternary
-const status = count > 100 ? 'high' : count > 50 ? 'medium' : count > 0 ? 'low' : 'none';
-
-// Prefer: Switch or if/else
-function getStatus(count: number): string {
-  if (count > 100) return 'high';
-  if (count > 50) return 'medium';
-  if (count > 0) return 'low';
-  return 'none';
-}
-```
-
-### Don't Abstract Prematurely
-
-```typescript
-// Avoid: Unnecessary abstraction for one use case
-const formatters = {
-  date: (d: Date) => d.toISOString(),
-  name: (n: string) => n.trim().toLowerCase(),
-};
-const formatted = formatters[type](value);
-
-// Prefer: Direct code when used once
-const formatted = type === 'date'
-  ? value.toISOString()
-  : value.trim().toLowerCase();
-```
-
-### Don't Remove Helpful Structure
-
-Keep abstractions that genuinely improve organization. Not every helper function needs to be inlined. Evaluate whether the abstraction aids comprehension before removing it.
-
-## Output Format
-
-When presenting simplified code:
-
-1. Show the original code snippet
-2. Present the refined version
-3. Briefly explain the improvement (one line)
-4. Confirm functionality is preserved
+1. Show the exact files and regions changed.
+2. Explain each meaningful change in one sentence focused on readability/maintainability gain.
+3. Confirm behavior-preservation assumptions explicitly.
+4. Summarize verification performed (or clearly state omissions).
