@@ -4,7 +4,7 @@
 
 | Model           | Description                          |
 | --------------- | ------------------------------------ |
-| `codex-5.3-gpt` | Latest frontier agentic coding model |
+| `gpt-5.3-codex` | Latest frontier agentic coding model |
 
 ## Reasoning Effort (`-c model_reasoning_effort=`)
 
@@ -56,7 +56,7 @@ These flags are specific to `codex exec`:
 ```bash
 CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 codex exec \
-  -m codex-5.3-gpt \
+  -m gpt-5.3-codex \
   -c model_reasoning_effort=high \
   -s read-only \
   -o "$CODEX_OUTPUT" \
@@ -70,7 +70,7 @@ EOF
 ```bash
 CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 codex exec \
-  -m codex-5.3-gpt \
+  -m gpt-5.3-codex \
   -c model_reasoning_effort=medium \
   -s read-only \
   -o "$CODEX_OUTPUT" \
@@ -85,7 +85,7 @@ EOF
 ```bash
 CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 codex exec \
-  -m codex-5.3-gpt \
+  -m gpt-5.3-codex \
   -c model_reasoning_effort=medium \
   -s read-only \
   --search \
@@ -99,7 +99,8 @@ EOF
 
 Override defaults by specifying in the prompt:
 
-- "Use model codex-5.3-gpt"
 - "Use medium reasoning effort"
 - "With high reasoning"
 - "Enable web search"
+
+**Model selection is restricted to the allowlist above.** User requests for unlisted models (e.g., "use o3") must be rejected.

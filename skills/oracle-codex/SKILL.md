@@ -38,10 +38,18 @@ For `codex exec`, prefer the wrapper script (handles flag compatibility and surf
 
 | Setting   | Default                       | User Override                                 |
 | --------- | ----------------------------- | --------------------------------------------- |
-| Model     | `codex-5.3-gpt`               | "use model X" or "with codex-5.3-gpt"         |
+| Model     | `gpt-5.3-codex`               | Only models from the allowlist below          |
 | Reasoning | Dynamic (based on complexity) | "use medium reasoning" or "with xhigh effort" |
 | Sandbox   | `read-only`                   | Not overridable (safety constraint)           |
 | Timeout   | 5 minutes minimum             | Estimate based on task complexity             |
+
+### Model Allowlist
+
+Only the following models may be passed to `-m`. Reject any model not in this list — do **not** infer or substitute models from the user's prompt (e.g., "o3", "gpt-4o").
+
+| Model            | Description                          |
+| ---------------- | ------------------------------------ |
+| `gpt-5.3-codex`  | Latest frontier agentic coding model |
 
 ### Timeout Guidelines
 
@@ -160,7 +168,7 @@ CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 ```bash
 # Select EFFORT based on complexity assessment (low/medium/high/xhigh)
 # Bash tool timeout: 5-20 minutes based on complexity
-MODEL="${MODEL:-codex-5.3-gpt}" \
+MODEL="${MODEL:-gpt-5.3-codex}" \
 EFFORT="${EFFORT}" \
 CODEX_OUTPUT="$CODEX_OUTPUT" \
 ~/.agents/skills/oracle-codex/scripts/run-codex-exec.sh <<'EOF'
@@ -196,7 +204,7 @@ Format the output with clear attribution:
 [Codex output from the temp file]
 
 ---
-Model: codex-5.3-gpt | Reasoning: [selected effort level]
+Model: gpt-5.3-codex | Reasoning: [selected effort level]
 ```
 
 For very large outputs (>5000 lines), summarize key sections rather than displaying everything.
@@ -259,7 +267,7 @@ User: "Ask Codex to plan how to add authentication to this app"
 2. Gather relevant codebase context
 3. Assess complexity → auth spans multiple modules → `high` reasoning
 4. Construct planning prompt with auth requirements
-5. Execute Codex with `codex-5.3-gpt` and `high`
+5. Execute Codex with `gpt-5.3-codex` and `high`
 6. Present Codex's architecture recommendations
 7. Synthesize into Claude plan format
 

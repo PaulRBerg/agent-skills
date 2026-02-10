@@ -5,7 +5,7 @@
 # and prints the output to stdout. If CODEX_OUTPUT is unset, uses a temp file.
 #
 # Environment variables:
-#   MODEL         - Codex model (default: codex-5.3-gpt)
+#   MODEL         - Codex model (default: gpt-5.3-codex)
 #   EFFORT        - Reasoning effort (default: medium)
 #   SANDBOX       - Sandbox mode (default: read-only)
 #   CODEX_SEARCH  - Set to 1 to enable web search
@@ -13,7 +13,19 @@
 
 set -euo pipefail
 
-MODEL="${MODEL:-codex-5.3-gpt}"
+MODEL="${MODEL:-gpt-5.3-codex}"
+
+# Allowlist validation — reject unknown models
+ALLOWED_MODELS="gpt-5.3-codex"
+_model_ok=0
+for _m in $ALLOWED_MODELS; do
+  if [[ "$MODEL" == "$_m" ]]; then _model_ok=1; break; fi
+done
+if [[ $_model_ok -eq 0 ]]; then
+  echo "ERROR: model '$MODEL' is not in the allowlist ($ALLOWED_MODELS)." >&2
+  exit 1
+fi
+
 EFFORT="${EFFORT:-medium}"
 SANDBOX="${SANDBOX:-read-only}"
 CODEX_SEARCH="${CODEX_SEARCH:-0}"
