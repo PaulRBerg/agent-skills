@@ -1,5 +1,6 @@
 ---
 name: code-review
+argument-hint: '[--fix]'
 agent: Plan
 context: fork
 user-invocable: true
@@ -17,6 +18,10 @@ Perform expert-level code review focusing on security vulnerabilities, correctne
 ## Review Workflow
 
 **Before starting**: Verify you're in a git repository by running `git rev-parse --git-dir`. If this fails (exit code 128), inform the user they must run the code review from within a git repository and stop.
+
+Parse arguments from `$ARGUMENTS`:
+- `--fix`: After presenting findings, automatically apply all suggested fixes without waiting for confirmation. Implement fixes in severity order (CRITICAL → HIGH → MEDIUM → LOW), then report what was changed.
+- Default (no `--fix`): Present findings and wait for user confirmation before applying changes.
 
 Begin every code review by running `git diff` to understand the scope of changes. Examine both the changed lines and surrounding context to understand intent. Identify file types being modified: application code, test files, configuration, database migrations, or documentation.
 
@@ -102,8 +107,11 @@ Structure reviews consistently:
 2. **Findings**: Grouped by severity (CRITICAL → HIGH → MEDIUM → LOW)
 3. **Suggested Fixes**: Code snippets or specific recommendations
 4. **Deployment Notes**: Rollout strategy, monitoring requirements (when applicable)
+5. **Applied Fixes** (only when `--fix` is present): concrete list of implemented changes with file references
 
-**Important**: After presenting findings, wait for the user to confirm which issues to address. Do not immediately implement fixes. The user may choose to address only critical issues, defer some findings, or disagree with recommendations. Ask which findings to fix before making any changes.
+**Important**:
+- Default behavior: After presenting findings, wait for the user to confirm which issues to address.
+- With `--fix`: Do not wait for confirmation. Apply all suggested fixes automatically, then provide an implementation summary and any remaining follow-ups.
 
 ## Additional Resources
 
