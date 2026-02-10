@@ -15,7 +15,7 @@ Available globally without definition:
 | `GREEN`              | `\e[32m`  |
 | `YELLOW`             | `\e[33m`  |
 | `BLUE`               | `\e[34m`  |
-| `PURPLE` / `MAGENTA` | `\e[35m`  |
+| `MAGENTA`            | `\e[35m`  |
 | `CYAN`               | `\e[36m`  |
 | `WHITE`              | `\e[37m`  |
 
@@ -45,7 +45,7 @@ Available globally without definition:
 | `BG_GREEN`  | Green background  |
 | `BG_YELLOW` | Yellow background |
 | `BG_BLUE`   | Blue background   |
-| `BG_PURPLE` | Purple background |
+| `BG_MAGENTA`| Magenta background |
 | `BG_CYAN`   | Cyan background   |
 | `BG_WHITE`  | White background  |
 

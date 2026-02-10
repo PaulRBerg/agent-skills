@@ -104,7 +104,7 @@ Terminal formatting constants are globally available (no definition needed):
 
 | Constant                                           | Description                                |
 | -------------------------------------------------- | ------------------------------------------ |
-| `CYAN`, `GREEN`, `RED`, `YELLOW`, `BLUE`, `PURPLE` | Text colors                                |
+| `CYAN`, `GREEN`, `RED`, `YELLOW`, `BLUE`, `MAGENTA` | Text colors                                |
 | `BOLD`, `ITALIC`, `UNDERLINE`, `STRIKETHROUGH`     | Text styles                                |
 | `NORMAL`                                           | Reset formatting                           |
 | `BG_*`                                             | Background colors (BG_RED, BG_GREEN, etc.) |
