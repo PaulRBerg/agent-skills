@@ -1,6 +1,8 @@
 ---
+context: fork
 name: code-simplify
-description: Simplify and refactor existing code for readability and maintainability without changing behavior. Use when the user asks to "simplify code", "clean up code", "refactor for clarity", "reduce complexity", "improve readability", "make this easier to maintain", or asks to polish recently modified code.
+user-invocable: true
+description: This skill should be used when the user asks to "simplify code", "clean up code", "refactor for clarity", "reduce complexity", "improve readability", "make this easier to maintain", or asks to simplify recently modified code.
 ---
 
 # Code Simplify

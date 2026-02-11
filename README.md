@@ -14,6 +14,7 @@ npx skills add PaulRBerg/agent-skills
 | --------------- | ---------------------------------------- |
 | biome-js        | BiomeJS linting/formatting guidance      |
 | bump-release    | Release workflow with changelog, tagging |
+| code-polish     | Combined simplification and review        |
 | code-review     | Expert code review                       |
 | cli-gh          | GitHub CLI operations                    |
 | cli-just        | Just command runner guidance             |

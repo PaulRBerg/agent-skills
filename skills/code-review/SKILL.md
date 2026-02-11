@@ -8,7 +8,7 @@ description: This skill should be used when the user asks to "review code", "rev
 
 # Code Review Skill
 
-> **File paths**: All `~/.agents/skills/code-review/references/` paths in this skill resolve under `~/.agents/skills/code-review/`. Do not look for them in the current working directory.
+> **File paths**: All `references/` and `scripts/` paths in this skill resolve under `~/.agents/skills/code-review/`. Do not look for them in the current working directory.
 
 ## Overview
 
