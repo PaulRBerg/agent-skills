@@ -1,6 +1,5 @@
 ---
 argument-hint: '[version] [--beta] [--dry-run]'
-disable-model-invocation: true
 model: opus
 name: bump-release
 description: Rolls out a new release by updating changelog, bumping version, committing, and tagging
