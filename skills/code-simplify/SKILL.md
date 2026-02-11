@@ -25,8 +25,9 @@ Simplify code while preserving behavior, public contracts, and side effects. Fav
 
 - Verify repository context: `git rev-parse --git-dir`.
 - Identify candidate files:
-  - If the user provides a file list, use it.
-  - Otherwise start from `git diff --name-only --diff-filter=ACMR`.
+  - If `$ARGUMENTS` contains file paths or patterns, use them.
+  - Otherwise, use session-modified files (files edited in this chat session).
+  - If no session edits exist, fall back to `git diff --name-only --diff-filter=ACMR`.
 - Exclude generated or low-signal files unless explicitly requested:
   - lockfiles, minified bundles, build outputs, vendored code.
 - If no target files are found, ask for explicit scope.

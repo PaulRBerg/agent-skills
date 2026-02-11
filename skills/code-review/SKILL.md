@@ -22,7 +22,13 @@ Parse arguments from `$ARGUMENTS`:
 - `--fix`: After presenting findings, automatically apply all suggested fixes without waiting for confirmation. Implement fixes in severity order (CRITICAL → HIGH → MEDIUM → LOW), then report what was changed.
 - Default (no `--fix`): Present findings and wait for user confirmation before applying changes.
 
-Begin every code review by running `git diff` to understand the scope of changes. Examine both the changed lines and surrounding context to understand intent. Identify file types being modified: application code, test files, configuration, database migrations, or documentation.
+Determine which files to review:
+- If `$ARGUMENTS` contains file paths or patterns, use them.
+- Otherwise, use session-modified files (files edited in this chat session).
+- If no session edits exist, fall back to uncommitted changes: `git diff --name-only --diff-filter=ACMR`.
+- If no changes found, inform the user and stop.
+
+Run `git diff` on the in-scope files to understand the changes. Examine both the changed lines and surrounding context to understand intent. Identify file types being modified: application code, test files, configuration, database migrations, or documentation.
 
 Assess risk level based on change scope and type. High-risk areas include authentication logic, authorization checks, payment processing, data persistence, external API integrations, and cryptographic operations.
 

@@ -19,8 +19,9 @@ Combined simplification and review pipeline for recently changed code. Simplify 
 
 - Verify repository context: `git rev-parse --git-dir`. If this fails, stop.
 - Identify candidate files:
-  - If the user provides a file list or path in `$ARGUMENTS`, use it.
-  - Otherwise: `git diff --name-only --diff-filter=ACMR`.
+  - If `$ARGUMENTS` contains file paths or patterns, use them.
+  - Otherwise, use session-modified files (files edited in this chat session).
+  - If no session edits exist, fall back to `git diff --name-only --diff-filter=ACMR`.
 - Exclude generated or low-signal files: lockfiles, minified bundles, build outputs, vendored code.
 - If no target files found, ask for explicit scope.
 - Read all in-scope files and surrounding context once. This context serves both the simplification and review phases.
