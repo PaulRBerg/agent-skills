@@ -19,6 +19,7 @@ npx skills add PaulRBerg/agent-skills
 | bump-release    | Release workflow with changelog, tagging |
 | code-polish     | Combined simplification and review       |
 | code-review     | Expert code review                       |
+| cli-cast        | Foundry cast CLI guidance                |
 | cli-gh          | GitHub CLI operations                    |
 | cli-just        | Just command runner guidance             |
 | cli-sentry      | Sentry CLI issue management              |
