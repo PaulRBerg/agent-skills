@@ -1,5 +1,5 @@
 ---
-argument-hint: '[--fix]'
+argument-hint: '[--all] [--fix]'
 context: fork
 disable-model-invocation: false
 name: code-review
@@ -7,28 +7,32 @@ user-invocable: true
 description: This skill should be used when the user asks to "review code", "review PR", "code review", "audit code", "check for bugs", "security review", "review my changes", "find issues in this code", "review the diff", or asks for pull request review or code audit.
 ---
 
+
 # Code Review Skill
 
-> **File paths**: All `references/` and `scripts/` paths in this skill resolve under `~/.agents/skills/code-review/`. Do not look for them in the current working directory.
 
 ## Overview
 
 Perform expert-level code review focusing on security vulnerabilities, correctness, performance implications, and maintainability. Support multiple languages and ecosystems including TypeScript, React, Node.js, Python, Bash, Solidity, and Solana. Apply industry best practices, security standards, and language-specific idioms. Prioritize findings by severity and provide actionable recommendations with evidence-based reasoning. Keep reviews thorough yet pragmatic, distinguishing between critical issues requiring immediate attention and minor improvements that can be addressed later.
 
-## Review Workflow
+## Scope Identification
 
-**Before starting**: Verify you're in a git repository by running `git rev-parse --git-dir`. If this fails (exit code 128), inform the user they must run the code review from within a git repository and stop.
+Use this scope resolution logic before doing any review/simplification work:
+
+1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
+2. If `$ARGUMENTS` includes `--all`, scope is all uncommitted changes from `git diff --name-only --diff-filter=ACMR`.
+3. Otherwise, if the user specifies file paths/patterns or a git commit/range, scope is exactly those targets. For commits/ranges, resolve files with `git diff --name-only <commit-or-range> --diff-filter=ACMR`.
+4. Otherwise, scope is session-modified files (files edited in this chat session).
+5. Exclude generated or low-signal files unless explicitly requested: lockfiles, minified bundles, build outputs, vendored code.
+6. If scope resolves to zero files, inform the user and stop. Do not silently widen scope.
+
+## Review Workflow
 
 Parse arguments from `$ARGUMENTS`:
 
 - `--fix`: After presenting findings, automatically apply all suggested fixes without waiting for confirmation. Implement fixes in severity order (CRITICAL → HIGH → MEDIUM → LOW), then report what was changed.
 - Default (no `--fix`): Present findings and wait for user confirmation before applying changes.
-
-Determine which files to review:
-
-- If `$ARGUMENTS` contains file paths, patterns, or `--all`, use them. `--all` means uncommitted changes via `git diff --name-only --diff-filter=ACMR`.
-- Otherwise, default to session-modified files (files edited in this chat session).
-- If no session edits exist and no explicit scope was given, inform the user and stop. Do not silently widen scope.
+- Use the "Scope Identification" section above to determine which files to review.
 
 Run `git diff` on the in-scope files to understand the changes. Examine both the changed lines and surrounding context to understand intent. Identify file types being modified: application code, test files, configuration, database migrations, or documentation.
 
@@ -60,7 +64,7 @@ Apply these language-agnostic patterns to every code review:
 
 **Maintainability Standards**: Assess coupling—changes should be localized, not rippling across modules. Verify single responsibility—functions and classes should have one reason to change. Check for magic numbers and strings—extract named constants. Review error messages for actionability—include context for debugging.
 
-**Naming Quality**: Names should reveal intent—verb phrases for functions (`validateOrder`, not `process`), descriptive nouns for variables (`userCount`, not `n`), boolean prefixes (`is`, `has`, `can`). See `~/.agents/skills/code-review/references/naming.md` for detailed conventions by language and common anti-patterns.
+**Naming Quality**: Names should reveal intent—verb phrases for functions (`validateOrder`, not `process`), descriptive nouns for variables (`userCount`, not `n`), boolean prefixes (`is`, `has`, `can`). See `references/naming.md` for detailed conventions by language and common anti-patterns.
 
 ## Relative Change Analysis
 
@@ -125,18 +129,18 @@ Structure reviews consistently:
 
 Consult specialized reference documents for in-depth guidance on specific review areas:
 
-- **~/.agents/skills/code-review/references/configuration.md** - Configuration file review patterns including environment-specific validation, secrets management, and limit tuning
-- **~/.agents/skills/code-review/references/security.md** - Comprehensive security review covering OWASP Top 10, authentication patterns, authorization models, cryptography, input validation, and secure defaults
-- **~/.agents/skills/code-review/references/typescript-react.md** - Frontend and Node.js patterns including React hooks, state management, TypeScript type safety, async handling, and API design
-- **~/.agents/skills/code-review/references/python.md** - Python-specific patterns covering type hints, async/await, exception handling, context managers, and common library pitfalls
-- **~/.agents/skills/code-review/references/smart-contracts.md** - Blockchain security for Solidity and Solana including reentrancy, integer overflow, access control, and economic attack vectors
-- **~/.agents/skills/code-review/references/shell.md** - Bash script review covering quoting, error handling, portability, security risks from command injection and path traversal
-- **~/.agents/skills/code-review/references/data-formats.md** - CSV, JSON, and data format handling including parsing safety, schema validation, and encoding issues
-- **~/.agents/skills/code-review/references/naming.md** - Naming conventions covering functions, variables, files, classes, and constants with language-specific patterns and common anti-patterns
+- **references/configuration.md** - Configuration file review patterns including environment-specific validation, secrets management, and limit tuning
+- **references/security.md** - Comprehensive security review covering OWASP Top 10, authentication patterns, authorization models, cryptography, input validation, and secure defaults
+- **references/typescript-react.md** - Frontend and Node.js patterns including React hooks, state management, TypeScript type safety, async handling, and API design
+- **references/python.md** - Python-specific patterns covering type hints, async/await, exception handling, context managers, and common library pitfalls
+- **references/smart-contracts.md** - Blockchain security for Solidity and Solana including reentrancy, integer overflow, access control, and economic attack vectors
+- **references/shell.md** - Bash script review covering quoting, error handling, portability, security risks from command injection and path traversal
+- **references/data-formats.md** - CSV, JSON, and data format handling including parsing safety, schema validation, and encoding issues
+- **references/naming.md** - Naming conventions covering functions, variables, files, classes, and constants with language-specific patterns and common anti-patterns
 
 Reference these documents when reviewing code in their respective domains for detailed checklists and language-specific vulnerabilities.
 
 ### Examples
 
-- **~/.agents/skills/code-review/references/example-good-review.md** - Exemplary review output demonstrating proper structure, severity grouping, and actionable recommendations
-- **~/.agents/skills/code-review/references/example-bad-review.md** - Anti-patterns to avoid including fabricated line numbers, vague findings, and opinion without evidence
+- **references/example-good-review.md** - Exemplary review output demonstrating proper structure, severity grouping, and actionable recommendations
+- **references/example-bad-review.md** - Anti-patterns to avoid including fabricated line numbers, vague findings, and opinion without evidence
