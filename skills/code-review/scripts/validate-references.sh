@@ -10,7 +10,7 @@ ERRORS=0
 
 echo "Validating references in ${SKILL_FILE}..."
 
-# Extract referenced paths from SKILL.md (matches references/*.md and examples/*.md patterns)
+# Extract referenced paths from SKILL.md (supports nested references/examples paths)
 while IFS= read -r ref; do
   ref_path="${SKILL_DIR}/${ref}"
   if [[ ! -f "${ref_path}" ]]; then
@@ -19,7 +19,7 @@ while IFS= read -r ref; do
   else
     echo "OK: ${ref}"
   fi
-done < <(grep -oE '(references|examples)/[a-zA-Z0-9_-]+\.md' "${SKILL_FILE}" | sort -u)
+done < <(grep -oE '(references|examples)/[a-zA-Z0-9_./-]+\.md' "${SKILL_FILE}" | sort -u)
 
 if [[ ${ERRORS} -gt 0 ]]; then
   echo ""

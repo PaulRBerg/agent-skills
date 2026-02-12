@@ -14,16 +14,14 @@ description: This skill should be used when the user asks to "simplify code", "c
 
 Simplify code while preserving behavior, public contracts, and side effects. Favor explicit code and local clarity over clever or compressed constructs.
 
-## Scope Identification
-
-Use this scope resolution logic before doing any review/simplification work:
+## Scope Resolution
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
-2. If `$ARGUMENTS` includes `--all`, scope is all uncommitted changes from `git diff --name-only --diff-filter=ACMR`.
-3. Otherwise, if the user specifies file paths/patterns or a git commit/range, scope is exactly those targets. For commits/ranges, resolve files with `git diff --name-only <commit-or-range> --diff-filter=ACMR`.
-4. Otherwise, scope is session-modified files (files edited in this chat session).
-5. Exclude generated or low-signal files unless explicitly requested: lockfiles, minified bundles, build outputs, vendored code.
-6. If scope resolves to zero files, inform the user and stop. Do not silently widen scope.
+2. If `$ARGUMENTS` includes `--all`, scope is `git diff --name-only --diff-filter=ACMR`.
+3. Otherwise, if user provides file paths/patterns or a commit/range, scope is exactly those targets.
+4. Otherwise, scope is session-modified files.
+5. Exclude generated/low-signal files unless requested: lockfiles, minified bundles, build outputs, vendored code.
+6. If scope resolves to zero files, report and stop. Do not widen scope silently.
 
 ## Operating Rules
 
@@ -37,7 +35,7 @@ Use this scope resolution logic before doing any review/simplification work:
 
 ### 1) Determine Scope
 
-- Resolve target files using the "Scope Identification" section above.
+- Resolve target files using the "Scope Resolution" section above.
 
 ### 2) Build a Behavior Baseline
 
