@@ -23,6 +23,7 @@ sync:
 
     # Switch to ~/.agents
     cd ~/.agents
+    echo "📂 Changed directory to ~/.agents"
 
     # Commit uncommitted changes if any
     if [[ -n "$(git status --porcelain)" ]]; then

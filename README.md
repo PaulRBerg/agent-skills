@@ -2,6 +2,9 @@
 
 PRB's collection of AI agent skills. Designed to work across agents, but primarily built for [Claude Code](https://claude.com/product/claude-code) and [Codex](https://github.com/openai/codex).
 
+> [!WARNING]
+> These skills are optimized for my personal setup and workflow. If you install them, do your own due diligence and customize them to fit your stack and agents. No warranties, guarantees, or support are provided — use at your own risk.
+
 ## Installation
 
 ```sh
