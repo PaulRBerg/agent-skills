@@ -3,15 +3,12 @@ set allow-duplicate-recipes
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set unstable
 
-default:
-    @just --list
+@default:
+    just --list
 
-install-deps: install-uv install-mdformat
+@install-deps: install-uv
 
-install-mdformat:
-    uv tool install mdformat --with mdformat-gfm --with mdformat-frontmatter
-
-install-uv:
+@install-uv:
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Commit, sync skills to ~/.agents, commit again
@@ -39,10 +36,10 @@ sync:
     ccc
 alias s := sync
 
-mdformat-check:
+@mdformat-check:
     uvx --with mdformat-gfm --with mdformat-frontmatter mdformat --check .
 alias mc := mdformat-check
 
-mdformat-write:
+@mdformat-write:
     uvx --with mdformat-gfm --with mdformat-frontmatter mdformat .
 alias mw := mdformat-write

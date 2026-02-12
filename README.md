@@ -1,6 +1,6 @@
 # Agent Skills
 
-PRB's collection of agent skills for Claude Code, Codex, etc. The skills are designed to be agent-agnostic, but are primarily built for and tested with [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) and [Codex](https://github.com/openai/codex).
+PRB's collection of AI agent skills. Designed to work across agents, but primarily built for [Claude Code](https://claude.com/product/claude-code) and [Codex](https://github.com/openai/codex).
 
 ## Installation
 
