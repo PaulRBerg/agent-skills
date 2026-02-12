@@ -42,6 +42,7 @@ Note: The staged diff may become stale after staging changes; re-read `git diff 
   - For session-modified files with changes: `git add <file>`
   - Log staged files with status (A/M/D)
   - If none: error "No files modified in this session"
+- **Unrelated changes**: session-modified files may contain pre-existing uncommitted changes (hunks not from this session). Include the entire file—partial staging is impractical. Never revert, discard, or `git checkout` unrelated changes.
 - Re-read staged diff: `git diff --cached`
 
 ### 3) Parse arguments
@@ -63,6 +64,7 @@ Note: The staged diff may become stale after staging changes; re-read `git diff 
 
 - Default:
   - Read the staged diff
+  - Ignore unrelated hunks (pre-existing changes not from this session) when determining type, scope, and description. If unrelated changes are in the same file as session changes, they are included in the commit scope but should not influence the commit message.
   - Determine change type from behavior:
     - New functionality -> `feat`
     - Bug fix or error handling -> `fix`
