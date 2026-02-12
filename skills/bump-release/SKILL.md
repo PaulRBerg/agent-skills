@@ -4,7 +4,7 @@ disable-model-invocation: false
 model: opus
 name: bump-release
 user-invocable: true
-description: Rolls out a new release by updating changelog, bumping version, committing, and tagging
+description: This skill should be used when the user asks to "bump release", "cut a release", "tag a release", "bump version", "create a new release", or mentions release versioning, changelog updates, or version tagging workflows.
 ---
 
 # Bump Release
