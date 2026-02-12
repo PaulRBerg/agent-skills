@@ -25,12 +25,11 @@ Simplify code while preserving behavior, public contracts, and side effects. Fav
 
 - Verify repository context: `git rev-parse --git-dir`.
 - Identify candidate files:
-  - If `$ARGUMENTS` contains file paths or patterns, use them.
-  - Otherwise, use session-modified files (files edited in this chat session).
-  - If no session edits exist, fall back to `git diff --name-only --diff-filter=ACMR`.
+  - If `$ARGUMENTS` contains file paths, patterns, or `--all`, use them. `--all` means uncommitted changes via `git diff --name-only --diff-filter=ACMR`.
+  - Otherwise, default to session-modified files (files edited in this chat session).
 - Exclude generated or low-signal files unless explicitly requested:
   - lockfiles, minified bundles, build outputs, vendored code.
-- If no target files are found, ask for explicit scope.
+- If no session edits exist and no explicit scope was given, inform the user and stop. Do not silently widen scope.
 
 ### 2) Build a Behavior Baseline
 
@@ -79,6 +78,7 @@ Simplify code while preserving behavior, public contracts, and side effects. Fav
 ### 6) Report
 
 Provide:
+
 1. Scope touched (files/functions)
 2. Key simplifications with concise rationale
 3. Verification commands run and outcomes

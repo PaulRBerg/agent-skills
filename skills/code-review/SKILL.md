@@ -19,14 +19,15 @@ Perform expert-level code review focusing on security vulnerabilities, correctne
 **Before starting**: Verify you're in a git repository by running `git rev-parse --git-dir`. If this fails (exit code 128), inform the user they must run the code review from within a git repository and stop.
 
 Parse arguments from `$ARGUMENTS`:
+
 - `--fix`: After presenting findings, automatically apply all suggested fixes without waiting for confirmation. Implement fixes in severity order (CRITICAL → HIGH → MEDIUM → LOW), then report what was changed.
 - Default (no `--fix`): Present findings and wait for user confirmation before applying changes.
 
 Determine which files to review:
-- If `$ARGUMENTS` contains file paths or patterns, use them.
-- Otherwise, use session-modified files (files edited in this chat session).
-- If no session edits exist, fall back to uncommitted changes: `git diff --name-only --diff-filter=ACMR`.
-- If no changes found, inform the user and stop.
+
+- If `$ARGUMENTS` contains file paths, patterns, or `--all`, use them. `--all` means uncommitted changes via `git diff --name-only --diff-filter=ACMR`.
+- Otherwise, default to session-modified files (files edited in this chat session).
+- If no session edits exist and no explicit scope was given, inform the user and stop. Do not silently widen scope.
 
 Run `git diff` on the in-scope files to understand the changes. Examine both the changed lines and surrounding context to understand intent. Identify file types being modified: application code, test files, configuration, database migrations, or documentation.
 
@@ -115,6 +116,7 @@ Structure reviews consistently:
 5. **Applied Fixes** (only when `--fix` is present): concrete list of implemented changes with file references
 
 **Important**:
+
 - Default behavior: After presenting findings, wait for the user to confirm which issues to address.
 - With `--fix`: Do not wait for confirmation. Apply all suggested fixes automatically, then provide an implementation summary and any remaining follow-ups.
 
