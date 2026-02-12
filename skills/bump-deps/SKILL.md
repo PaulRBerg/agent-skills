@@ -104,7 +104,40 @@ taze major --write --include <pkg1>,<pkg2>,<pkg3>
 
 Add `-r` if monorepo was detected.
 
-### Step 6: Install Dependencies
+### Step 6: Update Bun Catalogs
+
+After applying all updates, check the **root** `package.json` for Bun workspace catalogs. Bun monorepos can centralize dependency versions using `catalog` and `catalogs` fields inside the `workspaces` object:
+
+```json
+{
+  "workspaces": {
+    "packages": ["packages/*"],
+    "catalog": {
+      "react": "^19.0.0"
+    },
+    "catalogs": {
+      "testing": {
+        "jest": "^30.0.0"
+      }
+    }
+  }
+}
+```
+
+Workspace packages reference these with `"react": "catalog:"` (default catalog) or `"jest": "catalog:testing"` (named catalog).
+
+**Skip this step** if neither `workspaces.catalog` nor `workspaces.catalogs` exists in the root `package.json`.
+
+For each package that was updated in Steps 3/5:
+
+1. Check if it appears in `workspaces.catalog` — if so, update the version there
+2. Check each named catalog in `workspaces.catalogs` — if the package appears, update the version there
+
+Preserve the existing range prefix (`^`, `~`, or none) from the catalog entry. For example, if the catalog has `"react": "^19.0.0"` and taze bumped react to `19.1.0`, update the catalog to `"react": "^19.1.0"`.
+
+Use `Edit` to apply the version changes directly to the root `package.json`.
+
+### Step 7: Install Dependencies
 
 After all updates are applied, remind the user to run their package manager's install command:
 
@@ -145,3 +178,4 @@ Packages shown with `--include-locked` that have no `^` or `~` are fixed version
 - MINOR/PATCH updates are backward-compatible by semver convention—safe to auto-apply
 - The `--include` flag accepts comma-separated package names or regex patterns
 - Monorepo detection is automatic—no flag needed
+- Bun catalogs (`workspaces.catalog` / `workspaces.catalogs`) are the source of truth for workspace packages using the `catalog:` protocol—always update catalog entries alongside regular deps
