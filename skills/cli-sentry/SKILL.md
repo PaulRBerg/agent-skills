@@ -5,13 +5,11 @@ user-invocable: true
 description: This skill should be used when the user asks to "fetch Sentry issues", "check Sentry errors", "triage Sentry", "categorize Sentry issues", "resolve Sentry issue", "mute Sentry issue", "unresolve Sentry issue", "sentry-cli", or mentions Sentry API, Sentry project issues, error monitoring, issue triage, Sentry stack traces, or browser extension errors in Sentry.
 ---
 
-
 # Sentry CLI Issue Management
 
 > **Compatibility**: This skill is compatible with `sentry-cli` v3 only.
 >
 > **Important**: `sentry-cli api` was removed in v3. Do **not** use `sentry-cli api` for anything. Use `scripts/sentry-api.sh` for API calls (see [API Access](#api-access) and [API Fallbacks](#api-fallbacks)).
->
 
 ## Overview
 
@@ -266,16 +264,16 @@ bash scripts/sentry-api.sh PUT \
 
 ## Quick Reference
 
-| Operation          | Method | Command / Endpoint                                                                                                              |
-| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| List issues        | CLI    | `sentry-cli issues list --project <p>`                                                                                          |
+| Operation          | Method | Command / Endpoint                                                                                  |
+| ------------------ | ------ | --------------------------------------------------------------------------------------------------- |
+| List issues        | CLI    | `sentry-cli issues list --project <p>`                                                              |
 | List issues (rich) | Script | `bash scripts/fetch-issues.sh --org=<o> --project=<p>`                                              |
 | Issue details      | Script | `bash scripts/sentry-api.sh GET /issues/{id}/`                                                      |
 | Latest event       | Script | `bash scripts/sentry-api.sh GET /issues/{id}/events/latest/`                                        |
 | Event list         | Script | `bash scripts/sentry-api.sh GET /issues/{id}/events/`                                               |
-| Resolve            | CLI    | `sentry-cli issues resolve --project <p> -i <id>`                                                                               |
-| Mute               | CLI    | `sentry-cli issues mute --project <p> -i <id>`                                                                                  |
-| Unresolve          | CLI    | `sentry-cli issues unresolve --project <p> -i <id>`                                                                             |
+| Resolve            | CLI    | `sentry-cli issues resolve --project <p> -i <id>`                                                   |
+| Mute               | CLI    | `sentry-cli issues mute --project <p> -i <id>`                                                      |
+| Unresolve          | CLI    | `sentry-cli issues unresolve --project <p> -i <id>`                                                 |
 | Bulk update        | Script | `bash scripts/sentry-api.sh PUT "/projects/{org}/{project}/issues/?id=..." '{"status":"resolved"}'` |
 
 ## Tips

@@ -6,7 +6,6 @@ user-invocable: true
 description: This skill should be used when the user asks to "commit changes", "craft a commit message", "stage and commit", "commit only session edits", or run a commit workflow with flags like --all, --deep, or --push. Creates atomic git commits with heuristic analysis, conventional-commit formatting, staging rules, optional deep analysis, and optional push.
 ---
 
-
 # Git Commit
 
 ## Overview

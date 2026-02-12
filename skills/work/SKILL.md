@@ -31,12 +31,12 @@ Read the task description from `$ARGUMENTS`.
 
 Classify the task as **simple** or **complex** using these heuristics:
 
-| Signal           | Simple                   | Complex                                   |
-| ---------------- | ------------------------ | ----------------------------------------- |
-| File count       | 1-3 files                | 4+ files                                  |
-| Module span      | Single module or package | Cross-module or cross-package             |
-| Dependency chain | No new dependencies      | New packages or service integrations      |
-| Risk surface     | Low (UI, docs, config)   | High (auth, payments, data, infra)        |
+| Signal           | Simple                   | Complex                                       |
+| ---------------- | ------------------------ | --------------------------------------------- |
+| File count       | 1-3 files                | 4+ files                                      |
+| Module span      | Single module or package | Cross-module or cross-package                 |
+| Dependency chain | No new dependencies      | New packages or service integrations          |
+| Risk surface     | Low (UI, docs, config)   | High (auth, payments, data, infra)            |
 | Parallelism      | Sequential steps only    | Independent subtasks benefit from concurrency |
 
 A task is complex when **3 or more** signals fall in the complex column. When in doubt, prefer the simple path — team overhead is only justified when parallelism provides a real speedup.
@@ -108,14 +108,14 @@ This step is mandatory — always run it, even if the implementation seems clean
 
 ## Error Handling
 
-| Error                            | Response                                                      |
-| -------------------------------- | ------------------------------------------------------------- |
-| Empty `$ARGUMENTS`               | Ask for a task description and stop                           |
-| `code-polish` skill missing      | Stop immediately with installation instructions               |
-| Not in a git repository          | Stop with clear error                                         |
-| Verification failures after impl | Attempt to fix; if unfixable, report to user before polishing |
-| Team agent fails or times out    | Reclaim the task and complete it directly                      |
-| `code-polish` reports stop condition | Relay to user with context                                |
+| Error                                | Response                                                      |
+| ------------------------------------ | ------------------------------------------------------------- |
+| Empty `$ARGUMENTS`                   | Ask for a task description and stop                           |
+| `code-polish` skill missing          | Stop immediately with installation instructions               |
+| Not in a git repository              | Stop with clear error                                         |
+| Verification failures after impl     | Attempt to fix; if unfixable, report to user before polishing |
+| Team agent fails or times out        | Reclaim the task and complete it directly                     |
+| `code-polish` reports stop condition | Relay to user with context                                    |
 
 ## Stop Conditions
 

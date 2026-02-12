@@ -7,7 +7,6 @@ user-invocable: true
 description: This skill should be used when the user asks to "run npm test after 30 minutes", "git commit after 1 hour", "wait 2h then deploy", "sleep 45m and run build", "after 10m run prettier", or provides a duration followed by a shell command to execute later.
 ---
 
-
 # Delayed Command Execution
 
 Wait for a specified duration, then execute a Bash command.

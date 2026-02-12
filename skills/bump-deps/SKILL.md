@@ -6,9 +6,7 @@ user-invocable: true
 description: This skill should be used when the user asks to "update dependencies", "update npm packages", "bump dependencies", "upgrade node packages", "check for outdated packages", "update package.json", or mentions dependency updates, npm/pnpm/yarn/bun package upgrades, or taze CLI usage.
 ---
 
-
 # Bump Dependencies Skill
-
 
 Update Node.js dependencies using taze CLI with smart prompting: auto-apply MINOR/PATCH updates, prompt for MAJOR updates individually, skip fixed-version packages.
 
@@ -168,9 +166,9 @@ Packages shown with `--include-locked` that have no `^` or `~` are fixed version
 
 ## Script Reference
 
-| Script                                             | Purpose                                              |
-| -------------------------------------------------- | ---------------------------------------------------- |
-| `scripts/run-taze.sh`   | Run taze in non-interactive mode, check installation |
+| Script                | Purpose                                              |
+| --------------------- | ---------------------------------------------------- |
+| `scripts/run-taze.sh` | Run taze in non-interactive mode, check installation |
 
 ## Important Notes
 
