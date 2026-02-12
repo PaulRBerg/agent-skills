@@ -1,22 +1,24 @@
 ---
-argument-hint: '[-r|--monorepo]'
-name: node-deps
+argument-hint: '[package ...]'
+name: bump-deps
 user-invocable: true
 description: This skill should be used when the user asks to "update dependencies", "update npm packages", "bump dependencies", "upgrade node packages", "check for outdated packages", "update package.json", or mentions dependency updates, npm/pnpm/yarn/bun package upgrades, or taze CLI usage.
 ---
 
-# Node Dependencies Update Skill
+# Bump Dependencies Skill
 
-> **File paths**: All `scripts/` paths in this skill resolve under `~/.agents/skills/node-deps/`. Do not look for them in the current working directory.
+> **File paths**: All `scripts/` paths in this skill resolve under `~/.agents/skills/bump-deps/`. Do not look for them in the current working directory.
 
 Update Node.js dependencies using taze CLI with smart prompting: auto-apply MINOR/PATCH updates, prompt for MAJOR updates individually, skip fixed-version packages.
+
+When package names are provided as arguments (e.g. `/bump-deps react typescript`), scope all taze commands to only those packages using `--include`.
 
 ## Prerequisites
 
 Before starting, verify taze is installed by running:
 
 ```bash
-~/.agents/skills/node-deps/scripts/run-taze.sh
+~/.agents/skills/bump-deps/scripts/run-taze.sh
 ```
 
 If exit code is 1, stop and inform the user that taze must be installed:
@@ -26,23 +28,15 @@ If exit code is 1, stop and inform the user that taze must be installed:
 
 ## Update Workflow
 
-### Step 1: Determine Scope
+### Step 1: Scan for Updates
 
-Ask the user if this is a monorepo project. Use the `-r` flag for recursive scanning of workspaces.
-
-### Step 2: Scan for Updates
-
-Run the taze script to discover all available updates:
+Run the taze script to discover available updates. The script auto-detects monorepo projects (`workspaces` in package.json or `pnpm-workspace.yaml`) and enables recursive mode automatically.
 
 ```bash
-# Single package
-~/.agents/skills/node-deps/scripts/run-taze.sh
-
-# Monorepo (recursive)
-~/.agents/skills/node-deps/scripts/run-taze.sh -r
+~/.agents/skills/bump-deps/scripts/run-taze.sh
 ```
 
-### Step 3: Parse and Categorize Updates
+### Step 2: Parse and Categorize Updates
 
 From the taze output, categorize each package update:
 
@@ -53,26 +47,30 @@ From the taze output, categorize each package update:
 | **MINOR** | `x.y.z` → `x.Y.0` (e.g., `1.0.0` → `1.1.0`) | Auto-apply    |
 | **MAJOR** | `x.y.z` → `X.0.0` (e.g., `1.0.0` → `2.0.0`) | Prompt user   |
 
+If package arguments were provided, filter to only those packages.
+
 **Identifying fixed versions:** In package.json, fixed versions have no range prefix:
 
 - Fixed: `"lodash": "4.17.21"` → skip
 - Ranged: `"lodash": "^4.17.21"` → process
 
-### Step 4: Apply MINOR/PATCH Updates
+### Step 3: Apply MINOR/PATCH Updates
 
 Apply all non-major updates automatically without prompting:
 
 ```bash
-# Single package
+# All packages
 taze minor --write
 
-# Monorepo
-taze minor --write -r
+# Specific packages only (when args provided)
+taze minor --write --include react,typescript
 ```
+
+The script auto-detects monorepo mode, but when running taze directly, detect it yourself: check for `workspaces` in package.json or `pnpm-workspace.yaml` and add `-r` if present.
 
 Report the packages that were updated.
 
-### Step 5: Prompt for MAJOR Updates
+### Step 4: Prompt for MAJOR Updates
 
 **Auto-skip packages:** Never prompt for these packages—auto-apply their major updates:
 
@@ -96,19 +94,17 @@ Update to major version?
 
 Collect all approved major updates.
 
-### Step 6: Apply Approved MAJOR Updates
+### Step 5: Apply Approved MAJOR Updates
 
 After collecting user approvals, apply the approved major updates:
 
 ```bash
-# Apply specific packages
 taze major --write --include <pkg1>,<pkg2>,<pkg3>
-
-# With monorepo
-taze major --write -r --include <pkg1>,<pkg2>,<pkg3>
 ```
 
-### Step 7: Install Dependencies
+Add `-r` if monorepo was detected.
+
+### Step 6: Install Dependencies
 
 After all updates are applied, remind the user to run their package manager's install command:
 
@@ -116,6 +112,8 @@ After all updates are applied, remind the user to run their package manager's in
 npm install
 # or
 pnpm install
+# or
+bun install
 # or
 yarn install
 ```
@@ -136,10 +134,9 @@ Packages shown with `--include-locked` that have no `^` or `~` are fixed version
 
 ## Script Reference
 
-| Script                                              | Purpose                                              |
-| --------------------------------------------------- | ---------------------------------------------------- |
-| `~/.agents/skills/node-deps/scripts/run-taze.sh`    | Run taze in non-interactive mode, check installation |
-| `~/.agents/skills/node-deps/scripts/run-taze.sh -r` | Same with recursive monorepo scanning                |
+| Script                                             | Purpose                                              |
+| -------------------------------------------------- | ---------------------------------------------------- |
+| `~/.agents/skills/bump-deps/scripts/run-taze.sh`   | Run taze in non-interactive mode, check installation |
 
 ## Important Notes
 
@@ -147,3 +144,4 @@ Packages shown with `--include-locked` that have no `^` or `~` are fixed version
 - MAJOR updates may contain breaking changes—always prompt the user
 - MINOR/PATCH updates are backward-compatible by semver convention—safe to auto-apply
 - The `--include` flag accepts comma-separated package names or regex patterns
+- Monorepo detection is automatic—no flag needed

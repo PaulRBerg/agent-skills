@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # run-taze.sh - Run taze in non-interactive mode
 #
-# Usage: run-taze.sh [-r] [path]
-#   -r    Enable recursive/monorepo mode
+# Usage: run-taze.sh [path]
+#
+# Automatically detects monorepo projects (workspaces in package.json
+# or pnpm-workspace.yaml) and enables recursive mode.
 #
 # Exit codes:
 #   0 - Success (updates displayed)
@@ -11,14 +13,7 @@
 
 set -euo pipefail
 
-recursive=""
-while getopts "r" opt; do
-    case $opt in
-        r) recursive="-r" ;;
-        *) ;;
-    esac
-done
-shift $((OPTIND - 1))
+target_dir="${1:-.}"
 
 # Check taze availability
 if ! command -v taze &>/dev/null; then
@@ -37,14 +32,21 @@ EOF
 fi
 
 # Check for package.json
-target_dir="${1:-.}"
 if [[ ! -f "$target_dir/package.json" ]]; then
     echo "ERROR: No package.json found in $target_dir" >&2
     exit 2
 fi
 
+cd "$target_dir"
+
+# Auto-detect monorepo
+recursive=""
+if grep -q '"workspaces"' package.json 2>/dev/null \
+    || [[ -f pnpm-workspace.yaml ]]; then
+    recursive="-r"
+fi
+
 # Run taze major to show ALL available updates (including breaking)
 # -l/--include-locked shows fixed versions (no ^ or ~)
-cd "$target_dir"
 # shellcheck disable=SC2086
 taze major $recursive --include-locked 2>&1

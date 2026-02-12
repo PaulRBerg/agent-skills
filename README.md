@@ -14,7 +14,7 @@ npx skills add PaulRBerg/agent-skills
 | --------------- | ---------------------------------------- |
 | biome-js        | BiomeJS linting/formatting guidance      |
 | bump-release    | Release workflow with changelog, tagging |
-| code-polish     | Combined simplification and review        |
+| code-polish     | Combined simplification and review       |
 | code-review     | Expert code review                       |
 | cli-gh          | GitHub CLI operations                    |
 | cli-just        | Just command runner guidance             |
@@ -24,7 +24,7 @@ npx skills add PaulRBerg/agent-skills
 | delayed-command | Wait and execute bash command            |
 | ls-lint         | Directory/filename linting               |
 | md-docs         | Markdown documentation management        |
-| node-deps       | Node.js dependency updates               |
+| bump-deps       | Node.js dependency updates               |
 | openclaw        | OpenClaw CLI guidance                    |
 | oracle-codex    | Codex oracle for planning                |
 | oss             | OSS contribution workflows               |
