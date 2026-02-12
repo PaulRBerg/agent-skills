@@ -4,6 +4,7 @@ argument-hint: '[prompt-request]'
 disable-model-invocation: true
 model: opus
 name: refine-prompt
+user-invocable: true
 description: Optimize prompts for LLMs and append to PROMPT.md
 ---
 

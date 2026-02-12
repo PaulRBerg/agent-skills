@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: false
 name: ls-lint
 user-invocable: false
 description: This skill should be used when the user asks to "configure ls-lint", "set up filename linting", "enforce naming conventions", "create .ls-lint.yml", "lint file names", "lint directory names", "file naming rules", "directory structure linting", or mentions ls-lint, directory naming rules, or filename conventions.

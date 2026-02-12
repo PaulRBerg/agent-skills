@@ -1,6 +1,8 @@
 ---
 argument-hint: '[--all] [--deep] [--push]'
+disable-model-invocation: false
 name: commit
+user-invocable: true
 description: Create atomic git commits with heuristic analysis, conventional-commit formatting, staging rules, optional deep analysis, and optional push. Use when the user asks to craft a commit message, commit changes, stage/commit only session edits, or run a commit workflow with flags like --all, --deep, or --push.
 ---
 

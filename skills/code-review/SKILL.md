@@ -1,6 +1,7 @@
 ---
 argument-hint: '[--fix]'
 context: fork
+disable-model-invocation: false
 name: code-review
 user-invocable: true
 description: This skill should be used when the user asks to "review code", "review PR", "code review", "audit code", "check for bugs", "security review", "review my changes", "find issues in this code", "review the diff", or asks for pull request review or code audit.

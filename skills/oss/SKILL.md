@@ -1,5 +1,6 @@
 ---
 argument-hint: <create-pr|update-pr|create-issue|create-discussion> [options]
+disable-model-invocation: false
 name: oss
 user-invocable: true
 description: This skill should be used when the user asks to "create a pull request", "create PR", "open PR", "update a pull request", "update PR", "create an issue", "file an issue", "create a GitHub issue", "create a Claude Code issue", "report a bug in Claude Code", "create a Codex issue", "report a bug in Codex CLI", "create a Sablier issue", "file an issue in sablier-labs", "create a discussion", "start a GitHub discussion", or mentions OSS contribution workflows.
