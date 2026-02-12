@@ -8,16 +8,16 @@ Language syntax and utilities for Just command runner.
 
 Available globally without definition:
 
-| Constant             | ANSI Code |
-| -------------------- | --------- |
-| `BLACK`              | `\e[30m`  |
-| `RED`                | `\e[31m`  |
-| `GREEN`              | `\e[32m`  |
-| `YELLOW`             | `\e[33m`  |
-| `BLUE`               | `\e[34m`  |
-| `MAGENTA`            | `\e[35m`  |
-| `CYAN`               | `\e[36m`  |
-| `WHITE`              | `\e[37m`  |
+| Constant  | ANSI Code |
+| --------- | --------- |
+| `BLACK`   | `\e[30m`  |
+| `RED`     | `\e[31m`  |
+| `GREEN`   | `\e[32m`  |
+| `YELLOW`  | `\e[33m`  |
+| `BLUE`    | `\e[34m`  |
+| `MAGENTA` | `\e[35m`  |
+| `CYAN`    | `\e[36m`  |
+| `WHITE`   | `\e[37m`  |
 
 ### Text Styles
 
@@ -38,16 +38,16 @@ Available globally without definition:
 
 ### Background Colors
 
-| Constant    | Description       |
-| ----------- | ----------------- |
-| `BG_BLACK`  | Black background  |
-| `BG_RED`    | Red background    |
-| `BG_GREEN`  | Green background  |
-| `BG_YELLOW` | Yellow background |
-| `BG_BLUE`   | Blue background   |
-| `BG_MAGENTA`| Magenta background |
-| `BG_CYAN`   | Cyan background   |
-| `BG_WHITE`  | White background  |
+| Constant     | Description        |
+| ------------ | ------------------ |
+| `BG_BLACK`   | Black background   |
+| `BG_RED`     | Red background     |
+| `BG_GREEN`   | Green background   |
+| `BG_YELLOW`  | Yellow background  |
+| `BG_BLUE`    | Blue background    |
+| `BG_MAGENTA` | Magenta background |
+| `BG_CYAN`    | Cyan background    |
+| `BG_WHITE`   | White background   |
 
 ### System Constants
 

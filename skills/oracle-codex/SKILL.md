@@ -47,9 +47,9 @@ For `codex exec`, prefer the wrapper script (handles flag compatibility and surf
 
 Only the following models may be passed to `-m`. Reject any model not in this list — do **not** infer or substitute models from the user's prompt (e.g., "o3", "gpt-4o").
 
-| Model            | Description                          |
-| ---------------- | ------------------------------------ |
-| `gpt-5.3-codex`  | Latest frontier agentic coding model |
+| Model           | Description                          |
+| --------------- | ------------------------------------ |
+| `gpt-5.3-codex` | Latest frontier agentic coding model |
 
 ### Timeout Guidelines
 
