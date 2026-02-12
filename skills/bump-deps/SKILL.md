@@ -6,9 +6,9 @@ user-invocable: true
 description: This skill should be used when the user asks to "update dependencies", "update npm packages", "bump dependencies", "upgrade node packages", "check for outdated packages", "update package.json", or mentions dependency updates, npm/pnpm/yarn/bun package upgrades, or taze CLI usage.
 ---
 
+
 # Bump Dependencies Skill
 
-> **File paths**: All `scripts/` paths in this skill resolve under `~/.agents/skills/bump-deps/`. Do not look for them in the current working directory.
 
 Update Node.js dependencies using taze CLI with smart prompting: auto-apply MINOR/PATCH updates, prompt for MAJOR updates individually, skip fixed-version packages.
 
@@ -19,7 +19,7 @@ When package names are provided as arguments (e.g. `/bump-deps react typescript`
 Before starting, verify taze is installed by running:
 
 ```bash
-~/.agents/skills/bump-deps/scripts/run-taze.sh
+scripts/run-taze.sh
 ```
 
 If exit code is 1, stop and inform the user that taze must be installed:
@@ -34,7 +34,7 @@ If exit code is 1, stop and inform the user that taze must be installed:
 Run the taze script to discover available updates. The script auto-detects monorepo projects (`workspaces` in package.json or `pnpm-workspace.yaml`) and enables recursive mode automatically.
 
 ```bash
-~/.agents/skills/bump-deps/scripts/run-taze.sh
+scripts/run-taze.sh
 ```
 
 ### Step 2: Parse and Categorize Updates
@@ -170,7 +170,7 @@ Packages shown with `--include-locked` that have no `^` or `~` are fixed version
 
 | Script                                             | Purpose                                              |
 | -------------------------------------------------- | ---------------------------------------------------- |
-| `~/.agents/skills/bump-deps/scripts/run-taze.sh`   | Run taze in non-interactive mode, check installation |
+| `scripts/run-taze.sh`   | Run taze in non-interactive mode, check installation |
 
 ## Important Notes
 

@@ -5,6 +5,7 @@ user-invocable: false
 description: This skill should be used when the user asks to "configure ls-lint", "set up filename linting", "enforce naming conventions", "create .ls-lint.yml", "lint file names", "lint directory names", "file naming rules", "directory structure linting", or mentions ls-lint, directory naming rules, or filename conventions.
 ---
 
+
 # ls-lint v2.3
 
 > **Version Notice:** This skill documents **ls-lint v2.3** specifically. Before proceeding, verify the installed version matches:

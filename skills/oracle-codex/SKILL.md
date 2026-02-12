@@ -7,9 +7,9 @@ user-invocable: false
 description: This skill should be used when the user asks to "use Codex", "ask Codex", "consult Codex", "use GPT for planning", "ask GPT to review", "get GPT's opinion", "what does GPT think", "second opinion on code", "consult the oracle", "ask the oracle", or mentions using an AI oracle for planning or code review. NOT for implementation tasks.
 ---
 
+
 # Codex Oracle
 
-> **File paths**: All `scripts/` and `references/` paths in this skill resolve under `~/.agents/skills/oracle-codex/`. Do not look for them in the current working directory.
 
 Use OpenAI Codex CLI as a **planning oracle** and **code reviewer**. Codex provides analysis and recommendations; Claude synthesizes and presents to the user.
 
@@ -24,7 +24,7 @@ Use OpenAI Codex CLI as a **planning oracle** and **code reviewer**. Codex provi
 Before invoking Codex, validate availability:
 
 ```bash
-~/.agents/skills/oracle-codex/scripts/check-codex.sh
+scripts/check-codex.sh
 ```
 
 If the script exits non-zero, display the error message and stop. Do not proceed without Codex CLI.
@@ -32,7 +32,7 @@ If the script exits non-zero, display the error message and stop. Do not proceed
 For `codex exec`, prefer the wrapper script (handles flag compatibility and surfaces errors):
 
 ```bash
-~/.agents/skills/oracle-codex/scripts/run-codex-exec.sh
+scripts/run-codex-exec.sh
 ```
 
 ## Configuration Defaults
@@ -80,7 +80,7 @@ Select reasoning effort based on task complexity:
 - **`high`**: Task spans multiple modules or requires architectural thinking
 - **`xhigh`**: Task requires comprehensive codebase understanding or critical decisions
 
-For available models and reasoning levels, consult `~/.agents/skills/oracle-codex/references/codex-flags.md`.
+For available models and reasoning levels, consult `references/codex-flags.md`.
 
 ## Workflow
 
@@ -172,7 +172,7 @@ CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
 MODEL="${MODEL:-gpt-5.3-codex}" \
 EFFORT="${EFFORT}" \
 CODEX_OUTPUT="$CODEX_OUTPUT" \
-~/.agents/skills/oracle-codex/scripts/run-codex-exec.sh <<'EOF'
+scripts/run-codex-exec.sh <<'EOF'
 [constructed prompt]
 EOF
 ```
@@ -288,8 +288,8 @@ User: "Have Codex review the changes in src/auth/"
 
 ### Reference Files
 
-- **`~/.agents/skills/oracle-codex/references/codex-flags.md`** - Complete model and flag documentation
+- **`references/codex-flags.md`** - Complete model and flag documentation
 
 ### Scripts
 
-- **`~/.agents/skills/oracle-codex/scripts/check-codex.sh`** - Prerequisite validation (run before any Codex command)
+- **`scripts/check-codex.sh`** - Prerequisite validation (run before any Codex command)

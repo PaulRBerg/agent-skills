@@ -5,9 +5,9 @@ user-invocable: false
 description: This skill should be used when the user asks to "create a justfile", "write just recipes", "configure just settings", "add just modules", "use just attributes", "set up task automation", mentions justfile, just command runner, or task automation with just.
 ---
 
+
 # Just Command Runner
 
-> **File paths**: All `~/.agents/skills/cli-just/references/` and `~/.agents/skills/cli-just/examples/` paths in this skill resolve under `~/.agents/skills/cli-just/`. Do not look for them in the current working directory.
 
 ## Overview
 
@@ -360,17 +360,17 @@ Example topics to search:
 
 For detailed patterns and comprehensive coverage, consult:
 
-- **[`~/.agents/skills/cli-just/references/settings.md`](~/.agents/skills/cli-just/references/settings.md)** - Settings configuration and module system
-- **[`~/.agents/skills/cli-just/references/recipes.md`](~/.agents/skills/cli-just/references/recipes.md)** - Recipe attributes, parameters, dependencies, and prefixes
-- **[`~/.agents/skills/cli-just/references/syntax.md`](~/.agents/skills/cli-just/references/syntax.md)** - Constants, functions, variables, and CLI options
-- **[`~/.agents/skills/cli-just/references/patterns.md`](~/.agents/skills/cli-just/references/patterns.md)** - Established conventions, section organization, helper patterns
+- **[`references/settings.md`](references/settings.md)** - Settings configuration and module system
+- **[`references/recipes.md`](references/recipes.md)** - Recipe attributes, parameters, dependencies, and prefixes
+- **[`references/syntax.md`](references/syntax.md)** - Constants, functions, variables, and CLI options
+- **[`references/patterns.md`](references/patterns.md)** - Established conventions, section organization, helper patterns
 
 ### Example Templates
 
-Working justfile templates in `~/.agents/skills/cli-just/examples/`:
+Working justfile templates in `examples/`:
 
-- **[`devkit.just`](~/.agents/skills/cli-just/examples/devkit.just)** - Minimal template importing @sablier/devkit
-- **[`standalone.just`](~/.agents/skills/cli-just/examples/standalone.just)** - Full standalone template with all patterns
+- **[`devkit.just`](examples/devkit.just)** - Minimal template importing @sablier/devkit
+- **[`standalone.just`](examples/standalone.just)** - Full standalone template with all patterns
 
 ### External Documentation
 

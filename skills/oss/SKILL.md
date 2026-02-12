@@ -6,9 +6,9 @@ user-invocable: true
 description: This skill should be used when the user asks to "create a pull request", "create PR", "open PR", "update a pull request", "update PR", "create an issue", "file an issue", "create a GitHub issue", "create a Claude Code issue", "report a bug in Claude Code", "create a Codex issue", "report a bug in Codex CLI", "create a Sablier issue", "file an issue in sablier-labs", "create a discussion", "start a GitHub discussion", or mentions OSS contribution workflows.
 ---
 
+
 # OSS Contribution Workflows
 
-> **File paths**: All `scripts/` and `references/` paths in this skill resolve under `~/.agents/skills/oss/`. Do not look for them in the current working directory.
 
 ## Overview
 
@@ -111,7 +111,7 @@ Execute the gh command with all parsed flags and generated content. Include:
 - `--draft` if draft mode requested
 - Return the PR URL to the user
 
-For the complete pull request workflow with detailed steps, examples, and edge cases, refer to `~/.agents/skills/oss/references/create-pr.md`.
+For the complete pull request workflow with detailed steps, examples, and edge cases, refer to `references/create-pr.md`.
 
 ## Update Pull Requests
 
@@ -154,7 +154,7 @@ gh pr edit --title "$title" --body "$body"
 
 Push any local commits after updating.
 
-For the complete update workflow with detailed steps and examples, refer to `~/.agents/skills/oss/references/update-pr.md`.
+For the complete update workflow with detailed steps and examples, refer to `references/update-pr.md`.
 
 ## Issues
 
@@ -214,7 +214,7 @@ Display results and ask user if they want to proceed with creation.
 
 Execute the gh command with generated title, body, and metadata. Pass multi-line bodies using HEREDOC syntax. Return the issue URL to the user.
 
-For the complete issue creation workflow with template examples, label strategies, and search patterns, refer to `~/.agents/skills/oss/references/create-issue.md`.
+For the complete issue creation workflow with template examples, label strategies, and search patterns, refer to `references/create-issue.md`.
 
 ## Claude Code Issues
 
@@ -240,7 +240,7 @@ Collect relevant environment details:
 claude --version
 
 # Operating system (macOS)
-~/.agents/skills/oss/scripts/get-macos-version.sh
+scripts/get-macos-version.sh
 
 # Terminal emulator (macOS)
 echo $TERM_PROGRAM
@@ -282,7 +282,7 @@ EOF
 
 Return the issue URL to the user.
 
-For the complete Claude Code issue workflow with template examples and environment gathering scripts, refer to `~/.agents/skills/oss/references/issue-claude-code.md`.
+For the complete Claude Code issue workflow with template examples and environment gathering scripts, refer to `references/issue-claude-code.md`.
 
 ## Codex CLI Issues
 
@@ -308,7 +308,7 @@ Collect relevant environment details:
 codex --version
 
 # Platform (macOS)
-~/.agents/skills/oss/scripts/get-macos-version.sh
+scripts/get-macos-version.sh
 
 # For VS Code extension issues
 code --version
@@ -340,7 +340,7 @@ EOF
 
 Return the issue URL to the user.
 
-For the complete Codex CLI issue workflow with template examples and environment gathering scripts, refer to `~/.agents/skills/oss/references/issue-codex-cli.md`.
+For the complete Codex CLI issue workflow with template examples and environment gathering scripts, refer to `references/issue-codex-cli.md`.
 
 ## Sablier Issues
 
@@ -378,7 +378,7 @@ gh issue create \
 
 Return the issue URL to the user.
 
-For the complete Sablier issue workflow with label reference tables, scope labels, and examples, refer to `~/.agents/skills/oss/references/issue-sablier.md`.
+For the complete Sablier issue workflow with label reference tables, scope labels, and examples, refer to `references/issue-sablier.md`.
 
 ## Discussions
 
@@ -476,7 +476,7 @@ gh api graphql -f query='
 
 Return the discussion URL to the user.
 
-For the complete discussion workflow with GraphQL examples, category selection logic, and search patterns, refer to `~/.agents/skills/oss/references/create-discussion.md`.
+For the complete discussion workflow with GraphQL examples, category selection logic, and search patterns, refer to `references/create-discussion.md`.
 
 ## Common Patterns
 
@@ -588,13 +588,13 @@ For search operations with `--check`:
 
 For detailed workflows, examples, and edge case handling, refer to these reference documents:
 
-- **`~/.agents/skills/oss/references/create-pr.md`** - Complete pull request workflow including git state validation, semantic analysis strategies, template examples, and reviewer management
-- **`~/.agents/skills/oss/references/update-pr.md`** - Complete update PR workflow including argument parsing, semantic analysis, and title/description regeneration
-- **`~/.agents/skills/oss/references/create-issue.md`** - Complete issue creation workflow including template parsing, label application strategies, and duplicate detection
-- **`~/.agents/skills/oss/references/issue-claude-code.md`** - Claude Code-specific issue creation including all template formats, environment gathering scripts, and submission guidelines
-- **`~/.agents/skills/oss/references/issue-codex-cli.md`** - Codex CLI-specific issue creation including bug reports, feature requests, docs issues, and VS Code extension templates
-- **`~/.agents/skills/oss/references/issue-sablier.md`** - Sablier-specific issue creation for `sablier-labs/*` repos including label taxonomy, scope labels for command-center, and default template
-- **`~/.agents/skills/oss/references/issue-biome.md`** - Biome-specific issue creation including playground reproduction links, formatter/linter bug templates, and environment detection
-- **`~/.agents/skills/oss/references/create-discussion.md`** - GitHub discussions workflow including GraphQL queries, category selection logic, and search strategies
+- **`references/create-pr.md`** - Complete pull request workflow including git state validation, semantic analysis strategies, template examples, and reviewer management
+- **`references/update-pr.md`** - Complete update PR workflow including argument parsing, semantic analysis, and title/description regeneration
+- **`references/create-issue.md`** - Complete issue creation workflow including template parsing, label application strategies, and duplicate detection
+- **`references/issue-claude-code.md`** - Claude Code-specific issue creation including all template formats, environment gathering scripts, and submission guidelines
+- **`references/issue-codex-cli.md`** - Codex CLI-specific issue creation including bug reports, feature requests, docs issues, and VS Code extension templates
+- **`references/issue-sablier.md`** - Sablier-specific issue creation for `sablier-labs/*` repos including label taxonomy, scope labels for command-center, and default template
+- **`references/issue-biome.md`** - Biome-specific issue creation including playground reproduction links, formatter/linter bug templates, and environment detection
+- **`references/create-discussion.md`** - GitHub discussions workflow including GraphQL queries, category selection logic, and search strategies
 
 These references provide implementation details, code examples, and troubleshooting guidance for each workflow type.
