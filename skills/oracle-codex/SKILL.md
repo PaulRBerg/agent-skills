@@ -1,5 +1,5 @@
 ---
-argument-hint: '<query> [--reasoning <level>] [--search]'
+argument-hint: <query> [--reasoning <level>] [--search]
 context: fork
 disable-model-invocation: false
 name: oracle-codex
@@ -37,20 +37,20 @@ scripts/run-codex-exec.sh
 
 ## Configuration
 
-| Setting   | Default        | Override                             |
-| --------- | -------------- | ------------------------------------ |
+| Setting   | Default         | Override                                         |
+| --------- | --------------- | ------------------------------------------------ |
 | Model     | `gpt-5.3-codex` | Allowlist only (see `references/codex-flags.md`) |
-| Reasoning | Auto           | `--reasoning <level>` or user prose  |
-| Sandbox   | `read-only`    | Not overridable                      |
+| Reasoning | Auto            | `--reasoning <level>` or user prose              |
+| Sandbox   | `read-only`     | Not overridable                                  |
 
 ### Reasoning Effort
 
-| Complexity | Effort   | Timeout   | Criteria                              |
-| ---------- | -------- | --------- | ------------------------------------- |
-| Simple     | `low`    | 300000ms  | <3 files, quick question              |
-| Moderate   | `medium` | 300000ms  | 3–10 files, focused analysis          |
-| Complex    | `high`   | 600000ms  | Multi-module, architectural thinking  |
-| Maximum    | `xhigh`  | 600000ms  | Full codebase, critical decisions     |
+| Complexity | Effort   | Timeout  | Criteria                             |
+| ---------- | -------- | -------- | ------------------------------------ |
+| Simple     | `low`    | 300000ms | \<3 files, quick question            |
+| Moderate   | `medium` | 300000ms | 3–10 files, focused analysis         |
+| Complex    | `high`   | 600000ms | Multi-module, architectural thinking |
+| Maximum    | `xhigh`  | 600000ms | Full codebase, critical decisions    |
 
 For `xhigh` tasks that may exceed 10 minutes, use `run_in_background: true` on the Bash tool and set `CODEX_OUTPUT` so you can read the output later.
 

@@ -53,10 +53,10 @@ These flags are specific to `codex exec`:
 
 Bash tool timeout caps at 600000ms (10 minutes). Choose based on reasoning effort:
 
-| Effort           | Timeout   |
-| ---------------- | --------- |
-| `low` / `medium` | 300000ms  |
-| `high` / `xhigh` | 600000ms  |
+| Effort           | Timeout  |
+| ---------------- | -------- |
+| `low` / `medium` | 300000ms |
+| `high` / `xhigh` | 600000ms |
 
 For `xhigh` tasks that may exceed 10 minutes, use `run_in_background: true` on the Bash tool call and set `CODEX_OUTPUT` so the wrapper writes to a known file you can read later.
 
