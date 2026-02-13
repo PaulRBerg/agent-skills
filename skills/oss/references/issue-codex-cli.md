@@ -51,7 +51,7 @@ Based on the template type, generate a body with these sections:
 
 ### What platform is your computer?
 
-{macOS version from helper script, e.g., "macOS Tahoe 16.2"}
+{macOS version from helper script, e.g., "macOS Tahoe v26.2"}
 
 ### What issue are you seeing?
 
@@ -117,7 +117,7 @@ Based on the template type, generate a body with these sections:
 
 ### What platform is your computer?
 
-{macOS version from helper script, e.g., "macOS Tahoe 16.2"}
+{macOS version from helper script, e.g., "macOS Tahoe v26.2"}
 
 ### What issue are you seeing?
 
@@ -172,7 +172,11 @@ On failure: show error and suggest fix
 Gather environment information for bug reports and extension issues:
 
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
-- **Platform**: macOS version, `uname -mprs` (Linux), or PowerShell for Windows
+- **Platform**:
+  - macOS: `scripts/get-macos-version.sh` (format: `macOS <Name> v<Version>`, e.g., `macOS Tahoe v26.2`)
+  - Linux: `uname -mprs`
+  - Windows: PowerShell platform command output
+  - Never use `uname` output for macOS platform fields
 - **IDE** (for extension issues): Ask user or infer from context
 
 ## Examples

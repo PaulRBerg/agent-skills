@@ -54,7 +54,7 @@ Based on the template type, generate a body with these sections:
 ### Environment
 
 - **Version**: {claude --version}
-- **OS**: {operating system and version}
+- **OS**: {operating system and version; on macOS use scripts/get-macos-version.sh, e.g., "macOS Tahoe v26.2"}
 - **Terminal**: {terminal program}
 - **Platform**: Anthropic API (assume unless stated otherwise)
 - **Model**: Sonnet (assume unless stated otherwise)
@@ -134,7 +134,7 @@ Based on the template type, generate a body with these sections:
 ### Environment
 
 - **Version**: {claude --version}
-- **OS**: {operating system and version}
+- **OS**: {operating system and version; on macOS use scripts/get-macos-version.sh, e.g., "macOS Tahoe v26.2"}
 - **Model**: {Sonnet/Opus/Haiku - infer or default to Sonnet}
 - **Platform**: Anthropic API
 - **Permission mode**: {Accept Edits ON/OFF - infer from context or "unknown"}
@@ -182,7 +182,7 @@ On failure: show error and suggest fix
 Gather environment information for bug reports and model behavior issues:
 
 - **Claude Code version**: `claude --version 2>/dev/null || echo "unknown"`
-- **Operating System**: Detect macOS version from Setup Assistant RTF file or use `sw_vers`
+- **Operating System**: Use `scripts/get-macos-version.sh` on macOS (format: `macOS <Name> v<Version>`, e.g., `macOS Tahoe v26.2`), not `uname` output
 - **Terminal**: `${TERM_PROGRAM:-${TERMINAL_EMULATOR:-unknown}}`
 
 ## Examples

@@ -237,7 +237,7 @@ Collect relevant environment details:
 # Claude Code version
 claude --version
 
-# Operating system (macOS)
+# Operating system (macOS format: "macOS Tahoe v26.2")
 scripts/get-macos-version.sh
 
 # Terminal emulator (macOS)
@@ -305,7 +305,7 @@ Collect relevant environment details:
 # Codex CLI version
 codex --version
 
-# Platform (macOS)
+# Platform (macOS format: "macOS Tahoe v26.2")
 scripts/get-macos-version.sh
 
 # For VS Code extension issues

@@ -293,6 +293,15 @@ Refactor the authentication module to use JWT tokens.
 - List one per line if multiple files
 - **OMIT the entire "## Files Affected" section** if no files are specified (e.g., for feature requests or planning issues)
 
+### Platform String Normalization
+
+If the selected template includes an OS/platform field:
+
+- On macOS, use `scripts/get-macos-version.sh` and keep the format `macOS <Name> v<Version>` (example: `macOS Tahoe v26.2`)
+- Do not use `uname` output for macOS fields (for example, avoid `Darwin 25.2 arm64`)
+- On Linux, use `uname -mprs`
+- On Windows, use PowerShell platform command output
+
 ## Create the Issue
 
 **Label handling:**

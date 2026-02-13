@@ -166,6 +166,15 @@ Use this default template:
 [Any relevant background information, if applicable]
 ```
 
+### Platform String Normalization (When Needed)
+
+If the discussion body includes OS/platform details:
+
+- On macOS, use `scripts/get-macos-version.sh` and keep the format `macOS <Name> v<Version>` (example: `macOS Tahoe v26.2`)
+- Do not use `uname` output for macOS fields (for example, avoid `Darwin 25.2 arm64`)
+- On Linux, use `uname -mprs`
+- On Windows, use PowerShell platform command output
+
 ### GitHub Admonitions
 
 Add GitHub-style admonitions when appropriate:
