@@ -17,6 +17,7 @@ npx skills add PaulRBerg/agent-skills
 | --------------- | ---------------------------------------- |
 | biome-js        | BiomeJS linting/formatting guidance      |
 | bump-release    | Release workflow with changelog, tagging |
+| coderabbit      | CodeRabbit PR feedback triage            |
 | code-polish     | Combined simplification and review       |
 | code-review     | Expert code review                       |
 | cli-cast        | Foundry cast CLI guidance                |
