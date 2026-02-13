@@ -10,13 +10,6 @@ description: This skill should be run only when the user explicitly invokes it. 
 
 Orchestrate end-to-end task implementation: understand the task, assess complexity, implement directly or distribute across a team, then polish the result.
 
-## Pre-flight
-
-Verify prerequisites before starting any work.
-
-1. **Check `code-polish` availability**: Confirm the `code-polish` skill exists. If missing, stop immediately with: "The `code-polish` skill is required but not installed."
-2. **Verify repository context**: Run `git rev-parse --is-inside-work-tree`. If not inside a git worktree, stop with a clear error.
-
 ## Workflow
 
 ### 1) Parse Task
@@ -111,8 +104,6 @@ This step is mandatory — always run it, even if the implementation seems clean
 | Error                                | Response                                                      |
 | ------------------------------------ | ------------------------------------------------------------- |
 | Empty `$ARGUMENTS`                   | Ask for a task description and stop                           |
-| `code-polish` skill missing          | Stop immediately with installation instructions               |
-| Not in a git repository              | Stop with clear error                                         |
 | Verification failures after impl     | Attempt to fix; if unfixable, report to user before polishing |
 | Team agent fails or times out        | Reclaim the task and complete it directly                     |
 | `code-polish` reports stop condition | Relay to user with context                                    |

@@ -14,12 +14,6 @@ Combined simplification and review pipeline. This skill orchestrates two sub-ski
 1. **`code-simplify`** — simplify for readability and maintainability
 2. **`code-review --fix`** — review for correctness, security, and quality, auto-applying all fixes
 
-## Prerequisites
-
-Both the `code-simplify` and `code-review` skills MUST be installed. If either skill is missing, stop immediately and report the error:
-
-> ERROR: `code-polish` requires the `code-simplify` and `code-review` skills to be installed. Missing: `<skill-name>`.
-
 ## Workflow
 
 ### 1) Run `code-simplify`
