@@ -31,7 +31,7 @@ npx skills add PaulRBerg/agent-skills
 | bump-deps       | Node.js dependency updates               |
 | openclaw        | OpenClaw CLI guidance                    |
 | oracle-codex    | Codex oracle for planning                |
-| oss             | OSS contribution workflows               |
+| yeet            | GitHub contribution workflows            |
 | refine-prompt   | LLM prompt optimization                  |
 | work            | End-to-end task implementation           |
 
