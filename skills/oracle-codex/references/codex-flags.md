@@ -49,48 +49,45 @@ These flags are specific to `codex exec`:
 | `--output-schema <FILE>` | Structured output schema          |
 | `--skip-git-repo-check`  | Bypass git repository requirement |
 
+## Timeout Guidelines
+
+Bash tool timeout caps at 600000ms (10 minutes). Choose based on reasoning effort:
+
+| Effort           | Timeout   |
+| ---------------- | --------- |
+| `low` / `medium` | 300000ms  |
+| `high` / `xhigh` | 600000ms  |
+
+For `xhigh` tasks that may exceed 10 minutes, use `run_in_background: true` on the Bash tool call and set `CODEX_OUTPUT` so the wrapper writes to a known file you can read later.
+
 ## Example Commands
 
-### Planning Query (High Complexity → `high`)
+### Planning Query via Wrapper (high effort)
 
 ```bash
-CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
-codex exec \
-  -m gpt-5.3-codex \
-  -c model_reasoning_effort=high \
-  -s read-only \
-  -o "$CODEX_OUTPUT" \
-  2>/dev/null <<'EOF'
+CODEX_OUTPUT="/tmp/codex-output.txt" \
+EFFORT="high" \
+scripts/run-codex-exec.sh <<'EOF'
 Analyze this codebase and design an implementation plan for [feature].
 EOF
 ```
 
-### Code Review with `codex exec`
+### Code Review via Wrapper (medium effort)
 
 ```bash
-CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
-codex exec \
-  -m gpt-5.3-codex \
-  -c model_reasoning_effort=medium \
-  -s read-only \
-  -o "$CODEX_OUTPUT" \
-  2>/dev/null <<'EOF'
+EFFORT="medium" \
+scripts/run-codex-exec.sh <<'EOF'
 Review the recent changes for security vulnerabilities, focusing on SQL injection and XSS.
 Include file paths and line references for each finding.
 EOF
 ```
 
-### Planning Query with Web Search
+### Query with Web Search via Wrapper
 
 ```bash
-CODEX_OUTPUT="/tmp/codex-${RANDOM}${RANDOM}.txt"
-codex exec \
-  -m gpt-5.3-codex \
-  -c model_reasoning_effort=medium \
-  -s read-only \
-  --search \
-  -o "$CODEX_OUTPUT" \
-  2>/dev/null <<'EOF'
+CODEX_SEARCH=1 \
+EFFORT="medium" \
+scripts/run-codex-exec.sh <<'EOF'
 Research current best practices for [topic] and recommend an approach.
 EOF
 ```

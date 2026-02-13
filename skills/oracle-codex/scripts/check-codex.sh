@@ -14,6 +14,22 @@
 
 set -euo pipefail
 
+# Bash 3.2-compatible timeout shim for macOS (no GNU coreutils)
+if ! command -v timeout &>/dev/null; then
+    timeout() {
+        local secs=$1; shift
+        "$@" &
+        local pid=$!
+        ( sleep "$secs" && kill "$pid" 2>/dev/null ) &
+        local watchdog=$!
+        wait "$pid" 2>/dev/null
+        local rc=$?
+        kill "$watchdog" 2>/dev/null
+        wait "$watchdog" 2>/dev/null 2>&1
+        return $rc
+    }
+fi
+
 VERBOSE=0
 QUIET=0
 SKIP_AUTH=0
