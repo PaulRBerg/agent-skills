@@ -68,12 +68,12 @@ Store as `$AUTHENTICATED_USER` for later comparisons.
 Check if the repository has issue templates:
 
 ```bash
-gh api repos/{owner}/{repo}/contents/.github/ISSUE_TEMPLATE --jq '.[].name | select(endswith(".md") or endswith(".yml") or endswith(".yaml"))' 2>/dev/null
+gh api repos/{owner}/{repo}/contents/.github/ISSUE_TEMPLATE --jq '.[].name | select(endswith(".md") or endswith(".yml") or endswith(".yaml"))' 2>/dev/null || true
 ```
 
-Note: Exclude `config.yml` from template selection - it's for GitHub configuration, not an issue template.
+Note: This API returns 404 for repos without an ISSUE_TEMPLATE directory — the `|| true` ensures the command always succeeds. Treat empty output as "no templates". Exclude `config.yml` from template selection — it's for GitHub configuration, not an issue template.
 
-IF templates are found (`.yml`, `.yaml`, or `.md`):
+IF templates are found (non-empty output listing `.yml`, `.yaml`, or `.md` files):
 
 ### Select Template
 
