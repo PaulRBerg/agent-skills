@@ -34,6 +34,7 @@ npx skills add PaulRBerg/agent-skills
 | oracle-codex    | Codex oracle for planning                |
 | yeet            | GitHub contribution workflows            |
 | refine-prompt   | LLM prompt optimization                  |
+| tailwind-css    | Tailwind CSS v4 styling guidance         |
 | work            | End-to-end task implementation           |
 
 ## SKILL.md Frontmatter Guide
