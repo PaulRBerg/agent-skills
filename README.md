@@ -23,7 +23,6 @@ npx skills add PaulRBerg/agent-skills
 | cli-cast        | Foundry cast CLI guidance                |
 | cli-gh          | GitHub CLI operations                    |
 | cli-just        | Just command runner guidance             |
-| cli-sentry      | Sentry CLI issue management              |
 | code-simplify   | Code simplification and refactoring      |
 | commit          | Git commit with conventional commits     |
 | delayed-command | Wait and execute bash command            |
