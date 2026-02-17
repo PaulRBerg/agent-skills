@@ -22,8 +22,8 @@ Find high-impact defects in changed code with evidence. Prioritize security, cor
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
 2. If user provides file paths/patterns or a commit/range, scope is exactly those targets.
-3. Otherwise, scope is session-modified files.
-4. If session-modified files resolve to zero files, fall back to all uncommitted tracked changes: `git diff --name-only --diff-filter=ACMR`.
+3. Otherwise, scope is **only** session-modified files. Do not include other uncommitted changes.
+4. If there are no session-modified files, fall back to all uncommitted tracked changes: `git diff --name-only --diff-filter=ACMR`.
 5. Exclude generated/low-signal files unless requested: lockfiles, minified bundles, build outputs, vendored code.
 6. If scope still resolves to zero files, report and stop.
 

@@ -14,6 +14,8 @@ Combined simplification and review pipeline. This skill orchestrates two sub-ski
 1. **`code-simplify`** — simplify for readability and maintainability
 2. **`code-review --fix`** — review for correctness, security, and quality, auto-applying all fixes
 
+Both sub-skills share the same scope resolution: **only** session-modified files are in scope. If there are no session-modified files, they fall back to all uncommitted tracked changes. See each sub-skill for full details.
+
 ## Workflow
 
 ### 1) Run `code-simplify`
