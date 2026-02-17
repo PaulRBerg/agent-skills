@@ -18,6 +18,7 @@ Support for both regular and beta releases.
 
 ## Steps
 
+0. **Locate the package** - The user may be in a monorepo where the package to release lives in a subdirectory. Look for `package.json` in the current working directory first; if not found, ask which package to release. All file paths (`CHANGELOG.md`, `package.json`, `justfile`) are relative to the package directory.
 1. Update the `CHANGELOG.md` file with all changes since the last version release (**skip this step for beta releases**).
 2. Bump the version in `package.json`:
    - **Regular release**: Follow semantic versioning (e.g., 1.2.3)
