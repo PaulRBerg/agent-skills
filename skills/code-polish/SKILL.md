@@ -1,5 +1,5 @@
 ---
-argument-hint: '[--all]'
+argument-hint: ''
 context: fork
 disable-model-invocation: false
 name: code-polish

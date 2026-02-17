@@ -1,5 +1,5 @@
 ---
-argument-hint: '[--all]'
+argument-hint: ''
 context: fork
 disable-model-invocation: false
 name: code-simplify
@@ -16,11 +16,11 @@ Simplify code while preserving behavior, public contracts, and side effects. Fav
 ## Scope Resolution
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
-2. If `$ARGUMENTS` includes `--all`, scope is `git diff --name-only --diff-filter=ACMR`.
-3. Otherwise, if user provides file paths/patterns or a commit/range, scope is exactly those targets.
-4. Otherwise, scope is session-modified files.
+2. If user provides file paths/patterns or a commit/range, scope is exactly those targets.
+3. Otherwise, scope is session-modified files.
+4. If session-modified files resolve to zero files, fall back to all uncommitted tracked changes: `git diff --name-only --diff-filter=ACMR`.
 5. Exclude generated/low-signal files unless requested: lockfiles, minified bundles, build outputs, vendored code.
-6. If scope resolves to zero files, report and stop. Do not widen scope silently.
+6. If scope still resolves to zero files, report and stop.
 
 ## Operating Rules
 
