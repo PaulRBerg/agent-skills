@@ -1,6 +1,5 @@
 ---
 argument-hint: ''
-context: fork
 disable-model-invocation: false
 name: code-simplify
 user-invocable: true

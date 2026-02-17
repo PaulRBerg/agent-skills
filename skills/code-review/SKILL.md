@@ -1,6 +1,5 @@
 ---
 argument-hint: '[--fix]'
-context: fork
 disable-model-invocation: false
 name: code-review
 user-invocable: true
