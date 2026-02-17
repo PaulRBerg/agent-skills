@@ -167,7 +167,7 @@ Standard pattern for pre-commit hooks:
 module.exports = {
   "*.{json,jsonc,ts,tsx}": "bun biome check --write",
   "*.{md,yml,yaml}": "bun prettier --cache --write",
-  "*.{ts,tsx}": "bun biome lint --write --only correctness/noUnusedImports",
+  "*.{ts,tsx}": "bun biome check --write --only=correctness/noUnusedImports",
 };
 ```
 
@@ -181,7 +181,6 @@ For frontend projects with Tailwind CSS:
 {
   "css": {
     "parser": {
-      "cssModules": true,
       "tailwindDirectives": true
     }
   },
@@ -208,6 +207,18 @@ For frontend projects with Tailwind CSS:
   }
 }
 ```
+
+Biome `v2.4.0+` auto-enables CSS Modules parsing for `*.module.css`, so explicit
+`"cssModules": true` is usually unnecessary unless your project needs non-standard behavior.
+
+## Biome v2.4+ Notes
+
+- `biome check` and `biome ci` now support `--only` and `--skip` for targeted rule/action runs.
+- `biome check --write` now also applies formatting when applying fixes.
+- Config lookup now also supports hidden files: `.biome.json` and `.biome.jsonc`.
+- Config lookup now also supports user config directories (for example, `$HOME/.config/biome` on Linux/macOS equivalents).
+- New formatter option `formatter.trailingNewline` can disable trailing newline insertion.
+- HTML formatter behavior changed significantly in `v2.4.0`; expect larger diffs in HTML/Vue/Svelte/Astro if formatter support is enabled.
 
 ## Troubleshooting
 

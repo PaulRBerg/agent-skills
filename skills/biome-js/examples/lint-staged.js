@@ -17,5 +17,5 @@ module.exports = {
 
   // Enforce unused imports cleanup at commit time
   // This runs after biome check, so it only affects imports
-  "*.{ts,tsx}": "bun biome lint --write --only correctness/noUnusedImports",
+  "*.{ts,tsx}": "bun biome check --write --only=correctness/noUnusedImports",
 };

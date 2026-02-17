@@ -1,7 +1,6 @@
 ---
 argument-hint: '[version] [--beta] [--dry-run]'
 disable-model-invocation: false
-model: opus
 name: bump-release
 user-invocable: true
 description: This skill should be used when the user asks to "bump release", "cut a release", "tag a release", "bump version", "create a new release", or mentions release versioning, changelog updates, or version tagging workflows.
@@ -34,13 +33,14 @@ Support for both regular and beta releases.
 ## Process
 
 1. **Check for arguments** - Determine if `version` was provided, if this is a beta release (`--beta`), and/or dry-run (`--dry-run`)
-2. **Write Changelog** - Examine diffs between the current branch and the previous tag to write Changelog. Then find
+2. **Check for clean working tree** - Run `git status --porcelain` to verify there are no uncommitted changes unrelated to this release. If there are, run the `commit` skill to commit them before proceeding
+3. **Write Changelog** - Examine diffs between the current branch and the previous tag to write Changelog. Then find
    relevant PRs by looking at the commit history and add them to each changelog (when available). If `package.json` contains
    a `files` field, only include changes within those specified files/directories. If no `files` field exists, include all
    changes except test changes, CI/CD workflows, and development tooling
-3. **Follow format** - Use [Common Changelog](https://common-changelog.org/) specification
-4. **Check version** - Get current version from `package.json`
-5. **Bump version** - If `version` argument provided, use it directly. Otherwise, if unchanged since last release, increment per Semantic Versioning rules:
+4. **Follow format** - Consult `references/common-changelog.md` for the Common Changelog specification
+5. **Check version** - Get current version from `package.json`
+6. **Bump version** - If `version` argument provided, use it directly. Otherwise, if unchanged since last release, increment per Semantic Versioning rules:
    - **For regular releases**:
      - **PATCH** (x.x.X) - Bug fixes, documentation updates
      - **MINOR** (x.X.x) - New features, backward-compatible changes
@@ -66,19 +66,7 @@ When `--beta` flag is provided in the $ARGUMENTS
 
 ## Output
 
-For regular releases only, in the `CHANGELOG.md` file, generate changelog entries categorizing changes in this order:
-
-- **Changed** - Changes in existing functionality
-- **Added** - New functionality
-- **Removed** - Removed functionality
-- **Fixed** - Bug fixes
-
-Every entry must begin with a verb in its base form. Examples:
-
-- "Update minimum Node.js version to 20"
-- "Add `createLinear` function for linear streams"
-- "Remove deprecated `cancelStream` method"
-- "Fix incorrect unlock time calculation in `withdrawMax`"
+For regular releases only, generate changelog entries in `CHANGELOG.md` following the format and writing guidelines in `references/common-changelog.md`. Use the `Changed`, `Added`, `Removed`, `Fixed` categories (in that order). Every entry must begin with a present-tense verb in imperative mood.
 
 ## Inclusion Criteria
 
@@ -135,3 +123,7 @@ For regular releases only (changelog generation is skipped for beta releases):
 | `1.2.3-beta.5`  | Regular        | `1.2.3`         |
 | `1.2.3`         | `2.0.0`        | `2.0.0`         |
 | `1.2.3`         | `2.0.0` + Beta | `2.0.0-beta.1`  |
+
+## Resources
+
+- `references/common-changelog.md` — Common Changelog format and writing guidelines
