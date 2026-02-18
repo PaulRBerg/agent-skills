@@ -13,6 +13,9 @@ Determine repository from arguments:
 - IF the first token matches "owner/repo": use it as repository and remove it from arguments
 - ELSE: infer the current repository from the working directory (error if not in a repo)
 
+> [!IMPORTANT]
+> When dispatched via a repo-specific subcommand (e.g., `issue-codex`, `issue-cc`, `issue-biome`, `issue-sablier`), the target repository is predetermined by that subcommand's reference. Skip this section — do NOT infer from the working directory.
+
 Note: If you don't specify a repository, the command will infer the current repository (owner/repo) automatically.
 
 ## Parse Optional Flags

@@ -2,6 +2,12 @@
 
 This reference document describes the workflow for creating issues in the `openai/codex` repository. The workflow automatically selects the appropriate issue template based on the issue description and generates structured issue content.
 
+## Repo Isolation
+
+This workflow targets **`openai/codex`** exclusively. The working directory's repository is irrelevant — do not use it for `--repo` flags, file links, issue search, or comments. Every `gh` command must use `--repo "openai/codex"`.
+
+If the issue references files, use: `[{path}](https://github.com/openai/codex/blob/main/{path})`
+
 ## Validate Authentication
 
 Check if GitHub CLI is authenticated:
@@ -166,6 +172,21 @@ EOF
 Display: "Created: $URL"
 
 On failure: show error and suggest fix
+
+## Comment on Existing Issue
+
+If a similar issue already exists and the user prefers commenting over creating a duplicate:
+
+```bash
+gh issue comment {number} \
+  --repo "openai/codex" \
+  --body "$(cat <<'EOF'
+{comment body}
+EOF
+)"
+```
+
+Display: "Commented: https://github.com/openai/codex/issues/{number}"
 
 ## Environment Detection
 

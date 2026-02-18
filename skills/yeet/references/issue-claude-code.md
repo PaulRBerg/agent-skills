@@ -2,6 +2,12 @@
 
 This reference document describes the workflow for creating issues in the `anthropics/claude-code` repository. The workflow automatically selects the appropriate issue template based on the issue description and generates structured issue content.
 
+## Repo Isolation
+
+This workflow targets **`anthropics/claude-code`** exclusively. The working directory's repository is irrelevant — do not use it for `--repo` flags, file links, issue search, or comments. Every `gh` command must use `--repo "anthropics/claude-code"`.
+
+If the issue references files, use: `[{path}](https://github.com/anthropics/claude-code/blob/main/{path})`
+
 ## Validate Authentication
 
 Check if GitHub CLI is authenticated:
@@ -176,6 +182,21 @@ EOF
 Display: "Created: $URL"
 
 On failure: show error and suggest fix
+
+## Comment on Existing Issue
+
+If a similar issue already exists and the user prefers commenting over creating a duplicate:
+
+```bash
+gh issue comment {number} \
+  --repo "anthropics/claude-code" \
+  --body "$(cat <<'EOF'
+{comment body}
+EOF
+)"
+```
+
+Display: "Commented: https://github.com/anthropics/claude-code/issues/{number}"
 
 ## Environment Detection
 
