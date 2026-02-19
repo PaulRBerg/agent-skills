@@ -138,17 +138,7 @@ Use `Edit` to apply the version changes directly to the root `package.json`.
 
 ### Step 7: Install Dependencies
 
-After all updates are applied, remind the user to run their package manager's install command:
-
-```bash
-npm install
-# or
-pnpm install
-# or
-bun install
-# or
-yarn install
-```
+After all updates are applied, run `ni` to install dependencies. It auto-detects the package manager.
 
 ## Taze Output Interpretation
 

@@ -443,6 +443,7 @@ const button = tv({
 | Gradients          | `bg-linear-*`, `bg-radial`, `bg-conic`            |
 | Opacity            | Modifier syntax: `bg-black/50`                    |
 | Line Height        | Modifier syntax: `text-base/7`                    |
+| Font Features      | `font-features-zero`, `font-features-ss01`, etc.  |
 | CSS Variables      | `bg-my-color` (auto-created from `@theme`)        |
 | CSS Modules        | `@reference "#tailwind";` at top                  |
 | Class Merging      | `cn()` for conditionals; plain string for static  |

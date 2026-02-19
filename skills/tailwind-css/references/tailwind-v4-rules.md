@@ -2,7 +2,7 @@
 
 ## Core Principles
 
-- **Always use Tailwind CSS v4.1+** - Ensure the codebase is using the latest version
+- **Always use Tailwind CSS v4.2+** - Ensure the codebase is using the latest version
 - **Do not use deprecated or removed utilities** - Use the replacement
 - **Never use `@apply`** - Use CSS variables, the `--spacing()` function, or framework components instead
 - **Check for redundant classes** - Remove any classes that aren't necessary
@@ -317,6 +317,27 @@ Use the new composable mask utilities for image and gradient masks:
 <!-- ✅ Radial gradient masks -->
 <div class="mask-radial-[100%_100%] mask-radial-from-75% mask-radial-at-left">Radial mask</div>
 ```
+
+### Font Feature Settings (v4.2)
+
+Use `font-features-*` for low-level OpenType font features via `font-feature-settings`:
+
+```html
+<!-- ✅ Slashed zero — distinguish 0 from O (useful for addresses/hashes) -->
+<span class="font-features-zero">0x1a2B3c</span>
+
+<!-- ✅ Stylistic sets (font-dependent) -->
+<span class="font-features-ss01">Alternative glyphs</span>
+
+<!-- ✅ Multiple features -->
+<span class="font-features-zero font-features-ss01">Combined features</span>
+```
+
+**When to use `font-features-*` vs high-level properties:**
+
+- **Prefer `tabular-nums`** over `font-features-tnum` — `font-variant-numeric` is the high-level CSS property and doesn't conflict with other numeric features
+- **Use `font-features-*`** for OpenType features that lack high-level CSS equivalents: stylistic sets (`ss01`–`ss20`), character variants (`cv01`–`cv99`), capital spacing (`cpsp`), case-sensitive forms (`case`)
+- **`font-features-zero`** (slashed zero) overlaps with the `slashed-zero` utility but can be combined with other `font-features-*` values
 
 ## Component Patterns
 
