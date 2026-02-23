@@ -1,6 +1,6 @@
 # UPDATE_AGENTS.md
 
-Workflow for updating `CLAUDE.md`, `AGENTS.md`, and optionally `DOCS.md` files to match actual codebase state. DOCS.md is optional and only processed if it exists (for API/code documentation).
+Workflow for updating `AGENTS.md` and optionally `DOCS.md` files to match actual codebase state. `CLAUDE.md` is a symlink to `AGENTS.md` and does not need separate processing. DOCS.md is optional and only processed if it exists (for API/code documentation).
 
 ## Workflow
 
@@ -13,7 +13,7 @@ Check for `--dry-run` flag:
 
 ### Step 2: Extract Verifiable Claims
 
-Read each context file (`CLAUDE.md`, `AGENTS.md`, and `DOCS.md` if present) and extract verifiable claims:
+Read `AGENTS.md` (and `DOCS.md` if present) and extract verifiable claims:
 
 - File paths mentioned
 - Directory structures described
@@ -78,7 +78,7 @@ Scan for patterns not mentioned in context files:
 
 **Lint configuration:**
 
-- If lint-staged exists but no linting section in CLAUDE.md, draft one
+- If lint-staged exists but no linting section in AGENTS.md, draft one
 
 **Build/test commands:**
 

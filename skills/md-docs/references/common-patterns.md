@@ -16,10 +16,9 @@ Parse arguments from user input and set appropriate flags for workflow execution
 
 ## Backup File Handling
 
-Always create backups before overwriting existing files:
+Always create backups before overwriting existing files. `CLAUDE.md` is a symlink to `AGENTS.md` and does not need a separate backup:
 
 ```bash
-cp CLAUDE.md CLAUDE.md.backup
 cp AGENTS.md AGENTS.md.backup
 test -f DOCS.md && cp DOCS.md DOCS.md.backup                 # only if exists
 test -f CONTRIBUTING.md && cp CONTRIBUTING.md CONTRIBUTING.md.backup  # only if exists
@@ -28,7 +27,6 @@ test -f CONTRIBUTING.md && cp CONTRIBUTING.md CONTRIBUTING.md.backup  # only if 
 Inform the user when backups are created:
 
 ```
-Created backup: CLAUDE.md.backup
 Created backup: AGENTS.md.backup
 Created backup: DOCS.md.backup (optional file)
 Created backup: CONTRIBUTING.md.backup (optional file)
@@ -77,7 +75,7 @@ In order to build the project, you will need to use the npm build command. This 
 After completing operations, display a clear summary:
 
 ```
-✓ Updated CLAUDE.md
+✓ Updated AGENTS.md
   - Fixed build command
   - Added new directory structure
 
@@ -88,9 +86,6 @@ After completing operations, display a clear summary:
 ✓ Updated DOCS.md
   - Updated API endpoint documentation
   - Fixed function signature
-
-✗ AGENTS.md not found
-  - Skipped update
 
 ⊘ DOCS.md not found
   - Skipped (optional file)

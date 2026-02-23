@@ -1,10 +1,10 @@
 # Init Context Reference
 
-Generate project-specific CLAUDE.md files with custom context derived from project analysis or user description.
+Generate project-specific AGENTS.md files with custom context derived from project analysis or user description.
 
 ## Overview
 
-The init-agents workflow creates tailored CLAUDE.md files that provide project-specific instructions for AI agents. It operates in two modes: automatic inference (derives context from project files) or guided mode (uses user description to focus content).
+The init-agents workflow creates tailored AGENTS.md files that provide project-specific instructions for AI agents. It operates in two modes: automatic inference (derives context from project files) or guided mode (uses user description to focus content).
 
 ## Workflow Steps
 
@@ -20,11 +20,11 @@ Guided mode examples:
 - `/md-docs:init-agents TypeScript monorepo with strict type safety and functional patterns`
 - `/md-docs:init-agents Foundry smart contract project with security-first mindset`
 
-### 2. Check Existing CLAUDE.md
+### 2. Check Existing AGENTS.md
 
 Check for existing files:
 
-- Run `test -f CLAUDE.md && echo "root" && echo "claude" || echo "none"`
+- Run `test -f AGENTS.md && echo "exists" || echo "none"`
 
 If existing file found:
 
@@ -53,7 +53,7 @@ Analyze to understand:
 - Build/test tools
 - Architecture hints
 
-### 4. Generate CLAUDE.md Content
+### 4. Generate AGENTS.md Content
 
 #### Writing Style Requirements
 
@@ -136,17 +136,17 @@ Infer priorities from project signals:
 - Multiple packages → monorepo patterns
 - Strict TypeScript config → type safety focus
 
-### 5. Write CLAUDE.md
+### 5. Write AGENTS.md
 
 #### Location
 
-`./CLAUDE.md` (root)
+`./AGENTS.md` (root)
 
 #### Write Operation
 
 **Overwrite or no existing file**:
 
-- Write complete new CLAUDE.md with generated content
+- Write complete new AGENTS.md with generated content
 
 **Merge mode**:
 
@@ -161,7 +161,7 @@ Success:
 
 - Display file path
 - Show first 10 lines as preview
-- Success message: `✓ Created CLAUDE.md at ./CLAUDE.md`
+- Success message: `✓ Created AGENTS.md at ./AGENTS.md`
 
 Failure:
 
@@ -169,17 +169,17 @@ Failure:
 - Suggest specific fix
 - DO NOT retry automatically
 
-#### Create AGENTS.md Symlink
+#### Create CLAUDE.md Symlink
 
-After writing CLAUDE.md, create a symlink for compatibility with other AI tools:
+After writing AGENTS.md, create a symlink for Claude Code compatibility:
 
 ```bash
-ln -sf CLAUDE.md AGENTS.md
+ln -sf AGENTS.md CLAUDE.md
 ```
 
-- Creates relative symlink `AGENTS.md -> CLAUDE.md`
+- Creates relative symlink `CLAUDE.md -> AGENTS.md`
 - Use `-f` to overwrite existing symlink
-- Confirm symlink creation: `✓ Created AGENTS.md symlink`
+- Confirm symlink creation: `✓ Created CLAUDE.md symlink`
 
 ### 6. Optional Project Import Suggestions
 
@@ -191,19 +191,19 @@ Check for commonly useful files:
 Format suggestion:
 
 ```
-💡 Tip: Consider importing project files into CLAUDE.md:
+💡 Tip: Consider importing project files into AGENTS.md:
 
 @README.md         # Project overview
 @package.json      # Available scripts
 
-Add these lines to CLAUDE.md to auto-load context.
+Add these lines to AGENTS.md to auto-load context.
 ```
 
 ## Key Principles
 
 - **Case-by-case content** - No rigid template, adapt to user's description
-- **Import awareness** - CLAUDE.md can use `@path/to/file` syntax to import other files
-- **Hierarchy context** - Project CLAUDE.md supplements (not replaces) user/enterprise CLAUDE.md
+- **Import awareness** - AGENTS.md can use `@path/to/file` syntax to import other files
+- **Hierarchy context** - Project AGENTS.md supplements (not replaces) user/enterprise AGENTS.md
 - **Writing style matches user** - Analyzed from existing agents/commands/skills
 
 ## Related Resources
