@@ -1,6 +1,5 @@
 ---
 argument-hint: <query> [--reasoning <level>]
-context: fork
 disable-model-invocation: false
 name: oracle-codex
 user-invocable: true
