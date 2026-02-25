@@ -8,7 +8,6 @@
 #   MODEL         - Codex model (default: gpt-5.3-codex)
 #   EFFORT        - Reasoning effort (default: medium)
 #   SANDBOX       - Sandbox mode (default: read-only)
-#   CODEX_SEARCH  - Set to 1 to enable web search
 #   CODEX_OUTPUT  - Output file path (optional)
 
 set -euo pipefail
@@ -28,8 +27,6 @@ fi
 
 EFFORT="${EFFORT:-medium}"
 SANDBOX="${SANDBOX:-read-only}"
-CODEX_SEARCH="${CODEX_SEARCH:-0}"
-
 CODEX_BIN="$(command -v codex || true)"
 if [[ -z "$CODEX_BIN" ]]; then
   echo "ERROR: codex not found in PATH." >&2
@@ -80,9 +77,6 @@ cmd=(
 )
 if [[ -n "$SKIP_FLAG" ]]; then
   cmd+=("$SKIP_FLAG")
-fi
-if [[ "$CODEX_SEARCH" == "1" ]]; then
-  cmd+=("--search")
 fi
 if [[ -n "$OUTPUT_FLAG" ]]; then
   cmd+=("$OUTPUT_FLAG" "$OUT_FILE")

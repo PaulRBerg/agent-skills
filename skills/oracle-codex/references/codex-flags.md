@@ -31,12 +31,11 @@ Configured via `-c model_reasoning_effort=<level>` or in `~/.codex/config.toml`.
 
 These flags work with all Codex commands:
 
-| Flag                      | Description                                                 |
-| ------------------------- | ----------------------------------------------------------- |
-| `-C <dir>` / `--cd <dir>` | Set working directory                                       |
-| `--search`                | Enable live web search (native Responses `web_search` tool) |
-| `--add-dir <DIR>`         | Additional directories that should be writable              |
-| `--full-auto`             | Shorthand for workspace-write with auto-approval            |
+| Flag                      | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `-C <dir>` / `--cd <dir>` | Set working directory                            |
+| `--add-dir <DIR>`         | Additional directories that should be writable   |
+| `--full-auto`             | Shorthand for workspace-write with auto-approval |
 
 ## Exec Subcommand Flags
 
@@ -82,22 +81,11 @@ Include file paths and line references for each finding.
 EOF
 ```
 
-### Query with Web Search via Wrapper
-
-```bash
-CODEX_SEARCH=1 \
-EFFORT="medium" \
-scripts/run-codex-exec.sh <<'EOF'
-Research current best practices for [topic] and recommend an approach.
-EOF
-```
-
 ## User Configuration
 
 Override defaults by specifying in the prompt:
 
 - "Use medium reasoning effort"
 - "With high reasoning"
-- "Enable web search"
 
 **Model selection is restricted to the allowlist above.** User requests for unlisted models (e.g., "use o3") must be rejected.
