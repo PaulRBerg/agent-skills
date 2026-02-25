@@ -51,19 +51,24 @@ cast call "$CONTRACT" "balanceOf(address)" "$ADDR" \
 # Arbitrum (chain ID 42161)
 cast send "$CONTRACT" "transfer(address,uint256)" "$TO" "$AMOUNT" \
   --rpc-url "https://lb.routeme.sh/42161/$ROUTEMESH_API_KEY" \
-  --private-key "$PRIVATE_KEY"
+  --private-key "$ETH_PRIVATE_KEY"
 ```
 
 ## Signing & Key Management
 
 Cast supports multiple signing methods. Choose based on the security context.
 
+**Default private key:** Read `ETH_PRIVATE_KEY` from the environment. If the variable is unset and the task requires signing (e.g., `cast send`, `cast mktx`, `cast wallet sign`), **stop and inform the user** that no private key was found, then ask them to either:
+
+1. Export `ETH_PRIVATE_KEY` in their shell, or
+2. Provide a private key or keystore account for this session
+
 ### Private Key (dev/testing only)
 
 ```bash
 cast send "$CONTRACT" "approve(address,uint256)" "$SPENDER" "$AMOUNT" \
   --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY"
+  --private-key "$ETH_PRIVATE_KEY"
 ```
 
 ### Keystore Account (recommended for persistent keys)
@@ -97,17 +102,17 @@ Use `cast send` to submit state-changing transactions on-chain.
 # Send ETH
 cast send "$TO" --value 1ether \
   --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY"
+  --private-key "$ETH_PRIVATE_KEY"
 
 # Call a contract function
 cast send "$CONTRACT" "approve(address,uint256)" "$SPENDER" "$AMOUNT" \
   --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY"
+  --private-key "$ETH_PRIVATE_KEY"
 
 # With gas parameters
 cast send "$CONTRACT" "mint(uint256)" 100 \
   --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY" \
+  --private-key "$ETH_PRIVATE_KEY" \
   --gas-limit 200000 \
   --gas-price 20gwei
 ```
@@ -134,7 +139,7 @@ Use `cast mktx` to create a signed raw transaction without broadcasting it.
 ```bash
 cast mktx "$CONTRACT" "transfer(address,uint256)" "$TO" "$AMOUNT" \
   --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY"
+  --private-key "$ETH_PRIVATE_KEY"
 ```
 
 ### Inspect Transactions
@@ -192,13 +197,13 @@ cast sig-event "Transfer(address,address,uint256)"
 cast wallet new
 
 # Get address from private key
-cast wallet address --private-key "$PRIVATE_KEY"
+cast wallet address --private-key "$ETH_PRIVATE_KEY"
 
 # List keystore accounts
 cast wallet list
 
 # Sign a message
-cast wallet sign "Hello, world!" --private-key "$PRIVATE_KEY"
+cast wallet sign "Hello, world!" --private-key "$ETH_PRIVATE_KEY"
 ```
 
 ### ENS Resolution
