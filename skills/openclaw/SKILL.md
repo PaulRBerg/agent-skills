@@ -17,11 +17,13 @@ OpenClaw is a multi-channel messaging and agent platform. The CLI provides comma
 # Check CLI version and help
 openclaw --version
 openclaw --help
+openclaw --log-level <level>  # Override log level (silent|fatal|error|warn|info|debug|trace)
+openclaw --no-color           # Disable ANSI colors
 
 # Setup and configuration
 openclaw setup          # Initialize config and workspace
 openclaw onboard        # Interactive setup wizard
-openclaw configure      # Set credentials and defaults
+openclaw configure      # Interactive setup wizard for credentials, channels, gateway, and agent defaults
 openclaw doctor         # Health checks and diagnostics
 
 # Gateway operations
@@ -40,12 +42,15 @@ openclaw message send --target +15555550123 --message "Hi"
 openclaw message send --channel telegram --target @mychat --message "Hi"
 
 # Channel management
-openclaw channels login --verbose  # Link WhatsApp/Telegram
+openclaw channels login --verbose  # Link Telegram, Discord, etc.
 openclaw channels       # Manage channels
 
 # Device and session management
 openclaw devices        # Device pairing and tokens
 openclaw sessions       # List conversation sessions
+
+# Cron jobs
+openclaw cron           # Manage cron jobs via the Gateway scheduler
 ```
 
 ## Common Workflows
