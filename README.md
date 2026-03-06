@@ -26,6 +26,7 @@ npx skills add PaulRBerg/agent-skills
 | code-simplify   | Code simplification and refactoring      |
 | commit          | Git commit with conventional commits     |
 | delayed-command | Wait and execute bash command            |
+| effect-ts       | Effect-TS patterns and guidance          |
 | ls-lint         | Directory/filename linting               |
 | md-docs         | Markdown documentation management        |
 | bump-deps       | Node.js dependency updates               |
