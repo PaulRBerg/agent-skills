@@ -2,7 +2,7 @@
 
 Chain names and IDs for constructing RouteMesh RPC URLs.
 
-**RPC URL pattern:** `https://lb.routeme.sh/{CHAIN_ID}/{ROUTEMESH_API_KEY}`
+**RPC URL pattern:** `https://lb.routeme.sh/rpc/{CHAIN_ID}/{ROUTEMESH_API_KEY}`
 
 | Chain       | Chain ID  |
 | ----------- | --------- |

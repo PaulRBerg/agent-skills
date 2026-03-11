@@ -27,7 +27,7 @@ All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC 
 **URL pattern:**
 
 ```
-https://lb.routeme.sh/{CHAIN_ID}/{ROUTEMESH_API_KEY}
+https://lb.routeme.sh/rpc/{CHAIN_ID}/{ROUTEMESH_API_KEY}
 ```
 
 **Construct the RPC URL** by looking up the chain ID from `references/chains.md` and reading the `ROUTEMESH_API_KEY` environment variable.
@@ -46,11 +46,11 @@ fi
 ```bash
 # Ethereum Mainnet (chain ID 1)
 cast call "$CONTRACT" "balanceOf(address)" "$ADDR" \
-  --rpc-url "https://lb.routeme.sh/1/$ROUTEMESH_API_KEY"
+  --rpc-url "https://lb.routeme.sh/rpc/1/$ROUTEMESH_API_KEY"
 
 # Arbitrum (chain ID 42161)
 cast send "$CONTRACT" "transfer(address,uint256)" "$TO" "$AMOUNT" \
-  --rpc-url "https://lb.routeme.sh/42161/$ROUTEMESH_API_KEY" \
+  --rpc-url "https://lb.routeme.sh/rpc/42161/$ROUTEMESH_API_KEY" \
   --private-key "$ETH_PRIVATE_KEY"
 ```
 
