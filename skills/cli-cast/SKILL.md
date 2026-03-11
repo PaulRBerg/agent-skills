@@ -132,6 +132,34 @@ cast call "$CONTRACT" "balanceOf(address)(uint256)" "$ADDR" --rpc-url "$RPC_URL"
 cast call "$CONTRACT" "getReserves()(uint112,uint112,uint32)" --rpc-url "$RPC_URL"
 ```
 
+### Batch Reads with Multicall3
+
+When reading multiple values across contracts, batch them into a single RPC call using [Multicall3](https://github.com/mds1/multicall3). This is deployed at a deterministic address on 250+ chains.
+
+**Address:** `0xcA11bde05977b3631167028862bE2a173976CA11`
+
+Use `aggregate3` to batch multiple `cast call` reads:
+
+```bash
+MULTICALL3="0xcA11bde05977b3631167028862bE2a173976CA11"
+
+# Encode each sub-call
+CALL1=$(cast calldata "balanceOf(address)" "$ADDR")
+CALL2=$(cast calldata "totalSupply()")
+CALL3=$(cast calldata "decimals()")
+
+# Batch into a single RPC call via aggregate3
+# Each tuple is (target, allowFailure, callData)
+cast call "$MULTICALL3" \
+  "aggregate3((address,bool,bytes)[])(((bool,bytes)[]))" \
+  "[($TOKEN1,false,$CALL1),($TOKEN2,false,$CALL2),($TOKEN2,false,$CALL3)]" \
+  --rpc-url "$RPC_URL"
+```
+
+**When to use:** Prefer Multicall3 whenever you need 2+ read calls on the same chain. It reduces RPC round-trips and guarantees all results come from the same block.
+
+**Caveat:** `msg.sender` in downstream calls becomes the Multicall3 contract address, not the caller. Only use for reads or calls where `msg.sender` doesn't matter.
+
 ### Build Raw Transactions
 
 Use `cast mktx` to create a signed raw transaction without broadcasting it.
@@ -248,6 +276,7 @@ When the user specifies a chain by name, resolve the chain ID using these steps:
 | ABI encode   | `cast abi-encode`      | (function sig + args)                   |
 | ABI decode   | `cast abi-decode`      | (function sig + data)                   |
 | Function sig | `cast sig`             | (function signature string)             |
+| Batch reads  | `cast call` Multicall3 | `aggregate3`, `--rpc-url`               |
 | Balance      | `cast balance`         | `--rpc-url`, `--ether`                  |
 | ENS resolve  | `cast resolve-name`    | `--rpc-url`                             |
 | New wallet   | `cast wallet new`      | —                                       |
