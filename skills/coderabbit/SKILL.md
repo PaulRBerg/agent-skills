@@ -107,6 +107,22 @@ Assign one of two classifications:
   - Already handled elsewhere in the codebase
   - Out of scope for this PR's intent
 
+### 4b) Confirm Ambiguous Classifications
+
+After classifying all comments, identify findings where confidence is **Medium** or **Low** and the code is on a critical path (auth, payments, data integrity, core business logic). For each such finding, use `AskUserQuestion` to ask the user:
+
+- header: Truncated filename (max 12 chars)
+- question: "CodeRabbit flagged `<file>:<line>` — <one-line summary of suggestion>. Is this valid?"
+- options:
+  - "Valid — fix it" with description of what the fix entails
+  - "False positive — skip" with description of why it might not apply
+  - "Needs context — defer" with description that it will be added to Residual Risks
+- multiSelect: false
+
+Batch up to 4 questions per `AskUserQuestion` call to minimize interruptions. Update classifications based on user responses before generating the fix plan.
+
+Skip this step when all medium/low-confidence findings are on non-critical paths — classify those using your best judgment and note the confidence level in the report.
+
 ### 5) Generate Fix Plan
 
 For each valid finding, ordered by severity (CRITICAL first, LOW last), produce a structured entry:
