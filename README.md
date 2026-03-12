@@ -30,11 +30,8 @@ npx skills add PaulRBerg/agent-skills
 | diagram-monochrome | Monochrome technical schematic diagrams  |
 | effect-ts          | Effect-TS patterns and guidance          |
 | evm-chains         | Sablier SDK EVM chain reference          |
-| ls-lint            | Directory/filename linting               |
 | md-docs            | Markdown documentation management        |
-| openclaw           | OpenClaw CLI guidance                    |
 | oracle-codex       | Codex oracle for planning                |
-| refine-prompt      | LLM prompt optimization                  |
 | tailwind-css       | Tailwind CSS v4 styling guidance         |
 | work               | End-to-end task implementation           |
 | yeet               | GitHub contribution workflows            |
