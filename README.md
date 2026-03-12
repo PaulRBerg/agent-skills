@@ -29,7 +29,7 @@ npx skills add PaulRBerg/agent-skills
 | delayed-command    | Wait and execute bash command            |
 | diagram-monochrome | Monochrome technical schematic diagrams  |
 | effect-ts          | Effect-TS patterns and guidance          |
-| evm-chains         | Sablier SDK EVM chain reference          |
+| evm-chains         | EVM chain metadata and RouteMesh reference |
 | md-docs            | Markdown documentation management        |
 | oracle-codex       | Codex oracle for planning                |
 | tailwind-css       | Tailwind CSS v4 styling guidance         |
