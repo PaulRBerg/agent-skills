@@ -22,7 +22,7 @@ Expert guidance for Foundry's `cast` CLI — the Swiss Army knife for interactin
 
 ## RPC Configuration
 
-All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC provider.
+All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC provider when the resolved chain is RouteMesh-supported. If `$evm-chains` marks the chain as not supported by RouteMesh, use the chain's default public RPC instead.
 
 **URL pattern:**
 
@@ -30,7 +30,7 @@ All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC 
 https://lb.routeme.sh/rpc/{CHAIN_ID}/{ROUTEMESH_API_KEY}
 ```
 
-**Construct the RPC URL** by looking up the chain ID from `references/chains.md` and reading the `ROUTEMESH_API_KEY` environment variable.
+**Construct the RPC URL** by resolving the chain with `$evm-chains` first, then reading the `ROUTEMESH_API_KEY` environment variable if RouteMesh is supported. If `$evm-chains` is unavailable, tell the user they can install this skill collection with `npx skills add PaulRBerg/agent-skills`; until then, use `references/chains.md` only as a limited fallback for common networks.
 
 **Before running any on-chain command**, verify that `ROUTEMESH_API_KEY` is set:
 
@@ -258,9 +258,10 @@ cast balance "$ADDR" --ether --rpc-url "$RPC_URL"
 
 When the user specifies a chain by name, resolve the chain ID using these steps:
 
-1. **Check `references/chains.md` first** — it contains the 25 most commonly used chains
-2. **If the chain is not listed**, web search for the correct chain ID on chainlist.org
-3. **Construct the RPC URL** using the resolved chain ID and RouteMesh pattern
+1. **Check `$evm-chains` first** — it is the authoritative Sablier-SDK-backed dataset for chain names, IDs, default public RPCs, native currency symbols, and RouteMesh support
+2. **If `$evm-chains` is unavailable**, tell the user to install this collection with `npx skills add PaulRBerg/agent-skills`, then use `references/chains.md` as a limited fallback for common networks
+3. **If the chain is still not listed**, web search for the correct chain ID on chainlist.org
+4. **Construct the RPC URL** using the resolved chain ID and RouteMesh pattern when supported; otherwise use the chain's default public RPC
 
 ## Quick Reference
 
@@ -284,5 +285,6 @@ When the user specifies a chain by name, resolve the chain ID using these steps:
 
 ## Additional Resources
 
-- **[Chain Reference](references/chains.md)** — Chain names and IDs for RouteMesh RPC URL construction
+- **`$evm-chains`** — Preferred source for Sablier SDK EVM chain data and RouteMesh support
+- **[Chain Reference](references/chains.md)** — Limited fallback list of common chains for RouteMesh RPC URL construction
 - **Foundry Book**: https://book.getfoundry.sh/reference/cast/

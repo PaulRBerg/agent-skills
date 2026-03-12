@@ -13,29 +13,31 @@ npx skills add PaulRBerg/agent-skills
 
 ## Skills
 
-| Skill           | Description                              |
-| --------------- | ---------------------------------------- |
-| biome-js        | BiomeJS linting/formatting guidance      |
-| bump-release    | Release workflow with changelog, tagging |
-| coderabbit      | CodeRabbit PR feedback triage            |
-| code-polish     | Combined simplification and review       |
-| code-review     | Expert code review                       |
-| cli-cast        | Foundry cast CLI guidance                |
-| cli-gh          | GitHub CLI operations                    |
-| cli-just        | Just command runner guidance             |
-| code-simplify   | Code simplification and refactoring      |
-| commit          | Git commit with conventional commits     |
-| delayed-command | Wait and execute bash command            |
-| effect-ts       | Effect-TS patterns and guidance          |
-| ls-lint         | Directory/filename linting               |
-| md-docs         | Markdown documentation management        |
-| bump-deps       | Node.js dependency updates               |
-| openclaw        | OpenClaw CLI guidance                    |
-| oracle-codex    | Codex oracle for planning                |
-| yeet            | GitHub contribution workflows            |
-| refine-prompt   | LLM prompt optimization                  |
-| tailwind-css    | Tailwind CSS v4 styling guidance         |
-| work            | End-to-end task implementation           |
+| Skill              | Description                              |
+| ------------------ | ---------------------------------------- |
+| biome-js           | BiomeJS linting/formatting guidance      |
+| bump-deps          | Node.js dependency updates               |
+| bump-release       | Release workflow with changelog, tagging |
+| cli-cast           | Foundry cast CLI guidance                |
+| cli-gh             | GitHub CLI operations                    |
+| cli-just           | Just command runner guidance             |
+| code-polish        | Combined simplification and review       |
+| code-review        | Expert code review                       |
+| code-simplify      | Code simplification and refactoring      |
+| coderabbit         | CodeRabbit PR feedback triage            |
+| commit             | Git commit with conventional commits     |
+| delayed-command    | Wait and execute bash command            |
+| diagram-monochrome | Monochrome technical schematic diagrams  |
+| effect-ts          | Effect-TS patterns and guidance          |
+| evm-chains         | Sablier SDK EVM chain reference          |
+| ls-lint            | Directory/filename linting               |
+| md-docs            | Markdown documentation management        |
+| openclaw           | OpenClaw CLI guidance                    |
+| oracle-codex       | Codex oracle for planning                |
+| refine-prompt      | LLM prompt optimization                  |
+| tailwind-css       | Tailwind CSS v4 styling guidance         |
+| work               | End-to-end task implementation           |
+| yeet               | GitHub contribution workflows            |
 
 ## SKILL.md Frontmatter Guide
 
