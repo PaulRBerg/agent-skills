@@ -3,7 +3,7 @@ argument-hint: '[--subject "type: summary"] [--base <branch>]'
 disable-model-invocation: true
 name: git-squash
 user-invocable: true
-description: This skill should be used when the user asks to "squash PR commits", "squash my branch", "flatten branch history", "combine all commits into one", "prepare a clean PR commit", or "squash commits relative to main/default branch". It rewrites the current branch into a single commit whose message is derived only from the net diff relative to the default branch.
+description: This skill should be used when the user asks to "squash PR commits", "squash my branch", "flatten branch history", "combine all commits into one", "prepare a clean PR commit", or "squash commits relative to main/default branch". It rewrites the current branch into a single commit whose message semantically summarizes the surviving net changes relative to the default branch.
 ---
 
 # Git Squash
@@ -19,7 +19,7 @@ Parse `$ARGUMENTS` for optional flags:
 
 Defaults:
 
-- Subject: `chore: squash <current-branch> net changes`
+- Subject: infer a conventional-commit subject from the squashed changes themselves; do not default to `chore`
 - Base detection order:
   1. `refs/remotes/origin/HEAD`
   2. `git remote show origin`
@@ -69,7 +69,18 @@ ahead_count="$(git rev-list --count "$merge_base..HEAD")"
 original_head="$(git rev-parse HEAD)"
 ```
 
-### 4) Rewrite the Branch into a Single Staged Diff
+### 4) Collect Semantic Context Before Rewriting
+
+Inspect the commits that will be squashed before mutating history. Use them to understand intent and distinct workstreams, but treat the staged net diff as the source of truth for what survives.
+
+- Read the commit list in chronological order: `git log --reverse --format='%H%x09%s' "$merge_base..HEAD"`
+- If subjects are vague or mixed, inspect the most important commits more deeply with `git show --stat --summary --format=fuller <commit>`
+- Identify the dominant user-visible or developer-visible outcomes
+- Ignore intermediate work that does not survive in the final diff
+
+You are not writing a changelog of every commit. You are deriving one accurate commit message for the final net change.
+
+### 5) Rewrite the Branch into a Single Staged Diff
 
 Soft-reset to the merge-base. This keeps the branch's net changes staged while removing the intermediate commits from history. If the staged diff is empty after the reset, restore the original head and stop with an error, because there is no net change to commit.
 
@@ -79,30 +90,66 @@ git diff --cached --quiet
 git reset --soft "$original_head"
 ```
 
-### 5) Build the Commit Message from the Net Diff
+### 6) Build the Commit Message from Commits + Net Diff
 
-Use `--subject` when provided. Otherwise, generate:
+Use `--subject` when provided. Otherwise, generate a conventional-commit subject by semantically analyzing:
 
-`chore: squash <current-branch> net changes`
+- all commits in `"$merge_base..HEAD"`
+- the staged net diff after the soft reset
+- targeted hunks from `git diff --cached` when the summary is ambiguous
 
-The body should describe the net diff only, not the original commit history. Start with:
+Infer the commit type from the surviving change, not from the fact that a squash happened:
 
-`Net changes vs <default_ref>:`
+- New functionality -> `feat`
+- Bug fix -> `fix`
+- Refactor without behavior change -> `refactor`
+- Docs only -> `docs`
+- Tests only -> `test`
+- Build or tooling -> `build`
+- CI workflow -> `ci`
+- Dependency updates -> `chore(deps)`
+- Formatting only -> `style`
+- Performance -> `perf`
+- AI agent/config updates -> `ai`
+- General maintenance -> `chore`
 
-Then append:
+Do not default to `chore` unless the net change is actually maintenance work.
 
-- The staged shortstat, if present
-- One line per staged path from `git diff --cached --name-status`
-- Rename lines in the form `<old> -> <new>`
+Subject requirements:
+
+- Format: `type(scope): description` or `type: description`
+- Imperative mood, lowercase, no trailing period
+- Describe what changed in English, not that commits were squashed
+- Keep it specific; `feat(streaming): add batch cancel support` is acceptable, `chore: squash branch changes` is not
+- Keep it short enough for a normal Git subject line
+
+Body requirements:
+
+- Describe only net changes that still exist after the squash
+- Use 1-5 hyphen bullets for non-trivial changes
+- Summarize distinct behavior, API, data model, tooling, test, or documentation changes in natural language
+- Mention filenames or raw path lists only when a name is semantically necessary for clarity
+- Do not dump `shortstat`, `name-status`, or file inventories into the message
+- Skip the body entirely if the change is small and the subject fully captures it
+
+Validation requirements before committing:
+
+- If the message reads like a file listing, stats dump, or "squash net changes" meta-commentary, rewrite it
+- If multiple commits were squashed but only one net concern remains, write one focused message for that concern
+- If several distinct net concerns remain, reflect them as concise bullets in the body
+- Make sure every bullet is supported by the staged diff
+
+Helpful commands:
 
 ```bash
-git diff --cached --shortstat
-git diff --cached --name-status
+git log --reverse --format='%H%x09%s' "$merge_base..HEAD"
+git diff --cached --stat
+git diff --cached
 ```
 
-Write that message to a temporary file and commit with `git commit -F`.
+Write the final message to a temporary file and commit with `git commit -F`.
 
-### 6) Report the Result
+### 7) Report the Result
 
 After the commit succeeds:
 
@@ -120,9 +167,11 @@ git push --force-with-lease
 - Stop immediately if not inside a git repository.
 - Stop immediately if the current branch is the default branch.
 - Stop if the working tree is dirty, to avoid mixing unrelated local edits.
+- Inspect the commits being squashed before rewriting history.
 - Reset softly to the merge-base with the default branch.
 - Commit staged net changes as a single commit.
-- Generate the commit message from the staged net diff only (shortstat + name-status lines).
+- Generate a semantic commit message grounded in the net diff and informed by all commits being squashed.
+- Never use a fixed fallback like `chore: squash <branch> net changes` unless the user explicitly provided `--subject`.
 
 ## Output
 
