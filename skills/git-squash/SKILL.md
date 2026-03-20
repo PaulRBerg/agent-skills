@@ -1,5 +1,5 @@
 ---
-argument-hint: '[--subject "type: summary"] [--base <branch>]'
+argument-hint: '[--base <branch>]'
 disable-model-invocation: true
 name: git-squash
 user-invocable: true
@@ -77,6 +77,7 @@ Inspect the commits that will be squashed before mutating history. Use them to u
 - If subjects are vague or mixed, inspect the most important commits more deeply with `git show --stat --summary --format=fuller <commit>`
 - Identify the dominant user-visible or developer-visible outcomes
 - Ignore intermediate work that does not survive in the final diff
+- Collect all unique authors from the squashed commits and identify which are co-authors (anyone other than the committer of the squash commit). Use `git log --format='%aN <%aE>' "$merge_base..HEAD" | sort -u` to get the list, then exclude the current user (`git config user.name` / `git config user.email`). Each remaining author becomes a `Co-authored-by` trailer
 
 You are not writing a changelog of every commit. You are deriving one accurate commit message for the final net change.
 
@@ -146,6 +147,8 @@ git log --reverse --format='%H%x09%s' "$merge_base..HEAD"
 git diff --cached --stat
 git diff --cached
 ```
+
+If co-authors were collected in step 4, append a blank line followed by one `Co-authored-by: Name <email>` trailer per co-author at the end of the message. Do not add trailers for the current user.
 
 Write the final message to a temporary file and commit with `git commit -F`.
 
