@@ -33,6 +33,7 @@ npx skills add PaulRBerg/agent-skills
 | git-squash         | Squash PR branch with semantic commit message |
 | md-docs            | Markdown documentation management             |
 | oracle-codex       | Codex oracle for planning                     |
+| autoresearch       | Autonomous experiment loop                    |
 | process-cleanup    | Detect and reap zombie processes with procs   |
 | tailwind-css       | Tailwind CSS v4 styling guidance              |
 | work               | End-to-end task implementation                |
