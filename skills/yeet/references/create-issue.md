@@ -4,7 +4,7 @@ Create GitHub issues with automatic labeling, template detection, and intelligen
 
 ## Validate Prerequisites
 
-IF not authenticated: ERROR "Run `gh auth login` first"
+See `commons.md > Auth Validation`.
 
 ## Parse Repository Argument
 
@@ -16,135 +16,78 @@ Determine repository from arguments:
 > [!IMPORTANT]
 > When dispatched via a repo-specific subcommand (e.g., `issue-codex`, `issue-cc`, `issue-biome`, `issue-sablier`), the target repository is predetermined by that subcommand's reference. Skip this section — do NOT infer from the working directory.
 
-Note: If you don't specify a repository, the command will infer the current repository (owner/repo) automatically.
-
 ## Parse Optional Flags
 
-IF arguments contain `--check`:
-
-- Remove `--check` from arguments
-- Set `check_mode = true`
-- Continue to check for similar issues
-
-ELSE:
-
-- Set `check_mode = false`
-- Skip similarity check and continue to template detection
+IF arguments contain `--check`: remove it, set `check_mode = true`, continue to similarity check.
+ELSE: skip similarity check and continue to template detection.
 
 ## Determine Authenticated User
-
-Get the authenticated GitHub username for permission checks:
 
 ```bash
 gh api user -q .login
 ```
 
-Store as `$AUTHENTICATED_USER` for later comparisons.
+Store as `$AUTHENTICATED_USER` for later permission checks.
 
 ## Check for Similar Issues
 
 **ONLY if `check_mode = true`:**
 
-1. Extract key terms from the remaining arguments (issue description)
+1. Extract key terms from remaining arguments
 
-2. Search for similar open issues (full-text search across title and body):
+2. Search:
 
    ```bash
    gh search issues "{key_terms}" --repo "{owner}/{repo}" --state open --limit 10 --json number,title,url
    ```
 
-3. **IF similar issues found:**
-
-   - Display the list of potentially related issues to the user
-   - Use `AskUserQuestion` to prompt: "Similar issues found. Do you want to proceed with creating a new issue?"
-     - Options: "Yes, create new issue" / "No, cancel"
-   - IF user selects "No": Exit command with message "Issue creation cancelled"
-   - IF user selects "Yes": Continue to template detection
-
-4. **IF no similar issues found:**
-
-   - Inform user: "No similar issues found. Proceeding with issue creation."
-   - Continue to template detection
+3. IF found: display list, use `AskUserQuestion` ("Similar issues found. Proceed?"), cancel if "No"
+4. IF none found: inform user, continue
 
 ## Check for Issue Templates
-
-Check if the repository has issue templates:
 
 ```bash
 gh api repos/{owner}/{repo}/contents/.github/ISSUE_TEMPLATE --jq '.[].name | select(endswith(".md") or endswith(".yml") or endswith(".yaml"))' 2>/dev/null || true
 ```
 
-Note: This API returns 404 for repos without an ISSUE_TEMPLATE directory — the `|| true` ensures the command always succeeds. Treat empty output as "no templates". Exclude `config.yml` from template selection — it's for GitHub configuration, not an issue template.
+Returns 404 for repos without templates — `|| true` ensures success. Exclude `config.yml`.
 
-IF templates are found (non-empty output listing `.yml`, `.yaml`, or `.md` files):
+IF templates found:
 
 ### Select Template
 
-Infer which template best matches the user's intent from arguments:
-
-- Common patterns: `bug_report.yml`, `feature_request.yml`, `bug_report.md`, `feature_request.md`, etc.
-- Consider keywords in user's description (bug, feature, docs, model, etc.)
-- Prefer YAML templates over Markdown if both exist for same type (GitHub lists YAML first)
+Infer best match from user's description keywords (bug, feature, docs, etc.). Prefer YAML over Markdown if both exist.
 
 ### Parse Template
 
-Based on file extension:
+**YAML (`.yml`/`.yaml`):**
 
-**IF `.yml` or `.yaml` template:**
-
-1. Fetch raw template content:
+1. Fetch raw content:
 
    ```bash
    gh api repos/{owner}/{repo}/contents/.github/ISSUE_TEMPLATE/{template_name} --jq '.content' | base64 -d
    ```
 
-2. Parse YAML structure to extract:
+2. Parse: `name`, `description`, `title` (prefix), `labels`, `body` array (fields with `type`, `id`, `attributes`)
 
-   - `name`, `description` - template metadata
-   - `title` - default issue title prefix (e.g., "[BUG] ")
-   - `labels` - pre-defined labels to merge with auto-labels
-   - `body` array - form fields with `type`, `id`, `attributes`
+3. Field types: `textarea`/`input` → section header from `attributes.label`; `dropdown` → select option from context; `checkboxes` → auto-acknowledge; `markdown` → skip
 
-3. For each field in `body` array:
+**Markdown (`.md`):** Fetch and populate template structure.
 
-   - `markdown`: Skip (display-only, not submitted)
-   - `textarea`/`input`: Use `attributes.label` as section header, `attributes.description` as guidance
-   - `dropdown`: Select appropriate option based on arguments context
-   - `checkboxes`: Auto-acknowledge as "Confirmed" (preflight attestations)
-
-**IF `.md` template:**
-
-- Fetch and populate the markdown template structure for the issue body (existing behavior)
-
-ELSE:
-
-- **USE DEFAULT TEMPLATE**: No templates found, use default structure (see Generate Title and Body section)
+**No templates:** Use default structure (see Generate Title and Body).
 
 ## Check if Labels Should Be Applied
 
-Extract the owner from the repository (the part before the `/`).
+Extract owner from repository.
 
-IF owner matches `$AUTHENTICATED_USER` OR owner is `sablier-labs`:
-
-- **APPLY LABELS**: The user has permission to add labels
-- Continue to apply labels
-- IF owner is `sablier-labs`: also apply Scope labels for `command-center` (see `./references/issue-sablier.md` for the full Sablier label taxonomy)
-
-ELSE:
-
-- **SKIP LABELS**: Do not apply labels for this repository
-- Skip label generation
+- IF owner = `$AUTHENTICATED_USER` OR owner = `sablier-labs`: **apply labels**. For `sablier-labs`, also apply Scope labels for `command-center` (see `issue-sablier.md`).
+- ELSE: **skip labels** (only apply template-defined labels if any)
 
 ## Apply Labels
 
-**ONLY if owner matches $AUTHENTICATED_USER or owner is `sablier-labs`:**
+**ONLY if owner matches or is `sablier-labs`.**
 
-From content analysis, determine:
-
-- **Type**: Primary category (bug, feature, docs, etc.)
-- **Work**: Complexity via Cynefin (clear, complicated, complex, chaotic)
-- **Priority**: Urgency (0=critical to 3=nice-to-have)
-- **Effort**: Size (low, medium, high, epic)
+From content analysis, determine Type, Work, Priority, and Effort.
 
 ### Label Reference
 
@@ -184,66 +127,19 @@ From content analysis, determine:
 
 ## Generate Title and Body
 
-**Tone**: Write the issue body in an informal, casual style. Skip corporate speak and excessive formality. Be direct and conversational - write like you're explaining the issue to a colleague, not drafting a legal document.
-
-From remaining arguments, create:
+See `commons.md > Informal Tone` for tone guidance.
 
 ### Title
 
-If YAML template has `title` field (e.g., "[BUG] "), prepend it to a clear, concise summary (5-10 words)
+If YAML template has `title` field (e.g., "[BUG] "), prepend it to a clear, concise summary (5-10 words).
 
 ### Body
 
-Generate based on template type:
+**YAML template:** Generate markdown sections matching the `body` array fields — `### {field.attributes.label}` with content based on arguments and `field.attributes.description`. Skip `markdown` type fields.
 
-**IF YAML template (`.yml`/`.yaml`):**
+**Markdown template:** Populate template structure with content from arguments.
 
-Generate markdown sections matching the template's `body` array fields:
-
-```
-### {field.attributes.label}
-
-{Generated content based on arguments and field.attributes.description}
-```
-
-For each field type:
-
-- `textarea`/`input`: Create a section with `### {label}` header, populate from arguments
-- `dropdown`: Include selected option value (infer from context)
-- `checkboxes`: Add "Confirmed" for preflight attestations
-- `markdown`: Skip (not included in submitted issues)
-
-Example for `feature_request.yml`:
-
-```
-### Problem Statement
-
-Users cannot export their data in CSV format, limiting integration options.
-
-### Proposed Solution
-
-Add a CSV export button to the dashboard settings page.
-
-### Alternative Solutions
-
-Considered JSON export but CSV is more widely supported by spreadsheet tools.
-
-### Priority
-
-Medium - Would be very helpful
-
-### Feature Category
-
-CLI commands and flags
-```
-
-**IF Markdown template (`.md`):**
-
-Populate the template structure with content from arguments (existing behavior).
-
-**IF no template found:**
-
-Use this default template:
+**No template — default:**
 
 ```
 ## Problem
@@ -259,90 +155,29 @@ Use this default template:
 <details><summary>Toggle to see affected files</summary>
 <p>
 
-- [{filename1}](https://github.com/{owner}/{repo}/blob/main/{path1})
-- [{filename2}](https://github.com/{owner}/{repo}/blob/main/{path2})
-- [{filename3}](https://github.com/{owner}/{repo}/blob/main/{path3})
+- [{filename}](https://github.com/{owner}/{repo}/blob/main/{path})
 
 </p>
 </details>
 ```
 
-### Admonitions
-
-Add GitHub-style admonitions when appropriate:
-
-- `> [!NOTE]` - For context, dependencies, or implementation details users should notice
-- `> [!TIP]` - For suggestions on testing, workarounds, or best practices
-- `> [!IMPORTANT]` - For breaking changes, required migrations, or critical setup steps
-- `> [!WARNING]` - For potential risks, known issues, or things that could go wrong
-- `> [!CAUTION]` - For deprecated features, temporary solutions, or things to avoid
-
-Place admonitions after the relevant section. Example:
-
-```
-## Solution
-
-Refactor the authentication module to use JWT tokens.
-
-> [!IMPORTANT]
-> This change requires updating the environment variables. See `.env.example` for new required keys.
-```
-
-### File Links
-
-- **MUST** use markdown format: `[{filename}](https://github.com/{owner}/{repo}/blob/main/{path})`
-- **Link text** should be the relative file path (e.g., `src/file.ts`, `docusaurus.config.ts`)
-- **URL** must be the full GitHub URL
-- List one per line if multiple files
-- **OMIT the entire "## Files Affected" section** if no files are specified (e.g., for feature requests or planning issues)
-
-### Platform String Normalization
-
-If the selected template includes an OS/platform field:
-
-- On macOS, use `scripts/get-macos-version.sh` and keep the format `macOS <Name> v<Version>` (example: `macOS Tahoe v26.2`)
-- Do not use `uname` output for macOS fields (for example, avoid `Darwin 25.2 arm64`)
-- On Linux, use `uname -mprs`
-- On Windows, use PowerShell platform command output
+See `commons.md > GitHub Admonitions` for when/how to add admonitions. See `commons.md > File Link Formatting` for link rules. See `commons.md > Platform String Normalization` for OS fields.
 
 ## Create the Issue
 
-**Label handling:**
-
-- If YAML template has `labels` field (e.g., `labels: ["bug"]`), merge with auto-generated labels
-- Deduplicate labels (e.g., don't add "bug" twice if template and auto-labels both include it)
-- Template labels always apply regardless of repository owner
-
-**IF owner matches $AUTHENTICATED_USER or owner is `sablier-labs`:**
+Merge template-defined labels with auto-generated labels (deduplicate). Only include auto-labels if owner matches `$AUTHENTICATED_USER` or is `sablier-labs`:
 
 ```bash
 gh issue create \
   --repo "$repository" \
   --title "$title" \
   --body "$body" \
-  --label "template-label1,auto-label1,auto-label2"
+  --label "label1,label2"  # omit --label entirely if no labels apply
 ```
 
-**IF owner does not match $AUTHENTICATED_USER and owner is not `sablier-labs`:**
+Display: "Created: $URL"
 
-```bash
-# If YAML template has labels defined:
-gh issue create \
-  --repo "$repository" \
-  --title "$title" \
-  --body "$body" \
-  --label "template-label1,template-label2"
-
-# If no template labels:
-gh issue create \
-  --repo "$repository" \
-  --title "$title" \
-  --body "$body"
-```
-
-Display: "✓ Created issue: $URL"
-
-On failure: show specific error and fix
+On failure: show specific error and fix.
 
 ## Examples
 
@@ -356,7 +191,7 @@ PaulRBerg/dotfiles "Add zsh configuration for tmux startup"
 # External repository
 facebook/react "Add useDebounce hook to react-dom"
 
-# With --check flag (searches for similar issues first)
+# With --check flag
 --check "Bug in auth flow causing token expiration"
 
 # External repo with --check

@@ -1,44 +1,31 @@
 # Codex CLI Issue Workflow
 
-This reference document describes the workflow for creating issues in the `openai/codex` repository. The workflow automatically selects the appropriate issue template based on the issue description and generates structured issue content.
+Create issues in the `openai/codex` repository with environment gathering and specialized templates.
 
 ## Repo Isolation
 
-This workflow targets **`openai/codex`** exclusively. The working directory's repository is irrelevant — do not use it for `--repo` flags, file links, issue search, or comments. Every `gh` command must use `--repo "openai/codex"`.
+This workflow targets **`openai/codex`** exclusively. Every `gh` command must use `--repo "openai/codex"`. Do not infer from working directory.
 
-If the issue references files, use: `[{path}](https://github.com/openai/codex/blob/main/{path})`
+File links: `[{path}](https://github.com/openai/codex/blob/main/{path})`
 
 ## Validate Authentication
 
-Check if GitHub CLI is authenticated:
-
-```bash
-gh auth status 2>&1 | rg -q "Logged in"
-```
-
-If not authenticated, error with: "Run `gh auth login` first"
+See `commons.md > Auth Validation`.
 
 ## Determine Issue Type
 
 From the issue description, infer which template fits best:
 
-| Keywords                                                 | Template                  | Title Prefix   |
-| -------------------------------------------------------- | ------------------------- | -------------- |
-| bug, broken, error, crash, fails, doesn't work           | `2-bug-report.yml`        | `[BUG] `       |
-| feature, request, add, support, wish, would be nice      | `4-feature-request.yml`   | `[FEATURE] `   |
-| docs, documentation, unclear, confusing, readme, example | `3-docs-issue.yml`        | `[DOCS] `      |
-| vscode, extension, cursor, windsurf, ide                 | `5-vs-code-extension.yml` | `[EXTENSION] ` |
+| Keywords | Template | Title Prefix |
+|---|---|---|
+| bug, broken, error, crash, fails, doesn't work | `2-bug-report.yml` | `[BUG] ` |
+| feature, request, add, support, wish, would be nice | `4-feature-request.yml` | `[FEATURE] ` |
+| docs, documentation, unclear, confusing, readme, example | `3-docs-issue.yml` | `[DOCS] ` |
+| vscode, extension, cursor, windsurf, ide | `5-vs-code-extension.yml` | `[EXTENSION] ` |
 
-**If ambiguous or no strong match**: Use AskUserQuestion with these options:
-
-- Bug Report - something's broken in the CLI
-- Feature Request - new idea or enhancement
-- Documentation - docs are missing/unclear
-- VS Code Extension - issue with the IDE extension
+**If ambiguous**: Use AskUserQuestion with options: Bug Report, Feature Request, Documentation, VS Code Extension.
 
 ## Generate Issue Body
-
-Based on the template type, generate a body with these sections:
 
 ### Bug Report Template
 
@@ -49,19 +36,19 @@ Based on the template type, generate a body with these sections:
 
 ### What subscription do you have?
 
-{Plus/Pro/Team/Enterprise - infer from context or ask}
+{Plus/Pro/Team/Enterprise - infer or ask}
 
 ### Which model were you using?
 
-{gpt-4.1/o4-mini/o3/etc. - infer from context or default to "Not specified"}
+{gpt-4.1/o4-mini/o3/etc. - infer or "Not specified"}
 
 ### What platform is your computer?
 
-{macOS version from helper script, e.g., "macOS Tahoe v26.2"}
+{see commons.md > Platform String Normalization}
 
 ### What issue are you seeing?
 
-{describe the bug from description}
+{describe the bug}
 
 ### What steps can reproduce the bug?
 
@@ -87,7 +74,7 @@ Based on the template type, generate a body with these sections:
 
 ### Additional information
 
-{any other relevant context, workarounds, or alternatives - or "None" if not mentioned}
+{any other relevant context, workarounds, or alternatives - or "None"}
 ```
 
 ### Documentation Template
@@ -95,7 +82,7 @@ Based on the template type, generate a body with these sections:
 ```markdown
 ### What is the type of issue?
 
-{Documentation is missing/Documentation is incorrect/Documentation is confusing/Example code is not working/Something else}
+{Documentation is missing/incorrect/confusing/Example code is not working/Something else}
 
 ### What is the issue?
 
@@ -115,7 +102,7 @@ Based on the template type, generate a body with these sections:
 
 ### What subscription do you have?
 
-{Plus/Pro/Team/Enterprise - infer from context or ask}
+{Plus/Pro/Team/Enterprise - infer or ask}
 
 ### Which IDE are you using?
 
@@ -123,7 +110,7 @@ Based on the template type, generate a body with these sections:
 
 ### What platform is your computer?
 
-{macOS version from helper script, e.g., "macOS Tahoe v26.2"}
+{see commons.md > Platform String Normalization}
 
 ### What issue are you seeing?
 
@@ -146,16 +133,9 @@ Based on the template type, generate a body with these sections:
 
 ## Generate Title
 
-Create a concise title (5-10 words) with the appropriate prefix:
-
-- Bug: `[BUG] {what's broken}`
-- Feature: `[FEATURE] {what you want}`
-- Docs: `[DOCS] {what needs fixing}`
-- Extension: `[EXTENSION] {what's wrong with the IDE extension}`
+Concise (5-10 words) with prefix: `[BUG]`, `[FEATURE]`, `[DOCS]`, or `[EXTENSION]`.
 
 ## Create the Issue
-
-Use GitHub CLI to create the issue:
 
 ```bash
 gh issue create \
@@ -167,37 +147,18 @@ EOF
 )"
 ```
 
-**Note**: Template labels (`bug`, `enhancement`, `docs`, `extension`) are applied automatically by GitHub when matching the template format.
+Template labels are applied automatically by GitHub.
 
 Display: "Created: $URL"
 
-On failure: show error and suggest fix
-
 ## Comment on Existing Issue
 
-If a similar issue already exists and the user prefers commenting over creating a duplicate:
-
-```bash
-gh issue comment {number} \
-  --repo "openai/codex" \
-  --body "$(cat <<'EOF'
-{comment body}
-EOF
-)"
-```
-
-Display: "Commented: https://github.com/openai/codex/issues/{number}"
+See `commons.md > Comment on Existing Issue`, using repo `"openai/codex"`.
 
 ## Environment Detection
 
-Gather environment information for bug reports and extension issues:
-
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
-- **Platform**:
-  - macOS: `scripts/get-macos-version.sh` (format: `macOS <Name> v<Version>`, e.g., `macOS Tahoe v26.2`)
-  - Linux: `uname -mprs`
-  - Windows: PowerShell platform command output
-  - Never use `uname` output for macOS platform fields
+- **Platform**: See `commons.md > Platform String Normalization`
 - **IDE** (for extension issues): Ask user or infer from context
 
 ## Examples

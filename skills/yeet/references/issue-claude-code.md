@@ -1,51 +1,38 @@
 # Claude Code Issue Workflow
 
-This reference document describes the workflow for creating issues in the `anthropics/claude-code` repository. The workflow automatically selects the appropriate issue template based on the issue description and generates structured issue content.
+Create issues in the `anthropics/claude-code` repository with environment gathering and specialized templates.
 
 ## Repo Isolation
 
-This workflow targets **`anthropics/claude-code`** exclusively. The working directory's repository is irrelevant — do not use it for `--repo` flags, file links, issue search, or comments. Every `gh` command must use `--repo "anthropics/claude-code"`.
+This workflow targets **`anthropics/claude-code`** exclusively. Every `gh` command must use `--repo "anthropics/claude-code"`. Do not infer from working directory.
 
-If the issue references files, use: `[{path}](https://github.com/anthropics/claude-code/blob/main/{path})`
+File links: `[{path}](https://github.com/anthropics/claude-code/blob/main/{path})`
 
 ## Validate Authentication
 
-Check if GitHub CLI is authenticated:
-
-```bash
-gh auth status 2>&1 | rg -q "Logged in"
-```
-
-If not authenticated, error with: "Run `gh auth login` first"
+See `commons.md > Auth Validation`.
 
 ## Determine Issue Type
 
 From the issue description, infer which template fits best:
 
-| Keywords                                                      | Template              | Title Prefix |
-| ------------------------------------------------------------- | --------------------- | ------------ |
-| bug, broken, error, crash, fails, doesn't work                | `bug_report.yml`      | `[BUG] `     |
-| feature, request, add, support, wish, would be nice           | `feature_request.yml` | `[FEATURE] ` |
-| docs, documentation, unclear, confusing, readme               | `documentation.yml`   | `[DOCS] `    |
-| model, claude did, unexpected, wrong files, reverted, ignored | `model_behavior.yml`  | `[MODEL] `   |
+| Keywords | Template | Title Prefix |
+|---|---|---|
+| bug, broken, error, crash, fails, doesn't work | `bug_report.yml` | `[BUG] ` |
+| feature, request, add, support, wish, would be nice | `feature_request.yml` | `[FEATURE] ` |
+| docs, documentation, unclear, confusing, readme | `documentation.yml` | `[DOCS] ` |
+| model, claude did, unexpected, wrong files, reverted, ignored | `model_behavior.yml` | `[MODEL] ` |
 
-**If ambiguous or no strong match**: Use AskUserQuestion with these options:
-
-- Bug Report - something's broken
-- Feature Request - new idea or enhancement
-- Documentation - docs are missing/unclear
-- Model Behavior - Claude did something unexpected
+**If ambiguous**: Use AskUserQuestion with options: Bug Report, Feature Request, Documentation, Model Behavior.
 
 ## Generate Issue Body
-
-Based on the template type, generate a body with these sections:
 
 ### Bug Report Template
 
 ```markdown
 ### What went wrong?
 
-{describe the bug from description}
+{describe the bug}
 
 ### What should happen?
 
@@ -60,8 +47,8 @@ Based on the template type, generate a body with these sections:
 ### Environment
 
 - **Version**: {claude --version}
-- **OS**: {operating system and version; on macOS use scripts/get-macos-version.sh, e.g., "macOS Tahoe v26.2"}
-- **Terminal**: {terminal program}
+- **OS**: {see commons.md > Platform String Normalization}
+- **Terminal**: {$TERM_PROGRAM}
 - **Platform**: Anthropic API (assume unless stated otherwise)
 - **Model**: Sonnet (assume unless stated otherwise)
 
@@ -83,15 +70,15 @@ Based on the template type, generate a body with these sections:
 
 ### Alternatives considered
 
-{any workarounds or other approaches - or "None" if not mentioned}
+{any workarounds or other approaches - or "None"}
 
 ### Priority
 
-{Critical/High/Medium/Low - infer from urgency, default to Medium}
+{Critical/High/Medium/Low - default Medium}
 
 ### Category
 
-{infer from context: CLI commands and flags, Interactive mode (TUI), File operations, API and model interactions, MCP server integration, Performance and speed, Configuration and settings, Developer tools/SDK, Documentation, Other}
+{infer: CLI commands and flags, Interactive mode (TUI), File operations, API and model interactions, MCP server integration, Performance and speed, Configuration and settings, Developer tools/SDK, Documentation, Other}
 ```
 
 ### Documentation Template
@@ -135,15 +122,15 @@ Based on the template type, generate a body with these sections:
 
 ### Files affected
 
-{list files that were modified unexpectedly, if applicable}
+{list files modified unexpectedly, if applicable}
 
 ### Environment
 
 - **Version**: {claude --version}
-- **OS**: {operating system and version; on macOS use scripts/get-macos-version.sh, e.g., "macOS Tahoe v26.2"}
-- **Model**: {Sonnet/Opus/Haiku - infer or default to Sonnet}
+- **OS**: {see commons.md > Platform String Normalization}
+- **Model**: {Sonnet/Opus/Haiku - default Sonnet}
 - **Platform**: Anthropic API
-- **Permission mode**: {Accept Edits ON/OFF - infer from context or "unknown"}
+- **Permission mode**: {Accept Edits ON/OFF - infer or "unknown"}
 
 ### Can you reproduce this?
 
@@ -156,16 +143,9 @@ Based on the template type, generate a body with these sections:
 
 ## Generate Title
 
-Create a concise title (5-10 words) with the appropriate prefix:
-
-- Bug: `[BUG] {what's broken}`
-- Feature: `[FEATURE] {what you want}`
-- Docs: `[DOCS] {what needs fixing}`
-- Model: `[MODEL] {unexpected behavior}`
+Concise (5-10 words) with prefix: `[BUG]`, `[FEATURE]`, `[DOCS]`, or `[MODEL]`.
 
 ## Create the Issue
-
-Use GitHub CLI to create the issue:
 
 ```bash
 gh issue create \
@@ -177,33 +157,18 @@ EOF
 )"
 ```
 
-**Note**: Template labels (`bug`, `enhancement`, `documentation`, `model`) are applied automatically by GitHub when matching the template format.
+Template labels (`bug`, `enhancement`, `documentation`, `model`) are applied automatically by GitHub.
 
 Display: "Created: $URL"
 
-On failure: show error and suggest fix
-
 ## Comment on Existing Issue
 
-If a similar issue already exists and the user prefers commenting over creating a duplicate:
-
-```bash
-gh issue comment {number} \
-  --repo "anthropics/claude-code" \
-  --body "$(cat <<'EOF'
-{comment body}
-EOF
-)"
-```
-
-Display: "Commented: https://github.com/anthropics/claude-code/issues/{number}"
+See `commons.md > Comment on Existing Issue`, using repo `"anthropics/claude-code"`.
 
 ## Environment Detection
 
-Gather environment information for bug reports and model behavior issues:
-
-- **Claude Code version**: `claude --version 2>/dev/null || echo "unknown"`
-- **Operating System**: Use `scripts/get-macos-version.sh` on macOS (format: `macOS <Name> v<Version>`, e.g., `macOS Tahoe v26.2`), not `uname` output
+- **Version**: `claude --version 2>/dev/null || echo "unknown"`
+- **OS**: See `commons.md > Platform String Normalization`
 - **Terminal**: `${TERM_PROGRAM:-${TERMINAL_EMULATOR:-unknown}}`
 
 ## Examples

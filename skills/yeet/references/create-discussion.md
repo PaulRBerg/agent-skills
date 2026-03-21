@@ -1,53 +1,33 @@
 # Discussion Creation Workflow
 
-This reference document describes the workflow for creating GitHub discussions with automatic category selection and optional template support. The workflow intelligently selects the appropriate category, checks for similar discussions, and formats the discussion body according to repository templates.
+Create GitHub discussions using the GraphQL API with automatic category selection and optional template support.
 
 ## Validate Prerequisites
 
-Check if GitHub CLI is authenticated:
-
-```bash
-gh auth status 2>&1 | rg -q "Logged in"
-```
-
-If not authenticated, error with: "Run `gh auth login` first"
+See `commons.md > Auth Validation`.
 
 ## Parse Repository Argument
 
-Determine the target repository:
-
-- If the first token matches "owner/repo" format: use it as repository
-- Otherwise: infer from the current working directory using `gh repo view --json nameWithOwner -q .nameWithOwner`
-- Error if not in a repository and no explicit repository provided
+- If first token matches "owner/repo": use it as repository
+- Otherwise: infer from working directory via `gh repo view --json nameWithOwner -q .nameWithOwner`
+- Error if not in a repo and no explicit repository provided
 
 ## Check for Similar Discussions (Optional)
 
-If the `--check` flag is present:
+If `--check` flag is present:
 
-1. Extract key terms from the discussion description
+1. Extract key terms from description
 
-2. Search for similar open discussions:
+2. Search:
 
    ```bash
    gh search discussions "{key_terms}" --repo "{owner}/{repo}" --limit 10 --json number,title,url
    ```
 
-3. **If similar discussions found:**
-
-   - Display the list of potentially related discussions
-   - Use `AskUserQuestion`: "Similar discussions found. Do you want to proceed with creating a new discussion?"
-   - Options: "Yes, create new discussion" / "No, cancel"
-   - If "No": Exit with message "Discussion creation cancelled"
-   - If "Yes": Continue with creation
-
-4. **If no similar discussions found:**
-
-   - Inform user: "No similar discussions found. Proceeding with discussion creation."
-   - Continue with creation
+3. IF found: display list, use `AskUserQuestion` ("Similar discussions found. Proceed?"), cancel if "No"
+4. IF none found: inform user, continue
 
 ## Fetch Discussion Categories
-
-Retrieve repository ID and available discussion categories via GraphQL:
 
 ```bash
 gh api graphql -f query='
@@ -55,13 +35,7 @@ gh api graphql -f query='
     repository(owner: $owner, name: $name) {
       id
       discussionCategories(first: 25) {
-        nodes {
-          id
-          name
-          slug
-          description
-          isAnswerable
-        }
+        nodes { id, name, slug, description, isAnswerable }
       }
     }
   }
@@ -70,34 +44,19 @@ gh api graphql -f query='
 
 ## Select Discussion Category
 
-Infer the best category based on the discussion description:
+Infer best category from description:
 
-| Category Pattern                 | When to Use                                            |
-| -------------------------------- | ------------------------------------------------------ |
-| **Ideas** / **Feature Requests** | User wants to propose something new                    |
-| **Q&A**                          | User is asking a question or seeking help              |
-| **General**                      | General conversation, no specific category fits        |
-| **Show and Tell**                | User is sharing something they built/created           |
-| **Announcements**                | Official announcements (rarely used by external users) |
-| **Polls**                        | User wants community input via voting                  |
+| Keywords | Category |
+|---|---|
+| "idea", "proposal", "suggest", "would be nice", "feature" | Ideas |
+| "how do I", "help", "question", "why does", "what is" | Q&A |
+| "built", "made", "created", "sharing", "check out" | Show and Tell |
+| "vote", "poll", "which", "prefer" | Polls |
+| General conversation, feedback, meta-discussion | General |
 
-If no obvious match, default to **General** or **Ideas** depending on context.
-
-### Category Inference Keywords
-
-Use these heuristics to select the best category:
-
-| Keywords in Description                                   | Likely Category |
-| --------------------------------------------------------- | --------------- |
-| "idea", "proposal", "suggest", "would be nice", "feature" | Ideas           |
-| "how do I", "help", "question", "why does", "what is"     | Q&A             |
-| "built", "made", "created", "sharing", "check out"        | Show and Tell   |
-| "vote", "poll", "which", "prefer"                         | Polls           |
-| General conversation, feedback, meta-discussion           | General         |
+Default to **General** or **Ideas** if uncertain.
 
 ## Check for Discussion Templates
-
-Check if the repository has discussion category forms:
 
 ```bash
 gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE --jq '.[].name | select(endswith(".yml") or endswith(".yaml"))' 2>/dev/null
@@ -105,87 +64,47 @@ gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE --jq '.[].name 
 
 ### If Templates Found
 
-1. **Select template**: Find template matching the selected category's slug (e.g., `ideas.yml` for the Ideas category)
-
-2. **Fetch and parse template**:
+1. Select template matching category slug (e.g., `ideas.yml` for Ideas)
+2. Fetch and parse:
 
    ```bash
    gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE/{template_name} --jq '.content' | base64 -d
    ```
 
-3. **Parse YAML structure** to extract:
-
-   - `title` - default discussion title prefix
-   - `body` array - form fields with `type`, `id`, `attributes`
-
-4. **Process each field** in `body` array:
-
-   - `markdown`: Skip (display-only, not submitted)
-   - `textarea`/`input`: Use `attributes.label` as section header, `attributes.description` as guidance
-   - `dropdown`: Select appropriate option based on description context
-   - `checkboxes`: Auto-acknowledge as "Confirmed" (preflight attestations)
+3. Parse YAML: `title` (prefix), `body` array (fields with `type`, `id`, `attributes`)
+4. Field types: `textarea`/`input` → section header; `dropdown` → select option; `checkboxes` → auto-acknowledge; `markdown` → skip
 
 ### If No Templates Found
 
-Use default structure (see next section)
+Use default structure (see below).
 
 ## Generate Title and Body
 
-**Tone**: Write the discussion body in an informal, casual style. Be direct and conversational.
+See `commons.md > Informal Tone` for tone guidance.
 
-### Title Generation
+**Title**: If template has `title` field, prepend it. Otherwise create clear summary (5-10 words).
 
-- If YAML template has `title` field, prepend it to the generated title
-- Otherwise, create a clear, concise summary (5-10 words)
+**Body with template**: Generate `### {field.attributes.label}` sections matching template fields.
 
-### Body Generation with Template
-
-Generate markdown sections matching the template's `body` array fields:
-
-```markdown
-### {field.attributes.label}
-
-{Generated content based on description and field.attributes.description}
-```
-
-### Body Generation without Template
-
-Use this default template:
+**Body without template**:
 
 ```markdown
 ## Context
 
-[Extracted from user description - what is this discussion about?]
+[What is this discussion about?]
 
 ## Discussion Points
 
-[Key points or questions to discuss]
+[Key points or questions]
 
 ## Additional Context
 
-[Any relevant background information, if applicable]
+[Background information, if applicable]
 ```
 
-### Platform String Normalization (When Needed)
-
-If the discussion body includes OS/platform details:
-
-- On macOS, use `scripts/get-macos-version.sh` and keep the format `macOS <Name> v<Version>` (example: `macOS Tahoe v26.2`)
-- Do not use `uname` output for macOS fields (for example, avoid `Darwin 25.2 arm64`)
-- On Linux, use `uname -mprs`
-- On Windows, use PowerShell platform command output
-
-### GitHub Admonitions
-
-Add GitHub-style admonitions when appropriate:
-
-- `> [!NOTE]` - For context or background information
-- `> [!TIP]` - For suggestions or related ideas
-- `> [!IMPORTANT]` - For key points that shouldn't be missed
+See `commons.md > GitHub Admonitions` for admonitions. See `commons.md > Platform String Normalization` if OS details needed.
 
 ## Create the Discussion
-
-Create the discussion via GraphQL mutation:
 
 ```bash
 gh api graphql -f query='
@@ -196,17 +115,13 @@ gh api graphql -f query='
       title: $title
       body: $body
     }) {
-      discussion {
-        url
-      }
+      discussion { url }
     }
   }
 ' -f repositoryId="$REPO_ID" -f categoryId="$CAT_ID" -f title="$TITLE" -f body="$BODY"
 ```
 
-Extract the URL from the response and display: "✓ Created discussion: $URL"
-
-On failure: show specific error and suggest fix
+Display: "Created discussion: $URL"
 
 ## Examples
 
@@ -220,7 +135,7 @@ PaulRBerg/dotfiles "Ideas for improving the zsh setup"
 # Another repository
 vercel/next.js "Question about server components caching"
 
-# With --check flag (searches for similar discussions first)
+# With --check flag
 --check "How to configure custom routes"
 
 # Explicit repository with --check

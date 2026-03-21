@@ -1,78 +1,42 @@
 # Biome Issue Workflow
 
-This reference document describes the workflow for creating issues in the `biomejs/biome` repository. The workflow automatically selects the appropriate issue template based on the issue description and generates structured issue content.
+Create issues in the `biomejs/biome` repository with playground reproduction links and specialized templates.
 
 ## Repo Isolation
 
-This workflow targets **`biomejs/biome`** exclusively. The working directory's repository is irrelevant — do not use it for `--repo` flags, file links, issue search, or comments. Every `gh` command must use `--repo "biomejs/biome"`.
+This workflow targets **`biomejs/biome`** exclusively. Every `gh` command must use `--repo "biomejs/biome"`. Do not infer from working directory.
 
-If the issue references files, use: `[{path}](https://github.com/biomejs/biome/blob/main/{path})`
+File links: `[{path}](https://github.com/biomejs/biome/blob/main/{path})`
 
 ## Validate Authentication
 
-Check if GitHub CLI is authenticated:
-
-```bash
-gh auth status 2>&1 | rg -q "Logged in"
-```
-
-If not authenticated, error with: "Run `gh auth login` first"
+See `commons.md > Auth Validation`.
 
 ## Determine Issue Type
 
 From the issue description, infer which template fits best:
 
-| Keywords                                    | Template           | Title Prefix |
-| ------------------------------------------- | ------------------ | ------------ |
-| format, formatter, formatting, prettier     | `01_formatter_bug` | `📝 `        |
-| lint, linter, rule, diagnostic, warning     | `02_lint_bug`      | `💅 `        |
-| bug, broken, error, crash, panic, fails     | `03_bug`           | `🐛 `        |
-| task, implement, add support (contributors) | `04_task`          | `📎 `        |
+| Keywords | Template | Title Prefix |
+|---|---|---|
+| format, formatter, formatting, prettier | `01_formatter_bug` | `📝 ` |
+| lint, linter, rule, diagnostic, warning | `02_lint_bug` | `💅 ` |
+| bug, broken, error, crash, panic, fails | `03_bug` | `🐛 ` |
+| task, implement, add support (contributors) | `04_task` | `📎 ` |
 
-**If ambiguous or no strong match**: Use AskUserQuestion with these options:
-
-- Formatter Bug - formatting isn't working correctly
-- Linter Bug - lint rule misbehaving
-- General Bug - other issues (CLI, parser, etc.)
-- Task - specific implementation task (contributors only)
+**If ambiguous**: Use AskUserQuestion with options: Formatter Bug, Linter Bug, General Bug, Task.
 
 ## Create Playground Link
 
-Bug reports require a playground reproduction. Create one at https://biomejs.dev/playground/:
+Bug reports require a playground reproduction at https://biomejs.dev/playground/:
 
-### Steps
+1. Paste minimal reproduction code
+2. Select language (JavaScript, TypeScript, JSX, TSX, JSON, CSS, GraphQL)
+3. Configure relevant settings (formatter: line width, indent style, quote style; linter: specific rules)
+4. Copy URL (auto-updates with query params: `code=<base64>`, `language=<type>`, settings)
 
-1. Open https://biomejs.dev/playground/
-2. Paste the minimal code that reproduces the issue
-3. Select the appropriate language (JavaScript, TypeScript, JSX, TSX, JSON, CSS, GraphQL)
-4. Configure relevant settings in the sidebar:
-   - For formatter bugs: line width, indent style, quote style, etc.
-   - For linter bugs: enable/disable specific rules
-5. Copy the URL from the browser address bar (auto-updates as you type)
-
-### URL Structure
-
-The playground URL uses query parameters:
-
-- `code=<base64_encoded>` - the reproduction code
-- `language=<tsx|ts|js|jsx|json|css|graphql>` - file type
-- Settings: `lineWidth=80`, `indentStyle=tab`, `quoteStyle=single`, etc.
-
-Only non-default values appear in the URL for compact links.
-
-### Alternative Reproduction
-
-If the playground cannot reproduce the issue (e.g., multi-file scenarios, CLI-specific bugs):
-
-```bash
-npm create @biomejs/biome-reproduction
-```
-
-This scaffolds a reproduction repository that can be shared.
+For multi-file scenarios: `npm create @biomejs/biome-reproduction`
 
 ## Generate Issue Body
-
-Based on the template type, generate a body with these sections:
 
 ### Formatter Bug Template
 
@@ -83,7 +47,7 @@ Based on the template type, generate a body with these sections:
 
 ### Configuration
 
-{contents of biome.json if relevant, or "Default configuration"}
+{biome.json contents if relevant, or "Default configuration"}
 
 ### Playground link
 
@@ -91,7 +55,7 @@ Based on the template type, generate a body with these sections:
 
 ### Expected result
 
-{describe what the formatter should output}
+{what the formatter should output}
 ```
 
 ### Linter Bug Template
@@ -103,7 +67,7 @@ Based on the template type, generate a body with these sections:
 
 ### Rule name
 
-{rule name, e.g., "noUnusedVariables" or "suspicious/noExplicitAny"}
+{e.g., "noUnusedVariables" or "suspicious/noExplicitAny"}
 
 ### Playground link
 
@@ -111,7 +75,7 @@ Based on the template type, generate a body with these sections:
 
 ### Expected result
 
-{describe what should happen - should it error? not error? different message?}
+{should it error? not error? different message?}
 ```
 
 ### General Bug Template
@@ -133,7 +97,7 @@ Based on the template type, generate a body with these sections:
 
 ### Expected result
 
-{describe what should happen}
+{what should happen}
 ```
 
 ### Task Template
@@ -146,16 +110,9 @@ Based on the template type, generate a body with these sections:
 
 ## Generate Title
 
-Create a concise title (5-10 words) with the appropriate emoji prefix:
-
-- Formatter: `📝 {formatting issue description}`
-- Linter: `💅 {lint rule issue description}`
-- General: `🐛 {bug description}`
-- Task: `📎 {task description}`
+Concise (5-10 words) with emoji prefix: `📝`, `💅`, `🐛`, or `📎`.
 
 ## Create the Issue
-
-Use GitHub CLI to create the issue:
 
 ```bash
 gh issue create \
@@ -167,48 +124,23 @@ EOF
 )"
 ```
 
-**Note**: The label `S-Needs triage` is applied automatically by GitHub when using bug templates.
+The label `S-Needs triage` is applied automatically by GitHub for bug templates.
 
 Display: "Created: $URL"
 
-On failure: show error and suggest fix
-
 ## Comment on Existing Issue
 
-If a similar issue already exists and the user prefers commenting over creating a duplicate:
-
-```bash
-gh issue comment {number} \
-  --repo "biomejs/biome" \
-  --body "$(cat <<'EOF'
-{comment body}
-EOF
-)"
-```
-
-Display: "Commented: https://github.com/biomejs/biome/issues/{number}"
+See `commons.md > Comment on Existing Issue`, using repo `"biomejs/biome"`.
 
 ## Environment Detection
 
-Gather environment information for bug reports using the appropriate `biome rage` variant:
+Use the appropriate `biome rage` variant:
 
 ```bash
-# Formatter bugs
-biome rage --formatter
-
-# Linter bugs
-biome rage --linter
-
-# General bugs
-biome rage
+biome rage --formatter  # Formatter bugs
+biome rage --linter     # Linter bugs
+biome rage              # General bugs
 ```
-
-The `biome rage` command outputs:
-
-- Biome version
-- Platform information
-- Configuration file location and contents
-- Active plugins/rules
 
 ## Examples
 
