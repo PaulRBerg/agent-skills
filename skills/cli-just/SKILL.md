@@ -376,6 +376,10 @@ Working justfile templates in `examples/`:
 - **GitHub Repository**: https://github.com/casey/just
 - **Context7 Library ID**: `/websites/just_systems-man`
 
+## No Justfile Formatter
+
+Do not use `just --fmt` or `just --dump`. The user has bespoke formatting preferences that the built-in formatter does not respect. Preserve existing formatting as-is.
+
 ## Tips
 
 1. Use `@` prefix to suppress command echo: `@echo "quiet"`
