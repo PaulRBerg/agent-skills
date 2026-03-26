@@ -1,5 +1,5 @@
 ---
-argument-hint: ''
+argument-hint: '[--no-verify] [--no-report]'
 disable-model-invocation: false
 name: code-simplify
 user-invocable: true
@@ -12,10 +12,16 @@ description: This skill should be used when the user asks to "simplify code", "c
 
 Simplify code while preserving behavior, public contracts, and side effects. Favor explicit code and local clarity over clever or compressed constructs.
 
+## Arguments
+
+- `--no-verify`: Skip verification because a parent orchestrator will verify the final result separately.
+- `--no-report`: Skip the full user-facing report. Keep only concise working notes needed by the caller.
+- Default: verify touched behavior and present the full report.
+
 ## Scope Resolution
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
-2. If user provides file paths/patterns or a commit/range, scope is exactly those targets.
+2. If user provides file paths/patterns, a commit/range, or a `Resolved scope` fenced block with one repo-relative path per line, scope is exactly those targets.
 3. Otherwise, scope is **only** session-modified files. Do not include other uncommitted changes.
 4. If there are no session-modified files, fall back to all uncommitted tracked + untracked files:
    - tracked: `git diff --name-only --diff-filter=ACMR`
@@ -75,6 +81,8 @@ Simplify code while preserving behavior, public contracts, and side effects. Fav
 
 ### 5) Verify
 
+Skip this step when `--no-verify` is set. Otherwise:
+
 - Run the narrowest useful checks first:
   - formatter/lint on touched files
   - targeted tests related to touched modules
@@ -84,7 +92,9 @@ Simplify code while preserving behavior, public contracts, and side effects. Fav
 
 ### 6) Report
 
-Provide:
+Skip the full report when `--no-report` is set. In that mode, keep only terse working notes covering touched scope, key simplifications, and residual risks for a parent orchestrator.
+
+Otherwise provide:
 
 1. Scope touched (files/functions)
 2. Key simplifications with concise rationale
@@ -117,7 +127,7 @@ Provide:
 
 ## Output Contract
 
-When presenting simplification results:
+When `--no-report` is not set, present simplification results like this:
 
 1. Show the exact files and regions changed.
 2. Explain each meaningful change in one sentence focused on readability/maintainability gain.

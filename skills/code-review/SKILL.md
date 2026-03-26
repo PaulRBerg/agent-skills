@@ -1,5 +1,5 @@
 ---
-argument-hint: '[--fix]'
+argument-hint: '[--fix] [--skip-profile <name>]'
 disable-model-invocation: false
 name: code-review
 user-invocable: true
@@ -15,12 +15,13 @@ Find high-impact defects in changed code with evidence. Prioritize security, cor
 ## Arguments
 
 - `--fix`: After reporting findings, apply all suggested fixes automatically in severity order (`CRITICAL -> HIGH -> MEDIUM -> LOW`), then rerun targeted checks and report exactly what changed.
+- `--skip-profile <name>`: Skip an optional domain profile by stem or filename. Repeatable. Example: `--skip-profile naming`.
 - Default: Report findings and wait for confirmation before editing.
 
 ## Scope Resolution
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
-2. If user provides file paths/patterns or a commit/range, scope is exactly those targets.
+2. If user provides file paths/patterns, a commit/range, or a `Resolved scope` fenced block with one repo-relative path per line, scope is exactly those targets.
 3. Otherwise, scope is **only** session-modified files. Do not include other uncommitted changes.
 4. If there are no session-modified files, fall back to all uncommitted tracked + untracked files:
    - tracked: `git diff --name-only --diff-filter=ACMR`
@@ -33,12 +34,30 @@ Find high-impact defects in changed code with evidence. Prioritize security, cor
 
 1. Resolve scope and read diffs plus minimal surrounding context.
 2. Classify files by domain/risk.
-3. Load `references/profiles/core.md` plus only the domain profiles that match the current diff.
+3. Apply the core checks below plus only the domain profiles that match the current diff. Honor any `--skip-profile` exclusions.
 4. Generate findings with: location, impact, evidence, confidence, and concrete fix.
 5. Assign severity with the model below.
 6. Default behavior: report and wait.
 7. With `--fix`: apply all suggested fixes in severity order, then run targeted verification.
-8. Report using `references/output-schema.md`.
+8. Report using the output schema below.
+
+## Core Review Checks
+
+Apply on every run.
+
+### Checks
+
+- `CORE-001` Behavior regression (`HIGH`): changed branch/state transition alters external behavior.
+- `CORE-002` Error-path safety (`HIGH`): failures can cascade, crash, or return unsafe defaults.
+- `CORE-003` Boundary handling (`HIGH`): null/empty/overflow/edge inputs are not handled.
+- `CORE-004` Resource hygiene (`MEDIUM`): leaked timers/listeners/handles/connections.
+- `CORE-005` Complexity hotspot (`MEDIUM`): change introduces avoidable coupling or hidden side effects.
+- `CORE-006` Test gap (`MEDIUM`): changed behavior has no targeted test coverage.
+
+### Evidence Expectations
+
+- Show the concrete input/state that triggers failure.
+- Point to changed lines or nearby guards that caused the risk.
 
 ## Profile Dispatch
 
@@ -49,7 +68,7 @@ Find high-impact defects in changed code with evidence. Prioritize security, cor
 - `references/profiles/shell.md`: shell scripts, CI command blocks, deployment scripts.
 - `references/profiles/smart-contracts.md`: Solidity/Solana/on-chain protocol code.
 - `references/profiles/data-formats.md`: CSV/JSON/YAML/binary ingestion/export/parsing.
-- `references/profiles/naming.md`: naming/intent clarity (after correctness and security pass).
+- `references/profiles/naming.md`: naming/intent clarity after correctness and security issues are handled. This profile is optional and can be skipped explicitly.
 
 Load only profiles relevant to touched files. Prefer no more than three domain profiles per pass unless the user requests a deep audit.
 
@@ -59,6 +78,48 @@ Load only profiles relevant to touched files. Prefer no more than three domain p
 - **HIGH**: logic defect or performance failure that can break core behavior.
 - **MEDIUM**: maintainability/reliability issue likely to cause near-term defects.
 - **LOW**: localized clarity/style/documentation improvements.
+
+## Output Schema
+
+Use this structure and order for every review result.
+
+### 1. Scope
+
+List reviewed files and any excluded patterns.
+
+### 2. Findings (ordered)
+
+Order by severity: `CRITICAL -> HIGH -> MEDIUM -> LOW`.
+
+For each finding, use this shape:
+
+- `[SEVERITY] Title — path/to/file.ext:line`
+- Impact: concrete user/system impact.
+- Evidence: exact code behavior or diff evidence.
+- Fix: smallest practical remediation.
+- Confidence: `high | medium | low`.
+
+### 3. Suggested Fixes
+
+Include when not using `--fix`.
+
+### 4. Applied Fixes
+
+Include only when `--fix` is used. List each change with file references.
+
+### 5. Verification
+
+List commands run and outcomes. Explicitly list skipped checks.
+
+### 6. Residual Risks / Open Questions
+
+Capture unresolved assumptions and follow-ups.
+
+### Rules
+
+- Do not fabricate locations.
+- Merge duplicate findings.
+- Keep style-only issues at LOW unless they create operational risk.
 
 ## Evidence Rules
 
