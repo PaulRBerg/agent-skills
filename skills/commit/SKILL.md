@@ -1,9 +1,9 @@
 ---
-argument-hint: '[--all] [--deep] [--push]'
+argument-hint: '[--all] [--deep] [--push] [--close <issue_numbers>]'
 disable-model-invocation: false
 name: commit
 user-invocable: true
-description: This skill should be used when the user asks to "commit changes", "craft a commit message", "stage and commit", "commit only session edits", or run a commit workflow with flags like --all, --deep, or --push. Creates atomic git commits with heuristic analysis, conventional-commit formatting, staging rules, optional deep analysis, and optional push.
+description: This skill should be used when the user asks to "commit changes", "craft a commit message", "stage and commit", "commit only session edits", or run a commit workflow with flags like --all, --deep, --close, or --push. Creates atomic git commits with heuristic analysis, conventional-commit formatting, staging rules, optional deep analysis, and optional push.
 ---
 
 # Git Commit
@@ -35,6 +35,7 @@ Arguments: `$ARGUMENTS`
   - `--all` commit all changes
   - `--deep` deep analysis, breaking changes, concise body
   - `--push` push after commit
+  - `--close <issue_numbers>` append `Closes #N` trailers for listed issues (comma/space-separated)
 - Value arguments:
   - Type keyword (any conventional type) overrides inferred type
   - Quoted text overrides inferred description
@@ -97,6 +98,11 @@ Explicit type keyword in arguments takes precedence over inference.
 - Body: 2-3 hyphenated lines max, focus on WHY
 - Breaking change: `BREAKING CHANGE:` + one-line migration note
 - Check for GitHub issues in the chat transcript; add `Closes #123`
+
+**If `--close`:**
+
+- Append a `Closes #N` line for each issue number provided
+- Multiple issues: one `Closes #N` per line in the body/trailer
 
 ### 5) Commit
 
