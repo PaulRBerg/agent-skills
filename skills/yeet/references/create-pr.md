@@ -42,6 +42,8 @@ Follow the process in `commons.md > Semantic Change Analysis`.
 
 See `commons.md > GitHub Admonitions` for admonition usage in PR descriptions.
 
+**Issue linking:** If an issue number was referenced in the conversation (e.g., "fixes #42", "for issue #100"), append `Closes #NUMBER` to the PR body so the issue auto-closes on merge.
+
 ## Check for Existing PR
 
 ```bash
