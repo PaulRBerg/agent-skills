@@ -71,8 +71,10 @@ gh run view 123456 --web
 # View specific job in a run
 gh run view 123456 --job=123
 
-# View run with exit status
+# View run with exit status (also works with --log and --log-failed)
 gh run view 123456 --exit-status
+gh run view 123456 --log --exit-status
+gh run view 123456 --log-failed --exit-status
 ```
 
 ### Monitor and Control Runs
@@ -86,6 +88,9 @@ gh run watch 123456 --interval=5
 
 # Cancel running workflow
 gh run cancel 123456
+
+# Force cancel (skip confirmation)
+gh run cancel 123456 --force
 
 # Rerun failed jobs only
 gh run rerun 123456 --failed
@@ -118,7 +123,7 @@ gh run download --name=build-artifacts
 
 ## Workflow Dispatch
 
-Trigger workflows with custom inputs.
+Trigger workflows with custom inputs. Since v2.87, `gh workflow run` immediately returns the workflow run URL.
 
 ```bash
 # Trigger workflow with inputs
@@ -127,8 +132,8 @@ gh workflow run deploy.yml -f environment=production -f version=v1.2.3
 # Trigger workflow on specific branch
 gh workflow run ci.yml --ref feature-branch
 
-# Trigger workflow and get the run ID
-RUN_ID=$(gh workflow run ci.yml --json url --jq '.url | split("/") | .[-1]')
+# Trigger workflow - the run URL is printed immediately
+gh workflow run ci.yml
 ```
 
 ## GitHub Actions Cache
@@ -157,16 +162,13 @@ gh cache list --limit 10
 ### Trigger Workflow and Wait
 
 ```bash
-# Trigger workflow and wait for completion
-gh workflow run ci.yml --ref main && \
-  sleep 5 && \
-  gh run watch $(gh run list --workflow=ci.yml --limit 1 --json databaseId -q '.[0].databaseId')
-
-# More robust version with retry
+# Trigger workflow - the run URL is returned immediately (v2.87+)
 gh workflow run ci.yml --ref main
-sleep 3
-RUN_ID=$(gh run list --workflow=ci.yml --limit 1 --json databaseId -q '.[0].databaseId')
-gh run watch $RUN_ID
+
+# Trigger and watch in one go (extract run ID from the returned URL)
+RUN_URL=$(gh workflow run ci.yml --ref main 2>&1 | grep -oE 'https://[^ ]+')
+RUN_ID=$(echo "$RUN_URL" | grep -oE '[0-9]+$')
+gh run watch "$RUN_ID"
 ```
 
 ### Check CI Status Before Merge

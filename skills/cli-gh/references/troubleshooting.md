@@ -61,7 +61,7 @@ gh auth login
 **Solution:**
 
 ```bash
-# Add required scopes
+# Add required scopes (use --clipboard to auto-copy OAuth code)
 gh auth refresh -h github.com -s repo,workflow,admin:org
 
 # Common scopes needed:

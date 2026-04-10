@@ -111,7 +111,7 @@ gh org view <org-name>
 
 ## Projects
 
-Work with GitHub Projects (beta).
+Work with GitHub Projects.
 
 ```bash
 # List projects
@@ -122,6 +122,9 @@ gh project view <project-number>
 
 # Create project
 gh project create --owner <org-name> --title "Project Name"
+
+# List project items with a filter query
+gh project item-list <project-number> --query "status:Done"
 ```
 
 ## Repository Rulesets

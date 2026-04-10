@@ -2,7 +2,7 @@
 disable-model-invocation: false
 name: cli-gh
 user-invocable: false
-description: This skill should be used when the user mentions "gh CLI", "gh command", asks to "view repository info", "trigger workflows", "search GitHub", "manage codespaces", "check PR status", "list issues", or asks about GitHub CLI usage and automation from the command line.
+description: This skill should be used when the user mentions "gh CLI", "gh command", asks to "view repository info", "trigger workflows", "search GitHub", "manage codespaces", "check PR status", "list issues", "browse repo", or asks about GitHub CLI usage and automation from the command line.
 ---
 
 # GitHub CLI (gh)
@@ -20,6 +20,7 @@ Expert guidance for GitHub CLI (gh) operations and workflows. Use this skill for
 - Trigger and monitor GitHub Actions workflows
 - Work with codespaces
 - Automate repository operations and releases
+- Browse repositories, PRs, and files in the browser
 
 ## Safety Rules
 
@@ -52,6 +53,7 @@ This skill focuses exclusively on safe, read-only, or reversible GitHub operatio
 - Viewing and listing (status, logs, information, searches)
 - Updating and editing existing resources
 - Closing PRs/issues (reversible - can be reopened)
+- Reverting pull requests (creates a new revert PR)
 - Canceling workflow runs (stops execution without deleting data)
 - Merging pull requests (after proper review)
 - Read-only git operations (`git status`, `git log`, `git diff`)
@@ -62,8 +64,14 @@ This skill focuses exclusively on safe, read-only, or reversible GitHub operatio
 # Login to GitHub
 gh auth login
 
+# Login and copy OAuth code to clipboard automatically
+gh auth login --clipboard
+
 # Check authentication status
 gh auth status
+
+# Check auth status with JSON output
+gh auth status --json
 
 # Configure git to use gh as credential helper
 gh auth setup-git
@@ -88,6 +96,9 @@ gh pr create --draft
 
 # Create PR from current branch
 gh pr create --fill  # Uses commit messages
+
+# Create PR with Copilot Code Review
+gh pr create --reviewer @copilot
 ```
 
 ### Viewing PRs
@@ -108,6 +119,9 @@ gh pr view 123 --web
 # View PR diff
 gh pr diff 123
 
+# View PR diff excluding specific files
+gh pr diff 123 --exclude "*.lock"
+
 # Check PR status
 gh pr status
 ```
@@ -122,6 +136,9 @@ gh pr checkout 123
 gh pr review 123 --approve
 gh pr review 123 --comment --body "Looks good!"
 gh pr review 123 --request-changes --body "Please fix X"
+
+# Request Copilot Code Review
+gh pr edit 123 --add-reviewer @copilot
 
 # Merge PR
 gh pr merge 123
@@ -140,6 +157,9 @@ gh pr ready 123
 
 # Update PR branch with base branch
 gh pr update-branch 123
+
+# Revert a merged PR (creates a new revert PR)
+gh pr revert 123
 ```
 
 ### PR Checks
@@ -182,6 +202,9 @@ gh issue list --assignee @me
 # List by label
 gh issue list --label bug
 
+# Advanced issue search
+gh issue list --search "is:open label:bug sort:created-desc"
+
 # View issue details
 gh issue view 456
 
@@ -194,6 +217,9 @@ gh issue view 456 --web
 ```bash
 # Close issue
 gh issue close 456
+
+# Close as duplicate, linking to the original issue
+gh issue close 123 --duplicate-of 456
 
 # Reopen issue
 gh issue reopen 456
@@ -223,6 +249,9 @@ gh repo view --web
 
 # Clone repository
 gh repo clone owner/repo
+
+# Clone without adding upstream remote
+gh repo clone owner/repo --no-upstream
 
 # Fork repository
 gh repo fork owner/repo
@@ -345,6 +374,30 @@ gh codespace cp remote:~/path/file.txt ./local-dir/
 gh codespace logs
 ```
 
+## Browse
+
+Open repositories, files, and resources in the browser.
+
+```bash
+# Open current repo in browser
+gh browse
+
+# Open specific file
+gh browse src/main.go
+
+# Open file at specific line
+gh browse src/main.go:42
+
+# Open blame view for a file
+gh browse --blame src/main.go
+
+# Open Actions tab
+gh browse --actions
+
+# Open specific branch
+gh browse --branch feature
+```
+
 ## Releases
 
 ### Creating Releases
@@ -418,25 +471,28 @@ gh config set browser firefox
 
 Common gh operations at a glance:
 
-| Operation        | Command                   | Common Flags                              |
-| ---------------- | ------------------------- | ----------------------------------------- |
-| Create PR        | `gh pr create`            | `--draft`, `--fill`, `--base`, `--title`  |
-| List PRs         | `gh pr list`              | `--author @me`, `--label`, `--state`      |
-| View PR          | `gh pr view <number>`     | `--web`, `--comments`                     |
-| Merge PR         | `gh pr merge <number>`    | `--squash`, `--rebase`, `--delete-branch` |
-| Create issue     | `gh issue create`         | `--title`, `--body`, `--label`            |
-| List issues      | `gh issue list`           | `--assignee @me`, `--label`, `--state`    |
-| View issue       | `gh issue view <number>`  | `--web`, `--comments`                     |
-| Clone repo       | `gh repo clone <repo>`    | `--` (to pass git flags)                  |
-| Fork repo        | `gh repo fork`            | `--clone`, `--remote`                     |
-| View repo        | `gh repo view`            | `--web`                                   |
-| Create release   | `gh release create <tag>` | `--title`, `--notes`, `--draft`           |
-| Run workflow     | `gh workflow run <name>`  | `--ref`, `--field`                        |
-| Watch run        | `gh run watch <id>`       | `--exit-status`                           |
-| Search repos     | `gh search repos <query>` | `--language`, `--stars`                   |
-| Create label     | `gh label create <name>`  | `--color`, `--description`                |
-| Create codespace | `gh codespace create`     | `--repo`, `--branch`                      |
-| SSH to codespace | `gh codespace ssh`        | `--codespace`                             |
+| Operation        | Command                    | Common Flags                              |
+| ---------------- | -------------------------- | ----------------------------------------- |
+| Create PR        | `gh pr create`             | `--draft`, `--fill`, `--reviewer @copilot`|
+| List PRs         | `gh pr list`               | `--author @me`, `--label`, `--search`     |
+| View PR          | `gh pr view <number>`      | `--web`, `--comments`                     |
+| Merge PR         | `gh pr merge <number>`     | `--squash`, `--rebase`, `--delete-branch` |
+| Revert PR        | `gh pr revert <number>`    | `--body`                                  |
+| Create issue     | `gh issue create`          | `--title`, `--body`, `--label`            |
+| List issues      | `gh issue list`            | `--assignee @me`, `--label`, `--search`   |
+| Close issue      | `gh issue close <number>`  | `--duplicate-of`, `--reason`              |
+| View issue       | `gh issue view <number>`   | `--web`, `--comments`                     |
+| Browse repo      | `gh browse`                | `--blame`, `--actions`, `--branch`        |
+| Clone repo       | `gh repo clone <repo>`     | `--no-upstream`                           |
+| Fork repo        | `gh repo fork`             | `--clone`, `--remote`                     |
+| View repo        | `gh repo view`             | `--web`                                   |
+| Create release   | `gh release create <tag>`  | `--title`, `--notes`, `--draft`           |
+| Verify release   | `gh release verify <tag>`  | `--repo`                                  |
+| Run workflow     | `gh workflow run <name>`   | `--ref`, `--field`                        |
+| Watch run        | `gh run watch <id>`        | `--exit-status`                           |
+| Search repos     | `gh search repos <query>`  | `--language`, `--stars`                   |
+| Create label     | `gh label create <name>`   | `--color`, `--description`                |
+| Create codespace | `gh codespace create`      | `--repo`, `--branch`                      |
 
 ## Additional Resources
 
