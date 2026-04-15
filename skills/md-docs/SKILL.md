@@ -1,9 +1,9 @@
 ---
-argument-hint: <update-readme|update-agents|init-agents> [--preserve] [--minimal] [--thorough] [--dry-run]
+argument-hint: <update-readme|update-agents|init-readme|init-agents> [--preserve] [--minimal] [--thorough] [--dry-run]
 disable-model-invocation: false
 name: md-docs
 user-invocable: true
-description: This skill should be used ONLY when the user asks to update README.md, CLAUDE.md, AGENTS.md, or CONTRIBUTING.md. Trigger phrases include "update README", "update context files", "init context", "create CLAUDE.md", "update CLAUDE.md", "update AGENTS.md", "update CONTRIBUTING". Do NOT activate this skill for any other Markdown file updates.
+description: This skill should be used ONLY when the user asks to update README.md, CLAUDE.md, AGENTS.md, or CONTRIBUTING.md. Trigger phrases include "update README", "init README", "create README", "update context files", "init context", "create CLAUDE.md", "update CLAUDE.md", "update AGENTS.md", "update CONTRIBUTING". Do NOT activate this skill for any other Markdown file updates.
 ---
 
 # Markdown Documentation Management
@@ -268,6 +268,78 @@ Display summary:
 
 For the complete update README workflow with section templates, metadata extraction strategies, and formatting examples, refer to `references/update-readme.md`.
 
+## Initialize README
+
+Create project-specific README.md from scratch based on codebase analysis or a user-provided description. This workflow is ideal for new projects or repositories lacking a README. Unlike `update-readme`, this workflow refuses to overwrite an existing README unless explicitly forced, and supports guided mode for focusing content on user intent.
+
+### Workflow Steps
+
+**Parse Arguments**
+
+Support the following arguments:
+
+- `[description?]`: Freeform description to focus content generation (guided mode)
+- `--dry-run`: Preview generated content without writing
+- `--minimal`: Create minimal README (title, description, installation, usage)
+- `--full`: Create comprehensive README with all applicable sections
+- `--force`: Overwrite existing README.md without prompting
+
+Guided mode examples:
+
+- `/md-docs:init-readme TypeScript library for parsing dates with zero deps`
+- `/md-docs:init-readme Foundry lending protocol with audit-ready docs`
+
+**Verify No Existing README**
+
+Check if README.md already exists at the repository root:
+
+```bash
+test -f README.md && echo "exists" || echo "missing"
+```
+
+If exists without `--force`, use `AskUserQuestion` with options:
+
+- **Overwrite**: Replace existing README completely
+- **Abort**: Cancel operation (suggest `/md-docs:update-readme --preserve` instead)
+
+**Analyze Project**
+
+Gather comprehensive information:
+
+- Language and framework (detect from files and package configs)
+- Package metadata (name, version, description, license, scripts)
+- Directory structure and organization
+- Entry points and public APIs
+- Existing assets (LICENSE, CONTRIBUTING.md, CHANGELOG.md, examples/)
+- Git remote for repository URL and badges
+
+**Generate README Content**
+
+Create structured content guided by the mode and optional description:
+
+- **Guided mode (description provided)**: Emphasize sections aligned with keywords and intent (e.g., "security-first" → audit/testing emphasis; "library" → API reference focus)
+- **Automatic inference (no description)**: Derive sections and tone entirely from project analysis
+
+Adapt section order to project type (library, application, smart contract). For `--minimal`, include only title, description, installation, usage. For `--full`, include all applicable sections. Follow the writing style, formatting rules, and section templates documented in `references/update-readme.md`.
+
+**Write README**
+
+Save generated content to `./README.md`. For `--dry-run`, display without writing.
+
+**Generate Report**
+
+Display summary:
+
+```
+✓ Created README.md
+  - Detected TypeScript library
+  - Added installation (pnpm detected)
+  - Generated usage example from src/index.ts
+  - Added MIT license badge
+```
+
+For the complete initialize README workflow with section templates, guided-mode strategies, and formatting examples, refer to `references/init-readme.md`.
+
 ## Update CONTRIBUTING
 
 Update CONTRIBUTING.md based on current codebase tooling and workflows. **This workflow only runs when CONTRIBUTING.md already exists in the repository.** If CONTRIBUTING.md is absent, skip this workflow entirely—do not auto-create contribution guidelines.
@@ -447,6 +519,7 @@ For detailed workflows, examples, and implementation guidance, refer to these re
 - **`references/update-agents.md`** - Complete context file update workflow including verification strategies, diff generation, and discrepancy detection
 - **`references/update-readme.md`** - Complete README update workflow including section templates, metadata extraction, and formatting conventions
 - **`references/update-contributing.md`** - Complete CONTRIBUTING.md update workflow including scope, templates, and validation (only when CONTRIBUTING.md exists)
+- **`references/init-readme.md`** - Complete README initialization workflow including guided-mode strategies, section templates, and project-type detection
 - **`references/init-agents.md`** - Complete context initialization workflow including language-specific templates, detection strategies, and customization options
 
 These references provide implementation details, code examples, and troubleshooting guidance for each workflow type.
