@@ -26,6 +26,7 @@ npx skills add PaulRBerg/agent-skills
 | code-simplify      | Code simplification and refactoring           |
 | coderabbit         | CodeRabbit PR comment analysis and local review triage |
 | commit             | Git commit with conventional commits          |
+| create-skill       | Bootstrap a new agent skill                   |
 | delayed-command    | Wait and execute bash command                 |
 | diagram-monochrome | Monochrome technical schematic diagrams       |
 | effect-ts          | Effect-TS patterns and guidance               |
