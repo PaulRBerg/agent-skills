@@ -91,18 +91,20 @@ Explicit type keyword in arguments takes precedence over inference.
 - Describe what the change does, not which files changed
 - Body: hyphenated lines for distinct changes; skip for trivial changes
 
+**Issue linking** — scan the chat transcript for GitHub issue references (e.g. `#123`, `owner/repo#123`, issue URLs) that the current changes resolve. For each match, append a `Closes #N` trailer. Skip issues merely mentioned in passing; include only ones the commit actually closes.
+
 **If `--deep`:**
 
 - Deep semantic analysis; detect breaking changes
 - Infer scope from code structure even when path isn't clear
 - Body: 2-3 hyphenated lines max, focus on WHY
 - Breaking change: `BREAKING CHANGE:` + one-line migration note
-- Check for GitHub issues in the chat transcript; add `Closes #123`
 
 **If `--close`:**
 
 - Append a `Closes #N` line for each issue number provided
 - Multiple issues: one `Closes #N` per line in the body/trailer
+- Merge with transcript-scanned issues; de-duplicate
 
 ### 5) Commit
 
