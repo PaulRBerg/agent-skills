@@ -56,12 +56,31 @@ cast send "$CONTRACT" "transfer(address,uint256)" "$TO" "$AMOUNT" \
 
 ## Signing & Key Management
 
-Cast supports multiple signing methods. Choose based on the security context.
+Cast supports multiple signing methods. Choose based on the security context, preferring methods that keep key material off the CLI.
 
-**Default private key:** Read `ETH_PRIVATE_KEY` from the environment. If the variable is unset and the task requires signing (e.g., `cast send`, `cast mktx`, `cast wallet sign`), **stop and inform the user** that no private key was found, then ask them to either:
+**Signing hierarchy:**
 
-1. Export `ETH_PRIVATE_KEY` in their shell, or
-2. Provide a private key or keystore account for this session
+1. **`--browser` (preferred)** — delegates signing to the user's browser wallet extension (MetaMask, Rabby, etc.). Private keys never touch the terminal or chat. See [Browser Wallet Signing](references/browser-signing.md) for the full flow, availability check, and fallback rules.
+2. **`--account` (keystore)** — for persistent encrypted keys on disk.
+3. **`--ledger` / `--trezor`** — for hardware wallets.
+4. **`--private-key` (fallback)** — read `ETH_PRIVATE_KEY` from the environment. Only use when `--browser` is unavailable (headless environments, extension error) or the user explicitly opts in. Never proactively ask the user to paste a private key into the chat.
+
+If the task requires signing (e.g. `cast send`, `cast mktx`, `cast wallet sign`) and no signing method can be resolved, **stop and inform the user** before running anything.
+
+### Browser Wallet (preferred)
+
+```bash
+# Resolve the sender address from the connected browser wallet
+OWNER=$(cast wallet address --browser)
+
+# Sign and broadcast via the browser extension
+cast send "$CONTRACT" "transfer(address,uint256)" "$TO" "$AMOUNT" \
+  --rpc-url "$RPC_URL" \
+  --from "$OWNER" \
+  --browser
+```
+
+A browser tab opens on port `9545` for the user to approve the transaction. See [Browser Wallet Signing](references/browser-signing.md) for the availability check, failure modes, and EIP-712 message signing.
 
 ### Private Key (dev/testing only)
 
@@ -281,10 +300,12 @@ When the user specifies a chain by name, resolve the chain ID using these steps:
 | Balance      | `cast balance`         | `--rpc-url`, `--ether`                  |
 | ENS resolve  | `cast resolve-name`    | `--rpc-url`                             |
 | New wallet   | `cast wallet new`      | —                                       |
-| Sign message | `cast wallet sign`     | `--private-key`, `--account`            |
+| Sign message | `cast wallet sign`     | `--private-key`, `--account`, `--browser` |
+| Browser sign | `cast send --browser`  | `--rpc-url`, `--from`                   |
 
 ## Additional Resources
 
 - **`$evm-chains`** — Preferred source for Sablier SDK EVM chain data and RouteMesh support
+- **[Browser Wallet Signing](references/browser-signing.md)** — Full guide for signing via `--browser` with MetaMask/Rabby/etc.
 - **[Chain Reference](references/chains.md)** — Limited fallback list of common chains for RouteMesh RPC URL construction
 - **Foundry Book**: https://book.getfoundry.sh/reference/cast/
