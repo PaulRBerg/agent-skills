@@ -15,6 +15,7 @@ npx skills add PaulRBerg/agent-skills
 
 | Skill              | Description                                   |
 | ------------------ | --------------------------------------------- |
+| autoresearch       | Autonomous experiment loop                    |
 | biome-js           | BiomeJS linting/formatting guidance           |
 | bump-deps          | Node.js dependency updates                    |
 | bump-release       | Release workflow with changelog, tagging      |
@@ -34,7 +35,6 @@ npx skills add PaulRBerg/agent-skills
 | git-squash         | Squash PR branch with semantic commit message |
 | md-docs            | Markdown documentation management             |
 | oracle-codex       | Codex oracle for planning                     |
-| autoresearch       | Autonomous experiment loop                    |
 | process-cleanup    | Detect and reap zombie processes with procs   |
 | tailwind-css       | Tailwind CSS v4 styling guidance              |
 | work               | End-to-end task implementation                |

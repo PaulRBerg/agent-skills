@@ -5,17 +5,17 @@
 # and prints the output to stdout. If CODEX_OUTPUT is unset, uses a temp file.
 #
 # Environment variables:
-#   MODEL         - Codex model (default: gpt-5.3-codex)
-#   EFFORT        - Reasoning effort (default: medium)
+#   MODEL         - Codex model (default: gpt-5.4)
+#   EFFORT        - Reasoning effort (default: xhigh)
 #   SANDBOX       - Sandbox mode (default: read-only)
 #   CODEX_OUTPUT  - Output file path (optional)
 
 set -euo pipefail
 
-MODEL="${MODEL:-gpt-5.3-codex}"
+MODEL="${MODEL:-gpt-5.4}"
 
 # Allowlist validation — reject unknown models
-ALLOWED_MODELS="gpt-5.3-codex"
+ALLOWED_MODELS="gpt-5.4"
 _model_ok=0
 for _m in $ALLOWED_MODELS; do
   if [[ "$MODEL" == "$_m" ]]; then _model_ok=1; break; fi
@@ -25,7 +25,7 @@ if [[ $_model_ok -eq 0 ]]; then
   exit 1
 fi
 
-EFFORT="${EFFORT:-medium}"
+EFFORT="${EFFORT:-xhigh}"
 SANDBOX="${SANDBOX:-read-only}"
 CODEX_BIN="$(command -v codex || true)"
 if [[ -z "$CODEX_BIN" ]]; then

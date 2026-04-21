@@ -2,9 +2,9 @@
 
 ## Model Selection (`-m` / `--model`)
 
-| Model           | Description                          |
-| --------------- | ------------------------------------ |
-| `gpt-5.3-codex` | Latest frontier agentic coding model |
+| Model     | Description                          |
+| --------- | ------------------------------------ |
+| `gpt-5.4` | Latest frontier agentic coding model |
 
 ## Reasoning Effort (`-c model_reasoning_effort=`)
 

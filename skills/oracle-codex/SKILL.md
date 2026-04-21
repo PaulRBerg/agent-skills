@@ -17,7 +17,7 @@ Use OpenAI Codex CLI as a **read-only oracle** — planning, review, and analysi
 Parse `$ARGUMENTS` for:
 
 - **query** — the main question or task (everything not a flag). **Required** — if empty, tell the user to provide a query and stop.
-- `--reasoning <level>` — override reasoning effort (`low`, `medium`, `high`, `xhigh`). Optional; default is auto-selected based on complexity.
+- `--reasoning <level>` — override reasoning effort (`low`, `medium`, `high`, `xhigh`). Optional; default is `xhigh`.
 
 ## Prerequisites
 
@@ -37,9 +37,9 @@ scripts/run-codex-exec.sh
 
 | Setting   | Default         | Override                                         |
 | --------- | --------------- | ------------------------------------------------ |
-| Model     | `gpt-5.3-codex` | Allowlist only (see `references/codex-flags.md`) |
-| Reasoning | Auto            | `--reasoning <level>` or user prose              |
-| Sandbox   | `read-only`     | Not overridable                                  |
+| Model     | `gpt-5.4`   | Allowlist only (see `references/codex-flags.md`) |
+| Reasoning | `xhigh`     | `--reasoning <level>` or user prose              |
+| Sandbox   | `read-only` | Not overridable                                  |
 
 ### Reasoning Effort
 
@@ -60,7 +60,7 @@ See `references/codex-flags.md` for full flag documentation.
 
 1. Parse `$ARGUMENTS` for query and `--reasoning`
 2. Run `scripts/check-codex.sh` — abort on failure
-3. Assess complexity to select reasoning effort (unless overridden)
+3. Use `xhigh` reasoning effort unless `--reasoning` overrides it
 
 ### 2. Construct Prompt
 
@@ -90,7 +90,7 @@ Read the output file and present with attribution:
 [Codex output — summarize if >200 lines]
 
 ---
-Model: gpt-5.3-codex | Reasoning: [effort level]
+Model: gpt-5.4 | Reasoning: [effort level]
 ```
 
 Synthesize key insights and actionable items for the user.
