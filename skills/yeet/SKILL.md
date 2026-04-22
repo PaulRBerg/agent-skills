@@ -1,9 +1,9 @@
 ---
-argument-hint: <create-pr|update-pr|create-issue|create-discussion> [options]
+argument-hint: <create-pr|update-pr|create-issue|comment-issue|create-discussion> [options]
 disable-model-invocation: false
 name: yeet
 user-invocable: true
-description: This skill should be used when the user asks to "create a pull request", "create PR", "open PR", "update a pull request", "update PR", "create an issue", "file an issue", "create a GitHub issue", "create a Claude Code issue", "report a bug in Claude Code", "create a Codex issue", "report a bug in Codex CLI", "create a Sablier issue", "file an issue in sablier-labs", "create a discussion", "start a GitHub discussion", "yeet a PR", "yeet an issue", "yeet a discussion", or mentions GitHub contribution workflows.
+description: This skill should be used when the user asks to "create a pull request", "create PR", "open PR", "update a pull request", "update PR", "create an issue", "file an issue", "create a GitHub issue", "create a Claude Code issue", "report a bug in Claude Code", "create a Codex issue", "report a bug in Codex CLI", "create a Sablier issue", "file an issue in sablier-labs", "create a discussion", "start a GitHub discussion", "comment on an issue", "reply on a GitHub issue", "post an issue comment", "yeet a PR", "yeet an issue", "yeet a discussion", "yeet a comment", or mentions GitHub contribution workflows.
 ---
 
 # GitHub Contribution Workflows
@@ -41,6 +41,7 @@ Each workflow is fully documented in its reference file. Load the appropriate re
 | Codex CLI Issue | "Codex issue", "report bug in Codex" | `references/issue-codex-cli.md` |
 | Sablier Issue | "Sablier issue", "sablier-labs issue" | `references/issue-sablier.md` |
 | Biome Issue | "Biome issue", "biomejs issue" | `references/issue-biome.md` |
+| Comment on Issue | "comment on issue", "reply on issue", "post a comment" | `references/comment-issue.md` |
 | Create Discussion | "create discussion", "start discussion" | `references/create-discussion.md` |
 
 Shared patterns (auth validation, admonitions, HEREDOC syntax, semantic analysis, tone, platform normalization, error handling, file links) are in `references/commons.md`.
