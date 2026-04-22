@@ -37,6 +37,7 @@ npx skills add PaulRBerg/agent-skills
 | oracle-codex       | Codex oracle for planning                     |
 | process-cleanup    | Detect and reap zombie processes with procs   |
 | tailwind-css       | Tailwind CSS v4 styling guidance              |
+| vitest             | Vitest v4 testing guidance                    |
 | work               | End-to-end task implementation                |
 | yeet               | GitHub contribution workflows                 |
 
