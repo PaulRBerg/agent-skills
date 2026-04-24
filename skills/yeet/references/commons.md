@@ -80,6 +80,9 @@ When templates include OS/platform fields:
 - **Linux**: Use `uname -mprs`
 - **Windows**: Use PowerShell platform command output
 
+> [!IMPORTANT]
+> Skip platform/environment info entirely when the repo owner matches `$AUTHENTICATED_USER` or is `sablier-labs`. Omit the field in templates, and drop "Environment" sections in free-form bodies/comments. The user already knows their own machine — the noise only belongs in issues filed against external projects.
+
 ## Informal Tone
 
 Write in an informal, casual style. Be direct and conversational — like explaining to a colleague, not drafting a spec.
