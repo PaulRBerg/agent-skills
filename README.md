@@ -25,7 +25,6 @@ npx skills add PaulRBerg/agent-skills
 | code-polish        | Combined simplification and review            |
 | code-review        | Expert code review                            |
 | code-simplify      | Code simplification and refactoring           |
-| coderabbit         | CodeRabbit PR comment analysis and local review triage |
 | commit             | Git commit with conventional commits          |
 | create-skill       | Bootstrap a new agent skill                   |
 | delayed-command    | Wait and execute bash command                 |

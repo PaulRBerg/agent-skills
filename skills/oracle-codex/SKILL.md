@@ -37,7 +37,7 @@ scripts/run-codex-exec.sh
 
 | Setting   | Default         | Override                                         |
 | --------- | --------------- | ------------------------------------------------ |
-| Model     | `gpt-5.4`   | Allowlist only (see `references/codex-flags.md`) |
+| Model     | `gpt-5.5`   | Allowlist only (see `references/codex-flags.md`) |
 | Reasoning | `xhigh`     | `--reasoning <level>` or user prose              |
 | Sandbox   | `read-only` | Not overridable                                  |
 
@@ -90,7 +90,7 @@ Read the output file and present with attribution:
 [Codex output — summarize if >200 lines]
 
 ---
-Model: gpt-5.4 | Reasoning: [effort level]
+Model: gpt-5.5 | Reasoning: [effort level]
 ```
 
 Synthesize key insights and actionable items for the user.

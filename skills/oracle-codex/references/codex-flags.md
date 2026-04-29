@@ -4,7 +4,7 @@
 
 | Model     | Description                          |
 | --------- | ------------------------------------ |
-| `gpt-5.4` | Latest frontier agentic coding model |
+| `gpt-5.5` | Latest frontier agentic coding model |
 
 ## Reasoning Effort (`-c model_reasoning_effort=`)
 
