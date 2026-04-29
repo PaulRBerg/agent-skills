@@ -1,5 +1,5 @@
 ---
-argument-hint: <skill-name> [--global]
+argument-hint: <skill-name> [--project | --global]
 disable-model-invocation: false
 name: create-skill
 user-invocable: true
