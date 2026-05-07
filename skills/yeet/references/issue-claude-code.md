@@ -23,21 +23,24 @@ gh api repos/anthropics/claude-code/contents/.github/ISSUE_TEMPLATE \
 
 Compare against the known-good SHAs (last verified 2026-05-07):
 
-| File | SHA |
-|---|---|
-| `bug_report.yml` | `fce2b87e5dc2a42e0d3ff477ab86f528ec9dd290` |
-| `config.yml` | `5fe5625f9a612f3a8fba4fcd1ab4a34f266164d6` |
-| `documentation.yml` | `ead68fe39d0063179b5303ae3954ec51f9683690` |
+| File                  | SHA                                        |
+| --------------------- | ------------------------------------------ |
+| `bug_report.yml`      | `fce2b87e5dc2a42e0d3ff477ab86f528ec9dd290` |
+| `config.yml`          | `5fe5625f9a612f3a8fba4fcd1ab4a34f266164d6` |
+| `documentation.yml`   | `ead68fe39d0063179b5303ae3954ec51f9683690` |
 | `feature_request.yml` | `2fa6ca2409e973a1d002620c692cc0d282e58569` |
-| `model_behavior.yml` | `9c89de4b6522f68ddb4421767505506e316cb31c` |
+| `model_behavior.yml`  | `9c89de4b6522f68ddb4421767505506e316cb31c` |
 
 **If any SHA differs** (or a new file appears), the upstream templates have changed. Before creating the issue:
 
 1. Fetch the changed template(s):
+
    ```bash
    gh api repos/anthropics/claude-code/contents/.github/ISSUE_TEMPLATE/{file}.yml --jq '.content' | base64 -d
    ```
+
 2. Diff against the spec in this file (field labels, dropdown options, required fields).
+
 3. Tell the user:
 
    > ⚠️ Claude Code's issue templates have drifted from the spec in this skill (e.g., `bug_report.yml` SHA `<old>` → `<new>`). Please update the `yeet` skill in [`PaulRBerg/agent-skills`](https://github.com/PaulRBerg/agent-skills) — specifically `skills/yeet/references/issue-claude-code.md` — and refresh the SHA table. Continue filing this issue using the closest matching fields, but flag any new required fields you couldn't fill.
@@ -48,12 +51,12 @@ Compare against the known-good SHAs (last verified 2026-05-07):
 
 From the issue description, infer which template fits best:
 
-| Keywords | Template | Title Prefix | Label |
-|---|---|---|---|
-| bug, broken, error, crash, fails, doesn't work, EACCES | `bug_report.yml` | `[BUG] ` | `bug` |
-| feature, request, add, support, wish, would be nice | `feature_request.yml` | `[FEATURE] ` | `enhancement` |
-| docs, documentation, unclear, confusing, readme, broken link, typo | `documentation.yml` | `[DOCS] ` | `documentation` |
-| model, claude did, unexpected, wrong files, reverted, ignored, modified without asking | `model_behavior.yml` | `[MODEL] ` | `model` |
+| Keywords                                                                               | Template              | Title Prefix | Label           |
+| -------------------------------------------------------------------------------------- | --------------------- | ------------ | --------------- |
+| bug, broken, error, crash, fails, doesn't work, EACCES                                 | `bug_report.yml`      | `[BUG] `     | `bug`           |
+| feature, request, add, support, wish, would be nice                                    | `feature_request.yml` | `[FEATURE] ` | `enhancement`   |
+| docs, documentation, unclear, confusing, readme, broken link, typo                     | `documentation.yml`   | `[DOCS] `    | `documentation` |
+| model, claude did, unexpected, wrong files, reverted, ignored, modified without asking | `model_behavior.yml`  | `[MODEL] `   | `model`         |
 
 **If ambiguous**: Use AskUserQuestion with options: Bug Report, Feature Request, Documentation, Model Behavior.
 
@@ -66,7 +69,7 @@ Section headers must match the template field labels exactly — this keeps issu
 
 ### Bug Report Template
 
-```markdown
+````markdown
 ### Preflight Checklist
 
 - [x] I have searched existing issues and this hasn't been reported yet
@@ -122,7 +125,7 @@ Section headers must match the template field labels exactly — this keeps issu
 ### Additional Information
 
 {screenshots, config files, repro repo links, exact OS version (e.g., "macOS Tahoe v26.2") — omit section if none}
-```
+````
 
 ### Feature Request Template
 
@@ -199,7 +202,7 @@ Section headers must match the template field labels exactly — this keeps issu
 
 ### Model Behavior Template
 
-```markdown
+````markdown
 ### Preflight Checklist
 
 - [x] I have searched existing issues for similar behavior reports
@@ -260,7 +263,7 @@ Section headers must match the template field labels exactly — this keeps issu
 ### Additional Context
 
 {patterns noticed, similar behavior, file types that trigger it — omit section if none}
-```
+````
 
 ## Generate Title
 

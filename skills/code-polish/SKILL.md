@@ -35,7 +35,7 @@ Optimize for one scope resolution, one user-facing report, and no redundant simp
 
 - Apply the "Scope Resolution" rules above.
 - Treat the resulting `Resolved scope` block as authoritative for all downstream work.
-- Forward user intent, constraints, and risk preferences, but do not forward raw duplicate scope selectors when the resolved block already captures them.
+- Forward user intent, constraints, and risk preferences, but skip raw scope selectors already captured in the resolved block.
 
 ### 2) Run `code-simplify`
 

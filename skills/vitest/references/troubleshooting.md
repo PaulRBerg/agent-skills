@@ -979,6 +979,51 @@ act -j test
   if: failure()
 ```
 
+## Common Failures from SKILL.md
+
+**State bleeding between tests:**
+
+```typescript
+// Problem: Previous test left state
+test("first test", () => {
+  store.addItem("test");
+});
+
+test("second test", () => {
+  expect(store.items).toHaveLength(0); // Fails! Still has "test"
+});
+
+// Solution: Add cleanup
+afterEach(() => {
+  store.clear();
+});
+```
+
+**Mock not working:**
+
+```typescript
+// Problem: Mock path doesn't match import
+vi.mock("./utils/logger");
+import { logger } from "@/utils/logger"; // Different path!
+
+// Solution: Match exact import path
+vi.mock("@/utils/logger");
+```
+
+**Async timeout:**
+
+```typescript
+// Problem: Default 5s timeout too short
+test("slow operation", async () => {
+  await verySlowOperation(); // Times out
+});
+
+// Solution: Increase timeout
+test("slow operation", async () => {
+  await verySlowOperation();
+}, 10000); // 10 second timeout
+```
+
 ## Next Steps
 
 - For testing patterns - See `TESTING_PATTERNS.md`

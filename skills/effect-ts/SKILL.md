@@ -112,7 +112,7 @@ Read and internalize `./references/critical-rules.md` before writing any Effect 
 
 Quick links to patterns that frequently cause issues:
 
-- **SubscriptionRef version mismatch** — `unsafeMake is not a function` → [Quick Reference](#subscriptionref-reactive-references)
+- **SubscriptionRef version mismatch** — `unsafeMake is not a function` → [runtime.md](./references/runtime.md)
 - **Cancellation vs Failure** — Interrupts aren't errors → [Error Taxonomy](#error-taxonomy)
 - **Option vs null** — Use Option internally, null at boundaries → [option-null.md](./references/option-null.md)
 - **Stream backpressure** — Infinite streams hang → [streams.md](./references/streams.md)
@@ -199,258 +199,23 @@ Effect.onInterrupt(effect, () => Effect.log("Operation cancelled"))
 
 ### Pattern Matching (Match Module)
 
-**Default branching tool for tagged unions and complex conditionals.**
+When you need to use Effect's Match module for pattern matching, see [references/pattern-matching.md](references/pattern-matching.md).
 
-```typescript
-import { Match } from "effect"
+### Services and Layers / Generator Pattern
 
-// Type-safe exhaustive matching on tagged errors
-const handleError = Match.type<AppError>().pipe(
-  Match.tag("UserCancelledError", () => null),          // Expected rejection
-  Match.tag("ValidationError", (e) => e.message),       // Domain error
-  Match.tag("NetworkError", () => "Connection failed"), // Retryable
-  Match.exhaustive  // Compile error if case missing
-)
+For service definition patterns (`Context.Tag`, `Effect.Service`, `Context.Reference`, `Context.ReadonlyTag`) and the generator pattern (`Effect.gen`, `Effect.fn`), see [references/services-layers.md](references/services-layers.md).
 
-// Replace nested catchTag chains
-// BEFORE: effect.pipe(catchTag("A", ...), catchTag("B", ...), catchTag("C", ...))
-// AFTER:
-Effect.catchAll(effect, (error) =>
-  Match.value(error).pipe(
-    Match.tag("A", handleA),
-    Match.tag("B", handleB),
-    Match.tag("C", handleC),
-    Match.exhaustive
-  )
-)
+### Runtime Patterns (Resource Management, Duration, Scheduling, State, SubscriptionRef, Concurrency)
 
-// Match on values (cleaner than if/else)
-const describe = Match.value(status).pipe(
-  Match.when("pending", () => "Loading..."),
-  Match.when("success", () => "Done!"),
-  Match.orElse(() => "Unknown")
-)
-```
-
-### Services and Layers
-
-```typescript
-// Pattern 1: Context.Tag (implementation provided separately via Layer)
-class MyService extends Context.Tag("MyService")<MyService, { ... }>() {}
-const MyServiceLive = Layer.succeed(MyService, { ... })
-Effect.provide(effect, MyServiceLive)
-
-// Pattern 2: Effect.Service (default implementation bundled)
-class UserRepo extends Effect.Service<UserRepo>()("UserRepo", {
-  effect: Effect.gen(function* () {
-    const db = yield* Database
-    return { findAll: db.query("SELECT * FROM users") }
-  }),
-  dependencies: [Database.Default],  // Optional service dependencies
-  accessors: true                     // Auto-generate method accessors
-}) {}
-Effect.provide(effect, UserRepo.Default)  // .Default layer auto-generated
-// Use UserRepo.DefaultWithoutDependencies when deps provided separately
-
-// Effect.Service with parameters (3.16.0+)
-class ConfiguredApi extends Effect.Service<ConfiguredApi>()("ConfiguredApi", {
-  effect: (config: { baseUrl: string }) =>
-    Effect.succeed({ fetch: (path: string) => `${config.baseUrl}/${path}` })
-}) {}
-
-// Pattern 3: Context.Reference (defaultable tags - 3.11.0+)
-class SpecialNumber extends Context.Reference<SpecialNumber>()(
-  "SpecialNumber",
-  { defaultValue: () => 2048 }
-) {}
-// No Layer required if default value suffices
-
-// Pattern 4: Context.ReadonlyTag (covariant - 3.18.0+)
-// Use for functions that consume services without modifying the type
-function effectHandler<I, A, E, R>(service: Context.ReadonlyTag<I, Effect.Effect<A, E, R>>) {
-  // Handler can use service in a covariant position
-}
-```
-
-### Generator Pattern
-
-```typescript
-Effect.gen(function* () {
-  const a = yield* effectA;
-  const b = yield* effectB;
-  if (error) {
-    return yield* Effect.fail(new MyError());
-  }
-  return result;
-});
-
-// Effect.fn - automatic tracing and telemetry (preferred for named functions)
-const fetchUser = Effect.fn("fetchUser")(function* (id: string) {
-  const db = yield* Database
-  return yield* db.query(id)
-})
-// Creates spans, captures call sites, provides better stack traces
-```
-
-### Resource Management
-
-```typescript
-Effect.acquireUseRelease(acquire, use, release)  // Bracket pattern
-Effect.scoped(effect)                            // Scope lifetime to effect
-Effect.addFinalizer(cleanup)                     // Register cleanup action
-```
-
-### Duration
-
-Effect accepts human-readable duration strings anywhere a `DurationInput` is expected:
-
-```typescript
-// String syntax (preferred) - singular or plural forms work
-Duration.toMillis("5 minutes")    // 300000
-Duration.toMillis("1 minute")     // 60000
-Duration.toMillis("30 seconds")   // 30000
-Duration.toMillis("100 millis")   // 100
-
-// Verbose syntax (avoid)
-Duration.toMillis(Duration.minutes(5))  // Same result, more verbose
-
-// Common units: millis, seconds, minutes, hours, days, weeks
-// Also: nanos, micros
-```
-
-### Scheduling
-
-```typescript
-Effect.retry(effect, Schedule.exponential("100 millis"))  // Retry with backoff
-Effect.repeat(effect, Schedule.fixed("1 second"))         // Repeat on schedule
-Schedule.compose(s1, s2)                                  // Combine schedules
-```
-
-### State Management
-
-```typescript
-Ref.make(initialValue)       // Mutable reference
-Ref.get(ref)                 // Read value
-Ref.set(ref, value)          // Write value
-Deferred.make<E, A>()        // One-time async value
-```
-
-### SubscriptionRef (Reactive References)
-
-```typescript
-// WARNING: Never use unsafeMake - it may not exist in your Effect version.
-// If you see "unsafeMake is not a function", use the safe API below.
-
-SubscriptionRef.make(initial)      // Create reactive reference (safe)
-SubscriptionRef.get(ref)           // Read current value
-SubscriptionRef.set(ref, value)    // Update value (notifies subscribers)
-SubscriptionRef.changes(ref)       // Stream of value changes
-
-// React integration (effect-atom pattern)
-const ref = yield* SubscriptionRef.make<User | null>(null)
-// Hook reads: useSubscriptionRef(ref) — returns current value or null
-// Handle null explicitly in components
-```
-
-### Concurrency
-
-```typescript
-Effect.fork(effect)              // Run in background fiber
-Fiber.join(fiber)                // Wait for fiber result
-Effect.race(effect1, effect2)    // First to complete wins
-Effect.all([...effects], { concurrency: "unbounded" })
-```
+For resource lifecycles, durations, scheduling, state management, reactive refs, and concurrency primitives, see [references/runtime.md](references/runtime.md).
 
 ### Configuration & Environment Variables
 
-```typescript
-import { Config, ConfigProvider, Effect, Layer, Redacted } from "effect"
+When you need to read configuration with `Config`, handle secrets via `Redacted`, or wire custom config providers, see [references/config.md](references/config.md).
 
-// Basic config values
-const port = Config.number("PORT")                    // Required number
-const host = Config.string("HOST").pipe(              // Optional with default
-  Config.withDefault("localhost")
-)
+### Quick Utilities (Array Operations, Utility Functions, Deprecations)
 
-// Sensitive values (masked in logs)
-const apiKey = Config.redacted("API_KEY")             // Returns Redacted<string>
-const secret = Redacted.value(yield* apiKey)          // Unwrap when needed
-
-// Nested configuration with prefix
-const dbConfig = Config.all({
-  host: Config.string("HOST"),
-  port: Config.number("PORT"),
-  name: Config.string("NAME"),
-}).pipe(Config.nested("DATABASE"))                    // DATABASE_HOST, DATABASE_PORT, etc.
-
-// Using config in effects
-const program = Effect.gen(function* () {
-  const p = yield* Config.number("PORT")
-  const key = yield* Config.redacted("API_KEY")
-  return { port: p, apiKey: Redacted.value(key) }
-})
-
-// Custom config provider (e.g., from object instead of env)
-const customProvider = ConfigProvider.fromMap(
-  new Map([["PORT", "3000"], ["API_KEY", "secret"]])
-)
-const withCustomConfig = Effect.provide(
-  program,
-  Layer.setConfigProvider(customProvider)
-)
-
-// Config validation and transformation
-const validPort = Config.number("PORT").pipe(
-  Config.validate({
-    message: "Port must be between 1 and 65535",
-    validation: (n) => n >= 1 && n <= 65535,
-  })
-)
-```
-
-### Array Operations
-
-```typescript
-import { Array as Arr, Order } from "effect"
-
-// Sorting with built-in orderings (accepts any Iterable)
-Arr.sort([3, 1, 2], Order.number)              // [1, 2, 3]
-Arr.sort(["b", "a", "c"], Order.string)        // ["a", "b", "c"]
-Arr.sort(new Set([3n, 1n, 2n]), Order.bigint)  // [1n, 2n, 3n]
-
-// Sort by derived value
-Arr.sortWith(users, (u) => u.age, Order.number)
-
-// Sort by multiple criteria
-Arr.sortBy(
-  users,
-  Order.mapInput(Order.number, (u: User) => u.age),
-  Order.mapInput(Order.string, (u: User) => u.name)
-)
-
-// Built-in orderings: Order.string, Order.number, Order.bigint, Order.boolean, Order.Date
-// Reverse ordering: Order.reverse(Order.number)
-```
-
-### Utility Functions
-
-```typescript
-import { constVoid as noop } from "effect/Function"
-
-// constVoid returns undefined, useful as a no-operation callback
-noop()  // undefined
-
-// Common use cases:
-Effect.tap(effect, noop)              // Ignore value, just run effect
-Promise.catch(noop)                   // Swallow errors
-eventEmitter.on("event", noop)        // Register empty handler
-```
-
-### Deprecations
-
-- **`BigDecimal.fromNumber`** — Use `BigDecimal.unsafeFromNumber` instead (3.11.0+)
-- **`Schema.annotations()`** — Now removes previously set identifier annotations; identifiers are tied to the schema's
-  `ast` reference only (3.17.10)
+For Effect's `Array`/`Order` sorting helpers, small utility functions like `constVoid`, and the running list of deprecations, see [references/quick-utils.md](references/quick-utils.md).
 
 ## Additional Resources
 
@@ -464,9 +229,14 @@ eventEmitter.on("event", noop)        // Register empty handler
 
 ### Reference Files
 
+- **`./references/config.md`** — `Config`, `Redacted`, and custom config providers
 - **`./references/critical-rules.md`** — Forbidden patterns and mandatory conventions
 - **`./references/effect-atom.md`** — Effect-Atom reactive state management for React
 - **`./references/next-js.md`** — Effect + Next.js 15+ App Router integration patterns
 - **`./references/option-null.md`** — Option vs null boundary patterns
+- **`./references/pattern-matching.md`** — `Match` module for tagged unions and conditionals
+- **`./references/quick-utils.md`** — `Array`/`Order`, utility helpers, deprecations
+- **`./references/runtime.md`** — Resource management, Duration, Scheduling, State, SubscriptionRef, Concurrency
+- **`./references/services-layers.md`** — Services, Layers, generator (`Effect.gen` / `Effect.fn`)
 - **`./references/streams.md`** — Stream patterns and backpressure gotchas
 - **`./references/testing.md`** — Vitest deterministic testing patterns

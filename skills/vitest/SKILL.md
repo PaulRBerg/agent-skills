@@ -1,6 +1,6 @@
 ---
 name: vitest
-description: This skill should be used when the user asks to "write tests", "add tests", "test coverage", "run tests", "debug failing tests", "mock functions", or mentions Vitest, unit tests, component tests, test-driven development, or testing utilities. Provides comprehensive Vitest v4 guidance for TypeScript React/Next.js projects.
+description: This skill should be used when the user asks to write, run, or debug tests with Vitest in TypeScript React/Next.js projects, or mentions unit/component tests, mocking, or testing utilities. Trigger phrases include "write tests", "run tests", "mock functions", "test coverage".
 ---
 
 # Your Role
@@ -192,61 +192,9 @@ test("async function rejects with error", async () => {
 });
 ```
 
-## Mocking Functions
+## Mocking
 
-```typescript
-import { vi } from "vitest";
-
-// Mock a function
-const mockCallback = vi.fn((x: number) => x * 2);
-mockCallback(5);
-expect(mockCallback).toHaveBeenCalledWith(5);
-expect(mockCallback).toHaveReturnedWith(10);
-
-// Spy on object method
-const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-console.log("test");
-expect(spy).toHaveBeenCalledWith("test");
-spy.mockRestore();
-```
-
-## Mocking Modules
-
-```typescript
-// At top level, before imports
-vi.mock("./api-client", () => ({
-  fetchUser: vi.fn(() => Promise.resolve({ id: 1, name: "Test" }))
-}));
-
-import { fetchUser } from "./api-client";
-
-test("uses mocked API", async () => {
-  const user = await fetchUser();
-  expect(user.name).toBe("Test");
-});
-```
-
-## Timer Mocking
-
-```typescript
-import { vi } from "vitest";
-
-test("debounced function", () => {
-  vi.useFakeTimers();
-
-  const callback = vi.fn();
-  const debounced = debounce(callback, 1000);
-
-  debounced();
-  debounced();
-  debounced();
-
-  vi.advanceTimersByTime(1000);
-  expect(callback).toHaveBeenCalledTimes(1);
-
-  vi.useRealTimers();
-});
-```
+For function mocks (vi.fn, spyOn), module mocks (vi.mock, vi.doMock), and timer mocks (vi.useFakeTimers), see [references/mocking.md](references/mocking.md).
 
 # Debugging Failed Tests
 
@@ -260,48 +208,7 @@ Focus on these signals:
 
 ## Common Failures
 
-**State bleeding between tests:**
-
-```typescript
-// Problem: Previous test left state
-test("first test", () => {
-  store.addItem("test");
-});
-
-test("second test", () => {
-  expect(store.items).toHaveLength(0); // Fails! Still has "test"
-});
-
-// Solution: Add cleanup
-afterEach(() => {
-  store.clear();
-});
-```
-
-**Mock not working:**
-
-```typescript
-// Problem: Mock path doesn't match import
-vi.mock("./utils/logger");
-import { logger } from "@/utils/logger"; // Different path!
-
-// Solution: Match exact import path
-vi.mock("@/utils/logger");
-```
-
-**Async timeout:**
-
-```typescript
-// Problem: Default 5s timeout too short
-test("slow operation", async () => {
-  await verySlowOperation(); // Times out
-});
-
-// Solution: Increase timeout
-test("slow operation", async () => {
-  await verySlowOperation();
-}, 10000); // 10 second timeout
-```
+For known failure modes and how to recover (timeouts, async assertions, mock not called, snapshot drift, etc.), see [references/troubleshooting.md](references/troubleshooting.md).
 
 ## Debugging Tools
 
@@ -384,7 +291,7 @@ Example config: `vitest.config.ts`
 # Next Steps
 
 1. **For component testing** - See `./references/testing-patterns.md` (React Testing Library setup)
-3. **For monorepo-specific strategies** - See `./references/monorepo-testing.md`
-4. **For debugging help** - See `./references/troubleshooting.md`
+2. **For monorepo-specific strategies** - See `./references/monorepo-testing.md`
+3. **For debugging help** - See `./references/troubleshooting.md`
 
 Start with simple unit tests, add component tests as needed.

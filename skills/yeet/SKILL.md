@@ -4,7 +4,7 @@ disable-model-invocation: false
 effort: high
 name: yeet
 user-invocable: true
-description: This skill should be used when the user asks to "create a pull request", "create PR", "open PR", "update a pull request", "update PR", "create an issue", "file an issue", "create a GitHub issue", "create a Claude Code issue", "report a bug in Claude Code", "create a Codex issue", "report a bug in Codex CLI", "create a Sablier issue", "file an issue in sablier-labs", "create a discussion", "start a GitHub discussion", "comment on an issue", "reply on a GitHub issue", "post an issue comment", "yeet a PR", "yeet an issue", "yeet a discussion", "yeet a comment", or mentions GitHub contribution workflows.
+description: This skill should be used when the user asks to create or update a GitHub PR, file an issue, post a comment, or start a discussion. Trigger phrases include "create PR", "open PR", "file an issue", "yeet a PR/issue/discussion", "comment on an issue".
 ---
 
 # GitHub Contribution Workflows
@@ -33,16 +33,16 @@ For detailed GitHub CLI command syntax, flags, and patterns, activate the `cli-g
 
 Each workflow is fully documented in its reference file. Load the appropriate reference based on user intent.
 
-| Workflow | Trigger | Reference |
-|---|---|---|
-| Create PR | "create PR", "open PR", "yeet a PR" | `references/create-pr.md` |
-| Update PR | "update PR", "edit PR" | `references/update-pr.md` |
-| Create Issue | "create issue", "file issue" (generic repo) | `references/create-issue.md` |
-| Claude Code Issue | "Claude Code issue", "report bug in CC" | `references/issue-claude-code.md` |
-| Codex CLI Issue | "Codex issue", "report bug in Codex" | `references/issue-codex-cli.md` |
-| Sablier Issue | "Sablier issue", "sablier-labs issue" | `references/issue-sablier.md` |
-| Biome Issue | "Biome issue", "biomejs issue" | `references/issue-biome.md` |
-| Comment on Issue | "comment on issue", "reply on issue", "post a comment" | `references/comment-issue.md` |
-| Create Discussion | "create discussion", "start discussion" | `references/create-discussion.md` |
+| Workflow          | Trigger                                                | Reference                         |
+| ----------------- | ------------------------------------------------------ | --------------------------------- |
+| Create PR         | "create PR", "open PR", "yeet a PR"                    | `references/create-pr.md`         |
+| Update PR         | "update PR", "edit PR"                                 | `references/update-pr.md`         |
+| Create Issue      | "create issue", "file issue" (generic repo)            | `references/create-issue.md`      |
+| Claude Code Issue | "Claude Code issue", "report bug in CC"                | `references/issue-claude-code.md` |
+| Codex CLI Issue   | "Codex issue", "report bug in Codex"                   | `references/issue-codex-cli.md`   |
+| Sablier Issue     | "Sablier issue", "sablier-labs issue"                  | `references/issue-sablier.md`     |
+| Biome Issue       | "Biome issue", "biomejs issue"                         | `references/issue-biome.md`       |
+| Comment on Issue  | "comment on issue", "reply on issue", "post a comment" | `references/comment-issue.md`     |
+| Create Discussion | "create discussion", "start discussion"                | `references/create-discussion.md` |
 
 Shared patterns (auth validation, admonitions, HEREDOC syntax, semantic analysis, tone, platform normalization, error handling, file links) are in `references/commons.md`.

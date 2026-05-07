@@ -4,7 +4,7 @@ disable-model-invocation: false
 effort: medium
 name: commit
 user-invocable: true
-description: This skill should be used when the user asks to "commit changes", "craft a commit message", "stage and commit", "commit only session edits", or run a commit workflow with flags like --all, --deep, --close, or --push. Creates atomic git commits with heuristic analysis, conventional-commit formatting, staging rules, optional deep analysis, and optional push.
+description: This skill should be used when the user asks to commit changes, craft a commit message, or run a commit workflow. Creates atomic git commits with conventional-commit formatting and optional deep analysis or push. Flags: --all, --deep, --close, --push.
 ---
 
 # Git Commit
@@ -63,21 +63,21 @@ Read the staged diff and produce the commit message in a single pass.
 
 **Type inference** — determine from behavior:
 
-| Behavior | Type |
-|---|---|
-| New functionality | `feat` |
-| Bug fix / error handling | `fix` |
-| Code reorganization, no behavior change | `refactor` |
-| Documentation | `docs` |
-| Tests | `test` |
-| Build system (webpack, vite, esbuild) | `build` |
-| CI/CD pipelines | `ci` |
-| Dependencies | `chore(deps)` |
-| Formatting / whitespace only | `style` |
-| Performance | `perf` |
-| Reverting previous commit | `revert` |
-| AI config (CLAUDE.md, .claude/, .gemini/, .codex/) | `ai` |
-| Other maintenance | `chore` |
+| Behavior                                           | Type          |
+| -------------------------------------------------- | ------------- |
+| New functionality                                  | `feat`        |
+| Bug fix / error handling                           | `fix`         |
+| Code reorganization, no behavior change            | `refactor`    |
+| Documentation                                      | `docs`        |
+| Tests                                              | `test`        |
+| Build system (webpack, vite, esbuild)              | `build`       |
+| CI/CD pipelines                                    | `ci`          |
+| Dependencies                                       | `chore(deps)` |
+| Formatting / whitespace only                       | `style`       |
+| Performance                                        | `perf`        |
+| Reverting previous commit                          | `revert`      |
+| AI config (CLAUDE.md, .claude/, .gemini/, .codex/) | `ai`          |
+| Other maintenance                                  | `chore`       |
 
 Explicit type keyword in arguments takes precedence over inference.
 
@@ -87,7 +87,7 @@ Explicit type keyword in arguments takes precedence over inference.
 
 **Message format:**
 
-- Subject line (<= 50 chars): `type(scope): description` or `type: description`
+- Subject line (\<= 50 chars): `type(scope): description` or `type: description`
 - Imperative mood ("add" not "added"), lowercase, no period
 - Describe what the change does, not which files changed
 - Body: hyphenated lines for distinct changes; skip for trivial changes

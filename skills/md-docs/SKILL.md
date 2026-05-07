@@ -3,16 +3,57 @@ argument-hint: <update-readme|update-agents|init-readme|init-agents> [--preserve
 disable-model-invocation: false
 name: md-docs
 user-invocable: true
-description: This skill should be used ONLY when the user asks to update README.md, CLAUDE.md, AGENTS.md, or CONTRIBUTING.md. Trigger phrases include "update README", "init README", "create README", "update context files", "init context", "create CLAUDE.md", "update CLAUDE.md", "update AGENTS.md", "update CONTRIBUTING". Do NOT activate this skill for any other Markdown file updates.
+description: This skill should be used ONLY when the user asks to update or initialize README.md, CLAUDE.md, or AGENTS.md. Trigger phrases include "update README", "init README", "update context files", "update CLAUDE.md/AGENTS.md". Do NOT activate for any other Markdown file updates.
 ---
 
 # Markdown Documentation Management
 
 ## Overview
 
-Manage project documentation for Claude Code workflows including context files, READMEs, and agent instructions. This skill provides structured automation for maintaining accurate, up-to-date documentation that aligns with actual codebase structure and functionality. Use this skill when initializing new projects, updating existing documentation, or ensuring context files accurately reflect current code.
+Manage project documentation for Claude Code workflows including README.md and agent context files (AGENTS.md / CLAUDE.md). This skill enforces a strict audience split: **README.md is for humans**, **AGENTS.md is for agents and developers running commands**. Use this skill when initializing new projects, updating existing documentation, or ensuring context files accurately reflect current code.
 
-The skill emphasizes verification and validation over blind generation—analyze the actual codebase structure, file contents, and patterns before creating or updating documentation. All generated content should be terse, imperative, and expert-to-expert rather than verbose or tutorial-style.
+The skill emphasizes verification and validation over blind generation — analyze the actual codebase structure, file contents, and patterns before creating or updating documentation. All generated content should be terse, imperative, and expert-to-expert rather than verbose or tutorial-style.
+
+## Audience Split
+
+This is the central rule for everything this skill produces.
+
+| File                                  | Audience                                     | Contains                                                                                                                                                                    | Excludes                                                                                                             |
+| ------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `README.md`                           | Humans browsing the repo (GitHub, npm, etc.) | Description, badges, links to docs/site/demo, references, papers, related work, acknowledgments, license, contributing pointer                                              | Any CLI commands, `just` recipes, package scripts, build/test/lint workflows, project structure trees, API reference |
+| `AGENTS.md` (and `CLAUDE.md` symlink) | AI agents and developers working in the repo | Stack, commands (install, dev, build, test, lint), `just` recipes, `package.json` scripts, `Makefile` targets, code style, architecture, conventions, contribution workflow | Marketing copy, badges, external links unrelated to development                                                      |
+
+When in doubt, ask: *would a human reading this on GitHub care, or only a developer/agent running commands?* If the latter, it goes in AGENTS.md.
+
+## Workflow Selection
+
+Pick the workflow that matches the user's intent:
+
+| Trigger                                                               | Workflow             | Reference                     |
+| --------------------------------------------------------------------- | -------------------- | ----------------------------- |
+| "update README" / "refresh README" (file already exists)              | Update README        | `references/update-readme.md` |
+| "init README" / "create README" / "new README" (no file or `--force`) | Initialize README    | `references/init-readme.md`   |
+| "update CLAUDE.md" / "update AGENTS.md" / "update context files"      | Update Context Files | `references/update-agents.md` |
+| "init AGENTS.md" / "create CLAUDE.md" / "init context"                | Initialize Context   | `references/init-agents.md`   |
+
+Selection rules:
+
+- If the target file already exists and the user says "update" / "refresh" / "fix", route to an `update-*` workflow.
+- If the target file is missing or the user says "create" / "init" / "new", route to an `init-*` workflow.
+- For ambiguous requests, list available files first (see Prerequisites) and confirm with the user.
+- If the user invokes the skill with no arguments, default to listing the files present and proposing a workflow rather than guessing.
+- Multiple workflows in one request (e.g. "update README and AGENTS.md") are fine — run them sequentially in the order the user listed them, reporting each result independently.
+
+## CONTRIBUTING.md Policy
+
+This skill does **not** maintain `CONTRIBUTING.md`. If the workflow detects a `CONTRIBUTING.md` at the repo root:
+
+1. Stop before writing anything else for that workflow.
+2. Recommend the user merge its contents into `AGENTS.md` (since AGENTS.md now owns the development workflow, branch conventions, review process, and tooling references).
+3. Suggest deleting `CONTRIBUTING.md` after the merge so the agent context file is the single source of truth.
+4. Do not auto-merge or auto-delete; the user performs the merge.
+
+Report the recommendation in the standard summary format and continue with whichever README/AGENTS workflow the user requested, ignoring the `CONTRIBUTING.md` file.
 
 ## Prerequisites
 
@@ -27,499 +68,132 @@ Ensure the output confirms you are in a git repository. If not initialized, docu
 For update workflows, verify target files exist:
 
 ```bash
-ls -la CLAUDE.md AGENTS.md DOCS.md README.md CONTRIBUTING.md
+ls -la CLAUDE.md AGENTS.md README.md CONTRIBUTING.md
 ```
 
-Check which files are present before attempting updates. Missing files will show errors, which helps identify what needs initialization. Note that DOCS.md is optional and only relevant for projects with APIs or public interfaces. CONTRIBUTING.md is optional and only relevant if the repo already defines contribution guidance.
+Check which files are present before attempting updates. Missing files will show errors, which helps identify what needs initialization. If `CONTRIBUTING.md` shows up, apply the policy above before continuing.
+
+For monorepos, also confirm the working directory:
+
+```bash
+git rev-parse --show-toplevel
+```
+
+All workflows operate on files at the repo root — never on nested README/AGENTS files inside subpackages. To document a specific package, the user must `cd` into that package's directory first.
+
+## Common Arguments
+
+These flags are interpreted consistently across workflows. Each reference describes their per-workflow effects in detail; see `references/common-patterns.md` for shared parsing conventions.
+
+- `--dry-run`: Preview the changes that would be applied without writing files. Always supported.
+- `--preserve`: Keep existing user-authored content; only fix verifiable inaccuracies. Used by `update-*` workflows.
+- `--minimal`: Generate or verify the smallest useful output (top-level structure only).
+- `--thorough` (alias `--full`): Perform deep analysis or generate comprehensive content. Slowest mode.
+- `--force`: Override safety checks (e.g. overwrite existing target without prompting). Used by `init-*` workflows.
+
+If the user passes other flags, fall back to default mode and surface a one-line note about the unrecognized flag in the final report.
+
+## Writing Style
+
+All generated documentation should follow these conventions, regardless of workflow:
+
+- **Terse**: Omit needless words. Lead with the answer or the link.
+- **Imperative** (AGENTS.md): Use command form ("Build the project") not descriptive ("The project is built").
+- **Plain prose** (README.md): Short, direct descriptions; avoid imperative lecturing — the audience is browsing, not executing.
+- **Expert-to-expert**: Skip basic explanations; assume reader competence.
+- **Scannable**: Use headings, lists, and code blocks. A reader should find what they need in under 30 seconds.
+- **Accurate**: Verify every command, link, and path against the actual codebase before writing.
+
+Avoid tutorial-style prose, redundant context, and filler such as "In order to...". When in doubt, write less. See `references/common-patterns.md` for examples of good vs. bad output.
+
+## Safety Defaults
+
+Behaviors that apply across every workflow:
+
+- Always create `*.backup` files before overwriting existing targets (skipped only for `--dry-run`). Never auto-delete backups; let the user clean them up.
+- Never auto-commit. Workflows touch documentation files only; the user reviews and runs `git add` / `git commit` manually.
+- For `init-*` workflows: refuse to overwrite an existing target unless `--force` is set or the user confirms via `AskUserQuestion`.
+- Operate only at the repository root (`git rev-parse --show-toplevel`). For monorepo subpackages, the user must `cd` into that package's directory before invoking the skill.
+- If `CONTRIBUTING.md` exists, do not edit it; surface the merge-into-AGENTS recommendation and continue.
 
 ## Update Context Files
 
-Verify and fix AGENTS.md, and optionally DOCS.md and CONTRIBUTING.md against the actual codebase. `CLAUDE.md` is a symlink to `AGENTS.md` and does not need separate processing. This workflow reads existing context files, analyzes the codebase structure, identifies discrepancies, and updates documentation to match reality. DOCS.md and CONTRIBUTING.md are only processed if they exist in the repository.
+When to use: user asks to update CLAUDE.md or AGENTS.md so they match the actual codebase. Trigger phrases include "update CLAUDE.md", "update AGENTS.md", "update context files", "fix context", "refresh context".
 
-### Workflow Steps
+`CLAUDE.md` is a symlink to `AGENTS.md` and is not processed separately.
 
-**Parse Arguments**
+AGENTS.md owns: stack, all CLI commands (install, dev, build, test, lint, deploy), `just` recipes, `package.json` scripts, `Makefile` targets, code style, architecture, conventions, and contribution workflow.
 
-Support the following arguments:
+Inputs: existing `AGENTS.md` (required), package manifests, lock files, scripts, `justfile`, `Makefile`. Outputs: rewritten `AGENTS.md`, refreshed `CLAUDE.md` symlink, `*.backup` for the rewritten target.
 
-- `--dry-run`: Show what would change without writing files
-- `--preserve`: Keep existing content structure, only fix inaccuracies
-- `--thorough`: Perform deep analysis of all files (slower but comprehensive)
-- `--minimal`: Quick verification focusing on high-level structure only
+Recognised flags: `--dry-run`, `--preserve`, `--thorough`, `--minimal`.
 
-**Verify Git Repository**
-
-Confirm working directory is a git repository. If not, warn the user but proceed with limitations (cannot analyze git history or branches).
-
-**Read Existing Context Files**
-
-Read current AGENTS.md, DOCS.md, and CONTRIBUTING.md (if present) contents. `CLAUDE.md` is a symlink to `AGENTS.md` and does not need a separate read:
-
-```bash
-cat AGENTS.md
-cat DOCS.md         # if exists
-cat CONTRIBUTING.md # if exists
-```
-
-Parse the structure and extract documented information including:
-
-- Project description and purpose
-- File structure and organization
-- Build and test commands
-- Custom tooling or scripts
-- Agent configurations and triggers
-- API endpoints and methods (from DOCS.md)
-- Function signatures and parameters (from DOCS.md)
-- Type definitions and interfaces (from DOCS.md)
-- Contribution workflow and guidelines (from CONTRIBUTING.md)
-- Code review process and standards (from CONTRIBUTING.md)
-
-**Analyze Codebase**
-
-Scan the project to gather accurate information:
-
-- Directory structure (`ls -la`, `tree` if available)
-- Package configuration (`package.json`, `pyproject.toml`, `Cargo.toml`, etc.)
-- Build scripts and commands
-- Test frameworks and configurations
-- README badges and metadata
-
-For `--thorough` mode, also analyze:
-
-- File content patterns (imports, exports, interfaces)
-- Code organization conventions
-- Dependency relationships
-
-**Identify Discrepancies**
-
-Compare documented information against actual codebase:
-
-- Outdated file paths or structure
-- Incorrect build commands
-- Missing or removed features
-- Deprecated dependencies
-- Stale agent configurations
-- Outdated API endpoints or routes (DOCS.md)
-- Changed function signatures (DOCS.md)
-- Modified type definitions (DOCS.md)
-- Outdated contribution guidelines (CONTRIBUTING.md)
-- Stale branch naming or PR process (CONTRIBUTING.md)
-- Missing `CLAUDE.md` symlink (should point to `AGENTS.md`)
-
-**Create Backups**
-
-Before overwriting, create backup files. `CLAUDE.md` is a symlink to `AGENTS.md` and does not need a separate backup:
-
-```bash
-cp AGENTS.md AGENTS.md.backup
-test -f DOCS.md && cp DOCS.md DOCS.md.backup
-test -f CONTRIBUTING.md && cp CONTRIBUTING.md CONTRIBUTING.md.backup
-```
-
-**Update Context Files**
-
-Write corrected versions maintaining the existing structure when `--preserve` is used, or reorganizing for clarity when not. Ensure the `CLAUDE.md` symlink exists (`ln -sf AGENTS.md CLAUDE.md`). For `--dry-run`, display the diff without writing:
-
-```bash
-diff -u AGENTS.md.backup AGENTS.md
-```
-
-**Generate Report**
-
-Display a summary of changes.
-
-When DOCS.md exists:
-
-```
-✓ Updated AGENTS.md
-  - Fixed outdated build command
-  - Added new /api directory to structure
-  - Updated test-runner trigger pattern
-
-✓ Updated DOCS.md
-  - Fixed outdated endpoint path /api/v1/users
-  - Updated function signature for createUser()
-
-✓ Updated CONTRIBUTING.md
-  - Updated branch naming convention
-  - Fixed outdated PR template reference
-
-✓ CLAUDE.md symlink verified
-```
-
-When optional files are absent:
-
-```
-✓ Updated AGENTS.md
-  - Fixed outdated build command
-
-✓ CLAUDE.md symlink verified
-
-⊘ DOCS.md not found (skipped)
-⊘ CONTRIBUTING.md not found (skipped)
-```
-
-For the complete update context files workflow with verification strategies, diff examples, and edge cases, refer to `references/update-agents.md`.
+See [references/update-agents.md](references/update-agents.md).
 
 ## Update README
 
-Generate or update README.md based on project structure, package metadata, and codebase analysis. This workflow creates comprehensive, accurate READMEs that reflect the actual state of the project.
+When to use: user asks to update or refresh an existing README.md. Trigger phrases include "update README", "refresh README", "fix README", "regenerate README".
 
-### Workflow Steps
+If `README.md` does not exist, route to **Initialize README** instead (or, with `--force`, allow update-readme to create it).
 
-**Parse Arguments**
+README owns: description, badges, links (homepage, docs site, demo, package registry), references, related work, acknowledgments, license, contributing pointer. It does **not** contain CLI commands, `just` recipes, scripts, or project structure trees — those live in AGENTS.md, and the README links to AGENTS.md for them.
 
-Support the following arguments:
+Inputs: existing `README.md` at the repo root (`git rev-parse --show-toplevel`); package manifests for name/version/description/license/homepage URL; git remote for repository URL. Outputs: rewritten `README.md`, optional `README.md.backup`.
 
-- `--dry-run`: Preview README content without writing
-- `--preserve`: Keep existing sections, only update outdated information
-- `--minimal`: Generate minimal README (title, description, installation, usage)
-- `--full`: Generate comprehensive README with all optional sections
+Recognised flags: `--dry-run`, `--preserve`, `--minimal`, `--thorough` (alias `--full`).
 
-**Analyze Project Structure**
-
-Gather information from multiple sources:
-
-```bash
-# Package metadata
-cat package.json
-cat pyproject.toml
-cat Cargo.toml
-
-# Git information
-git remote get-url origin
-git describe --tags
-
-# Directory structure
-ls -la
-```
-
-Extract:
-
-- Project name and description
-- Version number
-- Repository URL
-- License
-- Dependencies
-- Scripts/commands
-
-**Read Existing README**
-
-If README.md exists and `--preserve` is used:
-
-```bash
-cat README.md
-```
-
-Parse existing sections to preserve custom content while updating technical details.
-
-**Read CONTRIBUTING.md (Optional)**
-
-If CONTRIBUTING.md exists, read it and treat it as the source of truth for contribution guidance. Do not duplicate detailed contribution steps in README; link to CONTRIBUTING.md instead.
-
-```bash
-test -f CONTRIBUTING.md && cat CONTRIBUTING.md
-```
-
-**Create Backup**
-
-Before overwriting existing README:
-
-```bash
-cp README.md README.md.backup
-```
-
-**Generate README Content**
-
-Create structured content with appropriate sections:
-
-- **Title and badges** (version, license, build status)
-- **Description** (concise project summary)
-- **Installation** (package manager commands)
-- **Usage** (basic examples)
-- **Development** (build, test, lint commands)
-- **Contributing** (if applicable; link to CONTRIBUTING.md when it exists)
-- **License** (based on package metadata)
-
-For `--minimal` mode, include only title, description, installation, and usage.
-
-For `--full` mode, also include:
-
-- API documentation
-- Examples directory listing
-- Deployment instructions
-- Troubleshooting section
-- Credits and acknowledgments
-
-**Write README**
-
-Save the generated content. For `--dry-run`, display without writing.
-
-**Generate Report**
-
-Display summary:
-
-```
-✓ Updated README.md
-  - Added installation section
-  - Updated build commands to match package.json
-  - Added badges for license and version
-```
-
-For the complete update README workflow with section templates, metadata extraction strategies, and formatting examples, refer to `references/update-readme.md`.
+See [references/update-readme.md](references/update-readme.md).
 
 ## Initialize README
 
-Create project-specific README.md from scratch based on codebase analysis or a user-provided description. This workflow is ideal for new projects or repositories lacking a README. Unlike `update-readme`, this workflow refuses to overwrite an existing README unless explicitly forced, and supports guided mode for focusing content on user intent.
+When to use: user asks to create a new README.md from scratch in a repository that lacks one. Trigger phrases include "init README", "create README", "new README", "generate a README".
 
-### Workflow Steps
+Refuses to overwrite an existing `README.md` without `--force` or explicit confirmation via `AskUserQuestion`. Supports two operating modes:
 
-**Parse Arguments**
+- **Automatic inference**: derive content entirely from project analysis.
+- **Guided**: focus content around a user-provided description (e.g., "TypeScript library for parsing dates with zero deps").
 
-Support the following arguments:
+Same audience rules as Update README: humans only, no CLI.
 
-- `[description?]`: Freeform description to focus content generation (guided mode)
-- `--dry-run`: Preview generated content without writing
-- `--minimal`: Create minimal README (title, description, installation, usage)
-- `--full`: Create comprehensive README with all applicable sections
-- `--force`: Overwrite existing README.md without prompting
+Inputs: codebase analysis (language, framework, LICENSE, homepage URL, citations or papers in repo), optional user-provided description. Outputs: new `README.md` at repo root.
 
-Guided mode examples:
+Recognised flags: `--dry-run`, `--minimal`, `--full`, `--force`.
 
-- `/md-docs:init-readme TypeScript library for parsing dates with zero deps`
-- `/md-docs:init-readme Foundry lending protocol with audit-ready docs`
-
-**Verify No Existing README**
-
-Check if README.md already exists at the repository root:
-
-```bash
-test -f README.md && echo "exists" || echo "missing"
-```
-
-If exists without `--force`, use `AskUserQuestion` with options:
-
-- **Overwrite**: Replace existing README completely
-- **Abort**: Cancel operation (suggest `/md-docs:update-readme --preserve` instead)
-
-**Analyze Project**
-
-Gather comprehensive information:
-
-- Language and framework (detect from files and package configs)
-- Package metadata (name, version, description, license, scripts)
-- Directory structure and organization
-- Entry points and public APIs
-- Existing assets (LICENSE, CONTRIBUTING.md, CHANGELOG.md, examples/)
-- Git remote for repository URL and badges
-
-**Generate README Content**
-
-Create structured content guided by the mode and optional description:
-
-- **Guided mode (description provided)**: Emphasize sections aligned with keywords and intent (e.g., "security-first" → audit/testing emphasis; "library" → API reference focus)
-- **Automatic inference (no description)**: Derive sections and tone entirely from project analysis
-
-Adapt section order to project type (library, application, smart contract). For `--minimal`, include only title, description, installation, usage. For `--full`, include all applicable sections. Follow the writing style, formatting rules, and section templates documented in `references/update-readme.md`.
-
-**Write README**
-
-Save generated content to `./README.md`. For `--dry-run`, display without writing.
-
-**Generate Report**
-
-Display summary:
-
-```
-✓ Created README.md
-  - Detected TypeScript library
-  - Added installation (pnpm detected)
-  - Generated usage example from src/index.ts
-  - Added MIT license badge
-```
-
-For the complete initialize README workflow with section templates, guided-mode strategies, and formatting examples, refer to `references/init-readme.md`.
-
-## Update CONTRIBUTING
-
-Update CONTRIBUTING.md based on current codebase tooling and workflows. **This workflow only runs when CONTRIBUTING.md already exists in the repository.** If CONTRIBUTING.md is absent, skip this workflow entirely—do not auto-create contribution guidelines.
-
-### Prerequisite Check
-
-Before proceeding, verify the file exists:
-
-```bash
-test -f CONTRIBUTING.md && echo "exists" || echo "missing"
-```
-
-If missing, report to the user and stop. Do not create CONTRIBUTING.md unless explicitly requested.
-
-### Workflow Steps
-
-**Parse Arguments**
-
-Support the following arguments:
-
-- `--dry-run`: Show what would change without writing files
-- `--preserve`: Maximum preservation; only fix broken commands/links
-- `--thorough`: Deep analysis; verify all links and commands work
-
-**Read Existing CONTRIBUTING.md**
-
-```bash
-cat CONTRIBUTING.md
-```
-
-Parse the document structure:
-
-- Section headings and organization
-- Code blocks with commands
-- URLs and file path references
-- Mentioned tooling (test runners, linters, formatters)
-
-**Gather Codebase Intelligence**
-
-Detect current tooling and compare against documented content:
-
-- Package manager (npm, pnpm, yarn, bun) from lock files
-- Available scripts from package.json/Makefile/justfile
-- Branch conventions (main vs master)
-- Linting/formatting tools in use
-
-**Identify Discrepancies**
-
-Compare documented information against actual codebase:
-
-- Outdated CLI commands (npm → pnpm)
-- Incorrect branch references (master → main)
-- Broken links to issue templates or docs
-- Stale tooling references (Jest → Vitest)
-
-**Update Content**
-
-Fix technical inaccuracies while preserving:
-
-- Contribution policies (CLA, DCO, licensing)
-- Review processes and expectations
-- Code of conduct references
-- Governance decisions
-
-**Generate Report**
-
-Display summary:
-
-```
-✓ Updated CONTRIBUTING.md
-  - Fixed package manager: npm → pnpm
-  - Corrected branch reference: master → main
-  - Updated test command
-
-⊘ Policy sections preserved (CLA, review process)
-```
-
-For the complete update CONTRIBUTING workflow with verification strategies and examples, refer to `references/update-contributing.md`.
+See [references/init-readme.md](references/init-readme.md).
 
 ## Initialize Context
 
-Create project-specific AGENTS.md from scratch based on codebase analysis. This workflow is ideal for new projects or repositories lacking context documentation.
+When to use: user asks to create a new AGENTS.md (and CLAUDE.md symlink) from scratch in a repository that lacks context documentation. Trigger phrases include "init AGENTS.md", "create CLAUDE.md", "init context", "new context file", "generate AGENTS.md".
 
-### Workflow Steps
+Like Initialize README, supports automatic inference and guided mode (e.g., "Foundry smart contract project with security-first mindset"). On completion, always creates the `CLAUDE.md` symlink via `ln -sf AGENTS.md CLAUDE.md`.
 
-**Parse Arguments**
+Generated AGENTS.md must include a Commands section that consolidates every CLI invocation a developer or agent will need: install, dev, build, test, lint, format, deploy, plus all `just` recipes, npm/pnpm/yarn/bun scripts, and Makefile targets discovered in the repo.
 
-Support the following arguments:
+Inputs: codebase analysis (stack, scripts, `justfile`, `Makefile`, architecture hints, existing `package.json`, `README.md`, language-specific manifests), optional user-provided description. Outputs: new `AGENTS.md`, `CLAUDE.md` symlink.
 
-- `--dry-run`: Preview generated content without writing
-- `--minimal`: Create minimal context file (project description, structure)
-- `--full`: Create comprehensive context file with all relevant sections
+Recognised flags: `--dry-run`, `--minimal`, `--full`, `--force`.
 
-**Verify No Existing AGENTS.md**
+See [references/init-agents.md](references/init-agents.md).
 
-Check if AGENTS.md already exists:
+## Reporting
 
-```bash
-test -f AGENTS.md && echo "exists" || echo "missing"
-```
+Every workflow ends with a short summary. Use these conventions across all workflows:
 
-If exists, warn the user and suggest using the update workflow instead. Allow override with `--force` flag.
+- `✓` for successful operations: `✓ Updated AGENTS.md` followed by indented bullet points listing concrete changes.
+- `⊘` for skipped optional files.
+- `⚠` for advisory notices (e.g. CONTRIBUTING.md merge recommendation).
+- `✗` for failures: `✗ Failed to write README.md` with a one-line cause.
 
-**Analyze Project**
-
-Gather comprehensive information:
-
-- Language and framework (detect from files and package configs)
-- Directory structure and organization patterns
-- Build system (npm, cargo, poetry, gradle, etc.)
-- Test framework (jest, pytest, cargo test, etc.)
-- Linting and formatting tools
-- Environment variables or configuration files
-
-**Generate AGENTS.md Content**
-
-Create structured sections:
-
-```markdown
-# Context
-
-Brief project description and purpose.
-
-## Structure
-
-Directory organization and key files.
-
-## Build
-
-Commands for building the project.
-
-## Test
-
-Commands for running tests.
-
-## Development
-
-Conventions, patterns, and workflows.
-```
-
-Adapt sections based on project type. For `--minimal`, include only Context and Structure. For `--full`, add all applicable sections including deployment, troubleshooting, and custom tooling.
-
-**Write AGENTS.md**
-
-Save generated content and create `CLAUDE.md` symlink (`ln -sf AGENTS.md CLAUDE.md`). For `--dry-run`, display without writing.
-
-**Generate Report**
-
-Display summary:
-
-```
-✓ Created AGENTS.md
-  - Detected Next.js project
-  - Added npm scripts from package.json
-  - Documented project structure
-  - Added testing section for Jest
-✓ Created CLAUDE.md symlink
-```
-
-For the complete initialize context workflow with language-specific templates, detection strategies, and customization options, refer to `references/init-agents.md`.
-
-### DOCS.md Initialization
-
-DOCS.md is optional and not created by default. Create DOCS.md manually when the project has:
-
-- Public API endpoints requiring documentation
-- Exported functions or classes intended for external use
-- Complex type definitions users need to understand
-
-The update context workflow will suggest creating DOCS.md if it detects significant APIs without corresponding documentation.
+Indent change details under each line so the user can scan a single file's deltas without re-reading the header. For `--dry-run`, prefix the report with a "Planned Changes" header and include the diff or proposed-content preview rather than a confirmation. Refer to `references/common-patterns.md` for full report templates.
 
 ## Additional Resources
 
 For detailed workflows, examples, and implementation guidance, refer to these reference documents:
 
-- **`references/common-patterns.md`** - Argument parsing, backup handling, writing style, report formatting, file detection, and metadata extraction
-- **`references/update-agents.md`** - Complete context file update workflow including verification strategies, diff generation, and discrepancy detection
-- **`references/update-readme.md`** - Complete README update workflow including section templates, metadata extraction, and formatting conventions
-- **`references/update-contributing.md`** - Complete CONTRIBUTING.md update workflow including scope, templates, and validation (only when CONTRIBUTING.md exists)
-- **`references/init-readme.md`** - Complete README initialization workflow including guided-mode strategies, section templates, and project-type detection
-- **`references/init-agents.md`** - Complete context initialization workflow including language-specific templates, detection strategies, and customization options
+- **`references/common-patterns.md`** — Audience split, argument parsing, backup handling, writing style, report formatting, file detection, metadata extraction, CONTRIBUTING.md merge recommendation
+- **`references/update-agents.md`** — Complete context file update workflow including verification strategies, command discovery, and discrepancy detection
+- **`references/update-readme.md`** — Complete README update workflow for human-aimed content
+- **`references/init-readme.md`** — Complete README initialization workflow for human-aimed content
+- **`references/init-agents.md`** — Complete context initialization workflow including language-specific templates and commands consolidation
 
 These references provide implementation details, code examples, and troubleshooting guidance for each workflow type.

@@ -276,103 +276,15 @@ gh repo set-default
 
 ## Search
 
-Search across all of GitHub for repositories, issues, and pull requests.
-
-### Search Repositories
-
-```bash
-# Search for repositories
-gh search repos "machine learning" --language=python
-
-# Search with filters
-gh search repos --stars=">1000" --topic=kubernetes
-```
-
-### Search Issues
-
-```bash
-# Search issues across GitHub
-gh search issues "bug" --label=critical --state=open
-
-# Exclude results (note the -- to prevent flag interpretation)
-gh search issues -- "memory leak -label:wontfix"
-```
-
-### Search Pull Requests
-
-```bash
-# Search PRs
-gh search prs --author=@me --state=open
-
-# Search with date filters
-gh search prs "refactor" --created=">2024-01-01"
-```
+When the user asks to search GitHub repositories, issues, or pull requests, see [references/search.md](references/search.md).
 
 ## Labels
 
-Manage repository labels for issue and PR organization.
-
-### List and View Labels
-
-```bash
-# List all labels in repository
-gh label list
-```
-
-### Create and Edit Labels
-
-```bash
-# Create new label
-gh label create "priority: high" --color FF0000 --description "High priority items"
-
-# Edit existing label
-gh label edit "bug" --color FFAA00 --description "Something isn't working"
-```
-
-### Clone Labels Between Repos
-
-```bash
-# Clone labels from another repository
-gh label clone owner/source-repo
-```
+When the user asks to list, create, edit, or clone repository labels, see [references/labels.md](references/labels.md).
 
 ## Codespaces
 
-Manage GitHub Codespaces directly from the terminal.
-
-### List and Create Codespaces
-
-```bash
-# List codespaces
-gh codespace list
-
-# Create new codespace
-gh codespace create --repo owner/repo
-```
-
-### Connect to Codespaces
-
-```bash
-# SSH into codespace
-gh codespace ssh
-
-# Open in VS Code
-gh codespace code
-
-# Open in JupyterLab
-gh codespace jupyter
-```
-
-### Manage Codespace Files
-
-```bash
-# Copy files to/from codespace
-gh codespace cp local-file.txt remote:~/path/
-gh codespace cp remote:~/path/file.txt ./local-dir/
-
-# View logs
-gh codespace logs
-```
+When the user asks to list, create, connect to, or manage files within GitHub Codespaces, see [references/codespaces.md](references/codespaces.md).
 
 ## Browse
 
@@ -400,56 +312,11 @@ gh browse --branch feature
 
 ## Releases
 
-### Creating Releases
-
-```bash
-# Create release
-gh release create v1.0.0
-
-# Create release with notes
-gh release create v1.0.0 --notes "Release notes"
-
-# Create release with files
-gh release create v1.0.0 dist/*.tar.gz
-
-# Create draft release
-gh release create v1.0.0 --draft
-
-# Generate release notes automatically
-gh release create v1.0.0 --generate-notes
-```
-
-### Managing Releases
-
-```bash
-# List releases
-gh release list
-
-# View release
-gh release view v1.0.0
-
-# Download release assets
-gh release download v1.0.0
-```
+When the user asks to create, list, view, or download GitHub releases, see [references/releases.md](references/releases.md).
 
 ## Gists
 
-```bash
-# Create gist
-gh gist create file.txt
-
-# Create gist from stdin
-echo "content" | gh gist create -
-
-# List gists
-gh gist list
-
-# View gist
-gh gist view <gist-id>
-
-# Edit gist
-gh gist edit <gist-id>
-```
+When the user asks to create, list, view, or edit GitHub gists, see [references/gists.md](references/gists.md).
 
 ## Configuration
 
@@ -471,28 +338,28 @@ gh config set browser firefox
 
 Common gh operations at a glance:
 
-| Operation        | Command                    | Common Flags                              |
-| ---------------- | -------------------------- | ----------------------------------------- |
-| Create PR        | `gh pr create`             | `--draft`, `--fill`, `--reviewer @copilot`|
-| List PRs         | `gh pr list`               | `--author @me`, `--label`, `--search`     |
-| View PR          | `gh pr view <number>`      | `--web`, `--comments`                     |
-| Merge PR         | `gh pr merge <number>`     | `--squash`, `--rebase`, `--delete-branch` |
-| Revert PR        | `gh pr revert <number>`    | `--body`                                  |
-| Create issue     | `gh issue create`          | `--title`, `--body`, `--label`            |
-| List issues      | `gh issue list`            | `--assignee @me`, `--label`, `--search`   |
-| Close issue      | `gh issue close <number>`  | `--duplicate-of`, `--reason`              |
-| View issue       | `gh issue view <number>`   | `--web`, `--comments`                     |
-| Browse repo      | `gh browse`                | `--blame`, `--actions`, `--branch`        |
-| Clone repo       | `gh repo clone <repo>`     | `--no-upstream`                           |
-| Fork repo        | `gh repo fork`             | `--clone`, `--remote`                     |
-| View repo        | `gh repo view`             | `--web`                                   |
-| Create release   | `gh release create <tag>`  | `--title`, `--notes`, `--draft`           |
-| Verify release   | `gh release verify <tag>`  | `--repo`                                  |
-| Run workflow     | `gh workflow run <name>`   | `--ref`, `--field`                        |
-| Watch run        | `gh run watch <id>`        | `--exit-status`                           |
-| Search repos     | `gh search repos <query>`  | `--language`, `--stars`                   |
-| Create label     | `gh label create <name>`   | `--color`, `--description`                |
-| Create codespace | `gh codespace create`      | `--repo`, `--branch`                      |
+| Operation        | Command                   | Common Flags                               |
+| ---------------- | ------------------------- | ------------------------------------------ |
+| Create PR        | `gh pr create`            | `--draft`, `--fill`, `--reviewer @copilot` |
+| List PRs         | `gh pr list`              | `--author @me`, `--label`, `--search`      |
+| View PR          | `gh pr view <number>`     | `--web`, `--comments`                      |
+| Merge PR         | `gh pr merge <number>`    | `--squash`, `--rebase`, `--delete-branch`  |
+| Revert PR        | `gh pr revert <number>`   | `--body`                                   |
+| Create issue     | `gh issue create`         | `--title`, `--body`, `--label`             |
+| List issues      | `gh issue list`           | `--assignee @me`, `--label`, `--search`    |
+| Close issue      | `gh issue close <number>` | `--duplicate-of`, `--reason`               |
+| View issue       | `gh issue view <number>`  | `--web`, `--comments`                      |
+| Browse repo      | `gh browse`               | `--blame`, `--actions`, `--branch`         |
+| Clone repo       | `gh repo clone <repo>`    | `--no-upstream`                            |
+| Fork repo        | `gh repo fork`            | `--clone`, `--remote`                      |
+| View repo        | `gh repo view`            | `--web`                                    |
+| Create release   | `gh release create <tag>` | `--title`, `--notes`, `--draft`            |
+| Verify release   | `gh release verify <tag>` | `--repo`                                   |
+| Run workflow     | `gh workflow run <name>`  | `--ref`, `--field`                         |
+| Watch run        | `gh run watch <id>`       | `--exit-status`                            |
+| Search repos     | `gh search repos <query>` | `--language`, `--stars`                    |
+| Create label     | `gh label create <name>`  | `--color`, `--description`                 |
+| Create codespace | `gh codespace create`     | `--repo`, `--branch`                       |
 
 ## Additional Resources
 
@@ -523,29 +390,7 @@ Practical automation scripts (see `examples/` directory):
 
 ## JSON Output
 
-Use `--json` flag for structured output. **Always verify field names with `--help`** as they differ from GitHub API names.
-
-```bash
-# Check available JSON fields for any command
-gh repo view --help | grep -A 50 "JSON FIELDS"
-gh pr list --help | grep -A 50 "JSON FIELDS"
-```
-
-### Common JSON Field Corrections
-
-| Wrong (API-style) | Correct (gh CLI) |
-| ----------------- | ---------------- |
-| `stargazersCount` | `stargazerCount` |
-| `forksCount`      | `forkCount`      |
-| `watchersCount`   | `watchers`       |
-| `openIssuesCount` | `issues`         |
-
-### Repository View Fields
-
-```bash
-# Common fields for gh repo view --json
-gh repo view owner/repo --json name,description,stargazerCount,forkCount,updatedAt,url,readme
-```
+When the user wants to use `--json` flags or needs the correct gh CLI JSON field names, see [references/json-output.md](references/json-output.md).
 
 ## Tips
 

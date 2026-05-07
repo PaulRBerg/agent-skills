@@ -17,10 +17,10 @@ Bootstrap a new agent skill, then symlink it into `.claude/skills/` so Claude Co
 
 ## Resolved Paths
 
-| Mode              | Skill source                | Claude Code symlink             |
-| ----------------- | --------------------------- | ------------------------------- |
-| local (default)   | `.agents/skills/<name>/`    | `.claude/skills/<name>`         |
-| `--global`        | `~/.agents/skills/<name>/`  | `~/.claude/skills/<name>`       |
+| Mode            | Skill source               | Claude Code symlink       |
+| --------------- | -------------------------- | ------------------------- |
+| local (default) | `.agents/skills/<name>/`   | `.claude/skills/<name>`   |
+| `--global`      | `~/.agents/skills/<name>/` | `~/.claude/skills/<name>` |
 
 The symlink target is always the relative path `../../.agents/skills/<name>` so it resolves correctly in both scopes.
 
@@ -62,7 +62,7 @@ Scripts are token-efficient: the agent invokes them without reading them. Docume
 
 Rules of thumb:
 
-- **One level deep** — link `references/foo.md` directly from `SKILL.md`, never reference-to-reference.
+- **One level deep** — link `references/placeholder.md` directly from `SKILL.md`, never reference-to-reference.
 - Files >100 lines: include a table of contents at the top.
 - Files >10k words: document grep patterns in `SKILL.md` so the agent can locate sections without reading the whole file.
 - **No duplication** — each fact lives in `SKILL.md` *or* a reference, never both.
@@ -170,6 +170,6 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - Frontmatter rule: sort fields alphabetically, but always place `description` last.
 - "When to use" information belongs in `description` (discovery-time), not in the body (activation-time only).
 - Use imperative / infinitive form throughout `SKILL.md`.
-- All paths inside `SKILL.md` (e.g., `references/foo.md`, `scripts/bar.sh`) are relative to the skill directory.
+- All paths inside `SKILL.md` (e.g., `references/placeholder.md`, `scripts/example.sh`) are relative to the skill directory.
 - Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by default.
 - Do not commit the new skill — leave that to the user.

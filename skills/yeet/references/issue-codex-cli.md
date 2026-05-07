@@ -23,22 +23,25 @@ gh api repos/openai/codex/contents/.github/ISSUE_TEMPLATE \
 
 Compare against the known-good SHAs (last verified 2026-05-07):
 
-| File | SHA |
-|---|---|
-| `1-codex-app.yml` | `6e294ee27bc924fc2c68b743bad26260297d13f9` |
-| `2-extension.yml` | `599bc08b428d6328c712f526549350daf0aada79` |
-| `3-cli.yml` | `4aff813e5f7bac7458d670f4cde35806493f9639` |
-| `4-bug-report.yml` | `4de88414600e6100720fefa2a324ce41d759cd7f` |
+| File                    | SHA                                        |
+| ----------------------- | ------------------------------------------ |
+| `1-codex-app.yml`       | `6e294ee27bc924fc2c68b743bad26260297d13f9` |
+| `2-extension.yml`       | `599bc08b428d6328c712f526549350daf0aada79` |
+| `3-cli.yml`             | `4aff813e5f7bac7458d670f4cde35806493f9639` |
+| `4-bug-report.yml`      | `4de88414600e6100720fefa2a324ce41d759cd7f` |
 | `5-feature-request.yml` | `55ff9fbbcd590a8c0c2cc51f6a2c0406875fb3f4` |
-| `6-docs-issue.yml` | `456602e6acbbb73453a2d027e670896ef4a31335` |
+| `6-docs-issue.yml`      | `456602e6acbbb73453a2d027e670896ef4a31335` |
 
 **If any SHA differs** (or a new file appears), the upstream templates have changed. Before creating the issue:
 
 1. Fetch the changed template(s):
+
    ```bash
    gh api repos/openai/codex/contents/.github/ISSUE_TEMPLATE/{file}.yml --jq '.content' | base64 -d
    ```
+
 2. Diff against the spec in this file (field labels, dropdown options, required fields, auto-applied labels).
+
 3. Tell the user:
 
    > ⚠️ Codex's issue templates have drifted from the spec in this skill (e.g., `3-cli.yml` SHA `<old>` → `<new>`). Please update the `yeet` skill in [`PaulRBerg/agent-skills`](https://github.com/PaulRBerg/agent-skills) — specifically `skills/yeet/references/issue-codex-cli.md` — and refresh the SHA table. Continue filing this issue using the closest matching fields, but flag any new required fields you couldn't fill.
@@ -49,14 +52,14 @@ Compare against the known-good SHAs (last verified 2026-05-07):
 
 The repo has six templates. Pick by surface area first, then kind.
 
-| Surface / kind | Template file | Labels (auto) |
-|---|---|---|
-| Codex App (desktop) bug | `1-codex-app.yml` | `app` |
-| IDE extension bug (VS Code, Cursor, Windsurf, ...) | `2-extension.yml` | `extension` |
-| Codex CLI bug | `3-cli.yml` | `bug`, `needs triage` |
-| Other bug (Codex Web, integrations, anything else) | `4-bug-report.yml` | `bug` |
-| Feature request (any variant) | `5-feature-request.yml` | `enhancement` |
-| Documentation issue | `6-docs-issue.yml` | `docs` |
+| Surface / kind                                     | Template file           | Labels (auto)         |
+| -------------------------------------------------- | ----------------------- | --------------------- |
+| Codex App (desktop) bug                            | `1-codex-app.yml`       | `app`                 |
+| IDE extension bug (VS Code, Cursor, Windsurf, ...) | `2-extension.yml`       | `extension`           |
+| Codex CLI bug                                      | `3-cli.yml`             | `bug`, `needs triage` |
+| Other bug (Codex Web, integrations, anything else) | `4-bug-report.yml`      | `bug`                 |
+| Feature request (any variant)                      | `5-feature-request.yml` | `enhancement`         |
+| Documentation issue                                | `6-docs-issue.yml`      | `docs`                |
 
 Heuristics:
 

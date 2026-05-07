@@ -30,27 +30,35 @@ Support for both regular and beta releases.
 
 **Note**: When `--dry-run` flag is provided, display what would be done without making any actual changes to files, creating commits, or tags.
 
-## Tasks
-
 ## Process
 
 1. **Check for arguments** - Determine if `version` was provided, if this is a beta release (`--beta`), and/or dry-run (`--dry-run`)
+
 2. **Check for clean working tree** - Run `git status --porcelain` to verify there are no uncommitted changes unrelated to this release. If there are, run the `commit` skill to commit them before proceeding
+
 3. **Write Changelog** - Examine diffs between the current branch and the previous tag to write Changelog. Then find
    relevant PRs by looking at the commit history and add them to each changelog (when available). If `package.json` contains
    a `files` field, only include changes within those specified files/directories. If no `files` field exists, include all
    changes except test changes, CI/CD workflows, and development tooling
+
 4. **Follow format** - Consult `references/common-changelog.md` for the Common Changelog specification
+
 5. **Check version** - Get current version from `package.json`
+
 6. **Bump version** - If `version` argument provided, use it directly. Otherwise, if unchanged since last release, increment per Semantic Versioning rules:
+
    - **For regular releases**:
+
      - **PATCH** (x.x.X) - Bug fixes, documentation updates
      - **MINOR** (x.X.x) - New features, backward-compatible changes
      - **MAJOR** (X.x.x) - Breaking changes
+
    - **For beta releases** (`--beta` flag):
+
      - If current version has no beta suffix: Add `-beta.1` to the version
      - If current version already has beta suffix: Increment beta number (e.g., `-beta.1` → `-beta.2`)
      - If moving from beta to release: Remove beta suffix and use the base version
+
    - **When unsure** — If the changes are ambiguous (e.g., a new feature that may also break consumers, or a mix of fixes and features), use `AskUserQuestion` to let the user decide the semver level:
 
      - header: "Version"
@@ -59,6 +67,7 @@ Support for both regular and beta releases.
      - multiSelect: false
 
      Use the user's choice and skip step 7
+
 7. **Confirm version** - When the version was confidently inferred (no explicit `version` argument), use `AskUserQuestion` to confirm before proceeding:
 
    - header: "Version"
@@ -147,4 +156,4 @@ For regular releases only (changelog generation is skipped for beta releases):
 
 ## Resources
 
-- `references/common-changelog.md` — Common Changelog format and writing guidelines
+- `references/common-changelog.md` — Read when generating changelog entries: Common Changelog format and writing guidelines

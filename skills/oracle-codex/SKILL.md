@@ -3,7 +3,7 @@ argument-hint: <query> [--reasoning <level>]
 disable-model-invocation: false
 name: oracle-codex
 user-invocable: true
-description: This skill should be used when the user asks to "use Codex", "ask Codex", "consult Codex", "use GPT for planning", "ask GPT to review", "get GPT's opinion", "what does GPT think", "second opinion on code", "consult the oracle", "ask the oracle", or mentions using an AI oracle for planning or code review. NOT for implementation tasks.
+description: This skill should be used when the user asks to consult Codex/GPT for planning or code review, or wants a second opinion on code. Trigger phrases include "ask Codex", "consult Codex", "second opinion on code", "consult the oracle". NOT for implementation tasks.
 ---
 
 # Codex Oracle
@@ -35,8 +35,8 @@ scripts/run-codex-exec.sh
 
 ## Configuration
 
-| Setting   | Default         | Override                                         |
-| --------- | --------------- | ------------------------------------------------ |
+| Setting   | Default     | Override                                         |
+| --------- | ----------- | ------------------------------------------------ |
 | Model     | `gpt-5.5`   | Allowlist only (see `references/codex-flags.md`) |
 | Reasoning | `xhigh`     | `--reasoning <level>` or user prose              |
 | Sandbox   | `read-only` | Not overridable                                  |

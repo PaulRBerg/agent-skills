@@ -4,7 +4,7 @@ disable-model-invocation: true
 effort: high
 name: git-squash
 user-invocable: true
-description: This skill should be used when the user asks to "squash PR commits", "squash my branch", "flatten branch history", "combine all commits into one", "prepare a clean PR commit", or "squash commits relative to main/default branch". It rewrites the current branch into a single commit whose message semantically summarizes the surviving net changes relative to the default branch.
+description: This skill should be used when the user asks to squash a feature branch's commits into one and rebase onto the base branch. Trigger phrases include "squash commits", "squash branch", "flatten branch history", "prepare a clean PR commit".
 ---
 
 # Git Squash

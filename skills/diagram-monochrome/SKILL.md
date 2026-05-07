@@ -1,6 +1,6 @@
 ---
 name: diagram-monochrome
-description: This skill should be used when the user asks to "create a diagram", "draw a schematic", "make a technical diagram", "monochrome diagram", "black and white diagram", "systems diagram", "architecture diagram", "supply chain diagram", or mentions creating line-art, technical schematics, or monochrome visual explainers.
+description: This skill should be used when the user asks to create a monochrome technical diagram, schematic, or systems/architecture diagram in black-and-white line-art style. Trigger phrases include "create a diagram", "monochrome diagram", "systems diagram", "draw a schematic".
 ---
 
 # Monochrome Technical Schematic

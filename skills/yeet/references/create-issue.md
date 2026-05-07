@@ -42,6 +42,7 @@ Store as `$AUTHENTICATED_USER` for later permission checks.
    ```
 
 3. IF found: display list, use `AskUserQuestion` ("Similar issues found. Proceed?"), cancel if "No"
+
 4. IF none found: inform user, continue
 
 ## Check for Issue Templates

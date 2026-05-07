@@ -1,5 +1,5 @@
 ---
-argument-hint: '<goal>'
+argument-hint: <goal>
 name: autoresearch
 user-invocable: true
 description: This skill should be used when the user asks to "run autoresearch", "optimize X in a loop", "set up autonomous experiments", "start autoresearch", "optimize X overnight", or "experiment loop". Sets up and runs an autonomous experiment loop for any optimization target.
@@ -77,11 +77,12 @@ echo "METRIC val_bpb=$val_bpb"
 ```
 
 Rules:
+
 - Use `set -euo pipefail`.
 - Output `METRIC name=value` lines to stdout (one per metric). The primary metric name must match what's documented in `autoresearch.md`.
 - Metric names: word chars, dots, or `µ` (e.g. `val_bpb`, `total_µs`, `bundle.size_kb`).
 - Keep the script fast — every second is multiplied by hundreds of runs.
-- For fast/noisy benchmarks (<5s), run multiple times inside the script and report the median.
+- For fast/noisy benchmarks (\<5s), run multiple times inside the script and report the median.
 - Update the script during the loop as needed.
 
 ### `autoresearch.checks.sh` (optional)
@@ -96,6 +97,7 @@ pnpm typecheck 2>&1 | grep -i error || true
 ```
 
 When this file exists:
+
 - Run it after every **passing** benchmark (exit 0).
 - If checks fail, log the experiment as `checks_failed` and revert.
 - Check execution time does NOT affect the primary metric.
@@ -109,44 +111,44 @@ When this file does not exist, skip checks entirely.
 
 Each iteration:
 
-1. **Formulate hypothesis**: Based on prior results, source code understanding, and any ideas in `autoresearch.ideas.md`, choose what to try next.
-2. **Edit code**: Modify the in-scope files. Make a single, focused change per experiment.
-3. **Commit**: `git add -A && git commit -m "<short description of what this experiment tries>"`
-4. **Run benchmark**:
-   ```bash
-   timeout 600 ./autoresearch.sh > run.log 2>&1
-   ```
-   If the command times out or crashes, treat it as a failure.
-5. **Parse metrics**: Extract `METRIC` lines from the output:
-   ```bash
-   grep '^METRIC ' run.log
-   ```
-   If no METRIC lines found, the run crashed — read `tail -50 run.log` for the error.
-6. **Run checks** (if `autoresearch.checks.sh` exists and benchmark passed):
-   ```bash
-   timeout 300 ./autoresearch.checks.sh > checks.log 2>&1
-   ```
-7. **Evaluate and log**:
-   - **Improved** (primary metric better than best so far) → status `keep`. The commit stays.
-   - **Worse or equal** → status `discard`. Revert: stage autoresearch files first, then reset.
-   - **Crash** (benchmark failed) → status `crash`. Fix if trivial, otherwise revert and move on.
-   - **Checks failed** → status `checks_failed`. Revert.
-8. **Log to JSONL**: Append one line to `autoresearch.jsonl`:
-   ```json
-   {"run":1,"commit":"a1b2c3d","metric":0.9979,"metrics":{"val_bpb":0.9979,"peak_vram_mb":45060.2},"status":"keep","description":"baseline","timestamp":1711036800000,"confidence":null}
-   ```
-9. **On discard/crash/checks_failed — revert code changes**:
-   ```bash
-   # Preserve autoresearch session files, revert everything else
-   git add autoresearch.jsonl autoresearch.md autoresearch.sh autoresearch.ideas.md autoresearch.checks.sh 2>/dev/null || true
-   git checkout -- .
-   git clean -fd
-   ```
+01. **Formulate hypothesis**: Based on prior results, source code understanding, and any ideas in `autoresearch.ideas.md`, choose what to try next.
+02. **Edit code**: Modify the in-scope files. Make a single, focused change per experiment.
+03. **Commit**: `git add -A && git commit -m "<short description of what this experiment tries>"`
+04. **Run benchmark**:
+    ```bash
+    timeout 600 ./autoresearch.sh > run.log 2>&1
+    ```
+    If the command times out or crashes, treat it as a failure.
+05. **Parse metrics**: Extract `METRIC` lines from the output:
+    ```bash
+    grep '^METRIC ' run.log
+    ```
+    If no METRIC lines found, the run crashed — read `tail -50 run.log` for the error.
+06. **Run checks** (if `autoresearch.checks.sh` exists and benchmark passed):
+    ```bash
+    timeout 300 ./autoresearch.checks.sh > checks.log 2>&1
+    ```
+07. **Evaluate and log**:
+    - **Improved** (primary metric better than best so far) → status `keep`. The commit stays.
+    - **Worse or equal** → status `discard`. Revert: stage autoresearch files first, then reset.
+    - **Crash** (benchmark failed) → status `crash`. Fix if trivial, otherwise revert and move on.
+    - **Checks failed** → status `checks_failed`. Revert.
+08. **Log to JSONL**: Append one line to `autoresearch.jsonl`:
+    ```json
+    {"run":1,"commit":"a1b2c3d","metric":0.9979,"metrics":{"val_bpb":0.9979,"peak_vram_mb":45060.2},"status":"keep","description":"baseline","timestamp":1711036800000,"confidence":null}
+    ```
+09. **On discard/crash/checks_failed — revert code changes**:
+    ```bash
+    # Preserve autoresearch session files, revert everything else
+    git add autoresearch.jsonl autoresearch.md autoresearch.sh autoresearch.ideas.md autoresearch.checks.sh 2>/dev/null || true
+    git checkout -- .
+    git clean -fd
+    ```
 10. **Check confidence**: After 3+ runs, run the confidence script from the skill's installation directory:
     ```bash
     bash "$(dirname "$(readlink -f "$0")")/scripts/confidence.sh"
     ```
-    Or locate it via the skill path and run it directly. Interpret the score:
+    Interpret the score:
     - **>= 2.0x**: Improvement is likely real (green).
     - **1.0-2.0x**: Above noise but marginal (yellow).
     - **< 1.0x**: Within noise — consider re-running to confirm (red).
@@ -158,16 +160,16 @@ Repeat forever until interrupted.
 
 Each line in `autoresearch.jsonl` is a JSON object:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `run` | number | 1-indexed experiment count |
-| `commit` | string | Short git SHA (7 chars) |
-| `metric` | number | Primary metric value |
-| `metrics` | object | All metrics dict (primary + secondary) |
-| `status` | string | `keep`, `discard`, `crash`, or `checks_failed` |
-| `description` | string | What this experiment tried |
-| `timestamp` | number | Unix timestamp (ms) |
-| `confidence` | number or null | MAD-based confidence score (null if <3 runs) |
+| Field         | Type           | Description                                    |
+| ------------- | -------------- | ---------------------------------------------- |
+| `run`         | number         | 1-indexed experiment count                     |
+| `commit`      | string         | Short git SHA (7 chars)                        |
+| `metric`      | number         | Primary metric value                           |
+| `metrics`     | object         | All metrics dict (primary + secondary)         |
+| `status`      | string         | `keep`, `discard`, `crash`, or `checks_failed` |
+| `description` | string         | What this experiment tried                     |
+| `timestamp`   | number         | Unix timestamp (ms)                            |
+| `confidence`  | number or null | MAD-based confidence score (null if \<3 runs)  |
 
 ## Resuming
 

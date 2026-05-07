@@ -16,12 +16,12 @@ See `commons.md > Auth Validation`.
 
 From the issue description, infer which template fits best:
 
-| Keywords | Template | Title Prefix |
-|---|---|---|
-| format, formatter, formatting, prettier | `01_formatter_bug` | `📝 ` |
-| lint, linter, rule, diagnostic, warning | `02_lint_bug` | `💅 ` |
-| bug, broken, error, crash, panic, fails | `03_bug` | `🐛 ` |
-| task, implement, add support (contributors) | `04_task` | `📎 ` |
+| Keywords                                    | Template           | Title Prefix |
+| ------------------------------------------- | ------------------ | ------------ |
+| format, formatter, formatting, prettier     | `01_formatter_bug` | `📝 `        |
+| lint, linter, rule, diagnostic, warning     | `02_lint_bug`      | `💅 `        |
+| bug, broken, error, crash, panic, fails     | `03_bug`           | `🐛 `        |
+| task, implement, add support (contributors) | `04_task`          | `📎 `        |
 
 **If ambiguous**: Use AskUserQuestion with options: Formatter Bug, Linter Bug, General Bug, Task.
 

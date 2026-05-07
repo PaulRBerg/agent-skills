@@ -25,6 +25,7 @@ If `--check` flag is present:
    ```
 
 3. IF found: display list, use `AskUserQuestion` ("Similar discussions found. Proceed?"), cancel if "No"
+
 4. IF none found: inform user, continue
 
 ## Fetch Discussion Categories
@@ -46,13 +47,13 @@ gh api graphql -f query='
 
 Infer best category from description:
 
-| Keywords | Category |
-|---|---|
-| "idea", "proposal", "suggest", "would be nice", "feature" | Ideas |
-| "how do I", "help", "question", "why does", "what is" | Q&A |
-| "built", "made", "created", "sharing", "check out" | Show and Tell |
-| "vote", "poll", "which", "prefer" | Polls |
-| General conversation, feedback, meta-discussion | General |
+| Keywords                                                  | Category      |
+| --------------------------------------------------------- | ------------- |
+| "idea", "proposal", "suggest", "would be nice", "feature" | Ideas         |
+| "how do I", "help", "question", "why does", "what is"     | Q&A           |
+| "built", "made", "created", "sharing", "check out"        | Show and Tell |
+| "vote", "poll", "which", "prefer"                         | Polls         |
+| General conversation, feedback, meta-discussion           | General       |
 
 Default to **General** or **Ideas** if uncertain.
 
@@ -65,6 +66,7 @@ gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE --jq '.[].name 
 ### If Templates Found
 
 1. Select template matching category slug (e.g., `ideas.yml` for Ideas)
+
 2. Fetch and parse:
 
    ```bash
@@ -72,6 +74,7 @@ gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE --jq '.[].name 
    ```
 
 3. Parse YAML: `title` (prefix), `body` array (fields with `type`, `id`, `attributes`)
+
 4. Field types: `textarea`/`input` → section header; `dropdown` → select option; `checkboxes` → auto-acknowledge; `markdown` → skip
 
 ### If No Templates Found

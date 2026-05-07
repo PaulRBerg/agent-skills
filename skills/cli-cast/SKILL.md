@@ -284,24 +284,24 @@ When the user specifies a chain by name, resolve the chain ID using these steps:
 
 ## Quick Reference
 
-| Operation    | Command                | Key Flags                               |
-| ------------ | ---------------------- | --------------------------------------- |
-| Send tx      | `cast send`            | `--rpc-url`, `--private-key`, `--value` |
-| Read state   | `cast call`            | `--rpc-url`, `--block`                  |
-| View tx      | `cast tx`              | `--rpc-url`, `--json`                   |
-| View receipt | `cast receipt`         | `--rpc-url`, `--json`                   |
-| Build tx     | `cast mktx`            | `--rpc-url`, `--private-key`            |
-| Encode call  | `cast calldata`        | (function sig + args)                   |
-| Decode call  | `cast decode-calldata` | (function sig + data)                   |
-| ABI encode   | `cast abi-encode`      | (function sig + args)                   |
-| ABI decode   | `cast abi-decode`      | (function sig + data)                   |
-| Function sig | `cast sig`             | (function signature string)             |
-| Batch reads  | `cast call` Multicall3 | `aggregate3`, `--rpc-url`               |
-| Balance      | `cast balance`         | `--rpc-url`, `--ether`                  |
-| ENS resolve  | `cast resolve-name`    | `--rpc-url`                             |
-| New wallet   | `cast wallet new`      | —                                       |
+| Operation    | Command                | Key Flags                                 |
+| ------------ | ---------------------- | ----------------------------------------- |
+| Send tx      | `cast send`            | `--rpc-url`, `--private-key`, `--value`   |
+| Read state   | `cast call`            | `--rpc-url`, `--block`                    |
+| View tx      | `cast tx`              | `--rpc-url`, `--json`                     |
+| View receipt | `cast receipt`         | `--rpc-url`, `--json`                     |
+| Build tx     | `cast mktx`            | `--rpc-url`, `--private-key`              |
+| Encode call  | `cast calldata`        | (function sig + args)                     |
+| Decode call  | `cast decode-calldata` | (function sig + data)                     |
+| ABI encode   | `cast abi-encode`      | (function sig + args)                     |
+| ABI decode   | `cast abi-decode`      | (function sig + data)                     |
+| Function sig | `cast sig`             | (function signature string)               |
+| Batch reads  | `cast call` Multicall3 | `aggregate3`, `--rpc-url`                 |
+| Balance      | `cast balance`         | `--rpc-url`, `--ether`                    |
+| ENS resolve  | `cast resolve-name`    | `--rpc-url`                               |
+| New wallet   | `cast wallet new`      | —                                         |
 | Sign message | `cast wallet sign`     | `--private-key`, `--account`, `--browser` |
-| Browser sign | `cast send --browser`  | `--rpc-url`, `--from`                   |
+| Browser sign | `cast send --browser`  | `--rpc-url`, `--from`                     |
 
 ## Additional Resources
 

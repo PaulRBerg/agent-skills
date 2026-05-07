@@ -7,6 +7,7 @@
 2. **Primary metric is king**: The single primary metric (defined in `autoresearch.md`) determines keep/discard. Secondary metrics are logged for context but rarely affect the decision.
 
 3. **Simplicity criterion**: All else being equal, simpler is better.
+
    - Removing code for equal or better performance → always keep.
    - Ugly complexity for a tiny gain → probably discard.
    - A 0.001 improvement that adds 20 lines of hacky code? Not worth it.
@@ -14,26 +15,26 @@
 
 ## Keep vs Discard Decisions
 
-| Situation | Decision | Rationale |
-|-----------|----------|-----------|
-| Metric improved | `keep` | Primary metric is king |
-| Metric equal | `discard` | No improvement = no reason to keep complexity |
-| Metric slightly worse but code much simpler | `discard` (usually) | Simplicity matters but metric still wins |
-| Metric improved but confidence <1.0x | Re-run to confirm | May be noise, not real improvement |
-| Crash (OOM, bug) | `crash` + revert | Log it and move on |
-| Checks failed (tests, types) | `checks_failed` + revert | Correctness is a hard constraint |
-| Metric improved but VRAM/memory exploded | Use judgment | Some increase is acceptable for meaningful gains |
+| Situation                                   | Decision                 | Rationale                                        |
+| ------------------------------------------- | ------------------------ | ------------------------------------------------ |
+| Metric improved                             | `keep`                   | Primary metric is king                           |
+| Metric equal                                | `discard`                | No improvement = no reason to keep complexity    |
+| Metric slightly worse but code much simpler | `discard` (usually)      | Simplicity matters but metric still wins         |
+| Metric improved but confidence \<1.0x       | Re-run to confirm        | May be noise, not real improvement               |
+| Crash (OOM, bug)                            | `crash` + revert         | Log it and move on                               |
+| Checks failed (tests, types)                | `checks_failed` + revert | Correctness is a hard constraint                 |
+| Metric improved but VRAM/memory exploded    | Use judgment             | Some increase is acceptable for meaningful gains |
 
 ## Confidence Score Interpretation
 
 After 3+ experiments, the confidence score compares the best improvement to the session noise floor using Median Absolute Deviation (MAD).
 
-| Score | Meaning | Action |
-|-------|---------|--------|
-| >= 2.0x | Improvement is likely real | Keep with confidence |
-| 1.0-2.0x | Above noise but marginal | Keep, but note it's marginal |
-| < 1.0x | Within noise | Re-run the same experiment to confirm before keeping |
-| null | Insufficient data (<3 runs) | Keep/discard based on metric alone |
+| Score    | Meaning                      | Action                                               |
+| -------- | ---------------------------- | ---------------------------------------------------- |
+| >= 2.0x  | Improvement is likely real   | Keep with confidence                                 |
+| 1.0-2.0x | Above noise but marginal     | Keep, but note it's marginal                         |
+| < 1.0x   | Within noise                 | Re-run the same experiment to confirm before keeping |
+| null     | Insufficient data (\<3 runs) | Keep/discard based on metric alone                   |
 
 The score is advisory — it never auto-discards. Use it to decide whether to re-run for confirmation.
 

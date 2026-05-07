@@ -1,22 +1,23 @@
 # Update README Workflow
 
-Comprehensive workflow for updating README.md files based on current codebase structure. This reference documents the complete 8-step process used by the `/md-docs:update-readme` command.
+Workflow for updating a human-aimed `README.md` based on current project metadata. README.md contains description, badges, links, references, license, and a contributing pointer — never CLI commands, `just` recipes, scripts, or project structure trees. Those live in `AGENTS.md`.
 
 ## Guiding Principles
 
-**README files are for humans, not documentation dumps.**
+**README.md is for humans browsing the repo on GitHub or a package registry.**
 
-- **Balanced, not bloated**: Aim for 200-400 lines for most projects. A README should be informative but not overwhelming.
-- **Show, don't tell**: Prefer concise code examples over lengthy prose explanations.
-- **Every section must add value**: Don't include sections just for completeness. If a section would be empty or trivial, skip it.
-- **Readability first**: Use clear headings, proper spacing, and visual hierarchy. Readers should scan and find what they need in under 30 seconds.
-- **Respect the reader's time**: They want to understand what the project does, install it, and use it quickly.
+- **Generic information only** — what the project is, where to learn more, how it relates to other work.
+- **No CLI commands** — install, build, test, lint, dev, deploy, scripts, `just` recipes all belong in `AGENTS.md`.
+- **No project structure trees** — that's a developer concern; AGENTS.md owns it.
+- **No API reference** — link to the dedicated docs site or AGENTS.md instead.
+- **Show, don't tell** — short, direct prose; if a code snippet is critical, link to a file in `examples/` rather than embedding it.
+- **Respect the reader's time** — they want to know what it is, whether it's relevant, and where to go next.
 
 **Target length by mode**:
 
-- `--minimal`: 100-200 lines
-- Default: 200-400 lines
-- `--thorough`: 400-600 lines (only if the project genuinely needs it)
+- `--minimal`: 40-80 lines
+- Default: 80-150 lines
+- `--thorough`: 150-250 lines (only if the project has many references or related projects worth listing)
 
 ## Workflow Steps
 
@@ -28,250 +29,208 @@ Comprehensive workflow for updating README.md files based on current codebase st
 - IF not a git repo: ERROR "Must be run from within a git repository. Initialize with 'git init' first."
 - Store the repository root path
 
-**Scope**: This command operates only on `README.md` at the repository root (the path from `git rev-parse --show-toplevel`). It won't touch nested README files in subdirectories or subpackages. If you're in a monorepo and want to update a package-specific README, the user should `cd` to that package directory first and run the command there.
+**Scope**: This command operates only on `README.md` at the repository root. It won't touch nested README files in subdirectories or subpackages. For monorepo subpackages, the user should `cd` to that package directory first.
 
 **CHECK for README:**
 
-- IF README.md doesn't exist in repo root: Note that we'll create a new README from scratch
-- IF README.md exists: Proceed to analyze and update
+- IF README.md doesn't exist in repo root: route to `init-readme` (or, with `--force`, create from scratch here).
+- IF README.md exists: proceed to analyze and update.
+
+**CHECK for CONTRIBUTING.md:**
+
+```bash
+test -f CONTRIBUTING.md && echo "found" || echo "absent"
+```
+
+If found, append a `⚠ CONTRIBUTING.md detected` advisory to the final report recommending merging it into AGENTS.md and deleting the file. Do not edit `CONTRIBUTING.md`.
 
 ### STEP 2: Parse Arguments
 
-Interpret $ARGUMENTS for mode flags:
+Interpret arguments for mode flags:
 
-- `--preserve` → Keep existing custom sections (About, Features, Why X, Background), only update standard sections (Install, Usage, Structure)
-- `--minimal` → Fast mode - generate basic structure only (badges, install, usage)
-- `--thorough` → Deep analysis - read code examples, generate API documentation, comprehensive sections
-- **Default** (no flags): Balanced update - standard sections with moderate detail
+- `--dry-run` → Preview README content without writing
+- `--preserve` → Keep existing custom prose sections (About, Background, Acknowledgments, Why X), only refresh metadata-driven sections (badges, links, license)
+- `--minimal` → Title, description, badges, license, contributing/AGENTS.md pointer only
+- `--thorough` (alias `--full`) → Comprehensive: include References, Related Projects, Acknowledgments
+- **Default** (no flags): Balanced — title, badges, description, links, contributing pointer, license
 
 SET mode based on arguments parsed.
 
-### STEP 3: Gather Codebase Intelligence
+### STEP 3: Gather Project Metadata
 
-**Language/Stack Detection:**
+Read only the metadata needed for human-facing content. Do **not** scan scripts, lockfiles for install commands, or build configs — those are AGENTS.md territory.
 
-- Look for `package.json` → Node.js/TypeScript/JavaScript project
-- Look for `Cargo.toml` → Rust project
-- Look for `pyproject.toml` or `setup.py` → Python project
-- Look for `foundry.toml` → Solidity/Foundry smart contract project
-- Look for `go.mod` → Go project
-- Look for `Gemfile` → Ruby project
-- Look for `composer.json` → PHP project
+**Language/Stack Detection (for badges only):**
+
+- `package.json` → Node.js / TypeScript / JavaScript
+- `Cargo.toml` → Rust
+- `pyproject.toml` or `setup.py` → Python
+- `foundry.toml` → Solidity / Foundry
+- `go.mod` → Go
+- `Gemfile` → Ruby
+- `composer.json` → PHP
 
 **Extract from detected metadata files:**
 
 - Project name
-- Version number
-- Description
-- License
-- Dependencies (production and dev)
-- Scripts/commands (build, test, lint, deploy)
-- Repository URL (from git remote or package file)
+- Version (only if shown in a version badge)
+- Description / summary
+- License identifier
+- Homepage / documentation URL
+- Repository URL (also check `git remote get-url origin`)
+- Author / maintainer (for acknowledgment, optional)
+- Keywords (helps categorize, optional)
 
-**Discover project structure:**
+**Find human-facing key files:**
 
-```bash
-# Get directory tree (2 levels deep) - use fd if available, ls otherwise
-fd -t d -d 2 2>/dev/null | sort || find . -type d -maxdepth 2 | sort
+- `LICENSE` or `LICENSE.md`
+- `CITATION.cff`, `CITATIONS.bib`, or papers/ directory → drives References section
+- `CHANGELOG.md` → link from README
+- `CODE_OF_CONDUCT.md` → link from README
+- `.github/FUNDING.yml` → drives Sponsors / Funding mention
+- `examples/`, `demo/`, `docs/` directories → link to them
+- `assets/`, `screenshots/`, `media/` directories → drive a banner or screenshot section
 
-# Count file types based on detected language
-fd -e ts -e tsx -e js -e jsx 2>/dev/null | wc -l  # For JS/TS projects
-fd -e rs 2>/dev/null | wc -l                       # For Rust
-fd -e sol 2>/dev/null | wc -l                      # For Solidity
-fd -e py 2>/dev/null | wc -l                       # For Python
-fd -e go 2>/dev/null | wc -l                       # For Go
-```
+**Discover documentation site:**
 
-**Find key files:**
+- `package.json` `homepage` field
+- `Cargo.toml` `documentation` field
+- A `docs/` directory with a published site (look for `mkdocs.yml`, `docusaurus.config.js`, `vitepress.config.js`, `nextra.config.js`)
+- Mention of GitHub Pages in CI (`.github/workflows/*.yml` deploying to `gh-pages`)
 
-- LICENSE or LICENSE.md
-- CONTRIBUTING.md
-- CHANGELOG.md
-- CODE_OF_CONDUCT.md
-- .github/workflows/\*.yml (CI/CD)
-- examples/ or example/ directory
-- docs/ or doc/ directory
-
-**Analyze entry points:**
-
-- Search for main files based on detected language:
-  - JavaScript/TypeScript: index.ts, index.js, src/index.ts, main.ts
-  - Rust: src/main.rs, src/lib.rs
-  - Python: __main__.py, main.py, src/__init__.py
-  - Solidity: src/\*.sol contracts
-  - Go: main.go, cmd/\*/main.go
-- IF `--thorough`: Extract exports/public API from main files
-- Find usage examples in tests/ or examples/ directories
+Do not run package managers, build tools, or scripts at any point.
 
 ### STEP 4: Read Existing README (If Preserving)
 
 IF `--preserve` flag is set AND README.md exists:
 
 - READ current README.md
-- PARSE sections by extracting ## and ### headings with their content
-- IDENTIFY sections to preserve (user-written custom content):
-  - "About" or "Overview"
-  - "Features" or "Why {Project}"
-  - "Background" or "Motivation"
-  - "Examples" (if manually written, not auto-generated)
-  - "Acknowledgments" or "Credits" or "Thanks"
-  - Custom sections with unique headings
-- IDENTIFY sections to regenerate (standard, likely outdated):
-  - "Installation" or "Install" or "Getting Started"
-  - "Usage" or "Quick Start"
-  - "API Reference" or "API"
-  - "Project Structure" or "Structure"
-  - Badges and shields
-  - "Scripts" or "Commands" or "Available Scripts"
-  - "Configuration" or "Config"
+- PARSE sections by extracting `##` and `###` headings with their content
+- IDENTIFY sections to preserve (custom prose):
+  - "About" / "Overview"
+  - "Background" / "Motivation"
+  - "Why {Project}"
+  - "Acknowledgments" / "Credits" / "Thanks"
+  - "References" / "Citations"
+  - "Related Projects" / "See Also"
+  - Any custom-headed prose blocks
+- IDENTIFY sections to regenerate (metadata-driven):
+  - Title + Badges
+  - Description
+  - Links section
+  - License
+  - Contributing pointer
+- IDENTIFY sections to **remove** (technical content that no longer belongs in README):
+  - Installation / Install / Getting Started
+  - Usage / Quick Start
+  - Scripts / Commands / Available Scripts
+  - Project Structure / Structure
+  - API Reference / API
+  - Configuration / Config
+  - Testing / Tests
+  - Deployment
+
+When removing technical sections, leave a single line directing the reader to AGENTS.md (see STEP 5 → Contributing pointer).
 
 ### STEP 5: Generate README Sections
 
-**Determine project type and section order:**
-
-**For Libraries** (no main executable, exports modules/functions):
-
-1. Title + Badges
-2. Description
-3. Features (if `--preserve` keeps it, or `--thorough` generates it)
-4. Installation
-5. Usage (with code examples)
-6. API Reference (if `--thorough`)
-7. Contributing
-8. License
-
-**For Applications** (has main entry point, runnable program):
+**Section order (all project types):**
 
 01. Title + Badges
 02. Description
-03. Features
-04. Installation
-05. Usage/Getting Started
-06. Configuration (if config files found)
-07. Scripts/Commands
-08. Project Structure (if `--thorough`)
+03. Optional banner / screenshot (if assets exist)
+04. Links
+05. About / Background (preserved or generated if `--thorough`)
+06. References (if applicable)
+07. Related Projects (if `--thorough` and detected)
+08. Acknowledgments (preserved)
 09. Contributing
 10. License
 
-**For Smart Contracts** (Solidity/Foundry):
-
-1. Title + Badges
-2. Description
-3. Installation (npm + forge install)
-4. Usage (Solidity import examples)
-5. Functions/API
-6. Testing
-7. Deployment
-8. Contributing
-9. License
-
 **Generate each section based on mode:**
 
-**REMEMBER**: Keep all sections concise and scannable. Each section should provide immediate value without overwhelming the reader. When in doubt, write less.
+**REMEMBER**: Keep all sections concise. README is a landing page, not a manual.
 
 **Title + Badges:**
 
-- Extract project name from package.json, Cargo.toml, or git repo name
+- Extract project name from metadata or git repo name
 - Add relevant badges based on what exists:
-  - CI status badge (if .github/workflows/\*.yml exists)
   - License badge (if LICENSE file found)
-  - Version badge (from package version)
-  - Framework/tool badges (Foundry, React, Next.js, etc.)
-- Format: `# {Project Name}` followed by badges on next line
+  - Version badge (from package version on the relevant registry)
+  - CI status badge (if `.github/workflows/*.yml` exists)
+  - Package registry badge (npm, crates.io, PyPI, etc.)
+  - Stack/framework badge (only one or two, not a wall)
+- Format: `# {Project Name}` followed by badges on the next line.
 
 **Description:**
 
-- IF `--preserve` AND existing description exists: Keep it
-- ELSE: Extract from package.json/Cargo.toml description field
-- ELSE: Generate brief description (1-2 sentences) from codebase analysis
-- **Keep it concise**: 1-3 sentences maximum. Answer "What does this do?" and move on.
+- IF `--preserve` AND existing description exists: keep it
+- ELSE: extract from `package.json` / `Cargo.toml` / `pyproject.toml` description field
+- ELSE: generate a 1-2 sentence description from the project metadata and any guided description provided
+- **Length**: 1-3 sentences. Answer "What is this?" and stop.
 
-**Features:**
+**Banner / Screenshot:**
 
-- IF `--preserve`: Keep existing Features section
-- IF `--thorough`: Generate feature list from code analysis (scan main APIs, exported functions). **Limit to 5-8 key features** - highlight what matters most.
-- IF `--minimal`: Omit this section
-- ELSE (default): Include 3-5 brief bullet points if easily identifiable. Skip if features are obvious from description.
+- IF an obvious banner asset exists (`assets/banner.{png,svg}`, `docs/banner.*`): embed it.
+- IF screenshots are present and the project is a UI/app: embed one or two thumbnails.
+- Skip otherwise. Do not invent images.
 
-**Installation:**
+**Links:**
 
-- Detect package manager from lock files:
-  - package-lock.json → npm
-  - pnpm-lock.yaml → pnpm
-  - yarn.lock → yarn
-  - bun.lockb → bun
-  - Cargo.lock → cargo
-  - requirements.txt or poetry.lock → pip/poetry
-- Show install command for detected manager(s)
-- For Solidity: Include both npm and forge install instructions
-- Include git clone if no package registry
-- Add remappings.txt example for Foundry projects
+- Bullet list pointing readers wherever they need to go next:
+  - Documentation site (if discovered)
+  - Package on npm / crates.io / PyPI / etc.
+  - Live demo / homepage
+  - Changelog (link to `CHANGELOG.md`)
+  - Releases page on GitHub
+  - Discussion / community channels (Discord, Matrix, mailing list) — only if linked from existing project metadata
+- Each link is a single line: `- [Documentation](https://example.com/docs)`
+- This is the section that replaces Install/Usage from the old template.
 
-**Usage:**
+**About / Background:**
 
-- IF examples/ directory exists: Extract and show example code
-- IF tests exist: Parse test files for usage patterns
-- Show import/require statements for libraries
-- Provide minimal working example (5-15 lines of code)
-- IF `--thorough`: Show 2-3 examples covering different use cases. **Each example should be under 20 lines.**
-- Use proper code blocks with language tags
-- **Brevity matters**: Show the simplest possible working code. Let users explore docs for advanced usage.
+- IF `--preserve`: keep existing prose verbatim
+- IF `--thorough` AND no existing prose: write a short paragraph (3-5 sentences) explaining the problem the project solves and why it exists
+- Default mode without existing prose: skip
+- `--minimal`: skip
 
-**Scripts/Commands:**
+**References:**
 
-- IF package.json scripts exist: Extract and list them
-- Format as table or bulleted list with descriptions:
-  ```markdown
-  - `npm run build` - Build the project
-  - `npm test` - Run tests
-  - `npm run lint` - Lint code
-  ```
-- Include common commands (build, test, lint, dev, deploy)
+- IF `CITATION.cff`, `CITATIONS.bib`, `papers/`, or related work files exist: list the citations as bullet points
+- IF the description names papers or specifications: list them with links
+- IF `--preserve`: keep existing References section verbatim
+- ELSE: skip
 
-**Project Structure:**
+**Related Projects:**
 
-- IF `--minimal`: Omit this section
-- IF `--thorough` OR default mode:
-  - Generate tree showing src/, tests/, docs/, etc.
-  - **Keep it minimal**: Show only 5-10 most important directories/files
-  - Explain key directories in 1 line each (no more than 2-3 explanations total)
-  - Keep depth to 2 levels max (3 only if absolutely necessary)
-  - Format as code block with tree structure
-  - **Skip this section entirely** if the structure is obvious (e.g., single src/ directory)
+- IF `--thorough` AND README has a "Related" / "See Also" section: keep it
+- IF `--thorough` AND `package.json` `keywords` clearly map to a known ecosystem (e.g. "viem", "foundry"): suggest related ecosystem links
+- ELSE: skip
 
-**API Reference:**
+**Acknowledgments:**
 
-- ONLY if `--thorough` mode
-- Extract exported functions/classes from main entry points
-- Show function signatures with 1-line descriptions
-- **Limit to 8-12 most important APIs** - link to full docs for the rest
-- Skip internal/private APIs
-- **Consider skipping** this section if there's separate API documentation - just link to it instead
-
-**Configuration:**
-
-- IF config files exist (.env.example, config.yaml, etc.): Document them
-- Show example config structure
-- Explain key configuration options
-- ELSE: Omit this section
+- IF `--preserve`: keep existing section verbatim (this is one of the most important sections to never touch)
+- ELSE: skip — do not auto-generate acknowledgment text
 
 **Contributing:**
 
-- IF `--preserve`: Keep existing Contributing section
-- IF CONTRIBUTING.md exists: Link to it with brief note
-- ELSE: Provide basic contribution guidelines:
+- One short paragraph plus a pointer:
+
   ```markdown
   ## Contributing
 
-  Contributions are welcome! Please feel free to submit a Pull Request.
+  Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development workflow, commands, and conventions.
   ```
+
+- IF `--preserve` AND existing Contributing section is custom prose: keep it but ensure the AGENTS.md link is present.
+
+- IF `CONTRIBUTING.md` was detected: still point to AGENTS.md here, and surface the merge advisory in the final report.
 
 **License:**
 
-- Extract license type from LICENSE file or package.json
-- Show license name and link
-- Format: `This project is licensed under the {LICENSE} - see the [LICENSE](LICENSE) file for details.`
-- IF no license found: Suggest adding one
+- Extract license type from `LICENSE` file or package metadata
+- Format: `This project is licensed under the {LICENSE} — see the [LICENSE](LICENSE) file for details.`
+- IF no license found: suggest adding one in the report (do not invent a license)
 
 ### STEP 6: Compose Final README
 
@@ -286,57 +245,60 @@ BUILD complete markdown content:
 
 {description paragraph}
 
-{features section if applicable}
+{optional banner/screenshot}
 
-## 📦 Installation
+## Links
 
-{installation instructions}
+- [Documentation]({url})
+- [Package]({url})
+- [Changelog](CHANGELOG.md)
+- [Discussions]({url})
 
-## 🚀 Usage
+{about/background section if applicable}
 
-{usage examples with code blocks}
+{references section if applicable}
 
-{scripts/commands section if applicable}
+{related projects section if applicable}
 
-{project structure section if applicable}
+{acknowledgments section if preserved}
 
-{API reference if --thorough}
+## Contributing
 
-{configuration section if applicable}
+Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development workflow, commands, and conventions.
 
-## 🤝 Contributing
-
-{contributing guidelines or link}
-
-## 📄 License
+## License
 
 {license information}
 ```
 
 **Formatting rules:**
 
-- Use emoji section headers for visual clarity (📦 Install, 🚀 Usage, 📖 Docs, 🤝 Contributing, etc.)
-- Consistent heading levels: ## for main sections, ### for subsections
-- Code blocks should have language specifiers (`bash, `typescript, \`\`\`solidity, etc.)
-- Use tables for scripts/commands if there are 5+ items
-- Use admonitions for important notes:
+- Use plain `##` headings; no emoji decoration on section headers (the audience is humans, but emoji-noise reads as 2018 marketing copy).
+
+- Code blocks are rare — README should not show CLI commands at all, and embedded code should be a short illustrative snippet at most. Prefer linking to `examples/`.
+
+- Tables only for things like a feature comparison with related projects.
+
+- Use admonitions sparingly:
+
   ```markdown
   > [!NOTE]
-  > Important context or helpful information
+  > Helpful context
 
   > [!WARNING]
   > Breaking changes or critical notices
   ```
-- Keep line length reasonable (wrap at ~100-120 chars in paragraphs)
-- Add blank lines between sections for readability
+
+- Line length ~100-120 chars in paragraphs.
+
+- Blank lines between sections.
 
 **IF `--preserve` mode:**
 
-- MERGE preserved sections with regenerated sections
-- Maintain section order from original README where it makes sense
-- Insert regenerated sections (Install, Usage, etc.) in their standard positions
-- Keep custom sections in their original positions
-- Avoid duplicating content between preserved and generated sections
+- MERGE preserved sections (About, References, Related, Acknowledgments) with regenerated metadata sections.
+- Maintain section order from original README where it makes sense.
+- Insert regenerated Title/Badges/Description/Links/License/Contributing at standard positions.
+- **Remove** any installation/usage/scripts/structure/API sections from the original; surface their removal in the report so the user knows where the content went (AGENTS.md).
 
 ### STEP 7: Write Updated README
 
@@ -347,7 +309,7 @@ WRITE the new README:
 
 IF write succeeds:
 
-- Note which sections were updated
+- Note which sections were updated, kept, or removed (especially removed technical sections so the user can verify those moved to AGENTS.md).
 
 IF write fails:
 
@@ -359,29 +321,38 @@ IF write fails:
 
 ### STEP 8: Display Summary
 
-SHOW what changed:
-
 ```markdown
 ✓ Updated README.md
 
 **Mode**: {minimal/default/thorough/preserve}
 
 **Project Type**: {Library/Application/Smart Contract/etc.}
-**Language/Stack**: {JavaScript/TypeScript/Rust/Solidity/Python/etc.}
 
-**Sections Added/Updated:**
+**Sections Generated:**
 - Title + Badges
-- Installation instructions
-- Usage examples
-- {list other updated sections}
+- Description
+- Links
+- {others}
 
 {IF --preserve mode:}
 **Sections Preserved:**
 - {list preserved custom sections}
 
+{IF technical sections removed:}
+**Sections Removed (now in AGENTS.md):**
+- Installation
+- Usage
+- Scripts
+- {others}
+
+{IF CONTRIBUTING.md detected:}
+⚠ CONTRIBUTING.md detected
+  - Recommend merging its contents into AGENTS.md (which now owns the development workflow).
+  - Delete CONTRIBUTING.md after the merge.
+
 **Next Steps:**
 1. Review README.md for accuracy
-2. Customize any auto-generated content if needed
+2. Move any removed technical content into AGENTS.md if not already there
 3. Commit changes: `git add README.md && git commit -m "docs: update README"`
 ```
 
@@ -399,15 +370,15 @@ IF errors occurred during generation:
 /md-docs:update-readme
 ```
 
-Generates a balanced README with standard sections and moderate detail.
+Generates a balanced human-aimed README: title, badges, description, links, contributing pointer, license.
 
-**Preserve custom sections:**
+**Preserve custom prose:**
 
 ```bash
 /md-docs:update-readme --preserve
 ```
 
-Keeps your hand-written Features, About, and other custom sections; only updates Install, Usage, Structure.
+Keeps About / Background / References / Acknowledgments; refreshes badges, description, links, license.
 
 **Minimal README (fast):**
 
@@ -415,46 +386,43 @@ Keeps your hand-written Features, About, and other custom sections; only updates
 /md-docs:update-readme --minimal
 ```
 
-Creates basic README with badges, installation, and usage only. Completes in ~3 seconds.
+Title, badges, description, license, AGENTS.md pointer.
 
-**Thorough analysis with API docs:**
+**Thorough analysis:**
 
 ```bash
 /md-docs:update-readme --thorough
 ```
 
-Deep codebase analysis, extracts API documentation, generates comprehensive sections. Takes ~20-30 seconds.
+Includes References, Related Projects, About/Background prose where applicable.
 
 **Create new README from scratch:**
 
 ```bash
-# In a repo without README.md
-/md-docs:update-readme
+/md-docs:update-readme  # in a repo without README.md → routed to init-readme
 ```
 
-Analyzes codebase and creates complete README from scratch.
+Or invoke `init-readme` directly.
 
 ## Key Characteristics
 
-**Language-agnostic**: Works with Node.js, Rust, Python, Solidity, Go, Ruby, PHP, and other common stacks.
+**Audience-strict**: README never contains CLI commands, scripts, or developer workflows. All such content is removed and recorded in the summary so the user can verify it lives in AGENTS.md.
 
-**Non-destructive**: Overwrites README.md in place (use git to restore if needed).
+**Language-agnostic**: Works with Node.js, Rust, Python, Solidity, Go, Ruby, PHP, and other common stacks (only for badge selection and metadata extraction).
 
-**Smart defaults**: Automatically detects project type (library vs application vs smart contract) and adjusts sections accordingly.
+**Non-destructive in spirit**: Overwrites README.md in place but always backs up to `README.md.backup` first (except `--dry-run`); use git to restore if needed.
 
-**Preserves manual work**: Use `--preserve` to keep custom sections like Features, About, Background while updating standard sections.
+**Smart defaults**: Automatically detects project metadata and language for badge selection.
+
+**Preserves manual prose**: `--preserve` keeps custom About / Background / References / Acknowledgments sections.
 
 **Idempotent**: Running multiple times produces consistent results (same input → same output).
 
-**Performance**:
+**No git operations**: Only updates `README.md` file, never auto-commits.
 
-- `--minimal`: ~3 seconds
-- Default: ~10 seconds
-- `--thorough`: ~20-30 seconds for large repos
+**Monorepo handling**: Operates ONLY on `README.md` at the repository root (via `git rev-parse --show-toplevel`). For package-specific READMEs, `cd` to that package directory and run the command there.
 
-**No git operations**: Only updates README.md file, never auto-commits. User reviews and commits manually.
-
-**Monorepo handling**: Operates ONLY on README.md at the repository root (via `git rev-parse --show-toplevel`). Never touches nested README files. For package-specific READMEs in a monorepo, `cd` to that package directory and run the command there.
+**CONTRIBUTING.md handling**: Detected but never edited. Recommendation surfaced to merge into AGENTS.md and delete.
 
 **Edge cases handled**:
 
