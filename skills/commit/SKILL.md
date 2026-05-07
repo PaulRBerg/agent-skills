@@ -4,7 +4,7 @@ disable-model-invocation: false
 effort: medium
 name: commit
 user-invocable: true
-description: This skill should be used when the user asks to commit changes, craft a commit message, or run a commit workflow. Creates atomic git commits with conventional-commit formatting and optional deep analysis or push. Flags: --all, --deep, --close, --push.
+description: "This skill should be used when the user asks to commit changes, craft a commit message, or run a commit workflow. Creates atomic git commits with conventional-commit formatting and optional deep analysis or push. Flags: --all, --deep, --close, --push."
 ---
 
 # Git Commit
