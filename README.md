@@ -16,7 +16,6 @@ npx skills add PaulRBerg/agent-skills
 | Skill              | Description                                   |
 | ------------------ | --------------------------------------------- |
 | autoresearch       | Autonomous experiment loop                    |
-| biome-js           | BiomeJS linting/formatting guidance           |
 | bump-deps          | Node.js dependency updates                    |
 | bump-release       | Release workflow with changelog, tagging      |
 | cli-cast           | Foundry cast CLI guidance                     |
@@ -27,7 +26,6 @@ npx skills add PaulRBerg/agent-skills
 | code-simplify      | Code simplification and refactoring           |
 | commit             | Git commit with conventional commits          |
 | create-skill       | Bootstrap a new agent skill                   |
-| delayed-command    | Wait and execute bash command                 |
 | diagram-monochrome | Monochrome technical schematic diagrams       |
 | effect-ts          | Effect-TS patterns and guidance               |
 | evm-chains         | EVM chain metadata and RouteMesh reference    |
