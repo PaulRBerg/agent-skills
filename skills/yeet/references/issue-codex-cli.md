@@ -1,6 +1,6 @@
-# Codex CLI Issue Workflow
+# Codex Issue Workflow
 
-Create issues in the `openai/codex` repository with environment gathering and specialized templates.
+Create issues in the `openai/codex` repository using the appropriate variant template.
 
 ## Repo Isolation
 
@@ -12,35 +12,124 @@ File links: `[{path}](https://github.com/openai/codex/blob/main/{path})`
 
 See `commons.md > Auth Validation`.
 
+## Template Drift Check
+
+Before generating the issue body, verify the template specs in this file still match the upstream `.github/ISSUE_TEMPLATE` files. GitHub form templates change over time and silent drift produces issues with wrong section headers, missing fields, or invalid dropdown values.
+
+```bash
+gh api repos/openai/codex/contents/.github/ISSUE_TEMPLATE \
+  --jq '.[] | select(.name | endswith(".yml")) | "\(.name) \(.sha)"'
+```
+
+Compare against the known-good SHAs (last verified 2026-05-07):
+
+| File | SHA |
+|---|---|
+| `1-codex-app.yml` | `6e294ee27bc924fc2c68b743bad26260297d13f9` |
+| `2-extension.yml` | `599bc08b428d6328c712f526549350daf0aada79` |
+| `3-cli.yml` | `4aff813e5f7bac7458d670f4cde35806493f9639` |
+| `4-bug-report.yml` | `4de88414600e6100720fefa2a324ce41d759cd7f` |
+| `5-feature-request.yml` | `55ff9fbbcd590a8c0c2cc51f6a2c0406875fb3f4` |
+| `6-docs-issue.yml` | `456602e6acbbb73453a2d027e670896ef4a31335` |
+
+**If any SHA differs** (or a new file appears), the upstream templates have changed. Before creating the issue:
+
+1. Fetch the changed template(s):
+   ```bash
+   gh api repos/openai/codex/contents/.github/ISSUE_TEMPLATE/{file}.yml --jq '.content' | base64 -d
+   ```
+2. Diff against the spec in this file (field labels, dropdown options, required fields, auto-applied labels).
+3. Tell the user:
+
+   > ⚠️ Codex's issue templates have drifted from the spec in this skill (e.g., `3-cli.yml` SHA `<old>` → `<new>`). Please update the `yeet` skill in [`PaulRBerg/agent-skills`](https://github.com/PaulRBerg/agent-skills) — specifically `skills/yeet/references/issue-codex-cli.md` — and refresh the SHA table. Continue filing this issue using the closest matching fields, but flag any new required fields you couldn't fill.
+
+4. Proceed with best-effort body generation using the fields the user can still fill from the new template.
+
 ## Determine Issue Type
 
-From the issue description, infer which template fits best:
+The repo has six templates. Pick by surface area first, then kind.
 
-| Keywords | Template | Title Prefix |
+| Surface / kind | Template file | Labels (auto) |
 |---|---|---|
-| bug, broken, error, crash, fails, doesn't work | `2-bug-report.yml` | `[BUG] ` |
-| feature, request, add, support, wish, would be nice | `4-feature-request.yml` | `[FEATURE] ` |
-| docs, documentation, unclear, confusing, readme, example | `3-docs-issue.yml` | `[DOCS] ` |
-| vscode, extension, cursor, windsurf, ide | `5-vs-code-extension.yml` | `[EXTENSION] ` |
+| Codex App (desktop) bug | `1-codex-app.yml` | `app` |
+| IDE extension bug (VS Code, Cursor, Windsurf, ...) | `2-extension.yml` | `extension` |
+| Codex CLI bug | `3-cli.yml` | `bug`, `needs triage` |
+| Other bug (Codex Web, integrations, anything else) | `4-bug-report.yml` | `bug` |
+| Feature request (any variant) | `5-feature-request.yml` | `enhancement` |
+| Documentation issue | `6-docs-issue.yml` | `docs` |
 
-**If ambiguous**: Use AskUserQuestion with options: Bug Report, Feature Request, Documentation, VS Code Extension.
+Heuristics:
+
+- "crash / error / broken / fails / doesn't work" → bug template; pick the surface (App vs Extension vs CLI vs Other).
+- "feature / request / would be nice / add support for" → feature request.
+- "docs / readme / unclear / example doesn't work" → docs issue.
+- Mentions of `codex` command, terminal, TUI → CLI.
+- Mentions of VS Code / Cursor / Windsurf → Extension.
+- Mentions of desktop app, "Codex App", "About Codex" dialog → App.
+- Codex Web / chatgpt.com/codex / cloud agent → Other Bug.
+
+**If ambiguous**: Use AskUserQuestion with the surface options above.
+
+## Title
+
+Plain, concise (5-10 words). **Do not** add `[BUG]`, `[FEATURE]`, or any other prefix — the templates apply labels automatically and current issues in the repo do not use prefixes.
+
+Good: `CLI hangs when piping large stdin`, `Add support for custom system prompts`
+Bad: `[BUG] CLI hangs ...`, `[FEATURE] Add support ...`
 
 ## Generate Issue Body
 
-### Bug Report Template
+Each template renders an H3 heading per field. Match the labels exactly so GitHub maps the body back to the form. Required fields must be non-empty; optional fields may be omitted entirely or filled with "None".
+
+### Codex App Bug (`1-codex-app.yml`)
 
 ```markdown
-### What version of Codex is running?
+### What version of the Codex App are you using (From "About Codex" dialog)?
 
-{codex --version}
+{version}
 
 ### What subscription do you have?
 
-{Plus/Pro/Team/Enterprise - infer or ask}
+{Plus/Pro/Team/Enterprise/Free — infer or ask}
 
-### Which model were you using?
+### What platform is your computer?
 
-{gpt-4.1/o4-mini/o3/etc. - infer or "Not specified"}
+{see commons.md > Platform String Normalization}
+
+### What issue are you seeing?
+
+{describe the bug; include error text, redact PII; prefer text over screenshots}
+
+### What steps can reproduce the bug?
+
+1. {step}
+2. {step}
+
+Include session id, token-limit usage, or context-window usage if relevant.
+
+### What is the expected behavior?
+
+{expected behavior}
+
+### Additional information
+
+{anything else, or omit}
+```
+
+### IDE Extension Bug (`2-extension.yml`)
+
+```markdown
+### What version of the IDE extension are you using?
+
+{version}
+
+### What subscription do you have?
+
+{Plus/Pro/Team/Enterprise/Free}
+
+### Which IDE are you using?
+
+{VS Code / Cursor / Windsurf / ...}
 
 ### What platform is your computer?
 
@@ -52,9 +141,8 @@ From the issue description, infer which template fits best:
 
 ### What steps can reproduce the bug?
 
-1. {step 1}
-2. {step 2}
-3. ...
+1. {step}
+2. {step}
 
 ### What is the expected behavior?
 
@@ -62,78 +150,107 @@ From the issue description, infer which template fits best:
 
 ### Additional information
 
-{any other relevant context}
+{anything else, or omit}
 ```
 
-### Feature Request Template
+### CLI Bug (`3-cli.yml`)
 
 ```markdown
+### What version of Codex CLI is running?
+
+{output of `codex --version`}
+
+### What subscription do you have?
+
+{Plus/Pro/Team/Enterprise/Free}
+
+### Which model were you using?
+
+{e.g. gpt-5.2, gpt-5.2-codex — or omit if not specified}
+
+### What platform is your computer?
+
+{see commons.md > Platform String Normalization}
+
+### What terminal emulator and version are you using (if applicable)?
+
+{e.g. iTerm2 3.5.0, Ghostty 1.0, VS Code integrated terminal, Windows Terminal (WSL)}
+{note any multiplexer: tmux / screen / zellij}
+
+### What issue are you seeing?
+
+{describe the bug; include thread id if applicable}
+
+### What steps can reproduce the bug?
+
+1. {step}
+2. {step}
+
+### What is the expected behavior?
+
+{expected behavior}
+
+### Additional information
+
+{anything else, or omit}
+```
+
+### Other Bug (`4-bug-report.yml`)
+
+For Codex Web, integrations, or anything that isn't App/Extension/CLI.
+
+```markdown
+### What issue are you seeing?
+
+{describe the bug}
+
+### What steps can reproduce the bug?
+
+1. {step}
+2. {step}
+
+### What is the expected behavior?
+
+{expected behavior}
+
+### Additional information
+
+{anything else, or omit}
+```
+
+### Feature Request (`5-feature-request.yml`)
+
+```markdown
+### What variant of Codex are you using?
+
+{App / IDE Extension / CLI / Web}
+
 ### What feature would you like to see?
 
 {describe the feature and the problem it solves}
 
 ### Additional information
 
-{any other relevant context, workarounds, or alternatives - or "None"}
+{workarounds, alternatives, related issues — or omit}
 ```
 
-### Documentation Template
+### Documentation Issue (`6-docs-issue.yml`)
+
+The "type" field is a multi-select dropdown; render selected items as a bullet list.
 
 ```markdown
 ### What is the type of issue?
 
-{Documentation is missing/incorrect/confusing/Example code is not working/Something else}
+- {Documentation is missing | Documentation is incorrect | Documentation is confusing | Example code is not working | Something else}
 
 ### What is the issue?
 
-{describe the documentation problem}
+{describe the problem}
 
 ### Where did you find it?
 
-{URL or location in docs - if known}
+{URL(s) — or omit}
 ```
-
-### VS Code Extension Template
-
-```markdown
-### What version of the VS Code extension are you using?
-
-{extension version}
-
-### What subscription do you have?
-
-{Plus/Pro/Team/Enterprise - infer or ask}
-
-### Which IDE are you using?
-
-{VS Code/Cursor/Windsurf/etc.}
-
-### What platform is your computer?
-
-{see commons.md > Platform String Normalization}
-
-### What issue are you seeing?
-
-{describe the issue}
-
-### What steps can reproduce the bug?
-
-1. {step 1}
-2. {step 2}
-3. ...
-
-### What is the expected behavior?
-
-{expected behavior}
-
-### Additional information
-
-{any other relevant context}
-```
-
-## Generate Title
-
-Concise (5-10 words) with prefix: `[BUG]`, `[FEATURE]`, `[DOCS]`, or `[EXTENSION]`.
 
 ## Create the Issue
 
@@ -147,7 +264,7 @@ EOF
 )"
 ```
 
-Template labels are applied automatically by GitHub.
+Labels are applied automatically by the template — do not pass `--label`.
 
 Display: "Created: $URL"
 
@@ -158,21 +275,29 @@ See `commons.md > Comment on Existing Issue`, using repo `"openai/codex"`.
 ## Environment Detection
 
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
-- **Platform**: See `commons.md > Platform String Normalization`
-- **IDE** (for extension issues): Ask user or infer from context
+- **Platform**: See `commons.md > Platform String Normalization`. The CLI/Extension/App templates suggest `uname -mprs` on macOS/Linux; the commons override (`scripts/get-macos-version.sh`) takes precedence for macOS so the value is human-readable.
+- **IDE** (extension issues): Ask user or infer from context.
+- **Terminal** (CLI issues): Ask user — cannot be reliably auto-detected from inside an agent shell. `$TERM_PROGRAM` is a hint but not authoritative.
+- **Codex App version**: From the in-app "About Codex" dialog. Ask the user; do not guess.
 
 ## Examples
 
 ```bash
-# Bug report
-"Codex crashes when processing large files"
+# CLI bug
+"CLI hangs when piping large stdin"
 
-# Feature request
+# Codex App bug
+"Codex Desktop pet overlay cannot be dragged on secondary monitor"
+
+# Extension bug
+"VS Code extension fails to send when prompt-history is not an array"
+
+# Feature request (any variant)
 "Add support for custom system prompts"
 
 # Docs issue
-"The installation docs don't mention npm prerequisites"
+"Installation docs don't mention npm prerequisites"
 
-# Extension issue
-"The Cursor extension doesn't connect to the API"
+# Other bug (Web)
+"Codex Web session sync drops messages after refresh"
 ```
