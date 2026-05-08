@@ -181,10 +181,11 @@ When removing technical sections, leave a single line directing the reader to AG
   - Documentation site (if discovered)
   - Package on npm / crates.io / PyPI / etc.
   - Live demo / homepage
-  - Changelog (link to `CHANGELOG.md`)
-  - Releases page on GitHub
+  - Changelog — only if `CHANGELOG.md` exists at the repo root
+  - Releases page on GitHub — only if the repo actually publishes releases. Verify with `gh release list --limit 1` (non-empty output) or by checking that the GitHub remote has at least one release. Do not link to an empty `/releases` page just because the repo is on GitHub.
   - Discussion / community channels (Discord, Matrix, mailing list) — only if linked from existing project metadata
 - Each link is a single line: `- [Documentation](https://example.com/docs)`
+- Omit any bullet whose target does not exist; never include a placeholder URL or a link that would 404.
 - This is the section that replaces Install/Usage from the old template.
 
 **About / Background:**
