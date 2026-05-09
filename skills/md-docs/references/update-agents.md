@@ -18,7 +18,7 @@ Supported flags:
 Mode behavior:
 
 - If `--dry-run`: Show planned changes without writing files
-- Otherwise: Apply changes and create backups
+- Otherwise: Apply changes in place (rely on git for recovery; do not create `*.backup` files)
 - For `--preserve`: Maintain existing structure when rewriting; for default mode, reorganize for clarity when needed
 - For `--thorough`: Also analyze file content patterns, code organization conventions, and dependency relationships
 - For `--minimal`: Skip deep file content scans
@@ -149,15 +149,7 @@ Scan for patterns not mentioned in AGENTS.md. Because AGENTS.md owns all technic
 
 If `CONTRIBUTING.md` exists, list its discovered sections in the report so the user knows what to merge in.
 
-### Step 5: Create Backups
-
-Before overwriting (skipped for `--dry-run`). `CLAUDE.md` is a symlink and does not need a separate backup:
-
-```bash
-cp AGENTS.md AGENTS.md.backup
-```
-
-### Step 6: Apply Updates
+### Step 5: Apply Updates
 
 **If --dry-run:**
 
@@ -180,10 +172,10 @@ AGENTS.md: Consider adding section:
 
 1. Apply all fixes to `AGENTS.md` directly
 2. Ensure `CLAUDE.md` symlink exists: `ln -sf AGENTS.md CLAUDE.md`
-3. Optionally show diff: `diff -u AGENTS.md.backup AGENTS.md`
+3. Optionally show diff: `git diff -- AGENTS.md`
 4. Report changes made
 
-### Step 7: Required Sections in AGENTS.md
+### Step 6: Required Sections in AGENTS.md
 
 Every AGENTS.md after this workflow should have these sections (create if missing, update if present):
 
@@ -196,7 +188,7 @@ Every AGENTS.md after this workflow should have these sections (create if missin
 
 `--minimal` may compress these into a shorter form (Stack, Commands, Style) but Commands is mandatory in every mode.
 
-### Step 8: Report Summary
+### Step 7: Report Summary
 
 **Format with all expected files:**
 

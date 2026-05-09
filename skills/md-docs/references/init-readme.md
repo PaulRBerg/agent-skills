@@ -82,11 +82,7 @@ If existing file found AND `--force` not set:
   - **Abort**: Cancel operation (suggest `/md-docs:update-readme --preserve` as an alternative)
 - Wait for user response before proceeding
 
-If `--force` is set, proceed without prompting but create a backup:
-
-```bash
-cp README.md README.md.backup
-```
+If `--force` is set, proceed without prompting. Rely on git to restore prior content if needed.
 
 ### 4. Gather Project Metadata
 
@@ -359,7 +355,7 @@ Preview generated content without writing to disk.
 /md-docs:init-readme --force
 ```
 
-Replace existing README.md without prompting (creates a `.backup` first).
+Replace existing `README.md` without prompting. Rely on git to restore prior content if needed.
 
 ## Key Characteristics
 

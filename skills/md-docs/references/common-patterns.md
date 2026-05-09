@@ -41,23 +41,9 @@ Standard arguments supported across workflows:
 
 Parse arguments from user input and set appropriate flags for workflow execution.
 
-## Backup File Handling
+## Overwrite Safety
 
-Always create backups before overwriting existing files. `CLAUDE.md` is a symlink to `AGENTS.md` and does not need a separate backup:
-
-```bash
-cp AGENTS.md AGENTS.md.backup
-cp README.md README.md.backup
-```
-
-Inform the user when backups are created:
-
-```
-Created backup: AGENTS.md.backup
-Created backup: README.md.backup
-```
-
-Never delete backups automatically. Let users manage backup cleanup manually.
+Rely on git for recovery. Do not create `*.backup` files when overwriting `README.md` or `AGENTS.md`. `CLAUDE.md` is a symlink to `AGENTS.md` and is not written separately. If the working tree has uncommitted changes to the target file, surface that to the user before overwriting.
 
 ## Writing Style
 

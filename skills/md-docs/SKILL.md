@@ -110,8 +110,7 @@ Avoid tutorial-style prose, redundant context, and filler such as "In order to..
 
 Behaviors that apply across every workflow:
 
-- Always create `*.backup` files before overwriting existing targets (skipped only for `--dry-run`). Never auto-delete backups; let the user clean them up.
-- Never auto-commit. Workflows touch documentation files only; the user reviews and runs `git add` / `git commit` manually.
+- Never auto-commit. Workflows touch documentation files only; the user reviews and runs `git add` / `git commit` manually. Rely on git for recovery — do not create `*.backup` files.
 - For `init-*` workflows: refuse to overwrite an existing target unless `--force` is set or the user confirms via `AskUserQuestion`.
 - Operate only at the repository root (`git rev-parse --show-toplevel`). For monorepo subpackages, the user must `cd` into that package's directory before invoking the skill.
 - If `CONTRIBUTING.md` exists, do not edit it; surface the merge-into-AGENTS recommendation and continue.
@@ -124,7 +123,7 @@ When to use: user asks to update CLAUDE.md or AGENTS.md so they match the actual
 
 AGENTS.md owns: stack, all CLI commands (install, dev, build, test, lint, deploy), `just` recipes, `package.json` scripts, `Makefile` targets, code style, architecture, conventions, and contribution workflow.
 
-Inputs: existing `AGENTS.md` (required), package manifests, lock files, scripts, `justfile`, `Makefile`. Outputs: rewritten `AGENTS.md`, refreshed `CLAUDE.md` symlink, `*.backup` for the rewritten target.
+Inputs: existing `AGENTS.md` (required), package manifests, lock files, scripts, `justfile`, `Makefile`. Outputs: rewritten `AGENTS.md`, refreshed `CLAUDE.md` symlink.
 
 Recognised flags: `--dry-run`, `--preserve`, `--thorough`, `--minimal`.
 
@@ -138,7 +137,7 @@ If `README.md` does not exist, route to **Initialize README** instead (or, with 
 
 README owns: description, badges, links (homepage, docs site, demo, package registry), references, related work, acknowledgments, license, contributing pointer. It does **not** contain CLI commands, `just` recipes, scripts, or project structure trees — those live in AGENTS.md, and the README links to AGENTS.md for them.
 
-Inputs: existing `README.md` at the repo root (`git rev-parse --show-toplevel`); package manifests for name/version/description/license/homepage URL; git remote for repository URL. Outputs: rewritten `README.md`, optional `README.md.backup`.
+Inputs: existing `README.md` at the repo root (`git rev-parse --show-toplevel`); package manifests for name/version/description/license/homepage URL; git remote for repository URL. Outputs: rewritten `README.md`.
 
 Recognised flags: `--dry-run`, `--preserve`, `--minimal`, `--thorough` (alias `--full`).
 
@@ -190,7 +189,7 @@ Indent change details under each line so the user can scan a single file's delta
 
 For detailed workflows, examples, and implementation guidance, refer to these reference documents:
 
-- **`references/common-patterns.md`** — Audience split, argument parsing, backup handling, writing style, report formatting, file detection, metadata extraction, CONTRIBUTING.md merge recommendation
+- **`references/common-patterns.md`** — Audience split, argument parsing, writing style, report formatting, file detection, metadata extraction, CONTRIBUTING.md merge recommendation
 - **`references/update-agents.md`** — Complete context file update workflow including verification strategies, command discovery, and discrepancy detection
 - **`references/update-readme.md`** — Complete README update workflow for human-aimed content
 - **`references/init-readme.md`** — Complete README initialization workflow for human-aimed content

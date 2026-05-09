@@ -411,7 +411,7 @@ Or invoke `init-readme` directly.
 
 **Language-agnostic**: Works with Node.js, Rust, Python, Solidity, Go, Ruby, PHP, and other common stacks (only for badge selection and metadata extraction).
 
-**Non-destructive in spirit**: Overwrites README.md in place but always backs up to `README.md.backup` first (except `--dry-run`); use git to restore if needed.
+**Non-destructive in spirit**: Overwrites `README.md` in place; rely on git to restore prior content if needed.
 
 **Smart defaults**: Automatically detects project metadata and language for badge selection.
 
