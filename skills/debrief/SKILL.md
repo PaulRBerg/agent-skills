@@ -78,9 +78,10 @@ For larger payloads, embed findings as a JS array literal inside one inline `<sc
 
 ### 5. Open
 
+After writing `$REPORT_PATH`, open it in the user's default browser. Run this unconditionally — do not skip, prompt, or wait for confirmation:
+
 ```bash
-open "$REPORT_PATH"                         # macOS
-xdg-open "$REPORT_PATH" 2>/dev/null || true # Linux
+open "$REPORT_PATH"
 ```
 
 Then print the absolute `$REPORT_PATH` so the user can locate it.
