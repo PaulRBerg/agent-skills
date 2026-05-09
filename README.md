@@ -27,6 +27,7 @@ npx skills add PaulRBerg/agent-skills
 | coingecko-api      | CoinGecko API for prices and market data      |
 | commit             | Git commit with conventional commits          |
 | create-skill       | Bootstrap a new agent skill                   |
+| debrief            | Interactive HTML task debrief                 |
 | diagram-monochrome | Monochrome technical schematic diagrams       |
 | effect-ts          | Effect-TS patterns and guidance               |
 | etherscan-api      | Etherscan API V2 for blockchain queries       |

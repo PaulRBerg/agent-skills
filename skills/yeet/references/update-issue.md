@@ -41,18 +41,18 @@ gh issue view {number} \
 
 Parse the instructions naturally — multiple intents may apply at once:
 
-| Intent              | Cue words                                              | `gh issue edit` flag                  |
-| ------------------- | ------------------------------------------------------ | ------------------------------------- |
-| Update title        | "title", "rename", quoted text passed as new title     | `--title`                             |
-| Regenerate body     | "description", "body", "rewrite"                       | `--body`                              |
-| Append to body      | "add to body", "append"                                | `--body` (preserve existing + append) |
-| Add labels          | "label X", "tag as X", "add label"                     | `--add-label`                         |
-| Remove labels       | "unlabel", "remove label"                              | `--remove-label`                      |
-| Assign user         | "assign X", "assign to X", `@user`                     | `--add-assignee`                      |
-| Unassign user       | "unassign X"                                           | `--remove-assignee`                   |
-| Set milestone       | "milestone X"                                          | `--milestone`                         |
-| Close               | "close", "resolve"                                     | `gh issue close` (separate command)   |
-| Reopen              | "reopen"                                               | `gh issue reopen` (separate command)  |
+| Intent          | Cue words                                          | `gh issue edit` flag                  |
+| --------------- | -------------------------------------------------- | ------------------------------------- |
+| Update title    | "title", "rename", quoted text passed as new title | `--title`                             |
+| Regenerate body | "description", "body", "rewrite"                   | `--body`                              |
+| Append to body  | "add to body", "append"                            | `--body` (preserve existing + append) |
+| Add labels      | "label X", "tag as X", "add label"                 | `--add-label`                         |
+| Remove labels   | "unlabel", "remove label"                          | `--remove-label`                      |
+| Assign user     | "assign X", "assign to X", `@user`                 | `--add-assignee`                      |
+| Unassign user   | "unassign X"                                       | `--remove-assignee`                   |
+| Set milestone   | "milestone X"                                      | `--milestone`                         |
+| Close           | "close", "resolve"                                 | `gh issue close` (separate command)   |
+| Reopen          | "reopen"                                           | `gh issue reopen` (separate command)  |
 
 If user provides only an issue identifier with no instructions, ERROR: "Tell me what to update — title, body, labels, assignees, or state."
 

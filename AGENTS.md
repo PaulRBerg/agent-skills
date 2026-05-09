@@ -12,6 +12,15 @@ Collection of self-contained agent skills for Claude Code, Codex, and compatible
 - `README.md` lists every skill and stays minimal.
 - `CLAUDE.md` is a symlink to `AGENTS.md`; do not edit it separately.
 
+## Lint Rules
+
+After editing Markdown, run these commands **in order**.
+
+1. **`just mdformat-write`** — format Markdown in place.
+2. **`just mdformat-check`** — verify formatting passes.
+
+If `mdformat-check` fails, analyze the errors and fix only files you changed.
+
 ## Commands
 
 - `just` - list recipes.

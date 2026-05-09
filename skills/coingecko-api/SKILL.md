@@ -40,10 +40,10 @@ fi
 
 ### API Tiers
 
-| Tier | Base URL | Auth Header | Rate Limit |
-| ---- | -------- | ---------- | ---------- |
-| Demo | `https://api.coingecko.com/api/v3` | `x-cg-demo-api-key` | ~30 calls/min, ~10k/month |
-| Analyst / Lite / Pro | `https://pro-api.coingecko.com/api/v3` | `x-cg-pro-api-key` | Plan-dependent |
+| Tier                 | Base URL                               | Auth Header         | Rate Limit                |
+| -------------------- | -------------------------------------- | ------------------- | ------------------------- |
+| Demo                 | `https://api.coingecko.com/api/v3`     | `x-cg-demo-api-key` | ~30 calls/min, ~10k/month |
+| Analyst / Lite / Pro | `https://pro-api.coingecko.com/api/v3` | `x-cg-pro-api-key`  | Plan-dependent            |
 
 Authentication via HTTP header (recommended). Query parameters (`x_cg_demo_api_key` / `x_cg_pro_api_key`) also work.
 
@@ -61,25 +61,25 @@ CoinGecko uses string IDs (e.g., `bitcoin`, `ethereum`, `uniswap`) rather than s
 
 ### Common Coin IDs
 
-| Coin | ID | Symbol |
-| ---- | -- | ------ |
-| Bitcoin | `bitcoin` | BTC |
-| Ethereum | `ethereum` | ETH |
-| Solana | `solana` | SOL |
-| BNB | `binancecoin` | BNB |
-| XRP | `ripple` | XRP |
-| Cardano | `cardano` | ADA |
-| Dogecoin | `dogecoin` | DOGE |
-| Chainlink | `chainlink` | LINK |
-| Avalanche | `avalanche-2` | AVAX |
-| Polygon | `polygon-ecosystem-token` | POL |
-| Uniswap | `uniswap` | UNI |
-| Aave | `aave` | AAVE |
-| Maker | `maker` | MKR |
-| USDC | `usd-coin` | USDC |
-| USDT | `tether` | USDT |
-| DAI | `dai` | DAI |
-| Wrapped BTC | `wrapped-bitcoin` | WBTC |
+| Coin        | ID                        | Symbol |
+| ----------- | ------------------------- | ------ |
+| Bitcoin     | `bitcoin`                 | BTC    |
+| Ethereum    | `ethereum`                | ETH    |
+| Solana      | `solana`                  | SOL    |
+| BNB         | `binancecoin`             | BNB    |
+| XRP         | `ripple`                  | XRP    |
+| Cardano     | `cardano`                 | ADA    |
+| Dogecoin    | `dogecoin`                | DOGE   |
+| Chainlink   | `chainlink`               | LINK   |
+| Avalanche   | `avalanche-2`             | AVAX   |
+| Polygon     | `polygon-ecosystem-token` | POL    |
+| Uniswap     | `uniswap`                 | UNI    |
+| Aave        | `aave`                    | AAVE   |
+| Maker       | `maker`                   | MKR    |
+| USDC        | `usd-coin`                | USDC   |
+| USDT        | `tether`                  | USDT   |
+| DAI         | `dai`                     | DAI    |
+| Wrapped BTC | `wrapped-bitcoin`         | WBTC   |
 
 ## Platform Resolution
 
@@ -140,11 +140,11 @@ Common platform IDs: `ethereum`, `polygon-pos`, `arbitrum-one`, `optimistic-ethe
 
 The `/coins/{id}` response includes logo URLs in the `image` object:
 
-| Field | Typical Size |
-| ----- | ------------ |
-| `image.thumb` | 25x25 px |
-| `image.small` | 50x50 px |
-| `image.large` | 200x200 px |
+| Field         | Typical Size |
+| ------------- | ------------ |
+| `image.thumb` | 25x25 px     |
+| `image.small` | 50x50 px     |
+| `image.large` | 200x200 px   |
 
 Fetch via `/coins/{id}` or `/coins/{platform}/contract/{address}` — the `image` field is present in both responses.
 
@@ -239,30 +239,31 @@ Returns `plan`, `rate_limit_request_per_minute`, `monthly_call_credit`, and `cur
 
 **Approximate defaults** (may vary):
 
-| Tier | Requests/Min | Monthly Cap |
-| ---- | ------------ | ----------- |
-| Demo (free) | ~30 | ~10,000 |
-| Analyst | ~500 | ~500,000 |
-| Lite | ~500 | ~1,000,000 |
-| Pro | ~1,000 | ~3,000,000 |
+| Tier        | Requests/Min | Monthly Cap |
+| ----------- | ------------ | ----------- |
+| Demo (free) | ~30          | ~10,000     |
+| Analyst     | ~500         | ~500,000    |
+| Lite        | ~500         | ~1,000,000  |
+| Pro         | ~1,000       | ~3,000,000  |
 
 If rate limited (HTTP 429), wait briefly and retry. Batch multiple coin queries into single calls using comma-separated IDs where possible.
 
 ## Error Handling
 
-| HTTP Code | Error Code | Cause | Action |
-| --------- | ---------- | ----- | ------ |
-| 401 | 10002 | Invalid or missing API key | Verify the key value and base URL match the tier |
-| 401 | 10005 | Endpoint not included in current plan | Use the tier-restricted fallback below |
-| 429 | — | Rate limit exceeded | Wait and retry; reduce request frequency |
-| 200 `{}` | — | Unknown coin ID or contract address | `/simple/*` endpoints return empty `{}` instead of 404 for unrecognized IDs/addresses. Treat an empty response as "not found" and use `/search` to resolve the correct ID |
-| 404 | — | Invalid endpoint path | Verify the endpoint URL is correct |
+| HTTP Code | Error Code | Cause                                 | Action                                                                                                                                                                    |
+| --------- | ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 401       | 10002      | Invalid or missing API key            | Verify the key value and base URL match the tier                                                                                                                          |
+| 401       | 10005      | Endpoint not included in current plan | Use the tier-restricted fallback below                                                                                                                                    |
+| 429       | —          | Rate limit exceeded                   | Wait and retry; reduce request frequency                                                                                                                                  |
+| 200 `{}`  | —          | Unknown coin ID or contract address   | `/simple/*` endpoints return empty `{}` instead of 404 for unrecognized IDs/addresses. Treat an empty response as "not found" and use `/search` to resolve the correct ID |
+| 404       | —          | Invalid endpoint path                 | Verify the endpoint URL is correct                                                                                                                                        |
 
 ### Tier-Restricted Endpoints
 
 Some endpoints return 401 (error code 10005) on the Pro base URL for lower-tier plans (e.g., Analyst) but work on the Demo base URL.
 
 **Known Analyst-tier restrictions** (401/10005 on Pro base URL):
+
 - `/search/trending`
 - `/global`
 - `/global/decentralized_finance_defi`
