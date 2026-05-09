@@ -40,6 +40,7 @@ set positional-arguments          # Pass recipe args as $1, $2, etc.
 | `[arg("p", pattern="…")]` | Constrain parameter to match regex pattern     |
 | `[group("name")]`         | Group recipes in `just --list` output          |
 | `[no-cd]`                 | Don't change to justfile directory             |
+| `[parallel]`              | Run direct dependencies concurrently           |
 | `[private]`               | Hide from `just --list` (same as `_` prefix)   |
 | `[script]`                | Execute recipe as single script block          |
 | `[script("interpreter")]` | Use specific interpreter (bash, python, etc.)  |

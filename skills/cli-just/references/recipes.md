@@ -102,6 +102,50 @@ deploy-prod:
     ./deploy.sh production
 ```
 
+### Parallel Execution
+
+Marks a recipe so its **direct dependencies run concurrently** instead of sequentially. Introduced in just 1.42.0
+([casey/just#2803](https://github.com/casey/just/pull/2803)).
+
+```just
+[parallel]
+ci: lint test build
+
+lint:
+    bun lint
+test:
+    bun test
+build:
+    bun run build
+```
+
+**Behavior:**
+
+- Only **direct** dependencies fan out. The recipe body itself still runs after all parallel deps finish.
+- **Shared transitive deps run exactly once before the parallel fan-out**, so this is the right primitive for
+  `setup → fan-out work` graphs — a dep referenced by multiple parallel siblings is deduped, not run once per sibling.
+- No concurrency cap is exposed; just launches all direct deps at once.
+- Empirical timing on a sleep-0.5 fan-out of three deps: **1.54 s sequential → 0.54 s with `[parallel]`**.
+
+Pairs naturally with parameterized dependencies (`recipe: (sub-recipe "arg1" "arg2")`) for table-driven fan-out where
+every sibling shares a setup step:
+
+```just
+[parallel]
+check: \
+    (_check "lint")  \
+    (_check "test")  \
+    (_check "types")
+
+_check kind: setup
+    ./scripts/check.sh {{ kind }}
+
+setup:
+    bun install --frozen-lockfile
+```
+
+Here `setup` runs once thanks to transitive dedup, then the three `_check` invocations run concurrently.
+
 ### Documentation
 
 ```just
