@@ -24,18 +24,20 @@ Verified against the live `chainlist` endpoint (64 chains).
 
 ## Free Tier NOT Available
 
-The following chains require a paid Etherscan plan:
+The following chains require a paid Etherscan plan for data endpoints (balances, transactions, logs, etc.):
 
-| Chain                | Chain ID |
-| -------------------- | -------- |
-| Base Mainnet         | `8453`   |
-| Base Sepolia Testnet | `84532`  |
-| OP Mainnet           | `10`     |
+| Chain                | Chain ID   |
+| -------------------- | ---------- |
+| Base Mainnet         | `8453`     |
+| Base Sepolia Testnet | `84532`    |
+| OP Mainnet           | `10`       |
 | OP Sepolia Testnet   | `11155420` |
-| Avalanche C-Chain    | `43114`  |
-| Avalanche Fuji       | `43113`  |
-| BNB Smart Chain      | `56`     |
-| BNB Testnet          | `97`     |
+| Avalanche C-Chain    | `43114`    |
+| Avalanche Fuji       | `43113`    |
+| BNB Smart Chain      | `56`       |
+| BNB Testnet          | `97`       |
+
+**Exception:** `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on **all** chains for **every** plan, including the free tier. The paid-plan requirement above applies only to data endpoints.
 
 ## Other Mainnets (Free Tier Available)
 
@@ -95,12 +97,12 @@ The following chains require a paid Etherscan plan:
 
 These chains were previously supported but **API requests will fail** on the V2 endpoint as of the dates noted:
 
-| Chain                              | Chain ID | Deprecated   |
-| ---------------------------------- | -------- | ------------ |
-| Scroll Mainnet                     | `534352` | Apr 16, 2026 |
-| Scroll Sepolia                     | `534351` | Apr 16, 2026 |
-| Swell Mainnet                      | `1923`   | Feb 25, 2026 |
-| Swell Testnet                      | `1924`   | Feb 25, 2026 |
+| Chain                              | Chain ID | Deprecated                         |
+| ---------------------------------- | -------- | ---------------------------------- |
+| Scroll Mainnet                     | `534352` | Apr 16, 2026                       |
+| Scroll Sepolia                     | `534351` | Apr 16, 2026                       |
+| Swell Mainnet                      | `1923`   | Feb 25, 2026                       |
+| Swell Testnet                      | `1924`   | Feb 25, 2026                       |
 | MemeCore Formicarium Testnet (old) | `43521`  | Feb 25, 2026 (migrated to `43522`) |
 
 The following chains are **not currently supported** on Etherscan V2 and were never part of the V2 unified API: Holesky, zkSync Era (`324`), zkSync Sepolia (`300`), Arbitrum Nova (`42170`). If a user references these, route them to a chain-native explorer instead.

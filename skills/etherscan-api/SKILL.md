@@ -81,14 +81,14 @@ Query native ETH (or native token) balance for an address.
 
 ### Endpoint Parameters
 
-| Parameter | Required | Default  | Description                                          |
-| --------- | -------- | -------- | ---------------------------------------------------- |
-| `chainid` | No       | `1`      | Chain ID (see chains.md)                             |
-| `module`  | Yes      | -        | Set to `account`                                     |
-| `action`  | Yes      | -        | Set to `balance`                                     |
-| `address` | Yes      | -        | Wallet address (supports up to 20 comma-separated)   |
+| Parameter | Required | Default  | Description                                                                                                 |
+| --------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `chainid` | No       | `1`      | Chain ID (see chains.md)                                                                                    |
+| `module`  | Yes      | -        | Set to `account`                                                                                            |
+| `action`  | Yes      | -        | Set to `balance`                                                                                            |
+| `address` | Yes      | -        | Wallet address (supports up to 20 comma-separated)                                                          |
 | `tag`     | No       | `latest` | `latest` or hex block number (last 128 blocks only — older history needs the `balancehistory` PRO endpoint) |
-| `apikey`  | Yes      | -        | API key from `$ETHERSCAN_API_KEY`                    |
+| `apikey`  | Yes      | -        | API key from `$ETHERSCAN_API_KEY`                                                                           |
 
 ### Single Address Query
 
@@ -163,10 +163,10 @@ curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokenba
 
 `tokenbalance` returns the balance for **one** ERC-20 contract at a time. To list **every** token an address holds, use the PRO endpoints:
 
-| Action                    | Returns                                                  |
-| ------------------------- | -------------------------------------------------------- |
-| `addresstokenbalance`     | All ERC-20 holdings (token, quantity, decimals, USD price) |
-| `addresstokennftbalance`  | All ERC-721 collection holdings and counts               |
+| Action                   | Returns                                                    |
+| ------------------------ | ---------------------------------------------------------- |
+| `addresstokenbalance`    | All ERC-20 holdings (token, quantity, decimals, USD price) |
+| `addresstokennftbalance` | All ERC-721 collection holdings and counts                 |
 
 Both require Standard plan or higher and are throttled to **2 calls/second** regardless of tier. On free tier, the workaround is calling `tokenbalance` once per known token contract.
 
@@ -174,29 +174,29 @@ Both require Standard plan or higher and are throttled to **2 calls/second** reg
 
 Query an address's transaction history. Five actions are available under `module=account`:
 
-| Action            | Returns                                            |
-| ----------------- | -------------------------------------------------- |
-| `txlist`          | Normal (external) transactions                     |
-| `txlistinternal`  | Internal transactions (contract-initiated)         |
-| `tokentx`         | ERC-20 token transfer events                       |
-| `tokennfttx`      | ERC-721 (NFT) token transfer events                |
-| `token1155tx`     | ERC-1155 token transfer events                     |
+| Action           | Returns                                    |
+| ---------------- | ------------------------------------------ |
+| `txlist`         | Normal (external) transactions             |
+| `txlistinternal` | Internal transactions (contract-initiated) |
+| `tokentx`        | ERC-20 token transfer events               |
+| `tokennfttx`     | ERC-721 (NFT) token transfer events        |
+| `token1155tx`    | ERC-1155 token transfer events             |
 
 ### Endpoint Parameters
 
-| Parameter         | Required | Default     | Description                                           |
-| ----------------- | -------- | ----------- | ----------------------------------------------------- |
-| `chainid`         | No       | `1`         | Chain ID (see chains.md)                              |
-| `module`          | Yes      | -           | Set to `account`                                      |
-| `action`          | Yes      | -           | One of the actions above                              |
-| `address`         | Yes      | -           | Wallet address                                        |
+| Parameter         | Required | Default     | Description                                                  |
+| ----------------- | -------- | ----------- | ------------------------------------------------------------ |
+| `chainid`         | No       | `1`         | Chain ID (see chains.md)                                     |
+| `module`          | Yes      | -           | Set to `account`                                             |
+| `action`          | Yes      | -           | One of the actions above                                     |
+| `address`         | Yes      | -           | Wallet address                                               |
 | `contractaddress` | No       | -           | Token contract filter (`tokentx`/`tokennfttx`/`token1155tx`) |
-| `startblock`      | No       | `0`         | Starting block number                                 |
-| `endblock`        | No       | `999999999` | Ending block number                                   |
-| `page`            | No       | `1`         | Page number for pagination                            |
-| `offset`          | No       | `100`       | Results per page (see free-tier limit note below)     |
-| `sort`            | No       | `asc`       | `asc` or `desc` by block number                       |
-| `apikey`          | Yes      | -           | API key from `$ETHERSCAN_API_KEY`                     |
+| `startblock`      | No       | `0`         | Starting block number                                        |
+| `endblock`        | No       | `999999999` | Ending block number                                          |
+| `page`            | No       | `1`         | Page number for pagination                                   |
+| `offset`          | No       | `100`       | Results per page (see free-tier limit note below)            |
+| `sort`            | No       | `asc`       | `asc` or `desc` by block number                              |
+| `apikey`          | Yes      | -           | API key from `$ETHERSCAN_API_KEY`                            |
 
 > **Free-tier limit change effective July 1, 2026:** `offset` maximum drops from `10000` → `1000` for free-tier accounts on `txlist`, `txlistinternal`, `tokentx`, `tokennfttx`, `token1155tx`, and several other list endpoints. Paginate in batches of 1,000 or fewer to stay forward-compatible. Paid tiers retain the 10,000 cap.
 
@@ -316,14 +316,30 @@ echo "scale=6; 135499000000 / 1000000" | bc
 
 ## Free Tier Limitations
 
-The following chains require a paid Etherscan plan and are **not available** on free tier:
+### Paid-Only Chains
 
-- Base (`8453`)
-- OP Mainnet (`10`)
-- Avalanche C-Chain (`43114`)
-- BNB Smart Chain (`56`)
+Four chain families (8 chains total, mainnet + testnet) require a paid Etherscan plan. Account, transaction, log, and similar data endpoints will fail on the free tier:
 
-If a user requests a query on these chains, inform them that a paid plan is required.
+| Chain             | Chain ID   |
+| ----------------- | ---------- |
+| Base Mainnet      | `8453`     |
+| Base Sepolia      | `84532`    |
+| OP Mainnet        | `10`       |
+| OP Sepolia        | `11155420` |
+| Avalanche C-Chain | `43114`    |
+| Avalanche Fuji    | `43113`    |
+| BNB Smart Chain   | `56`       |
+| BNB Testnet       | `97`       |
+
+**Exception:** Per Etherscan, source code and ABI endpoints (`module=contract`, e.g. `getsourcecode`, `getabi`) are available on **all** chains for every plan, including free tier. The paid-plan requirement applies only to data endpoints (balances, transactions, logs, etc.).
+
+If a user requests a data query on the chains above, inform them that a paid plan is required.
+
+### Free-Tier Chains
+
+All other supported chains — including Ethereum, Polygon, Arbitrum One, Linea, Blast, Mantle, Unichain, Gnosis, Celo, Fraxtal, Moonbeam, Moonriver, opBNB, Sonic, Sei, Monad, Berachain, Abstract, ApeChain, World, Katana, HyperEVM, MegaETH, Memecore, Plasma, Stable, Taiko, BitTorrent, XDC, and their testnets — are available on the free tier.
+
+See `./references/chains.md` for the full list with chain IDs.
 
 ## Error Handling
 
