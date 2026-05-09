@@ -24,10 +24,12 @@ npx skills add PaulRBerg/agent-skills
 | code-polish        | Combined simplification and review            |
 | code-review        | Expert code review                            |
 | code-simplify      | Code simplification and refactoring           |
+| coingecko-api      | CoinGecko API for prices and market data      |
 | commit             | Git commit with conventional commits          |
 | create-skill       | Bootstrap a new agent skill                   |
 | diagram-monochrome | Monochrome technical schematic diagrams       |
 | effect-ts          | Effect-TS patterns and guidance               |
+| etherscan-api      | Etherscan API V2 for blockchain queries       |
 | evm-chains         | EVM chain metadata and RouteMesh reference    |
 | git-squash         | Squash PR branch with semantic commit message |
 | md-docs            | Markdown documentation management             |
