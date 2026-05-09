@@ -10,11 +10,12 @@ description: This skill should be used when the user asks to "check ETH balance"
 Query blockchain data using Etherscan's unified API V2. This skill covers:
 
 - Native ETH balance queries
-- ERC-20 token balance queries (single contract; full holdings require PRO plan)
+- ERC-20 token balance queries (single contract on every plan; full holdings on PRO)
 - Transaction history queries (normal, internal, ERC-20/ERC-721/ERC-1155 transfers)
 - Multi-chain support via the `chainid` parameter
+- Auto-detection of free vs PRO so PRO-only endpoints are used when available
 
-**Scope:** This skill focuses on read-only account queries for free-tier accounts. For other Etherscan API features, consult the fallback documentation.
+**Scope:** Read-only account queries. For other Etherscan API features, consult the fallback documentation.
 
 ## Prerequisites
 
@@ -31,6 +32,48 @@ fi
 ```
 
 If the environment variable is missing, inform the user and halt execution.
+
+### Plan Detection
+
+Run the detection helper **once per session** and cache the result. It maps `getapilimit` → plan tier and probes a PRO endpoint to disambiguate Free from Lite:
+
+```bash
+./scripts/detect-plan.sh
+```
+
+Output (key=value lines):
+
+```
+plan=free
+credit_limit=100000
+credits_used=4
+credits_available=99996
+limit_interval=daily
+interval_expiry=14:38:10
+pro_endpoints=false
+```
+
+`plan` is one of `free`, `lite_with_pro`, `standard`, `advanced`, `professional`, `pro_plus`, `enterprise`, `unknown`. `pro_endpoints=true` means PRO-only actions (`addresstokenbalance`, `balancehistory`, `tokenholderlist`, daily-stats endpoints, etc.) are callable.
+
+**Manual detection** (if the script is unavailable):
+
+```bash
+curl -s "https://api.etherscan.io/v2/api?chainid=1&module=getapilimit&action=getapilimit&apikey=$ETHERSCAN_API_KEY"
+# → {"status":"1","message":"OK","result":{"creditsUsed":1,"creditsAvailable":99999,"creditLimit":100000,"limitInterval":"daily","intervalExpiryTimespan":"07:20:05"}}
+```
+
+| `creditLimit` | Plan         | PRO endpoints         |
+| ------------- | ------------ | --------------------- |
+| 100,000       | Free or Lite | No (probe to confirm) |
+| 200,000       | Standard     | Yes                   |
+| 500,000       | Advanced     | Yes                   |
+| 1,000,000     | Professional | Yes                   |
+| 1,500,000     | Pro Plus     | Yes                   |
+| > 1,500,000   | Enterprise   | Yes                   |
+
+Free and Lite both report `creditLimit: 100000`. Lite raises rate-limit-per-second (5 vs 3) but does **not** unlock PRO endpoints — those start at Standard. Confirm by attempting a PRO call; the failure response is `"Sorry, it looks like you are trying to access an API Pro endpoint."`.
+
+`getapilimit` itself consumes 1 credit (plus 1 more for the PRO probe), so do not re-run mid-session.
 
 ## Chain Inference
 
@@ -81,14 +124,14 @@ Query native ETH (or native token) balance for an address.
 
 ### Endpoint Parameters
 
-| Parameter | Required | Default  | Description                                                                                                 |
-| --------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `chainid` | No       | `1`      | Chain ID (see chains.md)                                                                                    |
-| `module`  | Yes      | -        | Set to `account`                                                                                            |
-| `action`  | Yes      | -        | Set to `balance`                                                                                            |
-| `address` | Yes      | -        | Wallet address (supports up to 20 comma-separated)                                                          |
-| `tag`     | No       | `latest` | `latest` or hex block number (last 128 blocks only — older history needs the `balancehistory` PRO endpoint) |
-| `apikey`  | Yes      | -        | API key from `$ETHERSCAN_API_KEY`                                                                           |
+| Parameter | Required | Default  | Description                                                                                                                                           |
+| --------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chainid` | No       | `1`      | Chain ID (see chains.md)                                                                                                                              |
+| `module`  | Yes      | -        | Set to `account`                                                                                                                                      |
+| `action`  | Yes      | -        | Set to `balance`                                                                                                                                      |
+| `address` | Yes      | -        | Wallet address (supports up to 20 comma-separated)                                                                                                    |
+| `tag`     | No       | `latest` | `latest` or hex block number. On free/Lite, only the last 128 blocks are queryable; older history needs the `balancehistory` PRO endpoint (Standard+) |
+| `apikey`  | Yes      | -        | API key from `$ETHERSCAN_API_KEY`                                                                                                                     |
 
 ### Single Address Query
 
@@ -159,16 +202,22 @@ curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokenba
 }
 ```
 
-### Full Holdings (PRO Only)
+### Full Holdings
 
-`tokenbalance` returns the balance for **one** ERC-20 contract at a time. To list **every** token an address holds, use the PRO endpoints:
+`tokenbalance` returns the balance for **one** ERC-20 contract at a time. To list **every** token an address holds:
 
 | Action                   | Returns                                                    |
 | ------------------------ | ---------------------------------------------------------- |
 | `addresstokenbalance`    | All ERC-20 holdings (token, quantity, decimals, USD price) |
 | `addresstokennftbalance` | All ERC-721 collection holdings and counts                 |
 
-Both require Standard plan or higher and are throttled to **2 calls/second** regardless of tier. On free tier, the workaround is calling `tokenbalance` once per known token contract.
+**Use only when `pro_endpoints=true`** from plan detection. Both require Standard plan or higher and are throttled to **2 calls/second** regardless of tier.
+
+```bash
+curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=addresstokenbalance&address=0x...&page=1&offset=100&apikey=$ETHERSCAN_API_KEY"
+```
+
+When `pro_endpoints=false`, fall back to looping `tokenbalance` over a known token contract list.
 
 ## Transaction History Queries
 
@@ -198,7 +247,7 @@ Query an address's transaction history. Five actions are available under `module
 | `sort`            | No       | `asc`       | `asc` or `desc` by block number                              |
 | `apikey`          | Yes      | -           | API key from `$ETHERSCAN_API_KEY`                            |
 
-> **Free-tier limit change effective July 1, 2026:** `offset` maximum drops from `10000` → `1000` for free-tier accounts on `txlist`, `txlistinternal`, `tokentx`, `tokennfttx`, `token1155tx`, and several other list endpoints. Paginate in batches of 1,000 or fewer to stay forward-compatible. Paid tiers retain the 10,000 cap.
+> **Pagination cap by plan (effective July 1, 2026):** `offset` maximum is `1000` for free-tier accounts and `10000` for paid tiers (Lite included) on `txlist`, `txlistinternal`, `tokentx`, `tokennfttx`, `token1155tx`, and other list endpoints. When `plan=free`, paginate in batches ≤ 1,000.
 
 ### Example Query
 
@@ -314,11 +363,13 @@ echo "scale=6; 135499000000 / 1000000" | bc
 
 **User preference:** If the user requests a specific format (JSON, CSV, plain text, etc.), use that format instead. Do not generate a Markdown table when the user specifies an alternative output format.
 
-## Free Tier Limitations
+## Plan-Gated Capabilities
+
+Decisions in this section depend on the cached output of `./scripts/detect-plan.sh`.
 
 ### Paid-Only Chains
 
-Four chain families (8 chains total, mainnet + testnet) require a paid Etherscan plan. Account, transaction, log, and similar data endpoints will fail on the free tier:
+Four chain families (8 chains total, mainnet + testnet) require any paid Etherscan plan. Data endpoints (balance, txlist, logs, etc.) will fail when `plan=free`:
 
 | Chain             | Chain ID   |
 | ----------------- | ---------- |
@@ -331,13 +382,27 @@ Four chain families (8 chains total, mainnet + testnet) require a paid Etherscan
 | BNB Smart Chain   | `56`       |
 | BNB Testnet       | `97`       |
 
-**Exception:** Per Etherscan, source code and ABI endpoints (`module=contract`, e.g. `getsourcecode`, `getabi`) are available on **all** chains for every plan, including free tier. The paid-plan requirement applies only to data endpoints (balances, transactions, logs, etc.).
+**Exception:** `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on **all** chains for every plan including free. The paid-plan requirement applies only to data endpoints.
 
-If a user requests a data query on the chains above, inform them that a paid plan is required.
+If `plan=free` and the user requests a data query on the chains above, halt and inform them a paid plan is required.
 
-### Free-Tier Chains
+### PRO-Only Endpoints
 
-All other supported chains — including Ethereum, Polygon, Arbitrum One, Linea, Blast, Mantle, Unichain, Gnosis, Celo, Fraxtal, Moonbeam, Moonriver, opBNB, Sonic, Sei, Monad, Berachain, Abstract, ApeChain, World, Katana, HyperEVM, MegaETH, Memecore, Plasma, Stable, Taiko, BitTorrent, XDC, and their testnets — are available on the free tier.
+When `pro_endpoints=true`, the following actions become available (non-exhaustive — see `https://docs.etherscan.io/api-pro/api-pro` for the full list):
+
+| Module       | Action(s)                                                                   | Use case                           |
+| ------------ | --------------------------------------------------------------------------- | ---------------------------------- |
+| `account`    | `addresstokenbalance`, `addresstokennftbalance`, `balancehistory`           | Full holdings, historical balances |
+| `token`      | `tokenholderlist`, `tokeninfo`, `tokensupplyhistory`, `tokenbalancehistory` | Token analytics                    |
+| `block`      | `dailyavgblocksize`, `dailyblkcount`, `dailyblockrewards`, etc.             | Daily block stats                  |
+| `stats`      | `dailytxnfee`, `dailynewaddress`, `dailynetutilization`, etc.               | Network-wide daily metrics         |
+| `gastracker` | `dailyavggaslimit`, `dailygasused`, `dailyavggasprice`                      | Daily gas metrics                  |
+
+When `pro_endpoints=false` (free or Lite), prefer the non-PRO equivalents listed in this skill or fall back to per-token loops.
+
+### All Plans
+
+All other supported chains — Ethereum, Polygon, Arbitrum One, Linea, Blast, Mantle, Unichain, Gnosis, Celo, Fraxtal, Moonbeam, Moonriver, opBNB, Sonic, Sei, Monad, Berachain, Abstract, ApeChain, World, Katana, HyperEVM, MegaETH, Memecore, Plasma, Stable, Taiko, BitTorrent, XDC, and their testnets — are available on every plan including free.
 
 See `./references/chains.md` for the full list with chain IDs.
 
@@ -351,18 +416,26 @@ See `./references/chains.md` for the full list with chain IDs.
 | `0`    | `Invalid address format` | Malformed address               |
 | `0`    | `No transactions found`  | Address has no activity         |
 
-### Rate Limits (Free Tier)
+### Rate Limits by Plan
 
-- 3 calls/second
-- 100,000 calls/day
+| Plan         | Calls/second | Daily calls |
+| ------------ | ------------ | ----------- |
+| Free         | 3            | 100,000     |
+| Lite         | 5            | 100,000     |
+| Standard     | 10           | 200,000     |
+| Advanced     | 20           | 500,000     |
+| Professional | 30           | 1,000,000   |
+| Pro Plus     | 30           | 1,500,000   |
+| Enterprise   | custom       | unmetered   |
 
-The Lite tier raises this to 5 calls/second; higher tiers go further. See `https://docs.etherscan.io/resources/rate-limits` for the full schedule.
+PRO endpoints (`addresstokenbalance`, etc.) are throttled to **2 calls/second** regardless of tier. See `https://docs.etherscan.io/resources/rate-limits` for the authoritative schedule.
 
 If rate limited, wait briefly and retry.
 
 ## Reference Files
 
 - **`./references/chains.md`** - Complete list of supported chains with chain IDs
+- **`./scripts/detect-plan.sh`** - Plan-tier detection helper (run once per session)
 
 ## Fallback Documentation
 
