@@ -3,12 +3,12 @@ argument-hint: '[<slug>]'
 disable-model-invocation: false
 name: debrief
 user-invocable: true
-description: This skill should be used when the user asks to "debrief", "debrief this task", "debrief the session", "save findings", "save analysis", "save this as a report", "create an HTML report from the transcript", or wants to persist the current task's findings as a self-contained interactive HTML playground at `./.agents/findings/<slug>/index.html`.
+description: This skill should be used when the user asks to "debrief", "debrief this task", "debrief the session", "save findings", "save analysis", "save this as a report", "create an HTML report from the transcript", or wants to persist the current task's findings as a self-contained interactive HTML playground at `./.ai/reports/<slug>/index.html`.
 ---
 
 # Debrief
 
-Persist the current task's findings as a self-contained, interactive HTML debrief at `./.agents/findings/<slug>/index.html`. Pick a slug from the user's task, build the page using the [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill's conventions, and pre-populate it with concrete findings drawn from the transcript.
+Persist the current task's findings as a self-contained, interactive HTML debrief at `./.ai/reports/<slug>/index.html`. Pick a slug from the user's task, build the page using the [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill's conventions, and pre-populate it with concrete findings drawn from the transcript.
 
 ## Arguments
 
@@ -43,8 +43,8 @@ The script:
 - Validates the slug.
 - Probes `.agents/skills/playground`, `.claude/skills/playground`, `~/.agents/skills/playground`, `~/.claude/skills/playground`.
 - Exits `2` with the install command if `playground` is missing — relay the message verbatim and stop.
-- Creates `./.agents/findings/<slug>/`.
-- Prints four `KEY=VALUE` lines on stdout: `PLAYGROUND_DIR`, `FINDINGS_DIR`, `REPORT_PATH`, `EXISTS`.
+- Creates `./.ai/reports/<slug>/`.
+- Prints four `KEY=VALUE` lines on stdout: `PLAYGROUND_DIR`, `REPORTS_DIR`, `REPORT_PATH`, `EXISTS`.
 
 If `EXISTS=true`, ask the user before continuing: overwrite or pick a new slug.
 
@@ -88,7 +88,7 @@ Then print the absolute `$REPORT_PATH` so the user can locate it.
 
 ## Output
 
-A self-contained HTML debrief at `./.agents/findings/<slug>/index.html` that:
+A self-contained HTML debrief at `./.ai/reports/<slug>/index.html` that:
 
 - Surfaces concrete findings from the user's task.
 - Lets the user explore, filter, or annotate them interactively.
@@ -96,7 +96,7 @@ A self-contained HTML debrief at `./.agents/findings/<slug>/index.html` that:
 
 ## Notes
 
-- Write only under `./.agents/findings/<slug>/`. Never write elsewhere.
+- Write only under `./.ai/reports/<slug>/`. Never write elsewhere.
 - The HTML must be self-contained — no external CSS, JS, fonts, or images.
 - Re-run with a different slug to keep parallel debriefs.
-- Suggest the user add `.agents/findings/` to `.gitignore` if debriefs shouldn't be committed.
+- Suggest the user add `.ai/reports/` to `.gitignore` if debriefs shouldn't be committed.

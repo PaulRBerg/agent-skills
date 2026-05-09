@@ -1,10 +1,10 @@
 #!/bin/bash
-# debrief: probe playground skill, validate slug, create findings directory.
+# debrief: probe playground skill, validate slug, create reports directory.
 # Usage: prepare.sh <slug>
 # Stdout (KEY=VALUE per line):
 #   PLAYGROUND_DIR  absolute path to playground skill root
-#   FINDINGS_DIR    absolute path to ./.agents/findings/<slug>
-#   REPORT_PATH     absolute path to ./.agents/findings/<slug>/index.html
+#   REPORTS_DIR     absolute path to ./.ai/reports/<slug>
+#   REPORT_PATH     absolute path to ./.ai/reports/<slug>/index.html
 #   EXISTS          true if REPORT_PATH already exists, otherwise false
 # Exit codes:
 #   0  ok
@@ -52,9 +52,9 @@ EOF
   exit 2
 fi
 
-FINDINGS_DIR="$(pwd)/.agents/findings/$SLUG"
-mkdir -p "$FINDINGS_DIR"
-REPORT_PATH="$FINDINGS_DIR/index.html"
+REPORTS_DIR="$(pwd)/.ai/reports/$SLUG"
+mkdir -p "$REPORTS_DIR"
+REPORT_PATH="$REPORTS_DIR/index.html"
 
 if [ -f "$REPORT_PATH" ]; then
   EXISTS="true"
@@ -63,6 +63,6 @@ else
 fi
 
 printf 'PLAYGROUND_DIR=%s\n' "$PLAYGROUND_DIR"
-printf 'FINDINGS_DIR=%s\n'   "$FINDINGS_DIR"
+printf 'REPORTS_DIR=%s\n'    "$REPORTS_DIR"
 printf 'REPORT_PATH=%s\n'    "$REPORT_PATH"
 printf 'EXISTS=%s\n'         "$EXISTS"
