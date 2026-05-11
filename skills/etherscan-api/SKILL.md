@@ -14,7 +14,7 @@ Query blockchain data using Etherscan's unified API V2. This skill covers:
 - Transaction history queries (normal, internal, ERC-20/ERC-721/ERC-1155 transfers)
 - First-funding lookup for an address (PRO `fundedby` with a 2-call free-tier fallback)
 - Multi-chain support via the `chainid` parameter
-- Auto-detection of free vs PRO so PRO-only endpoints are used when available
+- Auto-detection of Free vs Lite vs PRO so paid-only chains and PRO-only endpoints are used when available
 
 **Scope:** Read-only account queries. For other Etherscan API features, consult the fallback documentation.
 
@@ -36,7 +36,7 @@ If the environment variable is missing, inform the user and halt execution.
 
 ### Plan Detection
 
-Run the detection helper **once per session** and cache the result. It maps `getapilimit` → plan tier and probes a PRO endpoint to disambiguate Free from Lite:
+Run the detection helper **once per session** and cache the result. It maps `getapilimit` → plan tier and probes a Base balance call to disambiguate Free from Lite:
 
 ```bash
 ./scripts/detect-plan.sh
@@ -45,16 +45,20 @@ Run the detection helper **once per session** and cache the result. It maps `get
 Output (key=value lines):
 
 ```
-plan=free
+plan=lite
 credit_limit=100000
 credits_used=4
 credits_available=99996
 limit_interval=daily
 interval_expiry=14:38:10
 pro_endpoints=false
+paid_chains=true
 ```
 
-`plan` is one of `free`, `lite_with_pro`, `standard`, `advanced`, `professional`, `pro_plus`, `enterprise`, `unknown`. `pro_endpoints=true` means PRO-only actions (`addresstokenbalance`, `balancehistory`, `tokenholderlist`, daily-stats endpoints, etc.) are callable.
+`plan` is one of `free`, `lite`, `standard`, `advanced`, `professional`, `pro_plus`, `enterprise`, `unknown`. Two boolean fields gate behavior:
+
+- `paid_chains=true` — paid-only chains (Base, OP, Avalanche, BNB) are queryable. True for Lite and all higher tiers.
+- `pro_endpoints=true` — PRO-only actions (`addresstokenbalance`, `balancehistory`, `tokenholderlist`, `fundedby`, daily-stats endpoints, etc.) are callable. True for Standard and higher; **false on Lite**.
 
 **Manual detection** (if the script is unavailable):
 
@@ -63,18 +67,18 @@ curl -s "https://api.etherscan.io/v2/api?chainid=1&module=getapilimit&action=get
 # → {"status":"1","message":"OK","result":{"creditsUsed":1,"creditsAvailable":99999,"creditLimit":100000,"limitInterval":"daily","intervalExpiryTimespan":"07:20:05"}}
 ```
 
-| `creditLimit` | Plan         | PRO endpoints         |
-| ------------- | ------------ | --------------------- |
-| 100,000       | Free or Lite | No (probe to confirm) |
-| 200,000       | Standard     | Yes                   |
-| 500,000       | Advanced     | Yes                   |
-| 1,000,000     | Professional | Yes                   |
-| 1,500,000     | Pro Plus     | Yes                   |
-| > 1,500,000   | Enterprise   | Yes                   |
+| `creditLimit` | Plan         | Paid-only chains | PRO endpoints |
+| ------------- | ------------ | ---------------- | ------------- |
+| 100,000       | Free or Lite | Probe to confirm | No            |
+| 200,000       | Standard     | Yes              | Yes           |
+| 500,000       | Advanced     | Yes              | Yes           |
+| 1,000,000     | Professional | Yes              | Yes           |
+| 1,500,000     | Pro Plus     | Yes              | Yes           |
+| > 1,500,000   | Enterprise   | Yes              | Yes           |
 
-Free and Lite both report `creditLimit: 100000`. Lite raises rate-limit-per-second (5 vs 3) but does **not** unlock PRO endpoints — those start at Standard. Confirm by attempting a PRO call; the failure response is `"Sorry, it looks like you are trying to access an API Pro endpoint."`.
+Free and Lite both report `creditLimit: 100000`. Lite ($49/mo) raises rate-limit-per-second (5 vs 3) **and unlocks every supported chain** (Base, OP, Avalanche, BNB), but does **not** add PRO endpoints — those start at Standard. To disambiguate, attempt a paid-chain balance call (e.g., `chainid=8453`): status=1 → Lite, status=0 → Free. To probe PRO instead, the failure response is `"Sorry, it looks like you are trying to access an API Pro endpoint."`.
 
-`getapilimit` itself consumes 1 credit (plus 1 more for the PRO probe), so do not re-run mid-session.
+`getapilimit` itself consumes 1 credit (plus 1 more for the paid-chain probe), so do not re-run mid-session.
 
 ## Chain Inference
 
@@ -442,7 +446,7 @@ Decisions in this section depend on the cached output of `./scripts/detect-plan.
 
 ### Paid-Only Chains
 
-Four chain families (8 chains total, mainnet + testnet) require any paid Etherscan plan. Data endpoints (balance, txlist, logs, etc.) will fail when `plan=free`:
+Four chain families (8 chains total, mainnet + testnet) require any paid Etherscan plan. **Lite ($49/mo) is sufficient** — it grants access to every supported chain at the same 100,000 daily-credit limit as Free. Data endpoints (balance, txlist, logs, etc.) fail only when `plan=free` (i.e., `paid_chains=false`):
 
 | Chain             | Chain ID   |
 | ----------------- | ---------- |
@@ -457,7 +461,7 @@ Four chain families (8 chains total, mainnet + testnet) require any paid Ethersc
 
 **Exception:** `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on **all** chains for every plan including free. The paid-plan requirement applies only to data endpoints.
 
-If `plan=free` and the user requests a data query on the chains above, halt and inform them a paid plan is required.
+If `paid_chains=false` (i.e., `plan=free`) and the user requests a data query on the chains above, halt and inform them upgrading to Lite or higher is required.
 
 ### PRO-Only Endpoints
 
@@ -475,7 +479,7 @@ When `pro_endpoints=false` (free or Lite), prefer the non-PRO equivalents listed
 
 ### All Plans
 
-All other supported chains — Ethereum, Polygon, Arbitrum One, Linea, Blast, Mantle, Unichain, Gnosis, Celo, Fraxtal, Moonbeam, Moonriver, opBNB, Sonic, Sei, Monad, Berachain, Abstract, ApeChain, World, Katana, HyperEVM, MegaETH, Memecore, Plasma, Stable, Taiko, BitTorrent, XDC, and their testnets — are available on every plan including free.
+All other supported chains — Ethereum, Polygon, Arbitrum One, Linea, Blast, Mantle, Unichain, Gnosis, Celo, Fraxtal, Moonbeam, Moonriver, opBNB, Sonic, Sei, Monad, Berachain, Abstract, ApeChain, World, Katana, HyperEVM, MegaETH, Memecore, Plasma, Stable, Taiko, BitTorrent, XDC, and their testnets — are available on every plan including Free. On Lite and higher, the paid-only chains above also become available.
 
 See `./references/chains.md` for the full list with chain IDs.
 

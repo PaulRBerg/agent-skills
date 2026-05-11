@@ -9,9 +9,10 @@
 #   limit_interval=<string>
 #   interval_expiry=<HH:MM:SS>
 #   pro_endpoints=<true|false>
+#   paid_chains=<true|false>
 #
 # Cache the result for the session — getapilimit itself consumes 1 credit, and
-# the optional PRO probe consumes another.
+# the paid-chain probe (when needed) consumes another.
 
 set -eu
 
@@ -44,33 +45,36 @@ credits_avail=$(extract_num "$response" "creditsAvailable")
 interval=$(extract_str "$response" "limitInterval")
 expiry=$(extract_str "$response" "intervalExpiryTimespan")
 
-# Map creditLimit → plan.
+# Map creditLimit → plan. Free and Lite share the 100k daily credit; the
+# difference is paid-only-chain access. Standard+ implies PRO endpoints and
+# paid-chain access; no probe needed.
 case "$credit_limit" in
-  100000)  plan="free_or_lite";  pro_endpoints="false" ;;
-  200000)  plan="standard";      pro_endpoints="true"  ;;
-  500000)  plan="advanced";      pro_endpoints="true"  ;;
-  1000000) plan="professional";  pro_endpoints="true"  ;;
-  1500000) plan="pro_plus";      pro_endpoints="true"  ;;
+  100000)  plan="free_or_lite";  pro_endpoints="false"; paid_chains="probe" ;;
+  200000)  plan="standard";      pro_endpoints="true";  paid_chains="true"  ;;
+  500000)  plan="advanced";      pro_endpoints="true";  paid_chains="true"  ;;
+  1000000) plan="professional";  pro_endpoints="true";  paid_chains="true"  ;;
+  1500000) plan="pro_plus";      pro_endpoints="true";  paid_chains="true"  ;;
   *)
     if [ "${credit_limit:-0}" -gt 1500000 ]; then
-      plan="enterprise"; pro_endpoints="true"
+      plan="enterprise"; pro_endpoints="true"; paid_chains="true"
     else
-      plan="unknown"; pro_endpoints="unknown"
+      plan="unknown"; pro_endpoints="unknown"; paid_chains="unknown"
     fi
     ;;
 esac
 
-# Disambiguate free vs Lite by probing a PRO endpoint (Lite has no PRO; Standard+ does).
+# Lite ($49/mo) unlocks all supported chains (Base, OP, Avalanche, BNB) while
+# Free does not. Probe a Base balance to disambiguate: status=1 → Lite,
+# status=0 → Free. PRO endpoints stay false on Lite (Standard plan and up).
 if [ "$plan" = "free_or_lite" ]; then
-  probe=$(curl -fsS "$base?chainid=1&module=account&action=addresstokenbalance&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&page=1&offset=1&apikey=$ETHERSCAN_API_KEY" 2>/dev/null || printf '{"status":"0"}')
+  probe=$(curl -fsS "$base?chainid=8453&module=account&action=balance&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&tag=latest&apikey=$ETHERSCAN_API_KEY" 2>/dev/null || printf '{"status":"0"}')
   probe_status=$(extract_str "$probe" "status")
   if [ "$probe_status" = "1" ]; then
-    # Unexpected: 100k limit AND PRO access. Report it transparently.
-    plan="lite_with_pro"
-    pro_endpoints="true"
+    plan="lite"
+    paid_chains="true"
   else
     plan="free"
-    pro_endpoints="false"
+    paid_chains="false"
   fi
 fi
 
@@ -82,4 +86,5 @@ credits_available=$credits_avail
 limit_interval=$interval
 interval_expiry=$expiry
 pro_endpoints=$pro_endpoints
+paid_chains=$paid_chains
 EOF

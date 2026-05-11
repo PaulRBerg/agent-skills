@@ -24,7 +24,7 @@ Verified against the live `chainlist` endpoint (64 chains).
 
 ## Free Tier NOT Available
 
-The following chains require a paid Etherscan plan for data endpoints (balances, transactions, logs, etc.):
+The following chains require a paid Etherscan plan for data endpoints (balances, transactions, logs, etc.). **Lite ($49/mo) is sufficient** — it grants access to every supported chain:
 
 | Chain                | Chain ID   |
 | -------------------- | ---------- |
