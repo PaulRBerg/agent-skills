@@ -1,6 +1,6 @@
 ---
 name: etherscan-api
-description: This skill should be used when the user asks to "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "query Etherscan", or mentions Etherscan API, blockchain balance queries, or multi-chain balance lookups.
+description: This skill should be used when the user asks to "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "find first funding transaction", "trace fund origin", "who funded this address", "query Etherscan", or mentions Etherscan API, blockchain balance queries, multi-chain balance lookups, or wallet provenance tracing.
 ---
 
 # Etherscan API V2
@@ -12,6 +12,7 @@ Query blockchain data using Etherscan's unified API V2. This skill covers:
 - Native ETH balance queries
 - ERC-20 token balance queries (single contract on every plan; full holdings on PRO)
 - Transaction history queries (normal, internal, ERC-20/ERC-721/ERC-1155 transfers)
+- First-funding lookup for an address (PRO `fundedby` with a 2-call free-tier fallback)
 - Multi-chain support via the `chainid` parameter
 - Auto-detection of free vs PRO so PRO-only endpoints are used when available
 
@@ -296,6 +297,78 @@ date -u -d "@1693526400" --iso-8601=seconds
 date -u -r 1693526400 +"%Y-%m-%dT%H:%M:%SZ"
 ```
 
+## First Funding Transaction
+
+Identify the earliest transaction that sent native value to an address — useful for fund-origin tracing, provenance, or compliance checks. Cost is **1 API call** (PRO) or **2 API calls** (fallback).
+
+### Preferred: `fundedby` (PRO endpoint)
+
+Returns the address, tx hash, block, timestamp, and value of the transaction that first funded an EOA. Single call, structured response.
+
+| Parameter | Required | Default | Description                         |
+| --------- | -------- | ------- | ----------------------------------- |
+| `chainid` | No       | `1`     | Chain ID (see chains.md)            |
+| `module`  | Yes      | -       | Set to `account`                    |
+| `action`  | Yes      | -       | Set to `fundedby`                   |
+| `address` | Yes      | -       | EOA address (contracts unsupported) |
+| `apikey`  | Yes      | -       | API key from `$ETHERSCAN_API_KEY`   |
+
+```bash
+curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=fundedby&address=0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97&apikey=$ETHERSCAN_API_KEY"
+```
+
+Response:
+
+```json
+{
+  "status": "1",
+  "message": "OK",
+  "result": {
+    "block": 53708500,
+    "timeStamp": "1708349932",
+    "fundingAddress": "0x6969174fd72466430a46e18234d0b530c9fd5f49",
+    "fundingTxn": "0xbc0ca4a67eb1555920552246409626cd60df01314dd2bcdb99718b506d9c9946",
+    "value": "1000000000000000"
+  }
+}
+```
+
+**Requirements & limits:**
+
+- PRO endpoint — requires Standard plan or higher (`pro_endpoints=true` from plan detection).
+- Throttled to **2 calls/second** regardless of paid tier.
+- **EOA only.** Contract addresses return an error; use the fallback below.
+
+### Fallback: scan ASC normal + internal transactions
+
+When `pro_endpoints=false` (free/Lite) or the address is a contract, scan both transaction lists ascending and pick the earliest qualifying incoming entry. Two API calls per address.
+
+```bash
+# Earliest normal txs involving the address
+curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=0x...&startblock=0&endblock=999999999&page=1&offset=10&sort=asc&apikey=$ETHERSCAN_API_KEY"
+
+# Earliest internal txs involving the address
+curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal&address=0x...&startblock=0&endblock=999999999&page=1&offset=10&sort=asc&apikey=$ETHERSCAN_API_KEY"
+```
+
+For each response, pick the first entry where **all** of the following hold:
+
+- `to.toLowerCase() == address.toLowerCase()` — incoming, not outgoing.
+- `value` (in wei) is greater than `0` — actual funding, not a zero-value call.
+- `isError == "0"` (omit this filter for internal txs, which use `isError` differently or not at all).
+
+The funding tx is whichever match has the lower `blockNumber`; break ties by `transactionIndex` (normal txs) or by list order (internal txs).
+
+**Why both lists:** An address may be funded externally (normal tx) or internally (contract sent ETH — common for CEX withdrawals routed through proxy/router contracts, contract deployments with non-zero `msg.value`, or SELFDESTRUCT refunds). Checking only `txlist` will miss internally-funded addresses.
+
+**Why `offset=10`, not `1`:** A `txlist` query returns every tx involving the address, including outgoing ones. The very first entry is occasionally outgoing (e.g., the address was internally pre-funded), so fetch a small window and scan for the first incoming match.
+
+**Edge cases:**
+
+- **No qualifying entry in the first 10** — extend with `offset=100` and `page=1`, or paginate further. In practice, > 10 outgoing-before-incoming is exceedingly rare.
+- **Genesis allocation** — pre-mined balances do not appear in either list. The address shows a balance with no funding tx; report this explicitly.
+- **Token-only funding** — `fundedby` and this fallback only consider native value. If the address was bootstrapped with ERC-20 transfers alone (rare for EOAs since gas is needed), repeat the fallback against `tokentx`.
+
 ## Multi-Chain Usage
 
 Specify the `chainid` parameter to query different blockchains.
@@ -390,13 +463,13 @@ If `plan=free` and the user requests a data query on the chains above, halt and 
 
 When `pro_endpoints=true`, the following actions become available (non-exhaustive — see `https://docs.etherscan.io/api-pro/api-pro` for the full list):
 
-| Module       | Action(s)                                                                   | Use case                           |
-| ------------ | --------------------------------------------------------------------------- | ---------------------------------- |
-| `account`    | `addresstokenbalance`, `addresstokennftbalance`, `balancehistory`           | Full holdings, historical balances |
-| `token`      | `tokenholderlist`, `tokeninfo`, `tokensupplyhistory`, `tokenbalancehistory` | Token analytics                    |
-| `block`      | `dailyavgblocksize`, `dailyblkcount`, `dailyblockrewards`, etc.             | Daily block stats                  |
-| `stats`      | `dailytxnfee`, `dailynewaddress`, `dailynetutilization`, etc.               | Network-wide daily metrics         |
-| `gastracker` | `dailyavggaslimit`, `dailygasused`, `dailyavggasprice`                      | Daily gas metrics                  |
+| Module       | Action(s)                                                                     | Use case                                                 |
+| ------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `account`    | `addresstokenbalance`, `addresstokennftbalance`, `balancehistory`, `fundedby` | Full holdings, historical balances, first-funding lookup |
+| `token`      | `tokenholderlist`, `tokeninfo`, `tokensupplyhistory`, `tokenbalancehistory`   | Token analytics                                          |
+| `block`      | `dailyavgblocksize`, `dailyblkcount`, `dailyblockrewards`, etc.               | Daily block stats                                        |
+| `stats`      | `dailytxnfee`, `dailynewaddress`, `dailynetutilization`, etc.                 | Network-wide daily metrics                               |
+| `gastracker` | `dailyavggaslimit`, `dailygasused`, `dailyavggasprice`                        | Daily gas metrics                                        |
 
 When `pro_endpoints=false` (free or Lite), prefer the non-PRO equivalents listed in this skill or fall back to per-token loops.
 
