@@ -102,7 +102,13 @@ Do not default to Ethereum Mainnet. Always infer the chain from the user's promp
 
 ### Unsupported Chains
 
-If the user references a chain not supported by Etherscan (e.g., Solana, Bitcoin), inform them:
+If the user references an **EVM chain** that Etherscan API V2 does not cover (e.g., a niche L2 or appchain not in `./references/chains.md`), do **not** halt. Fall back to direct RPC calls against the chain's default public RPC:
+
+1. Resolve the chain via the `evm-chains` skill to get the default public RPC, chain ID, native currency symbol, and explorer URL.
+2. Issue equivalent JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against that RPC using `curl` or the `cast` CLI from the `cli-cast` skill.
+3. Note in the response that the data came from the chain's public RPC, not Etherscan, so PRO-style aggregations (full token holdings, first-funding lookup) are unavailable and must be derived manually from logs/transactions if needed.
+
+If the user references a **non-EVM chain** (e.g., Solana, Bitcoin, Cosmos), inform them — no RPC fallback applies:
 
 ```
 The chain "[chain name]" is not supported by Etherscan API V2.
@@ -111,7 +117,7 @@ Etherscan supports EVM-compatible chains only. For the full list, see:
 https://docs.etherscan.io/supported-chains
 ```
 
-For the complete list of supported chains and their IDs, see `./references/chains.md`.
+For the complete list of Etherscan-supported chains and their IDs, see `./references/chains.md`.
 
 ## API Base URL
 
