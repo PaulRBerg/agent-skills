@@ -13,32 +13,33 @@ npx skills add PaulRBerg/agent-skills
 
 ## Skills
 
-| Skill              | Description                                   |
-| ------------------ | --------------------------------------------- |
-| autoresearch       | Autonomous experiment loop                    |
-| bump-deps          | Node.js dependency updates                    |
-| bump-release       | Release workflow with changelog, tagging      |
-| cli-cast           | Foundry cast CLI guidance                     |
-| cli-gh             | GitHub CLI operations                         |
-| cli-just           | Just command runner guidance                  |
-| code-polish        | Combined simplification and review            |
-| code-review        | Expert code review                            |
-| code-simplify      | Code simplification and refactoring           |
-| coingecko-api      | CoinGecko API for prices and market data      |
-| commit             | Git commit with conventional commits          |
-| create-skill       | Bootstrap a new agent skill                   |
-| debrief            | Interactive HTML or Markdown task debrief     |
-| diagram-monochrome | Monochrome technical schematic diagrams       |
-| effect-ts          | Effect-TS patterns and guidance               |
-| etherscan-api      | Etherscan API V2 for blockchain queries       |
-| evm-chains         | EVM chain metadata and RouteMesh reference    |
-| git-squash         | Squash PR branch with semantic commit message |
-| md-docs            | Markdown documentation management             |
-| oracle-codex       | Codex oracle for planning                     |
-| tailwind-css       | Tailwind CSS v4 styling guidance              |
-| vitest             | Vitest v4 testing guidance                    |
-| work               | End-to-end task implementation                |
-| yeet               | GitHub contribution workflows                 |
+| Skill                | Description                                    |
+| -------------------- | ---------------------------------------------- |
+| autoresearch         | Autonomous experiment loop                     |
+| bump-deps            | Node.js dependency updates                     |
+| bump-release         | Release workflow with changelog, tagging       |
+| cli-cast             | Foundry cast CLI guidance                      |
+| cli-gh               | GitHub CLI operations                          |
+| cli-just             | Just command runner guidance                   |
+| code-polish          | Combined simplification and review             |
+| code-review          | Expert code review                             |
+| code-simplify        | Code simplification and refactoring            |
+| coingecko-cli        | CoinGecko CLI for prices and market data       |
+| coingecko-historical | Open CoinGecko historical data page in browser |
+| commit               | Git commit with conventional commits           |
+| create-skill         | Bootstrap a new agent skill                    |
+| debrief              | Interactive HTML or Markdown task debrief      |
+| diagram-monochrome   | Monochrome technical schematic diagrams        |
+| effect-ts            | Effect-TS patterns and guidance                |
+| etherscan-api        | Etherscan API V2 for blockchain queries        |
+| evm-chains           | EVM chain metadata and RouteMesh reference     |
+| git-squash           | Squash PR branch with semantic commit message  |
+| md-docs              | Markdown documentation management              |
+| oracle-codex         | Codex oracle for planning                      |
+| tailwind-css         | Tailwind CSS v4 styling guidance               |
+| vitest               | Vitest v4 testing guidance                     |
+| work                 | End-to-end task implementation                 |
+| yeet                 | GitHub contribution workflows                  |
 
 ## References
 
