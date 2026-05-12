@@ -1,6 +1,6 @@
 ---
 name: etherscan-api
-description: This skill should be used when the user asks to "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "find first funding transaction", "trace fund origin", "who funded this address", "query Etherscan", or mentions Etherscan API, blockchain balance queries, multi-chain balance lookups, or wallet provenance tracing.
+description: This skill should be used when the user asks to "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "fetch NFT transfers", "ERC-721 transfer history", "ERC-1155 transfer history", "find first funding transaction", "trace fund origin", "who funded this address", "query Etherscan", or mentions Etherscan API, blockchain balance queries, NFT transfer history, multi-chain balance lookups, or wallet provenance tracing.
 ---
 
 # Etherscan API V2
@@ -300,6 +300,84 @@ date -u -d "@1693526400" --iso-8601=seconds
 # macOS / BSD date
 date -u -r 1693526400 +"%Y-%m-%dT%H:%M:%SZ"
 ```
+
+## NFT Transfer History
+
+Fetch historical ERC-721 or ERC-1155 transfers for an address. Both actions share the parameter table in the previous section; pass `contractaddress` to filter by collection. Pagination caps (1,000 free / 10,000 paid) and the `startblock`/`endblock`/`page`/`offset`/`sort` semantics are identical to `txlist`.
+
+### ERC-721 Transfers (`tokennfttx`)
+
+```bash
+curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&address=0x6975be450864c02b4613023c2152ee0743572325&contractaddress=0x06012c8cf97bead5deae237070f9587f8e7a266d&startblock=0&endblock=999999999&page=1&offset=100&sort=asc&apikey=$ETHERSCAN_API_KEY"
+```
+
+Response entry (one per `Transfer` event involving the address):
+
+```json
+{
+  "blockNumber": "4708120",
+  "timeStamp": "1512907118",
+  "hash": "0x031e6968...",
+  "nonce": "0",
+  "blockHash": "0x4be19c27...",
+  "from": "0xb1690c08e213a35ed9bab7b318de14420fb57d8c",
+  "contractAddress": "0x06012c8cf97bead5deae237070f9587f8e7a266d",
+  "to": "0x6975be450864c02b4613023c2152ee0743572325",
+  "tokenID": "202106",
+  "tokenName": "CryptoKitties",
+  "tokenSymbol": "CK",
+  "tokenDecimal": "0",
+  "transactionIndex": "81",
+  "gas": "158820",
+  "gasPrice": "40000000000",
+  "gasUsed": "60508",
+  "cumulativeGasUsed": "4880352",
+  "input": "deprecated",
+  "methodId": "0x454a2ab3",
+  "functionName": "bid(uint256 _tokenId)",
+  "confirmations": "18759540"
+}
+```
+
+NFT-specific fields: `contractAddress` (collection), `tokenID` (per-NFT identifier), `tokenName`, `tokenSymbol`, `tokenDecimal` (always `"0"` for ERC-721).
+
+### ERC-1155 Transfers (`token1155tx`)
+
+Same parameter shape — swap `action=token1155tx`. ERC-1155 differs from ERC-721 in two response fields:
+
+- **`tokenValue`** (string) — quantity transferred for this `tokenID`. Required because ERC-1155 is semi-fungible; a single transfer can move N copies of one ID. **Not present in ERC-721 responses.**
+- **`tokenDecimal`** is omitted (ERC-1155 has no decimals concept).
+
+```json
+{
+  "blockNumber": "...",
+  "timeStamp": "...",
+  "hash": "...",
+  "from": "...",
+  "to": "...",
+  "contractAddress": "0x76be3b62873462d2142405439777e971754e8e77",
+  "tokenID": "10371",
+  "tokenValue": "1",
+  "tokenName": "...",
+  "tokenSymbol": "...",
+  "...": "(other tx-level fields identical to tokennfttx)"
+}
+```
+
+`TransferBatch` events (multiple IDs in one tx) appear as **multiple result entries sharing the same `hash`** — one per `(tokenID, tokenValue)` pair. Group by `hash` to reconstruct the batch.
+
+### Filtering by Collection or Token ID
+
+- **By collection** — pass `contractaddress=<collection>`. The API filters server-side; omit to fetch transfers across all collections.
+- **By token ID** — no server-side filter exists. Fetch the collection's transfers and filter `result[].tokenID == <id>` client-side. For high-volume collections, narrow with `startblock`/`endblock` first.
+- **Mint vs burn vs transfer** — derive from `from`/`to`:
+  - `from == 0x0000...0000` → mint
+  - `to == 0x0000...0000` → burn
+  - otherwise → transfer
+
+### Cost & Limits
+
+Standard list-endpoint pricing — 1 credit per call, same rate-limit tier as `txlist`. Not a PRO endpoint; available on Free and Lite for all supported chains (paid-chain restriction still applies to Base/OP/Avalanche/BNB).
 
 ## First Funding Transaction
 
