@@ -62,6 +62,7 @@ Replace `CHAIN_ID` with the numeric chain ID and `ROUTEMESH_API_KEY` with the va
 | Unichain      | 130       | https://mainnet.unichain.org/                  | ETH                    | Yes       |
 | XDC           | 50        | https://rpc.xdcrpc.com                         | XDC                    | Yes       |
 | ZKsync Era    | 324       | https://mainnet.era.zksync.io                  | ETH                    | Yes       |
+| Zora          | 7777777   | https://zora.drpc.org                          | ETH                    | No        |
 
 ## Testnets
 
