@@ -14,23 +14,7 @@ Example: `lockup "Bug in cliff streams"` → `repository = sablier-labs/lockup`
 
 ## Apply Labels
 
-Always applied. From content analysis, determine:
-
-- **Type**, **Work**, **Priority**, **Effort**: See `create-issue.md > Label Reference` for the full taxonomy.
-- **Scope** (only for `sablier-labs/command-center`): see below.
-
-### Scope Labels (command-center only)
-
-- `scope: frontend`
-- `scope: backend`
-- `scope: evm`
-- `scope: solana`
-- `scope: data`
-- `scope: devops`
-- `scope: integrations`
-- `scope: marketing`
-- `scope: business`
-- `scope: other`
+Sablier repos are owner-managed — labels always apply. Follow `commons.md > Fetch Repo Labels` to fetch the live label set and pick labels semantically. Scope labels (e.g., `scope: frontend`, `scope: evm`) are discovered organically from the fetched list for repos that define them — no special-case for `command-center`.
 
 ## Generate Title and Body
 

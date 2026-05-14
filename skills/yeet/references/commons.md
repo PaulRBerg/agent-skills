@@ -10,6 +10,35 @@ gh auth status 2>&1 | rg -q "Logged in"
 
 If not authenticated, error with: "Run `gh auth login` first"
 
+## Fetch Repo Labels
+
+For owner-managed repos (owner = `$AUTHENTICATED_USER` or `sablier-labs`), fetch the live label set before picking labels — never hardcode taxonomies. External repos: skip this step entirely (only template-defined labels apply).
+
+```bash
+gh label list \
+  --repo "{owner}/{repo}" \
+  --limit 200 \
+  --json name,description \
+  --jq '.[] | "\(.name)\t\(.description // "")"'
+```
+
+`--limit 200` covers the largest owner-controlled repos (default is 30, which truncates silently). Both `name` and `description` are required — match the user's request semantically against descriptions, not just names.
+
+### Picking labels
+
+Treat the fetched list as the **only** source of truth. Read each `name + description` pair and select the smallest set that fits the request:
+
+- **One label per dimension** if the repo's label set exposes a clear axis (e.g., a `type:` prefix, a `priority:` prefix, a `scope:` prefix). Skip dimensions the repo doesn't use.
+- **Match on intent, not keywords.** "Auth flow is broken" → a `bug`-flavored label. "Add dark mode" → a `feature`/`enhancement`-flavored label. The exact slug comes from the repo, not from memory.
+- **Never invent labels.** If nothing matches, apply none.
+- **Skip workflow labels.** Labels like `good first issue`, `help wanted`, `needs triage`, `duplicate`, `wontfix`, `stale` are for maintainers, not for filing. Do not apply them on issue creation.
+- **Respect template-defined labels.** If a template already assigns labels, merge (deduplicate) — don't override.
+
+### Error handling
+
+- **Empty result** (repo has no labels): proceed without `--label`. Do not fail the workflow.
+- **Command fails** (auth, network, missing repo): fail loud. Surface the `gh` error and stop before issue creation — silent fallback hides misconfiguration. Per `Error Handling` below, do not retry.
+
 ## HEREDOC Syntax
 
 Use HEREDOC when passing multi-line bodies to gh commands. Single quotes around `'EOF'` prevent variable expansion:

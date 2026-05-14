@@ -66,15 +66,11 @@ For appends, show the existing body, then append the new content with a separato
 
 ## Validate Labels Before Adding
 
-If adding labels, confirm they exist on the repository:
+If adding labels, fetch the repo's label set per `commons.md > Fetch Repo Labels` and confirm the requested labels exist (case-sensitive match on `name`).
 
-```bash
-gh label list --repo "{owner}/{repo}" --json name -q '.[].name'
-```
+IF a requested label doesn't exist: ERROR with the list of valid label names. Do not auto-create labels.
 
-IF label doesn't exist: ERROR with the list of existing labels. Do not auto-create labels.
-
-For owner-managed repos (owner = `$AUTHENTICATED_USER` or `sablier-labs`), follow `create-issue.md > Label Reference` when suggesting labels.
+For owner-managed repos (owner = `$AUTHENTICATED_USER` or `sablier-labs`), when the user asks for a label by intent rather than exact name ("tag this as a bug"), match semantically against the fetched `name + description` pairs per the rubric in `commons.md > Fetch Repo Labels`.
 
 ## Preview and Confirm
 

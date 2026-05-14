@@ -77,54 +77,16 @@ Infer best match from user's description keywords (bug, feature, docs, etc.). Pr
 
 **No templates:** Use default structure (see Generate Title and Body).
 
-## Check if Labels Should Be Applied
+## Apply Labels
 
 Extract owner from repository.
 
-- IF owner = `$AUTHENTICATED_USER` OR owner = `sablier-labs`: **apply labels**. For `sablier-labs`, also apply Scope labels for `command-center` (see `issue-sablier.md`).
-- ELSE: **skip labels** (only apply template-defined labels if any)
+- IF owner = `$AUTHENTICATED_USER` OR owner = `sablier-labs`: continue.
+- ELSE: **skip this section.** Only template-defined labels apply.
 
-## Apply Labels
+Fetch the repo's live label set per `commons.md > Fetch Repo Labels`, then pick labels by semantically matching the user's request against the fetched `name + description` pairs. One label per dimension when a clear axis exists in the repo; skip dimensions that don't apply; never invent labels.
 
-**ONLY if owner matches or is `sablier-labs`.**
-
-From content analysis, determine Type, Work, Priority, and Effort.
-
-### Label Reference
-
-#### Type
-
-- `type: bug` - Something isn't working
-- `type: feature` - New feature or request
-- `type: perf` - Performance or UX improvement
-- `type: docs` - Documentation
-- `type: test` - Test changes
-- `type: refactor` - Code restructuring
-- `type: build` - Build system or dependencies
-- `type: ci` - CI configuration
-- `type: chore` - Maintenance work
-- `type: style` - Code style changes
-
-#### Work (Cynefin)
-
-- `work: clear` - Known solution
-- `work: complicated` - Requires analysis but solvable
-- `work: complex` - Experimental, unclear outcome
-- `work: chaotic` - Crisis mode
-
-#### Priority
-
-- `priority: 0` - Critical blocker
-- `priority: 1` - Important
-- `priority: 2` - Standard work
-- `priority: 3` - Nice-to-have
-
-#### Effort
-
-- `effort: low` - \<1 day
-- `effort: medium` - 1-3 days
-- `effort: high` - Several days
-- `effort: epic` - Weeks, multiple PRs
+Stash the selected labels for the `gh issue create` call below.
 
 ## Generate Title and Body
 
@@ -166,7 +128,7 @@ See `commons.md > GitHub Admonitions` for when/how to add admonitions. See `comm
 
 ## Create the Issue
 
-Merge template-defined labels with auto-generated labels (deduplicate). Only include auto-labels if owner matches `$AUTHENTICATED_USER` or is `sablier-labs`:
+Merge template-defined labels with the labels picked in "Apply Labels" (deduplicate). Omit `--label` entirely if no labels apply.
 
 ```bash
 gh issue create \
