@@ -54,7 +54,39 @@ status:
 [working-directory: "packages/core"]
 build-core:
     npm run build
+
+# Expression-valued working directory (v1.51.0+)
+src := justfile_dir() / "src"
+
+[working-directory: src]
+generate:
+    codegen
 ```
+
+For a justfile-wide opt-out, use `set no-cd` (v1.51.0+) instead of annotating every recipe.
+
+### OS-Restricted Recipes
+
+Restrict a recipe to specific operating systems. Multiple OS attributes are OR'd together.
+
+```just
+[macos]
+[linux]
+open url:
+    xdg-open {{ url }} 2>/dev/null || open {{ url }}
+
+[windows]
+open url:
+    start {{ url }}
+
+[freebsd]
+[netbsd]
+[dragonflybsd]
+diag:
+    sysctl -a | head
+```
+
+Available: `[linux]`, `[macos]`, `[unix]`, `[windows]`, `[freebsd]`, `[netbsd]`, `[dragonflybsd]` (BSD variants added v1.47.0).
 
 ### Script Blocks
 
@@ -100,7 +132,42 @@ delete-all:
 [confirm("Are you sure you want to deploy to production?")]
 deploy-prod:
     ./deploy.sh production
+
+# Expression-valued prompt (v1.49.0+): skip the prompt in CI
+[confirm(if env("CI", "") == "true" { "" } else { "Deploy to prod?" })]
+deploy:
+    ./deploy.sh
 ```
+
+### Per-Recipe Environment Variables
+
+The `[env(NAME, VALUE)]` attribute (v1.47.0+) sets environment variables scoped to one recipe — narrower than `export` (whole justfile) or `set dotenv-load` (everything).
+
+```just
+[env("RUST_BACKTRACE", "1")]
+test:
+    cargo test                # RUST_BACKTRACE=1 is set only for `test`
+
+# Multiple env attributes stack
+[env("NODE_ENV", "test")]
+[env("LOG_LEVEL", "debug")]
+test-integration:
+    bun test:integration
+```
+
+As of v1.51.0, the value accepts arbitrary expressions, including other variables and functions:
+
+```just
+build_id := `git rev-parse --short HEAD`
+
+[env("BUILD_ID", build_id)]
+[env("CACHE_DIR", justfile_dir() / ".cache")]
+build:
+    cargo build
+```
+
+`[env(...)]` is the preferred mechanism for one-recipe env overrides — it composes with `set dotenv-load` and module-level
+exports (which it overrides as of v1.51.0).
 
 ### Parallel Execution
 

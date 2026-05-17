@@ -27,26 +27,31 @@ Expert guidance for Just, a command runner with syntax inspired by make. Use thi
 set allow-duplicate-recipes       # Allow recipes to override imported ones
 set allow-duplicate-variables     # Allow variables to override imported ones
 set shell := ["bash", "-euo", "pipefail", "-c"]  # Strict bash with error handling
-set unstable                      # Enable unstable features (modules, script attribute)
+set unstable                      # Enable unstable features (user-defined functions, eager keyword)
 set dotenv-load                   # Auto-load .env file
 set positional-arguments          # Pass recipe args as $1, $2, etc.
+set lazy                          # Defer evaluation of unused variables (v1.48.0+)
+set no-cd                         # Don't change to justfile directory for any recipe (v1.51.0+)
 ```
 
 ### Common Attributes
 
-| Attribute                 | Purpose                                        |
-| ------------------------- | ---------------------------------------------- |
-| `[arg("p", long, ...)]`   | Configure parameter as `--flag` option (v1.46) |
-| `[arg("p", pattern="…")]` | Constrain parameter to match regex pattern     |
-| `[group("name")]`         | Group recipes in `just --list` output          |
-| `[no-cd]`                 | Don't change to justfile directory             |
-| `[parallel]`              | Run direct dependencies concurrently           |
-| `[private]`               | Hide from `just --list` (same as `_` prefix)   |
-| `[script]`                | Execute recipe as single script block          |
-| `[script("interpreter")]` | Use specific interpreter (bash, python, etc.)  |
-| `[confirm("prompt")]`     | Require user confirmation before running       |
-| `[doc("text")]`           | Override recipe documentation                  |
-| `[positional-arguments]`  | Enable positional args for this recipe only    |
+| Attribute                  | Purpose                                                           |
+| -------------------------- | ----------------------------------------------------------------- |
+| `[arg("p", long, ...)]`    | Configure parameter as `--flag` option (v1.46)                    |
+| `[arg("p", pattern="…")]`  | Constrain parameter to match regex pattern                        |
+| `[confirm("prompt")]`      | Require user confirmation (expressions OK as of v1.49)            |
+| `[doc("text")]`            | Override recipe documentation                                     |
+| `[env("NAME", "VALUE")]`   | Set env var for this recipe only (v1.47+, expr v1.51)             |
+| `[group("name")]`          | Group recipes in `just --list` output                             |
+| `[linux]` / `[macos]` …    | Restrict to OS; also `[freebsd]/[netbsd]/[dragonflybsd]` (v1.47+) |
+| `[no-cd]`                  | Don't change to justfile directory                                |
+| `[parallel]`               | Run direct dependencies concurrently                              |
+| `[positional-arguments]`   | Enable positional args for this recipe only                       |
+| `[private]`                | Hide from `just --list` (same as `_` prefix)                      |
+| `[script]`                 | Execute recipe as single script block                             |
+| `[script("interpreter")]`  | Use specific interpreter (bash, python, etc.)                     |
+| `[working-directory: "…"]` | Run from given path (expressions OK as of v1.51)                  |
 
 ### Recipe Argument Flags (v1.46.0+)
 
@@ -129,7 +134,36 @@ log_level := env("LOG_LEVEL", "info")
 
 # Get justfile directory path
 root := justfile_dir()
+
+# Module location (v1.49.0–1.50.0; useful inside `mod` files)
+mod_path := module_path()            # Full submodule path, e.g. "foo::bar"
+mod_file := module_file()            # Absolute path to module's justfile
+mod_dir := module_directory()        # Directory containing the module justfile
+
+# Runtime directory (v1.49.0; typically $XDG_RUNTIME_DIR, falls back to tempdir)
+rt := runtime_directory()
 ```
+
+### User-Defined Functions (v1.49.0+)
+
+Define reusable named expressions with `name(args) := expression`. Requires `set unstable`. Functions can reference module-level assignments.
+
+```just
+set unstable
+
+base := "foo"
+join(extension) := base + "." + extension
+
+# Use f-strings for interpolation
+hello(name) := f"Hello, {{ name }}!"
+
+create:
+    touch {{ join("c") }}
+    touch {{ join("html") }}
+    echo '{{ hello("World") }}'
+```
+
+Use these to dedupe expression logic that would otherwise repeat across recipes; prefer them over backtick-evaluated variables when the value depends on input.
 
 ## Recipe Patterns
 
@@ -230,7 +264,7 @@ build:
 For Just features not covered in this skill (new attributes, advanced functions, edge cases), fetch the latest documentation:
 
 ```
-Use context7 MCP with library ID `/websites/just_systems-man` to get up-to-date Just documentation.
+Use context7 MCP with library ID `/websites/just_systems_man_en` to get up-to-date Just documentation.
 ```
 
 Example topics to search:
@@ -263,7 +297,7 @@ Working justfile templates in `examples/`:
 
 - **Official Manual**: https://just.systems/man/en/
 - **GitHub Repository**: https://github.com/casey/just
-- **Context7 Library ID**: `/websites/just_systems-man`
+- **Context7 Library ID**: `/websites/just_systems_man_en`
 
 ## No Justfile Formatter
 

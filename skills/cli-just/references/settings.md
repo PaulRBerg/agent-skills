@@ -10,20 +10,22 @@ Settings configure global behavior and must appear at the top of the justfile.
 
 Enable with `set NAME` or `set NAME := true`:
 
-| Setting                     | Description                                          |
-| --------------------------- | ---------------------------------------------------- |
-| `allow-duplicate-recipes`   | Allow later recipes to override earlier ones         |
-| `allow-duplicate-variables` | Allow later variables to override earlier ones       |
-| `dotenv-load`               | Load `.env` file automatically                       |
-| `dotenv-required`           | Error if `.env` file is missing                      |
-| `export`                    | Export all variables as environment variables        |
-| `fallback`                  | Search parent directories for justfile               |
-| `ignore-comments`           | Don't print comments in recipe listings              |
-| `positional-arguments`      | Pass recipe arguments as $1, $2, etc.                |
-| `quiet`                     | Don't echo recipe lines                              |
-| `unstable`                  | Enable unstable features (modules, script attribute) |
-| `windows-powershell`        | Use PowerShell on Windows                            |
-| `windows-shell`             | Use cmd.exe on Windows                               |
+| Setting                     | Description                                                              |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `allow-duplicate-recipes`   | Allow later recipes to override earlier ones                             |
+| `allow-duplicate-variables` | Allow later variables to override earlier ones                           |
+| `dotenv-load`               | Load `.env` file automatically                                           |
+| `dotenv-required`           | Error if `.env` file is missing                                          |
+| `export`                    | Export all variables as environment variables                            |
+| `fallback`                  | Search parent directories for justfile                                   |
+| `ignore-comments`           | Don't print comments in recipe listings                                  |
+| `lazy`                      | Defer evaluation of unused variables (v1.47.0; stable v1.48.0+)          |
+| `no-cd`                     | Don't change to justfile directory for any recipe (v1.51.0+)             |
+| `positional-arguments`      | Pass recipe arguments as $1, $2, etc.                                    |
+| `quiet`                     | Don't echo recipe lines                                                  |
+| `unstable`                  | Enable unstable features (user-defined functions, `eager` keyword, etc.) |
+| `windows-powershell`        | Use PowerShell on Windows                                                |
+| `windows-shell`             | Use cmd.exe on Windows                                                   |
 
 ### Value Settings
 
@@ -62,6 +64,35 @@ set unstable
 - `-u`: Treat unset variables as errors
 - `-o pipefail`: Pipeline fails if any command fails
 - `-c`: Execute following string as command
+
+### Lazy Evaluation (v1.47.0; stable v1.48.0+)
+
+`set lazy` skips evaluating any variable that no executed recipe references. Useful when top-level assignments invoke
+shell commands or remote calls that are only needed by some recipes.
+
+```just
+set lazy
+
+# Only evaluated when a recipe actually uses `token`.
+token := `gh auth token`
+
+deploy:
+    curl -H "Authorization: Bearer {{ token }}" https://example.com/deploy
+
+clean:
+    rm -rf dist/   # `token` never evaluated here.
+```
+
+Assignments marked `export` (or living in a module with `set export`) are always evaluated, even under `lazy`.
+
+To force evaluation of a normally-unused assignment under `lazy`, prefix it with `eager` (requires `set unstable`):
+
+```just
+set unstable
+set lazy
+
+eager schema_version := `cat schema/VERSION`   # Evaluated even if no recipe uses it.
+```
 
 ## Modules & Imports
 
@@ -129,6 +160,17 @@ just foo::build
 - Variables inside modules are NOT accessible from parent
 - Settings inside modules apply only to that module
 - Modules can import/include other files
+
+**Overriding module variables (v1.48.0+):**
+
+Override `:=` assignments inside submodules from the command line with a `::`-separated path:
+
+```bash
+just foo::log_level=debug foo::run
+just --set foo::log_level debug foo::run
+```
+
+Either form works; both target the submodule's own variable, not the parent's.
 
 ### Module Search Paths
 
