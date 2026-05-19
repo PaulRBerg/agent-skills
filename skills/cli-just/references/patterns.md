@@ -8,51 +8,9 @@ Use centered ASCII art headers to organize justfiles:
 
 ```just
 # ---------------------------------------------------------------------------- #
-#                                 DEPENDENCIES                                 #
+#                                    SECTION                                   #
 # ---------------------------------------------------------------------------- #
 ```
-
-### Standard Sections (in order)
-
-1. **DEPENDENCIES** - Required tools with documentation URLs
-2. **ENVIRONMENT VARS** - Exported environment variables
-3. **CONSTANTS** - Glob patterns, paths, configuration values
-4. **COMMANDS / RECIPES** - Main public recipes
-5. **CHECKS** - Code quality and validation recipes
-6. **TESTS** - Testing recipes
-7. **UTILITIES / INTERNAL HELPERS** - Private helper recipes
-
-## Dependencies Section
-
-Document required tools with URLs:
-
-```just
-# ---------------------------------------------------------------------------- #
-#                                 DEPENDENCIES                                 #
-# ---------------------------------------------------------------------------- #
-
-# Bun: https://bun.sh
-bun := require("bun")
-
-# UV: https://github.com/astral-sh/uv
-uv := require("uv")
-
-# Ni: https://github.com/antfu-collective/ni
-na := require("na")
-ni := require("ni")
-nlx := require("nlx")
-
-# Pnpm: https://github.com/pnpm/pnpm
-pnpm := require("pnpm")
-```
-
-**Common tool sets:**
-
-| Ecosystem | Tools                            |
-| --------- | -------------------------------- |
-| Node.js   | `ni`, `na`, `nlx`, `pnpm`, `bun` |
-| Python    | `uv`, `ruff`, `pyright`          |
-| Utilities | `jq`, `yq`, `fd`, `rg`           |
 
 ## Constants Section
 
@@ -78,13 +36,6 @@ export LOG_LEVEL := env("LOG_LEVEL", "info")
 export NODE_ENV := env("NODE_ENV", "development")
 ```
 
-### Path References
-
-```just
-JUST_DIR := justfile_dir()
-CONFIG_DIR := join(justfile_dir(), "config")
-```
-
 ## Recipe Groups
 
 Use `[group()]` attribute for organized `just --list` output:
@@ -102,8 +53,7 @@ Use `[group()]` attribute for organized `just --list` output:
 **Multiple groups per recipe:**
 
 ```just
-[group("codegen")]
-[group("envio")]
+[group("codegen"), group("envio")]
 codegen-envio:
     ./codegen.sh
 ```
@@ -120,7 +70,7 @@ Define aliases immediately after recipe names for discoverability:
 alias fc := full-check
 ```
 
-### Standard Aliases
+### Example Aliases
 
 | Recipe             | Alias | Purpose          |
 | ------------------ | ----- | ---------------- |
@@ -128,26 +78,6 @@ alias fc := full-check
 | `full-write`       | `fw`  | Apply all fixes  |
 | `biome-check`      | `bc`  | Biome check      |
 | `biome-write`      | `bw`  | Biome fix        |
-| `biome-lint`       | `bl`  | Biome lint only  |
-| `prettier-check`   | `pc`  | Prettier check   |
-| `prettier-write`   | `pw`  | Prettier fix     |
-| `mdformat-check`   | `mc`  | Markdown check   |
-| `mdformat-write`   | `mw`  | Markdown fix     |
-| `ruff-check`       | `rc`  | Ruff check       |
-| `ruff-write`       | `rw`  | Ruff fix         |
-| `tsc-check`        | `tc`  | TypeScript check |
-| `tsc-build`        | `tb`  | TypeScript build |
-| `pyright-check`    | `pyc` | Pyright check    |
-| `knip-check`       | `kc`  | Knip check       |
-| `knip-write`       | `kw`  | Knip fix         |
-| `test`             | `t`   | Run tests        |
-| `test-unit`        | `tu`  | Unit tests       |
-| `test-ui`          | `tui` | UI tests         |
-| `build`            | `b`   | Build project    |
-| `clean`            | `c`   | Clean artifacts  |
-| `install`          | `i`   | Install deps     |
-| `deploy`           | `d`   | Deploy           |
-| `_run-with-status` | `rws` | Status helper    |
 
 ## Helper Patterns
 
@@ -178,176 +108,6 @@ alias rws := _run-with-status
 alias fc := full-check
 ```
 
-### For-Each Pattern
-
-Iterate over a set of items:
-
-```just
-[private]
-[script("bash")]
-protocol-for-each recipe protocol:
-    if [ "{{ protocol }}" = "all" ]; then
-        just concurrent-protocols \
-            "just {{ recipe }} airdrops" \
-            "just {{ recipe }} flow" \
-            "just {{ recipe }} lockup"
-    else
-        just {{ recipe }} {{ protocol }}
-    fi
-```
-
-### Concurrent Execution Pattern
-
-Run multiple commands in parallel:
-
-```just
-[private]
-@concurrent-protocols cmd1 cmd2 cmd3:
-    pnpm concurrently --group \
-        -n "airdrops,flow,lockup" \
-        -c "blue,green,yellow" \
-        "{{ cmd1 }}" \
-        "{{ cmd2 }}" \
-        "{{ cmd3 }}"
-```
-
-### CLI Helper Pattern
-
-Centralize CLI tool invocation:
-
-```just
-[private]
-@cli *args:
-    pnpm tsx cli/index.ts {{ args }}
-
-[group("cli")]
-@export-schema:
-    just cli export-schema
-```
-
-## Check/Write Patterns
-
-### Biome (TypeScript/JavaScript)
-
-```just
-# Check code with Biome
-[group("checks")]
-[no-cd]
-@biome-check +globs=".":
-    na biome check {{ globs }}
-alias bc := biome-check
-
-# Lint code with Biome
-[group("checks")]
-[no-cd]
-@biome-lint +globs=".":
-    na biome lint {{ globs }}
-alias bl := biome-lint
-
-# Fix code with Biome
-[group("checks")]
-[no-cd]
-@biome-write +globs=".":
-    na biome check --write {{ globs }}
-    na biome lint --unsafe --write --only correctness/noUnusedImports {{ globs }}
-alias bw := biome-write
-```
-
-### Prettier (JSON/YAML/Markdown)
-
-```just
-# Check Prettier formatting
-[group("checks")]
-[no-cd]
-@prettier-check +globs=GLOBS_PRETTIER:
-    na prettier --check --cache --no-error-on-unmatched-pattern {{ globs }}
-alias pc := prettier-check
-
-# Format using Prettier
-[group("checks")]
-[no-cd]
-@prettier-write +globs=GLOBS_PRETTIER:
-    na prettier --write --cache --no-error-on-unmatched-pattern {{ globs }}
-alias pw := prettier-write
-```
-
-### mdformat (Markdown)
-
-```just
-# Check Markdown formatting
-[group("checks")]
-@mdformat-check +paths=".":
-    mdformat --check {{ paths }}
-alias mc := mdformat-check
-
-# Format Markdown files
-[group("checks")]
-@mdformat-write +paths=".":
-    mdformat {{ paths }}
-alias mw := mdformat-write
-```
-
-### Ruff (Python)
-
-```just
-# Check Python files
-[group("checks")]
-@ruff-check:
-    uv run ruff check .
-alias rc := ruff-check
-
-# Format Python files
-[group("checks")]
-@ruff-write:
-    uv run ruff check --fix .
-    uv run ruff format .
-alias rw := ruff-write
-
-# Check Python type hints
-[group("checks")]
-@pyright-check:
-    uv run pyright
-alias pyc := pyright-check
-```
-
-### TypeScript Checks
-
-```just
-# Type check with TypeScript
-[group("checks")]
-[no-cd]
-@type-check project="tsconfig.json":
-    na tsgo --noEmit --project {{ project }}
-alias tc := tsc-check
-```
-
-## Full Check/Write Pattern
-
-Aggregate all checks with status reporting:
-
-```just
-# Run all code checks
-[group("checks")]
-[no-cd]
-@full-check:
-    just _run-with-status biome-check
-    just _run-with-status prettier-check
-    just _run-with-status tsc-check
-    echo ""
-    echo '{{ GREEN }}All code checks passed!{{ NORMAL }}'
-alias fc := full-check
-
-# Run all code fixes
-[group("checks")]
-[no-cd]
-@full-write:
-    just _run-with-status biome-write
-    just _run-with-status prettier-write
-    echo ""
-    echo '{{ GREEN }}All code fixes applied!{{ NORMAL }}'
-alias fw := full-write
-```
-
 ## Default Recipe
 
 Always define a default recipe that shows available commands:
@@ -363,67 +123,6 @@ Alternative: Run primary action by default:
 ```just
 # Run all checks by default
 default: full-check
-```
-
-## Test Recipes
-
-```just
-# Run all tests
-[group("test")]
-@test *args:
-    just test-unit {{ args }}
-alias t := test
-
-# Run unit tests
-[group("test")]
-test-unit *args:
-    bun vitest run --hideSkippedTests {{ args }}
-alias tu := test-unit
-
-# Run tests with UI
-[group("test")]
-test-ui *args:
-    bun vitest --hideSkippedTests --ui {{ args }}
-alias tui := test-ui
-```
-
-## Build & Clean Recipes
-
-```just
-# Build the project
-@build:
-    just clean
-    just tsc-build
-alias b := build
-
-# Clean build artifacts
-@clean globs=GLOBS_CLEAN:
-    bunx del-cli "{{ globs }}"
-    echo "✅ Cleaned build files"
-
-# Clear node_modules
-[confirm("Delete all node_modules? Y/n")]
-[no-cd]
-clean-modules +globs="node_modules **/node_modules":
-    nlx del-cli {{ globs }}
-```
-
-## Install Recipes
-
-```just
-# Install dependencies
-[no-cd]
-install *args:
-    ni {{ args }}
-
-# Install with conditional CI behavior
-[script]
-install-utils:
-    if [[ "$CI" == "true" ]]; then
-        echo "Skipping brew install in CI"
-    else
-        brew install bat delta eza fd fzf jq just rg
-    fi
 ```
 
 ## Monorepo Patterns
