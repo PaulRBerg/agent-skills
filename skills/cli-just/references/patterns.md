@@ -72,12 +72,12 @@ alias fc := full-check
 
 ### Example Aliases
 
-| Recipe             | Alias | Purpose          |
-| ------------------ | ----- | ---------------- |
-| `full-check`       | `fc`  | Run all checks   |
-| `full-write`       | `fw`  | Apply all fixes  |
-| `biome-check`      | `bc`  | Biome check      |
-| `biome-write`      | `bw`  | Biome fix        |
+| Recipe        | Alias | Purpose         |
+| ------------- | ----- | --------------- |
+| `full-check`  | `fc`  | Run all checks  |
+| `full-write`  | `fw`  | Apply all fixes |
+| `biome-check` | `bc`  | Biome check     |
+| `biome-write` | `bw`  | Biome fix       |
 
 ## Helper Patterns
 

@@ -1,6 +1,6 @@
 # Update README Workflow
 
-Workflow for updating a human-aimed `README.md` based on current project metadata. README.md contains description, badges, links, references, license, and a contributing pointer — never CLI commands, `just` recipes, scripts, or project structure trees. Those live in `AGENTS.md`.
+Workflow for updating human-aimed `README.md` files based on current project metadata. By default it runs on **every** `README.md` in the repository, each scoped to its own directory and nearest manifest. README.md contains description, badges, links, references, license, and a contributing pointer — never CLI commands, `just` recipes, scripts, or project structure trees. Those live in the sibling `AGENTS.md`.
 
 ## Guiding Principles
 
@@ -21,7 +21,7 @@ Workflow for updating a human-aimed `README.md` based on current project metadat
 
 ## Workflow Steps
 
-### STEP 1: Validate Prerequisites
+### STEP 1: Validate Prerequisites & Enumerate Targets
 
 **CHECK repository state:**
 
@@ -29,25 +29,32 @@ Workflow for updating a human-aimed `README.md` based on current project metadat
 - IF not a git repo: ERROR "Must be run from within a git repository. Initialize with 'git init' first."
 - Store the repository root path
 
-**Scope**: This command operates only on `README.md` at the repository root. It won't touch nested README files in subdirectories or subpackages. For monorepo subpackages, the user should `cd` to that package directory first.
-
-**CHECK for README:**
-
-- IF README.md doesn't exist in repo root: route to `init-readme` (or, with `--force`, create from scratch here).
-- IF README.md exists: proceed to analyze and update.
-
-**CHECK for CONTRIBUTING.md:**
+**Scope**: By default this command updates every `README.md` in the tree. Enumerate targets (see Recursive Discovery in `SKILL.md` / `references/common-patterns.md`):
 
 ```bash
-test -f CONTRIBUTING.md && echo "found" || echo "absent"
+git ls-files --cached --others --exclude-standard -- '**/README.md' 'README.md'
 ```
 
-If found, append a `⚠ CONTRIBUTING.md detected` advisory to the final report recommending merging it into AGENTS.md and deleting the file. Do not edit `CONTRIBUTING.md`.
+Drop paths under excluded dirs (`.git`, `node_modules`, `vendor`, `.venv`, `target`, `dist`, `build`, `out`, `.next`, `coverage`, gitignored, hidden-without-manifest). `--root-only` keeps just the repo-root file; a `path` argument keeps only files inside it.
+
+Run STEP 3 onward **for each target**, scoping metadata reads to the target's own directory and nearest enclosing manifest, and reporting results grouped by path.
+
+**FILL gaps with init**: For any package root (manifest-bearing directory) that has no `README.md`, route that directory to `init-readme` (or, with `--force`, create it from scratch in place).
+
+**CHECK for CONTRIBUTING.md (per target directory):**
+
+```bash
+test -f "$dir/CONTRIBUTING.md" && echo "found" || echo "absent"
+```
+
+If found, append a `⚠ CONTRIBUTING.md detected` advisory for that directory recommending a merge into the sibling AGENTS.md and deleting the file. Do not edit `CONTRIBUTING.md`.
 
 ### STEP 2: Parse Arguments
 
 Interpret arguments for mode flags:
 
+- `path` → Confine the sweep to one directory subtree
+- `--root-only` → Update the repo-root `README.md` only (disables recursion)
 - `--dry-run` → Preview README content without writing
 - `--preserve` → Keep existing custom prose sections (About, Background, Acknowledgments, Why X), only refresh metadata-driven sections (badges, links, license)
 - `--minimal` → Title, description, badges, license, contributing/AGENTS.md pointer only
@@ -303,24 +310,28 @@ Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development work
 
 ### STEP 7: Write Updated README
 
-WRITE the new README:
+WRITE the new README at the target's own path (`$dir/README.md`):
 
-- Use the Write tool to create/overwrite README.md with the composed content
+- Use the Write tool to create/overwrite `$dir/README.md` with the composed content
 - Ensure content is complete and properly formatted
 
 IF write succeeds:
 
-- Note which sections were updated, kept, or removed (especially removed technical sections so the user can verify those moved to AGENTS.md).
+- Note which sections were updated, kept, or removed (especially removed technical sections so the user can verify those moved to the sibling AGENTS.md).
 
 IF write fails:
 
 - Show specific error message
 - Suggest fixes:
-  - Check file permissions: `ls -la README.md`
+  - Check file permissions: `ls -la "$dir/README.md"`
   - Check disk space: `df -h .`
   - Verify write access to directory
 
+Loop to the next target; emit the grouped summary (STEP 8) after the last one.
+
 ### STEP 8: Display Summary
+
+For recursive runs, repeat this block per target under a `### {path}` sub-header and end with a tally (`Updated N files, skipped M`). Single-target template:
 
 ```markdown
 ✓ Updated README.md
@@ -365,13 +376,25 @@ IF errors occurred during generation:
 
 ## Usage Examples
 
-**Basic update (default mode):**
+**Basic update (default mode, recursive):**
 
 ```bash
 /md-docs:update-readme
 ```
 
-Generates a balanced human-aimed README: title, badges, description, links, contributing pointer, license.
+Updates every `README.md` in the repo, each scoped to its own package — title, badges, description, links, contributing pointer, license.
+
+**Root README only:**
+
+```bash
+/md-docs:update-readme --root-only
+```
+
+**Limit to one package subtree:**
+
+```bash
+/md-docs:update-readme packages/cli
+```
 
 **Preserve custom prose:**
 
@@ -421,7 +444,7 @@ Or invoke `init-readme` directly.
 
 **No git operations**: Only updates `README.md` file, never auto-commits.
 
-**Monorepo handling**: Operates ONLY on `README.md` at the repository root (via `git rev-parse --show-toplevel`). For package-specific READMEs, `cd` to that package directory and run the command there.
+**Monorepo handling**: Recurses by default, updating every `README.md` in the tree (root and each package). Each file is scoped to its own directory and nearest manifest, and links to its sibling `AGENTS.md`. Use `--root-only` to update only the repo-root README, or a `path` argument to limit the sweep to one package.
 
 **CONTRIBUTING.md handling**: Detected but never edited. Recommendation surfaced to merge into AGENTS.md and delete.
 

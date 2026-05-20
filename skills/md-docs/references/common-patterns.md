@@ -13,16 +13,49 @@ The skill enforces a strict split between `README.md` and `AGENTS.md`. Every wor
 
 When in doubt, ask: *would a human reading this on GitHub care, or only a developer/agent running commands?* If the latter, it goes in AGENTS.md.
 
-The README is allowed to mention AGENTS.md and link to it; that's the only legitimate way for a reader to reach development commands from the README.
+The README is allowed to mention its sibling AGENTS.md and link to it; that's the only legitimate way for a reader to reach development commands from the README.
+
+## Recursive Operation
+
+Workflows act on every relevant file in the repository by default — not just the root. The skill's `SKILL.md` documents the canonical discovery commands; this section captures the conventions every workflow must honor.
+
+**Scope controls.**
+
+- Default: recurse over the whole repo from `git rev-parse --show-toplevel`.
+- `--root-only`: collapse to the repo root (pre-recursion behavior).
+- `path` argument: confine the sweep to one subtree.
+
+**Exclusions (always).** During discovery and creation, skip:
+
+- VCS / dependency / build output dirs: `.git`, `node_modules`, `vendor`, `.venv`, `target`, `dist`, `build`, `out`, `.next`, `coverage`.
+- Anything ignored by git (use `git ls-files --others --exclude-standard` and `git check-ignore`).
+- Hidden dot-directories, unless the directory holds a manifest.
+
+**`update-*` targets** — every existing `README.md` / `AGENTS.md` in scope:
+
+```bash
+git ls-files --cached --others --exclude-standard -- '**/README.md' 'README.md' '**/AGENTS.md' 'AGENTS.md'
+```
+
+**`init-*` targets** — package roots (repo root + directories holding a manifest such as `package.json`, `Cargo.toml`, `pyproject.toml`, `setup.py`, `go.mod`, `foundry.toml`, `Gemfile`, `composer.json`) that lack the file. Never create files in arbitrary leaf directories.
+
+**Per-file scoping.** Each target is independent:
+
+- Read metadata from the nearest enclosing manifest (own directory, else walk up).
+- A nested `README.md` links to its sibling `AGENTS.md`, never the root one.
+- Each `AGENTS.md` gets a sibling `CLAUDE.md` symlink in the same directory.
+- `CONTRIBUTING.md` is detected per directory and merged into the sibling `AGENTS.md`.
+
+`CLAUDE.md` is a symlink to its sibling `AGENTS.md` and is never enumerated or written on its own.
 
 ## CONTRIBUTING.md Policy
 
-This skill does not maintain `CONTRIBUTING.md`. AGENTS.md owns the contribution workflow.
+This skill does not maintain `CONTRIBUTING.md`. The sibling AGENTS.md owns the contribution workflow.
 
-When any workflow detects `CONTRIBUTING.md` at the repo root:
+When any workflow detects `CONTRIBUTING.md` next to a target (repo root or any package root):
 
-1. Surface a `⚠ CONTRIBUTING.md detected` advisory in the final report.
-2. Recommend merging its contents into AGENTS.md (under a `Contribution Workflow` section).
+1. Surface a `⚠ CONTRIBUTING.md detected` advisory in the final report, scoped to that directory.
+2. Recommend merging its contents into the sibling AGENTS.md (under a `Contribution Workflow` section).
 3. Suggest deleting `CONTRIBUTING.md` after the merge so AGENTS.md is the single source of truth.
 4. Never auto-merge or auto-delete; the user performs the merge.
 5. Do not edit `CONTRIBUTING.md` in any workflow.
@@ -33,17 +66,19 @@ If a generated AGENTS.md is missing a `Contribution Workflow` section while `CON
 
 Standard arguments supported across workflows:
 
+- `path` (positional): Confine the recursive sweep to one directory subtree
+- `--root-only`: Disable recursion; act on the repo root only
 - `--dry-run`: Preview changes without writing files
 - `--preserve`: Maintain existing structure, only fix inaccuracies
 - `--minimal`: Generate minimal documentation
 - `--thorough` / `--full`: Generate comprehensive documentation
-- `--force`: Override safety checks
+- `--force`: Override safety checks (applies to every file in the sweep)
 
 Parse arguments from user input and set appropriate flags for workflow execution.
 
 ## Overwrite Safety
 
-Rely on git for recovery. Do not create `*.backup` files when overwriting `README.md` or `AGENTS.md`. `CLAUDE.md` is a symlink to `AGENTS.md` and is not written separately. If the working tree has uncommitted changes to the target file, surface that to the user before overwriting.
+Rely on git for recovery. Do not create `*.backup` files when overwriting `README.md` or `AGENTS.md`. `CLAUDE.md` is a symlink to its sibling `AGENTS.md` and is not written separately. If the working tree has uncommitted changes to a target file, surface that before overwriting. When a recursive sweep would create or rewrite more than a handful of files, list the planned targets and confirm once for the batch before writing.
 
 ## Writing Style
 
@@ -81,8 +116,7 @@ Rely on git for recovery. Do not create `*.backup` files when overwriting `READM
 ```bash
 pnpm install
 pnpm build
-````
-
+```
 ````
 
 ### Good — README.md
@@ -96,7 +130,7 @@ pnpm build
 ## Contributing
 
 Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development workflow, commands, and conventions.
-````
+```
 
 ### Bad — AGENTS.md (marketing copy belongs in README)
 
@@ -136,6 +170,30 @@ Use:
 - `✗` for failed operations
 
 Include indented details showing specific changes made.
+
+### Recursive runs
+
+Group the summary by file path (relative to the repo root) and close with a tally:
+
+```
+### .
+✓ Updated AGENTS.md
+  - Refreshed Commands from justfile (5 recipes)
+✓ Updated README.md
+  - Refreshed badges and links
+
+### packages/core
+✓ Updated AGENTS.md
+  - Added vitest test command
+⚠ CONTRIBUTING.md detected → merge into packages/core/AGENTS.md
+
+### packages/cli
+⊘ README.md unchanged (already accurate)
+
+Updated 3 files, skipped 1, 1 advisory.
+```
+
+For `--dry-run`, list every target path under a `## Planned Changes` header before showing per-file diffs.
 
 ## File Detection
 
@@ -206,3 +264,5 @@ grep -E '^[a-zA-Z_-]+:' Makefile | sed 's/:.*//'
 ```
 
 Parse JSON or TOML appropriately to extract values. Never hardcode or guess metadata when it can be read directly from configuration files.
+
+In recursive runs, run detection and extraction per target against the **nearest enclosing manifest** (the one in the target's own directory, else the closest ancestor). A nested package's README/AGENTS reflects that package's manifest, scripts, and task runners — not the root project's. Fall back to the repo-root manifest only when a target directory has none of its own.

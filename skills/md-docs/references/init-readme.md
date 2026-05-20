@@ -1,10 +1,10 @@
 # Init README Reference
 
-Generate a human-aimed `README.md` from scratch with content derived from project metadata or a user-provided description. README contains description, badges, links, references, license, contributing pointer — never CLI commands, `just` recipes, scripts, or project structure trees. Those live in `AGENTS.md`.
+Generate human-aimed `README.md` files from scratch with content derived from project metadata or a user-provided description. README contains description, badges, links, references, license, contributing pointer — never CLI commands, `just` recipes, scripts, or project structure trees. Those live in the sibling `AGENTS.md`.
 
 ## Overview
 
-The init-readme workflow creates tailored README.md files for new projects or repositories lacking documentation. It operates in two modes: automatic inference (derives content from project files) or guided mode (uses user description to focus content).
+The init-readme workflow creates tailored README.md files for new projects or repositories lacking documentation. By default it creates one in **each package root** (the repo root plus every manifest-bearing directory) that lacks a README; use `--root-only` for just the repo root, or a `path` argument to limit the sweep. It operates in two modes: automatic inference (derives content from project files) or guided mode (uses user description to focus content).
 
 Unlike `update-readme`, this workflow:
 
@@ -38,11 +38,13 @@ If README.md already exists and the user wants to refresh it, suggest `/md-docs:
 Determine operating mode and flags:
 
 - **Automatic inference mode**: No description argument — derive content from project metadata
-- **Guided mode**: Description argument provided — focus content around the user's intent
+- **Guided mode**: Description argument provided — focus content around the user's intent (applies to the root README; nested package READMEs are inferred from their own manifests)
+- `path`: Confine the sweep to one directory subtree
+- `--root-only`: Create only the repo-root README (disables recursion)
 - `--dry-run`: Preview content without writing
 - `--minimal`: Title, badges, description, license, AGENTS.md pointer
 - `--full`: All applicable sections (About, References, Related Projects, Acknowledgments)
-- `--force`: Overwrite existing README.md without prompting
+- `--force`: Overwrite existing README.md files without prompting
 
 Guided mode examples:
 
@@ -58,29 +60,30 @@ Guided mode examples:
 - IF not a git repo: ERROR "Must be run from within a git repository. Initialize with 'git init' first."
 - Store the repository root path
 
-**Scope**: Operate only on `README.md` at the repository root. For package-specific READMEs in a monorepo, the user should `cd` to that package directory first.
+**Scope**: Enumerate package roots — the repo root plus every directory holding a manifest (`package.json`, `Cargo.toml`, `pyproject.toml`, `setup.py`, `go.mod`, `foundry.toml`, `Gemfile`, `composer.json`), minus excluded dirs (`.git`, `node_modules`, `vendor`, `.venv`, `target`, `dist`, `build`, `out`, `.next`, `coverage`, gitignored, hidden-without-manifest). See Recursive Discovery in `SKILL.md` / `references/common-patterns.md`. `--root-only` keeps just the repo root; a `path` argument confines the sweep. Create a README only in package roots that lack one. Run steps 3 onward **per package root**, scoping metadata to that directory's nearest manifest.
 
-**CHECK for CONTRIBUTING.md:**
-
-```bash
-test -f CONTRIBUTING.md && echo "found" || echo "absent"
-```
-
-If found, append a `⚠ CONTRIBUTING.md detected` advisory to the final report recommending merging its contents into AGENTS.md and deleting the file. Do not touch `CONTRIBUTING.md`.
-
-### 3. Check Existing README
+**CHECK for CONTRIBUTING.md (per package root):**
 
 ```bash
-test -f README.md && echo "exists" || echo "missing"
+test -f "$dir/CONTRIBUTING.md" && echo "found" || echo "absent"
 ```
 
-If existing file found AND `--force` not set:
+If found, append a `⚠ CONTRIBUTING.md detected` advisory for that directory recommending a merge into the sibling AGENTS.md and deleting the file. Do not touch `CONTRIBUTING.md`.
+
+### 3. Check Existing README (per package root)
+
+```bash
+test -f "$dir/README.md" && echo "exists" || echo "missing"
+```
+
+A package root whose README already exists is skipped (it's an `update-readme` job, not init). If existing file found AND `--force` not set:
 
 - Read the existing file (for reporting size/sections)
 - Use `AskUserQuestion` with options:
   - **Overwrite**: Replace existing file completely
+  - **Skip**: Leave it and continue to the next package root
   - **Abort**: Cancel operation (suggest `/md-docs:update-readme --preserve` as an alternative)
-- Wait for user response before proceeding
+- For a multi-target sweep, ask once for the batch rather than per file. Wait for user response before proceeding.
 
 If `--force` is set, proceed without prompting. Rely on git to restore prior content if needed.
 
@@ -258,12 +261,12 @@ Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development work
 
 #### Location
 
-`./README.md` (repository root)
+`$dir/README.md` — the package root being processed (repo root for the top-level file).
 
 #### Write Operation
 
 - For `--dry-run`: Display generated content without writing
-- Otherwise: Use the Write tool to create README.md with the composed content
+- Otherwise: Use the Write tool to create `$dir/README.md` with the composed content
 
 #### Confirmation
 
@@ -271,16 +274,20 @@ Success:
 
 - Display file path
 - Show first 10 lines as preview
-- Success message: `✓ Created README.md at ./README.md`
+- Success message: `✓ Created $dir/README.md`
 
 Failure:
 
-- Check permissions: `ls -la README.md`
+- Check permissions: `ls -la "$dir/README.md"`
 - Check disk space: `df -h .`
 - Suggest specific fix
 - DO NOT retry automatically
 
+Loop to the next package root; emit the grouped summary after the last one.
+
 ### 9. Display Summary
+
+For recursive runs, repeat this block per package root under a `### {path}` sub-header and end with a tally (`Created N files, skipped M`). Single-target template:
 
 ```
 ✓ Created README.md
@@ -309,13 +316,25 @@ Failure:
 
 ## Usage Examples
 
-**Automatic inference (no description):**
+**Automatic inference (no description, recursive):**
 
 ```bash
 /md-docs:init-readme
 ```
 
-Analyzes project metadata and creates a complete human-aimed README.
+Analyzes each package root lacking a README and creates a complete human-aimed README in each.
+
+**Root README only:**
+
+```bash
+/md-docs:init-readme --root-only
+```
+
+**Limit to one package subtree:**
+
+```bash
+/md-docs:init-readme packages/core
+```
 
 **Guided mode with description:**
 
@@ -371,7 +390,7 @@ Replace existing `README.md` without prompting. Rely on git to restore prior con
 
 **No git operations**: Only creates README.md; never auto-commits.
 
-**Monorepo handling**: Operates ONLY on README.md at the repository root (via `git rev-parse --show-toplevel`). For package-specific READMEs, `cd` to that package directory first.
+**Monorepo handling**: Creates a README in each package root that lacks one (repo root plus manifest-bearing directories). Each is scoped to its own manifest and links to its sibling `AGENTS.md`. Use `--root-only` for just the repo root, or a `path` argument to confine the sweep.
 
 **CONTRIBUTING.md handling**: Detected but never edited. Recommendation surfaced to merge into AGENTS.md and delete.
 

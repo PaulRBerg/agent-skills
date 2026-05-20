@@ -1,8 +1,8 @@
 # Update AGENTS.md Workflow
 
-Workflow for updating `AGENTS.md` to match actual codebase state. `CLAUDE.md` is a symlink to `AGENTS.md` and does not need separate processing.
+Workflow for updating `AGENTS.md` to match actual codebase state. By default it runs on **every** `AGENTS.md` in the repository; `CLAUDE.md` is a symlink to its sibling `AGENTS.md` and does not need separate processing.
 
-AGENTS.md is the single source of truth for everything technical: stack, commands, scripts, recipes, build/test/lint workflows, code style, architecture, conventions, and the contribution workflow. The README links here for any of it.
+AGENTS.md is the single source of truth for everything technical: stack, commands, scripts, recipes, build/test/lint workflows, code style, architecture, conventions, and the contribution workflow. The sibling README links here for any of it.
 
 ## Workflow
 
@@ -10,6 +10,8 @@ AGENTS.md is the single source of truth for everything technical: stack, command
 
 Supported flags:
 
+- `path`: Confine the sweep to one directory subtree
+- `--root-only`: Update the repo-root `AGENTS.md` only (disables recursion)
 - `--dry-run`: Show what would change without writing files
 - `--preserve`: Keep existing content structure, only fix inaccuracies
 - `--thorough`: Perform deep analysis of all files (slower but comprehensive)
@@ -33,23 +35,35 @@ git rev-parse --git-dir
 
 If not a git repo, warn the user but proceed with limitations (cannot analyze git history or branches).
 
-### Step 1b: Detect CONTRIBUTING.md
+### Step 1b: Enumerate Targets
+
+Find every `AGENTS.md` to update (see Recursive Discovery in `SKILL.md` and `references/common-patterns.md`):
 
 ```bash
-test -f CONTRIBUTING.md && echo "found" || echo "absent"
+git ls-files --cached --others --exclude-standard -- '**/AGENTS.md' 'AGENTS.md'
 ```
 
-If found, append a `⚠ CONTRIBUTING.md detected` advisory to the final report. AGENTS.md is now the home for the contribution workflow, so recommend the user merge `CONTRIBUTING.md` into AGENTS.md (under a "Contribution Workflow" section) and delete the file. Do not auto-merge or auto-delete.
+Drop paths under excluded dirs (`.git`, `node_modules`, `vendor`, `.venv`, `target`, `dist`, `build`, `out`, `.next`, `coverage`, gitignored, hidden-without-manifest). With `--root-only`, keep only the repo-root file. With a `path` argument, keep only files inside it.
 
-When updating AGENTS.md in this run, ensure it has a `Contribution Workflow` section if one is missing — but do not lift content from `CONTRIBUTING.md` automatically; just leave a stub so the user has a clear destination for the merge.
+Then run Steps 1c–6 **for each target**, scoping every command and file read to the target's own directory and its nearest enclosing manifest. Report results grouped by path (Step 7).
+
+### Step 1c: Detect CONTRIBUTING.md (per target directory)
+
+```bash
+test -f "$dir/CONTRIBUTING.md" && echo "found" || echo "absent"
+```
+
+If found, append a `⚠ CONTRIBUTING.md detected` advisory for that directory to the final report. The sibling AGENTS.md is the home for the contribution workflow, so recommend the user merge `CONTRIBUTING.md` into it (under a "Contribution Workflow" section) and delete the file. Do not auto-merge or auto-delete.
+
+When updating that AGENTS.md, ensure it has a `Contribution Workflow` section if one is missing — but do not lift content from `CONTRIBUTING.md` automatically; just leave a stub so the user has a clear destination for the merge.
 
 ### Step 2: Read Existing AGENTS.md & Extract Verifiable Claims
 
 ```bash
-cat AGENTS.md
+cat "$dir/AGENTS.md"
 ```
 
-`CLAUDE.md` is a symlink to `AGENTS.md` and does not need a separate read.
+The sibling `CLAUDE.md` is a symlink to this `AGENTS.md` and does not need a separate read.
 
 Extract verifiable claims:
 
@@ -98,14 +112,14 @@ Check each claim against actual codebase and auto-fix discrepancies:
 - Verify PR template paths exist (`.github/PULL_REQUEST_TEMPLATE.md` or `.github/PULL_REQUEST_TEMPLATE/`)
 - Verify CLI commands and tooling references match current state
 
-**CLAUDE.md symlink:**
+**CLAUDE.md symlink (sibling):**
 
-- Confirm `CLAUDE.md` exists as a symlink pointing to `AGENTS.md`
-- If missing: create with `ln -sf AGENTS.md CLAUDE.md`
+- Confirm a `CLAUDE.md` symlink exists in the **same directory** pointing to `AGENTS.md`
+- If missing: create it from that directory with `ln -sf AGENTS.md CLAUDE.md` (e.g. `(cd "$dir" && ln -sf AGENTS.md CLAUDE.md)`)
 
 ### Step 4: Discover Undocumented Patterns
 
-Scan for patterns not mentioned in AGENTS.md. Because AGENTS.md owns all technical commands, these discoveries are first-class additions, not optional polish.
+Scan the target's own directory subtree (and its nearest manifest) for patterns not mentioned in that AGENTS.md. Because AGENTS.md owns all technical commands, these discoveries are first-class additions, not optional polish. In a monorepo, a nested AGENTS.md documents its package's manifest/scripts/runners, not the root project's.
 
 **Task runners (mandatory in Commands section):**
 
@@ -170,10 +184,12 @@ AGENTS.md: Consider adding section:
 
 **If NOT --dry-run:**
 
-1. Apply all fixes to `AGENTS.md` directly
-2. Ensure `CLAUDE.md` symlink exists: `ln -sf AGENTS.md CLAUDE.md`
-3. Optionally show diff: `git diff -- AGENTS.md`
+1. Apply all fixes to the target `AGENTS.md` directly
+2. Ensure the sibling `CLAUDE.md` symlink exists: `(cd "$dir" && ln -sf AGENTS.md CLAUDE.md)`
+3. Optionally show diff: `git diff -- "$dir/AGENTS.md"`
 4. Report changes made
+
+After the last target, emit the grouped summary (Step 7).
 
 ### Step 6: Required Sections in AGENTS.md
 
@@ -190,9 +206,12 @@ Every AGENTS.md after this workflow should have these sections (create if missin
 
 ### Step 7: Report Summary
 
+For recursive runs, group results by file path (relative to the repo root) and close with a tally line, e.g. `Updated 3 files, 1 advisory`. The single-file blocks below are the per-path units.
+
 **Format with all expected files:**
 
 ```
+### packages/core
 ✓ Updated AGENTS.md
   - Refreshed Commands section from justfile (5 recipes) and package.json (8 scripts)
   - Fixed outdated build command: `npm run build` → `pnpm build`
@@ -202,7 +221,7 @@ Every AGENTS.md after this workflow should have these sections (create if missin
 ✓ CLAUDE.md symlink verified
 
 ⚠ CONTRIBUTING.md detected
-  - Recommend merging its sections (Setup, Code Review, Branch Conventions) into AGENTS.md → Contribution Workflow.
+  - Recommend merging its sections (Setup, Code Review, Branch Conventions) into packages/core/AGENTS.md → Contribution Workflow.
   - Delete CONTRIBUTING.md after the merge.
 ```
 
@@ -251,7 +270,8 @@ AGENTS.md: Consider adding:
 ## Notes
 
 - Focus on factual claims, not stylistic opinions
-- Preserve user's writing style when making fixes
-- AGENTS.md is the source of truth for commands; do not let documented commands drift from `justfile` / `package.json` / `Makefile`
+- Preserve each file's writing style when making fixes
+- AGENTS.md is the source of truth for commands; do not let documented commands drift from the nearest `justfile` / `package.json` / `Makefile`
 - Adapt discovery to project type (web, CLI, library, contracts, monorepo)
-- Never edit `CONTRIBUTING.md`; only recommend merging it into AGENTS.md
+- In a monorepo, each `AGENTS.md` is scoped to its own package; do not copy the root project's commands into a nested file
+- Never edit `CONTRIBUTING.md`; only recommend merging it into the sibling AGENTS.md
