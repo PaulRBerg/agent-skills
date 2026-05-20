@@ -52,6 +52,7 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 | Berachain     | 80094     | https://rpc.berachain.com                      | BERA                   | https://berascan.com            | Yes       |
 | Blast         | 81457     | https://rpc.blast.io                           | ETH                    | https://blastscan.io            | Yes       |
 | BNB Chain     | 56        | https://56.rpc.thirdweb.com                    | BNB                    | https://bscscan.com             | Yes       |
+| Celo          | 42220     | https://celo.drpc.org                          | CELO                   | https://celoscan.io             | Yes       |
 | Chiliz        | 88888     | https://rpc.chiliz.com                         | CHZ                    | https://chiliscan.com           | Yes       |
 | Core Dao      | 1116      | https://rpc.coredao.org                        | CORE                   | https://scan.coredao.org        | Yes       |
 | Ethereum      | 1         | https://eth.merkle.io                          | ETH                    | https://etherscan.io            | Yes       |
