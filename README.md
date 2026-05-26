@@ -36,6 +36,7 @@ npx skills add PaulRBerg/agent-skills
 | git-squash           | Squash PR branch with semantic commit message  |
 | md-docs              | Markdown documentation management              |
 | oracle-codex         | Codex oracle for planning                      |
+| playground           | Interactive single-file HTML playgrounds       |
 | tailwind-css         | Tailwind CSS v4 styling guidance               |
 | vitest               | Vitest v4 testing guidance                     |
 | work                 | End-to-end task implementation                 |
