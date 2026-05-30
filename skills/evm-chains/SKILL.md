@@ -61,6 +61,7 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 | Celo          | 42220    | https://forno.celo.org                         | CELO                   | https://celoscan.io             | Yes       |
 | Chiliz        | 88888    | https://rpc.chiliz.com                         | CHZ                    | https://chiliscan.com           | Yes       |
 | Core Dao      | 1116     | https://rpc.coredao.org                        | CORE                   | https://scan.coredao.org        | Yes       |
+| Dymension     | 1100     | https://dymension.api.onfinality.io/public     | DYM                    | https://dym.fyi                 | Yes       |
 | Ethereum      | 1        | https://ethereum-rpc.publicnode.com            | ETH                    | https://etherscan.io            | Yes       |
 | Gnosis        | 100      | https://rpc.gnosischain.com                    | XDAI                   | https://gnosisscan.io           | Yes       |
 | HyperEVM      | 999      | https://rpc.hyperliquid.xyz/evm                | HYPE                   | https://hyperevmscan.io         | Yes       |
@@ -85,39 +86,40 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 
 ## Mainnet Fallback RPCs
 
-| Chain name    | Chain ID | Fallback public RPCs                                                                                         |
-| ------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| Abstract      | 2741     | https://abstract.drpc.org, https://2741.rpc.thirdweb.com                                                     |
-| Arbitrum      | 42161    | https://arbitrum-one-rpc.publicnode.com, https://42161.rpc.thirdweb.com, https://rpcfree.com/arbitrum-rpc    |
-| Avalanche     | 43114    | https://avalanche-c-chain-rpc.publicnode.com, https://43114.rpc.thirdweb.com                                 |
-| Base          | 8453     | https://base-rpc.publicnode.com, https://base.gateway.tenderly.co, https://developer-access-mainnet.base.org |
-| Berachain     | 80094    | https://berachain-rpc.publicnode.com, https://80094.rpc.thirdweb.com, https://rpc.berachain-apis.com         |
-| Blast         | 81457    | https://blast-rpc.publicnode.com, https://blast.drpc.org, https://81457.rpc.thirdweb.com                     |
-| BNB Chain     | 56       | https://bsc-rpc.publicnode.com, https://bsc.drpc.org, https://56.rpc.thirdweb.com                            |
-| Celo          | 42220    | https://celo.drpc.org, https://celo-rpc.publicnode.com, https://42220.rpc.thirdweb.com                       |
-| Chiliz        | 88888    | https://chiliz.publicnode.com, https://88888.rpc.thirdweb.com, https://rpc.ankr.com/chiliz                   |
-| Core Dao      | 1116     | https://core.drpc.org, https://1116.rpc.thirdweb.com, https://rpc-core.icecreamswap.com                      |
-| Ethereum      | 1        | https://eth.drpc.org, https://rpc.flashbots.net, https://1.rpc.thirdweb.com                                  |
-| Gnosis        | 100      | https://gnosis-rpc.publicnode.com, https://gnosis.drpc.org, https://100.rpc.thirdweb.com                     |
-| HyperEVM      | 999      | https://hyperliquid.drpc.org, https://999.rpc.thirdweb.com, https://gwan-ssl.wandevs.org:46891               |
-| IoTeX         | 4689     | https://4689.rpc.thirdweb.com                                                                                |
-| Lightlink     | 1890     | https://1890.rpc.thirdweb.com                                                                                |
-| Linea Mainnet | 59144    | https://linea-rpc.publicnode.com, https://59144.rpc.thirdweb.com                                             |
-| Mode          | 34443    | https://mode.drpc.org, https://34443.rpc.thirdweb.com                                                        |
-| Monad         | 143      | https://monad.drpc.org, https://143.rpc.thirdweb.com                                                         |
-| Morph         | 2818     | https://morph.drpc.org, https://2818.rpc.thirdweb.com, https://rpc-quicknode.morphl2.io                      |
-| OP Mainnet    | 10       | https://optimism-rpc.publicnode.com, https://optimism.drpc.org, https://10.rpc.thirdweb.com                  |
-| Polygon       | 137      | https://polygon.drpc.org, https://137.rpc.thirdweb.com, https://rpc-mainnet.matic.quiknode.pro               |
-| Ronin         | 2020     | https://ronin.drpc.org, https://2020.rpc.thirdweb.com                                                        |
-| Scroll        | 534352   | https://scroll-rpc.publicnode.com, https://scroll.drpc.org, https://534352.rpc.thirdweb.com                  |
-| Sei Network   | 1329     | https://sei.drpc.org, https://1329.rpc.thirdweb.com                                                          |
-| Sonic         | 146      | https://sonic-rpc.publicnode.com, https://sonic.drpc.org, https://146.rpc.thirdweb.com                       |
-| Sophon        | 50104    | https://50104.rpc.thirdweb.com                                                                               |
-| Superseed     | 5330     | https://superseed.drpc.org, https://5330.rpc.thirdweb.com                                                    |
-| Unichain      | 130      | https://unichain-rpc.publicnode.com, https://130.rpc.thirdweb.com                                            |
-| XDC           | 50       | https://50.rpc.thirdweb.com, https://erpc.xdcrpc.com, https://rpc.xdc.org                                    |
-| ZKsync Era    | 324      | https://zksync.drpc.org, https://324.rpc.thirdweb.com                                                        |
-| Zora          | 7777777  | https://7777777.rpc.thirdweb.com, https://rpc.zora.energy                                                    |
+| Chain name    | Chain ID | Fallback public RPCs                                                                                           |
+| ------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| Abstract      | 2741     | https://abstract.drpc.org, https://2741.rpc.thirdweb.com                                                       |
+| Arbitrum      | 42161    | https://arbitrum-one-rpc.publicnode.com, https://42161.rpc.thirdweb.com, https://rpcfree.com/arbitrum-rpc      |
+| Avalanche     | 43114    | https://avalanche-c-chain-rpc.publicnode.com, https://43114.rpc.thirdweb.com                                   |
+| Base          | 8453     | https://base-rpc.publicnode.com, https://base.gateway.tenderly.co, https://developer-access-mainnet.base.org   |
+| Berachain     | 80094    | https://berachain-rpc.publicnode.com, https://80094.rpc.thirdweb.com, https://rpc.berachain-apis.com           |
+| Blast         | 81457    | https://blast-rpc.publicnode.com, https://blast.drpc.org, https://81457.rpc.thirdweb.com                       |
+| BNB Chain     | 56       | https://bsc-rpc.publicnode.com, https://bsc.drpc.org, https://56.rpc.thirdweb.com                              |
+| Celo          | 42220    | https://celo.drpc.org, https://celo-rpc.publicnode.com, https://42220.rpc.thirdweb.com                         |
+| Chiliz        | 88888    | https://chiliz.publicnode.com, https://88888.rpc.thirdweb.com, https://rpc.ankr.com/chiliz                     |
+| Core Dao      | 1116     | https://core.drpc.org, https://1116.rpc.thirdweb.com, https://rpc-core.icecreamswap.com                        |
+| Dymension     | 1100     | https://dymension.drpc.org, https://1100.rpc.thirdweb.com, https://dymension-evm.blockpi.network/v1/rpc/public |
+| Ethereum      | 1        | https://eth.drpc.org, https://rpc.flashbots.net, https://1.rpc.thirdweb.com                                    |
+| Gnosis        | 100      | https://gnosis-rpc.publicnode.com, https://gnosis.drpc.org, https://100.rpc.thirdweb.com                       |
+| HyperEVM      | 999      | https://hyperliquid.drpc.org, https://999.rpc.thirdweb.com, https://gwan-ssl.wandevs.org:46891                 |
+| IoTeX         | 4689     | https://4689.rpc.thirdweb.com                                                                                  |
+| Lightlink     | 1890     | https://1890.rpc.thirdweb.com                                                                                  |
+| Linea Mainnet | 59144    | https://linea-rpc.publicnode.com, https://59144.rpc.thirdweb.com                                               |
+| Mode          | 34443    | https://mode.drpc.org, https://34443.rpc.thirdweb.com                                                          |
+| Monad         | 143      | https://monad.drpc.org, https://143.rpc.thirdweb.com                                                           |
+| Morph         | 2818     | https://morph.drpc.org, https://2818.rpc.thirdweb.com, https://rpc-quicknode.morphl2.io                        |
+| OP Mainnet    | 10       | https://optimism-rpc.publicnode.com, https://optimism.drpc.org, https://10.rpc.thirdweb.com                    |
+| Polygon       | 137      | https://polygon.drpc.org, https://137.rpc.thirdweb.com, https://rpc-mainnet.matic.quiknode.pro                 |
+| Ronin         | 2020     | https://ronin.drpc.org, https://2020.rpc.thirdweb.com                                                          |
+| Scroll        | 534352   | https://scroll-rpc.publicnode.com, https://scroll.drpc.org, https://534352.rpc.thirdweb.com                    |
+| Sei Network   | 1329     | https://sei.drpc.org, https://1329.rpc.thirdweb.com                                                            |
+| Sonic         | 146      | https://sonic-rpc.publicnode.com, https://sonic.drpc.org, https://146.rpc.thirdweb.com                         |
+| Sophon        | 50104    | https://50104.rpc.thirdweb.com                                                                                 |
+| Superseed     | 5330     | https://superseed.drpc.org, https://5330.rpc.thirdweb.com                                                      |
+| Unichain      | 130      | https://unichain-rpc.publicnode.com, https://130.rpc.thirdweb.com                                              |
+| XDC           | 50       | https://50.rpc.thirdweb.com, https://erpc.xdcrpc.com, https://rpc.xdc.org                                      |
+| ZKsync Era    | 324      | https://zksync.drpc.org, https://324.rpc.thirdweb.com                                                          |
+| Zora          | 7777777  | https://7777777.rpc.thirdweb.com, https://rpc.zora.energy                                                      |
 
 ## Testnets
 
