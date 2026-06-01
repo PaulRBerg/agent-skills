@@ -45,7 +45,9 @@ The `Explorer URL` column is the base URL of the chain's canonical block explore
 | Block       | `/block/<number>` | `https://basescan.org/block/12345678`    |
 | Token       | `/token/<addr>`   | `https://polygonscan.com/token/0xdef...` |
 
-Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonscan, Optimism Etherscan, Lineascan, Snowscan, Blastscan, Scrollscan, Berascan, Uniscan, Gnosisscan, abscan.org) all follow this scheme. Most Blockscout-based and chain-native explorers accept the same segments, but conventions can drift — verify against the explorer UI when in doubt.
+Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonscan, Optimism Etherscan, Lineascan, Snowscan, Blastscan, Berascan, Uniscan, Gnosisscan, abscan.org) all follow this scheme. Most Blockscout-based and chain-native explorers accept the same segments, but conventions can drift — verify against the explorer UI when in doubt.
+
+Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer name do not imply Etherscan API V2 support. When API coverage matters, use the `etherscan-api` skill's supported-chain reference or Etherscan's live `https://api.etherscan.io/v2/chainlist` endpoint. Treat this table as chain metadata for RPC and explorer-link construction only.
 
 **Ronin (`app.roninchain.com`) does not follow the Etherscan path scheme.** Verify against the explorer UI before constructing a Ronin link.
 
@@ -77,14 +79,12 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 | OP Mainnet    | 10       | https://mainnet.optimism.io                    | ETH                    | https://optimistic.etherscan.io | Yes       |
 | Polygon       | 137      | https://polygon-bor-rpc.publicnode.com         | POL                    | https://polygonscan.com         | Yes       |
 | Ronin         | 2020     | https://api.roninchain.com/rpc                 | RON                    | https://app.roninchain.com      | Yes       |
-| Scroll        | 534352   | https://rpc.scroll.io                          | ETH                    | https://scrollscan.com          | Yes       |
 | Sei Network   | 1329     | https://evm-rpc.sei-apis.com                   | SEI                    | https://seiscan.io              | Yes       |
 | Sonic         | 146      | https://rpc.soniclabs.com                      | S                      | https://sonicscan.org           | Yes       |
 | Sophon        | 50104    | https://rpc.sophon.xyz                         | SOPH                   | https://sophscan.xyz            | Yes       |
 | Superseed     | 5330     | https://mainnet.superseed.xyz                  | ETH                    | https://explorer.superseed.xyz  | Yes       |
 | Unichain      | 130      | https://mainnet.unichain.org                   | ETH                    | https://uniscan.xyz             | Yes       |
 | XDC           | 50       | https://rpc.xdcrpc.com                         | XDC                    | https://xdcscan.com             | Yes       |
-| ZKsync Era    | 324      | https://mainnet.era.zksync.io                  | ETH                    | https://explorer.zksync.io      | Yes       |
 | Zora          | 7777777  | https://zora.drpc.org                          | ETH                    | https://explorer.zora.energy    | No        |
 
 ## Mainnet Fallback RPCs
@@ -115,14 +115,12 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 | OP Mainnet    | 10       | https://optimism-rpc.publicnode.com, https://optimism.drpc.org, https://10.rpc.thirdweb.com                    |
 | Polygon       | 137      | https://polygon.drpc.org, https://137.rpc.thirdweb.com, https://rpc-mainnet.matic.quiknode.pro                 |
 | Ronin         | 2020     | https://ronin.drpc.org, https://2020.rpc.thirdweb.com                                                          |
-| Scroll        | 534352   | https://scroll-rpc.publicnode.com, https://scroll.drpc.org, https://534352.rpc.thirdweb.com                    |
 | Sei Network   | 1329     | https://sei.drpc.org, https://1329.rpc.thirdweb.com                                                            |
 | Sonic         | 146      | https://sonic-rpc.publicnode.com, https://sonic.drpc.org, https://146.rpc.thirdweb.com                         |
 | Sophon        | 50104    | https://50104.rpc.thirdweb.com                                                                                 |
 | Superseed     | 5330     | https://superseed.drpc.org, https://5330.rpc.thirdweb.com                                                      |
 | Unichain      | 130      | https://unichain-rpc.publicnode.com, https://130.rpc.thirdweb.com                                              |
 | XDC           | 50       | https://50.rpc.thirdweb.com, https://erpc.xdcrpc.com, https://rpc.xdc.org                                      |
-| ZKsync Era    | 324      | https://zksync.drpc.org, https://324.rpc.thirdweb.com                                                          |
 | Zora          | 7777777  | https://7777777.rpc.thirdweb.com, https://rpc.zora.energy                                                      |
 
 ## Testnets
