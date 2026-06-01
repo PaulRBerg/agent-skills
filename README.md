@@ -29,16 +29,13 @@ npx skills add PaulRBerg/agent-skills
 | commit               | Git commit with conventional commits           |
 | create-skill         | Bootstrap a new agent skill                    |
 | debrief              | Interactive HTML or Markdown task debrief      |
-| diagram-monochrome   | Monochrome technical schematic diagrams        |
 | effect-ts            | Effect-TS patterns and guidance                |
 | etherscan-api        | Etherscan API V2 for blockchain queries        |
 | evm-chains           | EVM chain metadata and RouteMesh reference     |
 | git-squash           | Squash PR branch with semantic commit message  |
 | md-docs              | Markdown documentation management              |
-| oracle-codex         | Codex oracle for planning                      |
 | playground           | Interactive single-file HTML playgrounds       |
 | tailwind-css         | Tailwind CSS v4 styling guidance               |
-| vitest               | Vitest v4 testing guidance                     |
 | work                 | End-to-end task implementation                 |
 | yeet                 | GitHub contribution workflows                  |
 
