@@ -18,6 +18,8 @@ Match chains by displayed name or numeric chain ID. Treat any chain missing from
 
 Use RouteMesh only when the `RouteMesh` column is `Yes` and the `ROUTEMESH_API_KEY` environment variable is available.
 
+To verify current RouteMesh support, call `GET https://lb.routeme.sh/chains`; use `https://lb2.routeme.sh/chains` as the backup endpoint. Do not use `https://rpc.routeme.sh/chains`; the hostname may not resolve even though it appears in RouteMesh's OpenAPI spec.
+
 Construct the RouteMesh RPC URL as:
 
 ```text
@@ -63,6 +65,7 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 | Core Dao      | 1116     | https://rpc.coredao.org                        | CORE                   | https://scan.coredao.org        | Yes       |
 | Dymension     | 1100     | https://dymension.api.onfinality.io/public     | DYM                    | https://dym.fyi                 | Yes       |
 | Ethereum      | 1        | https://ethereum-rpc.publicnode.com            | ETH                    | https://etherscan.io            | Yes       |
+| Fantom        | 250      | https://rpc.fantom.network                     | FTM                    | https://ftmscan.com             | Yes       |
 | Gnosis        | 100      | https://rpc.gnosischain.com                    | XDAI                   | https://gnosisscan.io           | Yes       |
 | HyperEVM      | 999      | https://rpc.hyperliquid.xyz/evm                | HYPE                   | https://hyperevmscan.io         | Yes       |
 | IoTeX         | 4689     | https://babel-api.mainnet.iotex.io             | IOTX                   | https://iotexscan.io            | Yes       |
@@ -100,6 +103,7 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 | Core Dao      | 1116     | https://core.drpc.org, https://1116.rpc.thirdweb.com, https://rpc-core.icecreamswap.com                        |
 | Dymension     | 1100     | https://dymension.drpc.org, https://1100.rpc.thirdweb.com, https://dymension-evm.blockpi.network/v1/rpc/public |
 | Ethereum      | 1        | https://eth.drpc.org, https://rpc.flashbots.net, https://1.rpc.thirdweb.com                                    |
+| Fantom        | 250      | https://rpc2.fantom.network                                                                                    |
 | Gnosis        | 100      | https://gnosis-rpc.publicnode.com, https://gnosis.drpc.org, https://100.rpc.thirdweb.com                       |
 | HyperEVM      | 999      | https://hyperliquid.drpc.org, https://999.rpc.thirdweb.com, https://gwan-ssl.wandevs.org:46891                 |
 | IoTeX         | 4689     | https://4689.rpc.thirdweb.com                                                                                  |
