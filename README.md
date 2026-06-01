@@ -1,6 +1,6 @@
-# Agent Skills
+# Shelved Agent Skills
 
-PRB's collection of AI agent skills. Designed to work across agents, but primarily built for [Claude Code](https://claude.com/product/claude-code) and [Codex](https://github.com/openai/codex).
+PRB's shelved AI agent skills. These are kept off the default branch but preserved for manual install or future restoration.
 
 > [!WARNING]
 > These skills are optimized for my personal setup and workflow. If you install them, do your own due diligence and customize them to fit your stack and agents. No warranties, guarantees, or support are provided — use at your own risk.
@@ -8,52 +8,16 @@ PRB's collection of AI agent skills. Designed to work across agents, but primari
 ## Installation
 
 ```sh
-bunx skills add PaulRBerg/agent-skills
+npx skills add PaulRBerg/agent-skills#shelved
 ```
 
 ## Skills
 
-| Skill                     | Description                                                |
-| ------------------------- | ---------------------------------------------------------- |
-| agents-context-management | Create or polish README.md, AGENTS.md, and existing skills |
-| agents-introspection      | Retrospect on Codex/Claude Code transcript history         |
-| autoresearch              | Autonomous experiment loop                                 |
-| bump-deps                 | Node.js dependency updates via taze                        |
-| bump-release              | Release workflow with changelog, tagging                   |
-| cli-cast                  | Foundry cast CLI guidance                                  |
-| cli-gh                    | GitHub CLI operations                                      |
-| cli-just                  | Just command runner guidance                               |
-| code-polish               | Simplify and/or risk-profiled review with autofix          |
-| coingecko-cli             | CoinGecko CLI for prices and market data                   |
-| coingecko-historical      | Open CoinGecko historical data page in Chromium            |
-| commit                    | Git commit with conventional commits                       |
-| create-skill              | Bootstrap a new agent skill                                |
-| debrief                   | Interactive HTML or Markdown task debrief                  |
-| effect-ts                 | Effect-TS patterns and guidance                            |
-| evm-atlas                 | EVM chain/account lookup + cross-chain data routing        |
-| find-tool                 | Find and compare current developer tools                   |
-| git-squash                | Squash PR branch with semantic commit message              |
-| grill-me                  | Relentlessly stress-test plans and designs                 |
-| large-file-refactor       | Large source-file report and Serena split plans            |
-| loop-skill                | Repeat a skill multiple times with one net report          |
-| playground                | Interactive single-file HTML playgrounds                   |
-| repo-rename               | Rename GitHub repo, folder, and agent thread references    |
-| skill-doctor              | Audit Agent Skills catalogs and installed skill roots      |
-| skill-map                 | Find skill dependencies and references across machine      |
-| spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                |
-| tailwind-css              | Tailwind CSS v4 styling guidance                           |
-| todo-archive              | Archive checked TODO.md tasks into .ai/todos               |
-| vitest                    | Vitest test writing and debugging                          |
-| work                      | End-to-end task implementation                             |
-| yeet                      | GitHub contribution workflows                              |
-
-## Forked Skills
-
-| Skill      | Source                                                                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| playground | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
-
-Some skills pin `model: opus` in their frontmatter: their workflows are mechanical enough that Opus-level intelligence is sufficient, so there is no need to spend a more capable default model on them.
+| Skill              | Description                             |
+| ------------------ | --------------------------------------- |
+| diagram-monochrome | Monochrome technical schematic diagrams |
+| oracle-codex       | Codex oracle for planning               |
+| vitest             | Vitest v4 testing guidance              |
 
 ## References
 
