@@ -74,7 +74,7 @@ Write a single HTML file to `$REPORT_PATH` that satisfies playground core requir
 - Live preview updating on every control change. No "Apply" button.
 - Prompt output at the bottom — natural language, mentions only non-default choices, with a "Copy" button and brief "Copied!" feedback.
 - Sensible defaults plus 3-5 named presets that snap controls to a cohesive combination.
-- Dark theme. System font for UI, monospace for code/values.
+- System font for UI, monospace for code/values.
 - **Pre-populate with the actual findings from the transcript** — concrete file paths, line numbers, severities, metrics, suggestions, code snippets. Not lorem ipsum. Not placeholders. If the transcript has no findings, ask the user for the source material before writing.
 
 For larger payloads, embed findings as a JS array literal inside one inline `<script>` at the top of the file.
