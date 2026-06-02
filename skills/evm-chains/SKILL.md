@@ -78,6 +78,7 @@ Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer nam
 | Morph         | 2818     | https://rpc.morphl2.io                         | ETH                    | https://explorer.morphl2.io     | Yes       |
 | OP Mainnet    | 10       | https://mainnet.optimism.io                    | ETH                    | https://optimistic.etherscan.io | Yes       |
 | Polygon       | 137      | https://polygon-bor-rpc.publicnode.com         | POL                    | https://polygonscan.com         | Yes       |
+| PulseChain    | 369      | https://rpc.pulsechain.com                     | PLS                    | https://scan.pulsechain.com     | Yes       |
 | Ronin         | 2020     | https://api.roninchain.com/rpc                 | RON                    | https://app.roninchain.com      | Yes       |
 | Sei Network   | 1329     | https://evm-rpc.sei-apis.com                   | SEI                    | https://seiscan.io              | Yes       |
 | Sonic         | 146      | https://rpc.soniclabs.com                      | S                      | https://sonicscan.org           | Yes       |
@@ -114,6 +115,7 @@ Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer nam
 | Morph         | 2818     | https://morph.drpc.org, https://2818.rpc.thirdweb.com, https://rpc-quicknode.morphl2.io                        |
 | OP Mainnet    | 10       | https://optimism-rpc.publicnode.com, https://optimism.drpc.org, https://10.rpc.thirdweb.com                    |
 | Polygon       | 137      | https://polygon.drpc.org, https://137.rpc.thirdweb.com, https://rpc-mainnet.matic.quiknode.pro                 |
+| PulseChain    | 369      | https://pulsechain-rpc.publicnode.com, https://rpc-pulsechain.g4mm4.io, https://369.rpc.thirdweb.com           |
 | Ronin         | 2020     | https://ronin.drpc.org, https://2020.rpc.thirdweb.com                                                          |
 | Sei Network   | 1329     | https://sei.drpc.org, https://1329.rpc.thirdweb.com                                                            |
 | Sonic         | 146      | https://sonic-rpc.publicnode.com, https://sonic.drpc.org, https://146.rpc.thirdweb.com                         |
