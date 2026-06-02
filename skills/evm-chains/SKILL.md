@@ -49,7 +49,11 @@ Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonsca
 
 Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer name do not imply Etherscan API V2 support. When API coverage matters, use the `etherscan-api` skill's supported-chain reference or Etherscan's live `https://api.etherscan.io/v2/chainlist` endpoint. Treat this table as chain metadata for RPC and explorer-link construction only.
 
+## Caveats
+
 **Ronin (`app.roninchain.com`) does not follow the Etherscan path scheme.** Verify against the explorer UI before constructing a Ronin link.
+
+**PulseChain's explorer (`scan.pulsechain.com`) is a Blockscout frontend; its JSON API is on a separate host.** Address, tx, and block links under `scan.pulsechain.com` resolve, but `scan.pulsechain.com/api/...` returns a frontend 404, and the Blockscout API backend at `api.scan.pulsechain.com` has been observed down (HTTP 502). Prefer PulseChain's listed RPC endpoints for programmatic data.
 
 ## Mainnets
 
