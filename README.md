@@ -16,6 +16,7 @@ npx skills add PaulRBerg/agent-skills
 | Skill                | Description                                    |
 | -------------------- | ---------------------------------------------- |
 | autoresearch         | Autonomous experiment loop                     |
+| blockscout-api       | Blockscout / Chainscout multichain queries     |
 | bump-deps            | Node.js dependency updates                     |
 | bump-release         | Release workflow with changelog, tagging       |
 | cli-cast             | Foundry cast CLI guidance                      |
