@@ -30,7 +30,7 @@ Single-chain response shape:
 - `blockscout` — Blockscout-operated; candidate for the unified PRO host (`api.blockscout.com/{chain_id}/…`). Still confirm with a live call — not every hosted chain is fronted by the PRO host.
 - anything else — community-operated. Per-instance only; use `explorers[].url` directly (no key).
 
-Use `./scripts/resolve-chain.sh <chain_id>` to extract these fields as `key=value` lines. For **name → `chain_id`**, use the `evm-chains` skill first.
+Use `./scripts/resolve-chain.sh <chain_id>` to extract these fields as `key=value` lines. For **name → `chain_id`**, use the chain tables in `SKILL.md` first.
 
 ## Common Chains
 
@@ -48,7 +48,7 @@ Use `./scripts/resolve-chain.sh <chain_id>` to extract these fields as `key=valu
 
 For any chain not listed, resolve it through Chainscout rather than guessing the instance hostname. When the PRO host returns `404` but Chainscout has the chain, use its per-instance URL.
 
-Chains absent from the PRO host **and** Chainscout (e.g., BNB `56`, Kaia `8217`, Abstract `2741` at time of writing) are not in the Blockscout registry — use another explorer such as the `etherscan-api` skill for those.
+Chains absent from the PRO host **and** Chainscout (e.g., BNB `56`, Kaia `8217`, Abstract `2741` at time of writing) are not in the Blockscout registry — use Etherscan (`./etherscan-api.md`) for those.
 
 ## Contributing
 

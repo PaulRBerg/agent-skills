@@ -1,8 +1,3 @@
----
-name: etherscan-api
-description: This skill should be used when the user asks to "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "fetch NFT transfers", "ERC-721 transfer history", "ERC-1155 transfer history", "find first funding transaction", "trace fund origin", "who funded this address", "query Etherscan", or mentions Etherscan API, blockchain balance queries, NFT transfer history, multi-chain balance lookups, or wallet provenance tracing.
----
-
 # Etherscan API V2
 
 ## Overview
@@ -39,7 +34,7 @@ If the environment variable is missing, inform the user and halt execution.
 Run the detection helper **once per session** and cache the result. It maps `getapilimit` → plan tier and probes a Base balance call to disambiguate Free from Lite:
 
 ```bash
-./scripts/detect-plan.sh
+./scripts/etherscan-detect-plan.sh
 ```
 
 Output (key=value lines):
@@ -102,9 +97,9 @@ Do not default to Ethereum Mainnet. Always infer the chain from the user's promp
 
 ### Unsupported Chains
 
-If the user references an **EVM chain** that Etherscan API V2 does not cover (e.g., a niche L2 or appchain not in `./references/chains.md`), do **not** halt. Fall back to direct RPC calls against the chain's default public RPC:
+If the user references an **EVM chain** that Etherscan API V2 does not cover (e.g., a niche L2 or appchain not in `./references/etherscan-chains.md`), do **not** halt. For chains Etherscan doesn't serve, prefer Blockscout (`./blockscout-api.md`) before direct RPC. If Blockscout doesn't index the chain either, fall back to direct RPC calls against the chain's default public RPC:
 
-1. Resolve the chain via the `evm-chains` skill to get the default public RPC, chain ID, native currency symbol, and explorer URL.
+1. Resolve the chain via the tables in `SKILL.md` to get the default public RPC, chain ID, native currency symbol, and explorer URL.
 2. Issue equivalent JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against that RPC using `curl` or the `cast` CLI from the `cli-cast` skill.
 3. Note in the response that the data came from the chain's public RPC, not Etherscan, so PRO-style aggregations (full token holdings, first-funding lookup) are unavailable and must be derived manually from logs/transactions if needed.
 
@@ -117,7 +112,7 @@ Etherscan supports EVM-compatible chains only. For the full list, see:
 https://docs.etherscan.io/supported-chains
 ```
 
-For the complete list of Etherscan-supported chains and their IDs, see `./references/chains.md`.
+For the complete list of Etherscan-supported chains and their IDs, see `./references/etherscan-chains.md`.
 
 ## API Base URL
 
@@ -137,7 +132,7 @@ Query native ETH (or native token) balance for an address.
 
 | Parameter | Required | Default  | Description                                                                                                                                           |
 | --------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chainid` | No       | `1`      | Chain ID (see chains.md)                                                                                                                              |
+| `chainid` | No       | `1`      | Chain ID (see etherscan-chains.md)                                                                                                                    |
 | `module`  | Yes      | -        | Set to `account`                                                                                                                                      |
 | `action`  | Yes      | -        | Set to `balance`                                                                                                                                      |
 | `address` | Yes      | -        | Wallet address (supports up to 20 comma-separated)                                                                                                    |
@@ -187,15 +182,15 @@ Query ERC-20 token balance for an address.
 
 ### Endpoint Parameters
 
-| Parameter         | Required | Default  | Description                       |
-| ----------------- | -------- | -------- | --------------------------------- |
-| `chainid`         | No       | `1`      | Chain ID (see chains.md)          |
-| `module`          | Yes      | -        | Set to `account`                  |
-| `action`          | Yes      | -        | Set to `tokenbalance`             |
-| `contractaddress` | Yes      | -        | ERC-20 token contract address     |
-| `address`         | Yes      | -        | Wallet address to query           |
-| `tag`             | No       | `latest` | Block tag                         |
-| `apikey`          | Yes      | -        | API key from `$ETHERSCAN_API_KEY` |
+| Parameter         | Required | Default  | Description                        |
+| ----------------- | -------- | -------- | ---------------------------------- |
+| `chainid`         | No       | `1`      | Chain ID (see etherscan-chains.md) |
+| `module`          | Yes      | -        | Set to `account`                   |
+| `action`          | Yes      | -        | Set to `tokenbalance`              |
+| `contractaddress` | Yes      | -        | ERC-20 token contract address      |
+| `address`         | Yes      | -        | Wallet address to query            |
+| `tag`             | No       | `latest` | Block tag                          |
+| `apikey`          | Yes      | -        | API key from `$ETHERSCAN_API_KEY`  |
 
 ### Example Query
 
@@ -246,7 +241,7 @@ Query an address's transaction history. Five actions are available under `module
 
 | Parameter         | Required | Default     | Description                                                  |
 | ----------------- | -------- | ----------- | ------------------------------------------------------------ |
-| `chainid`         | No       | `1`         | Chain ID (see chains.md)                                     |
+| `chainid`         | No       | `1`         | Chain ID (see etherscan-chains.md)                           |
 | `module`          | Yes      | -           | Set to `account`                                             |
 | `action`          | Yes      | -           | One of the actions above                                     |
 | `address`         | Yes      | -           | Wallet address                                               |
@@ -395,7 +390,7 @@ Returns the address, tx hash, block, timestamp, and value of the transaction tha
 
 | Parameter | Required | Default | Description                         |
 | --------- | -------- | ------- | ----------------------------------- |
-| `chainid` | No       | `1`     | Chain ID (see chains.md)            |
+| `chainid` | No       | `1`     | Chain ID (see etherscan-chains.md)  |
 | `module`  | Yes      | -       | Set to `account`                    |
 | `action`  | Yes      | -       | Set to `fundedby`                   |
 | `address` | Yes      | -       | EOA address (contracts unsupported) |
@@ -479,7 +474,7 @@ Specify the `chainid` parameter to query different blockchains.
 curl -s "https://api.etherscan.io/v2/api?chainid=137&module=account&action=balance&address=0x...&tag=latest&apikey=$ETHERSCAN_API_KEY"
 ```
 
-For the complete list of supported chains, see `./references/chains.md`.
+For the complete list of supported chains, see `./references/etherscan-chains.md`.
 
 ## Wei to Human-Readable Conversion
 
@@ -526,7 +521,7 @@ echo "scale=6; 135499000000 / 1000000" | bc
 
 ## Plan-Gated Capabilities
 
-Decisions in this section depend on the cached output of `./scripts/detect-plan.sh`.
+Decisions in this section depend on the cached output of `./scripts/etherscan-detect-plan.sh`.
 
 ### Paid-Only Chains
 
@@ -565,7 +560,7 @@ When `pro_endpoints=false` (free or Lite), prefer the non-PRO equivalents listed
 
 All other supported chains — Ethereum, Polygon, Arbitrum One, Linea, Blast, Mantle, Unichain, Gnosis, Celo, Fraxtal, Moonbeam, Moonriver, opBNB, Sonic, Sei, Monad, Berachain, Abstract, ApeChain, World, Katana, HyperEVM, MegaETH, Memecore, Plasma, Stable, Taiko, BitTorrent, XDC, and their testnets — are available on every plan including Free. On Lite and higher, the paid-only chains above also become available.
 
-See `./references/chains.md` for the full list with chain IDs.
+See `./references/etherscan-chains.md` for the full list with chain IDs.
 
 ## Error Handling
 
@@ -595,8 +590,8 @@ If rate limited, wait briefly and retry.
 
 ## Reference Files
 
-- **`./references/chains.md`** - Complete list of supported chains with chain IDs
-- **`./scripts/detect-plan.sh`** - Plan-tier detection helper (run once per session)
+- **`./references/etherscan-chains.md`** - Complete list of supported chains with chain IDs
+- **`./scripts/etherscan-detect-plan.sh`** - Plan-tier detection helper (run once per session)
 
 ## Fallback Documentation
 

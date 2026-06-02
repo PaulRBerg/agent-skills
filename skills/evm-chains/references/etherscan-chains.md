@@ -105,4 +105,4 @@ These chains were previously supported but **API requests will fail** on the V2 
 | Swell Testnet                      | `1924`   | Feb 25, 2026                       |
 | MemeCore Formicarium Testnet (old) | `43521`  | Feb 25, 2026 (migrated to `43522`) |
 
-The following chains are **not currently supported** on Etherscan V2 and were never part of the V2 unified API: Holesky, zkSync Era (`324`), zkSync Sepolia (`300`), Arbitrum Nova (`42170`). If a user references these, route them to a chain-native explorer instead.
+The following chains are **not currently supported** on Etherscan V2 and were never part of the V2 unified API: Holesky, zkSync Era (`324`), zkSync Sepolia (`300`), Arbitrum Nova (`42170`). If a user references these, route them to a chain-native explorer or try Blockscout (`./blockscout-api.md`) instead.

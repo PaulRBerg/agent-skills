@@ -3,16 +3,27 @@ argument-hint: <chain-name-or-id>
 disable-model-invocation: false
 name: evm-chains
 user-invocable: true
-description: This skill should be used when the user asks to resolve an EVM chain name or chain ID, find chain metadata such as a default public RPC, native currency symbol, or block explorer URL, determine whether a chain is supported by RouteMesh, or needs chain resolution before fetching data from or interacting with an EVM chain.
+description: This skill should be used when the user asks to resolve an EVM chain name or chain ID; find chain metadata such as a default public RPC, native currency symbol, or block explorer URL; determine whether a chain is supported by RouteMesh; or read on-chain account data for any EVM chain — "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "fetch NFT transfers", "ERC-721 or ERC-1155 transfer history", "transaction history", "find first funding transaction", "trace fund origin", "who funded this address", "query Etherscan", "query Blockscout", or "look up a chain on Chainscout". It routes each data query through Etherscan API V2 (preferred) or the Blockscout/Chainscout APIs (fallback for chains Etherscan doesn't serve), with direct JSON-RPC as a last resort. Also use it for chain resolution before fetching data from or interacting with an EVM chain.
 ---
 
 # EVM Chains
 
-Local EVM chain reference for chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, and RouteMesh support lookups.
+Local EVM chain dataset (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback).
 
-Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks.
+Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks — and to query on-chain account data once the chain is resolved (see [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing)).
 
 Match chains by displayed name or numeric chain ID. Treat any chain missing from the tables as outside this skill's local dataset. If the requested chain is not listed, use the web search tool to find authoritative metadata from the chain's official documentation or Chainlist before proceeding.
+
+## Querying On-Chain Data (Routing)
+
+To read account data — native balance, token holdings, ERC-20/721/1155 transfers, transaction history, or first-funding — resolve the chain, then dispatch to the right explorer API. Do not default to Ethereum; infer the chain from the prompt (explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, testnet keywords). If ambiguous, ask.
+
+1. **Resolve the chain** — map the name → chain ID via the tables below (Mainnets, Testnets).
+2. **Etherscan (preferred)** — if the chain ID is listed in `./references/etherscan-chains.md`, follow `./references/etherscan-api.md` (unified API V2, needs `$ETHERSCAN_API_KEY`).
+3. **Blockscout (fallback)** — otherwise follow `./references/blockscout-api.md`. Blockscout/Chainscout indexes 1000+ chains Etherscan doesn't serve, with full token holdings on the free tier.
+4. **Neither** — if the chain is in neither registry, query the public RPCs below directly over JSON-RPC (`cast` from the `cli-cast` skill, or `curl`). If the chain is non-EVM (Solana, Bitcoin, Cosmos, …), report that it is unsupported.
+
+**Paid-chain auto-fallback.** Base (`8453`), OP (`10`), Avalanche (`43114`), and BNB (`56`) — plus their testnets `84532`, `11155420`, `43113`, `97` — are Etherscan-listed, but their data endpoints require a paid Etherscan plan. If the target is one of these **and** `./scripts/etherscan-detect-plan.sh` reports `paid_chains=false` (free tier), route to Blockscout instead: it serves them free, no key, with full holdings. Etherscan stays the default for every other chain.
 
 ## RouteMesh
 
@@ -47,7 +58,7 @@ The `Explorer URL` column is the base URL of the chain's canonical block explore
 
 Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonscan, Optimism Etherscan, Lineascan, Snowscan, Blastscan, Berascan, Uniscan, Gnosisscan, abscan.org) all follow this scheme. Most Blockscout-based and chain-native explorers accept the same segments, but conventions can drift — verify against the explorer UI when in doubt.
 
-Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer name do not imply Etherscan API V2 support. When API coverage matters, use the `etherscan-api` skill's supported-chain reference or Etherscan's live `https://api.etherscan.io/v2/chainlist` endpoint. Treat this table as chain metadata for RPC and explorer-link construction only.
+Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer name do not imply Etherscan API V2 support. When API coverage matters, use `./references/etherscan-chains.md` or Etherscan's live `https://api.etherscan.io/v2/chainlist` endpoint. Treat this table as chain metadata for RPC and explorer-link construction only.
 
 ## Caveats
 

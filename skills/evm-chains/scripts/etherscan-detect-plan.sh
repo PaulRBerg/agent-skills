@@ -1,5 +1,5 @@
 #!/bin/bash
-# detect-plan.sh — Detect Etherscan API plan tier from $ETHERSCAN_API_KEY.
+# etherscan-detect-plan.sh — Detect Etherscan API plan tier from $ETHERSCAN_API_KEY.
 #
 # Outputs key=value lines on stdout:
 #   plan=<free|lite|standard|advanced|professional|pro_plus|enterprise|unknown>

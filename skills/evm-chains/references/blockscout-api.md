@@ -1,8 +1,3 @@
----
-name: blockscout-api
-description: This skill should be used when the user asks to "query Blockscout", "use the Blockscout API", "Blockscout PRO API", "check balance on any chain", "token holdings via Blockscout", "fetch transfers on a chain Etherscan doesn't support", "resolve a Blockscout instance", "look up a chain on Chainscout", "migrate Etherscan API calls to Blockscout", or mentions Blockscout, Chainscout, free multichain explorer APIs, or querying on-chain data for any EVM chain Blockscout indexes.
----
-
 # Blockscout API
 
 ## Overview
@@ -15,7 +10,7 @@ Query blockchain data across any EVM chain that Blockscout indexes. Blockscout e
 
 This skill covers read-only account/address queries: native balance, ERC-20/721/1155 holdings and transfers, transaction history, and first-funding tracing.
 
-**Relationship to `etherscan-api`:** Same problem space, different explorer. Prefer Blockscout when the chain is **not** on Etherscan, when you want full token holdings on the free tier, or when the user names Blockscout/Chainscout. The two skills are interchangeable for native-balance and transfer queries.
+**Relationship to Etherscan (`./etherscan-api.md`):** Same problem space, different explorer. Prefer Blockscout when the chain is **not** on Etherscan, when you want full token holdings on the free tier, or when the user names Blockscout/Chainscout. The two surfaces are interchangeable for native-balance and transfer queries.
 
 ## Prerequisites
 
@@ -38,7 +33,7 @@ The key is **only** required for the unified PRO host (`api.blockscout.com`), wh
 Run once per session and cache the result. It reads rate-limit/credit headers returned on every PRO response:
 
 ```bash
-./scripts/detect-plan.sh
+./scripts/blockscout-detect-plan.sh
 ```
 
 Output (key=value lines):
@@ -59,7 +54,7 @@ credits_remaining=99880
 | `15`             | **Standard** | $49/mo  | 100M / month |
 | `30`             | **Pro**      | $199/mo | 500M / month |
 
-**Credits:** most endpoints cost **20 credits/call**; a handful cost more (`coin-balance-history` and `raw-trace` 50; `internal-transactions` per-tx 40; `logs` and per-tx `token-transfers` 30; `search/quick` 25). At 20 credits, the free 100K/day ≈ 5,000 calls/day. `detect-plan.sh` itself costs ~20 credits — do not re-run mid-session. Full table: `./references/endpoints.md`.
+**Credits:** most endpoints cost **20 credits/call**; a handful cost more (`coin-balance-history` and `raw-trace` 50; `internal-transactions` per-tx 40; `logs` and per-tx `token-transfers` 30; `search/quick` 25). At 20 credits, the free 100K/day ≈ 5,000 calls/day. `blockscout-detect-plan.sh` itself costs ~20 credits — do not re-run mid-session. Full table: `./references/blockscout-endpoints.md`.
 
 Per-instance public hosts are not credit-metered but are rate-limited to **3 req/s (300/min) per IP**.
 
@@ -73,15 +68,15 @@ Decide per query:
 | Porting existing Etherscan **V2** code (minimal diff)                  | **Etherscan-V2 alias** `https://api.blockscout.com/v2/api?chain_id={id}&module=...` |
 | Chain returns `404` on the PRO host, or no key available               | **Per-instance** `https://{instance}/api/v2/...` (no key) — resolve via Chainscout  |
 
-The PRO host fronts major Blockscout-hosted chains but **not all** of them — e.g., Flare `14` returns `404` on the PRO host yet is reachable per-instance (resolve via Chainscout). On any `404`, fall back to the per-instance host. If the chain is also absent from Chainscout (e.g., BNB `56`, Kaia `8217`, Abstract `2741` at time of writing), it isn't Blockscout-indexed — use another explorer such as the `etherscan-api` skill.
+The PRO host fronts major Blockscout-hosted chains but **not all** of them — e.g., Flare `14` returns `404` on the PRO host yet is reachable per-instance (resolve via Chainscout). On any `404`, fall back to the per-instance host. If the chain is also absent from Chainscout (e.g., BNB `56`, Kaia `8217`, Abstract `2741` at time of writing), it isn't Blockscout-indexed — use another explorer such as Etherscan (`./etherscan-api.md`).
 
 ## Chain Resolution
 
-Do **not** default to Ethereum Mainnet. Infer the chain from the prompt first (same rules as `etherscan-api`: explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, testnet keywords). If ambiguous, ask.
+Do **not** default to Ethereum Mainnet. Infer the chain from the prompt first (same rules as `./etherscan-api.md`: explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, testnet keywords). If ambiguous, ask.
 
 Two-step resolution:
 
-1. **Name → `chain_id`** — use the `evm-chains` skill.
+1. **Name → `chain_id`** — use the chain tables in `SKILL.md`.
 2. **`chain_id` → instance URL** (only needed for the per-instance route) — use Chainscout:
 
 ```bash
@@ -99,7 +94,7 @@ layer=1
 rollup_type=
 ```
 
-`hosted_by=blockscout` indicates the chain is a candidate for the PRO host; community-hosted chains (`hosted_by` other than `blockscout`) are per-instance only. Chainscout indexes 1000+ networks — see `./references/chains.md`.
+`hosted_by=blockscout` indicates the chain is a candidate for the PRO host; community-hosted chains (`hosted_by` other than `blockscout`) are per-instance only. Chainscout indexes 1000+ networks — see `./references/blockscout-chains.md`.
 
 ## Authentication
 
@@ -209,7 +204,7 @@ When `next_page_params` is `null`, the last page was reached. There is no `sort`
 
 ## Etherscan-Compatible Layer
 
-For porting existing `etherscan-api` code with minimal changes, use the **Etherscan-V2 alias**. It returns the familiar `{status,message,result}` shape:
+For porting existing Etherscan V2 code (`./etherscan-api.md`) with minimal changes, use the **Etherscan-V2 alias**. It returns the familiar `{status,message,result}` shape:
 
 ```bash
 curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=balance&address=0xADDR&apikey=$BLOCKSCOUT_API_KEY"
@@ -232,7 +227,7 @@ Porting checklist from Etherscan V2: change host `api.etherscan.io` → `api.blo
 | Logs                 | `getLogs`                   | —                                           | `getLogs`                  |
 | ABI / source         | `getabi` / `getsourcecode`  | `smart-contracts/{h}`                       | `getabi` / `getsourcecode` |
 
-Blockscout's compat layer does not implement every Etherscan action; when one is missing, use the native v2 equivalent. Full endpoint catalog: `./references/endpoints.md`.
+Blockscout's compat layer does not implement every Etherscan action; when one is missing, use the native v2 equivalent. Full endpoint catalog: `./references/blockscout-endpoints.md`.
 
 ## First Funding Transaction
 
@@ -295,9 +290,9 @@ If the user requests JSON/CSV/plain text, use that instead.
 
 ## Reference Files
 
-- **`./references/chains.md`** — Chainscout registry usage and a curated common-chain table.
-- **`./references/endpoints.md`** — full native v2 endpoint catalog, compat action list, and per-endpoint credit costs.
-- **`./scripts/detect-plan.sh`** — header-based plan/credit detection (run once per session).
+- **`./references/blockscout-chains.md`** — Chainscout registry usage and a curated common-chain table.
+- **`./references/blockscout-endpoints.md`** — full native v2 endpoint catalog, compat action list, and per-endpoint credit costs.
+- **`./scripts/blockscout-detect-plan.sh`** — header-based plan/credit detection (run once per session).
 - **`./scripts/resolve-chain.sh`** — `chain_id` → Blockscout instance URL via Chainscout.
 
 ## Fallback Documentation

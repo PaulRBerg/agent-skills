@@ -1,5 +1,5 @@
 #!/bin/bash
-# detect-plan.sh — Detect Blockscout PRO plan + credits from $BLOCKSCOUT_API_KEY.
+# blockscout-detect-plan.sh — Detect Blockscout PRO plan + credits from $BLOCKSCOUT_API_KEY.
 #
 # Reads the rate-limit/credit response headers the PRO host returns on every
 # call. x-ratelimit-limit maps directly to the plan tier:
