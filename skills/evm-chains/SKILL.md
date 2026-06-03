@@ -92,6 +92,7 @@ Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer nam
 | Monad         | 143      | https://rpc.monad.xyz                           | MON                    | https://monadscan.com           | Yes       |
 | Morph         | 2818     | https://rpc.morphl2.io                          | ETH                    | https://explorer.morphl2.io     | Yes       |
 | OP Mainnet    | 10       | https://mainnet.optimism.io                     | ETH                    | https://optimistic.etherscan.io | Yes       |
+| Plasma        | 9745     | https://rpc.plasma.to                           | XPL                    | https://plasmascan.to           | Yes       |
 | Polygon       | 137      | https://polygon-bor-rpc.publicnode.com          | POL                    | https://polygonscan.com         | Yes       |
 | PulseChain    | 369      | https://rpc.pulsechain.com                      | PLS                    | https://scan.pulsechain.com     | Yes       |
 | Ronin         | 2020     | https://api.roninchain.com/rpc                  | RON                    | https://app.roninchain.com      | Yes       |
@@ -130,6 +131,7 @@ Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer nam
 | Monad         | 143      | https://monad.drpc.org, https://143.rpc.thirdweb.com                                                           |
 | Morph         | 2818     | https://morph.drpc.org, https://2818.rpc.thirdweb.com, https://rpc-quicknode.morphl2.io                        |
 | OP Mainnet    | 10       | https://optimism-rpc.publicnode.com, https://optimism.drpc.org, https://10.rpc.thirdweb.com                    |
+| Plasma        | 9745     | https://9745.rpc.thirdweb.com, https://plasma.drpc.org, https://plasma.gateway.tenderly.co                     |
 | Polygon       | 137      | https://polygon.drpc.org, https://137.rpc.thirdweb.com, https://rpc-mainnet.matic.quiknode.pro                 |
 | PulseChain    | 369      | https://pulsechain-rpc.publicnode.com, https://rpc-pulsechain.g4mm4.io, https://369.rpc.thirdweb.com           |
 | Ronin         | 2020     | https://ronin.drpc.org, https://2020.rpc.thirdweb.com                                                          |
