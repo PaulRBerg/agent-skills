@@ -72,10 +72,6 @@ IF a requested label doesn't exist: ERROR with the list of valid label names. Do
 
 For owner-managed repos (owner = `$AUTHENTICATED_USER` or `sablier-labs`), when the user asks for a label by intent rather than exact name ("tag this as a bug"), match semantically against the fetched `name + description` pairs per the rubric in `commons.md > Fetch Repo Labels`.
 
-## Preview and Confirm
-
-Show a summary of the changes (title diff, body diff, labels added/removed, assignee changes) and use `AskUserQuestion` with options "Apply", "Edit first", "Cancel". Do not silently mutate issues — they're visible to everyone watching the thread.
-
 ## Execute Update
 
 ```bash

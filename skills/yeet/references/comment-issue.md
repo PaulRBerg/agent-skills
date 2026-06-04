@@ -115,10 +115,6 @@ If the comment includes environment info, follow `commons.md > Platform String N
 
 Follow `commons.md > File Link Formatting`. Prefer permalinks (commit SHA) over branch links when citing specific lines, since branch links rot.
 
-## Preview and Confirm
-
-Show the generated comment to the user before posting, then use `AskUserQuestion` with options like "Post it", "Edit first", "Cancel". Do not post silently — comments are visible to everyone watching the thread, so the blast radius warrants a confirmation.
-
 ## Post the Comment
 
 ```bash

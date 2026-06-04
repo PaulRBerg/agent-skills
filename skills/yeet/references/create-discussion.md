@@ -24,7 +24,7 @@ If `--check` flag is present:
    gh search discussions "{key_terms}" --repo "{owner}/{repo}" --limit 10 --json number,title,url
    ```
 
-3. IF found: display list, use `AskUserQuestion` ("Similar discussions found. Proceed?"), cancel if "No"
+3. IF found: display the list as a heads-up, then continue (don't block on confirmation)
 
 4. IF none found: inform user, continue
 

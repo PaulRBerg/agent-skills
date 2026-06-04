@@ -41,7 +41,7 @@ Store as `$AUTHENTICATED_USER` for later permission checks.
    gh search issues "{key_terms}" --repo "{owner}/{repo}" --state open --limit 10 --json number,title,url
    ```
 
-3. IF found: display list, use `AskUserQuestion` ("Similar issues found. Proceed?"), cancel if "No"
+3. IF found: display the list as a heads-up, then continue (don't block on confirmation)
 
 4. IF none found: inform user, continue
 

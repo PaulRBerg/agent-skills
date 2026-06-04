@@ -137,11 +137,11 @@ When operations fail, provide:
 
 Do not retry automatically.
 
-## Confirmation and Feedback
+## Posting and Feedback
 
-- Show what will happen before executing significant operations
-- Ask for confirmation when appropriate
-- For `--check` search operations: display results, let user decide, don't auto-skip on duplicates
+- Post, create, and update directly when the user asks — do not gate the operation behind a confirmation prompt.
+- After the operation, report what happened and link to the result.
+- For `--check` search operations: surface any similar results as a heads-up, then proceed; don't block on confirmation and don't auto-skip on duplicates.
 
 ## Comment on Existing Issue
 
