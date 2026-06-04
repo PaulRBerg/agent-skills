@@ -110,7 +110,8 @@ Explicit type keyword in arguments takes precedence over inference.
 ### 5) Commit
 
 - Use `git commit -m "subject"` (add `-m "body"` only if body is non-empty)
-- Output: commit hash + subject + file count summary
+- Output exactly: commit hash, subject, and `N files changed` summary. Nothing else.
+- Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or pre-commit hook activity unless a command failed.
 - If failed: show error + suggest fix
 
 ### 6) Push (if `--push`)
