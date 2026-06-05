@@ -73,6 +73,19 @@ Use GitHub-flavored admonitions to highlight important information. Apply judici
 > Advises about risks or negative outcomes
 ```
 
+## Task List Syntax
+
+When an issue tracks progress on a task with multiple items — a checklist, a multi-step plan, acceptance criteria, subtasks, or a "remaining work" list — render those items as GitHub task lists, not plain bullets:
+
+```markdown
+- [ ] Pending item
+- [x] Completed item
+```
+
+GitHub renders these as interactive checkboxes and surfaces a progress badge (e.g., `2 of 5`) in issue listings and references. Use them whenever the user frames the issue around tracking what's done vs. outstanding.
+
+Use plain bullets (`- `) for non-trackable lists — affected files, links, options, context — where completion state is meaningless.
+
 ## Semantic Change Analysis
 
 Read the actual diff to understand what changed — never generate content based solely on filenames or commit messages.

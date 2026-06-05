@@ -124,7 +124,7 @@ If YAML template has `title` field (e.g., "[BUG] "), prepend it to a clear, conc
 </details>
 ```
 
-See `commons.md > GitHub Admonitions` for when/how to add admonitions. See `commons.md > File Link Formatting` for link rules. See `commons.md > Platform String Normalization` for OS fields.
+See `commons.md > GitHub Admonitions` for when/how to add admonitions. See `commons.md > Task List Syntax` for progress-tracking checklists (`- [ ]` / `- [x]`). See `commons.md > File Link Formatting` for link rules. See `commons.md > Platform String Normalization` for OS fields.
 
 ## Create the Issue
 
