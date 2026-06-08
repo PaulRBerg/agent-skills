@@ -113,7 +113,7 @@ Explicit type keyword in arguments takes precedence over inference.
 - Output exactly: commit hash, subject, and `N files changed` summary. Nothing else.
 - Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or pre-commit hook activity unless a command failed.
 - If failed: show error + suggest fix
-- **Pre-commit hook failure:** if the hook fails on unrelated/pre-existing changes (not this session's changes), surface the failure and offer `git commit --no-verify`. Never bypass hooks for failures caused by the session's own changes, and never pass `--no-verify` silently.
+- **Pre-commit hook failure:** if the hook fails on unrelated/pre-existing changes (not this session's changes), retry automatically with `git commit --no-verify` — do not ask. Report the bypass in one line, noting the failure was unrelated to the staged changes. Never bypass hooks for failures caused by the session's own changes; fix those or surface the error instead.
 
 ### 6) Push (if `--push`)
 
