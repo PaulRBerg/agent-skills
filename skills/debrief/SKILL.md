@@ -3,17 +3,17 @@ argument-hint: '[<slug>] [--md]'
 disable-model-invocation: false
 name: debrief
 user-invocable: true
-description: "This skill should be used when the user asks to \"debrief\", \"debrief this task\", \"debrief the session\", \"save findings\", \"save analysis\", \"save this as a report\", \"create an HTML report from the transcript\", or wants to persist the current task's findings as a self-contained interactive HTML playground at `./.ai/reports/<slug>/index.html`. Flag: --md emits a plain Markdown report at `./.ai/reports/<slug>/index.md` and skips the playground dependency."
+description: "This skill should be used when the user asks to \"debrief\", \"debrief this task\", \"debrief the session\", \"save findings\", \"save analysis\", \"save this as a report\", \"create an HTML report from the transcript\", or wants to persist the current task's findings as a self-contained interactive HTML playground at `./.ai/debriefs/<slug>/index.html`. Flag: --md emits a plain Markdown report at `./.ai/debriefs/<slug>/index.md` and skips the playground dependency."
 ---
 
 # Debrief
 
-Persist the current task's findings as a self-contained, interactive HTML debrief at `./.ai/reports/<slug>/index.html`. Pick a slug from the user's task, build the page using the [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill's conventions, and pre-populate it with concrete findings drawn from the transcript. Pass `--md` to emit a plain Markdown report at `./.ai/reports/<slug>/index.md` instead; Markdown mode does not require the `playground` skill.
+Persist the current task's findings as a self-contained, interactive HTML debrief at `./.ai/debriefs/<slug>/index.html`. Pick a slug from the user's task, build the page using the [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill's conventions, and pre-populate it with concrete findings drawn from the transcript. Pass `--md` to emit a plain Markdown report at `./.ai/debriefs/<slug>/index.md` instead; Markdown mode does not require the `playground` skill.
 
 ## Arguments
 
 - `<slug>` (optional): kebab-case folder name, e.g. `auth-security-review`. If omitted, derive a topical slug from the task — short (3-5 words), lowercase, dash-separated.
-- `--md` (optional): emit a Markdown report at `<reports_dir>/index.md` instead of HTML. Disables the `playground` dependency.
+- `--md` (optional): emit a Markdown report at `<debriefs_dir>/index.md` instead of HTML. Disables the `playground` dependency.
 
 ## Prerequisites
 
@@ -44,8 +44,8 @@ The script:
 - Validates the slug.
 - In HTML mode (default), probes `.agents/skills/playground`, `.claude/skills/playground`, `~/.agents/skills/playground`, `~/.claude/skills/playground`. In `--md` mode the probe is skipped entirely.
 - Exits `2` with the install command if `playground` is missing in HTML mode — relay the message verbatim and stop.
-- Creates `./.ai/reports/<slug>/`.
-- Prints five `KEY=VALUE` lines on stdout: `MODE`, `PLAYGROUND_DIR`, `REPORTS_DIR`, `REPORT_PATH`, `EXISTS`. `PLAYGROUND_DIR` is empty when `MODE=md`; `REPORT_PATH` ends in `index.md` instead of `index.html`.
+- Creates `./.ai/debriefs/<slug>/`.
+- Prints five `KEY=VALUE` lines on stdout: `MODE`, `PLAYGROUND_DIR`, `DEBRIEFS_DIR`, `DEBRIEF_PATH`, `EXISTS`. `PLAYGROUND_DIR` is empty when `MODE=md`; `DEBRIEF_PATH` ends in `index.md` instead of `index.html`.
 
 If `EXISTS=true`, ask the user before continuing: overwrite or pick a new slug.
 
@@ -68,7 +68,7 @@ Read only the chosen template — don't load all six. If nothing fits cleanly, p
 
 ### 4a. Build the debrief — HTML
 
-Write a single HTML file to `$REPORT_PATH` that satisfies playground core requirements:
+Write a single HTML file to `$DEBRIEF_PATH` that satisfies playground core requirements:
 
 - Single file. Inline all CSS and JS. No external dependencies, fonts, or CDNs.
 - Live preview updating on every control change. No "Apply" button.
@@ -81,7 +81,7 @@ For larger payloads, embed findings as a JS array literal inside one inline `<sc
 
 ### 4b. Build the debrief — Markdown (when `--md`)
 
-Write a single Markdown file to `$REPORT_PATH`. Recommended skeleton:
+Write a single Markdown file to `$DEBRIEF_PATH`. Recommended skeleton:
 
 ````md
 # <Slug in Title Case>
@@ -110,31 +110,31 @@ Rules:
 
 - Pre-populate with concrete findings from the transcript — real paths, line numbers, severities, snippets. No placeholders, no lorem ipsum. If the transcript has no findings, ask the user before writing.
 - Keep it terse: one H3 per finding, fenced code only when the exact text matters.
-- No HTML, no embedded scripts, no inline assets. Adjacent files (images, data) may live alongside in `$REPORTS_DIR/` if needed.
+- No HTML, no embedded scripts, no inline assets. Adjacent files (images, data) may live alongside in `$DEBRIEFS_DIR/` if needed.
 
 ### 5. Open
 
-After writing `$REPORT_PATH`, open it in the user's default browser. Run this unconditionally — do not skip, prompt, or wait for confirmation:
+After writing `$DEBRIEF_PATH`, open it in the user's default browser. Run this unconditionally — do not skip, prompt, or wait for confirmation:
 
 ```bash
-open "$REPORT_PATH"
+open "$DEBRIEF_PATH"
 ```
 
-Then print the absolute `$REPORT_PATH` so the user can locate it.
+Then print the absolute `$DEBRIEF_PATH` so the user can locate it.
 
 ## Output
 
-A self-contained HTML debrief at `./.ai/reports/<slug>/index.html` that:
+A self-contained HTML debrief at `./.ai/debriefs/<slug>/index.html` that:
 
 - Surfaces concrete findings from the user's task.
 - Lets the user explore, filter, or annotate them interactively.
 - Generates a copyable prompt to act on the selected items.
 
-With `--md`, the output is instead a plain Markdown report at `./.ai/reports/<slug>/index.md` containing the same findings without the interactive UI.
+With `--md`, the output is instead a plain Markdown report at `./.ai/debriefs/<slug>/index.md` containing the same findings without the interactive UI.
 
 ## Notes
 
-- Write only under `./.ai/reports/<slug>/`. Never write elsewhere.
+- Write only under `./.ai/debriefs/<slug>/`. Never write elsewhere.
 - The HTML must be self-contained — no external CSS, JS, fonts, or images.
 - Re-run with a different slug to keep parallel debriefs.
-- Suggest the user add `.ai/reports/` to `.gitignore` if debriefs shouldn't be committed.
+- Suggest the user add `.ai/debriefs/` to `.gitignore` if debriefs shouldn't be committed.

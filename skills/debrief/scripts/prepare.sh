@@ -1,12 +1,12 @@
 #!/bin/bash
-# debrief: validate slug, optionally probe playground skill, create reports directory.
+# debrief: validate slug, optionally probe playground skill, create debriefs directory.
 # Usage: prepare.sh [--md] <slug>
 # Stdout (KEY=VALUE per line):
 #   MODE            "html" (default) or "md"
 #   PLAYGROUND_DIR  absolute path to playground skill root (empty in --md mode)
-#   REPORTS_DIR     absolute path to ./.ai/reports/<slug>
-#   REPORT_PATH     absolute path to ./.ai/reports/<slug>/index.{html,md}
-#   EXISTS          true if REPORT_PATH already exists, otherwise false
+#   DEBRIEFS_DIR    absolute path to ./.ai/debriefs/<slug>
+#   DEBRIEF_PATH    absolute path to ./.ai/debriefs/<slug>/index.{html,md}
+#   EXISTS          true if DEBRIEF_PATH already exists, otherwise false
 # Exit codes:
 #   0  ok
 #   2  playground skill not installed (html mode only)
@@ -75,15 +75,15 @@ EOF
   fi
 fi
 
-REPORTS_DIR="$(pwd)/.ai/reports/$SLUG"
-mkdir -p "$REPORTS_DIR"
+DEBRIEFS_DIR="$(pwd)/.ai/debriefs/$SLUG"
+mkdir -p "$DEBRIEFS_DIR"
 if [ "$MODE" = "md" ]; then
-  REPORT_PATH="$REPORTS_DIR/index.md"
+  DEBRIEF_PATH="$DEBRIEFS_DIR/index.md"
 else
-  REPORT_PATH="$REPORTS_DIR/index.html"
+  DEBRIEF_PATH="$DEBRIEFS_DIR/index.html"
 fi
 
-if [ -f "$REPORT_PATH" ]; then
+if [ -f "$DEBRIEF_PATH" ]; then
   EXISTS="true"
 else
   EXISTS="false"
@@ -91,6 +91,6 @@ fi
 
 printf 'MODE=%s\n'           "$MODE"
 printf 'PLAYGROUND_DIR=%s\n' "$PLAYGROUND_DIR"
-printf 'REPORTS_DIR=%s\n'    "$REPORTS_DIR"
-printf 'REPORT_PATH=%s\n'    "$REPORT_PATH"
+printf 'DEBRIEFS_DIR=%s\n'   "$DEBRIEFS_DIR"
+printf 'DEBRIEF_PATH=%s\n'   "$DEBRIEF_PATH"
 printf 'EXISTS=%s\n'         "$EXISTS"
