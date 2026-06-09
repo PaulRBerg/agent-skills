@@ -61,18 +61,29 @@ Arguments: `$ARGUMENTS`
 
 Read the staged diff and produce the commit message in a single pass.
 
-**Type inference** — determine from behavior:
+**Type inference** — infer the type from the dominant user-visible intent, not the largest file diff or the presence of
+dependency/config churn.
+
+Choose the highest-signal behavior that explains why the commit exists:
+
+- If a dependency bump is only the enabler for a migration/refactor/fix, use the migration/refactor/fix type instead of
+  `chore(deps)`.
+- If changed tooling/scripts/config are required to keep existing behavior working after a code migration, include them in
+  the same type as the migration.
+- Use `chore` only for maintenance that does not fit a more specific behavioral category.
+- Use `chore(deps)` only for dependency-only updates or dependency updates whose main purpose is routine maintenance.
 
 | Behavior                                           | Type          |
 | -------------------------------------------------- | ------------- |
 | New functionality                                  | `feat`        |
 | Bug fix / error handling                           | `fix`         |
+| Code migration or API adaptation without new UX/API | `refactor`    |
 | Code reorganization, no behavior change            | `refactor`    |
 | Documentation                                      | `docs`        |
 | Tests                                              | `test`        |
 | Build system (webpack, vite, esbuild)              | `build`       |
 | CI/CD pipelines                                    | `ci`          |
-| Dependencies                                       | `chore(deps)` |
+| Dependency-only maintenance                        | `chore(deps)` |
 | Formatting / whitespace only                       | `style`       |
 | Performance                                        | `perf`        |
 | Reverting previous commit                          | `revert`      |
