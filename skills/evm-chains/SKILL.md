@@ -3,14 +3,14 @@ argument-hint: <chain-name-or-id>
 disable-model-invocation: false
 name: evm-chains
 user-invocable: true
-description: This skill should be used when the user asks to resolve an EVM chain name or chain ID; find chain metadata such as a default public RPC, native currency symbol, or block explorer URL; determine whether a chain is supported by RouteMesh; or read on-chain account data for any EVM chain — "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "fetch NFT transfers", "ERC-721 or ERC-1155 transfer history", "transaction history", "find first funding transaction", "trace fund origin", "who funded this address", "query Etherscan", "query Blockscout", or "look up a chain on Chainscout". It routes each data query through Etherscan API V2 (preferred) or the Blockscout/Chainscout APIs (fallback for chains Etherscan doesn't serve), with direct JSON-RPC as a last resort. Also use it for chain resolution before fetching data from or interacting with an EVM chain.
+description: This skill should be used when the user asks to resolve an EVM chain name or chain ID; find chain metadata such as a default public RPC, native currency symbol, or block explorer URL; determine whether a chain is supported by RouteMesh; enrich bridge, bridge tx, cross-chain swap, Bungee, or Socket transaction lookups; or read on-chain account data for any EVM chain — "check ETH balance", "query ERC-20 balance", "get wallet balance", "check token holdings", "fetch NFT transfers", "ERC-721 or ERC-1155 transfer history", "transaction history", "find first funding transaction", "trace fund origin", "who funded this address", "query Etherscan", "query Blockscout", or "look up a chain on Chainscout". It routes each data query through Etherscan API V2 (preferred) or the Blockscout/Chainscout APIs (fallback for chains Etherscan doesn't serve), with Bungee for bridge enrichment and direct JSON-RPC as a last resort. Also use it for chain resolution before fetching data from or interacting with an EVM chain.
 ---
 
 # EVM Chains
 
-Local EVM chain dataset (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback).
+Local EVM chain dataset (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback). For bridge transactions and cross-chain swaps, enrich explorer/RPC verification with Bungee status data.
 
-Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks — and to query on-chain account data once the chain is resolved (see [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing)).
+Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks — and to query on-chain account data once the chain is resolved (see [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing)). Also use it when the user mentions bridging, bridge tx, cross-chain swap, Bungee, or Socket, or when a transaction is inferred to be bridge-related.
 
 Match chains by displayed name or numeric chain ID. Treat any chain missing from the tables as outside this skill's local dataset. If the requested chain is not listed, use the web search tool to find authoritative metadata from the chain's official documentation or Chainlist before proceeding.
 
@@ -26,6 +26,12 @@ To read account data — native balance, token holdings, ERC-20/721/1155 transfe
 4. **Neither** — if the chain is in neither registry, query the public RPCs below directly over JSON-RPC (`cast` from the `cli-cast` skill, or `curl`). If the chain is non-EVM (Solana, Bitcoin, Cosmos, …), report that it is unsupported.
 
 **Paid-chain auto-fallback.** Base (`8453`), OP (`10`), Avalanche (`43114`), and BNB (`56`) — plus their testnets `84532`, `11155420`, `43113`, `97` — are Etherscan-listed, but their data endpoints require a paid Etherscan plan. If the target is one of these **and** `./scripts/etherscan-detect-plan.sh` reports `paid_chains=false` (free tier), route to Blockscout instead: it serves them free, no key, with full holdings. Etherscan stays the default for every other chain.
+
+## Bridge Transaction Enrichment (Bungee)
+
+When the user mentions bridging, bridge tx, cross-chain swap, Bungee, or Socket, or when a transaction looks bridge-related from logs, counterparties, calldata, or token movement, read `./references/bungee-api.md` before answering. Use Bungee to enrich the analysis with origin/destination transaction context, route/bridge name, status code, timestamps, and refunds.
+
+Keep Bungee as an enrichment source alongside Etherscan, Blockscout, explorers, and RPC receipts. Do not treat Bungee as authoritative for on-chain execution by itself; verify submitted transactions and terminal outcomes with explorer/RPC data whenever possible. If Bungee has no record or the public sandbox is rate-limited/unavailable, say so and continue normal on-chain analysis.
 
 ## RouteMesh
 
