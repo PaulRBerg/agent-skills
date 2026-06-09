@@ -140,6 +140,28 @@ Write in an informal, casual style. Be direct and conversational — like explai
 - One per line for multiple files
 - Omit the "Files Affected" section entirely if no files are specified
 
+## Image Uploads
+
+GitHub has no public REST/GraphQL attachment API for issue or PR bodies. `gh issue create` only accepts markdown text, so images must be uploaded first and embedded as markdown.
+
+Prefer `gh img` from `theolundqvist/gh-img` when available. It returns ready-to-embed markdown backed by GitHub `user-attachments/assets` URLs:
+
+```bash
+gh img --repo "{owner}/{repo}" "{image_path}"
+```
+
+If `gh img` is unavailable, check for `gh attach` from `atani/gh-attach` and use URL-only mode:
+
+```bash
+gh attach --repo "{owner}/{repo}" --issue "{issue_or_pr_number}" --image "{image_path}" --url-only
+```
+
+`gh attach --url-only` needs an existing issue or PR as browser context, so it is useful for comments and updates, not first-pass issue creation. Do not create a placeholder issue just to get an upload context.
+
+Official API fallback: upload to a GitHub Release and embed the release asset URL. This creates or mutates release artifacts, so use it only when the user explicitly asks for an API-only fallback or the repo is owner-managed and this side effect is acceptable.
+
+When image upload was requested and no acceptable upload path works, stop before posting/updating. Do not file an issue with missing screenshots.
+
 ## Error Handling
 
 When operations fail, provide:

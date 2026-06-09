@@ -21,6 +21,10 @@ Determine repository from arguments:
 IF arguments contain `--check`: remove it, set `check_mode = true`, continue to similarity check.
 ELSE: skip similarity check and continue to template detection.
 
+IF arguments contain `--image <path>`: remove each repeated flag/value pair, validate every path exists and is a file, store as `$image_paths`.
+
+IF arguments contain `--image-release`: remove it, set `image_release_mode = true`. Use only when `--image` is also present; otherwise ignore it.
+
 ## Determine Authenticated User
 
 ```bash
@@ -126,6 +130,36 @@ If YAML template has `title` field (e.g., "[BUG] "), prepend it to a clear, conc
 
 See `commons.md > GitHub Admonitions` for when/how to add admonitions. See `commons.md > Task List Syntax` for progress-tracking checklists (`- [ ]` / `- [x]`). See `commons.md > File Link Formatting` for link rules. See `commons.md > Platform String Normalization` for OS fields.
 
+## Attach Images
+
+**ONLY if `$image_paths` is non-empty.**
+
+See `commons.md > Image Uploads` for constraints and fallback rules.
+
+Default path: require `gh img` and upload before creating the issue.
+
+```bash
+gh img --repo "$repository" "$image_path"
+```
+
+For multiple images, run once with all image paths or once per image. Capture stdout as `$image_markdown`; each line is already ready to embed.
+
+If `--image-release` was passed, use the GitHub Releases fallback instead. Create or reuse a clearly named asset release because the flag explicitly requested that side effect (`gh-issue-assets` is a reasonable default tag). Upload with unique filenames to avoid clobbering existing assets.
+
+Insert the uploaded markdown into the generated body:
+
+- If the selected template has a screenshot, image, reproduction, or media field, place the markdown there.
+
+- Otherwise append:
+
+  ```markdown
+  ## Images
+
+  ![image-name](https://github.com/user-attachments/assets/...)
+  ```
+
+On any upload failure, stop before issue creation and surface the upload error. Do not create the issue without the requested images.
+
 ## Create the Issue
 
 Merge template-defined labels with the labels picked in "Apply Labels" (deduplicate). Omit `--label` entirely if no labels apply.
@@ -159,4 +193,7 @@ facebook/react "Add useDebounce hook to react-dom"
 
 # External repo with --check
 vercel/next.js --check "Improve error overlay for server components"
+
+# With images
+--image ./before.png --image ./after.png "CLI output is unreadable after resizing"
 ```
