@@ -180,6 +180,8 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 ## Notes
 
 - Frontmatter rule: sort fields alphabetically, but always place `description` last.
+- Codex parses `SKILL.md` frontmatter as YAML before loading a skill. Avoid unquoted colon-space tokens in scalar values
+  such as `Triggers: "foo"` inside `description`; either omit the label or quote the whole value.
 - "When to use" information belongs in `description` (discovery-time), not in the body (activation-time only).
 - Use imperative / infinitive form throughout `SKILL.md`.
 - All paths inside `SKILL.md` (e.g., `references/placeholder.md`, `scripts/example.sh`) are relative to the skill directory.
