@@ -73,22 +73,22 @@ Choose the highest-signal behavior that explains why the commit exists:
 - Use `chore` only for maintenance that does not fit a more specific behavioral category.
 - Use `chore(deps)` only for dependency-only updates or dependency updates whose main purpose is routine maintenance.
 
-| Behavior                                           | Type          |
-| -------------------------------------------------- | ------------- |
-| New functionality                                  | `feat`        |
-| Bug fix / error handling                           | `fix`         |
+| Behavior                                            | Type          |
+| --------------------------------------------------- | ------------- |
+| New functionality                                   | `feat`        |
+| Bug fix / error handling                            | `fix`         |
 | Code migration or API adaptation without new UX/API | `refactor`    |
-| Code reorganization, no behavior change            | `refactor`    |
-| Documentation                                      | `docs`        |
-| Tests                                              | `test`        |
-| Build system (webpack, vite, esbuild)              | `build`       |
-| CI/CD pipelines                                    | `ci`          |
-| Dependency-only maintenance                        | `chore(deps)` |
-| Formatting / whitespace only                       | `style`       |
-| Performance                                        | `perf`        |
-| Reverting previous commit                          | `revert`      |
-| AI config (CLAUDE.md, .claude/, .gemini/, .codex/) | `ai`          |
-| Other maintenance                                  | `chore`       |
+| Code reorganization, no behavior change             | `refactor`    |
+| Documentation                                       | `docs`        |
+| Tests                                               | `test`        |
+| Build system (webpack, vite, esbuild)               | `build`       |
+| CI/CD pipelines                                     | `ci`          |
+| Dependency-only maintenance                         | `chore(deps)` |
+| Formatting / whitespace only                        | `style`       |
+| Performance                                         | `perf`        |
+| Reverting previous commit                           | `revert`      |
+| AI config (CLAUDE.md, .claude/, .gemini/, .codex/)  | `ai`          |
+| Other maintenance                                   | `chore`       |
 
 Explicit type keyword in arguments takes precedence over inference.
 
