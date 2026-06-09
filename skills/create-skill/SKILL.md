@@ -29,6 +29,8 @@ The symlink target is always the relative path `../../.agents/skills/<name>` so 
 ```
 <name>/
 ├── SKILL.md       # Required: frontmatter + lean workflow (aim for <500 lines)
+├── agents/
+│   └── openai.yaml # Required: Codex metadata; disables implicit invocation
 ├── scripts/       # Optional: executable code (Bash/Python/etc.) the workflow invokes
 ├── references/    # Optional: long-form docs loaded on demand
 └── assets/        # Optional: templates / fonts / images used in OUTPUT (never loaded into context)
@@ -133,7 +135,7 @@ Sketch the directory tree first, then create only the subdirectories the layout 
 ### 4. Create the Skill
 
 ```bash
-mkdir -p "<scope>/.agents/skills/<name>"
+mkdir -p "<scope>/.agents/skills/<name>/agents"
 # Add only the subdirectories the layout calls for:
 # mkdir -p "<scope>/.agents/skills/<name>/scripts"
 # mkdir -p "<scope>/.agents/skills/<name>/references"
@@ -150,6 +152,15 @@ Write `<scope>/.agents/skills/<name>/SKILL.md` with:
 
 Aim for `SKILL.md` under 500 lines. If a section grows past ~50 lines and is not core workflow, move it to `references/` and link it.
 
+Write `<scope>/.agents/skills/<name>/agents/openai.yaml` with:
+
+```yaml
+policy:
+  allow_implicit_invocation: false
+```
+
+This keeps Codex invocation explicit-only while preserving Claude-specific frontmatter behavior. If later adding Codex UI metadata or MCP/tool dependencies, merge them into the same file and keep the policy.
+
 ### 5. Create the Claude Code Symlink
 
 Always create a relative symlink so Claude Code picks the skill up from its own discovery path:
@@ -162,6 +173,7 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 ### 6. Verify
 
 - `test -f "<scope>/.agents/skills/<name>/SKILL.md"`
+- `test -f "<scope>/.agents/skills/<name>/agents/openai.yaml"`
 - `readlink "<scope>/.claude/skills/<name>"` resolves to the source directory.
 - Print both absolute paths to the user.
 
@@ -171,5 +183,6 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - "When to use" information belongs in `description` (discovery-time), not in the body (activation-time only).
 - Use imperative / infinitive form throughout `SKILL.md`.
 - All paths inside `SKILL.md` (e.g., `references/placeholder.md`, `scripts/example.sh`) are relative to the skill directory.
+- Every new skill must include `agents/openai.yaml` with `policy.allow_implicit_invocation: false`.
 - Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by default.
 - Do not commit the new skill — leave that to the user.

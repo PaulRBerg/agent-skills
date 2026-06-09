@@ -7,6 +7,7 @@ Collection of self-contained agent skills for Claude Code, Codex, and compatible
 - `skills/<name>/SKILL.md` is the skill entrypoint.
 - `skills/<name>/references/` contains skill-local reference docs.
 - `skills/<name>/scripts/` contains executable helpers.
+- `skills/<name>/agents/openai.yaml` contains Codex-specific metadata.
 - `skills/<name>/examples/` contains sample files.
 - `skills/<name>/assets/` contains bundled media or other static assets.
 - `README.md` lists every skill and stays minimal.
@@ -39,6 +40,19 @@ There is no package manifest or build step. Treat Markdown formatting and skill-
 - Bash scripts must be compatible with Bash v3.2 (`/bin/bash`), because Codex uses the built-in Bash by default.
 - In `SKILL.md` frontmatter, sort fields alphabetically but always place `description` last.
 - Keep generated docs terse, imperative, and expert-to-expert.
+
+## Codex Metadata
+
+Every skill must include `skills/<name>/agents/openai.yaml` with this policy:
+
+```yaml
+policy:
+  allow_implicit_invocation: false
+```
+
+Why: this repo keeps Codex skills explicit-only. The skill set is broad, some skills run side-effect-heavy workflows, and implicit matching can surprise users or crowd the startup context. Users should invoke skills intentionally with `$skill-name` or the skill picker.
+
+How: create an `agents/` directory next to `SKILL.md` and add `openai.yaml` with the policy above. If the file later needs UI metadata or tool dependencies, merge those fields into the same file; do not remove the policy.
 
 ## Skill Frontmatter
 
