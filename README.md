@@ -34,6 +34,7 @@ npx skills add PaulRBerg/agent-skills
 | md-docs              | Markdown documentation management                         |
 | playground           | Interactive single-file HTML playgrounds                  |
 | tailwind-css         | Tailwind CSS v4 styling guidance                          |
+| todo-archive         | Archive checked TODO.md tasks into .ai/todos              |
 | work                 | End-to-end task implementation                            |
 | yeet                 | GitHub contribution workflows                             |
 
