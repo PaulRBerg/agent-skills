@@ -40,6 +40,7 @@ There is no package manifest or build step. Treat Markdown formatting and skill-
 - Bash scripts must be compatible with Bash v3.2 (`/bin/bash`), because Codex uses the built-in Bash by default.
 - In `SKILL.md` frontmatter, sort fields alphabetically but always place `description` last.
 - Keep generated docs terse, imperative, and expert-to-expert.
+- Never leak personal crypto (EVM) addresses in any skill. Use well-known public addresses (e.g. Multicall3, token contracts) or the standard Etherscan doc example (`0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe`) for examples; never hardcode a real user, maintainer, or personal wallet address. The same applies to private keys, mnemonics, and API keys — reference env-var placeholders (`$ETH_PRIVATE_KEY`), never literal secrets.
 
 ## Codex Metadata
 
