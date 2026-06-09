@@ -10,6 +10,7 @@ Collection of self-contained agent skills for Claude Code, Codex, and compatible
 - `skills/<name>/agents/openai.yaml` contains Codex-specific metadata.
 - `skills/<name>/examples/` contains sample files.
 - `skills/<name>/assets/` contains bundled media or other static assets.
+- `.agents/internal-skills/<name>.md` contains repo-private internal skills referenced with `@`.
 - `README.md` lists every skill and stays minimal.
 - `CLAUDE.md` is a symlink to `AGENTS.md`; do not edit it separately.
 
@@ -33,8 +34,9 @@ There is no package manifest or build step. Treat Markdown formatting and skill-
 
 ## Rules
 
-- When asked to create, edit, or remove a skill while the current working directory is this repo, modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
-- When a skill is added or removed, update the skills table in `README.md`.
+- When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo, modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
+- When an installable catalog skill is added or removed, update the skills table in `README.md`.
+- Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under `skills/`. Do not add them to `README.md`, do not create `agents/openai.yaml`, and do not treat them as installable catalog skills.
 - Keep skills self-contained. Do not de-duplicate content across skills by extracting shared references or canonical files; users install skills individually.
 - Resolve `references/`, `scripts/`, `examples/`, and `assets/` paths relative to the owning skill directory.
 - Bash scripts must be compatible with Bash v3.2 (`/bin/bash`), because Codex uses the built-in Bash by default.
