@@ -1,6 +1,6 @@
 ---
 name: effect-ts
-description: This skill should be used when the user asks about Effect-TS patterns, services, layers, error handling, service composition, or writing/refactoring code that imports from 'effect'. Also covers Effect + Next.js integration with @prb/effect-next.
+description: This skill should be used when the user asks about Effect-TS patterns, services, layers, error handling, Schema/JSONSchema, @effect/ai tools, service composition, or writing/refactoring code that imports from 'effect'. Also covers Effect + Next.js integration with @prb/effect-next.
 ---
 
 # Effect-TS Expert
@@ -18,6 +18,20 @@ Before starting any Effect-related work, verify the Effect-TS source code exists
 git clone https://github.com/Effect-TS/effect.git ~/.effect
 ```
 
+## Upstream Baseline
+
+Last checked against `~/.effect` HEAD `05d72eab7` from 2026-06-05:
+
+- `effect@3.21.3`
+- `@effect/ai@0.36.0`
+- `@effect/ai-openai@0.40.0`
+- `@effect/platform@0.96.1`
+- `@effect/rpc@0.75.1`
+- `@effect/cluster@0.59.0`
+
+If `git -C ~/.effect log -1 --oneline` is newer, inspect the touched package changelogs and commits before relying on
+this skill. Capture public API or guidance changes in a reference file.
+
 ## Research Strategy
 
 Effect-TS has many ways to accomplish the same task. Proactively research best practices using the Task tool to spawn
@@ -30,6 +44,9 @@ research agents when working with Effect patterns, especially for moderate to hi
 
 2. **Effect Source Code** — For complex type errors, unclear behavior, or implementation details, examine the Effect
    source at `~/.effect/packages/effect/src/`. This contains the core Effect logic and modules.
+
+3. **Package Changelogs** — When behavior changed recently, read the relevant changelog under `~/.effect/packages/*/`
+   before inferring from old examples.
 
 ### When to Research
 
@@ -116,6 +133,9 @@ Quick links to patterns that frequently cause issues:
 - **Cancellation vs Failure** — Interrupts aren't errors → [Error Taxonomy](#error-taxonomy)
 - **Option vs null** — Use Option internally, null at boundaries → [option-null.md](./references/option-null.md)
 - **Stream backpressure** — Infinite streams hang → [streams.md](./references/streams.md)
+- **JSON Schema closed records** — `Schema.Record(String, Never)` emits no extra properties →
+  [schema-jsonschema.md](./references/schema-jsonschema.md)
+- **No-parameter AI tools** — Use `Tool.EmptyParams` or omit `parameters` → [ai.md](./references/ai.md)
 
 ## Explaining Solutions
 
@@ -201,6 +221,15 @@ Effect.onInterrupt(effect, () => Effect.log("Operation cancelled"))
 
 When you need to use Effect's Match module for pattern matching, see [references/pattern-matching.md](references/pattern-matching.md).
 
+### Schema and JSON Schema
+
+For schema decoding, JSON Schema generation, closed object shapes, and `Schema.Record({ key: Schema.String, value: Schema.Never })`, see [references/schema-jsonschema.md](references/schema-jsonschema.md).
+
+### AI Tooling
+
+For `@effect/ai` tool definitions, empty tool parameters, OpenAI strict schema behavior, and prompt cache enum gotchas,
+see [references/ai.md](references/ai.md).
+
 ### Services and Layers / Generator Pattern
 
 For service definition patterns (`Context.Tag`, `Effect.Service`, `Context.Reference`, `Context.ReadonlyTag`) and the generator pattern (`Effect.gen`, `Effect.fn`), see [references/services-layers.md](references/services-layers.md).
@@ -217,6 +246,11 @@ When you need to read configuration with `Config`, handle secrets via `Redacted`
 
 For Effect's `Array`/`Order` sorting helpers, small utility functions like `constVoid`, and the running list of deprecations, see [references/quick-utils.md](references/quick-utils.md).
 
+### Platform and RPC
+
+For `HttpLayerRouter`, `RpcSerialization.makeMsgPack`, and deployment gotchas such as Cloudflare Workers msgpack support,
+see [references/platform-rpc.md](references/platform-rpc.md).
+
 ## Additional Resources
 
 ### Local Effect Resources
@@ -229,14 +263,18 @@ For Effect's `Array`/`Order` sorting helpers, small utility functions like `cons
 
 ### Reference Files
 
+- **`./references/ai.md`** — `@effect/ai` tools, `Tool.EmptyParams`, OpenAI provider notes
 - **`./references/config.md`** — `Config`, `Redacted`, and custom config providers
 - **`./references/critical-rules.md`** — Forbidden patterns and mandatory conventions
 - **`./references/effect-atom.md`** — Effect-Atom reactive state management for React
 - **`./references/next-js.md`** — Effect + Next.js 15+ App Router integration patterns
 - **`./references/option-null.md`** — Option vs null boundary patterns
 - **`./references/pattern-matching.md`** — `Match` module for tagged unions and conditionals
+- **`./references/platform-rpc.md`** — `@effect/platform` and `@effect/rpc` integration notes
 - **`./references/quick-utils.md`** — `Array`/`Order`, utility helpers, deprecations
+- **`./references/recent-upstream.md`** — Recent upstream public changes reflected by this skill
 - **`./references/runtime.md`** — Resource management, Duration, Scheduling, State, SubscriptionRef, Concurrency
+- **`./references/schema-jsonschema.md`** — Schema decoding and JSON Schema generation patterns
 - **`./references/services-layers.md`** — Services, Layers, generator (`Effect.gen` / `Effect.fn`)
 - **`./references/streams.md`** — Stream patterns and backpressure gotchas
 - **`./references/testing.md`** — Vitest deterministic testing patterns

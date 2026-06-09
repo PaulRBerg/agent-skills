@@ -34,3 +34,34 @@ const describe = Match.value(status).pipe(
   Match.orElse(() => "Unknown")
 )
 ```
+
+## `Data.taggedEnum` Matching
+
+Use the constructor `$match` helper for `Data.taggedEnum` unions when you want exhaustiveness and variant-specific
+payload types without casts.
+
+As of `effect@3.21.3`, `$match(value, cases)` preserves generic type parameters inside each arm for generic tagged
+enums.
+
+```typescript
+import { Data } from "effect"
+
+type Tree<A> = Data.TaggedEnum<{
+  Leaf: { readonly value: A }
+  Branch: { readonly children: ReadonlyArray<Tree<A>> }
+}>
+
+interface TreeDefinition extends Data.TaggedEnum.WithGenerics<1> {
+  readonly taggedEnum: Tree<this["A"]>
+}
+
+const Tree = Data.taggedEnum<TreeDefinition>()
+
+const collect = <A>(tree: Tree<A>): ReadonlyArray<A> =>
+  Tree.$match(tree, {
+    Leaf: (leaf) => [leaf.value],
+    Branch: (branch) => branch.children.flatMap(collect<A>)
+  })
+```
+
+Prefer this over `switch` plus `as` casts when recursive generic variants are involved.

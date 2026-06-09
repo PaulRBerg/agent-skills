@@ -33,6 +33,20 @@ const program = Effect.gen(function* () {
 
 That makes your code controllable via `TestClock`.
 
+## Fractional Milliseconds and Unsafe Nanos
+
+`effect@3.21.2` fixed `TestClock.unsafeCurrentTimeNanos()` to floor fractional millisecond instants before converting to
+`BigInt`.
+
+```ts
+yield* TestClock.setTime(199023438.0000004)
+const testClock = yield* TestClock.testClock()
+testClock.unsafeCurrentTimeNanos() // 199023438000000n
+```
+
+Still prefer `Clock.currentTimeMillis`, `Clock.currentTimeNanos`, or `DateTime.now` inside Effect code. Reach for unsafe
+clock reads only in low-level tests where the synchronous escape hatch is the thing under test.
+
 ## Replace `Effect.sleep` with `TestClock.adjust` (under `it.effect`)
 
 Instead of:
