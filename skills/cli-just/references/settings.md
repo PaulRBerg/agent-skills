@@ -14,6 +14,8 @@ Enable with `set NAME` or `set NAME := true`:
 | --------------------------- | ------------------------------------------------------------------------ |
 | `allow-duplicate-recipes`   | Allow later recipes to override earlier ones                             |
 | `allow-duplicate-variables` | Allow later variables to override earlier ones                           |
+| `default-list`              | List recipes instead of running the default recipe (v1.52.0+)            |
+| `default-script`            | Treat unannotated recipes as script recipes (v1.52.0+)                   |
 | `dotenv-load`               | Load `.env` file automatically                                           |
 | `dotenv-required`           | Error if `.env` file is missing                                          |
 | `export`                    | Export all variables as environment variables                            |
@@ -29,13 +31,14 @@ Enable with `set NAME` or `set NAME := true`:
 
 ### Value Settings
 
-| Setting             | Example                              | Description                     |
-| ------------------- | ------------------------------------ | ------------------------------- |
-| `shell`             | `["bash", "-euo", "pipefail", "-c"]` | Shell and arguments for recipes |
-| `dotenv-filename`   | `".env.local"`                       | Custom dotenv filename          |
-| `dotenv-path`       | `"config/.env"`                      | Custom dotenv path              |
-| `tempdir`           | `"/tmp/just"`                        | Temporary file directory        |
-| `working-directory` | `"src"`                              | Default working directory       |
+| Setting              | Example                              | Description                              |
+| -------------------- | ------------------------------------ | ---------------------------------------- |
+| `shell`              | `["bash", "-euo", "pipefail", "-c"]` | Shell and arguments for linewise recipes |
+| `script-interpreter` | `["bash", "-euo", "pipefail"]`       | Interpreter for empty `[script]` recipes |
+| `dotenv-filename`    | `".env.local"`                       | Custom dotenv filename                   |
+| `dotenv-path`        | `"config/.env"`                      | Custom dotenv path                       |
+| `tempdir`            | `"/tmp/just"`                        | Temporary file directory                 |
+| `working-directory`  | `"src"`                              | Default working directory                |
 
 **Const expressions in settings (v1.46.0+):**
 
@@ -94,6 +97,53 @@ set lazy
 eager schema_version := `cat schema/VERSION`   # Evaluated even if no recipe uses it.
 ```
 
+### Default Listing (v1.52.0+)
+
+Use `default-list` when no recipe should be the default entrypoint:
+
+```just
+set default-list := true
+
+build:
+    cargo build
+
+test:
+    cargo test
+```
+
+With this setting, bare `just` lists recipes instead of running the `[default]` recipe or first recipe. The setting is
+per-module, so invoking a module path with `default-list` enabled lists that module's recipes.
+
+Runtime alternatives:
+
+```bash
+JUST_DEFAULT_LIST=true just
+just --default-list
+just --list foo::bar
+```
+
+### Default Script Recipes (v1.52.0+)
+
+Use `default-script` only in script-heavy justfiles where most recipes should run as whole-file scripts rather than as
+linewise shell commands:
+
+```just
+set default-script := true
+set script-interpreter := ["bash", "-euo", "pipefail"]
+
+deploy:
+    trap 'echo failed' ERR
+    npm run build
+    npm publish
+
+[shell]
+status:
+    echo "linewise shell recipe"
+```
+
+`set shell` still controls linewise shell recipes and backticks. `set script-interpreter` controls `[script]` recipes with
+no explicit command, including unannotated recipes when `default-script` is enabled.
+
 ## Modules & Imports
 
 ### Imports
@@ -138,6 +188,9 @@ mod internal
 [doc("Development tools")]
 mod dev
 ```
+
+As of v1.52.0, aliases and recipes that depend on an absent optional module are disabled with clearer errors instead of
+failing unrelated listings or invocations.
 
 **Calling module recipes:**
 

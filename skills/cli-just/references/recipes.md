@@ -79,6 +79,10 @@ open url:
 open url:
     start {{ url }}
 
+[android]
+diag:
+    getprop
+
 [freebsd]
 [netbsd]
 [dragonflybsd]
@@ -86,7 +90,7 @@ diag:
     sysctl -a | head
 ```
 
-Available: `[linux]`, `[macos]`, `[unix]`, `[windows]`, `[freebsd]`, `[netbsd]`, `[dragonflybsd]` (BSD variants added v1.47.0).
+Available: `[linux]`, `[macos]`, `[unix]`, `[windows]`, `[android]`, `[freebsd]`, `[netbsd]`, `[openbsd]`, `[dragonflybsd]` (`[android]` added v1.50.0; BSD variants added v1.47.0).
 
 ### Script Blocks
 
@@ -118,6 +122,17 @@ analyze:
     const fs = require('fs');
     const pkg = JSON.parse(fs.readFileSync('package.json'));
     console.log(`Package: ${pkg.name}@${pkg.version}`);
+```
+
+With `set default-script := true` (v1.52.0+), unannotated recipes are script recipes by default. Add `[shell]` to force
+normal linewise shell execution for a specific recipe:
+
+```just
+set default-script := true
+
+[shell]
+quick:
+    echo "run this as a shell line, not a temp script"
 ```
 
 ### Confirmation

@@ -32,26 +32,29 @@ set dotenv-load                   # Auto-load .env file
 set positional-arguments          # Pass recipe args as $1, $2, etc.
 set lazy                          # Defer evaluation of unused variables (v1.48.0+)
 set no-cd                         # Don't change to justfile directory for any recipe (v1.51.0+)
+set default-list := true          # Bare `just` lists recipes instead of running default (v1.52.0+)
+set default-script := true        # Make unannotated recipes script recipes; use sparingly (v1.52.0+)
 ```
 
 ### Common Attributes
 
-| Attribute                  | Purpose                                                           |
-| -------------------------- | ----------------------------------------------------------------- |
-| `[arg("p", long, ...)]`    | Configure parameter as `--flag` option (v1.46)                    |
-| `[arg("p", pattern="…")]`  | Constrain parameter to match regex pattern                        |
-| `[confirm("prompt")]`      | Require user confirmation (expressions OK as of v1.49)            |
-| `[doc("text")]`            | Override recipe documentation                                     |
-| `[env("NAME", "VALUE")]`   | Set env var for this recipe only (v1.47+, expr v1.51)             |
-| `[group("name")]`          | Group recipes in `just --list` output                             |
-| `[linux]` / `[macos]` …    | Restrict to OS; also `[freebsd]/[netbsd]/[dragonflybsd]` (v1.47+) |
-| `[no-cd]`                  | Don't change to justfile directory                                |
-| `[parallel]`               | Run direct dependencies concurrently                              |
-| `[positional-arguments]`   | Enable positional args for this recipe only                       |
-| `[private]`                | Hide from `just --list` (same as `_` prefix)                      |
-| `[script]`                 | Execute recipe as single script block                             |
-| `[script("interpreter")]`  | Use specific interpreter (bash, python, etc.)                     |
-| `[working-directory: "…"]` | Run from given path (expressions OK as of v1.51)                  |
+| Attribute                  | Purpose                                                        |
+| -------------------------- | -------------------------------------------------------------- |
+| `[arg("p", long, ...)]`    | Configure parameter as `--flag` option (v1.46)                 |
+| `[arg("p", pattern="…")]`  | Constrain parameter to match regex pattern                     |
+| `[confirm("prompt")]`      | Require user confirmation (expressions OK as of v1.49)         |
+| `[doc("text")]`            | Override recipe documentation                                  |
+| `[env("NAME", "VALUE")]`   | Set env var for this recipe only (v1.47+, expr v1.51)          |
+| `[group("name")]`          | Group recipes in `just --list` output                          |
+| `[linux]` / `[macos]` …    | Restrict to OS; also `[android]` (v1.50+) and BSD variants     |
+| `[no-cd]`                  | Don't change to justfile directory                             |
+| `[parallel]`               | Run direct dependencies concurrently                           |
+| `[positional-arguments]`   | Enable positional args for this recipe only                    |
+| `[private]`                | Hide from `just --list` (same as `_` prefix)                   |
+| `[script]`                 | Execute recipe as single script block                          |
+| `[script("interpreter")]`  | Use specific interpreter (bash, python, etc.)                  |
+| `[shell]`                  | Force linewise shell mode when `set default-script` is enabled |
+| `[working-directory: "…"]` | Run from given path (expressions OK as of v1.51)               |
 
 ### Recipe Argument Flags (v1.46.0+)
 
@@ -113,7 +116,7 @@ Terminal formatting constants are globally available (no definition needed):
 | `BOLD`, `ITALIC`, `UNDERLINE`, `STRIKETHROUGH`      | Text styles                                |
 | `NORMAL`                                            | Reset formatting                           |
 | `BG_*`                                              | Background colors (BG_RED, BG_GREEN, etc.) |
-| `HEX`, `HEXLOWER`                                   | Hexadecimal digits                         |
+| `HEX`, `HEXLOWER`, `HEXUPPER`                       | Hexadecimal digits                         |
 
 Usage:
 
@@ -135,7 +138,7 @@ log_level := env("LOG_LEVEL", "info")
 # Get justfile directory path
 root := justfile_dir()
 
-# Module location (v1.49.0–1.50.0; useful inside `mod` files)
+# Module location (useful inside `mod` files)
 mod_path := module_path()            # Full submodule path, e.g. "foo::bar"
 mod_file := module_file()            # Absolute path to module's justfile
 mod_dir := module_directory()        # Directory containing the module justfile
@@ -227,10 +230,29 @@ Common sections (in order):
 
 ## Default Recipe
 
-Always define a default recipe:
+Define a curated default recipe when one action should be the entrypoint:
 
 ```just
-# Show available commands
+# Run all checks by default
+default: full-check
+```
+
+If no single default makes sense, prefer `set default-list := true` (v1.52.0+) over a `default` recipe that shells out to
+`just --list`:
+
+```just
+set default-list := true
+
+# Optional: still define recipes normally; bare `just` now lists them.
+build:
+    cargo build
+```
+
+The setting is per-module. It can also be forced at runtime with `JUST_DEFAULT_LIST=true` or `just --default-list`.
+
+For compatibility with older `just` versions, keep the explicit listing recipe:
+
+```just
 default:
     @just --list
 ```

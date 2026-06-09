@@ -29,6 +29,27 @@ deploy:
     aws s3 sync dist/ s3://bucket/
 ```
 
+## Default Script Mode
+
+Use `set default-script := true` (v1.52.0+) when most recipes should run as complete scripts instead of independent shell
+lines:
+
+```just
+set default-script := true
+set script-interpreter := ["bash", "-euo", "pipefail"]
+
+deploy:
+    trap 'echo failed' ERR
+    npm run build
+    npm publish
+
+[shell]
+status:
+    echo "force this one back to linewise shell execution"
+```
+
+`[shell]` overrides `default-script` for one recipe. `set shell` still controls linewise recipes and backticks; `set script-interpreter` controls `[script]` recipes with no explicit command.
+
 ## Shebang Method
 
 Use `#!/usr/bin/env interpreter` at the recipe start:

@@ -110,19 +110,24 @@ alias fc := full-check
 
 ## Default Recipe
 
-Always define a default recipe that shows available commands:
-
-```just
-# Show available commands
-default:
-    @just --list
-```
-
-Alternative: Run primary action by default:
+Prefer a meaningful default action when a project has one:
 
 ```just
 # Run all checks by default
 default: full-check
+```
+
+When no single action is the obvious entrypoint, use `default-list` (v1.52.0+) instead of a wrapper recipe:
+
+```just
+set default-list := true
+```
+
+Keep the explicit listing recipe only when supporting older `just` versions:
+
+```just
+default:
+    @just --list
 ```
 
 ## Monorepo Patterns

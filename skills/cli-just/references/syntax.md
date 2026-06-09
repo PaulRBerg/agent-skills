@@ -51,11 +51,13 @@ Available globally without definition:
 
 ### System Constants
 
-| Constant   | Value                       |
-| ---------- | --------------------------- |
-| `HEX`      | `0123456789ABCDEF`          |
-| `HEXLOWER` | `0123456789abcdef`          |
-| `PATH_SEP` | `:` (Unix) or `;` (Windows) |
+| Constant       | Value                       |
+| -------------- | --------------------------- |
+| `HEX`          | `0123456789abcdef`          |
+| `HEXLOWER`     | `0123456789abcdef`          |
+| `HEXUPPER`     | `0123456789ABCDEF`          |
+| `PATH_SEP`     | `/` (Unix) or `\` (Windows) |
+| `PATH_VAR_SEP` | `:` (Unix) or `;` (Windows) |
 
 ### Usage Examples
 
@@ -272,8 +274,10 @@ files := ```
 | Option                       | Description                                                              |
 | ---------------------------- | ------------------------------------------------------------------------ |
 | `just --list`                | List available recipes                                                   |
+| `just --list MODULE::PATH`   | List recipes in a submodule                                              |
 | `just --list --unsorted`     | List in source order                                                     |
 | `just --list --group NAME`   | Filter `--list` to one group (v1.47.0+)                                  |
+| `just --default-list`        | Make bare `just` list recipes instead of running the default (v1.52.0+)  |
 | `just --summary`             | Brief recipe list                                                        |
 | `just --show RECIPE`         | Show recipe source                                                       |
 | `just --usage RECIPE`        | Show recipe argument usage (v1.46.0+)                                    |
