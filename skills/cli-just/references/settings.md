@@ -68,6 +68,8 @@ set unstable
 - `-o pipefail`: Pipeline fails if any command fails
 - `-c`: Execute following string as command
 
+Note: `bash` here resolves via `PATH` — `/bin/bash` 3.2 on stock macOS. See [inline-scripts.md > Bash Version Pitfalls](inline-scripts.md#bash-version-pitfalls-macos) before relying on Bash-4+ features in recipe bodies.
+
 ### Lazy Evaluation (v1.47.0; stable v1.48.0+)
 
 `set lazy` skips evaluating any variable that no executed recipe references. Useful when top-level assignments invoke

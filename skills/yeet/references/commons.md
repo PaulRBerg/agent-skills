@@ -170,7 +170,28 @@ When operations fail, provide:
 2. What went wrong
 3. What the user should do to fix it
 
-Do not retry automatically.
+Do not retry automatically, with one scoped exception: a label error may be retried once without the offending label, after the idempotency check below confirms nothing was created.
+
+### Idempotency on Retry
+
+A failed `gh issue create` or `gh pr create` may still have created the artifact (e.g. creation succeeded but a follow-up step like labeling failed). Before any retry, check whether it already exists:
+
+```bash
+gh issue list --repo "{repo}" --author "@me" --limit 5
+gh pr list --repo "{repo}" --head "{branch}"
+```
+
+If the artifact exists, switch to the update/comment workflow — never re-create.
+
+### Common Errors
+
+| Error                                   | Remedy                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------ |
+| `Not logged in` / 401                   | Tell the user to run `gh auth login` (see [Auth Validation](#auth-validation)) |
+| `label not found` / 422                 | Re-fetch repo labels, drop the offending label, retry once                     |
+| 403 applying labels on an external repo | Create without `--label`; mention the intended labels in the body              |
+| 404 on the repo                         | Verify the target with `gh repo view {repo}`                                   |
+| Rate limit exceeded                     | Stop and report the reset time (`gh api rate_limit`)                           |
 
 ## Posting and Feedback
 

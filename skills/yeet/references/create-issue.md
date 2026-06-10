@@ -174,7 +174,7 @@ gh issue create \
 
 Display: "Created: $URL"
 
-On failure: show specific error and fix.
+On failure: follow [commons.md > Error Handling](commons.md#error-handling) — run the idempotency check before any retry.
 
 ## Examples
 

@@ -75,3 +75,42 @@ bash-script:
 
 - `[script()]` - Better cross-platform support, cleaner syntax
 - Shebang - Traditional Unix approach, works without `set unstable`
+
+## Bash Version Pitfalls (macOS)
+
+`[script("bash")]`, `#!/usr/bin/env bash`, and `set shell := ["bash", ...]` all resolve `bash` via `PATH`. On stock macOS — and in minimal-`PATH` agent sandboxes — that is `/bin/bash` 3.2 (2007), not Homebrew's 5.x. Recipes written against Bash 4+ fail with signatures like:
+
+```
+mapfile: command not found
+declare: -A: invalid option
+```
+
+**Bash-4+ features and 3.2-safe replacements:**
+
+| Bash 4+ feature         | 3.2-safe replacement                           |
+| ----------------------- | ---------------------------------------------- |
+| `mapfile -t arr < file` | `while IFS= read -r line; do ...; done < file` |
+| `declare -A map`        | `case` statement or parallel arrays            |
+| `${var,,}` / `${var^^}` | `tr '[:upper:]' '[:lower:]'` (and inverse)     |
+| `${arr[-1]}`            | `${arr[${#arr[@]}-1]}`                         |
+| `cmd \|& other`         | `cmd 2>&1 \| other`                            |
+
+**Pinning a newer interpreter** works but sacrifices portability — `/opt/homebrew/bin/bash` does not exist on Intel Macs (`/usr/local/bin/bash`) or Linux (`/usr/bin/bash`):
+
+```just
+set shell := ["/opt/homebrew/bin/bash", "-euo", "pipefail", "-c"]
+```
+
+**3.2-safe version guard** when a recipe genuinely needs Bash 4+ (`BASH_VERSINFO` exists in 3.2, so the check itself never breaks):
+
+```just
+[script("bash")]
+modern:
+    if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+        echo "error: bash >= 4 required (found $BASH_VERSION)" >&2
+        exit 1
+    fi
+    declare -A map=([a]=1)
+```
+
+**Default recommendation:** write recipe bodies that are Bash-3.2-safe. Pinning an absolute interpreter path breaks cross-platform justfiles, and version guards only fail louder, not better.

@@ -93,7 +93,7 @@ After all tasks complete:
 
 ### 5) Polish
 
-Invoke `/code-polish` to simplify and review all session-modified files.
+Invoke the `code-polish` skill to simplify and review all session-modified files. If the harness cannot invoke skills directly (e.g., Codex), read `../code-polish/SKILL.md` — sibling skill directory relative to this file — and follow its instructions inline.
 
 Wait for completion. If it reports residual risks or stop conditions, relay them to the user.
 

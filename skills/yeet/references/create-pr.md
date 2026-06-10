@@ -73,4 +73,4 @@ gh pr create \
 
 Display: "Created PR: $PR_URL"
 
-On failure: check specific error (auth, branch protection, validation), provide fix. Do not retry.
+On failure: check the specific error (auth, branch protection, validation) and follow [commons.md > Error Handling](commons.md#error-handling) — run the idempotency check before any retry.

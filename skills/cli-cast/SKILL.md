@@ -2,7 +2,7 @@
 disable-model-invocation: false
 name: cli-cast
 user-invocable: false
-description: This skill should be used when the user asks to "send a transaction", "call a contract", "sign a message", "use cast", "cast send", "cast call", "cast wallet", "decode calldata", "encode ABI", "check balance", or mentions Foundry cast CLI, RPC endpoints, or on-chain interactions.
+description: This skill should be used when the user asks to "send a transaction", "call a contract", "sign a message", "use cast", "cast send", "cast call", "cast wallet", "decode calldata", "encode ABI", or mentions Foundry cast CLI, RPC endpoints, or on-chain interactions. For read-only balance, token, or transaction-history lookups without cast, prefer the evm-chains skill.
 ---
 
 # Foundry Cast CLI

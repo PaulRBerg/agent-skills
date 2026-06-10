@@ -174,7 +174,7 @@ When designing recipes that use status reporting, check/write semantics, or alia
 
 ## Inline Scripts
 
-When writing recipes that need shell scripts (script attribute or shebang style), see [references/inline-scripts.md](references/inline-scripts.md).
+When writing recipes that need shell scripts (script attribute or shebang style), see [references/inline-scripts.md](references/inline-scripts.md). On stock macOS, `bash` resolves to `/bin/bash` 3.2 — see that file's Bash Version Pitfalls section before using Bash-4+ features.
 
 ## Modules & Imports
 

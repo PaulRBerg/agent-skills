@@ -259,7 +259,7 @@ Query an address's transaction history. Five actions are available under `module
 ### Example Query
 
 ```bash
-curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=0x8877bcb2223682048baDD5b09b7eE5a8FA2F3424&startblock=0&endblock=999999999&page=1&offset=100&sort=desc&apikey=$ETHERSCAN_API_KEY"
+curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&startblock=0&endblock=999999999&page=1&offset=100&sort=desc&apikey=$ETHERSCAN_API_KEY"
 ```
 
 ### Response Format
