@@ -34,8 +34,10 @@ npx skills add PaulRBerg/agent-skills
 | git-squash           | Squash PR branch with semantic commit message             |
 | md-docs              | Markdown documentation management                         |
 | playground           | Interactive single-file HTML playgrounds                  |
+| spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS               |
 | tailwind-css         | Tailwind CSS v4 styling guidance                          |
 | todo-archive         | Archive checked TODO.md tasks into .ai/todos              |
+| vitest               | Vitest test writing and debugging                         |
 | work                 | End-to-end task implementation                            |
 | yeet                 | GitHub contribution workflows                             |
 
