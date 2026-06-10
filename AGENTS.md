@@ -29,7 +29,9 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 - `just` - list recipes.
 - `just mdformat-check` - check Markdown formatting with `mdformat-gfm` and `mdformat-frontmatter`.
 - `just mdformat-write` - format Markdown in place.
+- `just shelve <skill>` - move `skills/<skill>` to `shelved/<skill>`.
 - `just sync` - commit this repo, install skills into `~/.agents`, then commit installed changes there.
+- `just unshelve <skill>` - move `shelved/<skill>` to `skills/<skill>`.
 
 There is no package manifest or build step. Treat Markdown formatting and skill-specific helper scripts as the verification surface unless a task introduces a narrower check.
 
@@ -37,8 +39,8 @@ There is no package manifest or build step. Treat Markdown formatting and skill-
 
 - When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo, modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
 - When an installable catalog skill is added or removed, update the skills table in `README.md`.
-- Shelved skills under `shelved/` are not installable catalog skills. Do not list them in `README.md`, sync them to `~/.agents`, or require `agents/openai.yaml` while they remain shelved.
-- To restore a shelved skill, move it from `shelved/<name>/` to `skills/<name>/`, bring it up to current repo rules, add `skills/<name>/agents/openai.yaml`, and update `README.md`.
+- Shelved skills under `shelved/` are not installable catalog skills. Do not list them in `README.md` or sync them to `~/.agents`; keep `agents/openai.yaml` present so restoring a skill is a pure move plus modernization.
+- To restore a shelved skill, move it from `shelved/<name>/` to `skills/<name>/`, bring it up to current repo rules, and update `README.md`.
 - Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under `skills/`. Do not add them to `README.md`, do not create `agents/openai.yaml`, and do not treat them as installable catalog skills.
 - Keep skills self-contained. Do not de-duplicate content across skills by extracting shared references or canonical files; users install skills individually.
 - Resolve `references/`, `scripts/`, `examples/`, and `assets/` paths relative to the owning skill directory.

@@ -11,6 +11,32 @@ set unstable
 @install-uv:
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
+[group("skills")]
+[script("bash")]
+[doc("Move skills/<skill> to shelved/<skill>")]
+shelve skill:
+    set -euo pipefail
+    skill='{{ skill }}'
+    case "$skill" in ''|*[!a-z0-9_-]*) printf '{{ RED }}invalid skill name: %s{{ NORMAL }}\n' "$skill" >&2; exit 64;; esac
+    test -d "skills/$skill" || { printf '{{ RED }}missing skills/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
+    test ! -e "shelved/$skill" || { printf '{{ RED }}already exists: shelved/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
+    mkdir -p shelved
+    mv "skills/$skill" "shelved/$skill"
+    printf '{{ GREEN }}Shelved %s.{{ NORMAL }} {{ YELLOW }}Remove it from README.md if it was listed.{{ NORMAL }}\n' "$skill"
+
+[group("skills")]
+[script("bash")]
+[doc("Move shelved/<skill> to skills/<skill>")]
+unshelve skill:
+    set -euo pipefail
+    skill='{{ skill }}'
+    case "$skill" in ''|*[!a-z0-9_-]*) printf '{{ RED }}invalid skill name: %s{{ NORMAL }}\n' "$skill" >&2; exit 64;; esac
+    test -d "shelved/$skill" || { printf '{{ RED }}missing shelved/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
+    test ! -e "skills/$skill" || { printf '{{ RED }}already exists: skills/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
+    mkdir -p skills
+    mv "shelved/$skill" "skills/$skill"
+    printf '{{ GREEN }}Unshelved %s.{{ NORMAL }} {{ YELLOW }}Bring it up to current rules and add it to README.md.{{ NORMAL }}\n' "$skill"
+
 # Commit and push, sync skills to ~/.agents, commit again
 [group("sync")]
 [script("zsh")]
