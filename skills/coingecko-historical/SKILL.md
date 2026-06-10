@@ -1,6 +1,7 @@
 ---
 argument-hint: <coin-id> <date>
 disable-model-invocation: false
+model: opus
 name: coingecko-historical
 user-invocable: true
 description: This skill should be used when the user asks to "open CoinGecko historical data", "show historical price on date X", "open coingecko historical page", or wants to view the CoinGecko historical-data page for a coin around a given date in their default browser.

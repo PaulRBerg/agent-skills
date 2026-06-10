@@ -16,6 +16,7 @@ npx skills add PaulRBerg/agent-skills
 | Skill                | Description                                               |
 | -------------------- | --------------------------------------------------------- |
 | autoresearch         | Autonomous experiment loop                                |
+| bump-deps            | Node.js dependency updates via taze                       |
 | bump-release         | Release workflow with changelog, tagging                  |
 | cli-cast             | Foundry cast CLI guidance                                 |
 | cli-gh               | GitHub CLI operations                                     |
@@ -37,6 +38,8 @@ npx skills add PaulRBerg/agent-skills
 | todo-archive         | Archive checked TODO.md tasks into .ai/todos              |
 | work                 | End-to-end task implementation                            |
 | yeet                 | GitHub contribution workflows                             |
+
+Some skills pin `model: opus` in their frontmatter: their workflows are mechanical enough that Opus-level intelligence is sufficient, so there is no need to spend a more capable default model on them.
 
 ## References
 

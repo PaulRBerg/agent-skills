@@ -2,6 +2,7 @@
 argument-hint: '[--base <branch>]'
 disable-model-invocation: true
 effort: high
+model: opus
 name: git-squash
 user-invocable: true
 description: This skill should be used when the user asks to squash a feature branch's commits into one and rebase onto the base branch. Trigger phrases include "squash commits", "squash branch", "flatten branch history", "prepare a clean PR commit".
