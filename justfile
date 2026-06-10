@@ -11,15 +11,21 @@ set unstable
 @install-uv:
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Commit, sync skills to ~/.agents, commit again
+# Commit and push, sync skills to ~/.agents, commit again
 [group("sync")]
 [script("zsh")]
-[doc("Commit here, install skills in ~/.agents, commit there")]
+[doc("Commit and push here, install skills in ~/.agents, commit there")]
 sync:
     source ~/.zshrc 2>/dev/null
 
     # Commit in agent-skills repo
     ccc
+
+    # Push so the install below pulls the fresh commit (skills installs from GitHub)
+    git push
+
+    # Give GitHub a moment to serve the pushed commit
+    sleep 5
 
     # Switch to ~/.agents
     cd ~/.agents
