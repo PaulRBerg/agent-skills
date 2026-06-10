@@ -29,9 +29,9 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 - `just` - list recipes.
 - `just mdformat-check` - check Markdown formatting with `mdformat-gfm` and `mdformat-frontmatter`.
 - `just mdformat-write` - format Markdown in place.
-- `just shelve <skill>` - move `skills/<skill>` to `shelved/<skill>`.
+- `just shelve <skill>` - require a clean worktree, move `skills/<skill>` to `shelved/<skill>`, and commit the move.
 - `just sync` - commit this repo, install skills into `~/.agents`, then commit installed changes there.
-- `just unshelve <skill>` - move `shelved/<skill>` to `skills/<skill>`.
+- `just unshelve <skill>` - require a clean worktree, move `shelved/<skill>` to `skills/<skill>`, and commit the move.
 
 There is no package manifest or build step. Treat Markdown formatting and skill-specific helper scripts as the verification surface unless a task introduces a narrower check.
 
