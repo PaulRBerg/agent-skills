@@ -1,6 +1,6 @@
 # Security Profile
 
-Load when code touches trust boundaries.
+Load when the diff touches trust boundaries.
 
 ## Checks
 

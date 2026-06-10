@@ -1,6 +1,6 @@
 # Shell Profile
 
-Load for shell scripts and shell-heavy CI blocks.
+Load when the diff touches shell scripts or shell-heavy CI blocks.
 
 ## Checks
 

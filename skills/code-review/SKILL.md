@@ -1,6 +1,6 @@
 ---
-argument-hint: '[--fix] [--skip-profile <name>]'
-disable-model-invocation: false
+argument-hint: '[paths] [--fix] [--skip-profile <name>]'
+disable-model-invocation: true
 name: code-review
 user-invocable: true
 description: This skill should be used when the user asks to "review code", "review PR", "code review", "audit code", "check for bugs", "security review", "review my changes", "find issues in this code", "review the diff", or asks for pull request review or code audit.
@@ -14,38 +14,54 @@ Find high-impact defects in changed code with evidence. Prioritize security, cor
 
 ## Arguments
 
-- `--fix`: After reporting findings, apply all suggested fixes automatically in severity order (`CRITICAL -> HIGH -> MEDIUM -> LOW`), then rerun targeted checks and report exactly what changed.
-- `--skip-profile <name>`: Skip an optional domain profile by stem or filename. Repeatable. Example: `--skip-profile naming`.
-- Default: Report findings and wait for confirmation before editing.
+- Paths, patterns, a commit/range, or a scope phrase: used in Scope Resolution step 2.
+- `--fix`: Apply all suggested fixes in severity order after reporting findings, then verify per the Verification section.
+- `--skip-profile <name>`: Skip an optional domain profile by stem or filename (e.g. `--skip-profile naming`). Repeatable.
+- Default: report findings and wait for confirmation before editing.
 
 ## Scope Resolution
 
+Resolve scope once, then treat the result as fixed for the rest of the run.
+
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
-2. If user provides file paths/patterns, a commit/range, or a `Resolved scope` fenced block with one repo-relative path per line, scope is exactly those targets.
-3. Otherwise, scope is **only** session-modified files. Do not include other uncommitted changes.
-4. If there are no session-modified files, fall back to all uncommitted tracked + untracked files:
+2. If the request names targets — file paths/patterns, a commit/range, a natural-language subset (e.g. "the parser changes"), or a `resolved-scope` fenced block with one repo-relative path per line — scope is exactly those targets. Map natural-language subsets to concrete paths before continuing.
+3. Otherwise, scope is **only** session-modified files: files created or edited earlier in this session. Do not include other uncommitted changes.
+4. If there are no session-modified files, or earlier conversation history is not visible in this context, fall back to all uncommitted files, running each command once:
    - tracked: `git diff --name-only --diff-filter=ACMR`
    - untracked: `git ls-files --others --exclude-standard`
    - combine both lists and de-duplicate.
-5. Exclude generated/low-signal files unless requested: lockfiles, minified bundles, build outputs, vendored code.
-6. If scope still resolves to zero files, report and stop.
+5. Exclude generated/low-signal files unless explicitly requested: lockfiles, minified bundles, build outputs, vendored code.
+6. If scope resolves to zero files, report that and stop.
+7. Emit the scope as a fenced code block tagged `resolved-scope`, one repo-relative path per line. The block is authoritative: do not re-run scope commands or revisit exclusions afterward.
 
 ## Workflow
 
-1. Resolve scope and read diffs plus minimal surrounding context.
-2. Classify files by domain/risk.
-3. Apply the core checks below plus only the domain profiles that match the current diff. Honor any `--skip-profile` exclusions.
-4. Generate findings with: location, impact, evidence, confidence, and concrete fix.
-5. Assign severity with the model below.
-6. Default behavior: report and wait.
-7. With `--fix`: apply all suggested fixes in severity order, then run targeted verification.
-8. Report using the output schema below.
+### 1) Resolve Scope
+
+- Apply the Scope Resolution section, then read diffs plus minimal surrounding context.
+
+### 2) Apply Checks
+
+- Classify files by domain and risk.
+- Apply the core checks plus matching profiles per Profile Dispatch, honoring `--skip-profile` exclusions.
+
+### 3) Build Findings
+
+- Generate findings with location, impact, evidence, confidence, and a concrete fix.
+- Assign severity with the Severity Model.
+
+### 4) Fix or Wait
+
+- Default: report findings and wait for confirmation before editing.
+- With `--fix`: apply all suggested fixes in severity order (`CRITICAL -> HIGH -> MEDIUM -> LOW`), then verify per the Verification section.
+
+### 5) Report
+
+Produce the Report section below.
 
 ## Core Review Checks
 
 Apply on every run.
-
-### Checks
 
 - `CORE-001` Behavior regression (`HIGH`): changed branch/state transition alters external behavior.
 - `CORE-002` Error-path safety (`HIGH`): failures can cascade, crash, or return unsafe defaults.
@@ -54,12 +70,9 @@ Apply on every run.
 - `CORE-005` Complexity hotspot (`MEDIUM`): change introduces avoidable coupling or hidden side effects.
 - `CORE-006` Test gap (`MEDIUM`): changed behavior has no targeted test coverage.
 
-### Evidence Expectations
-
-- Show the concrete input/state that triggers failure.
-- Point to changed lines or nearby guards that caused the risk.
-
 ## Profile Dispatch
+
+Select at most three profiles per pass — the highest-risk matches for the touched files — unless the user requests a deep audit. Read each selected profile once, in full; every profile fits in a single read, so never page through or re-read one. Honor `--skip-profile` exclusions.
 
 - `references/profiles/security.md`: auth, external input, secrets, crypto, public network surfaces, unsafe parsing.
 - `references/profiles/configuration.md`: env/config, timeouts, retries, pools, limits, resource tuning, rollout controls.
@@ -68,9 +81,7 @@ Apply on every run.
 - `references/profiles/shell.md`: shell scripts, CI command blocks, deployment scripts.
 - `references/profiles/smart-contracts.md`: Solidity/Solana/on-chain protocol code.
 - `references/profiles/data-formats.md`: CSV/JSON/YAML/binary ingestion/export/parsing.
-- `references/profiles/naming.md`: naming/intent clarity after correctness and security issues are handled. This profile is optional and can be skipped explicitly.
-
-Load only profiles relevant to touched files. Prefer no more than three domain profiles per pass unless the user requests a deep audit.
+- `references/profiles/naming.md`: naming/intent clarity. Optional; skippable via `--skip-profile naming`.
 
 ## Severity Model
 
@@ -79,19 +90,36 @@ Load only profiles relevant to touched files. Prefer no more than three domain p
 - **MEDIUM**: maintainability/reliability issue likely to cause near-term defects.
 - **LOW**: localized clarity/style/documentation improvements.
 
-## Output Schema
+## Evidence Rules
 
-Use this structure and order for every review result.
+- Tie every finding to concrete code evidence at real, verified locations; never fabricate file paths or line numbers.
+- Show the input or state that triggers the failure and the changed lines or missing guards that cause it.
+- State blast radius and failure mode succinctly.
+- Merge duplicate findings.
+- Prefer targeted fixes over broad rewrites.
+- Keep style-only issues at LOW unless they create operational risk.
 
-### 1. Scope
+## Verification
 
-List reviewed files and any excluded patterns.
+Run the narrowest checks that validate touched behavior:
 
-### 2. Findings (ordered)
+- formatter/lint on touched files
+- targeted tests for touched modules
+- typecheck when relevant
 
-Order by severity: `CRITICAL -> HIGH -> MEDIUM -> LOW`.
+Run broader checks only when risk warrants it. Name every skipped check and why.
 
-For each finding, use this shape:
+## Report
+
+Use these section headings, in this order. Omit sections that do not apply — do not number them and do not leave gaps or placeholders.
+
+### Scope
+
+Reviewed files and any excluded patterns.
+
+### Findings
+
+Order by severity: `CRITICAL -> HIGH -> MEDIUM -> LOW`. For each finding:
 
 - `[SEVERITY] Title — path/to/file.ext:line`
 - Impact: concrete user/system impact.
@@ -99,49 +127,26 @@ For each finding, use this shape:
 - Fix: smallest practical remediation.
 - Confidence: `high | medium | low`.
 
-### 3. Suggested Fixes
+### Suggested Fixes
 
-Include when not using `--fix`.
+Only without `--fix`.
 
-### 4. Applied Fixes
+### Applied Fixes
 
-Include only when `--fix` is used. List each change with file references.
+Only with `--fix`. List each change with file references.
 
-### 5. Verification
+### Verification
 
-List commands run and outcomes. Explicitly list skipped checks.
+Commands run and outcomes, including skipped checks.
 
-### 6. Residual Risks / Open Questions
+### Residual Risks
 
-Capture unresolved assumptions and follow-ups.
-
-### Rules
-
-- Do not fabricate locations.
-- Merge duplicate findings.
-- Keep style-only issues at LOW unless they create operational risk.
-
-## Evidence Rules
-
-- Never fabricate line numbers.
-- Tie each finding to concrete code evidence.
-- Explain blast radius and failure mode succinctly.
-- Prefer targeted fixes over broad rewrites.
-
-## Verification
-
-Run the narrowest checks that validate touched behavior:
-
-- formatter/lint on touched files,
-- targeted tests for impacted modules,
-- typecheck when relevant.
-
-If checks cannot run, state exactly what was skipped and why.
+One line per risk: `Assumed <assumption>; if wrong, <what breaks>; check via <command or inspection>.` Plain language — expand or gloss domain-specific terms. Include questions that need a user decision, phrased directly. Write `None.` when there are none.
 
 ## Stop Conditions
 
 Stop and ask for direction when:
 
-- fixes require API/contract redesign,
-- behavior intent is too ambiguous to classify severity,
+- fixes require API/contract redesign.
+- behavior intent is too ambiguous to classify severity.
 - required validation tooling is unavailable and risk is high.

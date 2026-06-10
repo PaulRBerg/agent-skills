@@ -1,6 +1,6 @@
 # Smart Contracts Profile
 
-Load for Solidity/Solana/on-chain logic.
+Load when the diff touches Solidity, Solana, or on-chain logic.
 
 ## Checks
 

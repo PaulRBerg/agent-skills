@@ -1,6 +1,6 @@
 # TypeScript / React / Node Profile
 
-Load for `*.ts`, `*.tsx`, `*.js`, `*.jsx`.
+Load when the diff touches `*.ts`, `*.tsx`, `*.js`, or `*.jsx`.
 
 ## Checks
 

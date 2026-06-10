@@ -1,6 +1,6 @@
 # Python Profile
 
-Load for `*.py` and Python service code.
+Load when the diff touches `*.py` or Python service code.
 
 ## Checks
 

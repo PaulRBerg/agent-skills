@@ -1,6 +1,6 @@
 # Configuration Profile
 
-Load for config, infra limits, or rollout controls.
+Load when the diff touches config, infra limits, or rollout controls.
 
 ## Checks
 

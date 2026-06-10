@@ -1,6 +1,6 @@
 # Naming Profile
 
-Use after correctness/security findings are handled.
+Load last, after correctness and security checks; optional — skip with `--skip-profile naming`.
 
 ## Checks
 

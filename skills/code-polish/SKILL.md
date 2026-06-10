@@ -1,7 +1,6 @@
 ---
-argument-hint: ''
-context: fork
-disable-model-invocation: false
+argument-hint: '[paths] [--skip-profile <name>]'
+disable-model-invocation: true
 name: code-polish
 user-invocable: true
 description: This skill should be used when the user asks to "polish code", "simplify and review", "clean up and review code", "full code polish", "simplify then review", "refactor and review", "simplify and fix", "clean up and fix", or wants a combined simplification and review workflow on recently changed code.
@@ -9,67 +8,109 @@ description: This skill should be used when the user asks to "polish code", "sim
 
 # Code Polish
 
-Combined simplification and review pipeline. This skill orchestrates two sub-skills in sequence:
+## Objective
 
-1. **`code-simplify`** — simplify for readability and maintainability
-2. **`code-review --fix`** — review for correctness, security, and quality, auto-applying all fixes
+Run a combined pipeline on recently changed code: `code-simplify` for readability and maintainability, then `code-review --fix` for correctness, security, and quality with fixes applied. One scope resolution, one user-facing report, no redundant simplify-phase verification.
 
-Optimize for one scope resolution, one user-facing report, and no redundant simplify verification.
+## Arguments
+
+- Paths, patterns, a commit/range, or a scope phrase: used in Scope Resolution step 2.
+- `--skip-profile <name>`: Forward unchanged to `code-review`. Repeatable.
+- Extra cleanup instructions (e.g. "and split `_lib.ts` into smaller files"): execute during the simplify phase.
+- Default: run the full pipeline on the resolved scope.
+
+## Running Sub-Skills
+
+This skill requires `code-simplify` and `code-review` installed as sibling skills.
+
+- Read the sibling skill file once — `../code-simplify/SKILL.md` or `../code-review/SKILL.md`, relative to this file — and follow its instructions inline as if it were invoked with the stated arguments. Flags such as `--fix` are instructions to interpret, not commands to execute.
+- If a sibling `SKILL.md` is missing, stop and report which one.
 
 ## Scope Resolution
 
+Resolve scope once, then treat the result as fixed for the rest of the run.
+
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
-2. If user provides file paths/patterns, a commit/range, or a `Resolved scope` fenced block with one repo-relative path per line, scope is exactly those targets.
-3. Otherwise, scope is **only** session-modified files. Do not include other uncommitted changes.
-4. If there are no session-modified files, fall back to all uncommitted tracked + untracked files:
+2. If the request names targets — file paths/patterns, a commit/range, a natural-language subset (e.g. "the parser changes"), or a `resolved-scope` fenced block with one repo-relative path per line — scope is exactly those targets. Map natural-language subsets to concrete paths before continuing.
+3. Otherwise, scope is **only** session-modified files: files created or edited earlier in this session. Do not include other uncommitted changes.
+4. If there are no session-modified files, or earlier conversation history is not visible in this context, fall back to all uncommitted files, running each command once:
    - tracked: `git diff --name-only --diff-filter=ACMR`
    - untracked: `git ls-files --others --exclude-standard`
    - combine both lists and de-duplicate.
-5. Exclude generated/low-signal files unless requested: lockfiles, minified bundles, build outputs, vendored code.
-6. If scope still resolves to zero files, report and stop.
-7. Normalize the final scope into a `Resolved scope` fenced block with one repo-relative path per line. Reuse that exact block for both sub-skills instead of asking them to rediscover scope.
+5. Exclude generated/low-signal files unless explicitly requested: lockfiles, minified bundles, build outputs, vendored code.
+6. If scope resolves to zero files, report that and stop.
+7. Emit the scope as a fenced code block tagged `resolved-scope`, one repo-relative path per line. The block is authoritative: do not re-run scope commands or revisit exclusions afterward.
 
 ## Workflow
 
-### 1) Resolve scope once
+### 1) Resolve Scope
 
-- Apply the "Scope Resolution" rules above.
-- Treat the resulting `Resolved scope` block as authoritative for all downstream work.
-- Forward user intent, constraints, and risk preferences, but skip raw scope selectors already captured in the resolved block.
+- Apply the Scope Resolution section and emit the `resolved-scope` block.
+- Forward user intent, constraints, and risk preferences to both phases; the block replaces raw scope selectors.
 
-### 2) Run `code-simplify`
+### 2) Simplify Phase
 
-Invoke the `code-simplify` skill with:
+Run `code-simplify` (per Running Sub-Skills) with:
 
-- the authoritative `Resolved scope` block
-- `--no-verify`
-- `--no-report`
-- any non-scope user intent that still matters
+- the `resolved-scope` block
+- `--no-verify` and `--no-report`
+- any extra cleanup instructions from the user
 
-Tell `code-simplify` not to broaden or rediscover scope.
+Tell it not to broaden or rediscover scope.
 
-### 3) Run `code-review --fix`
+### 3) Review Phase
 
-Invoke the `code-review` skill with:
+Run `code-review` (per Running Sub-Skills) with:
 
-- the same authoritative `Resolved scope` block
+- the same `resolved-scope` block
 - `--fix`
-- any non-scope user intent that still matters
+- any `--skip-profile` flags from the user
 
-If the user explicitly asks for a speed-first pass over maintainability coverage, you may also append `--skip-profile naming`. Do not skip the naming profile by default.
+Skip the naming profile only when the user asks for a speed-first pass, never by default.
 
-### 4) Final verification
+### 4) Final Verification
 
-- Treat `code-review`'s post-fix verification as the final verification summary when it already covers the final touched scope.
-- If verification was skipped, partial, or no longer matches the final diff, run one narrow final verification pass across the final touched scope.
-- Always report skipped checks explicitly.
+- Reuse the review phase's post-fix verification as final when it covers the final touched scope.
+- Otherwise run the narrowest checks that validate touched behavior:
+  - formatter/lint on touched files
+  - targeted tests for touched modules
+  - typecheck when relevant
+- Name every skipped check and why.
 
 ### 5) Report
 
-Combine the final state into one summary:
+Produce the Report section below. Both phases must have completed first (see Stop Conditions).
 
-1. **Scope**: Files and functions touched.
-2. **Simplifications**: Key changes from `code-simplify`, derived from the actual diff when needed because `--no-report` was used.
-3. **Review findings and fixes**: Findings and applied fixes from `code-review`.
-4. **Verification**: Commands run and outcomes.
-5. **Residual risks**: Assumptions or items needing manual review.
+## Report
+
+Use these section headings, in this order. Omit sections that do not apply — do not number them and do not leave gaps or placeholders.
+
+### Scope
+
+Files and functions touched, final state.
+
+### Simplifications
+
+Key changes from the simplify phase, derived from the diff when needed — the phase ran with `--no-report`.
+
+### Review Findings and Fixes
+
+Findings and applied fixes from the review phase, ordered `CRITICAL -> HIGH -> MEDIUM -> LOW`.
+
+### Verification
+
+Commands run and outcomes, including skipped checks.
+
+### Residual Risks
+
+One line per risk: `Assumed <assumption>; if wrong, <what breaks>; check via <command or inspection>.` Plain language — expand or gloss domain-specific terms. Include questions that need a user decision, phrased directly. Write `None.` when there are none.
+
+## Stop Conditions
+
+Stop and ask for direction when:
+
+- `code-simplify` or `code-review` is not installed as a sibling skill.
+- a sub-skill hits one of its own stop conditions.
+- the review phase cannot run or cannot complete its fixes.
+
+Completion gate: a polish run is complete only after both phases have run over the resolved scope and the Report above is produced. Never end the run after the simplify phase alone; if the review phase did not run, state explicitly that the polish is incomplete and which phase is missing.

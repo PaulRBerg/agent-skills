@@ -1,6 +1,6 @@
 # Data Formats Profile
 
-Load when code parses or emits structured data.
+Load when the diff touches structured-data parsing or emission.
 
 ## Checks
 
