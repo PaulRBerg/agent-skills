@@ -37,6 +37,7 @@ npx skills add PaulRBerg/agent-skills
 | spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS               |
 | tailwind-css         | Tailwind CSS v4 styling guidance                          |
 | todo-archive         | Archive checked TODO.md tasks into .ai/todos              |
+| update-skills        | Sync project .agents/skills with the current repo state   |
 | vitest               | Vitest test writing and debugging                         |
 | work                 | End-to-end task implementation                            |
 | yeet                 | GitHub contribution workflows                             |
