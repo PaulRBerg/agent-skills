@@ -13,7 +13,9 @@ The skill enforces a strict split between `README.md` and `AGENTS.md`. Every wor
 
 When in doubt, ask: *would a human reading this on GitHub care, or only a developer/agent running commands?* If the latter, it goes in AGENTS.md.
 
-The README is allowed to mention its sibling AGENTS.md and link to it; that's the only legitimate way for a reader to reach development commands from the README.
+The README is allowed to mention its sibling AGENTS.md and link to it; that's the normal way for a reader to reach development commands from the README.
+
+**Exemption — operator-run setup guides.** The split is a default, not an absolute. A README may carry a short technical guide when its human reader is also the operator who must run the steps — typical cases: dotfiles repos (e.g. a chezmoi source tree whose README documents new-machine bootstrap), homelab or infra configs, personal tooling — or when the user explicitly asks for one. Keep the guide brief and task-focused (setup, bootstrap, restore); development-workflow commands (build, test, lint) still belong in AGENTS.md. During updates, preserve an existing exempted guide instead of stripping it.
 
 ## Recursive Operation
 
@@ -86,7 +88,7 @@ Rely on git for recovery. Do not create `*.backup` files when overwriting `READM
 
 - **Plain prose** — short, descriptive sentences. Not imperative, not marketing.
 - **Generic information** — what the project is, where to learn more, how it relates to other work.
-- **No CLI commands** — anywhere. Link to AGENTS.md instead.
+- **No CLI commands** — link to AGENTS.md instead. Exception: a brief operator-run setup guide where the Audience Split exemption applies (dotfiles, infra, personal tooling, or explicit user request).
 - **Scannable** — headings, bullet lists for links and references.
 - **Accurate** — verify all URLs against actual project metadata.
 

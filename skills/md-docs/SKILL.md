@@ -27,6 +27,8 @@ This is the central rule for everything this skill produces.
 
 When in doubt, ask: *would a human reading this on GitHub care, or only a developer/agent running commands?* If the latter, it goes in AGENTS.md.
 
+**Exemption — operator-run setup guides.** The split is a default, not an absolute. A README may carry a short technical guide when its human reader is also the operator who must run the steps — typical cases: dotfiles repos (e.g. a chezmoi source tree whose README documents new-machine bootstrap), homelab or infra configs, personal tooling — or when the user explicitly asks for one. Keep the guide brief and task-focused (setup, bootstrap, restore); development-workflow commands (build, test, lint) still belong in AGENTS.md. During updates, preserve an existing exempted guide instead of stripping it.
+
 ## Workflow Selection
 
 Pick the workflow that matches the user's intent:

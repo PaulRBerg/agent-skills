@@ -1,17 +1,18 @@
 # Update README Workflow
 
-Workflow for updating human-aimed `README.md` files based on current project metadata. By default it runs on **every** `README.md` in the repository, each scoped to its own directory and nearest manifest. README.md contains description, badges, links, references, license, and a contributing pointer — never CLI commands, `just` recipes, scripts, or project structure trees. Those live in the sibling `AGENTS.md`.
+Workflow for updating human-aimed `README.md` files based on current project metadata. By default it runs on **every** `README.md` in the repository, each scoped to its own directory and nearest manifest. README.md contains description, badges, links, references, license, and a contributing pointer — by default no CLI commands, `just` recipes, scripts, or project structure trees. Those live in the sibling `AGENTS.md` (see the operator-run setup-guide exemption under Guiding Principles).
 
 ## Guiding Principles
 
 **README.md is for humans browsing the repo on GitHub or a package registry.**
 
 - **Generic information only** — what the project is, where to learn more, how it relates to other work.
-- **No CLI commands** — install, build, test, lint, dev, deploy, scripts, `just` recipes all belong in `AGENTS.md`.
+- **No CLI commands** (default) — install, build, test, lint, dev, deploy, scripts, `just` recipes all belong in `AGENTS.md`. See the exemption below.
 - **No project structure trees** — that's a developer concern; AGENTS.md owns it.
 - **No API reference** — link to the dedicated docs site or AGENTS.md instead.
 - **Show, don't tell** — short, direct prose; if a code snippet is critical, link to a file in `examples/` rather than embedding it.
 - **Respect the reader's time** — they want to know what it is, whether it's relevant, and where to go next.
+- **Exemption — operator-run setup guides**: the split is a default, not an absolute. A README may keep a short technical guide when its human reader is also the operator who must run the steps (dotfiles repos such as a chezmoi source tree with new-machine bootstrap steps, homelab/infra configs, personal tooling) or when the user explicitly asks for one. Keep it brief and task-focused; development-workflow commands (build, test, lint) still belong in AGENTS.md.
 
 **Target length by mode**:
 
@@ -137,7 +138,7 @@ IF `--preserve` flag is set AND README.md exists:
   - Testing / Tests
   - Deployment
 
-When removing technical sections, leave a single line directing the reader to AGENTS.md (see STEP 5 → Contributing pointer).
+Before removing, check the operator-run setup-guide exemption (see Guiding Principles): in repos like dotfiles or infra configs, sections such as "Getting Started" or "Usage" that document steps the human reader must run themselves are exempt — preserve them instead of removing. When removing non-exempt technical sections, leave a single line directing the reader to AGENTS.md (see STEP 5 → Contributing pointer).
 
 ### STEP 5: Generate README Sections
 
@@ -283,7 +284,7 @@ Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development work
 
 - Use plain `##` headings; no emoji decoration on section headers (the audience is humans, but emoji-noise reads as 2018 marketing copy).
 
-- Code blocks are rare — README should not show CLI commands at all, and embedded code should be a short illustrative snippet at most. Prefer linking to `examples/`.
+- Code blocks are rare — README shows CLI commands only under the operator-run setup-guide exemption, and embedded code should be a short illustrative snippet at most. Prefer linking to `examples/`.
 
 - Tables only for things like a feature comparison with related projects.
 
@@ -430,7 +431,7 @@ Or invoke `init-readme` directly.
 
 ## Key Characteristics
 
-**Audience-strict**: README never contains CLI commands, scripts, or developer workflows. All such content is removed and recorded in the summary so the user can verify it lives in AGENTS.md.
+**Audience-strict by default**: README contains no CLI commands, scripts, or developer workflows unless the operator-run setup-guide exemption applies. Non-exempt technical content is removed and recorded in the summary so the user can verify it lives in AGENTS.md.
 
 **Language-agnostic**: Works with Node.js, Rust, Python, Solidity, Go, Ruby, PHP, and other common stacks (only for badge selection and metadata extraction).
 
