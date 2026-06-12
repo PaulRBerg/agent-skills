@@ -1,6 +1,6 @@
 ---
 argument-hint: '[--all] [--deep] [--push] [--close <issue_numbers>]'
-disable-model-invocation: true
+disable-model-invocation: false
 effort: high
 model: opus
 name: commit

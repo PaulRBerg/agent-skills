@@ -1,6 +1,6 @@
 ---
 argument-hint: <coin-id> <date>
-disable-model-invocation: true
+disable-model-invocation: false
 model: opus
 name: coingecko-historical
 user-invocable: true

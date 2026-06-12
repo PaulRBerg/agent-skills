@@ -1,6 +1,6 @@
 ---
 argument-hint: <goal>
-disable-model-invocation: true
+disable-model-invocation: false
 name: autoresearch
 user-invocable: true
 description: Use for autoresearch, autonomous experiments, optimization loops, "optimize X overnight/in a loop", or "experiment loop"; sets up iterative trials for an optimization target.

@@ -42,20 +42,14 @@ function checkSkill(skillPath, openaiPath) {
     return;
   }
 
-  const disableModelInvocation = readRequiredBoolean(
+  const disableModelInvocation = readOptionalBoolean(
     frontmatter,
     "disable-model-invocation",
+    false,
     skillPath,
   );
-  const userInvocable = readRequiredBoolean(frontmatter, "user-invocable", skillPath);
+  const userInvocable = readOptionalBoolean(frontmatter, "user-invocable", true, skillPath);
   if (disableModelInvocation === null || userInvocable === null) return;
-
-  if (!userInvocable) {
-    errors.push(
-      `${skillPath}: user-invocable=false is not logically equivalent in Codex; ` +
-        "Codex explicit $skill invocation remains available",
-    );
-  }
 
   const expectedAllowImplicitInvocation = !disableModelInvocation;
   const openaiText = fs.readFileSync(openaiPath, "utf8");
@@ -96,11 +90,8 @@ function readFrontmatter(filePath) {
   return fields;
 }
 
-function readRequiredBoolean(fields, key, filePath) {
-  if (!fields.has(key)) {
-    errors.push(`${filePath}: missing required frontmatter field ${key}`);
-    return null;
-  }
+function readOptionalBoolean(fields, key, defaultValue, filePath) {
+  if (!fields.has(key)) return defaultValue;
 
   const value = fields.get(key);
   if (value === "true") return true;

@@ -1,6 +1,6 @@
 ---
 argument-hint: <update-readme|update-agents|init-readme|init-agents> [path] [--root-only] [--preserve] [--minimal] [--thorough] [--dry-run]
-disable-model-invocation: true
+disable-model-invocation: false
 name: md-docs
 user-invocable: true
 description: Use ONLY to update or initialize README.md, CLAUDE.md, or AGENTS.md. Do not trigger for other Markdown files.

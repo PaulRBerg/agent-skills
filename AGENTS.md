@@ -57,16 +57,16 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 
 Reference: <https://developers.openai.com/codex/skills.md#optional-metadata>
 
-Every skill must include `skills/<name>/agents/openai.yaml` with invocation policy derived from `SKILL.md`:
+Every skill must include `skills/<name>/agents/openai.yaml` with invocation policy derived from `SKILL.md`. `SKILL.md` is authoritative.
 
 ```yaml
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true # inverse of SKILL.md disable-model-invocation
 ```
 
-Why: this repo currently keeps Codex skills explicit-only. The skill set is broad, some skills run side-effect-heavy workflows, and implicit matching can surprise users or crowd the startup context. Users should invoke skills intentionally with `$skill-name` or the skill picker.
+Why: Claude and Codex store related invocation policy in different places. Claude reads `disable-model-invocation` from `SKILL.md`; Codex reads `policy.allow_implicit_invocation` from `agents/openai.yaml`.
 
-How: create an `agents/` directory next to `SKILL.md` and add `openai.yaml` with a `policy.allow_implicit_invocation` value equivalent to `SKILL.md`. If the file later needs UI metadata or tool dependencies, merge those fields into the same file; do not remove the policy.
+How: create an `agents/` directory next to `SKILL.md` and add `openai.yaml` with `policy.allow_implicit_invocation: true` when `disable-model-invocation` is absent or `false`; use `false` only when `disable-model-invocation: true`. If the file later needs UI metadata or tool dependencies, merge those fields into the same file; do not remove the policy.
 
 Codex `allow_implicit_invocation` defaults to `true`; when set to `false`, Codex will not choose the skill from the prompt, but explicit `$skill` invocation still works. The Claude-equivalent implicit-invocation gate is the inverse of `disable-model-invocation`.
 
@@ -96,7 +96,7 @@ Combined behavior:
 | `user-invocable: false`          | No       | Yes                 | Yes                    |
 | Both disabled                    | No       | No                  | No                     |
 
-For this repo's explicit-only policy, keep `disable-model-invocation: true` and `user-invocable: true` in `SKILL.md` whenever `agents/openai.yaml` has `allow_implicit_invocation: false`. Do not treat `user-invocable` as Codex's implicit-invocation equivalent; Claude documents it as slash-menu visibility, while `disable-model-invocation` controls whether Claude can load the skill automatically.
+Do not treat `agents/openai.yaml` as authoritative and do not treat `user-invocable` as Codex's implicit-invocation equivalent. Claude documents `user-invocable` as slash-menu visibility, while `disable-model-invocation` controls whether Claude can load the skill automatically. Codex has no equivalent metadata bit for `user-invocable`.
 
 ### Execution Context
 

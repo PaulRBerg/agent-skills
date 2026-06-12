@@ -1,7 +1,7 @@
 ---
-disable-model-invocation: true
+disable-model-invocation: false
 name: coingecko-cli
-user-invocable: true
+user-invocable: false
 description: 'Use for CoinGecko/cg CLI crypto market data: prices, market cap, trending coins, top gainers/losers, coin search, historical data, or OHLC.'
 ---
 

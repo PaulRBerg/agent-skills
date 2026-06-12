@@ -1,6 +1,6 @@
 ---
 argument-hint: '[packages...] [version] [--beta] [--dry-run]'
-disable-model-invocation: true
+disable-model-invocation: false
 effort: high
 model: opus
 name: bump-release

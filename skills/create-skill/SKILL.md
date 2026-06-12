@@ -1,6 +1,6 @@
 ---
 argument-hint: <skill-name> [--project | --global]
-disable-model-invocation: true
+disable-model-invocation: false
 name: create-skill
 user-invocable: true
 description: Use to create/scaffold/init a new agent skill in `.agents/skills` by default or `~/.agents/skills` with `--global`.
@@ -146,6 +146,7 @@ Write `<scope>/.agents/skills/<name>/SKILL.md` with:
 - Frontmatter sorted alphabetically, with `description` last. The `description` is the only field seen at discovery time — front-load trigger phrases there, not in the body.
 - A short `# Title`.
 - A one-line summary of what the skill does.
+- `disable-model-invocation` and `user-invocable` fields set for Claude behavior. Omit only when intentionally relying on Claude defaults: `disable-model-invocation: false`, `user-invocable: true`.
 - `## Arguments` (if any) and `## Workflow` sections in **imperative form** with concrete steps.
 - Explicit links to every `references/` file the workflow may need, each with a one-line note describing *when* to read it.
 - CLI signatures for any bundled scripts so the agent can call them without reading them.
@@ -156,10 +157,10 @@ Write `<scope>/.agents/skills/<name>/agents/openai.yaml` with:
 
 ```yaml
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true
 ```
 
-This keeps Codex invocation explicit-only while preserving Claude-specific frontmatter behavior. If later adding Codex UI metadata or MCP/tool dependencies, merge them into the same file and keep the policy.
+Set `allow_implicit_invocation` to the inverse of `SKILL.md` `disable-model-invocation`. If later adding Codex UI metadata or MCP/tool dependencies, merge them into the same file and keep the policy.
 
 ### 5. Create the Claude Code Symlink
 
@@ -185,6 +186,6 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - "When to use" information belongs in `description` (discovery-time), not in the body (activation-time only).
 - Use imperative / infinitive form throughout `SKILL.md`.
 - All paths inside `SKILL.md` (e.g., `references/placeholder.md`, `scripts/example.sh`) are relative to the skill directory.
-- Every new skill must include `agents/openai.yaml` with `policy.allow_implicit_invocation: false`.
+- Every new skill must include `agents/openai.yaml` with `policy.allow_implicit_invocation` derived from `SKILL.md`, never the other way around.
 - Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by default.
 - Do not commit the new skill — leave that to the user.

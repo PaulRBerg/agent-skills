@@ -1,7 +1,7 @@
 ---
-disable-model-invocation: true
+disable-model-invocation: false
 name: cli-just
-user-invocable: true
+user-invocable: false
 description: 'Use for just/justfile task automation: create justfiles, write recipes, configure settings, add modules/attributes, or set up command-runner workflows.'
 ---
 

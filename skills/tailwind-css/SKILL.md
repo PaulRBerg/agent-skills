@@ -1,7 +1,7 @@
 ---
-disable-model-invocation: true
+disable-model-invocation: false
 name: tailwind-css
-user-invocable: true
+user-invocable: false
 description: 'Use for Tailwind v4 styling: add/fix classes, configure or migrate Tailwind, use tailwind-variants, or tw-animate-css.'
 ---
 

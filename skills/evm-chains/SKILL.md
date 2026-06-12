@@ -1,6 +1,6 @@
 ---
 argument-hint: <chain-name-or-id>
-disable-model-invocation: true
+disable-model-invocation: false
 name: evm-chains
 user-invocable: true
 description: 'Use for EVM chain resolution and on-chain account data: chain name/ID, RPC/explorer/native symbol, RouteMesh, balances, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; bridge/cross-chain Bungee/Socket enrichment.'

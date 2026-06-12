@@ -1,6 +1,6 @@
 ---
 argument-hint: '[--dry-run] [package ...]'
-disable-model-invocation: true
+disable-model-invocation: false
 effort: high
 model: opus
 name: bump-deps

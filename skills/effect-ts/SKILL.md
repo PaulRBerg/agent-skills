@@ -1,5 +1,5 @@
 ---
-disable-model-invocation: true
+disable-model-invocation: false
 name: effect-ts
 user-invocable: true
 description: Use for Effect-TS code and patterns including services, layers, errors, Schema/JSONSchema, @effect/ai tools, code importing from `effect`, or @prb/effect-next.

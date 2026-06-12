@@ -1,6 +1,6 @@
 ---
 argument-hint: <create-pr|update-pr|create-issue|update-issue|comment-issue|create-discussion> [options]
-disable-model-invocation: true
+disable-model-invocation: false
 effort: high
 name: yeet
 user-invocable: true

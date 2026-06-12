@@ -1,6 +1,6 @@
 ---
 argument-hint: '[<slug>] [--md]'
-disable-model-invocation: true
+disable-model-invocation: false
 name: debrief
 user-invocable: true
 description: "Use for debriefs or saved findings/reports from the current task. Creates `.ai/debriefs/<slug>/index.html`; `--md` writes `index.md` instead."

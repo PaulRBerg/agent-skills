@@ -1,6 +1,6 @@
 ---
 argument-hint: "[path] [--date YYYY-MM-DD|YYYY_MM_DD] [--dry-run] [--force]"
-disable-model-invocation: true
+disable-model-invocation: false
 name: todo-archive
 user-invocable: true
 description: Use only when explicitly asked to archive/prune/compact/roll over checked tasks from TODO.md into `.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, leaving unchecked tasks.
