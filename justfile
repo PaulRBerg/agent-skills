@@ -5,11 +5,34 @@ set unstable
 
 @default:
     just --list
+alias d := default
+
+[group("checks")]
+[doc("Install Husky git hooks for this checkout")]
+@hooks-install:
+    nlx husky
+alias hi := hooks-install
 
 @install-deps: install-uv
+alias id := install-deps
 
 @install-uv:
     curl -LsSf https://astral.sh/uv/install.sh | sh
+alias iu := install-uv
+
+@mdformat-check:
+    uvx --with mdformat-gfm --with mdformat-frontmatter mdformat --check .
+alias mc := mdformat-check
+
+@mdformat-write:
+    uvx --with mdformat-gfm --with mdformat-frontmatter mdformat .
+alias mw := mdformat-write
+
+[group("checks")]
+[doc("Run staged-file checks")]
+pre-commit:
+    nlx lint-staged
+alias pc := pre-commit
 
 [group("skills")]
 [script("bash")]
@@ -30,26 +53,19 @@ shelve skill:
     git add -A
     git commit -m "chore: shelve $skill skill"
     printf '{{ GREEN }}Shelved and committed %s.{{ NORMAL }}\n' "$skill"
+alias sh := shelve
 
-[group("skills")]
-[script("bash")]
-[doc("Move shelved/<skill> to skills/<skill>")]
-unshelve skill:
-    set -euo pipefail
-    skill='{{ skill }}'
-    case "$skill" in ''|*[!a-z0-9_-]*) printf '{{ RED }}invalid skill name: %s{{ NORMAL }}\n' "$skill" >&2; exit 64;; esac
-    if [ -n "$(git status --porcelain)" ]; then
-        printf '{{ RED }}working tree has uncommitted changes; commit or stash first{{ NORMAL }}\n' >&2
-        git status --short >&2
-        exit 1
-    fi
-    test -d "shelved/$skill" || { printf '{{ RED }}missing shelved/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
-    test ! -e "skills/$skill" || { printf '{{ RED }}already exists: skills/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
-    mkdir -p skills
-    mv "shelved/$skill" "skills/$skill"
-    git add -A
-    git commit -m "chore: unshelve $skill skill"
-    printf '{{ GREEN }}Unshelved and committed %s.{{ NORMAL }}\n' "$skill"
+[group("checks")]
+[doc("Check SKILL.md invocation fields against agents/openai.yaml")]
+skill-invocation-check:
+    node scripts/sync-invocation-policy.mjs
+alias sic := skill-invocation-check
+
+[group("checks")]
+[doc("Update agents/openai.yaml invocation policy from SKILL.md")]
+skill-invocation-fix:
+    node scripts/sync-invocation-policy.mjs --fix
+alias sif := skill-invocation-fix
 
 # Commit and push, sync skills to ~/.agents, commit again
 [group("sync")]
@@ -83,31 +99,23 @@ sync:
     ccc
 alias s := sync
 
-@mdformat-check:
-    uvx --with mdformat-gfm --with mdformat-frontmatter mdformat --check .
-alias mc := mdformat-check
-
-@mdformat-write:
-    uvx --with mdformat-gfm --with mdformat-frontmatter mdformat .
-alias mw := mdformat-write
-
-[group("checks")]
-[doc("Check SKILL.md invocation fields against agents/openai.yaml")]
-skill-invocation-check:
-    node scripts/sync-invocation-policy.mjs
-alias sic := skill-invocation-check
-
-[group("checks")]
-[doc("Update agents/openai.yaml invocation policy from SKILL.md")]
-skill-invocation-fix:
-    node scripts/sync-invocation-policy.mjs --fix
-
-[group("checks")]
-[doc("Run staged-file checks")]
-pre-commit:
-    nlx lint-staged
-
-[group("checks")]
-[doc("Install Husky git hooks for this checkout")]
-hooks-install:
-    nlx husky
+[group("skills")]
+[script("bash")]
+[doc("Move shelved/<skill> to skills/<skill>")]
+unshelve skill:
+    set -euo pipefail
+    skill='{{ skill }}'
+    case "$skill" in ''|*[!a-z0-9_-]*) printf '{{ RED }}invalid skill name: %s{{ NORMAL }}\n' "$skill" >&2; exit 64;; esac
+    if [ -n "$(git status --porcelain)" ]; then
+        printf '{{ RED }}working tree has uncommitted changes; commit or stash first{{ NORMAL }}\n' >&2
+        git status --short >&2
+        exit 1
+    fi
+    test -d "shelved/$skill" || { printf '{{ RED }}missing shelved/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
+    test ! -e "skills/$skill" || { printf '{{ RED }}already exists: skills/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
+    mkdir -p skills
+    mv "shelved/$skill" "skills/$skill"
+    git add -A
+    git commit -m "chore: unshelve $skill skill"
+    printf '{{ GREEN }}Unshelved and committed %s.{{ NORMAL }}\n' "$skill"
+alias u := unshelve
