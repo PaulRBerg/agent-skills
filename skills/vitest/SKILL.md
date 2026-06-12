@@ -1,6 +1,8 @@
 ---
+disable-model-invocation: true
 name: vitest
-description: This skill should be used when the user asks to write, run, or debug tests with Vitest in TypeScript React/Next.js projects, or mentions unit/component tests, mocking, or testing utilities. Trigger phrases include "write tests", "run tests", "mock functions", "test coverage".
+user-invocable: true
+description: 'Use for Vitest in TypeScript React/Next.js: write, run, or debug unit/component tests, mocks, testing utilities, and coverage.'
 ---
 
 # Your Role

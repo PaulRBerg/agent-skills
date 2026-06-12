@@ -5,7 +5,7 @@ effort: high
 model: opus
 name: git-squash
 user-invocable: true
-description: This skill should be used when the user asks to squash a feature branch's commits into one and rebase onto the base branch. Trigger phrases include "squash commits", "squash branch", "clean up my commits", "squash before merge", "flatten branch history", "prepare a clean PR commit".
+description: 'Use to squash a feature branch into one commit and rebase onto base: squash commits/branch, clean up commits, flatten branch history, prepare clean PR commit.'
 ---
 
 # Git Squash

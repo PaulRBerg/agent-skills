@@ -1,9 +1,9 @@
 ---
 argument-hint: <update-readme|update-agents|init-readme|init-agents> [path] [--root-only] [--preserve] [--minimal] [--thorough] [--dry-run]
-disable-model-invocation: false
+disable-model-invocation: true
 name: md-docs
 user-invocable: true
-description: This skill should be used ONLY when the user asks to update or initialize README.md, CLAUDE.md, or AGENTS.md. Trigger phrases include "update README", "init README", "update context files", "update CLAUDE.md/AGENTS.md". Do NOT activate for any other Markdown file updates.
+description: Use ONLY to update or initialize README.md, CLAUDE.md, or AGENTS.md. Do not trigger for other Markdown files.
 ---
 
 # Markdown Documentation Management

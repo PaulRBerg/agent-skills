@@ -1,9 +1,9 @@
 ---
 argument-hint: "[path] [--date YYYY-MM-DD|YYYY_MM_DD] [--dry-run] [--force]"
-disable-model-invocation: false
+disable-model-invocation: true
 name: todo-archive
 user-invocable: true
-description: This skill should be used when the user explicitly asks to archive, prune, compact, roll over, sweep, or move checked tasks from a repo-local TODO.md into .ai/todos/TODO_UNTIL_YYYY_MM_DD.md while leaving unchecked tasks in TODO.md.
+description: Use only when explicitly asked to archive/prune/compact/roll over checked tasks from TODO.md into `.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, leaving unchecked tasks.
 ---
 
 # TODO Archive

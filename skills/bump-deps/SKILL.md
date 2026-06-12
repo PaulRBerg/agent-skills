@@ -1,11 +1,11 @@
 ---
 argument-hint: '[--dry-run] [package ...]'
-disable-model-invocation: false
+disable-model-invocation: true
 effort: high
 model: opus
 name: bump-deps
 user-invocable: true
-description: This skill should be used when the user asks to "update dependencies", "update deps", "update npm packages", "bump dependencies", "bump deps", "upgrade node packages", "check for outdated packages", "update package.json", or mentions dependency updates, npm/pnpm/yarn/bun package upgrades, or taze CLI usage.
+description: 'Use for dependency updates: update/bump deps, npm/pnpm/yarn/bun package upgrades, outdated checks, package.json updates, or taze.'
 ---
 
 # Bump Dependencies Skill

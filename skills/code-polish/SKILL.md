@@ -3,7 +3,7 @@ argument-hint: '[paths] [--skip-profile <name>]'
 disable-model-invocation: true
 name: code-polish
 user-invocable: true
-description: This skill should be used when the user asks to "polish code", "simplify and review", "clean up and review code", "full code polish", "simplify then review", "refactor and review", "simplify and fix", "clean up and fix", or wants a combined simplification and review workflow on recently changed code.
+description: 'Use for combined simplification and review: polish code, clean up and review/fix, simplify then review, refactor and review, or full code polish on recent changes.'
 ---
 
 # Code Polish

@@ -1,8 +1,8 @@
 ---
-disable-model-invocation: false
+disable-model-invocation: true
 name: cli-gh
-user-invocable: false
-description: This skill should be used when the user mentions "gh CLI", "gh command", asks to "view repository info", "trigger workflows", "search GitHub", "manage codespaces", "check PR status", "list issues", "browse repo", or asks about GitHub CLI usage and automation from the command line.
+user-invocable: true
+description: 'Use for GitHub CLI automation: gh commands, repo info, workflow triggers, GitHub search, codespaces, PR status, issues, repo browsing, or command-line GitHub tasks.'
 ---
 
 # GitHub CLI (gh)

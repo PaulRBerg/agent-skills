@@ -1,7 +1,8 @@
 ---
+disable-model-invocation: true
 name: tailwind-css
-user-invocable: false
-description: This skill should be used when the user asks to style with Tailwind v4, add or fix Tailwind classes, use tailwind-variants or tw-animate-css, or configure Tailwind. Trigger phrases include "style with Tailwind", "fix Tailwind styles", "configure Tailwind v4", "migrate to Tailwind v4".
+user-invocable: true
+description: 'Use for Tailwind v4 styling: add/fix classes, configure or migrate Tailwind, use tailwind-variants, or tw-animate-css.'
 ---
 
 # Tailwind CSS v4

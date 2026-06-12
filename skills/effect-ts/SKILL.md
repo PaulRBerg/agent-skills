@@ -1,6 +1,8 @@
 ---
+disable-model-invocation: true
 name: effect-ts
-description: This skill should be used when the user asks about Effect-TS patterns, services, layers, error handling, Schema/JSONSchema, @effect/ai tools, service composition, or writing/refactoring code that imports from 'effect'. Also covers Effect + Next.js integration with @prb/effect-next.
+user-invocable: true
+description: Use for Effect-TS code and patterns including services, layers, errors, Schema/JSONSchema, @effect/ai tools, code importing from `effect`, or @prb/effect-next.
 ---
 
 # Effect-TS Expert

@@ -1,6 +1,6 @@
 ---
 argument-hint: <query> [--reasoning <level>]
-disable-model-invocation: false
+disable-model-invocation: true
 name: oracle-codex
 user-invocable: true
 description: This skill should be used when the user asks to consult Codex/GPT for planning or code review, or wants a second opinion on code. Trigger phrases include "ask Codex", "consult Codex", "second opinion on code", "consult the oracle". NOT for implementation tasks.

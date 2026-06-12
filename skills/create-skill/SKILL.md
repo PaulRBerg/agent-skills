@@ -1,9 +1,9 @@
 ---
 argument-hint: <skill-name> [--project | --global]
-disable-model-invocation: false
+disable-model-invocation: true
 name: create-skill
 user-invocable: true
-description: This skill should be used when the user asks to "create a skill", "new skill", "scaffold a skill", "make a skill", "init a skill", or wants to bootstrap a new agent skill in `.agents/skills` (default) or `~/.agents/skills` (with `--global`).
+description: Use to create/scaffold/init a new agent skill in `.agents/skills` by default or `~/.agents/skills` with `--global`.
 ---
 
 # Create Skill

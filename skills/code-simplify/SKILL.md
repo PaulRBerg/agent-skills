@@ -3,7 +3,7 @@ argument-hint: '[paths] [--no-report] [--no-verify]'
 disable-model-invocation: true
 name: code-simplify
 user-invocable: true
-description: This skill should be used when the user asks to "simplify code", "clean up code", "refactor for clarity", "reduce complexity", "improve readability", "make this easier to maintain", or asks to simplify recently modified code.
+description: 'Use for simplifying recently changed code: clean up, refactor for clarity, reduce complexity, improve readability, or maintainability.'
 ---
 
 # Code Simplify

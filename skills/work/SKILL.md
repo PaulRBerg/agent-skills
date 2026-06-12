@@ -3,7 +3,7 @@ argument-hint: <task>
 disable-model-invocation: true
 name: work
 user-invocable: true
-description: This skill should be run only when the user explicitly invokes it. Orchestrates end-to-end task implementation — understands the task, assesses complexity, implements directly or via a team of subagents for complex work, and always finishes with a code-polish pass.
+description: Run only on explicit invocation. Orchestrates end-to-end implementation, scales from direct work to subagents, and finishes with code-polish.
 ---
 
 # Work

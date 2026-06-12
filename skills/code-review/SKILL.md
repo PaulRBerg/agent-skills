@@ -3,7 +3,7 @@ argument-hint: '[paths] [--fix] [--skip-profile <name>]'
 disable-model-invocation: true
 name: code-review
 user-invocable: true
-description: This skill should be used when the user asks to "review code", "review PR", "code review", "audit code", "check for bugs", "security review", "review my changes", "find issues in this code", "review the diff", or asks for pull request review or code audit.
+description: Use for code/PR review, audits, bug/security checks, reviewing diffs or changes, and finding issues in code.
 ---
 
 # Code Review

@@ -29,11 +29,15 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 - `just` - list recipes.
 - `just mdformat-check` - check Markdown formatting with `mdformat-gfm` and `mdformat-frontmatter`.
 - `just mdformat-write` - format Markdown in place.
+- `just skill-invocation-check` - verify `SKILL.md` invocation fields match `agents/openai.yaml`.
+- `just skill-invocation-fix` - update `agents/openai.yaml` invocation policy from `SKILL.md`.
+- `just pre-commit` - run staged-file checks through `nlx lint-staged`.
+- `just hooks-install` - install Husky hooks for this checkout through `nlx husky`.
 - `just shelve <skill>` - require a clean worktree, move `skills/<skill>` to `shelved/<skill>`, and commit the move.
 - `just sync` - commit this repo, install skills into `~/.agents`, then commit installed changes there.
 - `just unshelve <skill>` - require a clean worktree, move `shelved/<skill>` to `skills/<skill>`, and commit the move.
 
-There is no package manifest or build step. Treat Markdown formatting and skill-specific helper scripts as the verification surface unless a task introduces a narrower check.
+`package.json` exists only for hook and lint-staged wiring; there is no build step. Treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the verification surface unless a task introduces a narrower check.
 
 ## Rules
 
@@ -51,22 +55,30 @@ There is no package manifest or build step. Treat Markdown formatting and skill-
 
 ## Codex Metadata
 
-Every skill must include `skills/<name>/agents/openai.yaml` with this policy:
+Reference: <https://developers.openai.com/codex/skills.md#optional-metadata>
+
+Every skill must include `skills/<name>/agents/openai.yaml` with invocation policy derived from `SKILL.md`:
 
 ```yaml
 policy:
   allow_implicit_invocation: false
 ```
 
-Why: this repo keeps Codex skills explicit-only. The skill set is broad, some skills run side-effect-heavy workflows, and implicit matching can surprise users or crowd the startup context. Users should invoke skills intentionally with `$skill-name` or the skill picker.
+Why: this repo currently keeps Codex skills explicit-only. The skill set is broad, some skills run side-effect-heavy workflows, and implicit matching can surprise users or crowd the startup context. Users should invoke skills intentionally with `$skill-name` or the skill picker.
 
-How: create an `agents/` directory next to `SKILL.md` and add `openai.yaml` with the policy above. If the file later needs UI metadata or tool dependencies, merge those fields into the same file; do not remove the policy.
+How: create an `agents/` directory next to `SKILL.md` and add `openai.yaml` with a `policy.allow_implicit_invocation` value equivalent to `SKILL.md`. If the file later needs UI metadata or tool dependencies, merge those fields into the same file; do not remove the policy.
+
+Codex `allow_implicit_invocation` defaults to `true`; when set to `false`, Codex will not choose the skill from the prompt, but explicit `$skill` invocation still works. The Claude-equivalent implicit-invocation gate is the inverse of `disable-model-invocation`.
+
+`SKILL.md` is authoritative for invocation policy. When changing `disable-model-invocation`, run `just skill-invocation-fix` to update `agents/openai.yaml` from the `SKILL.md` value.
 
 ## Skill Frontmatter
 
 Full reference: <https://code.claude.com/docs/en/skills>
 
 ### Invocation Control
+
+Reference: <https://code.claude.com/docs/en/skills#control-who-invokes-a-skill>
 
 Use these fields to control who can invoke a skill: the user, Claude, or both.
 
@@ -83,6 +95,8 @@ Combined behavior:
 | `disable-model-invocation: true` | Yes      | No                  | No                     |
 | `user-invocable: false`          | No       | Yes                 | Yes                    |
 | Both disabled                    | No       | No                  | No                     |
+
+For this repo's explicit-only policy, keep `disable-model-invocation: true` and `user-invocable: true` in `SKILL.md` whenever `agents/openai.yaml` has `allow_implicit_invocation: false`. Do not treat `user-invocable` as Codex's implicit-invocation equivalent; Claude documents it as slash-menu visibility, while `disable-model-invocation` controls whether Claude can load the skill automatically.
 
 ### Execution Context
 

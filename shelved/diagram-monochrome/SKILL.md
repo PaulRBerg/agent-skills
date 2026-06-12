@@ -1,5 +1,7 @@
 ---
+disable-model-invocation: true
 name: diagram-monochrome
+user-invocable: true
 description: This skill should be used when the user asks to create a monochrome technical diagram, schematic, or systems/architecture diagram in black-and-white line-art style. Trigger phrases include "create a diagram", "monochrome diagram", "systems diagram", "draw a schematic".
 ---
 

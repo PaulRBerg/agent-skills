@@ -3,7 +3,7 @@ argument-hint: <goal>
 disable-model-invocation: true
 name: autoresearch
 user-invocable: true
-description: This skill should be used when the user asks to "run autoresearch", "optimize X in a loop", "set up autonomous experiments", "start autoresearch", "optimize X overnight", or "experiment loop". Sets up and runs an autonomous experiment loop for any optimization target.
+description: Use for autoresearch, autonomous experiments, optimization loops, "optimize X overnight/in a loop", or "experiment loop"; sets up iterative trials for an optimization target.
 ---
 
 # Autoresearch

@@ -1,8 +1,8 @@
 ---
-disable-model-invocation: false
+disable-model-invocation: true
 name: coingecko-cli
-user-invocable: false
-description: This skill should be used when the user asks for crypto prices, market data, market cap, trending coins, historical or OHLC data, top gainers/losers, coin search, or mentions CoinGecko, the `cg` CLI, or the CoinGecko CLI.
+user-invocable: true
+description: 'Use for CoinGecko/cg CLI crypto market data: prices, market cap, trending coins, top gainers/losers, coin search, historical data, or OHLC.'
 ---
 
 # CoinGecko CLI

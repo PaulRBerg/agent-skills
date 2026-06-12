@@ -1,9 +1,9 @@
 ---
 argument-hint: '[<slug>] [--md]'
-disable-model-invocation: false
+disable-model-invocation: true
 name: debrief
 user-invocable: true
-description: "This skill should be used when the user asks to \"debrief\", \"debrief this task\", \"debrief the session\", \"save findings\", \"save analysis\", \"save this as a report\", \"create an HTML report from the transcript\", or wants to persist the current task's findings as a self-contained interactive HTML playground at `./.ai/debriefs/<slug>/index.html`. Flag: --md emits a plain Markdown report at `./.ai/debriefs/<slug>/index.md` and skips the playground dependency."
+description: "Use for debriefs or saved findings/reports from the current task. Creates `.ai/debriefs/<slug>/index.html`; `--md` writes `index.md` instead."
 ---
 
 # Debrief

@@ -1,0 +1,15 @@
+{
+  "name": "agent-skills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint-staged": "nlx lint-staged",
+    "prepare": "nlx husky",
+    "pre-commit": "just pre-commit"
+  },
+  "lint-staged": {
+    "**/*.md": "uvx --with mdformat-gfm --with mdformat-frontmatter mdformat",
+    "{skills,shelved}/*/{SKILL.md,agents/openai.yaml}": "bash -c 'just skill-invocation-check' --",
+    "scripts/sync-invocation-policy.mjs": "bash -c 'just skill-invocation-check' --"
+  }
+}

@@ -1,9 +1,9 @@
 ---
 argument-hint: "[file]"
-disable-model-invocation: false
+disable-model-invocation: true
 name: spreadsheets
 user-invocable: true
-description: This skill should be used when a CSV, TSV, or Excel (.xlsx) file is the primary input or output — reading, inspecting, cleaning, transforming, deduplicating, merging, validating, or converting tabular data; creating a spreadsheet from data or fixing a messy one; or recalculating formulas. Trigger phrases include "open this CSV", "clean this spreadsheet", "convert xlsx to TSV", "merge these CSVs", "sum by category", "make a spreadsheet". Do not trigger when tabular data is incidental to a non-spreadsheet deliverable.
+description: 'Use when CSV, TSV, or Excel (.xlsx) is the primary input/output: inspect, clean, transform, dedupe, merge, validate, convert, recalc formulas, or create/fix spreadsheets. Do not trigger when tabular data is incidental.'
 ---
 
 # Spreadsheets

@@ -90,3 +90,24 @@ alias mc := mdformat-check
 @mdformat-write:
     uvx --with mdformat-gfm --with mdformat-frontmatter mdformat .
 alias mw := mdformat-write
+
+[group("checks")]
+[doc("Check SKILL.md invocation fields against agents/openai.yaml")]
+skill-invocation-check:
+    node scripts/sync-invocation-policy.mjs
+alias sic := skill-invocation-check
+
+[group("checks")]
+[doc("Update agents/openai.yaml invocation policy from SKILL.md")]
+skill-invocation-fix:
+    node scripts/sync-invocation-policy.mjs --fix
+
+[group("checks")]
+[doc("Run staged-file checks")]
+pre-commit:
+    nlx lint-staged
+
+[group("checks")]
+[doc("Install Husky git hooks for this checkout")]
+hooks-install:
+    nlx husky

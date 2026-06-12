@@ -1,9 +1,9 @@
 ---
 argument-hint: <chain-name-or-id>
-disable-model-invocation: false
+disable-model-invocation: true
 name: evm-chains
 user-invocable: true
-description: This skill should be used when the user asks to resolve an EVM chain name or chain ID; find chain metadata such as a public RPC, native currency symbol, or block explorer URL; check RouteMesh support; enrich bridge, cross-chain swap, Bungee, or Socket transaction lookups; or read on-chain account data for any EVM chain via Etherscan API V2, Blockscout, or Chainscout — "check ETH balance", "query ERC-20 balance", "check token holdings", "fetch NFT transfers", ERC-721/ERC-1155 transfer history, "transaction history", "who funded this address", "trace fund origin". Also use it for chain resolution before fetching data from or interacting with an EVM chain.
+description: 'Use for EVM chain resolution and on-chain account data: chain name/ID, RPC/explorer/native symbol, RouteMesh, balances, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; bridge/cross-chain Bungee/Socket enrichment.'
 ---
 
 # EVM Chains
