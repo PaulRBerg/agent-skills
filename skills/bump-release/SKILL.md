@@ -1,5 +1,5 @@
 ---
-argument-hint: '[version] [--beta] [--dry-run]'
+argument-hint: '[packages...] [version] [--beta] [--dry-run]'
 disable-model-invocation: false
 effort: high
 model: opus
@@ -10,43 +10,72 @@ description: This skill should be used when the user asks to "bump release", "cu
 
 # Bump Release
 
-Support for both regular and beta releases.
+Support for both regular and beta releases, in single-package repos and monorepos. A single invocation may release one package or several.
 
 ## Parameters
 
-- `version`: Optional explicit version to use (e.g., `2.0.0`). When provided, skips automatic version inference
+- `packages`: Optional list of monorepo package directories or names to release (e.g., `evm evm-safe`). Omit in single-package repos
+- `version`: Optional explicit version to use (e.g., `2.0.0`). When provided, skips automatic version inference. Only valid when releasing a single package
 - `--beta`: Create a beta release with `-beta.X` suffix
 - `--dry-run`: Preview the release without making any changes (no file modifications, commits, or tags)
 
+## Repo Layout and Package Selection
+
+The user may run this skill in a single-package repo or in a monorepo (e.g., `~/projects/prb-effect`, whose workspaces include `evm`, `evm-safe`, `next`, `solana`, `xstate`), and may request releases for multiple packages at once (e.g., "bump evm and evm-safe").
+
+1. **Detect the layout** - A monorepo declares `workspaces` in the root `package.json` or ships a `pnpm-workspace.yaml`. Otherwise, treat the repo root as the only package
+2. **Resolve target packages** - In a monorepo, determine which packages to release in this order of precedence:
+   - Explicit `packages` arguments or package names in the user's prompt
+   - The current working directory, when it sits inside exactly one workspace package
+3. **Ask when unclear** - If the target set is ambiguous or unstated, do not guess. Use `AskUserQuestion` (multiSelect: true) listing the workspace packages so the user confirms which to release
+4. **Scope everything per package** - All file paths (`CHANGELOG.md`, `package.json`) are relative to each package directory. Compute changelog diffs against that package's own previous tag, restricted to files under the package directory. The `justfile` usually lives at the repo root
+
+## Dependent Packages
+
+Bumping one workspace package can force releases of others. After deciding the new version for each requested package:
+
+1. **Scan for dependents** - Check every other workspace package's `dependencies` and `peerDependencies` for the bumped package (e.g., `@prb/effect-evm-safe` declares `"@prb/effect-evm": "^2.0.0"`)
+2. **Range check** - If the new version still satisfies the declared range, the dependent needs no release. If it falls outside the range (e.g., `evm` goes `2.x` → `3.0.0` against `^2.0.0`), update the range and release the dependent too — even when the user did not name it
+3. **Pick the dependent's bump level** - A widened `dependencies` range is usually a patch. Raising a `peerDependencies` major is breaking for the dependent's consumers and usually warrants a major; confirm with `AskUserQuestion` when in doubt
+4. **Surface the cascade** - Include cascaded dependents in the release-plan confirmation so the user sees the full package set before any file is modified
+5. **Release in dependency order** - Process dependencies before dependents so each updated range points at an already-tagged version
+
 ## Steps
 
-0. **Locate the package** - The user may be in a monorepo where the package to release lives in a subdirectory. Look for `package.json` in the current working directory first; if not found, ask which package to release. All file paths (`CHANGELOG.md`, `package.json`, `justfile`) are relative to the package directory.
-1. Update the `CHANGELOG.md` file with all changes since the last version release (**skip this step for beta releases**).
-2. Bump the version in `package.json`:
+Run these steps once per target package, in dependency order:
+
+1. Update the package's `CHANGELOG.md` file with all changes since its last version release (**skip this step for beta releases**).
+2. Bump the version in the package's `package.json`:
    - **Regular release**: Follow semantic versioning (e.g., 1.2.3)
    - **Beta release**: Add `-beta.X` suffix (e.g., 1.2.3-beta.1)
 3. **Format files** - If a `justfile` exists in the repository, run `just full-write` to ensure `CHANGELOG.md` and `package.json` are properly formatted
-4. Commit the changes with a message like "docs: release <version>"
-5. Create a new git tag by running `git tag -a v<version> -m "<version>"`
+4. Commit the changes:
+   - **Single-package repo**: "docs: release <version>"
+   - **Monorepo**: "docs: release <package> <version>" — one commit per package
+5. Create a new git tag:
+   - **Single-package repo**: `git tag -a v<version> -m "<version>"`
+   - **Monorepo**: follow the repo's existing tag convention (inspect `git tag`); default to `<package-dir>@<version>` (e.g., `evm@1.3.1`) when none exists. One tag per package, pointing at that package's release commit
 
 **Note**: When `--dry-run` flag is provided, display what would be done without making any actual changes to files, creating commits, or tags.
 
 ## Process
 
-1. **Check for arguments** - Determine if `version` was provided, if this is a beta release (`--beta`), and/or dry-run (`--dry-run`)
+1. **Check for arguments** - Determine which `packages` were named (monorepo), if `version` was provided, if this is a beta release (`--beta`), and/or dry-run (`--dry-run`)
 
-2. **Check for clean working tree** - Run `git status --porcelain` to verify there are no uncommitted changes unrelated to this release. If there are, run the `commit` skill to commit them before proceeding
+2. **Resolve target packages** - Follow "Repo Layout and Package Selection" above. In a monorepo, ask via `AskUserQuestion` unless the user's prompt or working directory makes the target packages unambiguous
 
-3. **Write Changelog** - Examine diffs between the current branch and the previous tag to write Changelog. Then find
+3. **Check for clean working tree** - Run `git status --porcelain` to verify there are no uncommitted changes unrelated to this release. If there are, run the `commit` skill to commit them before proceeding
+
+4. **Write Changelog** - For each target package, examine diffs between the current branch and that package's previous tag (scoped to the package directory in a monorepo) to write its Changelog. Then find
    relevant PRs by looking at the commit history and add them to each changelog (when available). If `package.json` contains
    a `files` field, only include changes within those specified files/directories. If no `files` field exists, include all
    changes except test changes, CI/CD workflows, and development tooling
 
-4. **Follow format** - Consult `references/common-changelog.md` for the Common Changelog specification
+5. **Follow format** - Consult `references/common-changelog.md` for the Common Changelog specification
 
-5. **Check version** - Get current version from `package.json`
+6. **Check version** - Get the current version from each target package's `package.json`
 
-6. **Bump version** - If `version` argument provided, use it directly. Otherwise, if unchanged since last release, increment per Semantic Versioning rules:
+7. **Bump version** - If `version` argument provided (single-package release only), use it directly. Otherwise, for each target package, if unchanged since its last release, increment per Semantic Versioning rules:
 
    - **For regular releases**:
 
@@ -67,9 +96,11 @@ Support for both regular and beta releases.
      - options: list the plausible semver levels with their resulting version (e.g., "1.3.0 (minor)", "2.0.0 (major)")
      - multiSelect: false
 
-     Use the user's choice and skip step 7
+     Use the user's choice and skip step 9 for that package
 
-7. **Confirm version** - When the version was confidently inferred (no explicit `version` argument), use `AskUserQuestion` to confirm before proceeding:
+8. **Cascade to dependents** - Follow "Dependent Packages" above: scan the other workspace packages for `dependencies`/`peerDependencies` ranges that the new versions no longer satisfy, and add those packages to the release plan with updated ranges
+
+9. **Confirm version** - When the version was confidently inferred (no explicit `version` argument), use `AskUserQuestion` to confirm before proceeding:
 
    - header: "Version"
    - question: "Release `<current>` → `<inferred>`?"
@@ -79,7 +110,7 @@ Support for both regular and beta releases.
      - One alternative that is one semver level lower when possible (e.g., "1.2.4 (patch)")
    - multiSelect: false
 
-   If the user picks an alternative, use that version for the remaining steps. Skip this step when `--dry-run` is active (show the inferred version in the preview instead)
+   For multi-package releases, confirm the full plan instead: one question per package (max 4 per `AskUserQuestion` call), covering requested packages and cascaded dependents alike, so the user sees every package that will be released. If the user picks an alternative, use that version for the remaining steps. Skip this step when `--dry-run` is active (show the inferred versions in the preview instead)
 
 ## Beta Release Logic
 
@@ -129,6 +160,19 @@ For regular releases only (changelog generation is skipped for beta releases):
 
 # Preview what a beta release would do
 /bump-release --beta --dry-run
+```
+
+### Monorepo
+
+```bash
+# Release two workspace packages (e.g., in ~/projects/prb-effect)
+/bump-release evm evm-safe
+
+# Release one workspace package; cascade to dependents if their ranges break
+/bump-release evm
+
+# Preview a multi-package release
+/bump-release evm evm-safe --dry-run
 ```
 
 ### Explicit Version
