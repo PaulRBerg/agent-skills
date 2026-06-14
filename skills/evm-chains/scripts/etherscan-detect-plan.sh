@@ -63,8 +63,8 @@ case "$credit_limit" in
     ;;
 esac
 
-# Lite ($49/mo) unlocks all supported chains (Base, OP, Avalanche, BNB) while
-# Free does not. Probe a Base balance to disambiguate: status=1 → Lite,
+# Lite ($49/mo) unlocks the paid Etherscan target chains (Base, OP,
+# Avalanche, BNB) while Free does not. Probe a Base balance to disambiguate: status=1 → Lite,
 # status=0 → Free. PRO endpoints stay false on Lite (Standard plan and up).
 if [ "$plan" = "free_or_lite" ]; then
   probe=$(curl -fsS "$base?chainid=8453&module=account&action=balance&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&tag=latest&apikey=$ETHERSCAN_API_KEY" 2>/dev/null || printf '{"status":"0"}')

@@ -1,7 +1,7 @@
 #!/bin/bash
-# resolve-chain.sh — Resolve a chain_id to its Blockscout instance via Chainscout.
+# resolve-chain.sh — Resolve a target chain_id to its Blockscout instance via Chainscout.
 #
-# Usage: resolve-chain.sh <chain_id>
+# Usage: resolve-chain.sh <target_chain_id>
 #
 # Outputs key=value lines on stdout:
 #   chain_id=<int>
@@ -14,6 +14,7 @@
 #   rollup_type=<string|>
 #
 # No API key required. Source: https://chains.blockscout.com/
+# Scope is intentionally limited to skills/evm-chains/SKILL.md Target Mainnets.
 
 set -eu
 
@@ -23,6 +24,52 @@ if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
 fi
 
 chain_id="$1"
+
+target_name_pattern() {
+  case "$1" in
+    1) printf '%s\n' 'Ethereum' ;;
+    10) printf '%s\n' 'OP|Optimism' ;;
+    50) printf '%s\n' 'XDC' ;;
+    56) printf '%s\n' 'BNB|BSC|Smart Chain' ;;
+    100) printf '%s\n' 'Gnosis' ;;
+    130) printf '%s\n' 'Unichain' ;;
+    137) printf '%s\n' 'Polygon' ;;
+    143) printf '%s\n' 'Monad' ;;
+    146) printf '%s\n' 'Sonic' ;;
+    250) printf '%s\n' 'Fantom' ;;
+    324) printf '%s\n' 'ZKsync' ;;
+    999) printf '%s\n' 'HyperEVM|Hyper' ;;
+    1116) printf '%s\n' 'Core' ;;
+    1890) printf '%s\n' 'Lightlink|LightLink' ;;
+    2020) printf '%s\n' 'Ronin' ;;
+    2741) printf '%s\n' 'Abstract' ;;
+    2818) printf '%s\n' 'Morph' ;;
+    4689) printf '%s\n' 'IoTeX' ;;
+    5330) printf '%s\n' 'Superseed' ;;
+    8453) printf '%s\n' 'Base' ;;
+    88888) printf '%s\n' 'Chiliz' ;;
+    34443) printf '%s\n' 'Mode' ;;
+    42161) printf '%s\n' 'Arbitrum' ;;
+    42220) printf '%s\n' 'Celo' ;;
+    43114) printf '%s\n' 'Avalanche' ;;
+    50104) printf '%s\n' 'Sophon' ;;
+    59144) printf '%s\n' 'Linea' ;;
+    80094) printf '%s\n' 'Berachain' ;;
+    81457) printf '%s\n' 'Blast' ;;
+    534352) printf '%s\n' 'Scroll' ;;
+    7777777) printf '%s\n' 'Zora' ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+expected_pattern=$(target_name_pattern "$chain_id") || {
+  echo "Error: chain_id=$chain_id is outside the evm-chains target list." >&2
+  echo "Ask the user to file a feature request in https://github.com/PaulRBerg/agent-skills" >&2
+  exit 2
+}
+
 resp=$(curl -fsS "https://chains.blockscout.com/api/chains/$chain_id" 2>/dev/null) || {
   echo "Error: Chainscout request failed for chain_id=$chain_id" >&2
   exit 1
@@ -35,6 +82,11 @@ bval() { printf '%s' "$resp" | grep -oE "\"$1\":(true|false)" | head -1 | sed 's
 name=$(sval "name")
 if [ -z "$name" ]; then
   echo "Error: chain_id=$chain_id not found in Chainscout" >&2
+  exit 1
+fi
+if ! printf '%s' "$name" | grep -Eiq "$expected_pattern"; then
+  echo "Error: Chainscout returned name=$name for target chain_id=$chain_id; expected match=$expected_pattern" >&2
+  echo "Refusing to use a non-target Chainscout registry match." >&2
   exit 1
 fi
 

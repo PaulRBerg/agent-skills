@@ -1,108 +1,59 @@
-# Etherscan Supported Chains Reference
+# Etherscan Supported Target Chains Reference
 
 Source: <https://docs.etherscan.io/supported-chains>
-Live list: <https://api.etherscan.io/v2/chainlist> (returns the authoritative `chainid` set)
+Live list: <https://api.etherscan.io/v2/chainlist> (returns the provider's authoritative `chainid` set)
 
-Verified against the live `chainlist` endpoint (64 chains).
+Verified against the live `chainlist` endpoint on 2026-06-14 (64 provider chains). This file intentionally lists only chains from the `SKILL.md` target list; provider-supported chains outside that list are out of scope for this skill.
 
-## Major Mainnets (Free Tier Available)
+## Target Mainnets (Free Tier Available)
 
-| Chain            | Chain ID | Notes         |
-| ---------------- | -------- | ------------- |
-| Ethereum Mainnet | `1`      | Default chain |
-| Polygon Mainnet  | `137`    |               |
-| Arbitrum One     | `42161`  |               |
-| Linea Mainnet    | `59144`  |               |
-| Blast Mainnet    | `81457`  |               |
-| Mantle Mainnet   | `5000`   |               |
-| Unichain Mainnet | `130`    |               |
-| Moonbeam         | `1284`   |               |
-| Moonriver        | `1285`   |               |
-| Gnosis           | `100`    |               |
-| Celo Mainnet     | `42220`  |               |
-| Fraxtal Mainnet  | `252`    |               |
+| Chain     | Chain ID | Notes         |
+| --------- | -------- | ------------- |
+| Abstract  | `2741`   |               |
+| Arbitrum  | `42161`  |               |
+| Berachain | `80094`  |               |
+| Blast     | `81457`  |               |
+| Celo      | `42220`  |               |
+| Ethereum  | `1`      | Default chain |
+| Gnosis    | `100`    |               |
+| HyperEVM  | `999`    |               |
+| Linea     | `59144`  |               |
+| Monad     | `143`    |               |
+| Polygon   | `137`    |               |
+| Sei       | `1329`   |               |
+| Sonic     | `146`    |               |
+| Unichain  | `130`    |               |
+| XDC       | `50`     |               |
 
-## Free Tier NOT Available
+## Target Mainnets (Paid Plan Required)
 
-The following chains require a paid Etherscan plan for data endpoints (balances, transactions, logs, etc.). **Lite ($49/mo) is sufficient** — it grants access to every supported chain:
+The following target chains require a paid Etherscan plan for data endpoints (balances, transactions, logs, etc.). **Lite ($49/mo) is sufficient**; `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on every plan.
 
-| Chain                | Chain ID   |
-| -------------------- | ---------- |
-| Base Mainnet         | `8453`     |
-| Base Sepolia Testnet | `84532`    |
-| OP Mainnet           | `10`       |
-| OP Sepolia Testnet   | `11155420` |
-| Avalanche C-Chain    | `43114`    |
-| Avalanche Fuji       | `43113`    |
-| BNB Smart Chain      | `56`       |
-| BNB Testnet          | `97`       |
+| Chain     | Chain ID |
+| --------- | -------- |
+| Avalanche | `43114`  |
+| Base      | `8453`   |
+| BNB Chain | `56`     |
+| Optimism  | `10`     |
 
-**Exception:** `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on **all** chains for **every** plan, including the free tier. The paid-plan requirement above applies only to data endpoints.
+## Target Mainnets Not on Etherscan V2
 
-## Other Mainnets (Free Tier Available)
+Route these target chains to Blockscout when available, then to the target table's public RPC if needed. Do not query Etherscan V2 for them.
 
-| Chain            | Chain ID |
-| ---------------- | -------- |
-| Abstract         | `2741`   |
-| ApeChain         | `33139`  |
-| Berachain        | `80094`  |
-| BitTorrent Chain | `199`    |
-| HyperEVM         | `999`    |
-| Katana           | `747474` |
-| MegaETH          | `4326`   |
-| Memecore         | `4352`   |
-| Monad            | `143`    |
-| opBNB            | `204`    |
-| Plasma           | `9745`   |
-| Sei              | `1329`   |
-| Sonic            | `146`    |
-| Stable           | `988`    |
-| Taiko            | `167000` |
-| World            | `480`    |
-| XDC              | `50`     |
+| Chain      | Chain ID  | Notes                                   |
+| ---------- | --------- | --------------------------------------- |
+| Chiliz     | `88888`   | Not returned by the live chainlist      |
+| Core Dao   | `1116`    | Not returned by the live chainlist      |
+| Fantom     | `250`     | Not returned by the live chainlist      |
+| IoTeX      | `4689`    | Not returned by the live chainlist      |
+| Lightlink  | `1890`    | Not returned by the live chainlist      |
+| Mode       | `34443`   | Not returned by the live chainlist      |
+| Morph      | `2818`    | Not returned by the live chainlist      |
+| Ronin      | `2020`    | Not returned by the live chainlist      |
+| Scroll     | `534352`  | Removed from Etherscan V2 on 2026-04-16 |
+| Sophon     | `50104`   | Not returned by the live chainlist      |
+| Superseed  | `5330`    | Not returned by the live chainlist      |
+| ZKsync Era | `324`     | Not currently supported by Etherscan V2 |
+| Zora       | `7777777` | Not returned by the live chainlist      |
 
-## Testnets (Free Tier Available)
-
-| Chain                        | Chain ID    |
-| ---------------------------- | ----------- |
-| Sepolia                      | `11155111`  |
-| Hoodi                        | `560048`    |
-| Abstract Sepolia             | `11124`     |
-| ApeChain Curtis              | `33111`     |
-| Arbitrum Sepolia             | `421614`    |
-| Berachain Bepolia            | `80069`     |
-| BitTorrent Testnet           | `1029`      |
-| Blast Sepolia                | `168587773` |
-| Celo Sepolia                 | `11142220`  |
-| Fraxtal Hoodi                | `2523`      |
-| Katana Bokuto                | `737373`    |
-| Linea Sepolia                | `59141`     |
-| Mantle Sepolia               | `5003`      |
-| MegaETH Testnet              | `6343`      |
-| Memecore Insectarium Testnet | `43522`     |
-| Monad Testnet                | `10143`     |
-| Moonbase Alpha               | `1287`      |
-| opBNB Testnet                | `5611`      |
-| Plasma Testnet               | `9746`      |
-| Polygon Amoy                 | `80002`     |
-| Sei Testnet                  | `1328`      |
-| Sonic Testnet                | `14601`     |
-| Stable Testnet               | `2201`      |
-| Taiko Hoodi                  | `167013`    |
-| Unichain Sepolia             | `1301`      |
-| World Sepolia                | `4801`      |
-| XDC Apothem                  | `51`        |
-
-## Recently Removed / Deprecated
-
-These chains were previously supported but **API requests will fail** on the V2 endpoint as of the dates noted:
-
-| Chain                              | Chain ID | Deprecated                         |
-| ---------------------------------- | -------- | ---------------------------------- |
-| Scroll Mainnet                     | `534352` | Apr 16, 2026                       |
-| Scroll Sepolia                     | `534351` | Apr 16, 2026                       |
-| Swell Mainnet                      | `1923`   | Feb 25, 2026                       |
-| Swell Testnet                      | `1924`   | Feb 25, 2026                       |
-| MemeCore Formicarium Testnet (old) | `43521`  | Feb 25, 2026 (migrated to `43522`) |
-
-The following chains are **not currently supported** on Etherscan V2 and were never part of the V2 unified API: Holesky, zkSync Era (`324`), zkSync Sepolia (`300`), Arbitrum Nova (`42170`). If a user references these, route them to a chain-native explorer or try Blockscout (`./blockscout-api.md`) instead.
+Testnets are outside this skill's target list. If the user asks about any non-target chain, ask them to file a feature request in <https://github.com/PaulRBerg/agent-skills>.

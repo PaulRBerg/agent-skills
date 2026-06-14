@@ -2,7 +2,7 @@
 
 ## Overview
 
-Use Bungee as a read-only enrichment source for bridge transactions, cross-chain swaps, and Socket/Bungee route status. Bungee can connect the source transaction to destination execution, route metadata, and refund details, but it does not replace explorer, RPC, or receipt verification.
+Use Bungee as a read-only enrichment source for bridge transactions, cross-chain swaps, and Socket/Bungee route status after the known origin and destination chains are confirmed against `SKILL.md` [Target Mainnets](../SKILL.md#target-mainnets). Bungee can connect the source transaction to destination execution, route metadata, and refund details, but it does not replace explorer, RPC, or receipt verification.
 
 Default to the public sandbox API:
 
@@ -21,7 +21,7 @@ The public sandbox is shared and rate-limited. On rate-limit responses or 5xx er
 
 ## Lookup Router
 
-Use this router when the user mentions bridging, bridge tx, cross-chain swap, Bungee, Socket, or the transaction looks bridge-related from logs, counterparties, calldata, or token movement.
+Use this router when the user mentions bridging, bridge tx, cross-chain swap, Bungee, Socket, or the transaction looks bridge-related from logs, counterparties, calldata, or token movement. If Bungee returns an origin, destination, or refund chain outside the target list, report that the non-target leg is outside this skill and ask for a feature request rather than continuing analysis on that leg.
 
 1. **Known source tx hash:** query `GET /api/v1/bungee/status?txHash=<hash>`.
 2. **Known Bungee Auto request hash:** query `GET /api/v1/bungee/status?requestHash=<hash>`.

@@ -10,7 +10,7 @@ Query blockchain data across any EVM chain that Blockscout indexes. Blockscout e
 
 This skill covers read-only account/address queries: native balance, ERC-20/721/1155 holdings and transfers, transaction history, and first-funding tracing.
 
-**Relationship to Etherscan (`./etherscan-api.md`):** Same problem space, different explorer. Prefer Blockscout when the chain is **not** on Etherscan, when you want full token holdings on the free tier, or when the user names Blockscout/Chainscout. The two surfaces are interchangeable for native-balance and transfer queries.
+**Relationship to Etherscan (`./etherscan-api.md`):** Same problem space, different explorer. Prefer Blockscout when the target chain is **not** on Etherscan, when a paid Etherscan target chain needs free-tier data, when you want full token holdings on the free tier, or when the user names Blockscout/Chainscout. The two surfaces are interchangeable for native-balance and transfer queries.
 
 ## Prerequisites
 
@@ -68,7 +68,7 @@ Decide per query:
 | Porting existing Etherscan **V2** code (minimal diff)                  | **Etherscan-V2 alias** `https://api.blockscout.com/v2/api?chain_id={id}&module=...` |
 | Chain returns `404` on the PRO host, or no key available               | **Per-instance** `https://{instance}/api/v2/...` (no key) — resolve via Chainscout  |
 
-The PRO host fronts major Blockscout-hosted chains but **not all** of them — e.g., Flare `14` returns `404` on the PRO host yet is reachable per-instance (resolve via Chainscout). On any `404`, fall back to the per-instance host. If the chain is also absent from Chainscout (e.g., BNB `56`, Kaia `8217`, Abstract `2741` at time of writing), it isn't Blockscout-indexed — use another explorer such as Etherscan (`./etherscan-api.md`).
+The PRO host fronts major Blockscout-hosted target chains but **not all** of them. On any `404`, fall back to the per-instance host resolved through `./scripts/resolve-chain.sh`. If the target chain is absent from Chainscout, use Etherscan (`./etherscan-api.md`) or the target table's public RPC. If the requested chain is not in `SKILL.md` [Target Mainnets](../SKILL.md#target-mainnets), stop and ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
 
 ## Chain Resolution
 
@@ -77,7 +77,7 @@ Do **not** default to Ethereum Mainnet. Infer the chain from the prompt first (s
 Two-step resolution:
 
 1. **Name → `chain_id`** — use the chain tables in `SKILL.md`.
-2. **`chain_id` → instance URL** (only needed for the per-instance route) — use Chainscout:
+2. **`chain_id` -> instance URL** (only needed for the per-instance route) — use the target-gated Chainscout helper:
 
 ```bash
 ./scripts/resolve-chain.sh 100
@@ -94,7 +94,7 @@ layer=1
 rollup_type=
 ```
 
-`hosted_by=blockscout` indicates the chain is a candidate for the PRO host; community-hosted chains (`hosted_by` other than `blockscout`) are per-instance only. Chainscout indexes 1000+ networks — see `./references/blockscout-chains.md`.
+`hosted_by=blockscout` indicates the chain is a candidate for the PRO host; community-hosted chains (`hosted_by` other than `blockscout`) are per-instance only. Chainscout indexes many networks, but this skill only uses target chains — see `./references/blockscout-chains.md`.
 
 ## Authentication
 
@@ -280,17 +280,17 @@ If the user requests JSON/CSV/plain text, use that instead.
 
 ## Error Handling
 
-| Symptom                              | Cause / Action                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `401 {"error":"Unauthorized"}`       | Missing/invalid key on PRO host. Set `$BLOCKSCOUT_API_KEY` or use per-instance host. |
-| `404` on `api.blockscout.com/{id}/…` | Chain not on PRO host. Resolve instance via Chainscout, use per-instance host.       |
-| `429` / `x-ratelimit-remaining: 0`   | Rate limited. Back off until `x-ratelimit-reset` (seconds).                          |
-| `503`                                | Transient PRO-host hiccup. Retry; if persistent, use per-instance.                   |
-| Compat `{"status":"0", …}`           | Etherscan-shaped error (`No transactions found`, bad address, etc.).                 |
+| Symptom                              | Cause / Action                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `401 {"error":"Unauthorized"}`       | Missing/invalid key on PRO host. Set `$BLOCKSCOUT_API_KEY` or use per-instance host.  |
+| `404` on `api.blockscout.com/{id}/…` | Target chain not on PRO host. Resolve instance via Chainscout, use per-instance host. |
+| `429` / `x-ratelimit-remaining: 0`   | Rate limited. Back off until `x-ratelimit-reset` (seconds).                           |
+| `503`                                | Transient PRO-host hiccup. Retry; if persistent, use per-instance.                    |
+| Compat `{"status":"0", …}`           | Etherscan-shaped error (`No transactions found`, bad address, etc.).                  |
 
 ## Reference Files
 
-- **`./references/blockscout-chains.md`** — Chainscout registry usage and a curated common-chain table.
+- **`./references/blockscout-chains.md`** — Target-gated Chainscout registry usage and target-chain observations.
 - **`./references/blockscout-endpoints.md`** — full native v2 endpoint catalog, compat action list, and per-endpoint credit costs.
 - **`./scripts/blockscout-detect-plan.sh`** — header-based plan/credit detection (run once per session).
 - **`./scripts/resolve-chain.sh`** — `chain_id` → Blockscout instance URL via Chainscout.

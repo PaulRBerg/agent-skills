@@ -8,7 +8,7 @@ Query blockchain data using Etherscan's unified API V2. This skill covers:
 - ERC-20 token balance queries (single contract on every plan; full holdings on PRO)
 - Transaction history queries (normal, internal, ERC-20/ERC-721/ERC-1155 transfers)
 - First-funding lookup for an address (PRO `fundedby` with a 2-call free-tier fallback)
-- Multi-chain support via the `chainid` parameter
+- Target-chain support via the `chainid` parameter
 - Auto-detection of Free vs Lite vs PRO so paid-only chains and PRO-only endpoints are used when available
 - Token reputation availability: Etherscan exposes this only through paid metadata surfaces, not Lite
 
@@ -93,27 +93,27 @@ Do not default to Ethereum Mainnet. Always infer the chain from the user's promp
    - SEI → Sei (1329)
    - MON → Monad (143)
 3. **Contract address patterns** — If the user provides a contract address, consider asking which chain it's deployed on (many contracts exist on multiple chains).
-4. **Testnet keywords** — Words like "testnet", "Sepolia", "Hoodi", "Amoy" indicate testnet chains.
+4. **Testnet keywords** — Testnets are outside this skill's target list. Ask the user to file a feature request instead of querying them.
 5. **Ambiguous cases** — If the chain cannot be inferred, **ask the user** before proceeding. Do not assume Ethereum Mainnet.
 
 ### Unsupported Chains
 
-If the user references an **EVM chain** that Etherscan API V2 does not cover (e.g., a niche L2 or appchain not in `./references/etherscan-chains.md`), do **not** halt. For chains Etherscan doesn't serve, prefer Blockscout (`./blockscout-api.md`) before direct RPC. If Blockscout doesn't index the chain either, fall back to direct RPC calls against the chain's default public RPC:
+If the user references a chain that is not in `SKILL.md` [Target Mainnets](../SKILL.md#target-mainnets), halt and ask them to file a feature request in <https://github.com/PaulRBerg/agent-skills>. Do not query Etherscan, Blockscout, Bungee, Chainlist, web search, or public RPCs for non-target chains.
+
+If the user references a **target EVM chain** that Etherscan API V2 does not cover, do **not** halt. Prefer Blockscout (`./blockscout-api.md`) before direct RPC. If Blockscout doesn't index the target chain either, fall back to direct RPC calls against the target chain's default public RPC:
 
 1. Resolve the chain via the tables in `SKILL.md` to get the default public RPC, chain ID, native currency symbol, and explorer URL.
 2. Issue equivalent JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against that RPC using `curl` or the `cast` CLI from the `cli-cast` skill.
 3. Note in the response that the data came from the chain's public RPC, not Etherscan, so PRO-style aggregations (full token holdings, first-funding lookup) are unavailable and must be derived manually from logs/transactions if needed.
 
-If the user references a **non-EVM chain** (e.g., Solana, Bitcoin, Cosmos), inform them — no RPC fallback applies:
+If the user references a **non-EVM chain**, do not use this skill:
 
 ```
-The chain "[chain name]" is not supported by Etherscan API V2.
-
-Etherscan supports EVM-compatible chains only. For the full list, see:
-https://docs.etherscan.io/supported-chains
+The chain "[chain name]" is outside the evm-chains target list.
+Please file a feature request in https://github.com/PaulRBerg/agent-skills.
 ```
 
-For the complete list of Etherscan-supported chains and their IDs, see `./references/etherscan-chains.md`.
+For the target-filtered list of Etherscan-supported chains and their IDs, see `./references/etherscan-chains.md`.
 
 ## API Base URL
 
@@ -379,7 +379,7 @@ Same parameter shape — swap `action=token1155tx`. ERC-1155 differs from ERC-72
 
 ### Cost & Limits
 
-Standard list-endpoint pricing — 1 credit per call, same rate-limit tier as `txlist`. Not a PRO endpoint; available on Free and Lite for all supported chains (paid-chain restriction still applies to Base/OP/Avalanche/BNB).
+Standard list-endpoint pricing — 1 credit per call, same rate-limit tier as `txlist`. Not a PRO endpoint; available on Free and Lite for Etherscan-supported target chains (paid-chain restriction still applies to Base/OP/Avalanche/BNB).
 
 ## First Funding Transaction
 
@@ -457,17 +457,25 @@ The funding tx is whichever match has the lower `blockNumber`; break ties by `tr
 
 Specify the `chainid` parameter to query different blockchains.
 
-### Common Chain IDs (Free Tier)
+### Target Chain IDs (Free Tier)
 
-| Chain        | Chain ID |
-| ------------ | -------- |
-| Ethereum     | `1`      |
-| Polygon      | `137`    |
-| Arbitrum One | `42161`  |
-| Linea        | `59144`  |
-| Blast        | `81457`  |
-| Unichain     | `130`    |
-| Mantle       | `5000`   |
+| Chain     | Chain ID |
+| --------- | -------- |
+| Abstract  | `2741`   |
+| Arbitrum  | `42161`  |
+| Berachain | `80094`  |
+| Blast     | `81457`  |
+| Celo      | `42220`  |
+| Ethereum  | `1`      |
+| Gnosis    | `100`    |
+| HyperEVM  | `999`    |
+| Linea     | `59144`  |
+| Monad     | `143`    |
+| Polygon   | `137`    |
+| Sei       | `1329`   |
+| Sonic     | `146`    |
+| Unichain  | `130`    |
+| XDC       | `50`     |
 
 ### Example: Polygon Query
 
@@ -475,7 +483,7 @@ Specify the `chainid` parameter to query different blockchains.
 curl -s "https://api.etherscan.io/v2/api?chainid=137&module=account&action=balance&address=0x...&tag=latest&apikey=$ETHERSCAN_API_KEY"
 ```
 
-For the complete list of supported chains, see `./references/etherscan-chains.md`.
+For the target-filtered list of supported chains, see `./references/etherscan-chains.md`.
 
 ## Wei to Human-Readable Conversion
 
@@ -526,22 +534,18 @@ Decisions in this section depend on the cached output of `./scripts/etherscan-de
 
 ### Paid-Only Chains
 
-Four chain families (8 chains total, mainnet + testnet) require any paid Etherscan plan. **Lite ($49/mo) is sufficient** — it grants access to every supported chain at the same 100,000 daily-credit limit as Free. Data endpoints (balance, txlist, logs, etc.) fail only when `plan=free` (i.e., `paid_chains=false`):
+Four target mainnets require any paid Etherscan plan. **Lite ($49/mo) is sufficient** — it grants access to every Etherscan-supported target chain at the same 100,000 daily-credit limit as Free. Data endpoints (balance, txlist, logs, etc.) fail only when `plan=free` (i.e., `paid_chains=false`):
 
-| Chain             | Chain ID   |
-| ----------------- | ---------- |
-| Base Mainnet      | `8453`     |
-| Base Sepolia      | `84532`    |
-| OP Mainnet        | `10`       |
-| OP Sepolia        | `11155420` |
-| Avalanche C-Chain | `43114`    |
-| Avalanche Fuji    | `43113`    |
-| BNB Smart Chain   | `56`       |
-| BNB Testnet       | `97`       |
+| Chain             | Chain ID |
+| ----------------- | -------- |
+| Base Mainnet      | `8453`   |
+| OP Mainnet        | `10`     |
+| Avalanche C-Chain | `43114`  |
+| BNB Smart Chain   | `56`     |
 
 **Exception:** `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on **all** chains for every plan including free. The paid-plan requirement applies only to data endpoints.
 
-If `paid_chains=false` (i.e., `plan=free`) and the user requests a data query on the chains above, halt and inform them upgrading to Lite or higher is required.
+If `paid_chains=false` (i.e., `plan=free`) and the user requests a data query on the chains above, route to Blockscout (`./blockscout-api.md`) before direct RPC. Only mention upgrading to Lite or higher if the user specifically needs Etherscan as the source.
 
 ### PRO-Only Endpoints
 
@@ -567,13 +571,13 @@ Etherscan's token reputation badges are **not available on Lite**. The documente
 | Metadata CSV export  | `module=nametag&action=exportaddresstags` | Enterprise   | Bulk export; `other_attributes` can include `TR` token reputation values.                        |
 | Token info           | `module=token&action=tokeninfo`           | Standard     | Returns project/social metadata and `blueCheckmark`, but not the token reputation badge.         |
 
-Do not tell Lite users they can fetch token reputation from Etherscan API. Lite only unlocks all supported chains and higher community rate limits; it does not unlock API Pro endpoints, Pro Plus address metadata, or Enterprise metadata CSV exports.
+Do not tell Lite users they can fetch token reputation from Etherscan API. Lite only unlocks paid Etherscan target chains and higher community rate limits; it does not unlock API Pro endpoints, Pro Plus address metadata, or Enterprise metadata CSV exports.
 
 ### All Plans
 
-All other supported chains — Ethereum, Polygon, Arbitrum One, Linea, Blast, Mantle, Unichain, Gnosis, Celo, Fraxtal, Moonbeam, Moonriver, opBNB, Sonic, Sei, Monad, Berachain, Abstract, ApeChain, World, Katana, HyperEVM, MegaETH, Memecore, Plasma, Stable, Taiko, BitTorrent, XDC, and their testnets — are available on every plan including Free. On Lite and higher, the paid-only chains above also become available.
+All other Etherscan-supported target chains — Abstract, Arbitrum, Berachain, Blast, Celo, Ethereum, Gnosis, HyperEVM, Linea, Monad, Polygon, Sei, Sonic, Unichain, and XDC — are available on every plan including Free. On Lite and higher, the paid-only target chains above also become available.
 
-See `./references/etherscan-chains.md` for the full list with chain IDs.
+See `./references/etherscan-chains.md` for the target-filtered list with chain IDs.
 
 ## Error Handling
 
@@ -603,7 +607,7 @@ If rate limited, wait briefly and retry.
 
 ## Reference Files
 
-- **`./references/etherscan-chains.md`** - Complete list of supported chains with chain IDs
+- **`./references/etherscan-chains.md`** - Target-filtered list of supported chains with chain IDs
 - **`./scripts/etherscan-detect-plan.sh`** - Plan-tier detection helper (run once per session)
 
 ## Fallback Documentation
