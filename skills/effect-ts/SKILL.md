@@ -31,6 +31,11 @@ Last checked against `~/.effect` HEAD `05d72eab7` from 2026-06-05:
 - `@effect/rpc@0.75.1`
 - `@effect/cluster@0.59.0`
 
+Your local `~/.effect` checkout need not match these exact versions. Drift is expected and fine **as long as the major
+versions match**. For `effect` that means the `3.x` line. For the `0.x` `@effect/*` packages, semver treats the leading
+non-zero segment as the break boundary, so match the minor too (e.g. `@effect/ai@0.36.x`). Patch differences, and minor
+differences on stable packages, won't invalidate this skill's guidance; only a break-boundary bump warrants caution.
+
 If `git -C ~/.effect log -1 --oneline` is newer, inspect the touched package changelogs and commits before relying on
 this skill. Capture public API or guidance changes in a reference file.
 
