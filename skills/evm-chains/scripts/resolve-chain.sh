@@ -50,6 +50,7 @@ target_name_pattern() {
     88888) printf '%s\n' 'Chiliz' ;;
     34443) printf '%s\n' 'Mode' ;;
     42161) printf '%s\n' 'Arbitrum' ;;
+    42170) printf '%s\n' 'Arbitrum Nova' ;;
     42220) printf '%s\n' 'Celo' ;;
     43114) printf '%s\n' 'Avalanche' ;;
     50104) printf '%s\n' 'Sophon' ;;
