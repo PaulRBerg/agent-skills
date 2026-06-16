@@ -1,0 +1,39 @@
+{
+  "aliases": [
+    {
+      "alias": "mainnet",
+      "chainName": "Ethereum",
+      "chainId": 1
+    },
+    {
+      "alias": "op",
+      "chainName": "Optimism",
+      "chainId": 10
+    },
+    {
+      "alias": "bsc",
+      "chainName": "BNB Chain",
+      "chainId": 56
+    },
+    {
+      "alias": "worldchain",
+      "chainName": "World Chain",
+      "chainId": 480
+    },
+    {
+      "alias": "hyperevm",
+      "chainName": "HyperEVM",
+      "chainId": 999
+    },
+    {
+      "alias": "coreDao",
+      "chainName": "Core Dao",
+      "chainId": 1116
+    },
+    {
+      "alias": "zksync",
+      "chainName": "ZKsync Era",
+      "chainId": 324
+    }
+  ]
+}

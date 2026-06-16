@@ -14,7 +14,7 @@
 #   rollup_type=<string|>
 #
 # No API key required. Source: https://chains.blockscout.com/
-# Scope is intentionally limited to skills/evm-chains/SKILL.md Target Mainnets.
+# Scope is intentionally limited to skills/evm-chains/references/target-mainnets.json.
 
 set -eu
 

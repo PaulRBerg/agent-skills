@@ -1,0 +1,24 @@
+{
+  "paths": [
+    {
+      "resource": "address",
+      "path": "/address/<addr>",
+      "example": "https://arbiscan.io/address/0xabc..."
+    },
+    {
+      "resource": "transaction",
+      "path": "/tx/<hash>",
+      "example": "https://etherscan.io/tx/0x123..."
+    },
+    {
+      "resource": "block",
+      "path": "/block/<number>",
+      "example": "https://basescan.org/block/12345678"
+    },
+    {
+      "resource": "token",
+      "path": "/token/<addr>",
+      "example": "https://polygonscan.com/token/0xdef..."
+    }
+  ]
+}

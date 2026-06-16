@@ -98,11 +98,11 @@ Do not default to Ethereum Mainnet. Always infer the chain from the user's promp
 
 ### Unsupported Chains
 
-If the user references a chain that is not in `SKILL.md` [Target Mainnets](../SKILL.md#target-mainnets), halt and ask them to file a feature request in <https://github.com/PaulRBerg/agent-skills>. Do not query Etherscan, Blockscout, Bungee, Chainlist, web search, or public RPCs for non-target chains.
+If the user references a chain that is not in `./references/target-mainnets.json`, halt and ask them to file a feature request in <https://github.com/PaulRBerg/agent-skills>. Do not query Etherscan, Blockscout, Bungee, Chainlist, web search, or public RPCs for non-target chains.
 
 If the user references a **target EVM chain** that Etherscan API V2 does not cover, do **not** halt. Prefer Blockscout (`./blockscout-api.md`) before direct RPC. If Blockscout doesn't index the target chain either, fall back to direct RPC calls against the target chain's default public RPC:
 
-1. Resolve the chain via the tables in `SKILL.md` to get the default public RPC, chain ID, native currency symbol, and explorer URL.
+1. Resolve the chain via `./references/target-mainnets.json` and `./references/chain-aliases.json` to get the default public RPC, chain ID, native currency symbol, and explorer URL.
 2. Issue equivalent JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against that RPC using `curl` or the `cast` CLI from the `cli-cast` skill.
 3. Note in the response that the data came from the chain's public RPC, not Etherscan, so PRO-style aggregations (full token holdings, first-funding lookup) are unavailable and must be derived manually from logs/transactions if needed.
 

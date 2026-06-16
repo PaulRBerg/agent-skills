@@ -1,6 +1,6 @@
 # Target Chains & Chainscout
 
-Blockscout and Chainscout index many EVM networks, but this skill only uses them for chains in `SKILL.md` [Target Mainnets](../SKILL.md#target-mainnets). Do not use Chainscout to expand scope. If a requested chain is not in the target table, ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
+Blockscout and Chainscout index many EVM networks, but this skill only uses them for chains in `./references/target-mainnets.json`. Do not use Chainscout to expand scope. If a requested chain is not in that JSON file, ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
 
 ## Chainscout API
 
@@ -30,11 +30,11 @@ Single-chain response shape:
 - `blockscout` — Blockscout-operated; candidate for the unified PRO host (`api.blockscout.com/{chain_id}/...`). Still confirm with a live call — not every hosted target chain is fronted by the PRO host.
 - anything else — community-operated. Per-instance only; use `explorers[].url` directly (no key).
 
-Use `./scripts/resolve-chain.sh <chain_id>` to extract these fields as `key=value` lines. The helper refuses non-target chain IDs and rejects Chainscout responses whose name does not match the target chain. For **name -> `chain_id`**, use the target table in `SKILL.md` first.
+Use `./scripts/resolve-chain.sh <chain_id>` to extract these fields as `key=value` lines. The helper refuses non-target chain IDs and rejects Chainscout responses whose name does not match the target chain. For **name -> `chain_id`**, use `./references/target-mainnets.json` and `./references/chain-aliases.json` first.
 
 ## Target Chains Observed in Chainscout
 
-Observed on 2026-06-14. Presence here does not override the target table's canonical explorer/RPC metadata.
+Observed on 2026-06-14. Presence here does not override the canonical explorer/RPC metadata in `./references/target-mainnets.json`.
 
 | Chain         | `chain_id` | Native | Hosted by  | Instance URL                                     | Notes                                             |
 | ------------- | ---------- | ------ | ---------- | ------------------------------------------------ | ------------------------------------------------- |
@@ -60,7 +60,7 @@ Observed on 2026-06-14. Presence here does not override the target table's canon
 
 ## Target Chains Absent or Unsafe in Chainscout
 
-Use Etherscan or the target table's public RPC/explorer for these.
+Use Etherscan or the public RPC/explorer in `./references/target-mainnets.json` for these.
 
 | Chain     | `chain_id` | Notes                                             |
 | --------- | ---------- | ------------------------------------------------- |

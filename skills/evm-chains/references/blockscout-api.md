@@ -68,7 +68,7 @@ Decide per query:
 | Porting existing Etherscan **V2** code (minimal diff)                  | **Etherscan-V2 alias** `https://api.blockscout.com/v2/api?chain_id={id}&module=...` |
 | Chain returns `404` on the PRO host, or no key available               | **Per-instance** `https://{instance}/api/v2/...` (no key) — resolve via Chainscout  |
 
-The PRO host fronts major Blockscout-hosted target chains but **not all** of them. On any `404`, fall back to the per-instance host resolved through `./scripts/resolve-chain.sh`. If the target chain is absent from Chainscout, use Etherscan (`./etherscan-api.md`) or the target table's public RPC. If the requested chain is not in `SKILL.md` [Target Mainnets](../SKILL.md#target-mainnets), stop and ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
+The PRO host fronts major Blockscout-hosted target chains but **not all** of them. On any `404`, fall back to the per-instance host resolved through `./scripts/resolve-chain.sh`. If the target chain is absent from Chainscout, use Etherscan (`./etherscan-api.md`) or the `primaryPublicRpc` from `./references/target-mainnets.json`. If the requested chain is not in `./references/target-mainnets.json`, stop and ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
 
 ## Chain Resolution
 
@@ -76,7 +76,7 @@ Do **not** default to Ethereum Mainnet. Infer the chain from the prompt first (s
 
 Two-step resolution:
 
-1. **Name → `chain_id`** — use the chain tables in `SKILL.md`.
+1. **Name → `chain_id`** — use `./references/target-mainnets.json` and `./references/chain-aliases.json`.
 2. **`chain_id` -> instance URL** (only needed for the per-instance route) — use the target-gated Chainscout helper:
 
 ```bash

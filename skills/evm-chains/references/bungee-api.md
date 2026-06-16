@@ -2,7 +2,7 @@
 
 ## Overview
 
-Use Bungee as a read-only enrichment source for bridge transactions, cross-chain swaps, and Socket/Bungee route status after the known origin and destination chains are confirmed against `SKILL.md` [Target Mainnets](../SKILL.md#target-mainnets). Bungee can connect the source transaction to destination execution, route metadata, and refund details, but it does not replace explorer, RPC, or receipt verification.
+Use Bungee as a read-only enrichment source for bridge transactions, cross-chain swaps, and Socket/Bungee route status after the known origin and destination chains are confirmed against `./references/target-mainnets.json`. Bungee can connect the source transaction to destination execution, route metadata, and refund details, but it does not replace explorer, RPC, or receipt verification.
 
 Default to the public sandbox API:
 

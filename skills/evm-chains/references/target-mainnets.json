@@ -1,0 +1,310 @@
+{
+  "chains": [
+    {
+      "chainName": "Abstract",
+      "chainId": 2741,
+      "slug": "abstract",
+      "primaryPublicRpc": "https://api.mainnet.abs.xyz",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://abscan.org",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Arbitrum",
+      "chainId": 42161,
+      "slug": "arbitrum",
+      "primaryPublicRpc": "https://arb1.arbitrum.io/rpc",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://arbiscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Arbitrum Nova",
+      "chainId": 42170,
+      "slug": "arbitrum-nova",
+      "primaryPublicRpc": "https://nova.arbitrum.io/rpc",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://arbitrum-nova.blockscout.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Avalanche",
+      "chainId": 43114,
+      "slug": "avalanche",
+      "primaryPublicRpc": "https://api.avax.network/ext/bc/C/rpc",
+      "nativeCurrencySymbol": "AVAX",
+      "explorerUrl": "https://snowscan.xyz",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Base",
+      "chainId": 8453,
+      "slug": "base",
+      "primaryPublicRpc": "https://mainnet.base.org",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://basescan.org",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Berachain",
+      "chainId": 80094,
+      "slug": "berachain",
+      "primaryPublicRpc": "https://rpc.berachain.com",
+      "nativeCurrencySymbol": "BERA",
+      "explorerUrl": "https://berascan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Blast",
+      "chainId": 81457,
+      "slug": "blast",
+      "primaryPublicRpc": "https://rpc.blast.io",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://blastscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "BNB Chain",
+      "chainId": 56,
+      "slug": "bsc",
+      "primaryPublicRpc": "https://bsc-dataseed1.bnbchain.org",
+      "nativeCurrencySymbol": "BNB",
+      "explorerUrl": "https://bscscan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Celo",
+      "chainId": 42220,
+      "slug": "celo",
+      "primaryPublicRpc": "https://forno.celo.org",
+      "nativeCurrencySymbol": "CELO",
+      "explorerUrl": "https://celoscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Chiliz",
+      "chainId": 88888,
+      "slug": "chiliz",
+      "primaryPublicRpc": "https://rpc.chiliz.com",
+      "nativeCurrencySymbol": "CHZ",
+      "explorerUrl": "https://chiliscan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Core Dao",
+      "chainId": 1116,
+      "slug": "core-dao",
+      "primaryPublicRpc": "https://rpc.coredao.org",
+      "nativeCurrencySymbol": "CORE",
+      "explorerUrl": "https://scan.coredao.org",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Ethereum",
+      "chainId": 1,
+      "slug": "mainnet",
+      "primaryPublicRpc": "https://ethereum-rpc.publicnode.com",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://etherscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Fantom",
+      "chainId": 250,
+      "slug": "fantom",
+      "primaryPublicRpc": "https://rpc.fantom.network",
+      "nativeCurrencySymbol": "FTM",
+      "explorerUrl": "https://ftmscan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Gnosis",
+      "chainId": 100,
+      "slug": "gnosis",
+      "primaryPublicRpc": "https://rpc.gnosischain.com",
+      "nativeCurrencySymbol": "XDAI",
+      "explorerUrl": "https://gnosisscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "HyperEVM",
+      "chainId": 999,
+      "slug": "hyperevm",
+      "primaryPublicRpc": "https://rpc.hyperliquid.xyz/evm",
+      "nativeCurrencySymbol": "HYPE",
+      "explorerUrl": "https://hyperevmscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "IoTeX",
+      "chainId": 4689,
+      "slug": "iotex",
+      "primaryPublicRpc": "https://babel-api.mainnet.iotex.io",
+      "nativeCurrencySymbol": "IOTX",
+      "explorerUrl": "https://iotexscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Lightlink",
+      "chainId": 1890,
+      "slug": "lightlink",
+      "primaryPublicRpc": "https://replicator.phoenix.lightlink.io/rpc/v1",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://phoenix.lightlink.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Linea",
+      "chainId": 59144,
+      "slug": "linea",
+      "primaryPublicRpc": "https://rpc.linea.build",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://lineascan.build",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Mode",
+      "chainId": 34443,
+      "slug": "mode",
+      "primaryPublicRpc": "https://mainnet.mode.network",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://modescan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Monad",
+      "chainId": 143,
+      "slug": "monad",
+      "primaryPublicRpc": "https://rpc.monad.xyz",
+      "nativeCurrencySymbol": "MON",
+      "explorerUrl": "https://monadscan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Morph",
+      "chainId": 2818,
+      "slug": "morph",
+      "primaryPublicRpc": "https://rpc.morphl2.io",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://explorer.morphl2.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Optimism",
+      "chainId": 10,
+      "slug": "optimism",
+      "primaryPublicRpc": "https://mainnet.optimism.io",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://optimistic.etherscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Polygon",
+      "chainId": 137,
+      "slug": "polygon",
+      "primaryPublicRpc": "https://polygon-bor-rpc.publicnode.com",
+      "nativeCurrencySymbol": "POL",
+      "explorerUrl": "https://polygonscan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Ronin",
+      "chainId": 2020,
+      "slug": "ronin",
+      "primaryPublicRpc": "https://api.roninchain.com/rpc",
+      "nativeCurrencySymbol": "RON",
+      "explorerUrl": "https://app.roninchain.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Scroll",
+      "chainId": 534352,
+      "slug": "scroll",
+      "primaryPublicRpc": "https://rpc.scroll.io",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://scrollscan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Sei",
+      "chainId": 1329,
+      "slug": "sei",
+      "primaryPublicRpc": "https://evm-rpc.sei-apis.com",
+      "nativeCurrencySymbol": "SEI",
+      "explorerUrl": "https://seiscan.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Sonic",
+      "chainId": 146,
+      "slug": "sonic",
+      "primaryPublicRpc": "https://rpc.soniclabs.com",
+      "nativeCurrencySymbol": "S",
+      "explorerUrl": "https://sonicscan.org",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Sophon",
+      "chainId": 50104,
+      "slug": "sophon",
+      "primaryPublicRpc": "https://rpc.sophon.xyz",
+      "nativeCurrencySymbol": "SOPH",
+      "explorerUrl": "https://sophscan.xyz",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Superseed",
+      "chainId": 5330,
+      "slug": "superseed",
+      "primaryPublicRpc": "https://mainnet.superseed.xyz",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://explorer.superseed.xyz",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Unichain",
+      "chainId": 130,
+      "slug": "unichain",
+      "primaryPublicRpc": "https://mainnet.unichain.org",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://uniscan.xyz",
+      "routeMesh": true
+    },
+    {
+      "chainName": "World Chain",
+      "chainId": 480,
+      "slug": "world-chain",
+      "primaryPublicRpc": "https://worldchain-mainnet.g.alchemy.com/public",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://worldscan.org",
+      "routeMesh": true
+    },
+    {
+      "chainName": "XDC",
+      "chainId": 50,
+      "slug": "xdc",
+      "primaryPublicRpc": "https://rpc.xdcrpc.com",
+      "nativeCurrencySymbol": "XDC",
+      "explorerUrl": "https://xdcscan.com",
+      "routeMesh": true
+    },
+    {
+      "chainName": "ZKsync Era",
+      "chainId": 324,
+      "slug": "zksync",
+      "primaryPublicRpc": "https://mainnet.era.zksync.io",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://explorer.zksync.io",
+      "routeMesh": true
+    },
+    {
+      "chainName": "Zora",
+      "chainId": 7777777,
+      "slug": "zora",
+      "primaryPublicRpc": "https://zora.drpc.org",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://explorer.zora.energy",
+      "routeMesh": false
+    }
+  ]
+}
