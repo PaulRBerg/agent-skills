@@ -14,7 +14,17 @@ Use this skill to resolve chain metadata before reading from an RPC, sending tra
 
 Match chains by displayed name or numeric chain ID. The [Target Mainnets](#target-mainnets) table is the skill's authoritative scope. If the requested chain is not listed there, do not use Etherscan, Blockscout, Bungee, RouteMesh, Chainlist, web search, or public RPCs to work around the scope. Ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
 
-Also normalize common code aliases to their table rows, such as `mainnet` → Ethereum (`1`), `bsc` → BNB Chain (`56`), `coreDao` → Core Dao (`1116`), `hyperevm` → HyperEVM (`999`), `op` → Optimism (`10`), and `zksync` → ZKsync Era (`324`).
+Also normalize common code aliases to their table rows:
+
+| Alias        | Chain name  | Chain ID |
+| ------------ | ----------- | -------- |
+| `mainnet`    | Ethereum    | `1`      |
+| `op`         | Optimism    | `10`     |
+| `bsc`        | BNB Chain   | `56`     |
+| `worldchain` | World Chain | `480`    |
+| `hyperevm`   | HyperEVM    | `999`    |
+| `coreDao`    | Core Dao    | `1116`   |
+| `zksync`     | ZKsync Era  | `324`    |
 
 ## Querying On-Chain Data (Routing)
 
@@ -80,41 +90,42 @@ Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer nam
 
 The `Slug` column is the Sablier SDK chain slug (`sablier` package `~/sablier/sdk`, `src/evm/chains/specs.ts`, resolved as `meta.slug ?? key`). Arbitrum Nova, Celo, Fantom, IoTeX, and Zora are not defined in the SDK; their slugs follow the same convention (lowercase, hyphenated name).
 
-| Chain name    | Chain ID | Slug          | Primary public RPC                             | Native currency symbol | Explorer URL                         | RouteMesh |
-| ------------- | -------- | ------------- | ---------------------------------------------- | ---------------------- | ------------------------------------ | --------- |
-| Abstract      | 2741     | abstract      | https://api.mainnet.abs.xyz                    | ETH                    | https://abscan.org                   | Yes       |
-| Arbitrum      | 42161    | arbitrum      | https://arb1.arbitrum.io/rpc                   | ETH                    | https://arbiscan.io                  | Yes       |
-| Arbitrum Nova | 42170    | arbitrum-nova | https://nova.arbitrum.io/rpc                   | ETH                    | https://arbitrum-nova.blockscout.com | Yes       |
-| Avalanche     | 43114    | avalanche     | https://api.avax.network/ext/bc/C/rpc          | AVAX                   | https://snowscan.xyz                 | Yes       |
-| Base          | 8453     | base          | https://mainnet.base.org                       | ETH                    | https://basescan.org                 | Yes       |
-| Berachain     | 80094    | berachain     | https://rpc.berachain.com                      | BERA                   | https://berascan.com                 | Yes       |
-| Blast         | 81457    | blast         | https://rpc.blast.io                           | ETH                    | https://blastscan.io                 | Yes       |
-| BNB Chain     | 56       | bsc           | https://bsc-dataseed1.bnbchain.org             | BNB                    | https://bscscan.com                  | Yes       |
-| Celo          | 42220    | celo          | https://forno.celo.org                         | CELO                   | https://celoscan.io                  | Yes       |
-| Chiliz        | 88888    | chiliz        | https://rpc.chiliz.com                         | CHZ                    | https://chiliscan.com                | Yes       |
-| Core Dao      | 1116     | core-dao      | https://rpc.coredao.org                        | CORE                   | https://scan.coredao.org             | Yes       |
-| Ethereum      | 1        | mainnet       | https://ethereum-rpc.publicnode.com            | ETH                    | https://etherscan.io                 | Yes       |
-| Fantom        | 250      | fantom        | https://rpc.fantom.network                     | FTM                    | https://ftmscan.com                  | Yes       |
-| Gnosis        | 100      | gnosis        | https://rpc.gnosischain.com                    | XDAI                   | https://gnosisscan.io                | Yes       |
-| HyperEVM      | 999      | hyperevm      | https://rpc.hyperliquid.xyz/evm                | HYPE                   | https://hyperevmscan.io              | Yes       |
-| IoTeX         | 4689     | iotex         | https://babel-api.mainnet.iotex.io             | IOTX                   | https://iotexscan.io                 | Yes       |
-| Lightlink     | 1890     | lightlink     | https://replicator.phoenix.lightlink.io/rpc/v1 | ETH                    | https://phoenix.lightlink.io         | Yes       |
-| Linea         | 59144    | linea         | https://rpc.linea.build                        | ETH                    | https://lineascan.build              | Yes       |
-| Mode          | 34443    | mode          | https://mainnet.mode.network                   | ETH                    | https://modescan.io                  | Yes       |
-| Monad         | 143      | monad         | https://rpc.monad.xyz                          | MON                    | https://monadscan.com                | Yes       |
-| Morph         | 2818     | morph         | https://rpc.morphl2.io                         | ETH                    | https://explorer.morphl2.io          | Yes       |
-| Optimism      | 10       | optimism      | https://mainnet.optimism.io                    | ETH                    | https://optimistic.etherscan.io      | Yes       |
-| Polygon       | 137      | polygon       | https://polygon-bor-rpc.publicnode.com         | POL                    | https://polygonscan.com              | Yes       |
-| Ronin         | 2020     | ronin         | https://api.roninchain.com/rpc                 | RON                    | https://app.roninchain.com           | Yes       |
-| Scroll        | 534352   | scroll        | https://rpc.scroll.io                          | ETH                    | https://scrollscan.com               | Yes       |
-| Sei           | 1329     | sei           | https://evm-rpc.sei-apis.com                   | SEI                    | https://seiscan.io                   | Yes       |
-| Sonic         | 146      | sonic         | https://rpc.soniclabs.com                      | S                      | https://sonicscan.org                | Yes       |
-| Sophon        | 50104    | sophon        | https://rpc.sophon.xyz                         | SOPH                   | https://sophscan.xyz                 | Yes       |
-| Superseed     | 5330     | superseed     | https://mainnet.superseed.xyz                  | ETH                    | https://explorer.superseed.xyz       | Yes       |
-| Unichain      | 130      | unichain      | https://mainnet.unichain.org                   | ETH                    | https://uniscan.xyz                  | Yes       |
-| XDC           | 50       | xdc           | https://rpc.xdcrpc.com                         | XDC                    | https://xdcscan.com                  | Yes       |
-| ZKsync Era    | 324      | zksync        | https://mainnet.era.zksync.io                  | ETH                    | https://explorer.zksync.io           | Yes       |
-| Zora          | 7777777  | zora          | https://zora.drpc.org                          | ETH                    | https://explorer.zora.energy         | No        |
+| Chain name    | Chain ID | Slug          | Primary public RPC                              | Native currency symbol | Explorer URL                         | RouteMesh |
+| ------------- | -------- | ------------- | ----------------------------------------------- | ---------------------- | ------------------------------------ | --------- |
+| Abstract      | 2741     | abstract      | https://api.mainnet.abs.xyz                     | ETH                    | https://abscan.org                   | Yes       |
+| Arbitrum      | 42161    | arbitrum      | https://arb1.arbitrum.io/rpc                    | ETH                    | https://arbiscan.io                  | Yes       |
+| Arbitrum Nova | 42170    | arbitrum-nova | https://nova.arbitrum.io/rpc                    | ETH                    | https://arbitrum-nova.blockscout.com | Yes       |
+| Avalanche     | 43114    | avalanche     | https://api.avax.network/ext/bc/C/rpc           | AVAX                   | https://snowscan.xyz                 | Yes       |
+| Base          | 8453     | base          | https://mainnet.base.org                        | ETH                    | https://basescan.org                 | Yes       |
+| Berachain     | 80094    | berachain     | https://rpc.berachain.com                       | BERA                   | https://berascan.com                 | Yes       |
+| Blast         | 81457    | blast         | https://rpc.blast.io                            | ETH                    | https://blastscan.io                 | Yes       |
+| BNB Chain     | 56       | bsc           | https://bsc-dataseed1.bnbchain.org              | BNB                    | https://bscscan.com                  | Yes       |
+| Celo          | 42220    | celo          | https://forno.celo.org                          | CELO                   | https://celoscan.io                  | Yes       |
+| Chiliz        | 88888    | chiliz        | https://rpc.chiliz.com                          | CHZ                    | https://chiliscan.com                | Yes       |
+| Core Dao      | 1116     | core-dao      | https://rpc.coredao.org                         | CORE                   | https://scan.coredao.org             | Yes       |
+| Ethereum      | 1        | mainnet       | https://ethereum-rpc.publicnode.com             | ETH                    | https://etherscan.io                 | Yes       |
+| Fantom        | 250      | fantom        | https://rpc.fantom.network                      | FTM                    | https://ftmscan.com                  | Yes       |
+| Gnosis        | 100      | gnosis        | https://rpc.gnosischain.com                     | XDAI                   | https://gnosisscan.io                | Yes       |
+| HyperEVM      | 999      | hyperevm      | https://rpc.hyperliquid.xyz/evm                 | HYPE                   | https://hyperevmscan.io              | Yes       |
+| IoTeX         | 4689     | iotex         | https://babel-api.mainnet.iotex.io              | IOTX                   | https://iotexscan.io                 | Yes       |
+| Lightlink     | 1890     | lightlink     | https://replicator.phoenix.lightlink.io/rpc/v1  | ETH                    | https://phoenix.lightlink.io         | Yes       |
+| Linea         | 59144    | linea         | https://rpc.linea.build                         | ETH                    | https://lineascan.build              | Yes       |
+| Mode          | 34443    | mode          | https://mainnet.mode.network                    | ETH                    | https://modescan.io                  | Yes       |
+| Monad         | 143      | monad         | https://rpc.monad.xyz                           | MON                    | https://monadscan.com                | Yes       |
+| Morph         | 2818     | morph         | https://rpc.morphl2.io                          | ETH                    | https://explorer.morphl2.io          | Yes       |
+| Optimism      | 10       | optimism      | https://mainnet.optimism.io                     | ETH                    | https://optimistic.etherscan.io      | Yes       |
+| Polygon       | 137      | polygon       | https://polygon-bor-rpc.publicnode.com          | POL                    | https://polygonscan.com              | Yes       |
+| Ronin         | 2020     | ronin         | https://api.roninchain.com/rpc                  | RON                    | https://app.roninchain.com           | Yes       |
+| Scroll        | 534352   | scroll        | https://rpc.scroll.io                           | ETH                    | https://scrollscan.com               | Yes       |
+| Sei           | 1329     | sei           | https://evm-rpc.sei-apis.com                    | SEI                    | https://seiscan.io                   | Yes       |
+| Sonic         | 146      | sonic         | https://rpc.soniclabs.com                       | S                      | https://sonicscan.org                | Yes       |
+| Sophon        | 50104    | sophon        | https://rpc.sophon.xyz                          | SOPH                   | https://sophscan.xyz                 | Yes       |
+| Superseed     | 5330     | superseed     | https://mainnet.superseed.xyz                   | ETH                    | https://explorer.superseed.xyz       | Yes       |
+| Unichain      | 130      | unichain      | https://mainnet.unichain.org                    | ETH                    | https://uniscan.xyz                  | Yes       |
+| World Chain   | 480      | world-chain   | https://worldchain-mainnet.g.alchemy.com/public | ETH                    | https://worldscan.org                | Yes       |
+| XDC           | 50       | xdc           | https://rpc.xdcrpc.com                          | XDC                    | https://xdcscan.com                  | Yes       |
+| ZKsync Era    | 324      | zksync        | https://mainnet.era.zksync.io                   | ETH                    | https://explorer.zksync.io           | Yes       |
+| Zora          | 7777777  | zora          | https://zora.drpc.org                           | ETH                    | https://explorer.zora.energy         | No        |
 
 ## Target Fallback RPCs
 
@@ -150,6 +161,7 @@ The `Slug` column is the Sablier SDK chain slug (`sablier` package `~/sablier/sd
 | Sophon        | 50104    | https://50104.rpc.thirdweb.com                                                                               |
 | Superseed     | 5330     | https://superseed.drpc.org, https://5330.rpc.thirdweb.com                                                    |
 | Unichain      | 130      | https://unichain-rpc.publicnode.com, https://130.rpc.thirdweb.com                                            |
+| World Chain   | 480      | https://worldchain.drpc.org, https://480.rpc.thirdweb.com, https://worldchain-mainnet.gateway.tenderly.co    |
 | XDC           | 50       | https://50.rpc.thirdweb.com, https://erpc.xdcrpc.com, https://rpc.xdc.org                                    |
 | ZKsync Era    | 324      | https://zksync.drpc.org, https://324.rpc.thirdweb.com                                                        |
 | Zora          | 7777777  | https://7777777.rpc.thirdweb.com, https://rpc.zora.energy                                                    |

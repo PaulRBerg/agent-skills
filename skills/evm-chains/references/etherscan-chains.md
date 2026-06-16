@@ -7,23 +7,24 @@ Verified against the live `chainlist` endpoint on 2026-06-14 (64 provider chains
 
 ## Target Mainnets (Free Tier Available)
 
-| Chain     | Chain ID | Notes         |
-| --------- | -------- | ------------- |
-| Abstract  | `2741`   |               |
-| Arbitrum  | `42161`  |               |
-| Berachain | `80094`  |               |
-| Blast     | `81457`  |               |
-| Celo      | `42220`  |               |
-| Ethereum  | `1`      | Default chain |
-| Gnosis    | `100`    |               |
-| HyperEVM  | `999`    |               |
-| Linea     | `59144`  |               |
-| Monad     | `143`    |               |
-| Polygon   | `137`    |               |
-| Sei       | `1329`   |               |
-| Sonic     | `146`    |               |
-| Unichain  | `130`    |               |
-| XDC       | `50`     |               |
+| Chain       | Chain ID | Notes         |
+| ----------- | -------- | ------------- |
+| Abstract    | `2741`   |               |
+| Arbitrum    | `42161`  |               |
+| Berachain   | `80094`  |               |
+| Blast       | `81457`  |               |
+| Celo        | `42220`  |               |
+| Ethereum    | `1`      | Default chain |
+| Gnosis      | `100`    |               |
+| HyperEVM    | `999`    |               |
+| Linea       | `59144`  |               |
+| Monad       | `143`    |               |
+| Polygon     | `137`    |               |
+| Sei         | `1329`   |               |
+| Sonic       | `146`    |               |
+| Unichain    | `130`    |               |
+| World Chain | `480`    |               |
+| XDC         | `50`     |               |
 
 ## Target Mainnets (Paid Plan Required)
 
