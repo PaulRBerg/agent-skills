@@ -47,19 +47,21 @@ Run another agent skill multiple times in sequence, polishing code-changing iter
 
 For each iteration from 1 through the requested run count:
 
-1. Record the pre-iteration changed-path set:
+1. Record the pre-target diff state:
    - tracked: `git diff --name-only --diff-filter=ACMR`
    - untracked: `git ls-files --others --exclude-standard`
+   - content snapshot: a temporary patch or equivalent per-file content snapshot for changed and untracked files
 2. Run the target skill inline as if invoked with the user's target arguments.
 3. Override the target skill with these loop constraints:
    - Do not create commits, tags, branches, stashes, or other persistent git history.
    - Do not produce a full user-facing report unless the target must stop or ask for direction.
    - Keep scope stable unless the target's own instructions require a narrower discovered scope.
 4. If the target skill hits a stop condition, stop the loop and produce the net report for completed work plus the blocking condition.
-5. Record the post-target changed-path set and compare it with the pre-iteration set.
-6. If the target produced code changes, run `code-polish` inline on only those newly code-changed paths:
+5. Record the post-target diff state and compare it with the pre-target state.
+6. If the target produced code changes, run `code-polish` inline on only those target-changed code paths:
    - Pass a `resolved-scope` block with the code-changed paths.
    - Instruct `code-polish` not to broaden or rediscover scope.
+   - Keep the `code-polish` report as internal notes unless the loop stops early.
    - Preserve all loop constraints, especially no commits.
 7. Skip `code-polish` when the target produced no code changes. Also skip when changes are only docs, prose, generated outputs, assets, lockfiles, or vendored files unless the user explicitly asked to polish those files as code.
 8. If `code-polish` cannot complete, stop the loop and produce the net report with the incomplete polish called out.
