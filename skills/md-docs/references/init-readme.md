@@ -248,13 +248,15 @@ Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development work
 
 - Line length ~100-120 chars in paragraphs
 
-- Admonitions sparingly:
+- Admonitions sparingly; keep a blank blockquote line after the marker so Prettier-formatted repos don't collapse it into a non-rendering `[!NOTE] text` (see `references/common-patterns.md` → Markdown Admonitions):
 
   ```markdown
   > [!NOTE]
+  >
   > Helpful context
 
   > [!WARNING]
+  >
   > Breaking changes or critical notices
   ```
 

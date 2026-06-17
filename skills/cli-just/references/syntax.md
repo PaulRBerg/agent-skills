@@ -123,10 +123,10 @@ source_file := source_file()
 # Invocation directory (where just was called from)
 invocation_dir := invocation_directory()
 
-# Module location (v1.49.0–1.50.0; meaningful inside `mod` files)
-mod_file := module_file()         # Absolute path to the module's justfile
-mod_dir := module_directory()     # Directory containing the module justfile
-mod_path := module_path()         # Submodule path, e.g. "foo::bar"
+# Module location (meaningful inside `mod` files)
+mod_file := module_file()         # Absolute path to the module's justfile (v1.49.0+)
+mod_dir := module_directory()     # Directory containing the module justfile (v1.49.0+)
+mod_path := module_path()         # Submodule path, e.g. "foo::bar" (v1.50.0+)
 
 # Runtime directory (v1.49.0; $XDG_RUNTIME_DIR or platform fallback)
 rt := runtime_directory()
@@ -171,6 +171,11 @@ os := os()              # "linux", "macos", "windows"
 family := os_family()   # "unix" or "windows"
 arch := arch()          # "x86_64", "aarch64", etc.
 
+# Invocation info (only meaningful inside a recipe)
+dep := is_dependency()  # "true" when run as another recipe's dependency
+this:
+    echo {{ recipe_name() }}   # name of the running recipe (v1.53.0+)
+
 # Number of CPUs
 cpus := num_cpus()
 
@@ -191,6 +196,9 @@ timestamp := datetime("%s")
 ```just
 # Error if condition false
 _ := assert(path_exists("config.json"), "Config file required!")
+
+# Message is optional as of v1.53.0; assert() evaluates to its condition
+_ := assert(path_exists("config.json"))
 
 # Conditional value
 mode := if env("CI", "") != "" { "ci" } else { "local" }
@@ -227,6 +235,27 @@ build:
 - Prefer over backtick-evaluated variables when the value depends on a parameter (backticks evaluate once at
   justfile parse time; functions evaluate per call site).
 - Function bodies are pure expressions — no shell, no side effects. For shell logic, use a `[script]` recipe.
+
+## Lists & Booleans (unstable, v1.53.0+)
+
+`set lists` (requires `set unstable`) adds a list-of-strings type and reforms booleans. Operators and functions it adds or
+changes:
+
+| Construct           | Meaning                                                                   |
+| ------------------- | ------------------------------------------------------------------------- |
+| `[a, b, c]`         | List literal (flattens nested lists; strings only)                        |
+| `++`                | List concatenation                                                        |
+| `+`, `/`            | Broadcast a string across a list, or combine equal-length lists pairwise  |
+| `!expr`             | Negation: `"true"` when `expr` is `[]` (false), else `[]`                 |
+| `==` `!=` `=~` `!~` | Usable in any expression (not just `if`/`assert`); yield `"true"` or `[]` |
+| `if cond { x }`     | `else` may be omitted; evaluates to `[]` when `cond` is false             |
+| `split(s, sep)`     | Split string into a list (default: on whitespace, trimmed)                |
+| `join_list(v, sep)` | Join a list into one string (default separator: single space)             |
+| `bool(v)`           | Parse canonical booleans; errors on non-boolean values                    |
+| `show(v)`           | Literal representation of a value (useful in `--evaluate` / debugging)    |
+
+Canonical true is `"true"`; canonical false is the empty list `[]` (all else is truthy). Full semantics, list-aware
+built-ins, and multiple-`.env` behavior: [settings.md > Lists](settings.md#lists-unstable-v1530).
 
 ## Variables
 
@@ -271,30 +300,33 @@ files := ```
 
 ## Just CLI Options
 
-| Option                       | Description                                                              |
-| ---------------------------- | ------------------------------------------------------------------------ |
-| `just --list`                | List available recipes                                                   |
-| `just --list MODULE::PATH`   | List recipes in a submodule                                              |
-| `just --list --unsorted`     | List in source order                                                     |
-| `just --list --group NAME`   | Filter `--list` to one group (v1.47.0+)                                  |
-| `just --default-list`        | Make bare `just` list recipes instead of running the default (v1.52.0+)  |
-| `just --summary`             | Brief recipe list                                                        |
-| `just --show RECIPE`         | Show recipe source                                                       |
-| `just --usage RECIPE`        | Show recipe argument usage (v1.46.0+)                                    |
-| `just --dry-run RECIPE`      | Print commands without running                                           |
-| `just --time RECIPE`         | Print recipe execution time (v1.49.0+)                                   |
-| `just --evaluate`            | Print all variables                                                      |
-| `just --evaluate-format FMT` | Format `--evaluate` output (`json`, `shell`; v1.49.0+)                   |
-| `just --evaluate VAR`        | Evaluate a single variable/module path (v1.49.0+)                        |
-| `just --json`                | Dump justfile metadata as JSON (v1.48.0+; alias of `--dump-format json`) |
-| `just --fmt`                 | Format justfile (do not use — see SKILL.md)                              |
-| `just --fmt --check`         | Check formatting                                                         |
-| `just --choose`              | Interactive recipe selection (fzf)                                       |
-| `just --choose --group NAME` | Restrict `--choose` to one group (v1.50.0+)                              |
-| `just -f PATH`               | Use specific justfile (`-f -` reads stdin as of v1.51.0)                 |
-| `just --justfile-name NAME`  | Override justfile filename for auto-discovery (v1.49.0+)                 |
-| `just -d DIR`                | Set working directory                                                    |
-| `just --indentation STR`     | Use STR for recipe indentation when formatting (v1.49.0+)                |
+| Option                       | Description                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `just --list`                | List available recipes                                                          |
+| `just --list MODULE::PATH`   | List recipes in a submodule                                                     |
+| `just --list --unsorted`     | List in source order                                                            |
+| `just --list --group NAME`   | Filter `--list` to one group (v1.47.0+)                                         |
+| `just --default-list`        | Make bare `just` list recipes instead of running the default (v1.52.0+)         |
+| `just --summary`             | Brief recipe list                                                               |
+| `just --show RECIPE`         | Show recipe source                                                              |
+| `just --usage RECIPE`        | Show recipe argument usage (v1.46.0+)                                           |
+| `just --dry-run RECIPE`      | Print commands without running                                                  |
+| `just --time RECIPE`         | Print recipe execution time (v1.49.0+)                                          |
+| `just --evaluate`            | Print all variables                                                             |
+| `just --evaluate-format FMT` | Format `--evaluate` output (`json`, `shell`; v1.49.0+)                          |
+| `just --evaluate VAR`        | Evaluate a single variable/module path (v1.49.0+)                               |
+| `just --json`                | Dump justfile metadata as JSON (v1.48.0+; alias of `--dump --dump-format json`) |
+| `just --fmt`                 | Format justfile (do not use — see SKILL.md)                                     |
+| `just --fmt --check`         | Check formatting                                                                |
+| `just --choose`              | Interactive recipe selection (fzf)                                              |
+| `just --choose --group NAME` | Restrict `--choose` to one group (v1.50.0+)                                     |
+| `just -f PATH`               | Use specific justfile (`-f -` reads stdin as of v1.51.0)                        |
+| `just -f FILE.md RECIPE`     | Extract & run ```` ```just ```` blocks from a markdown file (v1.53.0+)          |
+| `just --justfile-name NAME`  | Override justfile filename for auto-discovery (v1.49.0+)                        |
+| `just --dotenv-path P …`     | Load dotenv file(s); repeatable to load several (v1.53.0+)                      |
+| `just --dotenv-filename N …` | Dotenv filename(s) to search for; repeatable (v1.53.0+)                         |
+| `just -d DIR`                | Set working directory                                                           |
+| `just --indentation STR`     | Use STR for recipe indentation when formatting (v1.49.0+)                       |
 
 ## Glob Patterns
 

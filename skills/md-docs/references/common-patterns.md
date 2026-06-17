@@ -142,6 +142,22 @@ Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development work
 Foo is a fast, ergonomic, zero-dependency library that makes parsing dates a breeze. Loved by 10,000 developers worldwide.
 ```
 
+## Markdown Admonitions
+
+GitHub alert syntax — `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]` — renders as a styled callout only when the marker sits on its own line directly above the body.
+
+**Prettier caveat.** When the target repo formats Markdown with Prettier (especially `proseWrap: "always"`), Prettier reflows the marker into the body: `> [!NOTE]` + `> text` collapses onto a single `> [!NOTE] text` line, which GitHub then renders as a literal `[!NOTE]` rather than an alert box. Suspect this whenever the repo has a `prettier` / `.prettierrc*` config plus a `*.md` lint-staged or CI step.
+
+Fix: put a blank blockquote line between the marker and the body so they are separate paragraphs and prose-wrap leaves the marker alone:
+
+```markdown
+> [!NOTE]
+>
+> Body text.
+```
+
+After writing, run the repo's formatter (or `prettier --check`) on the file to confirm the marker survived; if it collapsed, apply the blank-line form. When in doubt, use a plain `**Bold.**` blockquote instead of an admonition.
+
 ## Report Formatting
 
 After completing operations, display a clear summary:

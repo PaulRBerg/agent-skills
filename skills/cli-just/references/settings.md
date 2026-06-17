@@ -10,35 +10,36 @@ Settings configure global behavior and must appear at the top of the justfile.
 
 Enable with `set NAME` or `set NAME := true`:
 
-| Setting                     | Description                                                              |
-| --------------------------- | ------------------------------------------------------------------------ |
-| `allow-duplicate-recipes`   | Allow later recipes to override earlier ones                             |
-| `allow-duplicate-variables` | Allow later variables to override earlier ones                           |
-| `default-list`              | List recipes instead of running the default recipe (v1.52.0+)            |
-| `default-script`            | Treat unannotated recipes as script recipes (v1.52.0+)                   |
-| `dotenv-load`               | Load `.env` file automatically                                           |
-| `dotenv-required`           | Error if `.env` file is missing                                          |
-| `export`                    | Export all variables as environment variables                            |
-| `fallback`                  | Search parent directories for justfile                                   |
-| `ignore-comments`           | Don't print comments in recipe listings                                  |
-| `lazy`                      | Defer evaluation of unused variables (v1.47.0; stable v1.48.0+)          |
-| `no-cd`                     | Don't change to justfile directory for any recipe (v1.51.0+)             |
-| `positional-arguments`      | Pass recipe arguments as $1, $2, etc.                                    |
-| `quiet`                     | Don't echo recipe lines                                                  |
-| `unstable`                  | Enable unstable features (user-defined functions, `eager` keyword, etc.) |
-| `windows-powershell`        | Use PowerShell on Windows                                                |
-| `windows-shell`             | Use cmd.exe on Windows                                                   |
+| Setting                     | Description                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| `allow-duplicate-recipes`   | Allow later recipes to override earlier ones                                      |
+| `allow-duplicate-variables` | Allow later variables to override earlier ones                                    |
+| `default-list`              | List recipes instead of running the default recipe (v1.52.0+)                     |
+| `default-script`            | Treat unannotated recipes as script recipes (v1.52.0+)                            |
+| `dotenv-load`               | Load `.env` file automatically                                                    |
+| `dotenv-required`           | Error if `.env` file is missing                                                   |
+| `export`                    | Export all variables as environment variables                                     |
+| `fallback`                  | Search parent directories for justfile                                            |
+| `ignore-comments`           | Don't print comments in recipe listings                                           |
+| `lazy`                      | Defer evaluation of unused variables (v1.47.0; stable v1.48.0+)                   |
+| `lists`                     | Enable list-of-strings values (unstable, requires `set unstable`; v1.53.0+)       |
+| `no-cd`                     | Don't change to justfile directory for any recipe (v1.51.0+)                      |
+| `positional-arguments`      | Pass recipe arguments as $1, $2, etc.                                             |
+| `quiet`                     | Don't echo recipe lines                                                           |
+| `unstable`                  | Enable unstable features (user-defined functions, `eager` keyword, `lists`, etc.) |
+| `windows-powershell`        | Use PowerShell on Windows                                                         |
+| `windows-shell`             | Use cmd.exe on Windows                                                            |
 
 ### Value Settings
 
-| Setting              | Example                              | Description                              |
-| -------------------- | ------------------------------------ | ---------------------------------------- |
-| `shell`              | `["bash", "-euo", "pipefail", "-c"]` | Shell and arguments for linewise recipes |
-| `script-interpreter` | `["bash", "-euo", "pipefail"]`       | Interpreter for empty `[script]` recipes |
-| `dotenv-filename`    | `".env.local"`                       | Custom dotenv filename                   |
-| `dotenv-path`        | `"config/.env"`                      | Custom dotenv path                       |
-| `tempdir`            | `"/tmp/just"`                        | Temporary file directory                 |
-| `working-directory`  | `"src"`                              | Default working directory                |
+| Setting              | Example                              | Description                                                              |
+| -------------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| `shell`              | `["bash", "-euo", "pipefail", "-c"]` | Shell and arguments for linewise recipes                                 |
+| `script-interpreter` | `["bash", "-euo", "pipefail"]`       | Interpreter for empty `[script]` recipes                                 |
+| `dotenv-filename`    | `".env.local"`                       | Custom dotenv filename; accepts a list to load multiple files (v1.53.0+) |
+| `dotenv-path`        | `"config/.env"`                      | Custom dotenv path; accepts a list to load multiple files (v1.53.0+)     |
+| `tempdir`            | `"/tmp/just"`                        | Temporary file directory                                                 |
+| `working-directory`  | `"src"`                              | Default working directory                                                |
 
 **Const expressions in settings (v1.46.0+):**
 
@@ -145,6 +146,60 @@ status:
 
 `set shell` still controls linewise shell recipes and backticks. `set script-interpreter` controls `[script]` recipes with
 no explicit command, including unannotated recipes when `default-script` is enabled.
+
+### Lists (unstable, v1.53.0+)
+
+`set lists` introduces a list-of-strings value type. It is **unstable and will change in backwards-incompatible ways** —
+gate it behind `set unstable` and track [the `set lists` issue](https://github.com/casey/just/issues/3377). Enabling it
+changes several behaviors:
+
+```just
+set unstable
+set lists
+
+targets := ["x86", "arm"]            # List literal; literals flatten and hold only strings:
+                                     #   [["a", "b"], [], "c"] == ["a", "b", "c"]
+all := targets ++ ["wasm"]           # `++` concatenates lists
+prefixed := "build-" + targets       # `+`/`/` broadcast a string across each element
+pairs := ["a", "b"] / ["1", "2"]     # equal-length lists combine pairwise → ["a/1", "b/2"]
+parts := split("a.ts b.ts")          # ["a.ts", "b.ts"]; separator defaults to whitespace (trimmed)
+```
+
+**Recipes & dependencies:**
+
+- Variadic parameters (`*args`, `+args`) are lists of strings instead of one space-joined string.
+- A parameter evaluates to its default when given an empty list; passing `[]` to a non-`*` parameter without a default is an error.
+- Map a dependency over a list with `*(recipe *arg)` — see [recipes.md](recipes.md#mapped-dependencies-over-lists-unstable-v1530).
+- Lists in recipe and `f`-string interpolations are space-joined into a single string.
+
+**Booleans (reformed under `set lists`):** canonical true is `"true"`; canonical false is the empty list `[]`. Every
+other value is truthy, **including `''`**.
+
+- `!expr` evaluates to `"true"` when `expr` is `[]`, else `[]`.
+- `==`, `!=`, `=~`, `!~` work in any expression (not just `if`/`assert`) and evaluate to `"true"` or `[]`. `==`/`!=` check structural equality.
+- `value =~ regexes` is true if any element of `value` matches any regex in `regexes` (false if either is empty); `!~` is the negation.
+- An `if` with no `else` evaluates to `[]` when its condition is false.
+
+**Functions that accept lists:** `quote()`, `append()`, `prepend()`, `absolute_path()` map over each element; `env()`
+and `[env]` take a list of keys / set the joined value (`[]` unsets the variable); `which()` now **requires** `set lists`
+and returns `[]` when not found; `is_dependency()`, `path_exists()`, `semver_matches()` return the canonical booleans.
+
+**New functions:**
+
+| Function            | Behavior                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| `split(s, sep)`     | Split `s` into a list on `sep`; default splits on whitespace with ends trimmed                    |
+| `join_list(v, sep)` | Join list `v` into one string (default separator is a single space) — bridge to un-upgraded funcs |
+| `bool(v)`           | `[]` for `""`/`"0"`/`"false"`/`[]`, `"true"` for `"1"`/`"true"`; any other value errors           |
+| `show(v)`           | Literal representation, e.g. `"[]"`, `["foo", "bar"]`; single-element lists render as the element |
+
+**Caveat:** using a list where a string is expected is an error — reach for `join_list()` (or interpolation) to bridge to
+functions not yet list-aware.
+
+**Multiple `.env` files:** under `set lists`, `dotenv-path` and `dotenv-filename` accept lists (and the matching
+`--dotenv-path`/`--dotenv-filename` flags may be repeated). `dotenv-path` values are tried first; otherwise the
+`dotenv-filename` names are searched in the current directory and its ancestors. When several files load, later entries
+override earlier ones.
 
 ## Modules & Imports
 

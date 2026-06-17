@@ -90,7 +90,7 @@ diag:
     sysctl -a | head
 ```
 
-Available: `[linux]`, `[macos]`, `[unix]`, `[windows]`, `[android]`, `[freebsd]`, `[netbsd]`, `[openbsd]`, `[dragonflybsd]` (`[android]` added v1.50.0; BSD variants added v1.47.0).
+Available: `[linux]`, `[macos]`, `[unix]`, `[windows]`, `[android]`, `[freebsd]`, `[netbsd]`, `[openbsd]`, `[dragonflybsd]` (`[openbsd]` added v1.38.0; `[freebsd]`, `[netbsd]`, `[dragonflybsd]` added v1.47.0; `[android]` added v1.50.0).
 
 ### Script Blocks
 
@@ -359,7 +359,7 @@ compile output:
 
 ### Flags Without Values
 
-Use `value` for boolean-style flags that set a predefined value when present:
+Use `value` (v1.46.0+) for boolean-style flags that set a predefined value when present. Give the parameter a default so the flag is optional. This is the stable form and works on any `just` ≥ 1.46.0:
 
 ```just
 [arg("release", long, value="true")]
@@ -368,6 +368,21 @@ build release="false":
 
 # Usage:
 #   just build           → release="false" (default)
+#   just build --release → release="true"
+```
+
+Under `set lists` (unstable, v1.53.0+), the `flag` keyword is an alternative: presence sets the parameter to `"true"`, absence leaves it `[]` (the canonical false). Flag parameters may **not** have a default, and `set unstable` + `set lists` are required:
+
+```just
+set unstable
+set lists
+
+[arg("release", long, flag)]
+build release:
+    cargo build {{ if release == "true" { "--release" } else { "" } }}
+
+# Usage:
+#   just build           → release=[] (falsy)
 #   just build --release → release="true"
 ```
 
@@ -433,14 +448,15 @@ info flag:
 
 ### Arg Attribute Syntax Summary
 
-| Option            | Description                         |
-| ----------------- | ----------------------------------- |
-| `long`            | Accept `--param` (defaults to name) |
-| `long="name"`     | Accept `--name`                     |
-| `short="x"`       | Accept `-x`                         |
-| `value="val"`     | Set this value when flag present    |
-| `help="text"`     | Description for `just --usage`      |
-| `pattern="regex"` | Constrain argument to match regex   |
+| Option            | Description                                                              |
+| ----------------- | ------------------------------------------------------------------------ |
+| `long`            | Accept `--param` (defaults to name)                                      |
+| `long="name"`     | Accept `--name`                                                          |
+| `short="x"`       | Accept `-x`                                                              |
+| `value="val"`     | Set this value when flag present (stable; v1.46.0+)                      |
+| `flag`            | Valueless flag ⇒ `"true"`/`[]`; needs `set lists`, no default (v1.53.0+) |
+| `help="text"`     | Description for `just --usage`                                           |
+| `pattern="regex"` | Constrain argument to match regex                                        |
 
 ## Recipe Dependencies
 
@@ -475,6 +491,29 @@ test: && lint
 
 # lint runs only if test succeeds
 ```
+
+### Mapped Dependencies over Lists (unstable, v1.53.0+)
+
+With `set lists`, a dependency can be invoked once per element of a list argument using `*(recipe *arg)`. Combine with `[parallel]` to fan out concurrently:
+
+```just
+set unstable
+set lists
+
+[parallel]
+build target *platform: *(compile target *platform)
+
+@compile target platform:
+    echo compiling {{ target }} for {{ platform }}…
+```
+
+```console
+$ just build x86 foo bar
+compiling foo for x86…
+compiling bar for x86…
+```
+
+Each argument to a non-mapped dependency binds to exactly one parameter; passing extra arguments to a variadic dependency is an error.
 
 ## Command Prefixes
 

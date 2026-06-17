@@ -288,13 +288,15 @@ Contributions are welcome. See [`AGENTS.md`](AGENTS.md) for the development work
 
 - Tables only for things like a feature comparison with related projects.
 
-- Use admonitions sparingly:
+- Use admonitions sparingly, and keep a blank blockquote line after the marker so Prettier-formatted repos don't collapse it into a non-rendering `[!NOTE] text` (see `references/common-patterns.md` → Markdown Admonitions):
 
   ```markdown
   > [!NOTE]
+  >
   > Helpful context
 
   > [!WARNING]
+  >
   > Breaking changes or critical notices
   ```
 

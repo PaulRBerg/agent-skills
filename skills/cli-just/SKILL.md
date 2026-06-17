@@ -11,6 +11,8 @@ description: 'Use for just/justfile task automation: create justfiles, write rec
 
 Expert guidance for Just, a command runner with syntax inspired by make. Use this skill for creating justfiles, writing recipes, configuring settings, and implementing task automation workflows.
 
+**Targets just v1.53.0** (latest stable, released 2026-06-16). Features are tagged with the version that introduced them (e.g. `v1.51.0+`); a tag newer than your installed `just --version` means you must upgrade to use it. List features (`set lists`) and other gated capabilities additionally require `set unstable`.
+
 **Key capabilities:**
 
 - Create and organize justfiles with proper structure
@@ -30,31 +32,33 @@ set shell := ["bash", "-euo", "pipefail", "-c"]  # Strict bash with error handli
 set unstable                      # Enable unstable features (user-defined functions, eager keyword)
 set dotenv-load                   # Auto-load .env file
 set positional-arguments          # Pass recipe args as $1, $2, etc.
-set lazy                          # Defer evaluation of unused variables (v1.48.0+)
+set lazy                          # Defer evaluation of unused variables (v1.47.0; stable v1.48.0+)
 set no-cd                         # Don't change to justfile directory for any recipe (v1.51.0+)
 set default-list := true          # Bare `just` lists recipes instead of running default (v1.52.0+)
 set default-script := true        # Make unannotated recipes script recipes; use sparingly (v1.52.0+)
+set lists                         # Enable list-of-strings values; unstable, requires `set unstable` (v1.53.0+)
 ```
 
 ### Common Attributes
 
-| Attribute                  | Purpose                                                        |
-| -------------------------- | -------------------------------------------------------------- |
-| `[arg("p", long, ...)]`    | Configure parameter as `--flag` option (v1.46)                 |
-| `[arg("p", pattern="…")]`  | Constrain parameter to match regex pattern                     |
-| `[confirm("prompt")]`      | Require user confirmation (expressions OK as of v1.49)         |
-| `[doc("text")]`            | Override recipe documentation                                  |
-| `[env("NAME", "VALUE")]`   | Set env var for this recipe only (v1.47+, expr v1.51)          |
-| `[group("name")]`          | Group recipes in `just --list` output                          |
-| `[linux]` / `[macos]` …    | Restrict to OS; also `[android]` (v1.50+) and BSD variants     |
-| `[no-cd]`                  | Don't change to justfile directory                             |
-| `[parallel]`               | Run direct dependencies concurrently                           |
-| `[positional-arguments]`   | Enable positional args for this recipe only                    |
-| `[private]`                | Hide from `just --list` (same as `_` prefix)                   |
-| `[script]`                 | Execute recipe as single script block                          |
-| `[script("interpreter")]`  | Use specific interpreter (bash, python, etc.)                  |
-| `[shell]`                  | Force linewise shell mode when `set default-script` is enabled |
-| `[working-directory: "…"]` | Run from given path (expressions OK as of v1.51)               |
+| Attribute                  | Purpose                                                       |
+| -------------------------- | ------------------------------------------------------------- |
+| `[arg("p", long, ...)]`    | Configure parameter as `--flag` option (v1.46)                |
+| `[arg("p", long, flag)]`   | Valueless flag ⇒ `"true"`/`[]`; needs `set lists` (v1.53+)    |
+| `[arg("p", pattern="…")]`  | Constrain parameter to match regex pattern                    |
+| `[confirm("prompt")]`      | Require user confirmation (expressions OK as of v1.49)        |
+| `[doc("text")]`            | Override recipe documentation                                 |
+| `[env("NAME", "VALUE")]`   | Set env var for this recipe only (v1.47+, expr v1.51)         |
+| `[group("name")]`          | Group recipes in `just --list` output                         |
+| `[linux]` / `[macos]` …    | Restrict to OS; also `[android]` (v1.50+) and BSD variants    |
+| `[no-cd]`                  | Don't change to justfile directory                            |
+| `[parallel]`               | Run direct dependencies concurrently                          |
+| `[positional-arguments]`   | Enable positional args for this recipe only                   |
+| `[private]`                | Hide from `just --list` (same as `_` prefix)                  |
+| `[script]`                 | Execute recipe as single script block                         |
+| `[script("interpreter")]`  | Use specific interpreter (bash, python, etc.)                 |
+| `[shell]`                  | Force linewise shell mode under `set default-script` (v1.52+) |
+| `[working-directory: "…"]` | Run from given path (expressions OK as of v1.51)              |
 
 ### Recipe Argument Flags (v1.46.0+)
 
@@ -76,7 +80,7 @@ run verbose="false":
 compile output:
     gcc main.c -o {{ output }}
 
-# Flag without value (presence sets to "true")
+# Flag without value (presence sets the given value); under `set lists`, `flag` is the v1.53+ alternative
 [arg("release", long, value="true")]
 build release="false":
     cargo build {{ if release == "true" { "--release" } else { "" } }}
@@ -145,6 +149,10 @@ mod_dir := module_directory()        # Directory containing the module justfile
 
 # Runtime directory (v1.49.0; typically $XDG_RUNTIME_DIR, falls back to tempdir)
 rt := runtime_directory()
+
+# Name of the currently-running recipe (v1.53.0+)
+self:
+    echo "running {{ recipe_name() }}"
 ```
 
 ### User-Defined Functions (v1.49.0+)
@@ -167,6 +175,27 @@ create:
 ```
 
 Use these to dedupe expression logic that would otherwise repeat across recipes; prefer them over backtick-evaluated variables when the value depends on input.
+
+### Lists (unstable, v1.53.0+)
+
+`set lists` (also requires `set unstable`) turns values into lists of strings — still unstable and subject to breaking changes. Highlights:
+
+```just
+set unstable
+set lists
+
+targets := ["x86", "arm"]               # List literal (flattens; strings only)
+all := targets ++ ["wasm"]              # `++` concatenates lists
+files := split("a.ts b.ts")             # ["a.ts", "b.ts"] (whitespace by default)
+
+# Map a dependency over a list: invoked once per element, parallelized
+[parallel]
+build *platform: *(compile *platform)
+compile platform:
+    echo "compiling for {{ platform }}"
+```
+
+Booleans are reformed under `set lists`: canonical true is `"true"`, canonical false is the empty list `[]` (every other value, including `''`, is truthy). `!expr` negates, `==`/`!=`/`=~`/`!~` work in any expression, and an `if` without `else` evaluates to `[]` when false. Variadic params (`*args`) become lists. New functions: `split()`, `bool()`, `show()`, `join_list()`. Full behavior in [references/settings.md](references/settings.md#lists-unstable-v1530).
 
 ## Recipe Patterns
 
@@ -209,6 +238,25 @@ For projects using `@sablier/devkit`:
 import "./node_modules/@sablier/devkit/just/base.just"
 import "./node_modules/@sablier/devkit/just/npm.just"
 ```
+
+## Markdown Justfiles (v1.53.0+)
+
+When `--justfile` points at a `.md` file, just extracts the contents of unindented ```` ```just ```` fenced code blocks and runs them as a justfile. Useful for keeping runnable recipes inside documentation:
+
+````markdown
+Build the project:
+
+```just
+build:
+    echo Building…
+```
+````
+
+```bash
+just --justfile README.md build
+```
+
+`--fmt` prints the formatted justfile to stdout (rather than rewriting) when the source is a markdown file or stdin.
 
 ## Section Organization
 
