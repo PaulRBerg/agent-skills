@@ -41,6 +41,11 @@ alias i := install
     just tsc-build
 alias b := build
 
+# Compile TypeScript, emitting to the configured outDir
+[no-cd]
+@tsc-build compiler="tsc" project="tsconfig.json":
+    na {{ compiler }} --project {{ project }}
+
 # Clean build artifacts
 @clean:
     bunx del-cli dist
@@ -107,12 +112,12 @@ alias pc := prettier-check
     na prettier --write --cache --no-error-on-unmatched-pattern {{ globs }}
 alias pw := prettier-write
 
-# Type check with TypeScript
+# Type-check with TypeScript (no emit)
 [group("checks")]
 [no-cd]
-@type-check compiler="tsc" project="tsconfig.json":
+@tsc-check compiler="tsc" project="tsconfig.json":
     na {{ compiler }} --noEmit --project {{ project }}
-alias tc := type-check
+alias tc := tsc-check
 
 # ---------------------------------------------------------------------------- #
 #                                     TESTS                                    #
