@@ -3,18 +3,18 @@ argument-hint: '[path] [--dry-run]'
 disable-model-invocation: false
 name: agent-context-polish
 user-invocable: true
-description: 'Use to polish repo-local AGENTS.md and project .agents/skills context: sync installed skills, prune noisy guidance, and restructure nested AGENTS.md when it improves agent analysis.'
+description: 'Use to polish repo-local AGENTS.md context, companion CLAUDE.md symlinks, and project .agents/skills context: sync installed skills, prune noisy guidance, and restructure nested agent context when it improves analysis.'
 ---
 
 # Agent Context Polish
 
 ## Objective
 
-Tighten repo-local agent context after syncing the sources that maintain it. The output is not more documentation; it is less noise and better placement: keep guidance, preferences, workflow traps, and non-obvious repo rules that an agent cannot cheaply infer from the tree. Prefer a small, scoped `AGENTS.md` hierarchy over one broad root file when locality makes instructions more accurate.
+Tighten repo-local agent context after syncing the sources that maintain it. The output is not more documentation; it is less noise and better placement: keep guidance, preferences, workflow traps, and non-obvious repo rules that an agent cannot cheaply infer from the tree. Prefer a small, scoped `AGENTS.md` hierarchy over one broad root file when locality makes instructions more accurate, and keep companion `CLAUDE.md` symlinks colocated with the `AGENTS.md` files they mirror.
 
 ## Arguments
 
-- `path`: Optional repo-relative subtree. Restrict the final polish scan to matching `AGENTS.md` files and `.agents/skills` installs below that path. Forward to `md-docs` when supported.
+- `path`: Optional repo-relative subtree. Restrict the final polish scan to matching `AGENTS.md` files, companion `CLAUDE.md` symlinks, and `.agents/skills` installs below that path. Forward to `md-docs` when supported.
 - `--dry-run`: Preview sub-skill and polish changes without writing files. Forward to sub-skills when supported.
 - Default: operate on the whole git repository.
 
@@ -65,19 +65,22 @@ Targets:
 
 - Every repo-local `AGENTS.md`, recursively.
 - New repo-local nested `AGENTS.md` files when a subtree needs distinct agent guidance.
+- Repo-local `CLAUDE.md` symlinks that mirror an `AGENTS.md` target and need to move, be created, or be removed with it.
 - Every repo-local `.agents/skills/<name>/SKILL.md`, recursively.
 
 Context:
 
 - Other files under repo-local `.agents/skills/<name>/` may be read only to validate a `SKILL.md` claim.
 - Other files in candidate subtrees may be read to decide whether `AGENTS.md` guidance belongs in a parent, child, or new nested file.
+- Treat `CLAUDE.md` as an alias only when it is a symlink. Do not merge, rewrite, or relocate regular `CLAUDE.md` files as context sources.
 - Do not treat catalog trees such as `skills/<name>/` as installed project skills.
 - Do not rewrite `references/`, `scripts/`, `assets/`, or `examples/` unless a minimal edit is required to repair a reference broken by the `SKILL.md` polish.
 
-Discovery should respect git ignores for `AGENTS.md` and deliberately include hidden `.agents/skills` installs:
+Discovery should respect git ignores for `AGENTS.md` and `CLAUDE.md`, filter `CLAUDE.md` results to symlinks with `test -L`, and deliberately include hidden `.agents/skills` installs:
 
 ```sh
 git -C "$repo_root" ls-files --cached --others --exclude-standard -- '**/AGENTS.md' 'AGENTS.md'
+git -C "$repo_root" ls-files --cached --others --exclude-standard -- '**/CLAUDE.md' 'CLAUDE.md'
 fd --glob --full-path --hidden --no-ignore --follow --type f \
    --exclude .git --exclude .claude --exclude node_modules --exclude vendor \
    --exclude dist --exclude build --exclude out --exclude target \
@@ -100,9 +103,10 @@ For each discovered skill path, resolve the physical directory with `cd "${p%/SK
    - Forward `path` and `--dry-run` when present.
    - If the installed `md-docs` does not expose `update-all`, report the fallback and run `$md-docs update-readme` followed by `$md-docs update-agents` with the same supported arguments.
    - If `md-docs` is missing or either documented workflow fails, stop before the polish pass.
-6. Rediscover targets after the sub-skills finish.
-7. Polish the `AGENTS.md` hierarchy and repo-local project-skill `SKILL.md` files:
+6. Rediscover targets and companion `CLAUDE.md` symlinks after the sub-skills finish.
+7. Polish the `AGENTS.md` hierarchy, companion `CLAUDE.md` symlinks, and repo-local project-skill `SKILL.md` files:
    - For `AGENTS.md`, prune, relocate, add, or remove files only when the structure becomes more accurate for agents analyzing the codebase.
+   - For `CLAUDE.md`, relocate, add, or remove only symlinks that mirror moved, added, or deleted `AGENTS.md` files. Preserve or adjust relative link targets so the symlink remains valid from its new directory.
    - For project-skill `SKILL.md`, edit only discovered repo-local `.agents/skills/<name>/SKILL.md` files.
 8. Verify changed Markdown with the narrowest formatter/checker available. Prefer `just` recipes when present and inspect unclear recipes before running them.
 9. Report sub-skill outcomes, polish changes, verification, skipped checks, and residual risks.
@@ -132,9 +136,9 @@ Keep or sharpen these:
 
 When a section mixes useful guidance with obvious inventory, keep the useful guidance and remove only the inventory. Do not broaden scope or rewrite for style once the noise is gone.
 
-## AGENTS.md Placement
+## AGENTS.md and CLAUDE.md Placement
 
-Treat each `AGENTS.md` as scoped instructions for its directory tree.
+Treat each `AGENTS.md` as scoped instructions for its directory tree. Treat `CLAUDE.md` only as a compatibility symlink to the same scoped instructions.
 
 - Move subtree-specific guidance from a parent `AGENTS.md` to the deepest common ancestor where it applies.
 - Promote duplicated nested guidance to the nearest shared parent only when it genuinely applies across those children.
@@ -142,7 +146,10 @@ Treat each `AGENTS.md` as scoped instructions for its directory tree.
 - Prune a root or nested `AGENTS.md` when it repeats parent guidance, describes obvious layout, or carries stale context. Delete an `AGENTS.md` only when no useful guidance remains after pruning.
 - Keep parent files for global defaults and child files for local deltas, exceptions, and sharper constraints.
 - Do not create nested `AGENTS.md` files merely to document directories, package names, or facts an agent can discover from manifests and filenames.
-- After moving, adding, or deleting `AGENTS.md` files, rediscover targets and ensure no useful local constraint was orphaned.
+- When relocating an `AGENTS.md`, relocate any sibling `CLAUDE.md` symlink that points to that `AGENTS.md`, adjusting the link target if needed.
+- When adding a nested `AGENTS.md` below a tree that maintains sibling `CLAUDE.md` symlinks, add the same companion symlink for the new file.
+- When deleting an `AGENTS.md`, delete only a sibling `CLAUDE.md` symlink that points to that deleted file. Leave regular `CLAUDE.md` files and symlinks to other targets untouched.
+- After moving, adding, or deleting `AGENTS.md` files or companion `CLAUDE.md` symlinks, rediscover targets and ensure no useful local constraint was orphaned.
 
 ## Verification
 
@@ -159,7 +166,7 @@ Use this order:
 
 ### Scope
 
-List counts and relative paths for existing, added, removed, and relocated `AGENTS.md` files plus project-skill `SKILL.md` targets. Say explicitly when no `.agents/skills` installs exist.
+List counts and relative paths for existing, added, removed, and relocated `AGENTS.md` files and companion `CLAUDE.md` symlinks plus project-skill `SKILL.md` targets. Say explicitly when no `.agents/skills` installs exist.
 
 ### Sync
 
@@ -167,7 +174,7 @@ Summarize `$agent-skills-update` and `$md-docs` outcomes, including any `update-
 
 ### Polish
 
-List each changed file, content relocated between `AGENTS.md` files, new or removed `AGENTS.md` files, and noise removed or compressed. For `--dry-run`, list planned changes instead.
+List each changed file, content relocated between `AGENTS.md` files, new or removed `AGENTS.md` files, companion `CLAUDE.md` symlinks moved, added, or removed, and noise removed or compressed. For `--dry-run`, list planned changes instead.
 
 ### Verification
 
@@ -185,4 +192,5 @@ Stop without editing when:
 - The current directory is not inside a supported git repository.
 - A sub-skill fails or requires user confirmation.
 - A target has unparseable frontmatter and the minimal safe fix is not obvious.
+- A planned `CLAUDE.md` write would modify a regular file instead of a symlink.
 - A planned write would touch global skills or files outside `$repo_root`.
