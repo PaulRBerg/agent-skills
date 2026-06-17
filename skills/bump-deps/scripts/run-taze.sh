@@ -47,8 +47,8 @@ ERROR: taze CLI is not installed.
 Install taze globally:
   npm install -g taze
 
-Or run via npx:
-  npx taze
+Or run via bunx:
+  bunx taze
 
 Documentation: https://github.com/antfu-collective/taze
 EOF

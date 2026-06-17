@@ -67,7 +67,7 @@ if [ "$MODE" = "html" ]; then
 Error: the `playground` skill is not installed.
 
 Install it with:
-  npx skills add anthropics/skills --skill playground --global
+  bunx skills add anthropics/skills --skill playground --global
 
 After installing, retry this skill.
 EOF

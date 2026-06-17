@@ -20,7 +20,7 @@ Persist the current task's findings as a self-contained, interactive HTML debrie
 The [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill is required only for HTML mode (the default). With `--md`, this skill has no external dependencies. `scripts/prepare.sh` probes for `playground` only when building HTML; if missing it prints the install command and exits non-zero. Manual install:
 
 ```sh
-npx skills add anthropics/skills --skill playground --global
+bunx skills add anthropics/skills --skill playground --global
 ```
 
 ## Workflow

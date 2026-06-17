@@ -25,12 +25,12 @@ This skill requires sibling skills installed next to it:
 - `../agent-skills-update/SKILL.md`
 - `../md-docs/SKILL.md`
 
-Before doing any repo work, verify both files exist. If either is missing, stop and prompt the user to install it with `npx skills`, then rerun this skill. Do not emulate the missing skill manually.
+Before doing any repo work, verify both files exist. If either is missing, stop and prompt the user to install it with `bunx skills`, then rerun this skill. Do not emulate the missing skill manually.
 
 Use this wording:
 
 ```text
-Missing required skill: <name>. Install it with `npx skills add PaulRBerg/agent-skills` or the skill source that provides `<name>`, then rerun `agent-context-polish`.
+Missing required skill: <name>. Install it with `bunx skills add PaulRBerg/agent-skills` or the skill source that provides `<name>`, then rerun `agent-context-polish`.
 ```
 
 Read each sibling `SKILL.md` once and follow its instructions inline as if invoked with the arguments described below. `$agent-skills-update` and `$md-docs` are skill invocations, not shell commands.
@@ -89,7 +89,7 @@ For each discovered skill path, resolve the physical directory with `cd "${p%/SK
 
 1. Parse `path` and `--dry-run`.
 2. Run the guard rails and resolve `$repo_root`.
-3. Verify the required sibling skills are installed. Stop on the first missing skill and prompt for `npx skills` installation.
+3. Verify the required sibling skills are installed. Stop on the first missing skill and prompt for `bunx skills` installation.
 4. Run `$agent-skills-update` first:
    - Forward `--dry-run` when present.
    - Do not forward `path`; `agent-skills-update` owns repo-local `.agents/skills` discovery.

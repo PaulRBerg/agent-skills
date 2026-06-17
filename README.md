@@ -8,7 +8,7 @@ PRB's collection of AI agent skills. Designed to work across agents, but primari
 ## Installation
 
 ```sh
-npx skills add PaulRBerg/agent-skills
+bunx skills add PaulRBerg/agent-skills
 ```
 
 ## Skills

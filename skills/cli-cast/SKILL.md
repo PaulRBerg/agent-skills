@@ -30,7 +30,7 @@ All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC 
 https://lb.routeme.sh/rpc/{CHAIN_ID}/{ROUTEMESH_API_KEY}
 ```
 
-**Construct the RPC URL** by resolving the chain with `$evm-chains` first, then reading the `ROUTEMESH_API_KEY` environment variable if RouteMesh is supported. If `$evm-chains` is unavailable, tell the user they can install this skill collection with `npx skills add PaulRBerg/agent-skills`; until then, use `references/chains.md` only as a limited fallback for common networks.
+**Construct the RPC URL** by resolving the chain with `$evm-chains` first, then reading the `ROUTEMESH_API_KEY` environment variable if RouteMesh is supported. If `$evm-chains` is unavailable, tell the user they can install this skill collection with `bunx skills add PaulRBerg/agent-skills`; until then, use `references/chains.md` only as a limited fallback for common networks.
 
 **Before running any on-chain command**, verify that `ROUTEMESH_API_KEY` is set:
 
@@ -278,7 +278,7 @@ cast balance "$ADDR" --ether --rpc-url "$RPC_URL"
 When the user specifies a chain by name, resolve the chain ID using these steps:
 
 1. **Check `$evm-chains` first** — it is the authoritative Sablier-SDK-backed dataset for chain names, IDs, default public RPCs, native currency symbols, and RouteMesh support
-2. **If `$evm-chains` is unavailable**, tell the user to install this collection with `npx skills add PaulRBerg/agent-skills`, then use `references/chains.md` as a limited fallback for common networks
+2. **If `$evm-chains` is unavailable**, tell the user to install this collection with `bunx skills add PaulRBerg/agent-skills`, then use `references/chains.md` as a limited fallback for common networks
 3. **If the chain is still not listed**, web search for the correct chain ID on chainlist.org
 4. **Construct the RPC URL** using the resolved chain ID and RouteMesh pattern when supported; otherwise use the chain's default public RPC
 

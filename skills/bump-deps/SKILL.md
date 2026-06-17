@@ -36,7 +36,7 @@ scripts/run-taze.sh
 If exit code is 1, stop and inform the user that taze must be installed:
 
 - Global install: `npm install -g taze`
-- One-time: `npx taze`
+- One-time: `bunx taze`
 
 ## Minimum Release Age Mode
 
