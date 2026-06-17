@@ -1,12 +1,12 @@
 ---
 argument-hint: <task>
 disable-model-invocation: false
-name: agent-self-reflection
+name: agents-introspection
 user-invocable: true
 description: Use to retrospect on a task against historical Codex and Claude Code chat transcripts in the current project, identify recurring agent mistakes, and recommend or apply durable fixes such as AGENTS.md updates or new skills.
 ---
 
-# Agent Self Reflection
+# Agents Introspection
 
 Analyze the user's task against prior Codex and Claude Code work in the current directory, then turn repeated agent failure modes into concrete prevention steps.
 
