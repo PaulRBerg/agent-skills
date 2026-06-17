@@ -13,36 +13,37 @@ npx skills add PaulRBerg/agent-skills
 
 ## Skills
 
-| Skill                 | Description                                               |
-| --------------------- | --------------------------------------------------------- |
-| agent-self-reflection | Retrospect on Codex/Claude Code transcript history        |
-| autoresearch          | Autonomous experiment loop                                |
-| bump-deps             | Node.js dependency updates via taze                       |
-| bump-release          | Release workflow with changelog, tagging                  |
-| cli-cast              | Foundry cast CLI guidance                                 |
-| cli-gh                | GitHub CLI operations                                     |
-| cli-just              | Just command runner guidance                              |
-| code-polish           | Combined simplification and review                        |
-| code-review           | Expert code review                                        |
-| code-simplify         | Code simplification and refactoring                       |
-| coingecko-cli         | CoinGecko CLI for prices and market data                  |
-| coingecko-historical  | Open CoinGecko historical data page in browser            |
-| commit                | Git commit with conventional commits                      |
-| create-skill          | Bootstrap a new agent skill                               |
-| debrief               | Interactive HTML or Markdown task debrief                 |
-| effect-ts             | Effect-TS patterns and guidance                           |
-| evm-chains            | EVM chain resolution + Etherscan/Blockscout query routing |
-| find-tool             | Find and compare current developer tools                  |
-| git-squash            | Squash PR branch with semantic commit message             |
-| md-docs               | Markdown documentation management                         |
-| playground            | Interactive single-file HTML playgrounds                  |
-| spreadsheets          | Opinionated CSV/TSV/XLSX wrangling on macOS               |
-| tailwind-css          | Tailwind CSS v4 styling guidance                          |
-| todo-archive          | Archive checked TODO.md tasks into .ai/todos              |
-| update-skills         | Sync project .agents/skills with the current repo state   |
-| vitest                | Vitest test writing and debugging                         |
-| work                  | End-to-end task implementation                            |
-| yeet                  | GitHub contribution workflows                             |
+| Skill                 | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
+| agent-context-polish  | Prune noisy agent context from AGENTS.md and project skills |
+| agent-skills-update   | Sync project .agents/skills with the current repo state     |
+| agent-self-reflection | Retrospect on Codex/Claude Code transcript history          |
+| autoresearch          | Autonomous experiment loop                                  |
+| bump-deps             | Node.js dependency updates via taze                         |
+| bump-release          | Release workflow with changelog, tagging                    |
+| cli-cast              | Foundry cast CLI guidance                                   |
+| cli-gh                | GitHub CLI operations                                       |
+| cli-just              | Just command runner guidance                                |
+| code-polish           | Combined simplification and review                          |
+| code-review           | Expert code review                                          |
+| code-simplify         | Code simplification and refactoring                         |
+| coingecko-cli         | CoinGecko CLI for prices and market data                    |
+| coingecko-historical  | Open CoinGecko historical data page in browser              |
+| commit                | Git commit with conventional commits                        |
+| create-skill          | Bootstrap a new agent skill                                 |
+| debrief               | Interactive HTML or Markdown task debrief                   |
+| effect-ts             | Effect-TS patterns and guidance                             |
+| evm-chains            | EVM chain resolution + Etherscan/Blockscout query routing   |
+| find-tool             | Find and compare current developer tools                    |
+| git-squash            | Squash PR branch with semantic commit message               |
+| md-docs               | Markdown documentation management                           |
+| playground            | Interactive single-file HTML playgrounds                    |
+| spreadsheets          | Opinionated CSV/TSV/XLSX wrangling on macOS                 |
+| tailwind-css          | Tailwind CSS v4 styling guidance                            |
+| todo-archive          | Archive checked TODO.md tasks into .ai/todos                |
+| vitest                | Vitest test writing and debugging                           |
+| work                  | End-to-end task implementation                              |
+| yeet                  | GitHub contribution workflows                               |
 
 Some skills pin `model: opus` in their frontmatter: their workflows are mechanical enough that Opus-level intelligence is sufficient, so there is no need to spend a more capable default model on them.
 

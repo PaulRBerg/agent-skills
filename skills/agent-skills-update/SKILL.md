@@ -1,7 +1,7 @@
 ---
 argument-hint: '[skill-name ...] [--dry-run]'
 disable-model-invocation: true
-name: update-skills
+name: agent-skills-update
 user-invocable: true
 description: Use ONLY to check or update the project-scoped agent skills installed under .agents/skills so they match the current state of the repo. Do not trigger for creating, finding, or installing skills, or for README/AGENTS.md updates.
 ---
@@ -111,7 +111,7 @@ Inputs: every discovered `SKILL.md` plus its `references/`, `scripts/`, `assets/
 
 Recognised flags: `skill-name ...`, `--dry-run`.
 
-See [references/update-skills.md](references/update-skills.md).
+See [references/agent-skills-update.md](references/agent-skills-update.md).
 
 ## Update Rules
 
@@ -142,4 +142,4 @@ Group results per `.agents/skills` location, using its path relative to the repo
 
 ## Additional Resources
 
-- **`references/update-skills.md`** — Complete verify-and-fix workflow: argument parsing, guard rails, discovery and fallbacks, claim extraction, per-claim verification commands, obsolete-skill handling, formatting, and report templates.
+- **`references/agent-skills-update.md`** — Complete verify-and-fix workflow: argument parsing, guard rails, discovery and fallbacks, claim extraction, per-claim verification commands, obsolete-skill handling, formatting, and report templates.
