@@ -188,6 +188,9 @@ gh issue create --title "Bug" --label bug,critical
 
 # Assign issue
 gh issue create --title "Task" --assignee @me
+
+# Set the issue type (GitHub.com and GHES 3.17+)
+gh issue create --type Bug
 ```
 
 ### Viewing Issues
@@ -201,6 +204,9 @@ gh issue list --assignee @me
 
 # List by label
 gh issue list --label bug
+
+# Filter by issue type
+gh issue list --type Bug
 
 # Advanced issue search
 gh issue list --search "is:open label:bug sort:created-desc"
@@ -234,6 +240,77 @@ gh issue comment 456 --body "Update"
 
 # Create branch to work on issue
 gh issue develop 456 --checkout
+```
+
+### Issue Types, Sub-Issues & Relationships
+
+Issue types and sub-issues require GitHub.com or GHES 3.17+; blocking relationships require GHES 3.19+.
+
+```bash
+# Set or remove the issue type
+gh issue edit 456 --type Bug
+gh issue edit 456 --remove-type
+
+# Create a sub-issue under a parent
+gh issue create --parent 100
+
+# Organize existing issues into a parent/child hierarchy
+gh issue edit 100 --add-sub-issue 123,124
+gh issue edit 100 --remove-sub-issue 123
+gh issue edit 123 --parent 100
+gh issue edit 123 --remove-parent
+
+# Track blocked-by / blocking relationships
+gh issue create --blocked-by 200,201 --blocking 300
+gh issue edit 123 --add-blocked-by 200 --add-blocking 300,301
+gh issue edit 123 --remove-blocked-by 200 --remove-blocking 301
+```
+
+## Discussions
+
+When the user asks to list, view, create, edit, or comment on GitHub Discussions, see [references/discussions.md](references/discussions.md). The `gh discussion` command set is in preview and subject to change.
+
+## Copilot Agent Tasks
+
+Delegate work to the Copilot coding agent and track its sessions. The `gh agent-task` command set (aliases `gh agent`, `gh agents`) is in preview.
+
+```bash
+# Create an agent task on the current repository
+gh agent-task create "Improve the performance of the data processing pipeline"
+
+# List your most recent agent tasks
+gh agent-task list
+gh agent-task list --json id,name,state
+
+# View an agent task session (by PR number, session ID, or URL)
+gh agent-task view 123
+gh agent-task view <session-id> --json state --jq '.state'
+```
+
+## Agent Skills
+
+Discover, install, and publish agent skills from GitHub repositories. The `gh skill` command set (alias `gh skills`) is in preview.
+
+```bash
+# Search for skills across GitHub
+gh skill search terraform
+
+# Preview a skill before installing
+gh skill preview github/awesome-copilot documentation-writer
+
+# Install a skill (default scope: project)
+gh skill install github/awesome-copilot documentation-writer
+gh skill install owner/repo skill-name --scope user --pin v1.2.0
+
+# Include skills in hidden dirs (.claude/skills/, .agents/skills/, .github/skills/)
+gh skill install owner/repo skill-name --allow-hidden-dirs
+
+# List installed skills and update them
+gh skill list
+gh skill update --all
+
+# Validate and publish your own skills
+gh skill publish --dry-run
 ```
 
 ## Repository Operations
@@ -272,6 +349,9 @@ gh repo sync owner/repo
 
 # Set default repository
 gh repo set-default
+
+# Configure the squash-merge commit message default
+gh repo edit --squash-merge-commit-message COMMIT_MESSAGES
 ```
 
 ## Search
@@ -338,28 +418,33 @@ gh config set browser firefox
 
 Common gh operations at a glance:
 
-| Operation        | Command                   | Common Flags                               |
-| ---------------- | ------------------------- | ------------------------------------------ |
-| Create PR        | `gh pr create`            | `--draft`, `--fill`, `--reviewer @copilot` |
-| List PRs         | `gh pr list`              | `--author @me`, `--label`, `--search`      |
-| View PR          | `gh pr view <number>`     | `--web`, `--comments`                      |
-| Merge PR         | `gh pr merge <number>`    | `--squash`, `--rebase`, `--delete-branch`  |
-| Revert PR        | `gh pr revert <number>`   | `--body`                                   |
-| Create issue     | `gh issue create`         | `--title`, `--body`, `--label`             |
-| List issues      | `gh issue list`           | `--assignee @me`, `--label`, `--search`    |
-| Close issue      | `gh issue close <number>` | `--duplicate-of`, `--reason`               |
-| View issue       | `gh issue view <number>`  | `--web`, `--comments`                      |
-| Browse repo      | `gh browse`               | `--blame`, `--actions`, `--branch`         |
-| Clone repo       | `gh repo clone <repo>`    | `--no-upstream`                            |
-| Fork repo        | `gh repo fork`            | `--clone`, `--remote`                      |
-| View repo        | `gh repo view`            | `--web`                                    |
-| Create release   | `gh release create <tag>` | `--title`, `--notes`, `--draft`            |
-| Verify release   | `gh release verify <tag>` | `--repo`                                   |
-| Run workflow     | `gh workflow run <name>`  | `--ref`, `--field`                         |
-| Watch run        | `gh run watch <id>`       | `--exit-status`                            |
-| Search repos     | `gh search repos <query>` | `--language`, `--stars`                    |
-| Create label     | `gh label create <name>`  | `--color`, `--description`                 |
-| Create codespace | `gh codespace create`     | `--repo`, `--branch`                       |
+| Operation         | Command                   | Common Flags                               |
+| ----------------- | ------------------------- | ------------------------------------------ |
+| Create PR         | `gh pr create`            | `--draft`, `--fill`, `--reviewer @copilot` |
+| List PRs          | `gh pr list`              | `--author @me`, `--label`, `--search`      |
+| View PR           | `gh pr view <number>`     | `--web`, `--comments`                      |
+| Merge PR          | `gh pr merge <number>`    | `--squash`, `--rebase`, `--delete-branch`  |
+| Revert PR         | `gh pr revert <number>`   | `--body`                                   |
+| Create issue      | `gh issue create`         | `--title`, `--body`, `--label`, `--type`   |
+| List issues       | `gh issue list`           | `--assignee @me`, `--label`, `--type`      |
+| Close issue       | `gh issue close <number>` | `--duplicate-of`, `--reason`               |
+| View issue        | `gh issue view <number>`  | `--web`, `--comments`                      |
+| Link sub-issue    | `gh issue edit <number>`  | `--parent`, `--add-sub-issue`              |
+| Block issue       | `gh issue edit <number>`  | `--add-blocked-by`, `--add-blocking`       |
+| List discussions  | `gh discussion list`      | `--answered`, `--sort`, `--json`           |
+| Create agent task | `gh agent-task create`    | `--json` (on `list`/`view`)                |
+| Install skill     | `gh skill install`        | `--scope`, `--pin`, `--allow-hidden-dirs`  |
+| Browse repo       | `gh browse`               | `--blame`, `--actions`, `--branch`         |
+| Clone repo        | `gh repo clone <repo>`    | `--no-upstream`                            |
+| Fork repo         | `gh repo fork`            | `--clone`, `--remote`                      |
+| View repo         | `gh repo view`            | `--web`                                    |
+| Create release    | `gh release create <tag>` | `--title`, `--notes`, `--draft`            |
+| Verify release    | `gh release verify <tag>` | `--repo`                                   |
+| Run workflow      | `gh workflow run <name>`  | `--ref`, `--field`                         |
+| Watch run         | `gh run watch <id>`       | `--exit-status`                            |
+| Search repos      | `gh search repos <query>` | `--language`, `--stars`                    |
+| Create label      | `gh label create <name>`  | `--color`, `--description`                 |
+| Create codespace  | `gh codespace create`     | `--repo`, `--branch`                       |
 
 ## Additional Resources
 
@@ -367,6 +452,7 @@ Common gh operations at a glance:
 
 For detailed patterns and advanced usage, see:
 
+- **[Discussions](references/discussions.md)** - List, view, create, edit, and comment on GitHub Discussions (preview)
 - **[Workflows & Actions](references/workflows-actions.md)** - GitHub Actions workflows, runs, cache management, and CI/CD integration patterns
 - **[Advanced Features](references/advanced-features.md)** - Aliases, API access, extensions, secrets, SSH/GPG keys, organizations, projects, and advanced scripting
 - **[Automation Workflows](references/automation-workflows.md)** - Common automation patterns, daily reports, release automation, and team collaboration workflows
