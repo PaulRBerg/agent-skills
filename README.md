@@ -32,6 +32,7 @@ npx skills add PaulRBerg/agent-skills
 | debrief               | Interactive HTML or Markdown task debrief                 |
 | effect-ts             | Effect-TS patterns and guidance                           |
 | evm-chains            | EVM chain resolution + Etherscan/Blockscout query routing |
+| find-tool             | Find and compare current developer tools                  |
 | git-squash            | Squash PR branch with semantic commit message             |
 | md-docs               | Markdown documentation management                         |
 | playground            | Interactive single-file HTML playgrounds                  |
