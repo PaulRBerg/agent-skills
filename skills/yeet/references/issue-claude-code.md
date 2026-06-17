@@ -21,7 +21,7 @@ gh api repos/anthropics/claude-code/contents/.github/ISSUE_TEMPLATE \
   --jq '.[] | select(.name | endswith(".yml")) | "\(.name) \(.sha)"'
 ```
 
-Compare against the known-good SHAs (last verified 2026-05-07):
+Compare against the known-good SHAs (last verified 2026-06-17):
 
 | File                  | SHA                                        |
 | --------------------- | ------------------------------------------ |
@@ -61,7 +61,7 @@ From the issue description, infer which template fits best:
 **If ambiguous**: Use AskUserQuestion with options: Bug Report, Feature Request, Documentation, Model Behavior.
 
 > [!IMPORTANT]
-> `gh issue create --body` bypasses GitHub's form template, so it does NOT auto-apply labels. Pass `--label` explicitly (see "Create the Issue").
+> `gh issue create --body` bypasses GitHub's form template, so it does NOT auto-apply labels. Pass `--label` only when `gh repo view anthropics/claude-code --json viewerPermission --jq .viewerPermission` returns `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`; otherwise omit labels and let maintainers triage.
 
 ## Generate Issue Body
 
@@ -275,14 +275,13 @@ Concise (5-10 words) with prefix matching the template: `[BUG]`, `[FEATURE]`, `[
 gh issue create \
   --repo "anthropics/claude-code" \
   --title "$title" \
-  --label "$label" \
   --body "$(cat <<'EOF'
 $body
 EOF
 )"
 ```
 
-`$label` must be one of `bug`, `enhancement`, `documentation`, `model` (matches the template's auto-applied label — see the routing table above).
+Add `--label "$label"` only when the permission check above allows labels. When used, `$label` must be one of `bug`, `enhancement`, `documentation`, `model` (matches the template's auto-applied label — see the routing table above). On a label permission error, follow `commons.md > Idempotency on Retry`, then retry once without `--label`.
 
 Display: "Created: $URL"
 

@@ -21,16 +21,16 @@ gh api repos/openai/codex/contents/.github/ISSUE_TEMPLATE \
   --jq '.[] | select(.name | endswith(".yml")) | "\(.name) \(.sha)"'
 ```
 
-Compare against the known-good SHAs (last verified 2026-05-07):
+Compare against the known-good SHAs (last verified 2026-06-17):
 
 | File                    | SHA                                        |
 | ----------------------- | ------------------------------------------ |
 | `1-codex-app.yml`       | `6e294ee27bc924fc2c68b743bad26260297d13f9` |
 | `2-extension.yml`       | `599bc08b428d6328c712f526549350daf0aada79` |
-| `3-cli.yml`             | `4aff813e5f7bac7458d670f4cde35806493f9639` |
+| `3-cli.yml`             | `cfd368c0ba798d4f513edd5548fd185d761ed15d` |
 | `4-bug-report.yml`      | `4de88414600e6100720fefa2a324ce41d759cd7f` |
-| `5-feature-request.yml` | `55ff9fbbcd590a8c0c2cc51f6a2c0406875fb3f4` |
-| `6-docs-issue.yml`      | `456602e6acbbb73453a2d027e670896ef4a31335` |
+| `5-feature-request.yml` | `745c347965c2e58f8e8e4437009f2c8ae0059878` |
+| `6-docs-issue.yml`      | `1957b6035a58950329d87d4c24e67faf98c00572` |
 
 **If any SHA differs** (or a new file appears), the upstream templates have changed. Before creating the issue:
 
@@ -59,7 +59,7 @@ The repo has six templates. Pick by surface area first, then kind.
 | Codex CLI bug                                      | `3-cli.yml`             | `bug`, `needs triage` |
 | Other bug (Codex Web, integrations, anything else) | `4-bug-report.yml`      | `bug`                 |
 | Feature request (any variant)                      | `5-feature-request.yml` | `enhancement`         |
-| Documentation issue                                | `6-docs-issue.yml`      | `docs`                |
+| Documentation issue                                | `6-docs-issue.yml`      | `documentation`       |
 
 Heuristics:
 
@@ -73,9 +73,11 @@ Heuristics:
 
 **If ambiguous**: Use AskUserQuestion with the surface options above.
 
+Labels listed above are template metadata. Direct `gh issue create --body` creation does not apply YAML issue-form labels; omit `--label` unless `gh repo view openai/codex --json viewerPermission --jq .viewerPermission` returns `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`.
+
 ## Title
 
-Plain, concise (5-10 words). **Do not** add `[BUG]`, `[FEATURE]`, or any other prefix — the templates apply labels automatically and current issues in the repo do not use prefixes.
+Plain, concise (5-10 words). **Do not** add `[BUG]`, `[FEATURE]`, or any other prefix — label metadata lives in the templates and current issues in the repo do not use prefixes.
 
 Good: `CLI hangs when piping large stdin`, `Add support for custom system prompts`
 Bad: `[BUG] CLI hangs ...`, `[FEATURE] Add support ...`
@@ -180,6 +182,10 @@ Include session id, token-limit usage, or context-window usage if relevant.
 {e.g. iTerm2 3.5.0, Ghostty 1.0, VS Code integrated terminal, Windows Terminal (WSL)}
 {note any multiplexer: tmux / screen / zellij}
 
+### Codex doctor report
+
+{output of `codex doctor --json`, or `not available`; review for secrets before posting}
+
 ### What issue are you seeing?
 
 {describe the bug; include thread id if applicable}
@@ -267,7 +273,7 @@ EOF
 )"
 ```
 
-Labels are applied automatically by the template — do not pass `--label`.
+Direct CLI creation with `--body` does not apply YAML issue-form labels. Do not pass `--label` on the external repo unless the permission check above says labels are allowed.
 
 Display: "Created: $URL"
 
@@ -278,6 +284,7 @@ See `commons.md > Comment on Existing Issue`, using repo `"openai/codex"`.
 ## Environment Detection
 
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
+- **Codex doctor report**: `codex doctor --json 2>/dev/null || echo "not available"` — include for CLI bugs when supported; review/redact before posting.
 - **Platform**: See `commons.md > Platform String Normalization`. The CLI/Extension/App templates suggest `uname -mprs` on macOS/Linux; the commons override (`scripts/get-macos-version.sh`) takes precedence for macOS so the value is human-readable.
 - **IDE** (extension issues): Ask user or infer from context.
 - **Terminal** (CLI issues): Ask user — cannot be reliably auto-detected from inside an agent shell. `$TERM_PROGRAM` is a hint but not authoritative.

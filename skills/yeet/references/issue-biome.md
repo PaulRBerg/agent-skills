@@ -12,18 +12,47 @@ File links: `[{path}](https://github.com/biomejs/biome/blob/main/{path})`
 
 See `commons.md > Auth Validation`.
 
+## Template Drift Check
+
+Before generating the issue body, verify the template specs in this file still match the upstream `.github/ISSUE_TEMPLATE` files.
+
+```bash
+gh api repos/biomejs/biome/contents/.github/ISSUE_TEMPLATE \
+  --jq '.[] | select(.name | endswith(".yml")) | "\(.name) \(.sha)"'
+```
+
+Compare against the known-good SHAs (last verified 2026-06-17):
+
+| File                        | SHA                                        |
+| --------------------------- | ------------------------------------------ |
+| `01_formatter_bug.yml`      | `a5b1e863713e82a91a2ec4508cec794a846a9d50` |
+| `02_lint_bug.yml`           | `1150a07f6e70b8d00e662329ea5cc940fc836162` |
+| `03_bug.yml`                | `309033443c2ec2ab4a0f7bf0bfcb693103026aa8` |
+| `04_task.yml`               | `030d1b51e028c9240ea6f9c690c0aeace61916c0` |
+| `05_umbrella.yml`           | `b08776d17709268f8c20b01371bffbd6d642d257` |
+| `06_commercial_request.yml` | `16d744fddb4a5310d4d9467c41e5c385c17982eb` |
+| `config.yml`                | `53f16e16bb4352140251adffc6f9e51333e09072` |
+
+If any SHA differs, fetch the changed template and update this spec before creating the issue:
+
+```bash
+gh api repos/biomejs/biome/contents/.github/ISSUE_TEMPLATE/{file}.yml --jq '.content' | base64 -d
+```
+
 ## Determine Issue Type
 
 From the issue description, infer which template fits best:
 
-| Keywords                                    | Template           | Title Prefix |
-| ------------------------------------------- | ------------------ | ------------ |
-| format, formatter, formatting, prettier     | `01_formatter_bug` | `📝 `        |
-| lint, linter, rule, diagnostic, warning     | `02_lint_bug`      | `💅 `        |
-| bug, broken, error, crash, panic, fails     | `03_bug`           | `🐛 `        |
-| task, implement, add support (contributors) | `04_task`          | `📎 `        |
+| Keywords                                            | Template                    | Issue type   | Title Prefix |
+| --------------------------------------------------- | --------------------------- | ------------ | ------------ |
+| format, formatter, formatting, prettier             | `01_formatter_bug.yml`      | `Bug`        | `📝 `        |
+| lint, linter, rule, diagnostic, warning             | `02_lint_bug.yml`           | `Bug`        | `💅 `        |
+| bug, broken, error, crash, panic, fails             | `03_bug.yml`                | `Bug`        | `🐛 `        |
+| task, implement, add support (contributors)         | `04_task.yml`               | `Task`       | `📎 `        |
+| umbrella, meta issue, tracking, high-level goal     | `05_umbrella.yml`           | `Umbrella`   | `☂️ `        |
+| commercial, paid support, freelancer, contract work | `06_commercial_request.yml` | `Enterprise` | `💳 `        |
 
-**If ambiguous**: Use AskUserQuestion with options: Formatter Bug, Linter Bug, General Bug, Task.
+**If ambiguous**: Use AskUserQuestion with options: Formatter Bug, Linter Bug, General Bug, Task, Umbrella, Commercial Support. Umbrella issues should only be opened with prior maintainer discussion.
 
 ## Create Playground Link
 
@@ -53,9 +82,9 @@ For multi-file scenarios: `npm create @biomejs/biome-reproduction`
 
 {playground URL}
 
-### Expected result
+### Code of Conduct
 
-{what the formatter should output}
+- [x] I agree to follow Biome's Code of Conduct
 ```
 
 ### Linter Bug Template
@@ -76,6 +105,10 @@ For multi-file scenarios: `npm create @biomejs/biome-reproduction`
 ### Expected result
 
 {should it error? not error? different message?}
+
+### Code of Conduct
+
+- [x] I agree to follow Biome's Code of Conduct
 ```
 
 ### General Bug Template
@@ -98,6 +131,10 @@ For multi-file scenarios: `npm create @biomejs/biome-reproduction`
 ### Expected result
 
 {what should happen}
+
+### Code of Conduct
+
+- [x] I agree to follow Biome's Code of Conduct
 ```
 
 ### Task Template
@@ -108,9 +145,33 @@ For multi-file scenarios: `npm create @biomejs/biome-reproduction`
 {summary of the task}
 ```
 
+### Umbrella Template
+
+```markdown
+### Description
+
+{summary of the umbrella, scope, and action items}
+```
+
+### Commercial Support Request Template
+
+```markdown
+### Description
+
+{detailed request, requirements, and definition of done}
+
+### Country
+
+{country from which the freelancer would be hired}
+
+### Timeframe
+
+{urgency / desired schedule}
+```
+
 ## Generate Title
 
-Concise (5-10 words) with emoji prefix: `📝`, `💅`, `🐛`, or `📎`.
+Concise (5-10 words) with emoji prefix: `📝`, `💅`, `🐛`, `📎`, `☂️`, or `💳`.
 
 ## Create the Issue
 
@@ -118,13 +179,14 @@ Concise (5-10 words) with emoji prefix: `📝`, `💅`, `🐛`, or `📎`.
 gh issue create \
   --repo "biomejs/biome" \
   --title "$title" \
+  --type "$issue_type" \
   --body "$(cat <<'EOF'
 $body
 EOF
 )"
 ```
 
-The label `S-Needs triage` is applied automatically by GitHub for bug templates.
+`$issue_type` is the value from the routing table. The label `S-Needs triage` is template metadata for bug forms, but direct CLI body creation does not apply YAML labels; omit `--label` unless `gh repo view biomejs/biome --json viewerPermission --jq .viewerPermission` returns `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`.
 
 Display: "Created: $URL"
 

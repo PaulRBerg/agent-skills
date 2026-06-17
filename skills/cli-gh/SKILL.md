@@ -183,6 +183,9 @@ gh issue create
 # Create issue with title and body
 gh issue create --title "Bug report" --body "Description"
 
+# Use a Markdown issue template as interactive/editor starting body text
+gh issue create --template "Bug Report"
+
 # Create issue with labels
 gh issue create --title "Bug" --label bug,critical
 
@@ -192,6 +195,8 @@ gh issue create --title "Task" --assignee @me
 # Set the issue type (GitHub.com and GHES 3.17+)
 gh issue create --type Bug
 ```
+
+`--template` cannot be combined with `--body` or `--body-file`; use it with prompts, `--editor`, or `--web`. For YAML issue forms, fetch and render the form fields yourself for non-interactive automation, or finish in the browser.
 
 ### Viewing Issues
 
@@ -418,33 +423,33 @@ gh config set browser firefox
 
 Common gh operations at a glance:
 
-| Operation         | Command                   | Common Flags                               |
-| ----------------- | ------------------------- | ------------------------------------------ |
-| Create PR         | `gh pr create`            | `--draft`, `--fill`, `--reviewer @copilot` |
-| List PRs          | `gh pr list`              | `--author @me`, `--label`, `--search`      |
-| View PR           | `gh pr view <number>`     | `--web`, `--comments`                      |
-| Merge PR          | `gh pr merge <number>`    | `--squash`, `--rebase`, `--delete-branch`  |
-| Revert PR         | `gh pr revert <number>`   | `--body`                                   |
-| Create issue      | `gh issue create`         | `--title`, `--body`, `--label`, `--type`   |
-| List issues       | `gh issue list`           | `--assignee @me`, `--label`, `--type`      |
-| Close issue       | `gh issue close <number>` | `--duplicate-of`, `--reason`               |
-| View issue        | `gh issue view <number>`  | `--web`, `--comments`                      |
-| Link sub-issue    | `gh issue edit <number>`  | `--parent`, `--add-sub-issue`              |
-| Block issue       | `gh issue edit <number>`  | `--add-blocked-by`, `--add-blocking`       |
-| List discussions  | `gh discussion list`      | `--answered`, `--sort`, `--json`           |
-| Create agent task | `gh agent-task create`    | `--json` (on `list`/`view`)                |
-| Install skill     | `gh skill install`        | `--scope`, `--pin`, `--allow-hidden-dirs`  |
-| Browse repo       | `gh browse`               | `--blame`, `--actions`, `--branch`         |
-| Clone repo        | `gh repo clone <repo>`    | `--no-upstream`                            |
-| Fork repo         | `gh repo fork`            | `--clone`, `--remote`                      |
-| View repo         | `gh repo view`            | `--web`                                    |
-| Create release    | `gh release create <tag>` | `--title`, `--notes`, `--draft`            |
-| Verify release    | `gh release verify <tag>` | `--repo`                                   |
-| Run workflow      | `gh workflow run <name>`  | `--ref`, `--field`                         |
-| Watch run         | `gh run watch <id>`       | `--exit-status`                            |
-| Search repos      | `gh search repos <query>` | `--language`, `--stars`                    |
-| Create label      | `gh label create <name>`  | `--color`, `--description`                 |
-| Create codespace  | `gh codespace create`     | `--repo`, `--branch`                       |
+| Operation         | Command                   | Common Flags                                |
+| ----------------- | ------------------------- | ------------------------------------------- |
+| Create PR         | `gh pr create`            | `--draft`, `--fill`, `--reviewer @copilot`  |
+| List PRs          | `gh pr list`              | `--author @me`, `--label`, `--search`       |
+| View PR           | `gh pr view <number>`     | `--web`, `--comments`                       |
+| Merge PR          | `gh pr merge <number>`    | `--squash`, `--rebase`, `--delete-branch`   |
+| Revert PR         | `gh pr revert <number>`   | `--body`                                    |
+| Create issue      | `gh issue create`         | `--title`, `--body`, `--template`, `--type` |
+| List issues       | `gh issue list`           | `--assignee @me`, `--label`, `--type`       |
+| Close issue       | `gh issue close <number>` | `--duplicate-of`, `--reason`                |
+| View issue        | `gh issue view <number>`  | `--web`, `--comments`                       |
+| Link sub-issue    | `gh issue edit <number>`  | `--parent`, `--add-sub-issue`               |
+| Block issue       | `gh issue edit <number>`  | `--add-blocked-by`, `--add-blocking`        |
+| List discussions  | `gh discussion list`      | `--answered`, `--sort`, `--json`            |
+| Create agent task | `gh agent-task create`    | `--json` (on `list`/`view`)                 |
+| Install skill     | `gh skill install`        | `--scope`, `--pin`, `--allow-hidden-dirs`   |
+| Browse repo       | `gh browse`               | `--blame`, `--actions`, `--branch`          |
+| Clone repo        | `gh repo clone <repo>`    | `--no-upstream`                             |
+| Fork repo         | `gh repo fork`            | `--clone`, `--remote`                       |
+| View repo         | `gh repo view`            | `--web`                                     |
+| Create release    | `gh release create <tag>` | `--title`, `--notes`, `--draft`             |
+| Verify release    | `gh release verify <tag>` | `--repo`                                    |
+| Run workflow      | `gh workflow run <name>`  | `--ref`, `--field`                          |
+| Watch run         | `gh run watch <id>`       | `--exit-status`                             |
+| Search repos      | `gh search repos <query>` | `--language`, `--stars`                     |
+| Create label      | `gh label create <name>`  | `--color`, `--description`                  |
+| Create codespace  | `gh codespace create`     | `--repo`, `--branch`                        |
 
 ## Additional Resources
 

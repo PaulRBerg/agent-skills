@@ -39,6 +39,20 @@ Treat the fetched list as the **only** source of truth. Read each `name + descri
 - **Empty result** (repo has no labels): proceed without `--label`. Do not fail the workflow.
 - **Command fails** (auth, network, missing repo): fail loud. Surface the `gh` error and stop before issue creation — silent fallback hides misconfiguration. Per `Error Handling` below, do not retry.
 
+## Template Metadata And Issue Forms
+
+GitHub issue-form YAML can define top-level `labels` and `type`. The native web form applies that metadata, but `gh issue create --body` / `--body-file` posts a body directly and does not execute the form.
+
+Current `gh issue create --template` uses a template as interactive/editor starting body text. It is rejected with `--body` / `--body-file`, and it is not a non-interactive YAML issue-form submission API. For deterministic agent-created issues, fetch YAML forms, render matching markdown headings, and pass supported metadata explicitly.
+
+Before passing labels, check repository permission:
+
+```bash
+gh repo view "{owner}/{repo}" --json viewerPermission --jq .viewerPermission
+```
+
+Treat `ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` as label-capable; omit `--label` for `READ`. If a label create fails anyway, run the idempotency check before retrying once without labels. When a YAML form has top-level `type`, pass `--type` if the repo supports issue types.
+
 ## HEREDOC Syntax
 
 Use HEREDOC when passing multi-line bodies to gh commands. Single quotes around `'EOF'` prevent variable expansion:

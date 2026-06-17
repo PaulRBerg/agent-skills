@@ -73,7 +73,7 @@ Infer best match from user's description keywords (bug, feature, docs, etc.). Pr
    gh api repos/{owner}/{repo}/contents/.github/ISSUE_TEMPLATE/{template_name} --jq '.content' | base64 -d
    ```
 
-2. Parse: `name`, `description`, `title` (prefix), `labels`, `body` array (fields with `type`, `id`, `attributes`)
+2. Parse: `name`, `description`, `title` (prefix), `labels`, `type`, `body` array (fields with `type`, `id`, `attributes`)
 
 3. Field types: `textarea`/`input` → section header from `attributes.label`; `dropdown` → select option from context; `checkboxes` → auto-acknowledge; `markdown` → skip
 
@@ -81,12 +81,22 @@ Infer best match from user's description keywords (bug, feature, docs, etc.). Pr
 
 **No templates:** Use default structure (see Generate Title and Body).
 
+Do not use `gh issue create --template` for the automated body path. Current `gh` treats templates as interactive/editor starting body text, rejects `--template` with `--body` / `--body-file`, and does not replace YAML issue-form parsing.
+
 ## Apply Labels
 
 Extract owner from repository.
 
-- IF owner = `$AUTHENTICATED_USER` OR owner = `sablier-labs`: continue.
-- ELSE: **skip this section.** Only template-defined labels apply.
+Check whether labels can be applied:
+
+```bash
+gh repo view "{owner}/{repo}" --json viewerPermission --jq .viewerPermission
+```
+
+`ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` can pass labels; `READ` cannot. If permission is `READ`, skip labels entirely, including template-defined labels.
+
+- IF owner = `$AUTHENTICATED_USER` OR owner = `sablier-labs`: continue with semantic labels.
+- ELSE: skip semantic labels. Only template-defined labels apply, and only when permission allows labels.
 
 Fetch the repo's live label set per `commons.md > Fetch Repo Labels`, then pick labels by semantically matching the user's request against the fetched `name + description` pairs. One label per dimension when a clear axis exists in the repo; skip dimensions that don't apply; never invent labels.
 
@@ -162,15 +172,16 @@ On any upload failure, stop before issue creation and surface the upload error. 
 
 ## Create the Issue
 
-Merge template-defined labels with the labels picked in "Apply Labels" (deduplicate). Omit `--label` entirely if no labels apply.
+Merge template-defined labels with the labels picked in "Apply Labels" (deduplicate). Omit `--label` entirely if no labels apply or permission is `READ`. If the YAML template defines top-level `type`, pass it with `--type`; otherwise omit `--type`.
 
 ```bash
 gh issue create \
   --repo "$repository" \
   --title "$title" \
-  --body "$body" \
-  --label "label1,label2"  # omit --label entirely if no labels apply
+  --body "$body"
 ```
+
+Add `--type "$issue_type"` only when a template issue type applies. Add `--label "label1,label2"` only when labels apply and permission allows labels.
 
 Display: "Created: $URL"
 
