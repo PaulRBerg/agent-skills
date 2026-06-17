@@ -3,16 +3,16 @@ argument-hint: <chain-name-or-id>
 disable-model-invocation: false
 name: evm-chains
 user-invocable: true
-description: 'Use for targeted EVM chain resolution and on-chain account data: target chain name/ID, RPC/explorer/native symbol, RouteMesh, balances, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; bridge/cross-chain Bungee/Socket enrichment.'
+description: 'Use for targeted EVM chain resolution and on-chain account data: target chain name/ID, RPC/explorer/native symbol, RouteMesh, balances, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; bridge/cross-chain Bungee, LayerZero, LI.FI, Socket enrichment.'
 ---
 
 # EVM Chains
 
-Targeted EVM chain dataset (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback). For bridge transactions and cross-chain swaps, enrich explorer/RPC verification with Bungee status data only when the relevant chains are target chains.
+Targeted EVM chain dataset (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback). For bridge transactions and cross-chain swaps, enrich explorer/RPC verification with Bungee, LayerZero, or LI.FI data only when the relevant chains are target chains.
 
-Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks — and to query on-chain account data once the chain is resolved (see [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing)). Also use it when the user mentions bridging, bridge tx, cross-chain swap, Bungee, or Socket, or when a transaction is inferred to be bridge-related.
+Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks — and to query on-chain account data once the chain is resolved (see [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing)). Also use it when the user mentions bridging, bridge tx, cross-chain swap, Bungee, LayerZero, LI.FI, Socket, Stargate, OFT, CCTP, or Aori, or when a transaction is inferred to be bridge-related.
 
-Match chains by displayed name or numeric chain ID. `./references/target-mainnets.json` is the skill's authoritative scope. If the requested chain is not listed there, do not use Etherscan, Blockscout, Bungee, RouteMesh, Chainlist, web search, or public RPCs to work around the scope. Ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
+Match chains by displayed name or numeric chain ID. `./references/target-mainnets.json` is the skill's authoritative scope. If the requested chain is not listed there, do not use Etherscan, Blockscout, Bungee, LayerZero, LI.FI, RouteMesh, Chainlist, web search, or public RPCs to work around the scope. Ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
 
 Also normalize common code aliases from `./references/chain-aliases.json` to their target mainnet rows.
 
@@ -27,11 +27,17 @@ To read account data — native balance, token holdings, ERC-20/721/1155 transfe
 
 **Paid-chain auto-fallback.** Base (`8453`), Optimism (`10`), Avalanche (`43114`), and BNB Chain (`56`) are Etherscan-listed target chains, but their data endpoints require a paid Etherscan plan. If the target is one of these **and** `./scripts/etherscan-detect-plan.sh` reports `paid_chains=false` (free tier), route to Blockscout instead. Etherscan stays the default for every other Etherscan-listed target chain.
 
-## Bridge Transaction Enrichment (Bungee)
+## Bridge Data Enrichment
 
-When the user mentions bridging, bridge tx, cross-chain swap, Bungee, or Socket, or when a transaction looks bridge-related from logs, counterparties, calldata, or token movement, first confirm the known origin and destination chains are target chains. If either known chain is outside `./references/target-mainnets.json`, ask for a feature request instead of continuing. Otherwise, read `./references/bungee-api.md` before answering. Use Bungee to enrich the analysis with origin/destination transaction context, route/bridge name, status code, timestamps, and refunds.
+When the user mentions bridging, bridge tx, cross-chain swap, or a bridge provider, or when a transaction looks bridge-related from logs, counterparties, calldata, or token movement, first confirm the known origin and destination chains are target chains. If either known chain is outside `./references/target-mainnets.json`, ask for a feature request instead of continuing.
 
-Keep Bungee as an enrichment source alongside Etherscan, Blockscout, explorers, and RPC receipts. Do not treat Bungee as authoritative for on-chain execution by itself; verify submitted transactions and terminal outcomes with explorer/RPC data whenever possible. If Bungee has no record or the public sandbox is rate-limited/unavailable, say so and continue normal on-chain analysis.
+Then route to the bridge reference that matches the prompt or evidence:
+
+- **Bungee / Socket / Bungee Auto:** read `./references/bungee-api.md`.
+- **LayerZero / Stargate / OFT / CCTP / Aori / Value Transfer API / LayerZeroScan:** read `./references/layerzero-bridging.md`.
+- **LI.FI / LiFi / li.quest / LI.FI Explorer:** read `./references/lifi-bridging.md`.
+
+Use bridge APIs as read-only enrichment sources alongside Etherscan, Blockscout, explorers, and RPC receipts. Do not treat bridge APIs as authoritative for on-chain execution by themselves; verify submitted transactions and terminal outcomes with explorer/RPC data whenever possible. Returned route steps, calldata, `userSteps`, `transactionRequest`, or signatures are for inspection only in this skill. Do not sign messages, submit signatures, execute user steps, or broadcast bridge transactions.
 
 ## RouteMesh
 
