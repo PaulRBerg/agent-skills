@@ -84,6 +84,11 @@ CATALOG_SOURCE_PATHS = (
     "~/sablier/agent-skills",
 )
 
+MACOS_PROTECTED_HOME_PATHS = (
+    "~/Library",
+    "~/.Trash",
+)
+
 SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", re.DOTALL)
 NAME_FIELD_RE = re.compile(r"^name:\s*['\"]?([^'\"\n#]+?)['\"]?\s*(?:#.*)?$", re.MULTILINE)
@@ -120,6 +125,12 @@ def rg_base_args(root: Path, include_catalog_sources: bool) -> list[str]:
         args.extend(["-g", f"!**/{name}/**"])
     for pattern in AGENT_STATE_DIR_GLOBS + AGENT_STATE_FILE_GLOBS:
         args.extend(["-g", f"!{pattern}"])
+    for protected_root in macos_protected_home_roots():
+        if protected_root == root:
+            continue
+        if protected_root.is_relative_to(root):
+            relative = protected_root.relative_to(root).as_posix()
+            args.extend(["-g", f"!{relative}/**"])
     if not include_catalog_sources:
         for catalog_root in catalog_source_roots():
             if root.is_relative_to(catalog_root):
@@ -144,6 +155,10 @@ def normalize_roots(raw_roots: list[str]) -> list[Path]:
 
 def catalog_source_roots() -> list[Path]:
     return [Path(os.path.expanduser(path)).resolve() for path in CATALOG_SOURCE_PATHS]
+
+
+def macos_protected_home_roots() -> list[Path]:
+    return [Path(os.path.expanduser(path)).resolve() for path in MACOS_PROTECTED_HOME_PATHS]
 
 
 def catalog_sources_enabled_for_path(path: Path, roots: list[Path], include_catalog_sources: bool) -> bool:
@@ -407,6 +422,7 @@ def skipped_summary() -> dict[str, list[str]]:
     return {
         "directories": [f"**/{name}/**" for name in DEFAULT_DIR_IGNORES] + list(AGENT_STATE_DIR_GLOBS),
         "files": list(AGENT_STATE_FILE_GLOBS),
+        "macos_protected_home_paths": list(MACOS_PROTECTED_HOME_PATHS),
         "catalog_sources": list(CATALOG_SOURCE_PATHS),
     }
 
@@ -507,6 +523,9 @@ def as_text(
             print(f"- {pattern}")
         print("\nIgnored catalog source roots during broad scans:")
         for pattern in skipped_summary()["catalog_sources"]:
+            print(f"- {pattern}")
+        print("\nIgnored macOS protected home paths:")
+        for pattern in skipped_summary()["macos_protected_home_paths"]:
             print(f"- {pattern}")
 
 

@@ -7,7 +7,12 @@
 - VCS and dependency directories: `.git`, `node_modules`, `vendor`, `.venv`, `target`.
 - Build outputs: `dist`, `build`, `out`, `.next`, `coverage`.
 - Large or binary-ish local state: caches, logs, SQLite state, generated images, and temporary directories under known agent homes.
+- macOS protected home paths: `~/Library` and `~/.Trash`.
 - Known local skill catalog source checkouts during broad scans: `~/projects/agent-skills`, `~/sablier/sablier-skills`, and `~/sablier/agent-skills`.
+
+## macOS Protected Paths
+
+Broad `$HOME` scans ignore `~/Library` and `~/.Trash` because macOS privacy protections can make ripgrep return `2` after producing partial results. Scoped explicit roots are the reliable way to cover additional local content without treating protected-path failures as successful scans.
 
 ## Claude Code State
 

@@ -3,12 +3,12 @@ argument-hint: "[--root PATH] [--skill NAME] [--format text|json|dot]"
 disable-model-invocation: false
 name: skill-map
 user-invocable: true
-description: "Use to find agent skill installs, duplicate skills, cross-dependencies, invocations, and cross-references across the local machine. Scans broadly while ignoring agent transcript/history/state directories such as node_modules, Claude Code plans/projects/backups, and Codex sessions/threads/backups."
+description: "Use to find agent skill installs, duplicate skills, cross-dependencies, invocations, and cross-references across the local machine. Scans broadly while ignoring macOS protected home paths, agent transcript/history/state directories, dependency folders, and backups."
 ---
 
 # Skill Map
 
-Find skill installs and references across local files without scanning obvious transcript, cache, dependency, or backup noise.
+Find skill installs and references across local files without scanning macOS protected home paths or obvious transcript, cache, dependency, and backup noise.
 
 ## Arguments
 
@@ -52,6 +52,7 @@ Find skill installs and references across local files without scanning obvious t
 ## Guard Rails
 
 - Do not search transcript or backup directories manually after the helper excludes them unless the user explicitly requests transcript/history analysis.
+- Do not broaden `$HOME` scans into macOS protected paths such as `~/Library` or `~/.Trash`; pass narrower explicit roots instead when a broad scan needs more coverage.
 - Treat local skill catalog source checkouts as false positives during broad machine scans; pass them explicitly as `--root` when auditing catalog contents.
 - Treat output paths as local private context. Do not paste snippets unless `--include-snippets` was intentionally used.
 - Prefer adding ignore rules in the helper and documenting the rationale in `references/ignore-policy.md` instead of ad hoc shell filters.
