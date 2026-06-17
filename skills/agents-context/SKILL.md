@@ -16,7 +16,7 @@ Choose exactly one workflow.
 
 | User intent                                                             | Workflow | Reference                                                    |
 | ----------------------------------------------------------------------- | -------- | ------------------------------------------------------------ |
-| Update, refresh, sync, check, prune, polish, or repair existing context | `polish` | `references/polish.md`                                       |
+| Update, refresh, sync, check, prune, polish, or repair existing context | `polish` | `references/brain-polish.md`                                 |
 | Create or initialize missing README.md / AGENTS.md files                | `create` | `references/create-docs.md`                                  |
 | Create, scaffold, install, or discover a skill                          | Stop     | Refer to `skills/create-skill` or the user's skill installer |
 
@@ -151,5 +151,5 @@ Use `✓` for updated/created/verified, `⊘` for skipped, `⚠` for advisories,
 
 ## References
 
-- Read `references/polish.md` for the unified update/polish workflow.
+- Read `references/brain-polish.md` for the unified update/polish workflow.
 - Read `references/create-docs.md` for README.md and AGENTS.md creation.
