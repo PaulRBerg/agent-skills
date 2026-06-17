@@ -1,11 +1,9 @@
 ---
 argument-hint: '[--all] [--deep] [--push] [--close <issue_numbers>]'
-disable-model-invocation: false
-effort: high
-model: opus
+disable-model-invocation: true
 name: commit
 user-invocable: true
-description: 'Use for commit workflows: commit changes, craft commit messages, create atomic conventional commits, optionally --all, --deep, --close, or --push.'
+description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft conventional commit messages, commit, and optionally --all, --deep, --close, or --push.'
 ---
 
 # Git Commit
@@ -14,53 +12,50 @@ Create atomic commits by staging the right files, analyzing the staged diff, com
 
 ## Workflow
 
-### 1) Pre-flight + context (single call)
-
-Run all checks and context collection in one bash call:
-
-```bash
-git rev-parse --is-inside-work-tree \
-  && ! test -d "$(git rev-parse --git-dir)/rebase-merge" \
-  && ! test -f "$(git rev-parse --git-dir)/MERGE_HEAD" \
-  && ! test -f "$(git rev-parse --git-dir)/CHERRY_PICK_HEAD" \
-  && git symbolic-ref HEAD \
-  && git status --short --branch
-```
-
-If any check fails, stop with a clear error and suggested fix.
+### 1) Parse arguments
 
 Arguments: `$ARGUMENTS`
 
-### 2) Parse arguments
-
 - Flags:
   - `--all` commit all changes
-  - `--deep` deep analysis, breaking changes, concise body
+  - `--deep` deep analysis with the active session model, breaking changes, concise body
   - `--push` push after commit
   - `--close <issue_numbers>` append `Closes #N` trailers for listed issues (comma/space-separated)
 - Value arguments:
   - Type keyword (any conventional type) overrides inferred type
   - Quoted text overrides inferred description
 
-### 3) Stage + read diff
+### 2) Prepare staged diff
+
+Run the portable helper from the target repository cwd. Never `cd` into the skill directory, and never use dynamic `!` shell injection.
+
+For Claude Code:
+
+```bash
+bash "${CLAUDE_SKILL_DIR}/scripts/prepare-commit.sh" [--all] [--diff summary|full] -- [session_modified_paths...]
+```
+
+For Codex CLI, resolve `<skill-dir>` from the loaded `SKILL.md` path:
+
+```bash
+bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--diff summary|full] -- [session_modified_paths...]
+```
+
+Use `--diff summary` when the user supplied a clear subject or description. Use `--diff full` when the intent is ambiguous or `--deep` was requested.
+
+The helper performs Git preflight checks, stages `--all` or the session-modified paths, unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise suggested fix.
 
 - If `--all`:
-  - If no changes at all: error "No changes to commit"
-  - If unstaged changes exist: `git add -A`
-  - If already staged: proceed
+  - Include all tracked, untracked, modified, deleted, and already staged changes
 - Otherwise (atomic commits):
   - Session-modified files = files edited in this session
-  - Currently staged files: `git diff --cached --name-only`
-  - For staged files NOT in session-modified set: `git restore --staged <file>`
-  - For session-modified files with changes: `git add <file>`
-  - If none: error "No files modified in this session"
+  - Pass every session-modified path after `--`
+  - The helper stages only those paths and unstages unrelated pre-staged paths
 - **Unrelated changes**: session-modified files may contain pre-existing uncommitted changes (hunks not from this session). Include the entire file—partial staging is impractical. Never revert, discard, or `git checkout` unrelated changes.
-- Read the staged diff once: `git diff --cached`
-- Log staged files with status (A/M/D)
 
-### 4) Analyze + compose message
+### 3) Analyze + compose message
 
-Read the staged diff and produce the commit message in a single pass.
+Read the helper output and produce the commit message in a single pass.
 
 **Type inference** — infer the type from the dominant user-visible intent, not the largest file diff or the presence of
 dependency/config churn.
@@ -119,7 +114,7 @@ Explicit type keyword in arguments takes precedence over inference.
 - Multiple issues: one `Closes #N` per line in the body/trailer
 - Merge with transcript-scanned issues; de-duplicate
 
-### 5) Commit
+### 4) Commit
 
 - Use `git commit -m "subject"` (add `-m "body"` only if body is non-empty)
 - Output exactly: commit hash, subject, and `N files changed` summary. Nothing else.
@@ -127,7 +122,7 @@ Explicit type keyword in arguments takes precedence over inference.
 - If failed: show error + suggest fix
 - **Pre-commit hook failure:** if the hook fails on unrelated/pre-existing changes (not this session's changes), retry automatically with `git commit --no-verify` — do not ask. Report the bypass in one line, noting the failure was unrelated to the staged changes. Never bypass hooks for failures caused by the session's own changes; fix those or surface the error instead.
 
-### 6) Push (if `--push`)
+### 5) Push (if `--push`)
 
 - If upstream exists: `git push`
 - If no upstream: `git push -u origin HEAD`
