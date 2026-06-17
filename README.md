@@ -36,7 +36,7 @@ bunx skills add PaulRBerg/agent-skills
 | find-tool            | Find and compare current developer tools                   |
 | git-squash           | Squash PR branch with semantic commit message              |
 | grill-me             | Relentlessly stress-test plans and designs                 |
-| loop-skill           | Repeat a skill with code-polish and one net report         |
+| loop-skill           | Repeat a skill multiple times with one net report          |
 | playground           | Interactive single-file HTML playgrounds                   |
 | skill-map            | Find skill dependencies and references across machine      |
 | spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS                |
