@@ -3,14 +3,14 @@ argument-hint: '[path] [--dry-run]'
 disable-model-invocation: false
 name: agent-context-polish
 user-invocable: true
-description: 'Use to polish repo-local AGENTS.md and project .agents/skills context: sync installed skills, refresh docs, and remove verbose or trivially inferable agent instructions.'
+description: 'Use to polish repo-local AGENTS.md and project .agents/skills context: sync installed skills, prune noisy guidance, and restructure nested AGENTS.md when it improves agent analysis.'
 ---
 
 # Agent Context Polish
 
 ## Objective
 
-Tighten repo-local agent context after syncing the sources that maintain it. The output is not more documentation; it is less noise: keep guidance, preferences, workflow traps, and non-obvious repo rules that an agent cannot cheaply infer from the tree.
+Tighten repo-local agent context after syncing the sources that maintain it. The output is not more documentation; it is less noise and better placement: keep guidance, preferences, workflow traps, and non-obvious repo rules that an agent cannot cheaply infer from the tree. Prefer a small, scoped `AGENTS.md` hierarchy over one broad root file when locality makes instructions more accurate.
 
 ## Arguments
 
@@ -64,11 +64,13 @@ Stay inside the current git repository. Never scan or write global skill install
 Targets:
 
 - Every repo-local `AGENTS.md`, recursively.
+- New repo-local nested `AGENTS.md` files when a subtree needs distinct agent guidance.
 - Every repo-local `.agents/skills/<name>/SKILL.md`, recursively.
 
 Context:
 
 - Other files under repo-local `.agents/skills/<name>/` may be read only to validate a `SKILL.md` claim.
+- Other files in candidate subtrees may be read to decide whether `AGENTS.md` guidance belongs in a parent, child, or new nested file.
 - Do not treat catalog trees such as `skills/<name>/` as installed project skills.
 - Do not rewrite `references/`, `scripts/`, `assets/`, or `examples/` unless a minimal edit is required to repair a reference broken by the `SKILL.md` polish.
 
@@ -99,7 +101,9 @@ For each discovered skill path, resolve the physical directory with `cd "${p%/SK
    - If the installed `md-docs` does not expose `update-all`, report the fallback and run `$md-docs update-readme` followed by `$md-docs update-agents` with the same supported arguments.
    - If `md-docs` is missing or either documented workflow fails, stop before the polish pass.
 6. Rediscover targets after the sub-skills finish.
-7. Polish only the discovered `AGENTS.md` and repo-local project-skill `SKILL.md` files.
+7. Polish the `AGENTS.md` hierarchy and repo-local project-skill `SKILL.md` files:
+   - For `AGENTS.md`, prune, relocate, add, or remove files only when the structure becomes more accurate for agents analyzing the codebase.
+   - For project-skill `SKILL.md`, edit only discovered repo-local `.agents/skills/<name>/SKILL.md` files.
 8. Verify changed Markdown with the narrowest formatter/checker available. Prefer `just` recipes when present and inspect unclear recipes before running them.
 9. Report sub-skill outcomes, polish changes, verification, skipped checks, and residual risks.
 
@@ -128,6 +132,18 @@ Keep or sharpen these:
 
 When a section mixes useful guidance with obvious inventory, keep the useful guidance and remove only the inventory. Do not broaden scope or rewrite for style once the noise is gone.
 
+## AGENTS.md Placement
+
+Treat each `AGENTS.md` as scoped instructions for its directory tree.
+
+- Move subtree-specific guidance from a parent `AGENTS.md` to the deepest common ancestor where it applies.
+- Promote duplicated nested guidance to the nearest shared parent only when it genuinely applies across those children.
+- Add a nested `AGENTS.md` when a subtree has distinct commands, generated files, ownership boundaries, safety rules, data-handling rules, or review constraints that would be noisy or misleading at the repo root.
+- Prune a root or nested `AGENTS.md` when it repeats parent guidance, describes obvious layout, or carries stale context. Delete an `AGENTS.md` only when no useful guidance remains after pruning.
+- Keep parent files for global defaults and child files for local deltas, exceptions, and sharper constraints.
+- Do not create nested `AGENTS.md` files merely to document directories, package names, or facts an agent can discover from manifests and filenames.
+- After moving, adding, or deleting `AGENTS.md` files, rediscover targets and ensure no useful local constraint was orphaned.
+
 ## Verification
 
 After edits:
@@ -143,7 +159,7 @@ Use this order:
 
 ### Scope
 
-List counts and relative paths for `AGENTS.md` and project-skill `SKILL.md` targets. Say explicitly when no `.agents/skills` installs exist.
+List counts and relative paths for existing, added, removed, and relocated `AGENTS.md` files plus project-skill `SKILL.md` targets. Say explicitly when no `.agents/skills` installs exist.
 
 ### Sync
 
@@ -151,7 +167,7 @@ Summarize `$agent-skills-update` and `$md-docs` outcomes, including any `update-
 
 ### Polish
 
-List each changed file and the noise removed or compressed. For `--dry-run`, list planned changes instead.
+List each changed file, content relocated between `AGENTS.md` files, new or removed `AGENTS.md` files, and noise removed or compressed. For `--dry-run`, list planned changes instead.
 
 ### Verification
 
