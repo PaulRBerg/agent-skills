@@ -1,5 +1,5 @@
 ---
-argument-hint: <update-readme|update-agents|init-readme|init-agents> [path] [--root-only] [--preserve] [--minimal] [--thorough] [--dry-run]
+argument-hint: <update-all|update-readme|update-agents|init-readme|init-agents> [path] [--root-only] [--preserve] [--minimal] [--thorough] [--dry-run]
 disable-model-invocation: false
 name: md-docs
 user-invocable: true
@@ -35,6 +35,7 @@ Pick the workflow that matches the user's intent:
 
 | Trigger                                                               | Workflow             | Reference                     |
 | --------------------------------------------------------------------- | -------------------- | ----------------------------- |
+| "update docs" / "refresh docs" / "update README and AGENTS.md"        | Update All           | Compose the two update refs   |
 | "update README" / "refresh README" (file already exists)              | Update README        | `references/update-readme.md` |
 | "init README" / "create README" / "new README" (no file or `--force`) | Initialize README    | `references/init-readme.md`   |
 | "update CLAUDE.md" / "update AGENTS.md" / "update context files"      | Update Context Files | `references/update-agents.md` |
@@ -44,6 +45,7 @@ Selection rules:
 
 - If the target file already exists and the user says "update" / "refresh" / "fix", route to an `update-*` workflow.
 - If the target file is missing or the user says "create" / "init" / "new", route to an `init-*` workflow.
+- If the user invokes `update-all` or asks to refresh both human docs and agent context, run `update-readme` first, then `update-agents`, forwarding the same supported arguments to each phase.
 - For ambiguous requests, enumerate the target files first (see Recursive Discovery) and confirm with the user.
 - If the user invokes the skill with no arguments, default to listing the files present across the tree and proposing a workflow rather than guessing.
 - Multiple workflows in one request (e.g. "update README and AGENTS.md") are fine — run them sequentially in the order the user listed them, reporting each result independently.
@@ -155,6 +157,16 @@ Behaviors that apply across every workflow:
 - Recurse by default but stay inside the repo (`git rev-parse --show-toplevel`); honor the exclusions in Recursive Discovery. Use `--root-only` or a `path` argument to narrow scope. Never write outside the discovered target set.
 - When a sweep would create or rewrite more than a handful of files, list the planned targets and get confirmation before writing (treat it like an implicit `--dry-run` preview first).
 - If `CONTRIBUTING.md` exists next to any target, do not edit it; surface the merge-into-AGENTS recommendation for that directory and continue.
+
+## Update All
+
+When to use: user asks to update all maintained docs, refresh both README.md and AGENTS.md / CLAUDE.md, or invokes `update-all`.
+
+Run **Update README** first, then **Update Context Files**. Forward the same `path`, `--root-only`, `--dry-run`, `--preserve`, `--minimal`, and `--thorough` arguments to both phases when supported. If Update README fails or needs user confirmation, stop before Update Context Files. Report each phase separately and include a final tally across both phases.
+
+`update-all` is a documented orchestration workflow, not a separate reference file. Follow [references/update-readme.md](references/update-readme.md), then [references/update-agents.md](references/update-agents.md).
+
+Recognised flags: `path`, `--root-only`, `--dry-run`, `--preserve`, `--minimal`, `--thorough` (alias `--full`).
 
 ## Update Context Files
 
