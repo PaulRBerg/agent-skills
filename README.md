@@ -36,6 +36,7 @@ bunx skills add PaulRBerg/agent-skills
 | find-tool            | Find and compare current developer tools                   |
 | git-squash           | Squash PR branch with semantic commit message              |
 | playground           | Interactive single-file HTML playgrounds                   |
+| skill-map            | Find skill dependencies and references across machine      |
 | spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS                |
 | tailwind-css         | Tailwind CSS v4 styling guidance                           |
 | todo-archive         | Archive checked TODO.md tasks into .ai/todos               |
