@@ -22,6 +22,8 @@ Bootstrap a new agent skill, then symlink it into `.claude/skills/` so Claude Co
 | local (default) | `.agents/skills/<name>/`   | `.claude/skills/<name>`   |
 | `--global`      | `~/.agents/skills/<name>/` | `~/.claude/skills/<name>` |
 
+For local mode, `<scope>` is the chosen project directory. It may be the repository root or a nested project/workspace directory under a larger repo; a local `.agents/skills/` below the repo root is valid when that is the intended project scope.
+
 The symlink target is always the relative path `../../.agents/skills/<name>` so it resolves correctly in both scopes.
 
 ## Skill Layout
@@ -119,6 +121,7 @@ Use `WebFetch` to confirm the current frontmatter schema, naming rules, and prog
 ### 2. Validate
 
 - Reject names that are not kebab-case or collide with an existing skill at the resolved path.
+- Accept local scopes nested under a larger repo; do not force the skill into the repo root when the task targets a nested project directory.
 - Stop if `<scope>/.agents/skills/<name>/` or `<scope>/.claude/skills/<name>` already exists.
 
 ### 3. Plan the Layout
