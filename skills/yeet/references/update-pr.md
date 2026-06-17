@@ -12,7 +12,7 @@ Same as `create-pr.md > Validate Prerequisites`.
 gh pr view --json number,url,title,baseRefName 2>/dev/null
 ```
 
-IF no PR found: ERROR "No PR exists for this branch. Use `/create-pr` to create one first."
+IF no PR found: ERROR "No PR exists for this branch. Use `/yeet create-pr` to create one first."
 IF found: parse number, URL, title, base branch. Display: "Found PR #$number: $title"
 
 ## Parse Arguments Naturally
