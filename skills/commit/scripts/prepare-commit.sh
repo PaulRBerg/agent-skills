@@ -41,10 +41,21 @@ collect_path_output() {
   done
 }
 
+collect_stageable_paths() {
+  for _path in "$@"; do
+    if [ -e "$_path" ] || [ -L "$_path" ] || git ls-files --error-unmatch -- "$_path" >/dev/null 2>&1; then
+      if add_unique_path "$_path" ${stageable_paths[@]+"${stageable_paths[@]}"}; then
+        stageable_paths[${#stageable_paths[@]}]=$_path
+      fi
+    fi
+  done
+}
+
 all=false
 diff_mode=summary
 session_paths=()
 session_git_paths=()
+stageable_paths=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -137,7 +148,10 @@ else
 
   [ "${#session_git_paths[@]}" -gt 0 ] || die 'No files modified in this session'
 
-  git add -- "${session_paths[@]}" || die 'failed to stage session-modified paths'
+  collect_stageable_paths "${session_paths[@]}"
+  if [ "${#stageable_paths[@]}" -gt 0 ]; then
+    git add -- "${stageable_paths[@]}" || die 'failed to stage session-modified paths'
+  fi
 fi
 
 if git diff --cached --quiet --exit-code; then
