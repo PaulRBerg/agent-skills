@@ -187,6 +187,17 @@ set lists
 targets := ["x86", "arm"]               # List literal (flattens; strings only)
 all := targets ++ ["wasm"]              # `++` concatenates lists
 files := split("a.ts b.ts")             # ["a.ts", "b.ts"] (whitespace by default)
+root_ox_paths := [
+    "package.json",
+    ".lintstagedrc.mjs",
+    ".mcp.json",
+    "biome.jsonc",
+    "knip.jsonc",
+    "oxlint.config.ts",
+    "oxfmt.config.ts",
+    "tsconfig.base.json",
+    "vitest.shared.ts",
+]
 
 # Map a dependency over a list: invoked once per element, parallelized
 [parallel]
@@ -194,6 +205,8 @@ build *platform: *(compile *platform)
 compile platform:
     echo "compiling for {{ platform }}"
 ```
+
+Use list literals for file/path collections. Do not recommend parenthesized, space-joined string assembly for path sets.
 
 Booleans are reformed under `set lists`: canonical true is `"true"`, canonical false is the empty list `[]` (every other value, including `''`, is truthy). `!expr` negates, `==`/`!=`/`=~`/`!~` work in any expression, and an `if` without `else` evaluates to `[]` when false. Variadic params (`*args`) become lists. New functions: `split()`, `bool()`, `show()`, `join_list()`. Full behavior in [references/settings.md](references/settings.md#lists-unstable-v1530).
 

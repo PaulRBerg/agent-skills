@@ -29,6 +29,32 @@ GLOBS_CLEAN := "**/{.logs,bindings,build,generated}"
 GLOBS_CLEAN_IGNORE := "!graph/common/bindings"
 ```
 
+### Path Lists
+
+When a command consumes multiple concrete paths, require `set unstable` and `set lists`, then use list literals:
+
+```just
+set unstable
+set lists
+
+root_ox_paths := [
+    "package.json",
+    ".lintstagedrc.mjs",
+    ".mcp.json",
+    "biome.jsonc",
+    "knip.jsonc",
+    "oxlint.config.ts",
+    "oxfmt.config.ts",
+    "tsconfig.base.json",
+    "vitest.shared.ts",
+]
+
+oxlint-check:
+    oxlint {{ root_ox_paths }}
+```
+
+Do not recommend parenthesized, space-joined string assembly for path sets.
+
 ### Environment Variables
 
 ```just

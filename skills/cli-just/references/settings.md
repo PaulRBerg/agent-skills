@@ -165,6 +165,24 @@ pairs := ["a", "b"] / ["1", "2"]     # equal-length lists combine pairwise → [
 parts := split("a.ts b.ts")          # ["a.ts", "b.ts"]; separator defaults to whitespace (trimmed)
 ```
 
+For file/path collections, use list literals:
+
+```just
+root_ox_paths := [
+    "package.json",
+    ".lintstagedrc.mjs",
+    ".mcp.json",
+    "biome.jsonc",
+    "knip.jsonc",
+    "oxlint.config.ts",
+    "oxfmt.config.ts",
+    "tsconfig.base.json",
+    "vitest.shared.ts",
+]
+```
+
+Do not build path sets with parenthesized, space-joined string assembly.
+
 **Recipes & dependencies:**
 
 - Variadic parameters (`*args`, `+args`) are lists of strings instead of one space-joined string.
