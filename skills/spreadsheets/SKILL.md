@@ -12,6 +12,8 @@ Opinionated tabular-data handling for macOS. TSV/CSV is the primary format; `.xl
 
 ## Tool Selection
 
+`scripts/peek.py` and `scripts/recalc.py` are bundled with this skill. Resolve them relative to this `SKILL.md`'s directory, not the user's current project. They are not supposed to exist in the target repo.
+
 | Job                                                          | Use                                                 |
 | ------------------------------------------------------------ | --------------------------------------------------- |
 | First look at an unknown CSV/TSV                             | `uv run scripts/peek.py <file>`                     |
@@ -29,14 +31,30 @@ Opinionated tabular-data handling for macOS. TSV/CSV is the primary format; `.xl
 2. **Touch only what was asked.** No reordering, re-quoting, renumbering, or whitespace "tidying" outside the requested change. The diff must contain the change and nothing else.
 3. **House format for authored files**: TSV; UTF-8 without BOM; LF line endings; single trailing newline; lowercase `snake_case` headers; ISO 8601 dates (`YYYY-MM-DD`; prb-finance timestamps use `YYYY-MM-DD@HH:MM:SS`); `.` decimal point; no thousands separators or currency symbols inside cells; `-` for null. Conventions already present in an existing file override every one of these.
 4. **Strip BOMs on read, never write them.** Open files of unknown provenance with `encoding="utf-8-sig"`.
-5. **Validate after editing.** Re-run `peek.py` (column count unchanged, no new ragged rows) or the owning repo's checks. In prb-finance: `just tsv-check`, then `just cli::write-changed` to regenerate derived reports — never hand-edit generated `.pool.tsv`/`.annual.tsv`/`.md` artifacts.
+5. **Validate after editing.** Re-run this skill's `scripts/peek.py` (column count unchanged, no new ragged rows) or the owning repo's checks. Do not skip it because `scripts/peek.py` is absent from the target repo; the script lives next to this `SKILL.md`. In prb-finance: `just tsv-check`, then `just cli::write-changed` to regenerate derived reports — never hand-edit generated `.pool.tsv`/`.annual.tsv`/`.md` artifacts.
 6. **In-place edits are atomic.** Write to a temp file next to the target, verify it, then `mv` over the original.
 7. **Finance data stays local.** Treat transaction logs and bank/exchange exports as private tax records: never send their contents to web services or external APIs.
 8. **Escape spreadsheet formula injection** when writing cells sourced from external data: prefix a leading `=`, `+`, or `@` with `'` (a bare `-` null is exempt).
 
 ## Inspect
 
-`uv run scripts/peek.py <file> [--rows N]` prints a JSON report: encoding and BOM, newline style and trailing newline, delimiter and how it was detected, header with duplicates flagged, column/row counts, ragged and empty rows, `-` null usage, and sample rows. Run it before editing any delimited file; on a binary spreadsheet it exits with a pointer to the xlsx workflow.
+`peek.py` is at `scripts/peek.py` inside this skill directory, beside this `SKILL.md`. In normal installed-skill use, that means:
+
+- `~/.agents/skills/spreadsheets/scripts/peek.py`
+
+It is not a project-local helper and does not need to be installed in the repo being edited. If your current directory is the skill directory, run:
+
+```sh
+uv run scripts/peek.py <file> [--rows N]
+```
+
+If your current directory is the target project, run it by absolute path:
+
+```sh
+uv run ~/.agents/skills/spreadsheets/scripts/peek.py <file> [--rows N]
+```
+
+The report includes encoding and BOM, newline style and trailing newline, delimiter and how it was detected, header with duplicates flagged, column/row counts, ragged and empty rows, `-` null usage, and sample rows. Run it before editing any delimited file; on a binary spreadsheet it exits with a pointer to the xlsx workflow.
 
 Quick follow-ups with `qsv`:
 
