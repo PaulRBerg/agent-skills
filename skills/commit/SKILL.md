@@ -1,6 +1,5 @@
 ---
 argument-hint: '[--all] [--deep] [--push] [--close <issue_numbers>]'
-disable-model-invocation: true
 name: commit
 user-invocable: true
 description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft conventional commit messages, commit, and optionally --all, --deep, --close, or --push.'
