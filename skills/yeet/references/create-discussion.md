@@ -105,7 +105,7 @@ See `commons.md > Informal Tone` for tone guidance.
 [Background information, if applicable]
 ```
 
-See `commons.md > GitHub Admonitions` for admonitions. See `commons.md > Platform String Normalization` if OS details needed.
+See `commons.md > GitHub Admonitions` for admonitions. See `commons.md > Markdown Tables` for rendering tabular content as tables. See `commons.md > Platform String Normalization` if OS details needed.
 
 ## Create the Discussion
 

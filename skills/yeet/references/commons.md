@@ -100,6 +100,19 @@ GitHub renders these as interactive checkboxes and surfaces a progress badge (e.
 
 Use plain bullets (`- `) for non-trackable lists — affected files, links, options, context — where completion state is meaningless.
 
+## Markdown Tables
+
+GitHub renders pipe tables natively, and they scan far better in the web UI than the same data repeated across prose or nested bullets. When body content is naturally tabular — several items sharing one set of attributes (option/trade-off comparisons, before/after, config key → meaning, env var → value, version → status, benchmark numbers) — render it as a table so readers can take it in at a glance:
+
+```markdown
+| Option     | Pros                | Cons                 |
+| ---------- | ------------------- | -------------------- |
+| Approach A | Simple, no new deps | Slower on cold start |
+| Approach B | Fast                | Adds a dependency    |
+```
+
+Reach for a table only when the data has a real second dimension. Don't force a flat list, a single key/value pair, or a free-flowing explanation into one — bullets or prose read better there. Keep the columns to what actually varies across rows.
+
 ## Semantic Change Analysis
 
 Read the actual diff to understand what changed — never generate content based solely on filenames or commit messages.

@@ -46,7 +46,7 @@ Default template:
 </details>
 ```
 
-See `commons.md > GitHub Admonitions` for admonitions. See `commons.md > Task List Syntax` for progress-tracking checklists (`- [ ]` / `- [x]`). See `commons.md > File Link Formatting` for link rules. Omit "Files Affected" if no files specified.
+See `commons.md > GitHub Admonitions` for admonitions. See `commons.md > Task List Syntax` for progress-tracking checklists (`- [ ]` / `- [x]`). See `commons.md > Markdown Tables` for rendering tabular content as tables. See `commons.md > File Link Formatting` for link rules. Omit "Files Affected" if no files specified.
 
 ## Create the Issue
 
