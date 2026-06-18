@@ -1,12 +1,12 @@
 ---
 argument-hint: <polish|create> [path] [skill-name ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run] [--force]
-disable-model-invocation: false
-name: agents-context
+disable-model-invocation: true
+name: agents-context-management
 user-invocable: true
 description: "Use to create or polish repo agent context files: README.md, AGENTS.md/CLAUDE.md symlinks, and existing project .agents/skills/SKILL.md files. Updates existing skills only; do not create skills."
 ---
 
-# Agents Context
+# Agents Context Management
 
 Create and polish repo-local context as one system: human README files, agent-facing AGENTS.md files with companion CLAUDE.md symlinks, and existing project-installed skills under `.agents/skills`.
 
