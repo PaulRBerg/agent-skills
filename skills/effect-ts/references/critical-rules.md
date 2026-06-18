@@ -110,4 +110,4 @@ The `return` keyword makes termination explicit and improves code readability.
 - JSON serialization → `T | null` or `T | undefined`
 - External API responses → normalize to `Option<T>` at boundary
 
-See `OPTION_NULL.md` for comprehensive patterns.
+See `option-null.md` for comprehensive patterns.

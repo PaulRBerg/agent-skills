@@ -1,5 +1,8 @@
 # Effect-Atom Reference
 
+> When to read: pull this in when using `@effect-atom/*`, React atom state backed by Effect, atom runtimes, atom families,
+> stream-backed atoms, or Effectful mutation results in React.
+
 Reactive state management library for Effect. Provides atoms (reactive state containers) that integrate with Effect's
 functional programming ecosystem and React.
 

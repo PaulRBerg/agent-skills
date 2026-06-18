@@ -1,5 +1,8 @@
 # Stream Patterns
 
+> When to read: pull this in when creating, transforming, consuming, testing, or resource-managing Effect `Stream`s,
+> especially when the stream may be infinite or backpressured.
+
 Streams are lazy, pull-based sequences of values that can be infinite. Handle with care.
 
 ## Create Streams

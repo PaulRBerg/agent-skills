@@ -2,19 +2,33 @@
 disable-model-invocation: false
 name: effect-ts
 user-invocable: true
-description: Use for Effect-TS code and patterns including services, layers, errors, Schema/JSONSchema, @effect/ai tools, code importing from `effect`, or @prb/effect-next.
+description: Use for nontrivial Effect-TS work including services/layers, typed errors, Schema/JSONSchema, Config, runtime/concurrency, @effect/vitest, @effect/ai, or @prb/effect-next.
 ---
 
 # Effect-TS Expert
 
 Expert guidance for functional programming with the Effect library, covering error handling, dependency injection,
-composability, and testing patterns.
+composability, testing, and runtime-boundary patterns.
 
-## Prerequisites Check
+## Fast Path
 
-Before starting any Effect-related work, verify the Effect-TS source code exists at `~/.effect`.
+Use this skill for nontrivial Effect work. Do not route through this skill just because a file imports from `effect`; use
+it when the change depends on Effect semantics such as services, layers, typed errors, Schema, Config, runtime/concurrency,
+streams, or Effect-aware tests.
 
-**If missing, stop immediately and inform the user.** Clone it before proceeding:
+For small code edits:
+
+1. Inspect local project patterns first.
+2. Read `./references/critical-rules.md` before writing or changing Effect code.
+3. Open only the reference files that match the task.
+4. Run the narrowest project check that proves the changed Effect behavior.
+
+## Upstream Source Check
+
+Check the Effect source at `~/.effect` only when the task needs upstream API details, changelog verification, or a complex
+type/runtime question that local project patterns do not answer.
+
+If `~/.effect` is required but missing, stop and inform the user. Clone it before proceeding:
 
 ```bash
 git clone https://github.com/Effect-TS/effect.git ~/.effect
@@ -36,13 +50,15 @@ versions match**. For `effect` that means the `3.x` line. For the `0.x` `@effect
 non-zero segment as the break boundary, so match the minor too (e.g. `@effect/ai@0.36.x`). Patch differences, and minor
 differences on stable packages, won't invalidate this skill's guidance; only a break-boundary bump warrants caution.
 
-If `git -C ~/.effect log -1 --oneline` is newer, inspect the touched package changelogs and commits before relying on
-this skill. Capture public API or guidance changes in a reference file.
+Local `~/.effect` drift is usually fine for routine project work. If `git -C ~/.effect log -1 --oneline` is newer and the
+task depends on upstream behavior, inspect the touched package changelogs and commits before relying on this skill.
+Capture public API or guidance changes in a reference file.
 
 ## Research Strategy
 
-Effect-TS has many ways to accomplish the same task. Proactively research best practices using the Task tool to spawn
-research agents when working with Effect patterns, especially for moderate to high complexity tasks.
+Effect-TS has many ways to accomplish the same task. For moderate to high complexity tasks, research enough to choose the
+least surprising pattern that fits the current codebase. Prefer parallel local reads/searches. Use subagents only when the
+environment explicitly supports them and the task has separable research tracks.
 
 ### Research Sources (Priority Order)
 
@@ -75,10 +91,30 @@ research agents when working with Effect patterns, especially for moderate to hi
 
 ### Research Approach
 
-- Spawn multiple concurrent Task agents when investigating multiple related patterns
-- Focus on finding canonical, readable, and maintainable solutions rather than clever optimizations
+- Focus on canonical, readable, and maintainable solutions rather than clever optimizations
 - Verify suggested approaches against existing codebase patterns for consistency (if patterns exist)
-- When multiple approaches are possible, research to find the most idiomatic Effect-TS solution
+- When multiple approaches are possible, prefer the one already used locally unless it is clearly flawed
+
+## Reference Routing
+
+Open references selectively:
+
+| Task shape                                                     | Read                                |
+| -------------------------------------------------------------- | ----------------------------------- |
+| Writing/changing Effect code                                   | `./references/critical-rules.md`    |
+| Services, Layers, `Effect.Service`, `Context.Tag`, `Effect.fn` | `./references/services-layers.md`   |
+| Config, env vars, secrets, custom providers                    | `./references/config.md`            |
+| Schema decoding, JSON Schema, AI parameter shapes              | `./references/schema-jsonschema.md` |
+| `@effect/vitest`, `TestClock`, sleeps/retries, fibers in tests | `./references/testing.md`           |
+| Resources, scheduling, refs, concurrency, `SubscriptionRef`    | `./references/runtime.md`           |
+| Streams, backpressure, bounded consumption                     | `./references/streams.md`           |
+| Pattern matching, tagged unions, `Data.taggedEnum`             | `./references/pattern-matching.md`  |
+| `@effect/ai` tools/providers/OpenAI integration                | `./references/ai.md`                |
+| `@effect/platform`, `@effect/rpc`, deployment runtimes         | `./references/platform-rpc.md`      |
+| `@prb/effect-next` / Next.js App Router                        | `./references/next-js.md`           |
+| `@effect-atom/*` React state                                   | `./references/effect-atom.md`       |
+| Array helpers, `Order`, tiny utility functions, deprecations   | `./references/quick-utils.md`       |
+| Upstream drift or recent package behavior                      | `./references/recent-upstream.md`   |
 
 ## Codebase Pattern Discovery
 
@@ -124,9 +160,20 @@ Apply these core principles when writing Effect code:
 - Implement proper testing patterns using Effect's testing utilities
 - Prefer `Effect.fn()` for automatic telemetry and better stack traces
 
+### Boundary Refactors
+
+- Use Effect services at IO/runtime boundaries where dependency injection, testability, or resource safety improves the
+  design.
+- Do not make pure helpers, module constants, path strings, or tiny build-time utilities effectful just to replace Node or
+  platform APIs.
+- `@effect/platform` services such as `FileSystem` and `Path` are environment requirements. Keep them inside existing
+  service/runtime boundaries unless widening a function's environment is a deliberate design improvement.
+- Preserve local domain facades when they already centralize Effect services, for example filesystem, reporter, logger, or
+  config services.
+
 ## Critical Rules
 
-Read and internalize `./references/critical-rules.md` before writing any Effect code. Key guidelines:
+Read `./references/critical-rules.md` before writing or changing nontrivial Effect code. Key guidelines:
 
 - **INEFFECTIVE:** try-catch in Effect.gen (Effect failures aren't thrown)
 - **AVOID:** Type assertions (as never/any/unknown)

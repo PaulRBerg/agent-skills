@@ -1,5 +1,8 @@
 # Testing Effect-TS (Vitest) — Reference
 
+> When to read: pull this in when using `@effect/vitest`, `it.effect`, `TestClock`, `Effect.sleep`, retry schedules,
+> streams, background fibers, scoped resources, or Effect runtime boundaries in tests.
+
 This is a pragmatic guide for writing _deterministic_ tests in Effect-TS codebases, especially when using `@effect/vitest`.
 
 ## The #1 gotcha: `it.effect` uses `TestClock`

@@ -1,5 +1,8 @@
 # Effect + Next.js Integration
 
+> When to read: pull this in when using `@prb/effect-next`, Next.js App Router handlers/actions/middleware, request-scoped
+> runtime caches, Effect React hooks, or the `@prb/effect-next` testing kit.
+
 `@prb/effect-next` provides typed helpers for integrating Effect with Next.js 15+ App Router—route handlers, server
 actions, middleware, and React hooks.
 

@@ -1,5 +1,8 @@
 # Option vs Null Patterns
 
+> When to read: pull this in when deciding whether absence should be represented as `Option<A>`, `A | null`, or
+> `A | undefined`, especially at JSON/API/React/storage boundaries.
+
 ## The Rule
 
 Use `Option<T>` for Effect domain logic. Use `T | null` only at external boundaries.
