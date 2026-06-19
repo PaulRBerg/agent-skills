@@ -359,6 +359,30 @@ gh repo set-default
 gh repo edit --squash-merge-commit-message COMMIT_MESSAGES
 ```
 
+### Reading Repo Contents
+
+Read files and directories without cloning. The `gh repo read-file` and `gh repo read-dir` commands are in preview and subject to change.
+
+```bash
+# Read a file from the default branch (paged in a TTY, raw when piped)
+gh repo read-file README.md --repo cli/cli
+
+# Read from a specific branch, tag, or commit
+gh repo read-file go.mod --ref v2.94.0 --repo cli/cli
+
+# Write to disk instead of stdout (--clobber to overwrite)
+gh repo read-file README.md --output ./README.md --clobber
+
+# Refuse escape sequences by default; opt in for TTY/piped output
+gh repo read-file script.sh --allow-escape-sequences
+
+# List a directory (root when no path given)
+gh repo read-dir script --repo cli/cli
+
+# Inspect entries as JSON for scripting
+gh repo read-dir docs --repo cli/cli --json name,path,type,size
+```
+
 ## Search
 
 When the user asks to search GitHub repositories, issues, or pull requests, see [references/search.md](references/search.md).
@@ -423,33 +447,35 @@ gh config set browser firefox
 
 Common gh operations at a glance:
 
-| Operation         | Command                   | Common Flags                                |
-| ----------------- | ------------------------- | ------------------------------------------- |
-| Create PR         | `gh pr create`            | `--draft`, `--fill`, `--reviewer @copilot`  |
-| List PRs          | `gh pr list`              | `--author @me`, `--label`, `--search`       |
-| View PR           | `gh pr view <number>`     | `--web`, `--comments`                       |
-| Merge PR          | `gh pr merge <number>`    | `--squash`, `--rebase`, `--delete-branch`   |
-| Revert PR         | `gh pr revert <number>`   | `--body`                                    |
-| Create issue      | `gh issue create`         | `--title`, `--body`, `--template`, `--type` |
-| List issues       | `gh issue list`           | `--assignee @me`, `--label`, `--type`       |
-| Close issue       | `gh issue close <number>` | `--duplicate-of`, `--reason`                |
-| View issue        | `gh issue view <number>`  | `--web`, `--comments`                       |
-| Link sub-issue    | `gh issue edit <number>`  | `--parent`, `--add-sub-issue`               |
-| Block issue       | `gh issue edit <number>`  | `--add-blocked-by`, `--add-blocking`        |
-| List discussions  | `gh discussion list`      | `--answered`, `--sort`, `--json`            |
-| Create agent task | `gh agent-task create`    | `--json` (on `list`/`view`)                 |
-| Install skill     | `gh skill install`        | `--scope`, `--pin`, `--allow-hidden-dirs`   |
-| Browse repo       | `gh browse`               | `--blame`, `--actions`, `--branch`          |
-| Clone repo        | `gh repo clone <repo>`    | `--no-upstream`                             |
-| Fork repo         | `gh repo fork`            | `--clone`, `--remote`                       |
-| View repo         | `gh repo view`            | `--web`                                     |
-| Create release    | `gh release create <tag>` | `--title`, `--notes`, `--draft`             |
-| Verify release    | `gh release verify <tag>` | `--repo`                                    |
-| Run workflow      | `gh workflow run <name>`  | `--ref`, `--field`                          |
-| Watch run         | `gh run watch <id>`       | `--exit-status`                             |
-| Search repos      | `gh search repos <query>` | `--language`, `--stars`                     |
-| Create label      | `gh label create <name>`  | `--color`, `--description`                  |
-| Create codespace  | `gh codespace create`     | `--repo`, `--branch`                        |
+| Operation         | Command                    | Common Flags                                |
+| ----------------- | -------------------------- | ------------------------------------------- |
+| Create PR         | `gh pr create`             | `--draft`, `--fill`, `--reviewer @copilot`  |
+| List PRs          | `gh pr list`               | `--author @me`, `--label`, `--search`       |
+| View PR           | `gh pr view <number>`      | `--web`, `--comments`                       |
+| Merge PR          | `gh pr merge <number>`     | `--squash`, `--rebase`, `--delete-branch`   |
+| Revert PR         | `gh pr revert <number>`    | `--body`                                    |
+| Create issue      | `gh issue create`          | `--title`, `--body`, `--template`, `--type` |
+| List issues       | `gh issue list`            | `--assignee @me`, `--label`, `--type`       |
+| Close issue       | `gh issue close <number>`  | `--duplicate-of`, `--reason`                |
+| View issue        | `gh issue view <number>`   | `--web`, `--comments`                       |
+| Link sub-issue    | `gh issue edit <number>`   | `--parent`, `--add-sub-issue`               |
+| Block issue       | `gh issue edit <number>`   | `--add-blocked-by`, `--add-blocking`        |
+| List discussions  | `gh discussion list`       | `--answered`, `--sort`, `--json`            |
+| Create agent task | `gh agent-task create`     | `--json` (on `list`/`view`)                 |
+| Install skill     | `gh skill install`         | `--scope`, `--pin`, `--allow-hidden-dirs`   |
+| Browse repo       | `gh browse`                | `--blame`, `--actions`, `--branch`          |
+| Clone repo        | `gh repo clone <repo>`     | `--no-upstream`                             |
+| Fork repo         | `gh repo fork`             | `--clone`, `--remote`                       |
+| View repo         | `gh repo view`             | `--web`                                     |
+| Read repo file    | `gh repo read-file <path>` | `--ref`, `--output`, `--clobber`, `--json`  |
+| Read repo dir     | `gh repo read-dir [path]`  | `--ref`, `--json`                           |
+| Create release    | `gh release create <tag>`  | `--title`, `--notes`, `--draft`             |
+| Verify release    | `gh release verify <tag>`  | `--repo`                                    |
+| Run workflow      | `gh workflow run <name>`   | `--ref`, `--field`                          |
+| Watch run         | `gh run watch <id>`        | `--exit-status`                             |
+| Search repos      | `gh search repos <query>`  | `--language`, `--stars`                     |
+| Create label      | `gh label create <name>`   | `--color`, `--description`                  |
+| Create codespace  | `gh codespace create`      | `--repo`, `--branch`                        |
 
 ## Additional Resources
 
