@@ -16,7 +16,7 @@ Opinionated tabular-data handling for macOS. TSV/CSV is the primary format; `.xl
 
 | Job                                                          | Use                                                 |
 | ------------------------------------------------------------ | --------------------------------------------------- |
-| First look at an unknown CSV/TSV                             | `uv run scripts/peek.py <file>`                     |
+| First look or structural validation of CSV/TSV               | `uv run scripts/peek.py <file> [--strict]`          |
 | Counts, stats, frequencies, dedupe, column select            | `qsv` (infers the tab delimiter from `.tsv`)        |
 | Joins, group-bys, pivots, cross-file SQL, format conversion  | `duckdb -c "..."`                                   |
 | Row-level transforms, precision-critical edits               | `uv run` Python with a PEP 723 header               |
@@ -31,7 +31,7 @@ Opinionated tabular-data handling for macOS. TSV/CSV is the primary format; `.xl
 2. **Touch only what was asked.** No reordering, re-quoting, renumbering, or whitespace "tidying" outside the requested change. The diff must contain the change and nothing else.
 3. **House format for authored files**: TSV; UTF-8 without BOM; LF line endings; single trailing newline; lowercase `snake_case` headers; ISO 8601 dates (`YYYY-MM-DD`; prb-finance timestamps use `YYYY-MM-DD@HH:MM:SS`); `.` decimal point; no thousands separators or currency symbols inside cells; `-` for null. Conventions already present in an existing file override every one of these.
 4. **Strip BOMs on read, never write them.** Open files of unknown provenance with `encoding="utf-8-sig"`.
-5. **Validate after editing.** Re-run this skill's `scripts/peek.py` (column count unchanged, no new ragged rows) or the owning repo's checks. Do not skip it because `scripts/peek.py` is absent from the target repo; the script lives next to this `SKILL.md`. In prb-finance: `just tsv-check`, then `just cli::write-changed` to regenerate derived reports — never hand-edit generated `.pool.tsv`/`.annual.tsv`/`.md` artifacts.
+5. **Validate after editing.** Before no-shape-change edits, save a `peek.py` report; after the edit, run `peek.py --strict --expect-like <before-report>`. For intentional row/schema changes, use `--strict --expect-columns <n>` instead. Do not skip this because `peek.py` is absent from the target repo; the script lives next to this `SKILL.md`. In prb-finance: `just tsv-check`, then `just cli::write-changed` to regenerate derived reports — never hand-edit generated `.pool.tsv`/`.annual.tsv`/`.md` artifacts.
 6. **In-place edits are atomic.** Write to a temp file next to the target, verify it, then `mv` over the original.
 7. **Finance data stays local.** Treat transaction logs and bank/exchange exports as private tax records: never send their contents to web services or external APIs.
 8. **Escape spreadsheet formula injection** when writing cells sourced from external data: prefix a leading `=`, `+`, or `@` with `'` (a bare `-` null is exempt).
@@ -45,16 +45,31 @@ Opinionated tabular-data handling for macOS. TSV/CSV is the primary format; `.xl
 It is not a project-local helper and does not need to be installed in the repo being edited. If your current directory is the skill directory, run:
 
 ```sh
-uv run scripts/peek.py <file> [--rows N]
+uv run scripts/peek.py <file> [--rows N] [--strict] [--expect-like before.peek.json]
 ```
 
 If your current directory is the target project, run it by absolute path:
 
 ```sh
-uv run ~/.agents/skills/spreadsheets/scripts/peek.py <file> [--rows N]
+uv run ~/.agents/skills/spreadsheets/scripts/peek.py <file> [--rows N] [--strict] [--expect-like before.peek.json]
 ```
 
-The report includes encoding and BOM, newline style and trailing newline, delimiter and how it was detected, header with duplicates flagged, column/row counts, ragged and empty rows, `-` null usage, and sample rows. Run it before editing any delimited file; on a binary spreadsheet it exits with a pointer to the xlsx workflow.
+The report includes `status`, `issues`, encoding and BOM, newline style and trailing newline, delimiter and how it was detected, header with duplicates flagged, column/row counts, ragged and empty rows, `-` null usage, and sample rows. Default inspection exits `0` for parseable delimited files. Validation flags exit `1` when they find issues. Operational errors such as missing files, binary spreadsheets, or empty files exit `2`.
+
+Fast validation loop:
+
+```sh
+# Before edits that should preserve shape and format
+uv run ~/.agents/skills/spreadsheets/scripts/peek.py txs.tsv > txs.before.peek.json
+
+# After the edit
+uv run ~/.agents/skills/spreadsheets/scripts/peek.py txs.tsv --strict --expect-like txs.before.peek.json
+
+# If rows or headers intentionally changed, lock only the resulting width
+uv run ~/.agents/skills/spreadsheets/scripts/peek.py txs.tsv --strict --expect-columns 12
+```
+
+`--expect-like` catches drift in column count, header, delimiter, encoding, newline style, trailing newline, and data row count; it also fails on newly introduced ragged, empty, duplicate-header, or BOM problems. On a binary spreadsheet, `peek.py` exits with a pointer to the xlsx workflow.
 
 Quick follow-ups with `qsv`:
 

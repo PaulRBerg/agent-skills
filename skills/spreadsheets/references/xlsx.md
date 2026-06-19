@@ -146,6 +146,14 @@ duckdb -c "INSTALL excel; LOAD excel; COPY (FROM read_csv('data.tsv', delim = '\
 
 `all_varchar` keeps amounts as text on both sides — the precision rule survives conversion. Type the columns only when explicitly asked.
 
+After any `.xlsx` to TSV export, validate the TSV before using or delivering it:
+
+```sh
+uv run ~/.agents/skills/spreadsheets/scripts/peek.py book.tsv --strict
+```
+
+When replacing an existing TSV export and the sheet shape should not change, save a before-report first and finish with `--expect-like`.
+
 ## Formatting Defaults
 
 For new workbooks; conventions in an existing template always win.
