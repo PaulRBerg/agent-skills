@@ -27,7 +27,7 @@ Before choosing commands, check whether the target project has either:
 
 If present, follow [Minimum Release Age Mode](#minimum-release-age-mode).
 
-Before starting, verify taze is installed by running:
+The scan command in [Step 1](#step-1-scan-for-updates) also verifies that taze is installed.
 
 ```bash
 scripts/run-taze.sh
@@ -68,7 +68,7 @@ Append the same maturity flags to every Taze scan and write command in the workf
 
 ### Step 1: Scan for Updates
 
-Run the taze script to discover available updates. The script auto-detects monorepo projects (`workspaces` in package.json or `pnpm-workspace.yaml`) and enables recursive mode automatically.
+Run the taze script once to discover available updates. The script auto-detects monorepo projects (`workspaces` in package.json or `pnpm-workspace.yaml`) and enables recursive mode automatically.
 
 ```bash
 scripts/run-taze.sh
@@ -108,7 +108,7 @@ If `--dry-run` was passed, **stop here** — do not apply any updates. Instead, 
 - **Available** — new version string (preserving range prefix)
 - **Type** — `major`, `minor`, or `patch`
 - **Action** — what the normal (non-dry-run) workflow would do:
-  - `auto-apply` — MINOR/PATCH updates and auto-skip major packages (e.g. `lucide-react`)
+  - `auto-apply` — MINOR/PATCH updates and auto-approved major packages (e.g. `lucide-react`)
   - `prompt` — MAJOR updates that would be prompted to the user
   - `skip (fixed)` — fixed-version packages that would be skipped
 
@@ -121,29 +121,21 @@ After presenting the table, print a one-line summary: `N updates available (M ma
 - Fixed: `"lodash": "4.17.21"` → skip
 - Ranged: `"lodash": "^4.17.21"` → process
 
-### Step 3: Apply MINOR/PATCH Updates
+### Step 3: Select Updates to Apply
 
-Apply all non-major updates automatically without prompting:
-
-```bash
-# All packages
-taze minor --write
-
-# Specific packages only (when args provided)
-taze minor --write --include react,typescript
-```
-
-The script auto-detects monorepo mode, but when running taze directly, detect it yourself: check for `workspaces` in package.json or `pnpm-workspace.yaml` and add `-r` if present.
-
-Report the packages that were updated.
-
-### Step 4: Prompt for MAJOR Updates
-
-**Auto-skip packages:** Never prompt for these packages—auto-apply their major updates:
+Automatically select all MINOR/PATCH updates for application. Also automatically select approved major packages:
 
 - `lucide-react` (icon library with frequent major bumps, backward-compatible in practice)
 
-For each remaining package with a major update available, use `AskUserQuestion` to ask the user individually:
+Do not prompt for fixed-version packages. Do not prompt for auto-approved major packages.
+
+If no packages are selected, stop without running install.
+
+Report the packages selected for automatic update.
+
+### Step 4: Prompt for MAJOR Updates
+
+For each remaining major update, use `AskUserQuestion` to ask the user individually:
 
 ```
 Package: <package-name>
@@ -161,15 +153,15 @@ Update to major version?
 
 Collect all approved major updates.
 
-### Step 5: Apply Approved MAJOR Updates
+### Step 5: Apply Selected Updates
 
-After collecting user approvals, apply the approved major updates:
+After collecting user approvals, apply all selected packages in one write command. Include MINOR/PATCH updates, auto-approved major packages, and user-approved major packages:
 
 ```bash
-taze major --write --include <pkg1>,<pkg2>,<pkg3>
+scripts/run-taze.sh --write --include <pkg1>,<pkg2>,<pkg3>
 ```
 
-Add `-r` if monorepo was detected.
+The script keeps the same monorepo and maturity-period flags used by the scan. It omits `--include-locked` in write mode so fixed-version packages remain untouched.
 
 ### Step 6: Update Bun Catalogs
 
@@ -195,7 +187,7 @@ Workspace packages reference these with `"react": "catalog:"` (default catalog) 
 
 **Skip this step** if neither `workspaces.catalog` nor `workspaces.catalogs` exists in the root `package.json`.
 
-For each package that was updated in Steps 3/5:
+For each package that was updated in Step 5:
 
 1. Check if it appears in `workspaces.catalog` — if so, update the version there
 2. Check each named catalog in `workspaces.catalogs` — if the package appears, update the version there
@@ -228,11 +220,17 @@ Packages shown with `--include-locked` that have no `^` or `~` are fixed version
 | --------------------- | ---------------------------------------------------- |
 | `scripts/run-taze.sh` | Run taze in non-interactive mode, check installation |
 
+Supported script arguments:
+
+- `--include <packages>` — pass a comma-separated package list or taze include regex
+- `--concurrency <n>` — pass through taze's request concurrency setting
+- `--write` — write selected updates; requires `--include`; scan mode is the default
+
 ## Important Notes
 
 - Fixed-version dependencies (no `^` or `~`) indicate intentional pinning—never modify these
-- MAJOR updates may contain breaking changes—always prompt the user
+- MAJOR updates may contain breaking changes—prompt the user unless the package is explicitly auto-approved
 - MINOR/PATCH updates are backward-compatible by semver convention—safe to auto-apply
 - The `--include` flag accepts comma-separated package names or regex patterns
-- Monorepo detection is automatic—no flag needed
+- Monorepo detection is automatic—no flag needed when using `scripts/run-taze.sh`
 - Bun catalogs (`workspaces.catalog` / `workspaces.catalogs`) are the source of truth for workspace packages using the `catalog:` protocol—always update catalog entries alongside regular deps
