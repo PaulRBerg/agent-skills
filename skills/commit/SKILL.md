@@ -2,7 +2,7 @@
 argument-hint: '[--all] [--deep] [--natural] [--push] [--close <issue_numbers>]'
 name: commit
 user-invocable: true
-description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft Conventional Prefix Format messages by default or Natural Language messages with --natural, commit, and optionally --all, --deep, --close, or --push.'
+description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft Conventional Prefix Format messages by default, Natural Language messages with --natural or configured repos, commit, and optionally --all, --deep, --close, or --push.'
 ---
 
 # Git Commit
@@ -18,13 +18,29 @@ Arguments: `$ARGUMENTS`
 - Flags:
   - `--all` commit all changes
   - `--deep` deep analysis with the active session model, breaking changes, concise body
-  - `--natural` use Natural Language Format instead of default Conventional Prefix Format
+  - `--natural` force Natural Language Format
   - `--push` push after commit
   - `--close <issue_numbers>` append `Closes #N` trailers for listed issues (comma/space-separated)
 - Value arguments:
   - Conventional Prefix Format: type keyword overrides inferred type
   - Natural Language Format: leading verb/category keyword overrides inferred verb
   - Quoted text overrides inferred description or subject
+
+Resolve the message format from the target repository cwd. Never `cd` into the skill directory.
+
+For Claude Code:
+
+```bash
+bash "${CLAUDE_SKILL_DIR}/scripts/select-message-format.sh" [--natural]
+```
+
+For Codex CLI, resolve `<skill-dir>` from the loaded `SKILL.md` path:
+
+```bash
+bash "<skill-dir>/scripts/select-message-format.sh" [--natural]
+```
+
+The helper prints exactly `natural` or `conventional`. `--natural` forces `natural`; otherwise, configured always-natural-language repositories also use `natural`.
 
 ### 2) Prepare staged diff
 
@@ -58,10 +74,10 @@ The helper performs Git preflight checks, stages `--all` or the session-modified
 
 Read the helper output and produce the commit message in a single pass.
 
-**Message format** — default to Conventional Prefix Format unless `--natural` is present.
+**Message format** — use the resolved message format.
 
-- Default: read [references/conventional-prefix-format.md](references/conventional-prefix-format.md).
-- With `--natural`: read [references/natural-language-format.md](references/natural-language-format.md).
+- If `conventional`: read [references/conventional-prefix-format.md](references/conventional-prefix-format.md).
+- If `natural`: read [references/natural-language-format.md](references/natural-language-format.md).
 
 Read only the selected format reference before composing the message.
 
