@@ -7,8 +7,6 @@ description: Review and synchronize coupled skill files; align shared wording an
 
 Review skill files that intentionally share wording, policies, or helper contracts. Patch only real drift; preserve skill-specific behavior and examples.
 
-Run this internal skill after editing any file in a selected sync group so coupled skills and helper data stay aligned.
-
 ## Scope
 
 Default: run every sync group below. If the request names a group, file, or subset, run only that group.
