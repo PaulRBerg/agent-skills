@@ -36,9 +36,12 @@ Resolve scope once, then treat the result as fixed for the rest of the run.
 
 ## Operating Rules
 
+- State assumptions before editing. If multiple interpretations would change the simplification or verification strategy, present them and stop for direction.
 - Preserve runtime behavior exactly. Keep inputs, outputs, side effects, and error behavior stable.
 - Prefer project conventions over personal preferences. Infer conventions from existing code, linters, formatters, and tests.
-- Make small, reversible edits. Avoid broad rewrites when targeted simplifications solve the problem.
+- Make small, reversible edits. Every changed line should trace to the user's request, requested cleanup, or cleanup caused by your own edits.
+- Write the minimum code that solves the requested problem. Do not add features, single-use abstractions, speculative flexibility, or configurability the user did not request.
+- Clean up only your own mess: remove imports, variables, functions, and files made unused by your changes; mention pre-existing dead code in Residual Risks instead of deleting it.
 - Call out uncertainty immediately when behavior may change.
 
 ## Workflow
@@ -56,6 +59,7 @@ Resolve scope once, then treat the result as fixed for the rest of the run.
   - persistence/network behavior
   - user-facing messages and error semantics where externally relied on
 - Note available verification commands (lint, tests, typecheck).
+- Define success criteria before editing. For multi-step work, state a brief plan where each step names its verification check.
 
 ### 3) Apply Simplification Passes (in this order)
 
@@ -105,6 +109,8 @@ Produce the Report section below.
 - Do not introduce framework-wide patterns while simplifying a small local change.
 - Do not replace understandable duplication with opaque utility layers.
 - Do not bundle unrelated cleanups into one patch.
+- Do not add error handling for impossible scenarios.
+- Do not preserve code volume for its own sake; if a simpler equivalent approach exists, use it or explain why it does not satisfy the request.
 
 ## Verification
 
@@ -143,6 +149,7 @@ One line per risk: `Assumed <assumption>; if wrong, <what breaks>; check via <co
 Stop and ask for direction when:
 
 - simplification requires changing public API/contracts.
+- requirements are unclear or competing interpretations would produce materially different edits.
 - behavior parity cannot be confidently verified.
 - the code appears intentionally complex due to domain constraints.
 - the requested scope implies a larger redesign rather than simplification.

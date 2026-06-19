@@ -59,6 +59,15 @@ Resolve scope once, then treat the result as fixed for the rest of the run.
 
 Produce the Report section below.
 
+## Review Lens
+
+Treat the user's request as the boundary for judging the diff.
+
+- Surface hidden assumptions: if behavior intent is ambiguous or multiple interpretations would lead to different fixes, stop or record the assumption as residual risk instead of guessing.
+- Prefer the smallest defensible fix. Flag single-use abstractions, speculative configurability, extra features, and broad rewrites when they increase risk or review burden.
+- Treat unrelated churn as suspicious: adjacent refactors, formatting-only edits, deleted pre-existing dead code, or style conversions need direct traceability to the request.
+- Verify goal fit: changed behavior should have concrete success criteria and a narrow check. Bugs need reproducing tests when practical; validation changes need invalid-input coverage; refactors need before/after safety checks.
+
 ## Core Review Checks
 
 Apply on every run.
@@ -69,6 +78,9 @@ Apply on every run.
 - `CORE-004` Resource hygiene (`MEDIUM`): leaked timers/listeners/handles/connections.
 - `CORE-005` Complexity hotspot (`MEDIUM`): change introduces avoidable coupling or hidden side effects.
 - `CORE-006` Test gap (`MEDIUM`): changed behavior has no targeted test coverage.
+- `CORE-007` Over-scoped change (`MEDIUM`): changed lines do not trace directly to the user's request or verified cleanup caused by the change.
+- `CORE-008` Speculative complexity (`MEDIUM`): new abstraction, configurability, flexibility, or impossible-case handling adds code without proven need.
+- `CORE-009` Weak success criteria (`MEDIUM`): implementation lacks a clear verification target for the behavior it claims to change.
 
 ## Profile Dispatch
 
@@ -97,6 +109,8 @@ Select at most three profiles per pass — the highest-risk matches for the touc
 - State blast radius and failure mode succinctly.
 - Merge duplicate findings.
 - Prefer targeted fixes over broad rewrites.
+- For scope or simplicity findings, cite the changed line and the requested behavior it does not serve.
+- Mention unrelated dead code as residual risk; do not suggest deleting it unless the user asked for cleanup.
 - Keep style-only issues at LOW unless they create operational risk.
 
 ## Verification
@@ -149,4 +163,5 @@ Stop and ask for direction when:
 
 - fixes require API/contract redesign.
 - behavior intent is too ambiguous to classify severity.
+- multiple plausible interpretations would produce materially different findings or fixes.
 - required validation tooling is unavailable and risk is high.
