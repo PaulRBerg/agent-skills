@@ -3,7 +3,7 @@
 set -u
 
 usage() {
-  printf 'Usage: bash <skill-dir>/scripts/prepare-commit.sh [--all] [--diff summary|full] -- [session_modified_paths...]\n' >&2
+  printf 'Usage: bash <skill-dir>/scripts/prepare-commit.sh [--all] [--natural] [--diff summary|full] -- [session_modified_paths...]\n' >&2
 }
 
 die() {
@@ -33,6 +33,12 @@ path_in_list() {
   return 1
 }
 
+physical_dir() {
+  _dir=$1
+  [ -d "$_dir" ] || return 1
+  (cd "$_dir" 2>/dev/null && pwd -P)
+}
+
 collect_path_output() {
   while IFS= read -r -d '' _path; do
     if add_unique_path "$_path" ${session_git_paths[@]+"${session_git_paths[@]}"}; then
@@ -51,16 +57,82 @@ collect_stageable_paths() {
   done
 }
 
+collect_unstage_path() {
+  _path=$1
+  if add_unique_path "$_path" ${unstage_paths[@]+"${unstage_paths[@]}"}; then
+    unstage_paths[${#unstage_paths[@]}]=$_path
+  fi
+}
+
+unstage_collected_paths() {
+  [ "${#unstage_paths[@]}" -gt 0 ] || return 0
+
+  _chunk=()
+  for _path in "${unstage_paths[@]}"; do
+    _chunk[${#_chunk[@]}]=$_path
+    if [ "${#_chunk[@]}" -ge "$unstage_chunk_size" ]; then
+      git restore --staged -- "${_chunk[@]}" || return 1
+      _chunk=()
+    fi
+  done
+
+  if [ "${#_chunk[@]}" -gt 0 ]; then
+    git restore --staged -- "${_chunk[@]}" || return 1
+  fi
+}
+
+resolve_message_format() {
+  if [ "$force_natural" = true ]; then
+    printf 'natural\n'
+    return 0
+  fi
+
+  [ -n "${HOME:-}" ] || die 'HOME is not set'
+
+  _repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || die 'cannot resolve git repository root'
+  _repo_root=$(physical_dir "$_repo_root") || die 'cannot resolve git repository root'
+
+  _always_natural_language_repos=(
+    "$HOME/.agents"
+    "$HOME/.claude"
+    "$HOME/.codex"
+    "$HOME/.local/share/chezmoi"
+    "$HOME/projects/agent-skills"
+    "$HOME/projects/evm-sweeper"
+    "$HOME/projects/home-control"
+    "$HOME/projects/prb-chats"
+    "$HOME/projects/prb-finance"
+    "$HOME/work/mailops"
+  )
+
+  for _natural_repo in "${_always_natural_language_repos[@]}"; do
+    _natural_repo_root=$(physical_dir "$_natural_repo") || continue
+    if [ "$_repo_root" = "$_natural_repo_root" ]; then
+      printf 'natural\n'
+      return 0
+    fi
+  done
+
+  printf 'conventional\n'
+}
+
 all=false
+force_natural=false
 diff_mode=summary
+unstage_chunk_size=100
 session_paths=()
 session_git_paths=()
 stageable_paths=()
+unstage_paths=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --all)
       all=true
+      shift
+      ;;
+    --natural)
+      force_natural=true
       shift
       ;;
     --diff)
@@ -111,6 +183,7 @@ rebase_apply=$(git rev-parse --git-path rebase-apply 2>/dev/null) || die 'cannot
 [ ! -d "$rebase_apply" ] || die 'rebase in progress; resolve or abort it before committing'
 
 branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || die 'detached HEAD; check out a branch before committing'
+message_format=$(resolve_message_format) || exit 1
 
 if [ "$all" = true ]; then
   if [ -z "$(git status --porcelain=v1 --untracked-files=all)" ]; then
@@ -120,13 +193,8 @@ if [ "$all" = true ]; then
 else
   [ "${#session_paths[@]}" -gt 0 ] || die 'No files modified in this session'
 
-  git diff --cached --name-only -- "${session_paths[@]}" >/dev/null || die 'failed to inspect staged session paths'
-  git ls-files --full-name --modified --deleted --others --exclude-standard -- "${session_paths[@]}" >/dev/null || die 'failed to inspect session paths'
-
-  collect_path_output < <(git diff --cached --name-only -z -- "${session_paths[@]}") || exit 1
+  collect_path_output < <(git diff --cached --name-only -z --no-ext-diff --no-textconv -- "${session_paths[@]}") || exit 1
   collect_path_output < <(git ls-files --full-name -z --modified --deleted --others --exclude-standard -- "${session_paths[@]}") || exit 1
-
-  git diff --cached --name-status -- >/dev/null || die 'failed to inspect staged paths'
 
   while IFS= read -r -d '' staged_status; do
     case "$staged_status" in
@@ -134,17 +202,20 @@ else
         IFS= read -r -d '' staged_old_path || die 'failed to parse staged rename/copy'
         IFS= read -r -d '' staged_new_path || die 'failed to parse staged rename/copy'
         if ! path_in_list "$staged_old_path" ${session_git_paths[@]+"${session_git_paths[@]}"} && ! path_in_list "$staged_new_path" ${session_git_paths[@]+"${session_git_paths[@]}"}; then
-          git restore --staged -- "$staged_old_path" "$staged_new_path" || die "failed to unstage unrelated path: $staged_old_path -> $staged_new_path"
+          collect_unstage_path "$staged_old_path"
+          collect_unstage_path "$staged_new_path"
         fi
         ;;
       *)
         IFS= read -r -d '' staged_path || die 'failed to parse staged path'
         if ! path_in_list "$staged_path" ${session_git_paths[@]+"${session_git_paths[@]}"}; then
-          git restore --staged -- "$staged_path" || die "failed to unstage unrelated path: $staged_path"
+          collect_unstage_path "$staged_path"
         fi
         ;;
     esac
-  done < <(git diff --cached --name-status -z)
+  done < <(git diff --cached --name-status -z --no-ext-diff --no-textconv)
+
+  unstage_collected_paths || die 'failed to unstage unrelated staged paths'
 
   [ "${#session_git_paths[@]}" -gt 0 ] || die 'No files modified in this session'
 
@@ -157,6 +228,9 @@ fi
 if git diff --cached --quiet --exit-code; then
   die 'No staged changes to commit'
 fi
+
+printf '## message format\n'
+printf '%s\n\n' "$message_format"
 
 printf '## branch\n'
 printf '%s\n\n' "$branch"

@@ -26,21 +26,7 @@ Arguments: `$ARGUMENTS`
   - Natural Language Format: leading verb/category keyword overrides inferred verb
   - Quoted text overrides inferred description or subject
 
-Resolve the message format from the target repository cwd. Never `cd` into the skill directory.
-
-For Claude Code:
-
-```bash
-bash "${CLAUDE_SKILL_DIR}/scripts/select-message-format.sh" [--natural]
-```
-
-For Codex CLI, resolve `<skill-dir>` from the loaded `SKILL.md` path:
-
-```bash
-bash "<skill-dir>/scripts/select-message-format.sh" [--natural]
-```
-
-The helper prints exactly `natural` or `conventional`. `--natural` forces `natural`; otherwise, configured always-natural-language repositories also use `natural`.
+Pass `--natural` through to the prepare helper when requested. The helper resolves the message format from the target repository cwd. Never `cd` into the skill directory.
 
 ### 2) Prepare staged diff
 
@@ -49,18 +35,18 @@ Run the portable helper from the target repository cwd. Never `cd` into the skil
 For Claude Code:
 
 ```bash
-bash "${CLAUDE_SKILL_DIR}/scripts/prepare-commit.sh" [--all] [--diff summary|full] -- [session_modified_paths...]
+bash "${CLAUDE_SKILL_DIR}/scripts/prepare-commit.sh" [--all] [--natural] [--diff summary|full] -- [session_modified_paths...]
 ```
 
 For Codex CLI, resolve `<skill-dir>` from the loaded `SKILL.md` path:
 
 ```bash
-bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--diff summary|full] -- [session_modified_paths...]
+bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--natural] [--diff summary|full] -- [session_modified_paths...]
 ```
 
-Use `--diff summary` when the user supplied a clear subject or description. Use `--diff full` when the intent is ambiguous or `--deep` was requested.
+Use `--diff summary` by default. Use `--diff full` only when the intent is ambiguous or `--deep` was requested.
 
-The helper performs Git preflight checks, stages `--all` or the session-modified paths, unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise suggested fix.
+The helper performs Git preflight checks, stages `--all` or the session-modified paths, unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the message format, branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise suggested fix.
 
 - If `--all`:
   - Include all tracked, untracked, modified, deleted, and already staged changes
@@ -74,7 +60,7 @@ The helper performs Git preflight checks, stages `--all` or the session-modified
 
 Read the helper output and produce the commit message in a single pass.
 
-**Message format** — use the resolved message format.
+**Message format** — use the `## message format` value from the helper output.
 
 - If `conventional`: read [references/conventional-prefix-format.md](references/conventional-prefix-format.md).
 - If `natural`: read [references/natural-language-format.md](references/natural-language-format.md).
