@@ -1,5 +1,5 @@
 ---
-argument-hint: '[paths] [--deep] [--with-profile <name>] [--skip-profile <name>]'
+argument-hint: '[paths] [--with-profile <name>] [--skip-profile <name>]'
 disable-model-invocation: true
 name: code-polish
 user-invocable: true
@@ -10,27 +10,26 @@ description: 'Use for combined simplification and review: polish code, clean up 
 
 ## Objective
 
-Run a fast combined pipeline on recently changed code: focused simplification for readability and maintainability, then risk-profiled review with fixes applied. Resolve scope once, avoid duplicate broad checks, and produce one user-facing report.
+Run a combined pipeline on recently changed code: full simplification for readability and maintainability, then exhaustive risk-profiled review with fixes applied. Resolve scope once, avoid duplicate broad checks, and produce one user-facing report.
 
 ## Arguments
 
 - Paths, patterns, a commit/range, or a scope phrase: used in Scope Resolution step 2.
-- `--deep`: Run exhaustive simplify and review passes. Read sibling `code-simplify` and `code-review` skill files before those phases.
 - `--with-profile <name>`: Forward unchanged to the review phase. Repeatable.
 - `--skip-profile <name>`: Forward unchanged to the review phase. Repeatable.
 - Extra cleanup instructions (e.g. "and split `_lib.ts` into smaller files"): execute during the simplify phase.
-- Default: run the faster common path on the resolved scope.
+- Default: run exhaustive simplify and review passes on the resolved scope.
 
 ## Phase Contracts
 
-Use these embedded contracts for the default path. Read sibling `SKILL.md` files only when `--deep` is set, the user's instructions create ambiguity these contracts do not resolve, or a phase hits a stop condition that requires the full sibling guidance. Sibling paths are `../code-simplify/SKILL.md` and `../code-review/SKILL.md`, relative to this file.
+Read sibling `SKILL.md` files before the simplify and review phases. Sibling paths are `../code-simplify/SKILL.md` and `../code-review/SKILL.md`, relative to this file. Use the embedded contracts below as polish-specific orchestration constraints.
 
-### Focused Simplify Contract
+### Full Simplify Contract
 
 - Use the fixed `resolved-scope` block. Do not broaden, rediscover, or re-emit scope.
-- Apply only high-confidence simplifications that materially improve comprehension, reduce defect risk, or remove cleanup created by the current change.
+- Apply the full simplification checklist, limited to high-confidence changes that materially improve comprehension, reduce defect risk, or remove cleanup created by the current change.
 - Preserve behavior, public contracts, side effects, logging, telemetry, retries, and error semantics.
-- Do not run naming-only refactors unless `--deep` is set or the user explicitly asked for naming or intent cleanup.
+- Run naming-only refactors only when they create a concrete clarity or safety gain and can be safely verified.
 - Do not hand-edit generated, vendored, bulk, or low-signal files. If they must change, edit the generator, schema, or contract and validate the output with invariant checks.
 - Skip phase-level verification and the phase-level report; keep terse internal notes for the final report.
 
@@ -39,8 +38,8 @@ Use these embedded contracts for the default path. Read sibling `SKILL.md` files
 - Use the fixed `resolved-scope` block and any `excluded-scope` block. Do not broaden or rediscover scope.
 - Build findings internally, apply fixes in severity order, then produce one final report. Do not stop for a separate pre-fix report.
 - Apply core correctness, security, data integrity, shell/config safety, regression, and targeted verification checks on every run.
-- Select only review profiles triggered by touched risk surfaces, capped at three auto-selected profiles by default. Include `--with-profile` profiles unless excluded by `--skip-profile`.
-- Run the naming profile only with `--deep`, `--with-profile naming`, or explicit naming/intent review instructions, unless skipped.
+- Select every review profile triggered by touched risk surfaces. Include `--with-profile` profiles unless excluded by `--skip-profile`.
+- Run the naming profile unless skipped.
 - For generated, vendored, bulk, or low-signal files, review generators, schemas, contracts, and invariants instead of hand-reviewing every generated row or file.
 
 ## Scope Resolution
@@ -68,13 +67,13 @@ Resolve scope once, then treat the result as fixed for the rest of the run.
 
 ### 2) Simplify Phase
 
-Run the Focused Simplify Contract with:
+Run the Full Simplify Contract with:
 
 - the `resolved-scope` block
 - any extra cleanup instructions from the user
-- `--deep` semantics only when requested
+- full simplification semantics
 
-Under `--deep`, read `../code-simplify/SKILL.md` and follow it inline with `--no-verify`, `--no-report`, the `resolved-scope` block, and any extra cleanup instructions. Flags are instructions to interpret, not commands to execute.
+Read `../code-simplify/SKILL.md` and follow it inline with `--no-verify`, `--no-report`, the `resolved-scope` block, and any extra cleanup instructions. Flags are instructions to interpret, not commands to execute.
 
 ### 3) Review Phase
 
@@ -83,10 +82,9 @@ Run the Risk-Profiled Review Contract with:
 - the same `resolved-scope` block
 - any `excluded-scope` block
 - `--fix`
-- `--deep` when requested
 - any `--with-profile` and `--skip-profile` flags from the user
 
-Under `--deep`, read `../code-review/SKILL.md` and follow it inline with `--fix`, `--deep`, the scope blocks, and any forwarded profile flags. Flags are instructions to interpret, not commands to execute.
+Read `../code-review/SKILL.md` and follow it inline with `--fix`, the scope blocks, and any forwarded profile flags. Flags are instructions to interpret, not commands to execute.
 
 ### 4) Final Verification
 
@@ -130,7 +128,7 @@ One line per risk: `Assumed <assumption>; if wrong, <what breaks>; check via <co
 
 Stop and ask for direction when:
 
-- a required sibling skill is missing during `--deep` or an ambiguity path that requires sibling guidance.
+- a required sibling skill is missing.
 - a phase hits one of its own stop conditions.
 - the review phase cannot run or cannot complete its fixes.
 

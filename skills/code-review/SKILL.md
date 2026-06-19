@@ -1,5 +1,5 @@
 ---
-argument-hint: '[paths] [--fix] [--deep] [--with-profile <name>] [--skip-profile <name>]'
+argument-hint: '[paths] [--fix] [--with-profile <name>] [--skip-profile <name>]'
 disable-model-invocation: true
 name: code-review
 user-invocable: true
@@ -16,7 +16,6 @@ Find high-impact defects in changed code with evidence. Prioritize correctness, 
 
 - Paths, patterns, a commit/range, or a scope phrase: used in Scope Resolution step 2.
 - `--fix`: Build findings internally, apply suggested fixes in severity order, then produce one final report and verify per the Verification section. Do not emit a separate pre-fix report.
-- `--deep`: Run an exhaustive pass. Read every non-skipped profile triggered by the touched domains, include naming/intent review unless skipped, and broaden verification when risk warrants it.
 - `--with-profile <name>`: Force an optional domain profile by stem or filename (e.g. `--with-profile shell`). Repeatable.
 - `--skip-profile <name>`: Skip an optional domain profile by stem or filename (e.g. `--skip-profile naming`). Repeatable. If both `--with-profile` and `--skip-profile` name the same profile, skip wins.
 - Default: report findings and wait for confirmation before editing.
@@ -88,9 +87,9 @@ Apply on every run.
 
 ## Profile Dispatch
 
-Default profile dispatch is risk-triggered and capped. Read only profiles that materially improve defect discovery for the touched risk surfaces; file extension alone is not enough when core checks cover the change. Select at most three auto-selected profiles per pass unless `--deep` is set. Read each selected profile once, in full; every profile fits in a single read, so never page through or re-read one.
+Profile dispatch is risk-triggered and exhaustive. Read every non-skipped profile that materially improves defect discovery for the touched risk surfaces; file extension alone is not enough when core checks cover the change. Read each selected profile once, in full; every profile fits in a single read, so never page through or re-read one.
 
-Honor `--skip-profile` exclusions first. Add `--with-profile` profiles after exclusions; user-forced profiles may exceed the auto-selection cap. Under `--deep`, read every non-skipped profile triggered by the touched domains and include `references/profiles/naming.md` unless skipped.
+Honor `--skip-profile` exclusions first. Add `--with-profile` profiles after exclusions. Include `references/profiles/naming.md` unless skipped.
 
 - `references/profiles/security.md`: auth, external input, secrets, crypto, public network surfaces, unsafe parsing.
 - `references/profiles/configuration.md`: env/config, timeouts, retries, pools, limits, resource tuning, rollout controls.
@@ -99,7 +98,7 @@ Honor `--skip-profile` exclusions first. Add `--with-profile` profiles after exc
 - `references/profiles/python.md`: Python services, scripts, async workloads, packaging, data processing, or IO-heavy changes.
 - `references/profiles/shell.md`: shell scripts, CI command blocks, deployment scripts, installer commands, or command quoting.
 - `references/profiles/data-formats.md`: CSV/JSON/YAML/binary ingestion/export/parsing, schemas, generated data, migrations, or fixture updates.
-- `references/profiles/naming.md`: naming/intent clarity. Do not run by default; run only with `--deep`, `--with-profile naming`, or explicit naming/intent review instructions.
+- `references/profiles/naming.md`: naming/intent clarity. Run on every review unless skipped.
 
 ## Generated and Bulk Files
 
@@ -135,7 +134,7 @@ Run the narrowest checks that validate touched behavior:
 - typecheck when relevant
 - invariant checks for any relevant `excluded-scope` outputs
 
-Run broader checks only when risk warrants it, especially under `--deep` or when fixes touch shared contracts. Name every skipped check and why.
+Run broader checks only when risk warrants it, especially when fixes touch shared contracts. Name every skipped check and why.
 
 ## Report
 

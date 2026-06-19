@@ -16,6 +16,12 @@ Match chains by displayed name or numeric chain ID. `./references/target-mainnet
 
 Also normalize common code aliases from `./references/chain-aliases.json` to their target mainnet rows.
 
+## Address-Wide Sweeps
+
+When the user provides an EVM address and asks whether it was ever active on any chain, which chains it used, or whether it holds balances now across chains, read `./references/address-sweeps.md` before the single-chain router below. The sweep scope is still only `./references/target-mainnets.json`, not every provider-supported EVM chain.
+
+If the prompt names a specific target chain, use [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing) instead.
+
 ## Querying On-Chain Data (Routing)
 
 To read account data — native balance, token holdings, ERC-20/721/1155 transfers, transaction history, or first-funding — resolve the chain, then dispatch to the right explorer API. Do not default to Ethereum; infer the chain from the prompt (explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, target-chain aliases). If ambiguous, ask. If the resolved chain is not a target chain, ask for a feature request instead of querying.
