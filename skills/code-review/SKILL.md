@@ -1,5 +1,5 @@
 ---
-argument-hint: '[paths] [--fix] [--skip-profile <name>]'
+argument-hint: '[paths] [--fix] [--deep] [--with-profile <name>] [--skip-profile <name>]'
 disable-model-invocation: true
 name: code-review
 user-invocable: true
@@ -10,13 +10,15 @@ description: Use for code/PR review, audits, bug/security checks, reviewing diff
 
 ## Objective
 
-Find high-impact defects in changed code with evidence. Prioritize security, correctness, and regressions over style nits.
+Find high-impact defects in changed code with evidence. Prioritize correctness, security, data integrity, shell/config safety, and regressions over style nits.
 
 ## Arguments
 
 - Paths, patterns, a commit/range, or a scope phrase: used in Scope Resolution step 2.
-- `--fix`: Apply all suggested fixes in severity order after reporting findings, then verify per the Verification section.
-- `--skip-profile <name>`: Skip an optional domain profile by stem or filename (e.g. `--skip-profile naming`). Repeatable.
+- `--fix`: Build findings internally, apply suggested fixes in severity order, then produce one final report and verify per the Verification section. Do not emit a separate pre-fix report.
+- `--deep`: Run an exhaustive pass. Read every non-skipped profile triggered by the touched domains, include naming/intent review unless skipped, and broaden verification when risk warrants it.
+- `--with-profile <name>`: Force an optional domain profile by stem or filename (e.g. `--with-profile shell`). Repeatable.
+- `--skip-profile <name>`: Skip an optional domain profile by stem or filename (e.g. `--skip-profile naming`). Repeatable. If both `--with-profile` and `--skip-profile` name the same profile, skip wins.
 - Default: report findings and wait for confirmation before editing.
 
 ## Scope Resolution
@@ -30,7 +32,7 @@ Resolve scope once, then treat the result as fixed for the rest of the run.
    - tracked: `git diff --name-only --diff-filter=ACMR`
    - untracked: `git ls-files --others --exclude-standard`
    - combine both lists and de-duplicate.
-5. Exclude generated/low-signal files unless explicitly requested: lockfiles, minified bundles, build outputs, vendored code.
+5. Exclude generated, vendored, bulk, and low-signal files from manual review unless explicitly requested: lockfiles, minified bundles, build outputs, generated outputs, vendored code, and large data snapshots. When excluded files are relevant to correctness, emit an optional fenced code block tagged `excluded-scope`, one repo-relative path or glob per line, and cover them through verification or invariant checks.
 6. If scope resolves to zero files, report that and stop.
 7. Emit the scope as a fenced code block tagged `resolved-scope`, one repo-relative path per line. The block is authoritative: do not re-run scope commands or revisit exclusions afterward.
 
@@ -39,11 +41,13 @@ Resolve scope once, then treat the result as fixed for the rest of the run.
 ### 1) Resolve Scope
 
 - Apply the Scope Resolution section, then read diffs plus minimal surrounding context.
+- Treat any `excluded-scope` block as outside manual review but inside verification planning.
 
 ### 2) Apply Checks
 
-- Classify files by domain and risk.
-- Apply the core checks plus matching profiles per Profile Dispatch, honoring `--skip-profile` exclusions.
+- Classify files by changed behavior and touched risk surfaces.
+- Apply the core checks plus matching profiles per Profile Dispatch, honoring `--with-profile` and `--skip-profile`.
+- For generated, vendored, bulk, or low-signal files, review the generator, schema, contract, or invariant that produces or constrains them instead of hand-reviewing every generated row or file.
 
 ### 3) Build Findings
 
@@ -53,7 +57,7 @@ Resolve scope once, then treat the result as fixed for the rest of the run.
 ### 4) Fix or Wait
 
 - Default: report findings and wait for confirmation before editing.
-- With `--fix`: apply all suggested fixes in severity order (`CRITICAL -> HIGH -> MEDIUM -> LOW`), then verify per the Verification section.
+- With `--fix`: apply all suggested fixes in severity order (`CRITICAL -> HIGH -> MEDIUM -> LOW`), then verify per the Verification section. The first user-facing findings report is the final report after fixes.
 
 ### 5) Report
 
@@ -84,16 +88,25 @@ Apply on every run.
 
 ## Profile Dispatch
 
-Select at most three profiles per pass — the highest-risk matches for the touched files — unless the user requests a deep audit. Read each selected profile once, in full; every profile fits in a single read, so never page through or re-read one. Honor `--skip-profile` exclusions.
+Default profile dispatch is risk-triggered and capped. Read only profiles that materially improve defect discovery for the touched risk surfaces; file extension alone is not enough when core checks cover the change. Select at most three auto-selected profiles per pass unless `--deep` is set. Read each selected profile once, in full; every profile fits in a single read, so never page through or re-read one.
+
+Honor `--skip-profile` exclusions first. Add `--with-profile` profiles after exclusions; user-forced profiles may exceed the auto-selection cap. Under `--deep`, read every non-skipped profile triggered by the touched domains and include `references/profiles/naming.md` unless skipped.
 
 - `references/profiles/security.md`: auth, external input, secrets, crypto, public network surfaces, unsafe parsing.
 - `references/profiles/configuration.md`: env/config, timeouts, retries, pools, limits, resource tuning, rollout controls.
-- `references/profiles/typescript-react.md`: TypeScript/JavaScript/React/Node files.
-- `references/profiles/python.md`: Python services, scripts, async workloads.
-- `references/profiles/shell.md`: shell scripts, CI command blocks, deployment scripts.
-- `references/profiles/smart-contracts.md`: Solidity/Solana/on-chain protocol code.
-- `references/profiles/data-formats.md`: CSV/JSON/YAML/binary ingestion/export/parsing.
-- `references/profiles/naming.md`: naming/intent clarity. Optional; skippable via `--skip-profile naming`.
+- `references/profiles/go.md`: Go services, CLIs, concurrency, context propagation, error handling, modules, or tests.
+- `references/profiles/typescript-react.md`: TypeScript/JavaScript/React/Node behavior changes where type, render, runtime, package, or async semantics matter.
+- `references/profiles/python.md`: Python services, scripts, async workloads, packaging, data processing, or IO-heavy changes.
+- `references/profiles/shell.md`: shell scripts, CI command blocks, deployment scripts, installer commands, or command quoting.
+- `references/profiles/data-formats.md`: CSV/JSON/YAML/binary ingestion/export/parsing, schemas, generated data, migrations, or fixture updates.
+- `references/profiles/naming.md`: naming/intent clarity. Do not run by default; run only with `--deep`, `--with-profile naming`, or explicit naming/intent review instructions.
+
+## Generated and Bulk Files
+
+- Exclude generated, vendored, bulk, and low-signal files from manual review unless the user explicitly asks to inspect them.
+- Prefer reviewing the source that creates or constrains them: generator code, schemas, migrations, templates, lockfile update intent, fixture contracts, or serialization/deserialization paths.
+- Validate affected outputs with invariant checks such as regeneration diffs, schema validation, parser round trips, row counts, checksums, targeted fixture tests, or package-manager lockfile checks.
+- Mention excluded files in Scope or Verification when they affect confidence.
 
 ## Severity Model
 
@@ -120,8 +133,9 @@ Run the narrowest checks that validate touched behavior:
 - formatter/lint on touched files
 - targeted tests for touched modules
 - typecheck when relevant
+- invariant checks for any relevant `excluded-scope` outputs
 
-Run broader checks only when risk warrants it. Name every skipped check and why.
+Run broader checks only when risk warrants it, especially under `--deep` or when fixes touch shared contracts. Name every skipped check and why.
 
 ## Report
 
@@ -129,7 +143,7 @@ Use these section headings, in this order. Omit sections that do not apply — d
 
 ### Scope
 
-Reviewed files and any excluded patterns.
+Reviewed files and any `excluded-scope` entries with the validation strategy used for them.
 
 ### Findings
 
