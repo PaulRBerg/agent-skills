@@ -2,7 +2,7 @@
 disable-model-invocation: false
 name: effect-ts
 user-invocable: true
-description: Use for nontrivial Effect-TS work including services/layers, typed errors, Schema/JSONSchema, Config, runtime/concurrency, @effect/vitest, @effect/ai, or @prb/effect-next.
+description: Use for nontrivial Effect-TS work including services/layers, typed errors, Schema/JSONSchema, Config, runtime/concurrency, @effect/vitest, @effect/ai, @effect/sql, or @prb/effect-next.
 ---
 
 # Effect-TS Expert
@@ -42,6 +42,7 @@ Last checked against `~/.effect` HEAD `05d72eab7` from 2026-06-05:
 - `@effect/ai@0.36.0`
 - `@effect/ai-openai@0.40.0`
 - `@effect/platform@0.96.1`
+- `@effect/sql@0.51.1`
 - `@effect/rpc@0.75.1`
 - `@effect/cluster@0.59.0`
 
@@ -65,8 +66,8 @@ environment explicitly supports them and the task has separable research tracks.
 1. **Codebase Patterns First** — Examine similar patterns in the current project before implementing. If Effect patterns
    exist in the codebase, follow them for consistency. If no patterns exist, skip this step.
 
-2. **Effect Source Code** — For complex type errors, unclear behavior, or implementation details, examine the Effect
-   source at `~/.effect/packages/effect/src/`. This contains the core Effect logic and modules.
+2. **Effect Source Code** — For complex type errors, unclear behavior, or implementation details, examine the relevant
+   package source under `~/.effect/packages/<package>/src/`. For core `Effect`, use `~/.effect/packages/effect/src/`.
 
 3. **Package Changelogs** — When behavior changed recently, read the relevant changelog under `~/.effect/packages/*/`
    before inferring from old examples.
@@ -110,6 +111,7 @@ Open references selectively:
 | Streams, backpressure, bounded consumption                     | `./references/streams.md`           |
 | Pattern matching, tagged unions, `Data.taggedEnum`             | `./references/pattern-matching.md`  |
 | `@effect/ai` tools/providers/OpenAI integration                | `./references/ai.md`                |
+| `@effect/sql`, `SqlSchema`, repository row decoding            | `./references/sql.md`               |
 | `@effect/platform`, `@effect/rpc`, deployment runtimes         | `./references/platform-rpc.md`      |
 | `@prb/effect-next` / Next.js App Router                        | `./references/next-js.md`           |
 | `@effect-atom/*` React state                                   | `./references/effect-atom.md`       |
@@ -135,7 +137,8 @@ Apply these core principles when writing Effect code:
 ### Error Handling
 
 - Use Effect's typed error system instead of throwing exceptions
-- Define descriptive error types with proper error propagation
+- Prefer `Schema.TaggedError` for domain/API errors that cross serialization or HTTP boundaries
+- Use `Data.TaggedError` for internal, non-encoded errors when Schema integration is unnecessary
 - Use `Effect.fail`, `Effect.catchTag`, `Effect.catchAll` for error control flow
 - See `./references/critical-rules.md` for forbidden patterns
 
@@ -156,6 +159,7 @@ Apply these core principles when writing Effect code:
 ### Code Quality
 
 - Write type-safe code that leverages Effect's type system
+- Prefer `Schema.Class` for domain and API models that need construction, validation, encoding, or equality
 - Use `Effect.gen` for readable sequential code
 - Implement proper testing patterns using Effect's testing utilities
 - Prefer `Effect.fn()` for automatic telemetry and better stack traces
@@ -190,6 +194,8 @@ Quick links to patterns that frequently cause issues:
 - **JSON Schema closed records** — `Schema.Record(String, Never)` emits no extra properties →
   [schema-jsonschema.md](./references/schema-jsonschema.md)
 - **No-parameter AI tools** — Use `Tool.EmptyParams` or omit `parameters` → [ai.md](./references/ai.md)
+- **Layer reuse surprises** — Layers memoize by object identity; use `Layer.fresh` only when needed →
+  [services-layers.md](./references/services-layers.md)
 
 ## Explaining Solutions
 
@@ -228,8 +234,20 @@ Effect.partition([e1, e2, e3])  // Returns [failures, successes]
 ### Error Handling
 
 ```typescript
-// Define typed errors with Data.TaggedError (preferred)
-class UserNotFoundError extends Data.TaggedError("UserNotFoundError")<{
+// Domain/API errors that cross boundaries: prefer Schema.TaggedError
+class UserNotFoundError extends Schema.TaggedError<UserNotFoundError>()(
+  "UserNotFoundError",
+  {
+    userId: Schema.String
+  }
+) {
+  get message() {
+    return `User not found: ${this.userId}`
+  }
+}
+
+// Internal-only errors may use Data.TaggedError
+class CacheMissError extends Data.TaggedError("CacheMissError")<{
   userId: string
 }> {}
 
@@ -330,5 +348,6 @@ see [references/platform-rpc.md](references/platform-rpc.md).
 - **`./references/runtime.md`** — Resource management, Duration, Scheduling, State, SubscriptionRef, Concurrency
 - **`./references/schema-jsonschema.md`** — Schema decoding and JSON Schema generation patterns
 - **`./references/services-layers.md`** — Services, Layers, generator (`Effect.gen` / `Effect.fn`)
+- **`./references/sql.md`** — `@effect/sql`, `SqlSchema`, row decoding, repository patterns
 - **`./references/streams.md`** — Stream patterns and backpressure gotchas
 - **`./references/testing.md`** — Vitest deterministic testing patterns

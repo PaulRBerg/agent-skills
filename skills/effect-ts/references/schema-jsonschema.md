@@ -24,11 +24,65 @@ const program = (input: unknown) =>
   })
 ```
 
+## Domain and API Models
+
+Prefer `Schema.Class` for domain entities, API request/response bodies, and values that need construction, validation,
+encoding, annotations, or structural equality.
+
+```typescript
+import { Schema } from "effect"
+
+const UserId = Schema.NonEmptyTrimmedString.pipe(Schema.brand("UserId"))
+type UserId = typeof UserId.Type
+
+class User extends Schema.Class<User>("User")({
+  id: UserId,
+  email: Schema.NonEmptyTrimmedString,
+  displayName: Schema.NonEmptyTrimmedString
+}) {
+  get label() {
+    return `${this.displayName} <${this.email}>`
+  }
+}
+
+const user = User.make({
+  id: UserId.make("user_123"),
+  email: "ada@example.com",
+  displayName: "Ada"
+})
+```
+
+Use precise domain schemas instead of weakening fields to primitives. If a field can be `UserId`, `CurrencyCode`, or a
+domain literal union, do not type it as `Schema.String` unless the boundary genuinely accepts any string.
+
+## Schema-Backed Domain Errors
+
+Use `Schema.TaggedError` when errors cross module, API, persistence, or serialization boundaries. This gives you tagged
+matching plus Schema-derived validation, annotations, and type guards.
+
+```typescript
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
+  "UserNotFound",
+  { userId: UserId }
+) {
+  get message() {
+    return `User not found: ${this.userId}`
+  }
+}
+
+const isUserNotFound = Schema.is(UserNotFound)
+```
+
+`Data.TaggedError` remains useful for internal-only errors that do not need decoding, encoding, OpenAPI annotations, or
+Schema type guards.
+
 ## Optional, Nullable, and Exact Fields
 
 - Use `Schema.optionalWith(schema, { as: "Option" })` for optional domain fields that should decode to `Option<A>`.
 - Use `Schema.NullOr(schema)` when the serialized form explicitly uses `null`.
 - Use exact optional fields when extra keys must be rejected in generated JSON Schema.
+- Avoid `*FromSelf` variants for JSON/API shapes unless you intentionally want already-decoded input. Standard variants
+  such as `Schema.Option(...)` encode and decode cleanly at boundaries.
 
 ```typescript
 const ApiUser = Schema.Struct({
@@ -78,3 +132,18 @@ const jsonSchema = JSONSchema.fromAST(NoParams.ast, {
 
 If generation fails, look for unsupported schema nodes or missing JSON Schema annotations before weakening the domain
 schema.
+
+## Decode Effects, Not Sync Throws
+
+Prefer `Schema.decodeUnknown(schema)` in Effect code. Avoid sync decoders at effectful boundaries because they throw
+exceptions instead of returning typed failures.
+
+```typescript
+const decodeUser = Schema.decodeUnknown(User)
+
+const handle = (input: unknown) =>
+  Effect.gen(function* () {
+    const user = yield* decodeUser(input)
+    return user.id
+  })
+```

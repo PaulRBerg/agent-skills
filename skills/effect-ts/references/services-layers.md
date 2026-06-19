@@ -42,6 +42,57 @@ function effectHandler<I, A, E, R>(service: Context.ReadonlyTag<I, Effect.Effect
 }
 ```
 
+## Global Context vs Per-Request Context
+
+Use Layers for long-lived dependencies wired at startup: config, clients, repositories, and services. Use
+`Effect.provideService` for per-request values such as authenticated user, tenant, organization, locale, request id, or
+authorization context.
+
+```typescript
+const handleRequest = (request: Request) =>
+  program.pipe(
+    Effect.provideService(CurrentUserId, extractUserId(request)),
+    Effect.provideService(RequestId, extractRequestId(request))
+  )
+```
+
+Avoid constructing a Layer for one request's data. Per-request values are not application services, and wrapping them in
+`Layer.succeed` makes the runtime boundary harder to see.
+
+## Layer Construction
+
+Choose the layer constructor by lifecycle:
+
+```typescript
+Layer.succeed(Tag, value)     // Static pure value, common for tests and simple constants
+Layer.effect(Tag, make)       // Effectful construction without cleanup
+Layer.scoped(Tag, acquire)    // Resourceful construction with cleanup
+Layer.unwrapEffect(makeLayer) // Effectfully builds a Layer
+```
+
+For live services that read dependencies, config, or allocate resources, prefer `Layer.effect` or `Layer.scoped` over
+prebuilding a value and hiding acquisition in `Layer.succeed`.
+
+## Layer Memoization
+
+Layers are memoized by object identity. Reusing the same layer object in one composition shares one instance; creating a
+new layer object creates a distinct instance.
+
+```typescript
+const Shared = Layer.effect(Client, makeClient)
+
+const oneClient = Layer.mergeAll(Shared, Shared)
+
+const twoClients = Layer.mergeAll(
+  Layer.effect(Client, makeClient),
+  Layer.effect(Client, makeClient)
+)
+```
+
+Use `Layer.fresh(layer)` only when you need to escape memoization for the same layer reference, such as a module-level
+constant live layer reused with different test configuration. Do not wrap factory-created test layers in `Layer.fresh`;
+each factory call already returns a new layer object.
+
 ## Generator Pattern
 
 ```typescript

@@ -64,6 +64,83 @@ const value = something as unknown;
 Note: This is general TypeScript guidance. Occasional assertions may be justified when interfacing with poorly-typed
 external libraries, but document the reason.
 
+## AVOID: Global Error in the Effect Error Channel
+
+Do not model expected failures as `Error` in `Effect.Effect<A, Error, R>`. It erases domain information and weakens
+`catchTag`, `Match`, API error mapping, and serialization.
+
+```typescript
+// Avoid
+Effect.fail(new Error("User not found"))
+
+// Prefer for domain/API errors
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
+  "UserNotFound",
+  { userId: UserId }
+) {}
+
+Effect.fail(new UserNotFound({ userId }))
+```
+
+Use `Data.TaggedError` for internal errors that do not need Schema decoding, encoding, annotations, or HTTP/OpenAPI
+integration.
+
+## AVOID: `catchAllCause` for Error Mapping
+
+`Cause` includes both expected failures and defects. Mapping it into a normal error hides bugs that should stay defects.
+
+```typescript
+// Avoid: catches defects too
+effect.pipe(
+  Effect.catchAllCause((cause) =>
+    Effect.fail(new RepositoryError({ cause }))
+  )
+)
+
+// Prefer: transform only expected errors
+effect.pipe(
+  Effect.mapError((error) =>
+    new RepositoryError({ cause: error })
+  )
+)
+```
+
+Reach for `catchAllCause` only when you intentionally need full cause inspection at a runtime/reporting boundary.
+
+## AVOID: Silent Error Swallowing
+
+If a side effect matters, let its failure remain visible in the error channel. Audit logging, billing, persistence,
+security checks, and notification guarantees should not quietly become `Effect.void`.
+
+```typescript
+// Avoid for important side effects
+yield* audit.log(entry).pipe(
+  Effect.catchTag("AuditLogError", () => Effect.void)
+)
+
+// Prefer: propagate or map the error
+yield* audit.log(entry).pipe(
+  Effect.mapError((error) => new CreateUserError({ cause: error }))
+)
+```
+
+Fallback values are fine for optional queries; swallowing side-effect failures is not.
+
+## AVOID: Effect Wrappers Around Safe Pure Code
+
+`Effect.try` and `Effect.tryPromise` are boundary constructors. Do not wrap ordinary pure transformations just to make
+them "Effect-shaped".
+
+```typescript
+// Avoid
+const names = Effect.try(() => users.map((user) => user.name))
+
+// Prefer
+const names = users.map((user) => user.name)
+```
+
+Use `Effect.sync` for synchronous effects with observable side effects, and `Effect.try` only for code that can throw.
+
 ## RECOMMENDED: return `yield*` for Errors
 
 **Use `return yield*` when yielding errors or interrupts in Effect.gen for clarity.**
