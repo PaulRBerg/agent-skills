@@ -56,6 +56,48 @@ resolve_lock_root() {
   lock_root="$git_dir/agent-skills/commit-locks"
 }
 
+pid_is_running() {
+  _pid=$1
+  case "$_pid" in
+    '' | *[!0123456789]*)
+      return 1
+      ;;
+  esac
+  kill -0 "$_pid" 2>/dev/null
+}
+
+metadata_value() {
+  _metadata_file=$1
+  _key=$2
+  while IFS= read -r _line; do
+    case "$_line" in
+      "$_key="*)
+        printf '%s\n' "${_line#*=}"
+        return 0
+        ;;
+    esac
+  done <"$_metadata_file"
+  return 1
+}
+
+remove_stale_lock() {
+  _lock_dir=$1
+  _metadata_file="$_lock_dir/metadata"
+
+  if [ ! -f "$_metadata_file" ]; then
+    rmdir "$_lock_dir" 2>/dev/null
+    return $?
+  fi
+
+  _holder_pid=$(metadata_value "$_metadata_file" "pid" 2>/dev/null) || return 1
+  if pid_is_running "$_holder_pid"; then
+    return 1
+  fi
+
+  rm -f "$_metadata_file" 2>/dev/null || return 1
+  rmdir "$_lock_dir" 2>/dev/null
+}
+
 acquire_lock() {
   [ "$#" -eq 0 ] || {
     usage
@@ -66,15 +108,24 @@ acquire_lock() {
 
   lock_hash=$(printf '%s\n%s\n' "$repo_root" "$branch" | hash_stdin) || die 'failed to hash commit lock key'
   owner=$(printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$repo_root" "$branch" "$$" "$(date +%s)" "$RANDOM" "$RANDOM" | hash_stdin) || die 'failed to create commit lock owner'
+  lock_holder_pid=$PPID
   lock_token="$lock_hash:$owner"
   lock_dir="$lock_root/$lock_hash.lock"
 
   mkdir -p "$lock_root" || die 'failed to create commit lock directory'
 
   waits=0
+  waiting_reported=false
   while ! mkdir "$lock_dir" 2>/dev/null; do
+    if remove_stale_lock "$lock_dir"; then
+      continue
+    fi
     if [ "$waits" -ge "$lock_max_waits" ]; then
       die 'another agent is already committing for this repo and branch'
+    fi
+    if [ "$waiting_reported" = false ]; then
+      printf 'waiting for another commit attempt to finish...\n' >&2
+      waiting_reported=true
     fi
     sleep "$lock_sleep_seconds"
     waits=$((waits + 1))
@@ -84,7 +135,8 @@ acquire_lock() {
     printf 'owner=%s\n' "$owner"
     printf 'repo=%s\n' "$repo_root"
     printf 'branch=%s\n' "$branch"
-    printf 'pid=%s\n' "$$"
+    printf 'pid=%s\n' "$lock_holder_pid"
+    printf 'helper_pid=%s\n' "$$"
     date -u '+created_at=%Y-%m-%dT%H:%M:%SZ'
   } >"$lock_dir/metadata"; then
     rm -f "$lock_dir/metadata"
