@@ -14,7 +14,7 @@
 #   rollup_type=<string|>
 #
 # No API key required. Source: https://chains.blockscout.com/
-# Scope is intentionally limited to skills/evm-chains/references/target-mainnets.json.
+# Scope is intentionally limited to skills/evm-atlas/references/target-mainnets.json.
 
 set -eu
 
@@ -67,7 +67,7 @@ target_name_pattern() {
 }
 
 expected_pattern=$(target_name_pattern "$chain_id") || {
-  echo "Error: chain_id=$chain_id is outside the evm-chains target list." >&2
+  echo "Error: chain_id=$chain_id is outside the evm-atlas target list." >&2
   echo "Ask the user to file a feature request in https://github.com/PaulRBerg/agent-skills" >&2
   exit 2
 }

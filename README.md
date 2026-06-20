@@ -32,7 +32,7 @@ bunx skills add PaulRBerg/agent-skills
 | create-skill              | Bootstrap a new agent skill                                |
 | debrief                   | Interactive HTML or Markdown task debrief                  |
 | effect-ts                 | Effect-TS patterns and guidance                            |
-| evm-chains                | EVM chain resolution + Etherscan/Blockscout query routing  |
+| evm-atlas                 | EVM chain/account lookup + cross-chain data routing        |
 | find-tool                 | Find and compare current developer tools                   |
 | git-squash                | Squash PR branch with semantic commit message              |
 | grill-me                  | Relentlessly stress-test plans and designs                 |

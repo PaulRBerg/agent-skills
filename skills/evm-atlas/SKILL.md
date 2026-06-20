@@ -1,14 +1,14 @@
 ---
 argument-hint: <chain-name-or-id>
 disable-model-invocation: false
-name: evm-chains
+name: evm-atlas
 user-invocable: true
-description: 'Use for targeted EVM chain resolution and on-chain account data: target chain name/ID, RPC/explorer/native symbol, RouteMesh, balances, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; bridge/cross-chain Bungee, LayerZero, LI.FI, Socket enrichment.'
+description: 'Use for targeted EVM chain, account, transaction, RPC, explorer, and bridge data: chain name/ID, native symbol, RouteMesh, balances, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; Bungee, LayerZero, LI.FI, Socket enrichment.'
 ---
 
-# EVM Chains
+# EVM Atlas
 
-Targeted EVM chain dataset (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback). For bridge transactions and cross-chain swaps, enrich explorer/RPC verification with Bungee, LayerZero, or LI.FI data only when the relevant chains are target chains.
+Targeted EVM chain atlas (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback). For bridge transactions and cross-chain swaps, enrich explorer/RPC verification with Bungee, LayerZero, or LI.FI data only when the relevant chains are target chains.
 
 Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks — and to query on-chain account data once the chain is resolved (see [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing)). Also use it when the user mentions bridging, bridge tx, cross-chain swap, Bungee, LayerZero, LI.FI, Socket, Stargate, OFT, CCTP, or Aori, or when a transaction is inferred to be bridge-related.
 

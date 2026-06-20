@@ -109,7 +109,7 @@ If the user references a **target EVM chain** that Etherscan API V2 does not cov
 If the user references a **non-EVM chain**, do not use this skill:
 
 ```
-The chain "[chain name]" is outside the evm-chains target list.
+The chain "[chain name]" is outside the evm-atlas target list.
 Please file a feature request in https://github.com/PaulRBerg/agent-skills.
 ```
 

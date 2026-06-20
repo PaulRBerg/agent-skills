@@ -2,7 +2,7 @@
 disable-model-invocation: false
 name: cli-cast
 user-invocable: false
-description: 'Use for Foundry cast/on-chain actions: send tx, call contract, sign message, cast send/call/wallet, encode/decode ABI/calldata, or RPC interactions. For read-only balances/history, prefer evm-chains.'
+description: 'Use for Foundry cast/on-chain actions: send tx, call contract, sign message, cast send/call/wallet, encode/decode ABI/calldata, or RPC interactions. For read-only balances/history, prefer evm-atlas.'
 ---
 
 # Foundry Cast CLI
@@ -22,7 +22,7 @@ Expert guidance for Foundry's `cast` CLI — the Swiss Army knife for interactin
 
 ## RPC Configuration
 
-All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC provider when the resolved chain is RouteMesh-supported. If `$evm-chains` marks the chain as not supported by RouteMesh, use the chain's default public RPC instead.
+All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC provider when the resolved chain is RouteMesh-supported. If `$evm-atlas` marks the chain as not supported by RouteMesh, use the chain's default public RPC instead.
 
 **URL pattern:**
 
@@ -30,7 +30,7 @@ All on-chain commands require an RPC endpoint. Use RouteMesh as the default RPC 
 https://lb.routeme.sh/rpc/{CHAIN_ID}/{ROUTEMESH_API_KEY}
 ```
 
-**Construct the RPC URL** by resolving the chain with `$evm-chains` first, then reading the `ROUTEMESH_API_KEY` environment variable if RouteMesh is supported. If `$evm-chains` is unavailable, tell the user they can install this skill collection with `bunx skills add PaulRBerg/agent-skills`; until then, use `references/chains.md` only as a limited fallback for common networks.
+**Construct the RPC URL** by resolving the chain with `$evm-atlas` first, then reading the `ROUTEMESH_API_KEY` environment variable if RouteMesh is supported. If `$evm-atlas` is unavailable, tell the user they can install this skill collection with `bunx skills add PaulRBerg/agent-skills`; until then, use `references/chains.md` only as a limited fallback for common networks.
 
 **Before running any on-chain command**, verify that `ROUTEMESH_API_KEY` is set:
 
@@ -277,8 +277,8 @@ cast balance "$ADDR" --ether --rpc-url "$RPC_URL"
 
 When the user specifies a chain by name, resolve the chain ID using these steps:
 
-1. **Check `$evm-chains` first** — it is the authoritative Sablier-SDK-backed dataset for chain names, IDs, default public RPCs, native currency symbols, and RouteMesh support
-2. **If `$evm-chains` is unavailable**, tell the user to install this collection with `bunx skills add PaulRBerg/agent-skills`, then use `references/chains.md` as a limited fallback for common networks
+1. **Check `$evm-atlas` first** — it is the authoritative Sablier-SDK-backed dataset for chain names, IDs, default public RPCs, native currency symbols, and RouteMesh support
+2. **If `$evm-atlas` is unavailable**, tell the user to install this collection with `bunx skills add PaulRBerg/agent-skills`, then use `references/chains.md` as a limited fallback for common networks
 3. **If the chain is still not listed**, web search for the correct chain ID on chainlist.org
 4. **Construct the RPC URL** using the resolved chain ID and RouteMesh pattern when supported; otherwise use the chain's default public RPC
 
@@ -305,7 +305,7 @@ When the user specifies a chain by name, resolve the chain ID using these steps:
 
 ## Additional Resources
 
-- **`$evm-chains`** — Preferred source for Sablier SDK EVM chain data and RouteMesh support
+- **`$evm-atlas`** — Preferred source for Sablier SDK EVM chain data and RouteMesh support
 - **[Browser Wallet Signing](references/browser-signing.md)** — Full guide for signing via `--browser` with MetaMask/Rabby/etc.
 - **[Chain Reference](references/chains.md)** — Limited fallback list of common chains for RouteMesh RPC URL construction
 - **Foundry Book**: https://book.getfoundry.sh/reference/cast/

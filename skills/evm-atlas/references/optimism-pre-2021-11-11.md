@@ -4,7 +4,7 @@
 
 Use this reference for OP Mainnet (`chain_id=10`) queries that target activity before the final regenesis on `2021-11-11`.
 
-Current OP Mainnet explorer and RPC routes are not authoritative for pre-final-regenesis transactions. Optimism's docs state that transactions older than `2021-11-11` are not part of the current blockchain and do not appear on Etherscan. The usual `evm-chains` routes - Etherscan, Blockscout, and public RPC - can therefore fail even when the historical activity happened.
+Current OP Mainnet explorer and RPC routes are not authoritative for pre-final-regenesis transactions. Optimism's docs state that transactions older than `2021-11-11` are not part of the current blockchain and do not appear on Etherscan. The usual `evm-atlas` routes - Etherscan, Blockscout, and public RPC - can therefore fail even when the historical activity happened.
 
 ## What Still Exists
 
