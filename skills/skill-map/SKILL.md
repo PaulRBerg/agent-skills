@@ -1,9 +1,9 @@
 ---
-argument-hint: "[--root PATH] [--skill NAME] [--format text|json|dot]"
+argument-hint: "[--skill NAME] [--root PATH] [--format text|json|dot]"
 disable-model-invocation: false
 name: skill-map
 user-invocable: true
-description: "Use to find agent skill installs, duplicate skills, cross-dependencies, invocations, and cross-references across the local machine. Scans broadly while ignoring macOS protected home paths, agent transcript/history/state directories, dependency folders, and backups."
+description: "Use to find agent skill installs, duplicate skills, cross-dependencies, invocations, and cross-references across the local machine. Scans broadly while ignoring macOS protected home paths, agent home install/state directories (~/.agents, ~/.claude, ~/.codex, ~/.local/state/skills), transcript/history/state directories, dependency folders, and backups."
 ---
 
 # Skill Map

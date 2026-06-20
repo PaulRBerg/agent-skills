@@ -8,11 +8,16 @@
 - Build outputs: `dist`, `build`, `out`, `.next`, `coverage`.
 - Large or binary-ish local state: caches, logs, SQLite state, generated images, and temporary directories under known agent homes.
 - macOS protected home paths: `~/Library` and `~/.Trash`.
+- Agent home install/state roots during broad scans: `~/.agents`, `~/.claude`, `~/.codex`, and `~/.local/state/skills`.
 - Known local skill catalog source checkouts during broad scans: `~/projects/agent-skills`, `~/sablier/sablier-skills`, and `~/sablier/agent-skills`.
 
 ## macOS Protected Paths
 
 Broad `$HOME` scans ignore `~/Library` and `~/.Trash` because macOS privacy protections can make ripgrep return `2` after producing partial results. Scoped explicit roots are the reliable way to cover additional local content without treating protected-path failures as successful scans.
+
+## Agent Home Install Roots
+
+Broad scans ignore the agent home roots themselves — `~/.agents`, `~/.claude`, `~/.codex`, and `~/.local/state/skills` — not just their state subdirectories. These hold installed skill copies and managed state, so during a default `$HOME` scan they are noise relative to authored sources and project references. Pass one explicitly as `--root` (e.g. `--root ~/.agents`) to audit installs there; an explicit root is never self-ignored, matching how `~/Library` and catalog source checkouts behave.
 
 ## Claude Code State
 
