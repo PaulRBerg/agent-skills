@@ -38,6 +38,7 @@ bunx skills add PaulRBerg/agent-skills
 | grill-me                  | Relentlessly stress-test plans and designs                 |
 | loop-skill                | Repeat a skill multiple times with one net report          |
 | playground                | Interactive single-file HTML playgrounds                   |
+| repo-rename               | Rename GitHub repo, folder, and agent thread references    |
 | skill-map                 | Find skill dependencies and references across machine      |
 | spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                |
 | tailwind-css              | Tailwind CSS v4 styling guidance                           |
