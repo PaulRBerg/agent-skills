@@ -48,6 +48,16 @@ Use `--diff summary` by default. Use `--diff full` only when the intent is ambig
 
 The helper performs Git preflight checks, stages `--all` or the session-modified paths, unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the message format, branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise suggested fix.
 
+The helper also acquires a repo+branch commit lock before staging. If it fails because another agent is already committing for this repo and branch, stop and tell the user that committing is blocked by another active commit attempt. Do not describe internal lock paths, tokens, retries, or metadata.
+
+On success, save the `## commit lock token` value from the helper output. Treat it as internal. Release it exactly once with:
+
+```bash
+bash "<skill-dir>/scripts/commit-lock.sh" release "<commit-lock-token>"
+```
+
+Run the release command after the commit workflow completes, including after optional push. If any post-prepare step fails or you stop before committing, release the lock before reporting the failure.
+
 - If `--all`:
   - Include all tracked, untracked, modified, deleted, and already staged changes
 - Otherwise (atomic commits):
@@ -90,9 +100,11 @@ Read only the selected format reference before composing the message.
 - Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or pre-commit hook activity unless a command failed.
 - If failed: show error + suggest fix
 - **Pre-commit hook failure:** if the hook fails on unrelated/pre-existing changes (not this session's changes), retry automatically with `git commit --no-verify` — do not ask. Report the bypass in one line, noting the failure was unrelated to the staged changes. Never bypass hooks for failures caused by the session's own changes; fix those or surface the error instead.
+- Keep the commit lock held through hook retries, then release it before reporting the final result or final failure.
 
 ### 5) Push (if `--push`)
 
 - If upstream exists: `git push`
 - If no upstream: `git push -u origin HEAD`
 - If failed: show error + suggest fix (pull/rebase first, set upstream, check auth)
+- Release the commit lock after push succeeds or fails, before the final user-facing response.
