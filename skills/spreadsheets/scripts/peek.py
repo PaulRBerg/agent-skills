@@ -7,7 +7,9 @@
 Reports encoding, BOM, newline style, delimiter, header, shape, ragged and
 empty rows, `-` null usage, issues, and sample rows. Read-only.
 
-Usage: uv run scripts/peek.py <file> [--rows N] [--strict] [--expect-like REPORT]
+Usage:
+  uv run scripts/peek.py <file> [--rows N] [--strict] [--expect-like REPORT]
+  uv run scripts/peek.py <file> --house --redact-samples
 """
 
 from __future__ import annotations
@@ -16,6 +18,9 @@ import argparse
 import csv
 import io
 import json
+import re
+import shutil
+import subprocess
 import sys
 from collections import Counter
 from contextlib import contextmanager
@@ -27,6 +32,7 @@ CANDIDATE_DELIMITERS = ",\t;|"
 BINARY_SUFFIXES = {".xlsx", ".xlsm", ".xls", ".ods", ".numbers", ".parquet"}
 CELL_PREVIEW_LIMIT = 120
 NEWLINE_CHUNK = 1024 * 1024
+HOUSE_HEADER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 def fail(message: str, hint: str | None = None) -> NoReturn:
@@ -70,7 +76,17 @@ def open_text(path: Path, encoding: str, skip_bytes: int = 0) -> Iterator[io.Tex
             raw.close()
 
 
-def newline_report(path: Path, encoding: str, skip_bytes: int) -> dict:
+def summarize_newlines(crlf: int, lf: int, cr: int, trailing_newline: bool) -> dict[str, Any]:
+    present = [name for name, count in (("crlf", crlf), ("lf", lf), ("cr", cr)) if count]
+    style = present[0] if len(present) == 1 else ("mixed" if present else "none")
+    return {
+        "style": style,
+        "counts": {"crlf": crlf, "lf": lf, "cr": cr},
+        "trailing_newline": trailing_newline,
+    }
+
+
+def newline_report(path: Path, encoding: str, skip_bytes: int) -> dict[str, Any]:
     crlf = 0
     lf = 0
     cr = 0
@@ -98,13 +114,7 @@ def newline_report(path: Path, encoding: str, skip_bytes: int) -> dict:
     if pending_cr:
         cr += 1
 
-    present = [name for name, count in (("crlf", crlf), ("lf", lf), ("cr", cr)) if count]
-    style = present[0] if len(present) == 1 else ("mixed" if present else "none")
-    return {
-        "style": style,
-        "counts": {"crlf": crlf, "lf": lf, "cr": cr},
-        "trailing_newline": last_char in ("\n", "\r"),
-    }
+    return summarize_newlines(crlf, lf, cr, last_char in ("\n", "\r"))
 
 
 def pick_delimiter(path: Path, text: str) -> tuple[str, str]:
@@ -122,8 +132,10 @@ def pick_delimiter(path: Path, text: str) -> tuple[str, str]:
         return ",", "fallback (no delimiter found)"
 
 
-def preview(cell: str) -> str:
-    return cell if len(cell) <= CELL_PREVIEW_LIMIT else cell[:CELL_PREVIEW_LIMIT] + "…"
+def preview(cell: str, redact: bool) -> str:
+    if redact and cell not in ("", "-"):
+        return "<redacted>"
+    return cell if len(cell) <= CELL_PREVIEW_LIMIT else cell[:CELL_PREVIEW_LIMIT] + "..."
 
 
 def issue(code: str, message: str, **details: Any) -> dict[str, Any]:
@@ -172,6 +184,37 @@ def structural_issues(report: dict[str, Any]) -> list[dict[str, Any]]:
         )
     if report["empty_rows"]:
         issues.append(issue("empty_rows", "empty data rows", count=report["empty_rows"]))
+    validation = report.get("qsv_validation")
+    if validation and validation.get("available") and "ok" in validation and not validation.get("ok"):
+        issues.append(
+            issue(
+                "qsv_validation_failed",
+                "qsv could not validate the file as RFC 4180-compatible CSV",
+                detail=validation.get("stderr") or validation.get("stdout"),
+            )
+        )
+    return issues
+
+
+def house_issues(report: dict[str, Any]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    if report["delimiter"] != "\t":
+        issues.append(
+            issue(
+                "house_delimiter_not_tsv",
+                "authored spreadsheet files should be TSV",
+                delimiter=delimiter_label(report["delimiter"]),
+            )
+        )
+    unsafe_headers = [header for header in report["header"] if not HOUSE_HEADER_RE.fullmatch(header)]
+    if unsafe_headers:
+        issues.append(
+            issue(
+                "house_headers_not_snake_case",
+                "headers are not lowercase snake_case",
+                headers=unsafe_headers,
+            )
+        )
     return issues
 
 
@@ -249,7 +292,14 @@ def compare_expected_like(report: dict[str, Any], expected: dict[str, Any]) -> l
     return issues
 
 
-def parse_rows(path: Path, encoding: str, skip_bytes: int, delimiter: str, sample_rows: int) -> dict[str, Any]:
+def parse_rows_python(
+    path: Path,
+    encoding: str,
+    skip_bytes: int,
+    delimiter: str,
+    sample_rows: int,
+    redact_samples: bool,
+) -> dict[str, Any]:
     with open_text(path, encoding, skip_bytes) as handle:
         reader = csv.reader(handle, delimiter=delimiter)
         try:
@@ -273,7 +323,7 @@ def parse_rows(path: Path, encoding: str, skip_bytes: int, delimiter: str, sampl
             for record_number, record in enumerate(reader, start=2):  # header is record 1
                 data_rows += 1
                 if len(sample) < sample_rows:
-                    sample.append([preview(cell) for cell in record])
+                    sample.append([preview(cell, redact_samples) for cell in record])
                 if not record or all(cell.strip() == "" for cell in record):
                     empty += 1
                     continue
@@ -297,21 +347,149 @@ def parse_rows(path: Path, encoding: str, skip_bytes: int, delimiter: str, sampl
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("file", type=Path)
-    parser.add_argument("--rows", type=int, default=5, help="sample rows to include (default: 5)")
-    parser.add_argument("--strict", action="store_true", help="exit 1 on structural or house-format issues")
-    parser.add_argument("--expect-like", type=Path, help="exit 1 if shape/format drift from a previous peek report")
-    parser.add_argument("--expect-columns", type=int, help="exit 1 unless the file has this many columns")
-    args = parser.parse_args()
+def strip_record_ending(raw_line: bytes) -> tuple[bytes, str | None]:
+    if raw_line.endswith(b"\r\n"):
+        return raw_line[:-2], "crlf"
+    if raw_line.endswith(b"\n"):
+        return raw_line[:-1], "lf"
+    if raw_line.endswith(b"\r"):
+        return raw_line[:-1], "cr"
+    return raw_line, None
 
-    if args.rows < 0:
+
+def decode_fields(raw_fields: list[bytes]) -> list[str] | None:
+    try:
+        return [field.decode("utf-8") for field in raw_fields]
+    except UnicodeDecodeError:
+        return None
+
+
+def parse_rows_unquoted_fast(
+    path: Path,
+    skip_bytes: int,
+    delimiter: str,
+    sample_rows: int,
+    redact_samples: bool,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Fast parser for simple delimited files without quotes or embedded newlines."""
+    delimiter_bytes = delimiter.encode("utf-8")
+    if len(delimiter_bytes) != 1:
+        return None
+
+    crlf = 0
+    lf = 0
+    cr = 0
+    trailing_newline = False
+    header: list[str] | None = None
+    width = 0
+    duplicate_headers: list[str] = []
+    ragged_count = 0
+    ragged_first: list[dict[str, int]] = []
+    empty = 0
+    dash_nulls = 0
+    data_rows = 0
+    sample: list[list[str]] = []
+
+    with path.open("rb") as handle:
+        if skip_bytes:
+            handle.seek(skip_bytes)
+        for raw_record_number, raw_line in enumerate(handle, start=1):
+            record_bytes, ending = strip_record_ending(raw_line)
+            trailing_newline = ending is not None
+            if ending == "crlf":
+                crlf += 1
+            elif ending == "lf":
+                lf += 1
+            elif ending == "cr":
+                cr += 1
+            if b'"' in record_bytes or b"\r" in record_bytes:
+                return None
+
+            if raw_record_number == 1:
+                header = decode_fields(record_bytes.split(delimiter_bytes))
+                if header is None:
+                    return None
+                width = len(header)
+                duplicate_headers = sorted(name for name, count in Counter(header).items() if count > 1)
+                continue
+
+            data_rows += 1
+            if record_bytes == b"":
+                empty += 1
+                if len(sample) < sample_rows:
+                    sample.append([])
+                continue
+
+            record = decode_fields(record_bytes.split(delimiter_bytes))
+            if record is None:
+                return None
+            if len(sample) < sample_rows:
+                sample.append([preview(cell, redact_samples) for cell in record])
+            if all(cell.strip() == "" for cell in record):
+                empty += 1
+                continue
+            if len(record) != width:
+                ragged_count += 1
+                if len(ragged_first) < 10:
+                    ragged_first.append({"record": raw_record_number, "columns": len(record)})
+            dash_nulls += sum(1 for cell in record if cell == "-")
+
+    if header is None:
+        fail(f"{path.name} is empty")
+
+    row_report = {
+        "columns": width,
+        "header": header,
+        "duplicate_headers": duplicate_headers,
+        "data_rows": data_rows,
+        "empty_rows": empty,
+        "ragged_rows": {"count": ragged_count, "first": ragged_first},
+        "dash_null_cells": dash_nulls,
+        "sample": sample,
+    }
+    return row_report, summarize_newlines(crlf, lf, cr, trailing_newline)
+
+
+def qsv_validation(path: Path, delimiter: str, encoding: str) -> dict[str, Any]:
+    qsv = shutil.which("qsv")
+    if qsv is None:
+        return {"available": False}
+    if encoding != "utf-8":
+        return {"available": True, "skipped": "non-utf8"}
+    try:
+        result = subprocess.run(
+            [qsv, "validate", "-d", delimiter, str(path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"available": True, "ok": False, "error": str(exc)}
+    return {
+        "available": True,
+        "ok": result.returncode == 0,
+        "returncode": result.returncode,
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+    }
+
+
+def inspect_path(
+    path: Path,
+    *,
+    rows: int = 5,
+    strict: bool = False,
+    expect_like: Path | None = None,
+    expect_columns: int | None = None,
+    engine: str = "auto",
+    house: bool = False,
+    redact_samples: bool = False,
+) -> tuple[dict[str, Any], bool]:
+    if rows < 0:
         fail("--rows must be >= 0")
-    if args.expect_columns is not None and args.expect_columns < 1:
+    if expect_columns is not None and expect_columns < 1:
         fail("--expect-columns must be >= 1")
-
-    path: Path = args.file
     if not path.is_file():
         fail(f"{path} is not a file")
 
@@ -322,7 +500,7 @@ def main() -> None:
     if path.suffix.lower() in BINARY_SUFFIXES or raw[:4] == b"PK\x03\x04":
         fail(
             f"{path.name} is a binary spreadsheet, not delimited text",
-            "follow references/xlsx.md (openpyxl or DuckDB read_xlsx) instead of peek.py",
+            "follow references/xlsx.md (openpyxl, qsv excel, or DuckDB read_xlsx) instead of peek.py",
         )
     if b"\x00" in raw[:SNIFF_BYTES] and not raw.startswith((b"\xff\xfe", b"\xfe\xff")):
         fail(f"{path.name} looks binary (NUL bytes found)")
@@ -330,36 +508,55 @@ def main() -> None:
     text, encoding, bom, skip_bytes = decode_sample(raw)
     codec = stream_codec(encoding)
     delimiter, delimiter_source = pick_delimiter(path, text)
-    row_report = parse_rows(path, codec, skip_bytes, delimiter, args.rows)
+
+    validation = qsv_validation(path, delimiter, encoding) if engine == "auto" else {"available": False}
+    engine_used = "python-csv"
+    row_report: dict[str, Any]
+    newlines: dict[str, Any]
+
+    fast_report = None
+    if engine == "auto" and encoding == "utf-8":
+        fast_report = parse_rows_unquoted_fast(path, skip_bytes, delimiter, rows, redact_samples)
+    if fast_report is not None:
+        row_report, newlines = fast_report
+        engine_used = "python-fast-unquoted"
+    else:
+        row_report = parse_rows_python(path, codec, skip_bytes, delimiter, rows, redact_samples)
+        newlines = newline_report(path, codec, skip_bytes)
 
     report: dict[str, Any] = {
         "file": str(path),
         "size_bytes": size,
         "analysis_truncated": False,
+        "engine_requested": engine,
+        "engine": engine_used,
         "encoding": encoding,
         "bom": bom,
-        "newlines": newline_report(path, codec, skip_bytes),
+        "newlines": newlines,
         "delimiter": delimiter,
         "delimiter_source": delimiter_source,
+        "qsv_validation": validation,
     }
     report.update(row_report)
 
     reported_issues = structural_issues(report)
-    should_fail = args.strict and bool(reported_issues)
+    if house:
+        reported_issues.extend(house_issues(report))
+    should_fail = (strict or house) and bool(reported_issues)
 
-    if args.expect_columns is not None and report["columns"] != args.expect_columns:
+    if expect_columns is not None and report["columns"] != expect_columns:
         reported_issues.append(
             issue(
                 "expected_columns_mismatch",
                 "column count does not match --expect-columns",
-                expected=args.expect_columns,
+                expected=expect_columns,
                 actual=report["columns"],
             )
         )
         should_fail = True
 
-    if args.expect_like:
-        expected = load_expected_report(args.expect_like)
+    if expect_like:
+        expected = load_expected_report(expect_like)
         expected_issues = compare_expected_like(report, expected)
         reported_issues.extend(expected_issues)
         if expected_issues:
@@ -367,6 +564,36 @@ def main() -> None:
 
     report["status"] = "issues_found" if reported_issues else "ok"
     report["issues"] = reported_issues
+    return report, should_fail
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("file", type=Path)
+    parser.add_argument("--rows", type=int, default=5, help="sample rows to include (default: 5)")
+    parser.add_argument("--strict", action="store_true", help="exit 1 on structural issues")
+    parser.add_argument("--house", action="store_true", help="also enforce authored TSV house conventions")
+    parser.add_argument("--redact-samples", action="store_true", help="redact non-null sample cell values")
+    parser.add_argument("--expect-like", type=Path, help="exit 1 if shape/format drift from a previous peek report")
+    parser.add_argument("--expect-columns", type=int, help="exit 1 unless the file has this many columns")
+    parser.add_argument(
+        "--engine",
+        choices=("auto", "python"),
+        default="auto",
+        help="auto uses the fast unquoted parser and qsv validation when safe; python forces csv.reader",
+    )
+    args = parser.parse_args()
+
+    report, should_fail = inspect_path(
+        args.file,
+        rows=args.rows,
+        strict=args.strict,
+        expect_like=args.expect_like,
+        expect_columns=args.expect_columns,
+        engine=args.engine,
+        house=args.house,
+        redact_samples=args.redact_samples,
+    )
     print(json.dumps(report, indent=2, ensure_ascii=False))
     if should_fail:
         sys.exit(1)

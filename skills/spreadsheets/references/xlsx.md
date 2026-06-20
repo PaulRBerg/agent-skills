@@ -4,19 +4,39 @@ Contents: [Choose the Path](#choose-the-path) · [Read](#read) · [Create](#crea
 
 ## Choose the Path
 
-- **Values only** (analyze, extract, convert): read with DuckDB or a values-only openpyxl load. Prefer converting to TSV early and doing the real work there.
-- **Workbook as deliverable** (formulas, styling, multiple sheets): build with openpyxl, then run the mandatory recalculation loop.
+- **Values only** (analyze, extract, convert): use `qsv excel` for fast export/metadata, DuckDB for SQL over `.xlsx`, or `fastexcel` when Python/Polars/Arrow is truly needed. Prefer converting to TSV early and doing the real work there.
+- **New workbook deliverable** (formulas, styling, tables, charts): build with XlsxWriter, then run the mandatory recalculation loop.
+- **Existing workbook edit** (preserve sheets, formulas, macros where possible): use openpyxl surgically, then run the recalculation loop.
 
 ## Read
 
-DuckDB — values only, precision-safe:
+Fast metadata/export with qsv:
+
+```sh
+qsv excel --metadata J book.xlsx                 # sheet/table/header metadata as JSON
+qsv excel --sheet Trades -d '\t' -q -o trades.tsv book.xlsx
+qsv excel --table Table1 -d '\t' -q -o table1.tsv book.xlsx
+```
+
+DuckDB — values-only SQL, precision-safe:
 
 ```sql
 FROM read_xlsx('book.xlsx', all_varchar = true);                    -- first sheet
 FROM read_xlsx('book.xlsx', sheet = 'Trades', all_varchar = true);  -- named sheet
 ```
 
-openpyxl — structure and formulas:
+fastexcel — fast Python read when a dataframe/Arrow path is needed:
+
+```sh
+uv run --with fastexcel --with polars python -c "
+import fastexcel, polars as pl
+sheet = fastexcel.read_excel('book.xlsx').load_sheet_by_name('Trades')
+df = pl.DataFrame(sheet)
+print(df.shape)
+"
+```
+
+openpyxl — existing workbook structure and formulas:
 
 ```python
 from openpyxl import load_workbook
@@ -29,7 +49,7 @@ for ws in wb.worksheets:
 
 - `data_only=True` returns the values cached by the last application that saved the file. A workbook freshly written by openpyxl has no cache — formula cells read as `None` until recalculated.
 - Never save a workbook loaded with `data_only=True`: formulas are silently replaced by values, permanently.
-- Large files: `load_workbook(path, read_only=True)` for reading, `Workbook(write_only=True)` for writing.
+- Large values-only reads should not default to openpyxl; prefer `qsv excel`, DuckDB, or fastexcel.
 - Bulk multi-sheet dump when pandas is genuinely convenient: `uv run --with pandas python -c "..."` with `pd.read_excel(path, sheet_name=None, dtype=str)` — `dtype=str` is non-negotiable for amount columns.
 
 ## Create
@@ -38,26 +58,25 @@ for ws in wb.worksheets:
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["openpyxl"]
+# dependencies = ["XlsxWriter"]
 # ///
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+import xlsxwriter
 
-wb = Workbook()
-ws = wb.active
-ws.title = "Portfolio"
-ws.append(["asset", "amount", "price_usd", "value_usd"])
-for cell in ws[1]:
-    cell.font = Font(bold=True)
-ws.append(["ETH", 1.5, 2400, "=B2*C2"])
-ws.append(["BTC", 0.25, 64000, "=B3*C3"])
-ws["A4"] = "total"
-ws["D4"] = "=SUM(D2:D3)"
-ws.freeze_panes = "A2"
-for index, width in enumerate([10, 12, 12, 14], start=1):
-    ws.column_dimensions[get_column_letter(index)].width = width
-wb.save("portfolio.xlsx")
+wb = xlsxwriter.Workbook("portfolio.xlsx", {"constant_memory": True})
+ws = wb.add_worksheet("Portfolio")
+header = wb.add_format({"bold": True})
+money = wb.add_format({"num_format": "$#,##0.00"})
+ws.write_row(0, 0, ["asset", "amount", "price_usd", "value_usd"], header)
+ws.write_row(1, 0, ["ETH", 1.5, 2400])
+ws.write_formula(1, 3, "=B2*C2", money)
+ws.write_row(2, 0, ["BTC", 0.25, 64000])
+ws.write_formula(2, 3, "=B3*C3", money)
+ws.write(3, 0, "total")
+ws.write_formula(3, 3, "=SUM(D2:D3)", money)
+ws.freeze_panes(1, 0)
+ws.set_column(0, 0, 10)
+ws.set_column(1, 3, 14)
+wb.close()
 ```
 
 Then recalculate — see [Recalculate](#recalculate).
@@ -97,13 +116,13 @@ ws["B2"] = "=Inputs!B2*(1+Inputs!B3)"            # assumptions live in cells, no
 
 ## Recalculate
 
-openpyxl writes formula strings without computing them; errors only become visible after a real engine recalculates. Always finish with:
+Python libraries write formula strings without computing them; errors only become visible after a real engine recalculates. Always finish with:
 
 ```sh
-uv run scripts/recalc.py book.xlsx [timeout-seconds]   # timeout defaults to 60
+uv run scripts/recalc.py book.xlsx [timeout-seconds]   # exits nonzero unless status is success
 ```
 
-The script resolves LibreOffice (`soffice` on `PATH`, else the macOS app bundle under `/Applications` or `~/Applications`), installs a one-time recalc macro into the LibreOffice user profile, recalculates and saves the workbook in place, then audits every cell and prints JSON:
+The script resolves LibreOffice (`soffice` on `PATH`, else the macOS app bundle under `/Applications` or `~/Applications`), uses an isolated temporary LibreOffice profile, recalculates and saves the workbook in place, then audits every cell and prints JSON:
 
 ```json
 {
@@ -117,26 +136,21 @@ The script resolves LibreOffice (`soffice` on `PATH`, else the macOS app bundle 
 
 Loop until `status` is `success`: fix the listed cells, rerun. Statuses:
 
-- `errors_found` — fix and rerun. Typical causes: `#REF!` broken references after inserting/deleting rows or columns; `#DIV/0!` unguarded division; `#VALUE!` text where a number is expected; `#NAME?` misspelled function or unquoted sheet name.
-- `recalc_incomplete` — LibreOffice did not write cached values; quit any running LibreOffice instance and rerun.
-- `error` — operational failure; the JSON `hint` says what to do (e.g. `brew install --cask libreoffice` when LibreOffice is missing).
+- `success` — deliverable.
+- `errors_found` — exits `1`; fix and rerun. Typical causes: `#REF!` broken references after inserting/deleting rows or columns; `#DIV/0!` unguarded division; `#VALUE!` text where a number is expected; `#NAME?` misspelled function or unquoted sheet name.
+- `recalc_incomplete` — exits `1`; LibreOffice did not write cached values.
+- `error` — exits `1`; the JSON `hint` says what to do (e.g. `brew install --cask libreoffice` when LibreOffice is missing).
+
+Use `--soft` only when automation must capture a non-success report without failing the shell command.
 
 ## Convert
 
 ```sh
-# xlsx -> tsv (one sheet)
-duckdb -c "COPY (FROM read_xlsx('book.xlsx', all_varchar = true)) TO 'book.tsv' (FORMAT csv, DELIMITER '\t', HEADER true)"
+# xlsx/xls/xlsb/ods -> tsv (one sheet, fast values-only export)
+qsv excel --sheet Trades -d '\t' -q -o trades.tsv book.xlsx
 
-# every sheet -> one tsv each
-uv run --with openpyxl python -c "
-import csv
-from openpyxl import load_workbook
-wb = load_workbook('book.xlsx', read_only=True, data_only=True)
-for ws in wb.worksheets:
-    with open(f'{ws.title}.tsv', 'w', encoding='utf-8', newline='') as f:
-        csv.writer(f, delimiter='\t', lineterminator='\n').writerows(
-            ['' if v is None else v for v in row] for row in ws.iter_rows(values_only=True))
-"
+# xlsx -> tsv via DuckDB when you need SQL/range/filter control
+duckdb -c "COPY (FROM read_xlsx('book.xlsx', sheet = 'Trades', all_varchar = true)) TO 'trades.tsv' (FORMAT csv, DELIMITER '\t', HEADER true)"
 
 # tsv -> xlsx (values only, no styling)
 duckdb -c "INSTALL excel; LOAD excel; COPY (FROM read_csv('data.tsv', delim = '\t', header = true, all_varchar = true)) TO 'data.xlsx' (FORMAT xlsx, HEADER true)"
