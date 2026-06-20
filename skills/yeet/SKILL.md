@@ -13,11 +13,7 @@ Facilitate GitHub-based open source contribution workflows including pull reques
 
 ## Prerequisites
 
-Verify GitHub CLI authentication before any workflow:
-
-```bash
-gh auth status
-```
+Use the first required read-only `gh` command in each workflow as authentication validation. Prefer `scripts/yeet-context.sh` when the workflow needs repository, template, discussion, label, or issue/PR thread context.
 
 For pull request workflows, also verify:
 

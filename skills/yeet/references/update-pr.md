@@ -4,7 +4,7 @@ Update existing GitHub pull requests with semantic change analysis, regenerating
 
 ## Validate Prerequisites
 
-Same as `create-pr.md > Validate Prerequisites`.
+Same as `create-pr.md > Validate Prerequisites`, except the `gh pr view` read below can serve as the first auth check.
 
 ## Check for Existing PR
 
@@ -28,8 +28,8 @@ Interpret as natural language:
 
 Follow `commons.md > Semantic Change Analysis` with these differences:
 
-1. Run `git fetch origin` first to update remote state
-2. Get base branch from PR metadata (not args)
+1. Get base branch from PR metadata (not args)
+2. Fetch only that base branch: `git fetch origin "+refs/heads/$base_branch:refs/remotes/origin/$base_branch"`
 3. Preserve existing issue references (Closes #X, Related to #X) when regenerating
 
 If user provided additional context in args, append it naturally to the description.

@@ -10,18 +10,17 @@ File links: `[{path}](https://github.com/biomejs/biome/blob/main/{path})`
 
 ## Validate Authentication
 
-See `commons.md > Auth Validation`.
+See `commons.md > Auth Validation`. The repository context read below is the auth check.
 
 ## Template Drift Check
 
 Before generating the issue body, verify the template specs in this file still match the upstream `.github/ISSUE_TEMPLATE` files.
 
 ```bash
-gh api repos/biomejs/biome/contents/.github/ISSUE_TEMPLATE \
-  --jq '.[] | select(.name | endswith(".yml")) | "\(.name) \(.sha)"'
+scripts/yeet-context.sh repo biomejs/biome --issue-templates
 ```
 
-Compare against the known-good SHAs (last verified 2026-06-17):
+Use `repository.viewerPermission` for label capability. Compare `repository.issueTemplateTree.entries` names and SHAs against the known-good SHAs (last verified 2026-06-17):
 
 | File                        | SHA                                        |
 | --------------------------- | ------------------------------------------ |
@@ -33,7 +32,7 @@ Compare against the known-good SHAs (last verified 2026-06-17):
 | `06_commercial_request.yml` | `16d744fddb4a5310d4d9467c41e5c385c17982eb` |
 | `config.yml`                | `53f16e16bb4352140251adffc6f9e51333e09072` |
 
-If any SHA differs, fetch the changed template and update this spec before creating the issue:
+If any SHA differs, fetch the changed template and update this routing file plus the matching `references/templates/biome/` template reference before creating the issue:
 
 ```bash
 gh api repos/biomejs/biome/contents/.github/ISSUE_TEMPLATE/{file}.yml --jq '.content' | base64 -d
@@ -67,107 +66,16 @@ For multi-file scenarios: `npm create @biomejs/biome-reproduction`
 
 ## Generate Issue Body
 
-### Formatter Bug Template
+After selecting the issue type, load exactly one template reference:
 
-```markdown
-### Environment information
-
-{biome rage --formatter output}
-
-### Configuration
-
-{biome.json contents if relevant, or "Default configuration"}
-
-### Playground link
-
-{playground URL}
-
-### Code of Conduct
-
-- [x] I agree to follow Biome's Code of Conduct
-```
-
-### Linter Bug Template
-
-```markdown
-### Environment information
-
-{biome rage --linter output}
-
-### Rule name
-
-{e.g., "noUnusedVariables" or "suspicious/noExplicitAny"}
-
-### Playground link
-
-{playground URL}
-
-### Expected result
-
-{should it error? not error? different message?}
-
-### Code of Conduct
-
-- [x] I agree to follow Biome's Code of Conduct
-```
-
-### General Bug Template
-
-```markdown
-### Environment information
-
-{biome rage output}
-
-### What happened?
-
-{describe the bug}
-
-1. {step 1}
-2. {step 2}
-3. ...
-
-{playground link if applicable, or reproduction repo}
-
-### Expected result
-
-{what should happen}
-
-### Code of Conduct
-
-- [x] I agree to follow Biome's Code of Conduct
-```
-
-### Task Template
-
-```markdown
-### Description
-
-{summary of the task}
-```
-
-### Umbrella Template
-
-```markdown
-### Description
-
-{summary of the umbrella, scope, and action items}
-```
-
-### Commercial Support Request Template
-
-```markdown
-### Description
-
-{detailed request, requirements, and definition of done}
-
-### Country
-
-{country from which the freelancer would be hired}
-
-### Timeframe
-
-{urgency / desired schedule}
-```
+| Template file               | Reference                                          |
+| --------------------------- | -------------------------------------------------- |
+| `01_formatter_bug.yml`      | `references/templates/biome/formatter-bug.md`      |
+| `02_lint_bug.yml`           | `references/templates/biome/linter-bug.md`         |
+| `03_bug.yml`                | `references/templates/biome/general-bug.md`        |
+| `04_task.yml`               | `references/templates/biome/task.md`               |
+| `05_umbrella.yml`           | `references/templates/biome/umbrella.md`           |
+| `06_commercial_request.yml` | `references/templates/biome/commercial-request.md` |
 
 ## Generate Title
 
@@ -186,7 +94,7 @@ EOF
 )"
 ```
 
-`$issue_type` is the value from the routing table. The label `S-Needs triage` is template metadata for bug forms, but direct CLI body creation does not apply YAML labels; omit `--label` unless `gh repo view biomejs/biome --json viewerPermission --jq .viewerPermission` returns `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`.
+`$issue_type` is the value from the routing table. The label `S-Needs triage` is template metadata for bug forms, but direct CLI body creation does not apply YAML labels; omit `--label` unless cached `repository.viewerPermission` returns `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`.
 
 Display: "Created: $URL"
 

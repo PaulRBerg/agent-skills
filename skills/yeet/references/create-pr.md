@@ -4,28 +4,41 @@ Create GitHub pull requests with semantic change analysis, intelligent defaults,
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation` for GitHub authentication.
+See `commons.md > Auth Validation` for GitHub authentication. The repository context read below is the auth check.
 
 **Check git repository state:**
 
 - `git remote get-url origin` — confirm remote exists
 - `git rev-parse --show-toplevel` — confirm we're in a repo
-- `git fetch origin` — update remote state
 
-**Check commits to PR:**
+**Collect repo context once:**
 
-- Base branch: `git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@' 2>/dev/null || echo "main"`
-- Commits ahead: `git rev-list --count origin/$base_branch..HEAD 2>/dev/null`
-- IF 0 commits: ERROR "No commits to create PR from"
+```bash
+scripts/yeet-context.sh repo
+```
+
+Use `repository.defaultBranchRef.name` as the default base branch unless args specify a base.
 
 ## Parse Arguments Naturally
 
 - "draft" or "--draft" → draft mode
 - "test-plan" or "--test-plan" → include test plan section
-- "to X" or "base=X" → target branch X (default: main)
+- "to X" or "base=X" → target branch X (default: repo default branch)
+- If no base was passed, use `repository.defaultBranchRef.name` from repo context
 - "review=X" or "reviewers=X" → add reviewer(s)
 - Quoted text → custom title
 - Everything else → additional context for description
+
+## Fetch Base And Check Commits
+
+Fetch the selected base branch only:
+
+```bash
+git fetch origin "+refs/heads/$base_branch:refs/remotes/origin/$base_branch"
+```
+
+- Commits ahead: `git rev-list --count origin/$base_branch..HEAD 2>/dev/null`
+- IF 0 commits: ERROR "No commits to create PR from"
 
 ## Semantic Change Analysis
 

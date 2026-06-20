@@ -4,7 +4,7 @@ Create issues in `sablier-labs/*` repositories. Labels are always applied (user 
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`.
+See `commons.md > Auth Validation`. The label fetch below is the auth check.
 
 ## Parse Repository Argument
 
@@ -14,7 +14,7 @@ Example: `lockup "Bug in cliff streams"` → `repository = sablier-labs/lockup`
 
 ## Apply Labels
 
-Sablier repos are owner-managed — labels always apply. Follow `commons.md > Fetch Repo Labels` to fetch the live label set and pick labels semantically. Scope labels (e.g., `scope: frontend`, `scope: evm`) are discovered organically from the fetched list for repos that define them — no special-case for `command-center`.
+Sablier repos are owner-managed — labels always apply. Follow `commons.md > Fetch Repo Labels` to fetch the live label set once and pick labels semantically. Scope labels (e.g., `scope: frontend`, `scope: evm`) are discovered organically from the fetched list for repos that define them — no special-case for `command-center`.
 
 ## Generate Title and Body
 

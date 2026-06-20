@@ -4,7 +4,7 @@ Post a comment on an existing GitHub issue (or PR — on GitHub's data model, a 
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`.
+See `commons.md > Auth Validation`. The issue context read below is the auth check.
 
 ## Parse Arguments
 
@@ -21,7 +21,7 @@ Rules:
 - IF first token matches `https://github.com/{owner}/{repo}/issues/{number}` or `.../pull/{number}`: parse owner, repo, number from URL
 - ELSE IF first token matches `{owner}/{repo}#{number}`: split on `#`
 - ELSE IF first token matches `{owner}/{repo}`: use it as repository; next token must be the issue number (strip leading `#`)
-- ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from working directory via `gh repo view --json nameWithOwner -q .nameWithOwner`
+- ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from the local `origin` remote via `scripts/yeet-context.sh issue`
 - ELSE: ERROR "Couldn't figure out the issue. Pass `owner/repo#123` or a GitHub issue URL."
 
 Everything after the issue identifier is the **comment context** — the user's description of what they want to say. May be empty if the user just wants a canned reaction (e.g., "+1", "same here").
@@ -31,16 +31,13 @@ Everything after the issue identifier is the **comment context** — the user's 
 Always read the issue before writing the comment — never generate a reply based on the user's context alone, because tone/terminology should match the thread.
 
 ```bash
-gh issue view {number} \
-  --repo "{owner}/{repo}" \
-  --json number,title,body,state,author,labels,comments \
-  --jq '{number, title, state, author: .author.login, labels: [.labels[].name], body, comments: [.comments[] | {author: .author.login, body}]}'
+scripts/yeet-context.sh issue "{owner}/{repo}" {number}
 ```
 
 Analyze:
 
 - The issue title and body — what's actually being discussed
-- The most recent 3-5 comments — what's the current state of the conversation
+- The latest `comments(last: 5)` nodes — what's the current state of the conversation
 - Who's been participating — don't ping people who are already in the thread
 - Whether the issue is open or closed — adjust tone accordingly (closed issues may need "reopen?" framing)
 - Any labels hinting at the issue type (bug, feature, question)

@@ -4,25 +4,47 @@ Shared conventions used across all GitHub contribution workflows.
 
 ## Auth Validation
 
+Do not run unconditional `gh auth status`. Treat the first required read-only `gh` command in the workflow as auth validation.
+
+When repository, template, discussion, label, or issue/PR thread context is needed, prefer:
+
 ```bash
-gh auth status 2>&1 | rg -q "Logged in"
+scripts/yeet-context.sh repo "{owner}/{repo}" [--issue-templates] [--discussion-templates] [--discussion-categories]
+scripts/yeet-context.sh issue "{owner}/{repo}" {number}
+scripts/yeet-context.sh labels "{owner}/{repo}"
 ```
 
-If not authenticated, error with: "Run `gh auth login` first"
+If the helper fails with an auth error, stop with: "Run `gh auth login` first".
+
+## Repository Context
+
+Collect repository context once per workflow and reuse it. The `repo` helper output includes:
+
+- `viewer.login` — the authenticated GitHub login
+- `repository.id`
+- `repository.nameWithOwner`
+- `repository.viewerPermission`
+- `repository.defaultBranchRef.name`
+- optional issue/discussion template tree entries with `name`, `oid`, and `type`
+- optional discussion categories
+
+For workflows in the current Git repository, `scripts/yeet-context.sh repo` can infer `{owner}/{repo}` from the local `origin` remote before the GraphQL read. For explicit targets, pass `{owner}/{repo}`.
 
 ## Fetch Repo Labels
 
-For owner-managed repos (owner = `$AUTHENTICATED_USER` or `sablier-labs`), fetch the live label set before picking labels — never hardcode taxonomies. External repos: skip this step entirely (only template-defined labels apply).
+Fetch labels only when labels may actually be applied:
+
+- owner-managed repos (`owner = viewer.login` or `owner = sablier-labs`)
+- requested label edits
+- selected templates that define labels and `repository.viewerPermission` is label-capable
+
+External repos without label-capable permission: skip this step entirely and omit labels. Never hardcode taxonomies.
 
 ```bash
-gh label list \
-  --repo "{owner}/{repo}" \
-  --limit 200 \
-  --json name,description \
-  --jq '.[] | "\(.name)\t\(.description // "")"'
+scripts/yeet-context.sh labels "{owner}/{repo}"
 ```
 
-`--limit 200` covers the largest owner-controlled repos (default is 30, which truncates silently). Both `name` and `description` are required — match the user's request semantically against descriptions, not just names.
+The helper preserves the current `gh label list --limit 200 --json name,description` behavior. Both `name` and `description` are required — match the user's request semantically against descriptions, not just names.
 
 ### Picking labels
 
@@ -45,13 +67,7 @@ GitHub issue-form YAML can define top-level `labels` and `type`. The native web 
 
 Current `gh issue create --template` uses a template as interactive/editor starting body text. It is rejected with `--body` / `--body-file`, and it is not a non-interactive YAML issue-form submission API. For deterministic agent-created issues, fetch YAML forms, render matching markdown headings, and pass supported metadata explicitly.
 
-Before passing labels, check repository permission:
-
-```bash
-gh repo view "{owner}/{repo}" --json viewerPermission --jq .viewerPermission
-```
-
-Treat `ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` as label-capable; omit `--label` for `READ`. If a label create fails anyway, run the idempotency check before retrying once without labels. When a YAML form has top-level `type`, pass `--type` if the repo supports issue types.
+Use the cached `repository.viewerPermission` from `scripts/yeet-context.sh repo`. Treat `ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` as label-capable; omit `--label` for `READ`. If a label create fails anyway, run the idempotency check before retrying once without labels. When a YAML form has top-level `type`, pass `--type` if the repo supports issue types.
 
 ## HEREDOC Syntax
 
@@ -118,10 +134,13 @@ Reach for a table only when the data has a real second dimension. Don't force a 
 Read the actual diff to understand what changed — never generate content based solely on filenames or commit messages.
 
 ```bash
-git diff origin/$base_branch...HEAD        # full diff
 git diff --stat origin/$base_branch...HEAD  # summary
+git diff --name-only origin/$base_branch...HEAD
 git log --pretty=format:"%s%n%b" origin/$base_branch...HEAD  # commit messages
+git diff origin/$base_branch...HEAD -- path/to/important/file
 ```
+
+Read stat, name-only, and log first. Then inspect targeted full diffs for the files or packages that explain the change. Fall back to the full diff only when the targeted reads leave behavior unclear.
 
 Analyze:
 
@@ -150,7 +169,7 @@ When templates include OS/platform fields:
 - **Windows**: Use PowerShell platform command output
 
 > [!IMPORTANT]
-> Skip platform/environment info entirely when the repo owner matches `$AUTHENTICATED_USER` or is `sablier-labs`. Omit the field in templates, and drop "Environment" sections in free-form bodies/comments. The user already knows their own machine — the noise only belongs in issues filed against external projects.
+> Skip platform/environment info entirely when the repo owner matches cached `viewer.login` or is `sablier-labs`. Omit the field in templates, and drop "Environment" sections in free-form bodies/comments. The user already knows their own machine — the noise only belongs in issues filed against external projects.
 
 ## Informal Tone
 

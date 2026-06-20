@@ -4,13 +4,23 @@ Create GitHub discussions using the GraphQL API with automatic category selectio
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`.
+See `commons.md > Auth Validation`. The repository context read below is the auth check.
 
 ## Parse Repository Argument
 
 - If first token matches "owner/repo": use it as repository
-- Otherwise: infer from working directory via `gh repo view --json nameWithOwner -q .nameWithOwner`
+- Otherwise: infer from the local `origin` remote via `scripts/yeet-context.sh repo`
 - Error if not in a repo and no explicit repository provided
+
+## Collect Repository Context
+
+Fetch repo id, categories, and discussion-template tree once:
+
+```bash
+scripts/yeet-context.sh repo "{owner}/{repo}" --discussion-categories --discussion-templates
+```
+
+If the repository was inferred from the current Git repo, omit `{owner}/{repo}`. Store `repository.id`, `repository.discussionCategories.nodes`, and `repository.discussionTemplateTree.entries`.
 
 ## Check for Similar Discussions (Optional)
 
@@ -28,21 +38,6 @@ If `--check` flag is present:
 
 4. IF none found: inform user, continue
 
-## Fetch Discussion Categories
-
-```bash
-gh api graphql -f query='
-  query($owner: String!, $name: String!) {
-    repository(owner: $owner, name: $name) {
-      id
-      discussionCategories(first: 25) {
-        nodes { id, name, slug, description, isAnswerable }
-      }
-    }
-  }
-' -f owner="{owner}" -f name="{repo}"
-```
-
 ## Select Discussion Category
 
 Infer best category from description:
@@ -59,15 +54,13 @@ Default to **General** or **Ideas** if uncertain.
 
 ## Check for Discussion Templates
 
-```bash
-gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE --jq '.[].name | select(endswith(".yml") or endswith(".yaml"))' 2>/dev/null
-```
+Use `repository.discussionTemplateTree.entries` from the cached context. Keep entries ending in `.yml` or `.yaml`.
 
 ### If Templates Found
 
 1. Select template matching category slug (e.g., `ideas.yml` for Ideas)
 
-2. Fetch and parse:
+2. After selecting the template, fetch and parse:
 
    ```bash
    gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE/{template_name} --jq '.content' | base64 -d
