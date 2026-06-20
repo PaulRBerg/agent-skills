@@ -19,6 +19,7 @@ Rename the current GitHub repo, matching local folder, and local thread referenc
 - Handle only Codex CLI and Claude Code continuity files.
 - Use `~/.claude/projects` for Claude Code. If `~/claude/projects` exists, inspect it too, but do not assume it is authoritative.
 - Use `~/.codex/sessions` for Codex CLI. Do not update other Codex archives unless the user explicitly asks.
+- Update `~/.codex/config.toml` when it contains the old repo path or repo name.
 - Treat "local git ref" as the local `origin` remote URL.
 
 ## Workflow
@@ -118,10 +119,11 @@ fi
 
 ### 5) Preserve Codex CLI Continuity
 
-Update literal old absolute paths in the active Codex CLI and Claude Code transcript stores. Inspect matches before replacing.
+Update literal old absolute paths in the active Codex CLI and Claude Code transcript stores, and update Codex CLI config when it references the old repo. Inspect matches before replacing.
 
 ```sh
 export OLD_ROOT="$old_root" NEW_ROOT="$new_root"
+export OLD_NAME="$old_name" NEW_NAME="$new_name"
 
 for dir in "${HOME}/.claude/projects" "${HOME}/claude/projects" "${HOME}/.codex/sessions"; do
   test -d "$dir" || continue
@@ -132,6 +134,18 @@ for dir in "${HOME}/.claude/projects" "${HOME}/claude/projects" "${HOME}/.codex/
     done
   fi
 done
+
+codex_config="${HOME}/.codex/config.toml"
+if [ -f "$codex_config" ]; then
+  rg -n -F "$old_root" "$codex_config" || true
+  rg -n -F "$old_name" "$codex_config" || true
+  if rg -q -F "$old_root" "$codex_config"; then
+    perl -0pi -e 's/\Q$ENV{OLD_ROOT}\E/$ENV{NEW_ROOT}/g' "$codex_config"
+  fi
+  if rg -q -F "$old_name" "$codex_config"; then
+    perl -0pi -e 's/\Q$ENV{OLD_NAME}\E/$ENV{NEW_NAME}/g' "$codex_config"
+  fi
+fi
 ```
 
 ### 6) Update Repo-Local References
@@ -164,6 +178,8 @@ for dir in "${HOME}/.claude/projects" "${HOME}/claude/projects" "${HOME}/.codex/
   test -d "$dir" || continue
   rg -n -F "$old_root" "$dir" || true
 done
+test ! -f "${HOME}/.codex/config.toml" || rg -n -F "$old_root" "${HOME}/.codex/config.toml" || true
+test ! -f "${HOME}/.codex/config.toml" || rg -n -F "$old_name" "${HOME}/.codex/config.toml" || true
 rg -n -F --hidden --glob '!.git' --glob '!node_modules' "$old_name" . || true
 ```
 
@@ -173,4 +189,5 @@ Report:
 - The old and new local paths.
 - Whether the Claude Code project directory was renamed.
 - How many Claude Code and Codex CLI files were updated.
+- Whether `~/.codex/config.toml` was updated.
 - Any remaining old-name matches that were intentionally left alone.
