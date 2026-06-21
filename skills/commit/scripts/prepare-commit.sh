@@ -187,6 +187,13 @@ done
 inside_work_tree=$(git rev-parse --is-inside-work-tree 2>/dev/null) || die 'not inside a git work tree'
 [ "$inside_work_tree" = true ] || die 'not inside a git work tree'
 
+# Anchor to the repository root so repo-root-relative session pathspecs resolve
+# correctly regardless of the caller's current directory. Without this, running
+# from a subdirectory makes git interpret pathspecs relative to that subdir,
+# doubling the prefix and matching nothing.
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || die 'cannot resolve git repository root'
+cd "$repo_root" || die 'cannot enter git repository root'
+
 merge_head=$(git rev-parse --git-path MERGE_HEAD 2>/dev/null) || die 'cannot resolve git state'
 cherry_pick_head=$(git rev-parse --git-path CHERRY_PICK_HEAD 2>/dev/null) || die 'cannot resolve git state'
 rebase_merge=$(git rev-parse --git-path rebase-merge 2>/dev/null) || die 'cannot resolve git state'
