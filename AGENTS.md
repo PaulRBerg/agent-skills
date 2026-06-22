@@ -34,7 +34,7 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 - `just pre-commit` - run staged-file checks through `nlx lint-staged`.
 - `just hooks-install` - install Husky hooks for this checkout through `nlx husky`.
 - `just shelve <skill>` - require a clean worktree, move `skills/<skill>` to `shelved/<skill>`, and commit the move.
-- `just sync` - commit this repo, install skills into `~/.agents`, then commit installed changes there.
+- `just sync` - commit your staged changes via `ccc --staged` and push, install skills into `~/.agents`, sync `~/.claude`, then commit and push there.
 - `just unshelve <skill>` - require a clean worktree, move `shelved/<skill>` to `skills/<skill>`, and commit the move.
 
 `package.json` exists only for hook and lint-staged wiring; there is no build step. Treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the verification surface unless a task introduces a narrower check.
