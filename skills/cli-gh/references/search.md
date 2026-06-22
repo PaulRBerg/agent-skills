@@ -24,6 +24,20 @@ gh search issues "bug" --label=critical --state=open
 gh search issues -- "memory leak -label:wontfix"
 ```
 
+### Scope to one repository
+
+Two repo-scoped paths; pick by whether you want search-ranked results or a plain filtered list.
+
+```bash
+# Search API, scoped to a repo (relevance-ranked; repeat --repo for several)
+gh search issues "panic" --repo cli/cli --state=open
+
+# List a single repo's issues with a search filter (defaults to current repo)
+gh issue list --repo cli/cli --search "is:open label:bug sort:created-desc"
+```
+
+`gh search issues` hits GitHub's search index (cross-repo, relevance-ranked, ~1000-result cap). `gh issue list --search` lists one repo's issues with the same `is:`/`label:`/`sort:` qualifiers and honors `--limit`.
+
 ## Search Pull Requests
 
 ```bash
