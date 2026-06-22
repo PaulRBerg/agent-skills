@@ -46,7 +46,7 @@ Run:
 
 ```bash
 cd "$HOME/.agents"
-npx skills add PaulRBerg/prb-finance --global --yes --skill "<skill-name>"
+bunx skills add PaulRBerg/agent-skills --global --yes --skill "<skill-name>"
 ```
 
 Replace `<skill-name>` with the validated single skill name. Keep `--skill` present exactly once. Do not omit it, do not

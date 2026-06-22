@@ -1,5 +1,10 @@
 #!/bin/bash
 # Get macOS marketing name and version
+if [ "$(uname -s 2>/dev/null)" != "Darwin" ]; then
+  echo "unsupported platform"
+  exit 0
+fi
+
 name=$(awk -F 'macOS ' '/SOFTWARE LICENSE AGREEMENT FOR macOS/{gsub(/[0-9]+\.*/, "", $2); gsub(/\\.*/, "", $2); print $2; exit}' "/System/Library/CoreServices/Setup Assistant.app/Contents/Resources/en.lproj/OSXSoftwareLicense.rtf" 2>/dev/null | tr -d ' ')
 version=$(sw_vers -productVersion 2>/dev/null)
 

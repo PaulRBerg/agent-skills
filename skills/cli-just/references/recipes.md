@@ -67,30 +67,15 @@ For a justfile-wide opt-out, use `set no-cd` (v1.51.0+) instead of annotating ev
 
 ### OS-Restricted Recipes
 
-Restrict a recipe to specific operating systems. Multiple OS attributes are OR'd together.
+Restrict a recipe to macOS when the command intentionally uses macOS tools.
 
 ```just
 [macos]
-[linux]
 open url:
-    xdg-open {{ url }} 2>/dev/null || open {{ url }}
-
-[windows]
-open url:
-    start {{ url }}
-
-[android]
-diag:
-    getprop
-
-[freebsd]
-[netbsd]
-[dragonflybsd]
-diag:
-    sysctl -a | head
+    open {{ url }}
 ```
 
-Available: `[linux]`, `[macos]`, `[unix]`, `[windows]`, `[android]`, `[freebsd]`, `[netbsd]`, `[openbsd]`, `[dragonflybsd]` (`[openbsd]` added v1.38.0; `[freebsd]`, `[netbsd]`, `[dragonflybsd]` added v1.47.0; `[android]` added v1.50.0).
+This catalog is macOS-first; omit non-Mac OS guards unless the project itself must publish a portable justfile.
 
 ### Script Blocks
 

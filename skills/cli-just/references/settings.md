@@ -27,8 +27,6 @@ Enable with `set NAME` or `set NAME := true`:
 | `positional-arguments`      | Pass recipe arguments as $1, $2, etc.                                             |
 | `quiet`                     | Don't echo recipe lines                                                           |
 | `unstable`                  | Enable unstable features (user-defined functions, `eager` keyword, `lists`, etc.) |
-| `windows-powershell`        | Use PowerShell on Windows                                                         |
-| `windows-shell`             | Use cmd.exe on Windows                                                            |
 
 ### Value Settings
 
@@ -69,7 +67,7 @@ set unstable
 - `-o pipefail`: Pipeline fails if any command fails
 - `-c`: Execute following string as command
 
-Note: `bash` here resolves via `PATH` — `/bin/bash` 3.2 on stock macOS. See [inline-scripts.md > Bash Version Pitfalls](inline-scripts.md#bash-version-pitfalls-macos) before relying on Bash-4+ features in recipe bodies.
+Note: `bash` here resolves via `PATH`. In agent sandboxes and stock macOS environments this can be `/bin/bash` 3.2, even when Homebrew Bash exists at `/opt/homebrew/bin/bash`; see [inline-scripts.md > Bash Version Pitfalls](inline-scripts.md#bash-version-pitfalls-macos) before relying on Bash-4+ features in recipe bodies.
 
 ### Lazy Evaluation (v1.47.0; stable v1.48.0+)
 

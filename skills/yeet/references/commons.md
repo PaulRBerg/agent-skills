@@ -165,8 +165,7 @@ Analyze:
 When templates include OS/platform fields:
 
 - **macOS**: Use `scripts/get-macos-version.sh` → format `macOS <Name> v<Version>` (e.g., `macOS Tahoe v26.2`). Do not use `uname` output.
-- **Linux**: Use `uname -mprs`
-- **Windows**: Use PowerShell platform command output
+- This catalog is macOS-first. Preserve upstream template enum values when required, but do not add Linux/Windows environment details unless the user explicitly asks to file from another machine.
 
 > [!IMPORTANT]
 > Skip platform/environment info entirely when the repo owner matches cached `viewer.login` or is `sablier-labs`. Omit the field in templates, and drop "Environment" sections in free-form bodies/comments. The user already knows their own machine — the noise only belongs in issues filed against external projects.

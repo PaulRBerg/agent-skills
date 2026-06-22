@@ -145,9 +145,10 @@ Each iteration:
     git checkout -- .
     git clean -fd
     ```
-10. **Check confidence**: After 3+ runs, run the confidence script from the skill's installation directory:
+10. **Check confidence**: After 3+ runs, run the confidence script from the skill's installation directory. On macOS, avoid `readlink -f`; resolve the skill directory once and invoke the script directly:
     ```bash
-    bash "$(dirname "$(readlink -f "$0")")/scripts/confidence.sh"
+    skill_dir="$HOME/.agents/skills/autoresearch"
+    bash "$skill_dir/scripts/confidence.sh"
     ```
     Interpret the score:
     - **>= 2.0x**: Improvement is likely real (green).

@@ -69,34 +69,36 @@ alias sif := skill-invocation-fix
 
 # Commit and push, sync skills to ~/.agents, commit again
 [group("sync")]
-[script("zsh")]
+[script("bash")]
 [doc("Commit and push here, install skills in ~/.agents, commit there")]
 sync:
-    source ~/.zshrc 2>/dev/null
+    set -euo pipefail
 
-    # Commit in agent-skills repo
-    ccc
+    commit_if_dirty() {
+        repo="$1"
+        message="$2"
+        if [ -n "$(git -C "$repo" status --porcelain)" ]; then
+            git -C "$repo" add -A
+            git -C "$repo" commit -m "$message"
+        fi
+    }
 
-    # Push so the install below pulls the fresh commit (skills installs from GitHub)
-    git push
+    repo_root="$(git rev-parse --show-toplevel)"
+    agents_root="$HOME/.agents"
 
-    # Give GitHub a moment to serve the pushed commit
+    commit_if_dirty "$repo_root" "chore: update agent skills"
+    git -C "$repo_root" push
+
+    # Give GitHub a moment to serve the pushed commit.
     sleep 5
 
-    # Switch to ~/.agents
-    cd ~/.agents
-    echo "📂 Changed directory to ~/.agents"
+    test -d "$agents_root" || { echo "missing $agents_root" >&2; exit 1; }
+    commit_if_dirty "$agents_root" "chore: checkpoint installed skills before sync"
 
-    # Commit uncommitted changes if any
-    if [[ -n "$(git status --porcelain)" ]]; then
-        ccc
-    fi
-
-    # Install skills from agent-skills repo
+    cd "$agents_root"
     just install-all PaulRBerg/agent-skills
 
-    # Commit the installed skills
-    ccc
+    commit_if_dirty "$agents_root" "chore: sync installed agent skills"
 alias s := sync
 
 [group("skills")]

@@ -73,7 +73,7 @@ bash-script:
 
 **When to use which:**
 
-- `[script()]` - Better cross-platform support, cleaner syntax
+- `[script()]` - Cleaner multi-line recipe syntax
 - Shebang - Traditional Unix approach, works without `set unstable`
 
 ## Bash Version Pitfalls (macOS)
@@ -95,7 +95,7 @@ declare: -A: invalid option
 | `${arr[-1]}`            | `${arr[${#arr[@]}-1]}`                         |
 | `cmd \|& other`         | `cmd 2>&1 \| other`                            |
 
-**Pinning a newer interpreter** works but sacrifices portability — `/opt/homebrew/bin/bash` does not exist on Intel Macs (`/usr/local/bin/bash`) or Linux (`/usr/bin/bash`):
+**Pinning a newer interpreter** works on this Apple Silicon/Homebrew profile when the path exists, but keep it explicit and guarded because agent sandboxes may expose only `/bin/bash`:
 
 ```just
 set shell := ["/opt/homebrew/bin/bash", "-euo", "pipefail", "-c"]
@@ -113,4 +113,4 @@ modern:
     declare -A map=([a]=1)
 ```
 
-**Default recommendation:** write recipe bodies that are Bash-3.2-safe. Pinning an absolute interpreter path breaks cross-platform justfiles, and version guards only fail louder, not better.
+**Default recommendation:** write recipe bodies that are Bash-3.2-safe. Pin `/opt/homebrew/bin/bash` only when a recipe genuinely needs Bash 4+ semantics.

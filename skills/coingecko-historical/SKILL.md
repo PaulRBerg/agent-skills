@@ -32,7 +32,7 @@ open "https://coingecko.com/en/coins/<coin-id>/historical_data?start=<DATE-1>&en
 
 ### Date arithmetic
 
-Use GNU/BSD `date` to compute the surrounding days. BSD `date` (default on macOS) syntax:
+Use BSD `date` (default on macOS) to compute the surrounding days:
 
 ```bash
 start=$(date -j -v-1d -f "%Y-%m-%d" "$DATE" +%Y-%m-%d)
@@ -51,5 +51,4 @@ open "https://coingecko.com/en/coins/bitcoin/historical_data?start=2024-03-13&en
 
 ## Notes
 
-- `open` is macOS-only. On Linux substitute `xdg-open`; on Windows use `start`.
 - Validate the date format before computing offsets; stop and ask the user if `date` is missing or malformed.

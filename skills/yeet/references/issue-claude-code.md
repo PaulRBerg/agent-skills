@@ -103,15 +103,13 @@ See `commons.md > Comment on Existing Issue`, using repo `"anthropics/claude-cod
 
 - **Claude Code Version**: `claude --version 2>/dev/null || echo "unknown"` — paste full output.
 - **Operating System**: pick from the OS dropdown (`macOS`, `Windows`, `Ubuntu/Debian Linux`, `Other Linux`, `Other`). Use `uname -s` / `scripts/get-macos-version.sh` only to decide which option fits; the precise version (e.g., `macOS Tahoe v26.2`) belongs in **Additional Information**, not the OS field.
-- **Terminal/Shell**: pick from the Terminal dropdown. Use `$TERM_PROGRAM`, `$TERMINAL_EMULATOR`, and `$INSIDE_EMACS` to map:
+- **Terminal/Shell**: pick from the Terminal dropdown. On macOS, use `$TERM_PROGRAM`, `$TERMINAL_EMULATOR`, and `$INSIDE_EMACS` to map:
   - `Apple_Terminal` → `Terminal.app (macOS)`
   - `iTerm.app` → `iTerm2`
   - `WarpTerminal` → `Warp`
   - `cursor` / `Cursor` → `Cursor`
   - `vscode` → `VS Code integrated terminal`
   - `JetBrains-JediTerm` → `IntelliJ IDEA terminal` or `PyCharm terminal` (depends on host IDE)
-  - PowerShell host (`PSModulePath` set, no `WSL_DISTRO_NAME`) → `PowerShell` or `Windows Terminal`
-  - `WSL_DISTRO_NAME` set → `WSL (Windows Subsystem for Linux)`
   - CI envs (`CI=true`, `GITHUB_ACTIONS`, etc.) → `Non-interactive/CI environment`
   - Anything else → `Other`
 - **Platform**: default to `Anthropic API` unless `ANTHROPIC_BEDROCK_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or user-supplied context indicates otherwise.

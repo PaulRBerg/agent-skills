@@ -50,7 +50,7 @@ set lists                         # Enable list-of-strings values; unstable, req
 | `[doc("text")]`            | Override recipe documentation                                 |
 | `[env("NAME", "VALUE")]`   | Set env var for this recipe only (v1.47+, expr v1.51)         |
 | `[group("name")]`          | Group recipes in `just --list` output                         |
-| `[linux]` / `[macos]` …    | Restrict to OS; also `[android]` (v1.50+) and BSD variants    |
+| `[macos]`                  | Restrict a recipe to macOS                                    |
 | `[no-cd]`                  | Don't change to justfile directory                            |
 | `[parallel]`               | Run direct dependencies concurrently                          |
 | `[positional-arguments]`   | Enable positional args for this recipe only                   |

@@ -51,13 +51,13 @@ Available globally without definition:
 
 ### System Constants
 
-| Constant       | Value                       |
-| -------------- | --------------------------- |
-| `HEX`          | `0123456789abcdef`          |
-| `HEXLOWER`     | `0123456789abcdef`          |
-| `HEXUPPER`     | `0123456789ABCDEF`          |
-| `PATH_SEP`     | `/` (Unix) or `\` (Windows) |
-| `PATH_VAR_SEP` | `:` (Unix) or `;` (Windows) |
+| Constant       | Value              |
+| -------------- | ------------------ |
+| `HEX`          | `0123456789abcdef` |
+| `HEXLOWER`     | `0123456789abcdef` |
+| `HEXUPPER`     | `0123456789ABCDEF` |
+| `PATH_SEP`     | `/` on macOS       |
+| `PATH_VAR_SEP` | `:` on macOS       |
 
 ### Usage Examples
 
@@ -167,8 +167,8 @@ shell_escaped := shell("echo 'test'")
 
 ```just
 # Operating system
-os := os()              # "linux", "macos", "windows"
-family := os_family()   # "unix" or "windows"
+os := os()              # "macos" on this catalog's target machine
+family := os_family()   # "unix" on macOS
 arch := arch()          # "x86_64", "aarch64", etc.
 
 # Invocation info (only meaningful inside a recipe)
@@ -275,7 +275,7 @@ version := `git describe --tags`
 export NODE_ENV := "production"
 
 # Conditional
-mode := if os() == "windows" { "win" } else { "unix" }
+mode := if os() == "macos" { "local-mac" } else { "other" }
 ```
 
 ### Variable Scope

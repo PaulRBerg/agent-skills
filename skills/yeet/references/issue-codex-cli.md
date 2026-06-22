@@ -120,7 +120,7 @@ See `commons.md > Comment on Existing Issue`, using repo `"openai/codex"`.
 
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
 - **Codex doctor report**: `codex doctor --json 2>/dev/null || echo "not available"` — include for CLI bugs when supported; review/redact before posting.
-- **Platform**: See `commons.md > Platform String Normalization`. The CLI/Extension/App templates suggest `uname -mprs` on macOS/Linux; the commons override (`scripts/get-macos-version.sh`) takes precedence for macOS so the value is human-readable.
+- **Platform**: See `commons.md > Platform String Normalization`; use `scripts/get-macos-version.sh` for macOS instead of raw `uname` output.
 - **IDE** (extension issues): Ask user or infer from context.
 - **Terminal** (CLI issues): Ask user — cannot be reliably auto-detected from inside an agent shell. `$TERM_PROGRAM` is a hint but not authoritative.
 - **Codex App version**: From the in-app "About Codex" dialog. Ask the user; do not guess.

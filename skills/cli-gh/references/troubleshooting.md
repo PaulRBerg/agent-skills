@@ -266,7 +266,7 @@ brew install gh
 brew upgrade gh
 
 # Update PATH (if installed but not in PATH)
-export PATH="/usr/local/bin:$PATH"
+export PATH="/opt/homebrew/bin:$PATH"
 
 # Verify installation
 which gh
