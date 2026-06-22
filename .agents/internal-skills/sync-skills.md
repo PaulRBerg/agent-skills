@@ -15,35 +15,6 @@ Work only in the files listed for the selected groups.
 
 ## Sync Groups
 
-### Code Workflow Skills
-
-Files:
-
-- `skills/code-polish/SKILL.md`
-- `skills/code-review/SKILL.md`
-- `skills/code-review/references/profiles/*.md`
-- `skills/code-simplify/SKILL.md`
-
-Treat these as in scope:
-
-- The `## Scope Resolution` section: byte-identical across all three `SKILL.md` files.
-- The `## Verification` section: byte-identical in `code-review` and `code-simplify`.
-- `code-polish` embeds the same three-bullet verification check list plus "Name every skipped check and why." in workflow step `4) Final Verification`.
-- The `### Residual Risks` subsection of each `## Report`.
-- The Report framing sentence under each `## Report` heading: "Use these section headings, in this order. Omit sections that do not apply — do not number them and do not leave gaps or placeholders."
-- The `## Stop Conditions` intro line: "Stop and ask for direction when:"
-- The workflow closing sentence: "Produce the Report section below."
-- The paths bullet in `## Arguments`: "- Paths, patterns, a commit/range, or a scope phrase: used in Scope Resolution step 2."
-- Flag-bullet shape in `## Arguments`: one imperative effect sentence; repeatable flags end with "Repeatable."; the last bullet is `- Default: <behavior sentence>.`
-- `argument-hint` shape in frontmatter: `[paths]` first, then flags A→Z.
-- Profile trigger sentences: `Load when the diff touches <X>.`; exception: `naming.md` keeps its sequencing trigger.
-
-Treat these as out of scope unless multiple files already carry the same concept and only wording drifted:
-
-- Per-skill workflow bodies, Operating Rules, Core Review Checks, Profile Dispatch, Severity Model, Evidence Rules, Simplification Heuristics, Anti-Patterns, Running Sub-Skills, Stop Conditions bullets, and the completion gate.
-- Profile checks, severities, per-profile Evidence Expectations, and naming's Guardrail.
-- Frontmatter `description` fields.
-
 ### Commit Message Format Helpers
 
 Files:
@@ -68,7 +39,7 @@ Treat these as out of scope unless the request explicitly names them:
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git repository.
 2. Resolve selected sync groups once. Do not broaden the group list after reading files unless the user asks.
 3. Read the selected files and compare only the in-scope shared blocks or helper contracts.
-4. When drift exists, normalize all copies to one phrasing or value set. Reuse the clearest wording already present. Keep `code-review` as the tiebreaker only when phrasings are equally clear.
+4. When drift exists, normalize all copies to one phrasing or value set. Reuse the clearest wording already present.
 5. Prefer minimal patches. Do not rewrite whole sections just to make them symmetrical if the remaining differences are skill-specific.
 6. If no drift exists, make no edits and report that the selected groups are already aligned.
 
@@ -80,27 +51,6 @@ After editing Markdown, run from the repo root:
 just mdformat-write
 just mdformat-check
 ```
-
-For the Code Workflow Skills group, also run:
-
-```bash
-bash skills/code-review/scripts/validate-references.sh
-```
-
-Confirm byte-identity of the `## Scope Resolution` section:
-
-```bash
-bash <<'EOF'
-set -euo pipefail
-for s in code-simplify code-polish; do
-  diff <(awk '/^## Scope Resolution$/{f=1;print;next} f&&/^## /{exit} f' skills/code-review/SKILL.md) \
-       <(awk '/^## Scope Resolution$/{f=1;print;next} f&&/^## /{exit} f' "skills/$s/SKILL.md") \
-    && echo "OK: $s Scope Resolution matches code-review"
-done
-EOF
-```
-
-Repeat the same extraction diff with `/^## Verification$/` for `code-review` against `code-simplify`, and with `/^### Residual Risks$/` for all three. The residual-risk extraction stops at `## Stop Conditions`.
 
 For the Commit Message Format Helpers group, run:
 

@@ -23,9 +23,7 @@ bunx skills add PaulRBerg/agent-skills
 | cli-cast                  | Foundry cast CLI guidance                                  |
 | cli-gh                    | GitHub CLI operations                                      |
 | cli-just                  | Just command runner guidance                               |
-| code-polish               | Combined simplification and review                         |
-| code-review               | Expert code review                                         |
-| code-simplify             | Code simplification and refactoring                        |
+| code-polish               | Simplify and/or risk-profiled review with autofix          |
 | coingecko-cli             | CoinGecko CLI for prices and market data                   |
 | coingecko-historical      | Open CoinGecko historical data page in browser             |
 | commit                    | Git commit with conventional commits                       |
