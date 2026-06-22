@@ -159,16 +159,16 @@ Apply on every review.
 
 Profile dispatch is risk-triggered and exhaustive: select every profile whose risk surface the diff touches, not by file extension alone when core checks already cover the change.
 
-| Touched surface                                                                              | Profile            |
-| -------------------------------------------------------------------------------------------- | ------------------ |
-| auth, external input, secrets, crypto, public network, unsafe parsing                        | `security`         |
-| env/config, timeouts, retries, pools, limits, resource tuning, rollout controls              | `configuration`    |
-| Go services, CLIs, concurrency, context propagation, error handling, modules, tests          | `go`               |
-| TS/JS/React/Node behavior where type, render, runtime, package, or async semantics matter    | `typescript-react` |
-| Python services, scripts, async workloads, packaging, data processing, IO-heavy changes      | `python`           |
-| shell scripts, CI/deploy/installer command blocks, command quoting                           | `shell`            |
-| CSV/JSON/YAML/binary ingestion/export/parsing, schemas, generated data, migrations, fixtures | `data-formats`     |
-| every review (naming/intent clarity) unless `--skip-profile naming`                          | `naming`           |
+| Touched surface                                                                              | Profile         |
+| -------------------------------------------------------------------------------------------- | --------------- |
+| auth, external input, secrets, crypto, public network, unsafe parsing                        | `security`      |
+| env/config, timeouts, retries, pools, limits, resource tuning, rollout controls              | `configuration` |
+| Go services, CLIs, concurrency, context propagation, error handling, modules, tests          | `go`            |
+| TypeScript behavior where type, module, package, generated type, or async semantics matter   | `typescript`    |
+| Python services, scripts, async workloads, packaging, data processing, IO-heavy changes      | `python`        |
+| shell scripts, CI/deploy/installer command blocks, command quoting                           | `shell`         |
+| CSV/JSON/YAML/binary ingestion/export/parsing, schemas, generated data, migrations, fixtures | `data-formats`  |
+| every review (naming/intent clarity) unless `--skip-profile naming`                          | `naming`        |
 
 Honor `--skip-profile` exclusions first, then add `--with-profile` profiles. Read all selected profiles as **parallel `Read` calls in a single message** — one batch, each file once, never paged or re-read. Profiles live at `references/profiles/<name>.md` relative to this file.
 
