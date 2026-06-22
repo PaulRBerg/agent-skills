@@ -42,6 +42,7 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 ## Rules
 
 - When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo, modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
+- Changes here are not live for the agents until installed into `~/.agents` and symlinked into `~/.claude`. After committing or pushing in this repo, recommend `just sync` (it does that propagation) and offer to run it on the user's behalf; do not run it unprompted.
 - When an installable catalog skill is added or removed, update the skills table in `README.md`.
 - Shelved skills under `shelved/` are not installable catalog skills. Do not list them in `README.md` or sync them to `~/.agents`; keep `agents/openai.yaml` present so restoring a skill is a pure move plus modernization.
 - To restore a shelved skill, move it from `shelved/<name>/` to `skills/<name>/`, bring it up to current repo rules, and update `README.md`.
