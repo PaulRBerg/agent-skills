@@ -18,7 +18,7 @@ release_commit_lock() {
 trap release_commit_lock EXIT
 
 usage() {
-  printf 'Usage: bash <skill-dir>/scripts/prepare-commit.sh [--all] [--natural] [--diff summary|full] -- [session_modified_paths...]\n' >&2
+  printf 'Usage: bash <skill-dir>/scripts/prepare-commit.sh [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]\n' >&2
 }
 
 die() {
@@ -132,6 +132,7 @@ resolve_message_format() {
 }
 
 all=false
+staged=false
 force_natural=false
 diff_mode=summary
 unstage_chunk_size=100
@@ -144,6 +145,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --all)
       all=true
+      shift
+      ;;
+    --staged)
+      staged=true
       shift
       ;;
     --natural)
@@ -184,6 +189,11 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
+if [ "$all" = true ] && [ "$staged" = true ]; then
+  usage
+  die '--all and --staged are mutually exclusive'
+fi
+
 inside_work_tree=$(git rev-parse --is-inside-work-tree 2>/dev/null) || die 'not inside a git work tree'
 [ "$inside_work_tree" = true ] || die 'not inside a git work tree'
 
@@ -214,6 +224,8 @@ if [ "$all" = true ]; then
     die 'No changes to commit'
   fi
   git add -A || die 'failed to stage all changes'
+elif [ "$staged" = true ]; then
+  : # commit the current index as-is; the empty-index guard below applies
 else
   [ "${#session_paths[@]}" -gt 0 ] || die 'No files modified in this session'
 

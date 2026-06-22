@@ -1,8 +1,8 @@
 ---
-argument-hint: '[--all] [--deep] [--natural] [--push] [--close <issue_numbers>]'
+argument-hint: '[--all] [--staged] [--deep] [--natural] [--push] [--close <issue_numbers>]'
 name: commit
 user-invocable: true
-description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft Conventional Prefix Format messages by default, Natural Language messages with --natural or configured repos, commit, and optionally --all, --deep, --close, or --push.'
+description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft Conventional Prefix Format messages by default, Natural Language messages with --natural or configured repos, commit, and optionally --all, --staged, --deep, --close, or --push.'
 ---
 
 # Git Commit
@@ -17,6 +17,7 @@ Arguments: `$ARGUMENTS`
 
 - Flags:
   - `--all` commit all changes
+  - `--staged` commit exactly the current index; do not auto-stage or unstage (conflicts with `--all`)
   - `--deep` deep analysis with the active session model, breaking changes, concise body
   - `--natural` force Natural Language Format
   - `--push` push after commit
@@ -35,18 +36,18 @@ Run the portable helper from the target repository cwd. Never `cd` into the skil
 For Claude Code:
 
 ```bash
-bash "${CLAUDE_SKILL_DIR}/scripts/prepare-commit.sh" [--all] [--natural] [--diff summary|full] -- [session_modified_paths...]
+bash "${CLAUDE_SKILL_DIR}/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]
 ```
 
 For Codex CLI, resolve `<skill-dir>` from the loaded `SKILL.md` path:
 
 ```bash
-bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--natural] [--diff summary|full] -- [session_modified_paths...]
+bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]
 ```
 
 Use `--diff summary` by default. Use `--diff full` only when the intent is ambiguous or `--deep` was requested.
 
-The helper performs Git preflight checks, stages `--all` or the session-modified paths, unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the message format, branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise suggested fix.
+The helper performs Git preflight checks, stages `--all` or the session-modified paths (or, with `--staged`, leaves the current index untouched), unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the message format, branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise suggested fix.
 
 The helper also acquires a repo+branch commit lock before staging. If it fails because another agent is already committing for this repo and branch, stop and tell the user that committing is blocked by another active commit attempt. Do not describe internal lock paths, tokens, retries, or metadata.
 
@@ -60,6 +61,8 @@ Run the release command after the commit workflow completes, including after opt
 
 - If `--all`:
   - Include all tracked, untracked, modified, deleted, and already staged changes
+- If `--staged`:
+  - Commit exactly what is already staged; pass no session paths. The helper neither stages nor unstages. Conflicts with `--all`.
 - Otherwise (atomic commits):
   - Session-modified files = files edited in this session
   - Pass every session-modified path after `--`

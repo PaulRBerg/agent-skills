@@ -67,38 +67,53 @@ skill-invocation-fix:
     node scripts/sync-invocation-policy.mjs --fix
 alias sif := skill-invocation-fix
 
-# Commit and push, sync skills to ~/.agents, commit again
+# Publish staged skills, install into ~/.agents, sync ~/.claude, commit+push there
 [group("sync")]
 [script("bash")]
-[doc("Commit and push here, install skills in ~/.agents, commit there")]
+[doc("Stage your changes first; commits them (ccc --staged), pushes, installs in ~/.agents, syncs ~/.claude, commits+pushes there")]
 sync:
     set -euo pipefail
-
-    commit_if_dirty() {
-        repo="$1"
-        message="$2"
-        if [ -n "$(git -C "$repo" status --porcelain)" ]; then
-            git -C "$repo" add -A
-            git -C "$repo" commit -m "$message"
-        fi
-    }
 
     repo_root="$(git rev-parse --show-toplevel)"
     agents_root="$HOME/.agents"
 
-    commit_if_dirty "$repo_root" "chore: update agent skills"
+    # ccc lives in this stable, chezmoi-managed file (also sourced by ~/.zshrc).
+    user_dir="${XDG_CONFIG_HOME:-$HOME/.config}/prb"
+    test -f "$user_dir/agents.sh" || { echo "missing $user_dir/agents.sh (needed for ccc)" >&2; exit 1; }
+    # shellcheck disable=SC1090
+    source "$user_dir/agents.sh"
+
+    # 1. Commit agent-skills: stage what you want first; this commits exactly the
+    #    staged index with an AI message. Dirty but nothing staged -> stop.
+    if ! git -C "$repo_root" diff --cached --quiet; then
+        ( cd "$repo_root" && ccc --staged )
+    elif [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
+        echo "agent-skills has changes but nothing staged." >&2
+        echo "Stage what you want to publish (git add ...), then rerun 'just sync'." >&2
+        git -C "$repo_root" status --short >&2
+        exit 1
+    fi
+
+    # 2. Publish so 'skills add' (install-all) fetches the latest from GitHub.
     git -C "$repo_root" push
+    sleep 5  # give GitHub a moment to serve the pushed commit
 
-    # Give GitHub a moment to serve the pushed commit.
-    sleep 5
-
+    # 3. install-all needs a clean ~/.agents tree; refuse to guess about churn.
     test -d "$agents_root" || { echo "missing $agents_root" >&2; exit 1; }
-    commit_if_dirty "$agents_root" "chore: checkpoint installed skills before sync"
+    if [ -n "$(git -C "$agents_root" status --porcelain)" ]; then
+        echo "~/.agents has uncommitted changes; commit or clean them first, then rerun 'just sync'." >&2
+        git -C "$agents_root" status --short >&2
+        exit 1
+    fi
 
+    # 4. Install latest skills, then refresh ~/.claude symlinks.
     cd "$agents_root"
     just install-all PaulRBerg/agent-skills
+    just sync-claude
 
-    commit_if_dirty "$agents_root" "chore: sync installed agent skills"
+    # 5. Commit the sync result (AI message via ccc) and push.
+    ccc
+    git -C "$agents_root" push
 alias s := sync
 
 [group("skills")]
