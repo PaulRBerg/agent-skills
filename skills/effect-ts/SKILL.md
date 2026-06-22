@@ -100,23 +100,24 @@ environment explicitly supports them and the task has separable research tracks.
 
 Open references selectively:
 
-| Task shape                                                     | Read                                |
-| -------------------------------------------------------------- | ----------------------------------- |
-| Writing/changing Effect code                                   | `./references/critical-rules.md`    |
-| Services, Layers, `Effect.Service`, `Context.Tag`, `Effect.fn` | `./references/services-layers.md`   |
-| Config, env vars, secrets, custom providers                    | `./references/config.md`            |
-| Schema decoding, JSON Schema, AI parameter shapes              | `./references/schema-jsonschema.md` |
-| `@effect/vitest`, `TestClock`, sleeps/retries, fibers in tests | `./references/testing.md`           |
-| Resources, scheduling, refs, concurrency, `SubscriptionRef`    | `./references/runtime.md`           |
-| Streams, backpressure, bounded consumption                     | `./references/streams.md`           |
-| Pattern matching, tagged unions, `Data.taggedEnum`             | `./references/pattern-matching.md`  |
-| `@effect/ai` tools/providers/OpenAI integration                | `./references/ai.md`                |
-| `@effect/sql`, `SqlSchema`, repository row decoding            | `./references/sql.md`               |
-| `@effect/platform`, `@effect/rpc`, deployment runtimes         | `./references/platform-rpc.md`      |
-| `@prb/effect-next` / Next.js App Router                        | `./references/next-js.md`           |
-| `@effect-atom/*` React state                                   | `./references/effect-atom.md`       |
-| Array helpers, `Order`, tiny utility functions, deprecations   | `./references/quick-utils.md`       |
-| Upstream drift or recent package behavior                      | `./references/recent-upstream.md`   |
+| Task shape                                                     | Read                                    |
+| -------------------------------------------------------------- | --------------------------------------- |
+| Writing/changing Effect code                                   | `./references/critical-rules.md`        |
+| Services, Layers, `Effect.Service`, `Context.Tag`, `Effect.fn` | `./references/services-layers.md`       |
+| Config, env vars, secrets, custom providers                    | `./references/config.md`                |
+| Schema decoding, JSON Schema, AI parameter shapes              | `./references/schema-jsonschema.md`     |
+| `@effect/vitest`, `TestClock`, sleeps/retries, fibers in tests | `./references/testing.md`               |
+| Resources, scheduling, refs, concurrency, `SubscriptionRef`    | `./references/runtime.md`               |
+| Streams, backpressure, bounded consumption                     | `./references/streams.md`               |
+| Pattern matching, tagged unions, `Data.taggedEnum`             | `./references/pattern-matching.md`      |
+| `@effect/ai` tools/providers/OpenAI integration                | `./references/ai.md`                    |
+| `@effect/sql`, `SqlSchema`, repository row decoding            | `./references/sql.md`                   |
+| `@effect/platform`, `@effect/rpc`, deployment runtimes         | `./references/platform-rpc.md`          |
+| `@prb/effect-next` / Next.js App Router                        | `./references/next-js.md`               |
+| `@effect-atom/*` React state                                   | `./references/effect-atom.md`           |
+| Array/Record reducers, filters, predicates, sorting            | `./references/collection-operations.md` |
+| Tiny utility functions, deprecations                           | `./references/quick-utils.md`           |
+| Upstream drift or recent package behavior                      | `./references/recent-upstream.md`       |
 
 ## Codebase Pattern Discovery
 
@@ -314,9 +315,14 @@ For resource lifecycles, durations, scheduling, state management, reactive refs,
 
 When you need to read configuration with `Config`, handle secrets via `Redacted`, or wire custom config providers, see [references/config.md](references/config.md).
 
-### Quick Utilities (Array Operations, Utility Functions, Deprecations)
+### Collection Operations (Array, Record, Order)
 
-For Effect's `Array`/`Order` sorting helpers, small utility functions like `constVoid`, and the running list of deprecations, see [references/quick-utils.md](references/quick-utils.md).
+For Effect's `Array`/`Record` reducers, filters, predicates, object traversal replacements, and `Order` sorting helpers,
+see [references/collection-operations.md](references/collection-operations.md).
+
+### Quick Utilities (Functions, Deprecations)
+
+For small utility functions like `constVoid` and the running list of deprecations, see [references/quick-utils.md](references/quick-utils.md).
 
 ### Platform and RPC
 
@@ -337,13 +343,14 @@ see [references/platform-rpc.md](references/platform-rpc.md).
 
 - **`./references/ai.md`** — `@effect/ai` tools, `Tool.EmptyParams`, OpenAI provider notes
 - **`./references/config.md`** — `Config`, `Redacted`, and custom config providers
+- **`./references/collection-operations.md`** — `Array`/`Record` reducers, filters, predicates, sorting
 - **`./references/critical-rules.md`** — Forbidden patterns and mandatory conventions
 - **`./references/effect-atom.md`** — Effect-Atom reactive state management for React
 - **`./references/next-js.md`** — Effect + Next.js 15+ App Router integration patterns
 - **`./references/option-null.md`** — Option vs null boundary patterns
 - **`./references/pattern-matching.md`** — `Match` module for tagged unions and conditionals
 - **`./references/platform-rpc.md`** — `@effect/platform` and `@effect/rpc` integration notes
-- **`./references/quick-utils.md`** — `Array`/`Order`, utility helpers, deprecations
+- **`./references/quick-utils.md`** — Utility helpers and deprecations
 - **`./references/recent-upstream.md`** — Recent upstream public changes reflected by this skill
 - **`./references/runtime.md`** — Resource management, Duration, Scheduling, State, SubscriptionRef, Concurrency
 - **`./references/schema-jsonschema.md`** — Schema decoding and JSON Schema generation patterns
