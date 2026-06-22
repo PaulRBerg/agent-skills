@@ -39,6 +39,7 @@ bunx skills add PaulRBerg/agent-skills
 | loop-skill                | Repeat a skill multiple times with one net report          |
 | playground                | Interactive single-file HTML playgrounds                   |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references    |
+| skill-doctor              | Audit Agent Skills catalogs and installed skill roots      |
 | skill-map                 | Find skill dependencies and references across machine      |
 | spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                |
 | tailwind-css              | Tailwind CSS v4 styling guidance                           |

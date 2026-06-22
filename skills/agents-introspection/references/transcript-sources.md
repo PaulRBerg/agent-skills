@@ -20,6 +20,26 @@ printf '%s\n' "$claude_project_dir"
 
 Example: `/Users/prb/projects/prb-math` maps to `~/.claude/projects/-Users-prb-projects-prb-math`.
 
+## Preferred Helper
+
+Run the bundled miner before opening transcript bodies:
+
+```sh
+uv run scripts/transcript-miner.py --keyword "<keyword>" --format json
+```
+
+For explicitly named projects, pass every path and mine only those scopes:
+
+```sh
+uv run scripts/transcript-miner.py \
+  --project /Users/prb/projects/one \
+  --project /Users/prb/projects/two \
+  --keyword "<keyword>" \
+  --format json
+```
+
+Use `--include-archived` only when active Codex sessions do not provide enough signal. The helper reports project coverage, candidate sessions, task themes, correction/failure/verification signals, tool-call counts, and privacy-gap categories. It redacts emails, API-key-like strings, private-key-like hex, EVM addresses, transaction hashes, and long secret-like tokens; it does not emit raw transcript excerpts.
+
 ## Claude Code
 
 Claude Code project transcripts live under the encoded project directory:

@@ -1,0 +1,62 @@
+---
+argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe] [--include-shelved]"
+disable-model-invocation: false
+name: skill-doctor
+user-invocable: true
+description: "Use to audit Agent Skills catalogs or installed skill roots: validate SKILL.md frontmatter, Codex openai.yaml metadata, README catalog coverage, cli-* version pins, and relative resource links; optionally apply conservative --fix-safe metadata repairs."
+---
+
+# Skill Doctor
+
+Audit local Agent Skills catalogs and installed skill roots, then apply only narrow metadata repairs when requested.
+
+## Arguments
+
+- `--root PATH`: Scan this catalog or installed skill root. Repeatable. Default: current working directory.
+- `--format text|json`: Select report format. Default: `text`.
+- `--fix-safe`: Create missing `agents/openai.yaml` files or update mismatched `policy.allow_implicit_invocation`.
+- `--include-shelved`: Include `shelved/*/SKILL.md` in metadata checks. Shelved skills are never required in `README.md`.
+
+## Workflow
+
+1. Resolve the skill directory, then run the helper from that directory:
+
+   ```sh
+   uv run scripts/skill-doctor.py "$ARGUMENTS"
+   ```
+
+2. Use JSON when another command or agent will consume the result:
+
+   ```sh
+   uv run scripts/skill-doctor.py --root . --format json
+   ```
+
+3. Run safe fixes only after reading the findings:
+
+   ```sh
+   uv run scripts/skill-doctor.py --root . --fix-safe
+   ```
+
+4. Re-run without `--fix-safe` after any manual edits.
+
+## Findings
+
+- Treat `error` findings as catalog defects that should block publishing or syncing.
+- Treat `warning` findings as review-required catalog hygiene issues.
+- Use `path` and `line` from JSON output for precise follow-up edits.
+
+## Safe Fix Policy
+
+`--fix-safe` may only:
+
+- Create a missing `agents/openai.yaml` with `policy.allow_implicit_invocation` derived from `SKILL.md`.
+- Update an existing `allow_implicit_invocation` boolean when it disagrees with `disable-model-invocation`.
+
+Do not use the helper to rewrite frontmatter order, descriptions, README rows, `references/version.txt`, or relative links. Make those edits manually and verify with a fresh audit.
+
+## Exit Codes
+
+- `0`: Clean, or all requested safe fixes succeeded and no findings remain.
+- `1`: Findings remain.
+- `2`: Invalid arguments or unreadable environment.
+- `3`: A requested safe fix failed.

@@ -25,12 +25,27 @@ Analyze the user's task against prior Codex and Claude Code work in the current 
 
 ### 2. Discover project transcripts
 
-Look only at Codex and Claude Code transcripts for the current project.
+Look only at Codex and Claude Code transcripts for the current project unless the user explicitly names additional project paths.
+
+Prefer the bundled miner for the first pass:
+
+```sh
+uv run scripts/transcript-miner.py --keyword "<keyword>" --format json
+```
+
+When the user names multiple projects, pass each one explicitly and mine only those paths:
+
+```sh
+uv run scripts/transcript-miner.py --project /path/to/one --project /path/to/two --keyword "<keyword>" --format json
+```
+
+Use `--include-archived` only when active Codex sessions are too thin. Use `--max-sessions N` to keep the evidence set small.
 
 - Claude Code: inspect `~/.claude/projects/<encoded-absolute-path>/`, where `/Users/prb/projects/example` becomes `-Users-prb-projects-example`.
 - Codex: inspect `~/.codex/session_index.jsonl` and transcript files under `~/.codex/sessions/`; include `~/.codex/archived_sessions/` when recent active sessions are insufficient.
 
 Prefer metadata first: cwd, workspace roots, session title, timestamps, and git branch. Open transcript bodies only after a session plausibly matches the current project or task.
+The miner emits counts, candidate paths, themes, correction/failure/verification signals, tool-call counts, and privacy-gap categories; it never emits raw transcript excerpts. Use it to choose evidence, then open only the minimum matching transcript content needed for interpretation.
 
 ### 3. Select evidence
 
