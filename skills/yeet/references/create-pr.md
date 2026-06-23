@@ -42,7 +42,7 @@ git fetch origin "+refs/heads/$base_branch:refs/remotes/origin/$base_branch"
 
 ## Semantic Change Analysis
 
-Follow the process in `commons.md > Semantic Change Analysis`.
+Follow the process in `commons.md > Semantic Change Analysis`. Write the title and body in the voice from `commons.md > Informal Tone`.
 
 **Test Plan** (only if `--test-plan` flag): Add a "## Test Plan" section with testing/validation approach, manual steps, or checklist.
 
