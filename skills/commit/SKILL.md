@@ -33,13 +33,7 @@ Pass `--natural` through to the prepare helper when requested. The helper resolv
 
 Run the portable helper from the target repository cwd. Never `cd` into the skill directory, and never use dynamic `!` shell injection.
 
-For Claude Code:
-
-```bash
-bash "${CLAUDE_SKILL_DIR}/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]
-```
-
-For Codex CLI, resolve `<skill-dir>` from the loaded `SKILL.md` path:
+Resolve `<skill-dir>` from the loaded `SKILL.md` path:
 
 ```bash
 bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]

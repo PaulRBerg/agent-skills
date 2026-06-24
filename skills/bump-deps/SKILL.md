@@ -29,11 +29,15 @@ If present, follow [Minimum Release Age Mode](#minimum-release-age-mode).
 
 The scan command in [Step 1](#step-1-scan-for-updates) also verifies that taze is installed.
 
+### Helper invocation
+
+This skill ships a `run-taze.sh` helper. Resolve `<skill-dir>` from the loaded `SKILL.md` path, then invoke the helper by its absolute path and run it from the target repository cwd so taze scans that project. Never `cd` into the skill directory; a bare `scripts/run-taze.sh` resolves against the target repo, which does not contain the helper.
+
 ```bash
-scripts/run-taze.sh
+bash "<skill-dir>/scripts/run-taze.sh"
 ```
 
-If exit code is 1, stop and inform the user that taze must be installed:
+Every `<skill-dir>/scripts/run-taze.sh` invocation below uses this form. Run the helper once now to confirm taze is installed. If exit code is 1, stop and inform the user that taze must be installed:
 
 - Global install: `npm install -g taze`
 - One-time: `bunx taze`
@@ -68,10 +72,10 @@ Append the same maturity flags to every Taze scan and write command in the workf
 
 ### Step 1: Scan for Updates
 
-Run the taze script once to discover available updates. The script auto-detects monorepo projects (`workspaces` in package.json or `pnpm-workspace.yaml`) and enables recursive mode automatically.
+Run the helper once to discover available updates. It auto-detects monorepo projects (`workspaces` in package.json or `pnpm-workspace.yaml`) and enables recursive mode automatically.
 
 ```bash
-scripts/run-taze.sh
+bash "<skill-dir>/scripts/run-taze.sh"
 ```
 
 ### Step 2: Parse and Categorize Updates
@@ -158,10 +162,10 @@ Collect all approved major updates.
 After collecting user approvals, apply all selected packages in one write command. Include MINOR/PATCH updates, auto-approved major packages, and user-approved major packages:
 
 ```bash
-scripts/run-taze.sh --write --include <pkg1>,<pkg2>,<pkg3>
+bash "<skill-dir>/scripts/run-taze.sh" --write --include <pkg1>,<pkg2>,<pkg3>
 ```
 
-The script keeps the same monorepo and maturity-period flags used by the scan. It omits `--include-locked` in write mode so fixed-version packages remain untouched.
+The helper keeps the same monorepo and maturity-period flags used by the scan. It omits `--include-locked` in write mode so fixed-version packages remain untouched.
 
 ### Step 6: Update Bun Catalogs
 
@@ -232,5 +236,5 @@ Supported script arguments:
 - MAJOR updates may contain breaking changes—prompt the user unless the package is explicitly auto-approved
 - MINOR/PATCH updates are backward-compatible by semver convention—safe to auto-apply
 - The `--include` flag accepts comma-separated package names or regex patterns
-- Monorepo detection is automatic—no flag needed when using `scripts/run-taze.sh`
+- Monorepo detection is automatic—no flag needed when using the `run-taze.sh` helper
 - Bun catalogs (`workspaces.catalog` / `workspaces.catalogs`) are the source of truth for workspace packages using the `catalog:` protocol—always update catalog entries alongside regular deps

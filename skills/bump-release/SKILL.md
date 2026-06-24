@@ -23,13 +23,7 @@ Release one package or several packages with version bumps, changelog entries, c
 
 Run the bundled planner before manual inspection. It is read-only and gives one JSON fact base for package discovery, previous tags, scoped changed files, dependency edges, and dirty-tree status. In pnpm workspaces, it uses `pnpm list -r --depth -1 --json` when available and falls back to local workspace-glob discovery. Bun and npm-style `package.json` workspaces use the local glob discovery, including negative workspace patterns.
 
-For Claude Code:
-
-```sh
-node "${CLAUDE_SKILL_DIR}/scripts/plan-release.mjs" [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] [--package <name-or-dir>]...
-```
-
-For Codex or other agents, resolve `<skill-dir>` from the loaded `SKILL.md` path:
+Resolve `<skill-dir>` from the loaded `SKILL.md` path:
 
 ```sh
 node "<skill-dir>/scripts/plan-release.mjs" [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] [--package <name-or-dir>]...
