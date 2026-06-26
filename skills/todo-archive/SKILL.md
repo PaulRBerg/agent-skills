@@ -15,7 +15,7 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
 - `path` (optional): Repository root or any path inside the repository. Default to the current directory.
 - `--date YYYY-MM-DD|YYYY_MM_DD` (optional): Archive date. Default to today's local date.
 - `--dry-run` (optional): Preview target paths and rendered content without writing.
-- `--force` (optional): Allow overwriting an existing archive file.
+- `--force` (optional): Overwrite the date-only archive in place instead of rolling a same-day re-run over to a timestamped file.
 
 ## Workflow
 
@@ -37,7 +37,7 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
 
    Pass through `--date`, `--dry-run`, or `--force` when the user requested them.
 
-4. Report the rewritten `TODO.md`, the created archive path, and the checked/unchecked task counts. If the helper reports no checked tasks, treat it as a no-op.
+4. Report the rewritten `TODO.md`, the created archive path, and the checked/unchecked task counts. If an archive for the date already exists, the helper rolls the new batch over to `TODO_UNTIL_YYYY_MM_DD_HHMM.md` and keeps the earlier file; report both paths. If the helper reports no checked tasks, treat it as a no-op.
 
 5. If useful, inspect only the touched paths:
 
@@ -56,4 +56,5 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
 - Drops headings whose subtree has no tasks for the output.
 - Keeps nested parent items as plain bullets when only descendants match the output, avoiding orphaned subtasks without copying the wrong checkbox state.
 - Leaves a minimal `# TODO` stub when every task was archived.
-- Refuses to overwrite an existing archive unless `--force` is passed.
+- Rolls a same-day re-run over to a timestamped `TODO_UNTIL_YYYY_MM_DD_HHMM.md` sibling (appending a counter on a same-minute collision) so an earlier batch is never clobbered.
+- Overwrites the date-only archive in place only when `--force` is passed.

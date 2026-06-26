@@ -35,7 +35,11 @@ def main() -> int:
     parser.add_argument("--root", default=None, help="repository root; defaults to git root or cwd")
     parser.add_argument("--date", default=None, help="YYYY-MM-DD or YYYY_MM_DD; defaults to today")
     parser.add_argument("--dry-run", action="store_true", help="print rendered outputs without writing")
-    parser.add_argument("--force", action="store_true", help="overwrite existing archive file")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite the dated archive in place instead of rolling over to a timestamped file",
+    )
     args = parser.parse_args()
 
     root = resolve_root(args.root)
@@ -45,7 +49,7 @@ def main() -> int:
         return 1
 
     archive_date = normalize_date(args.date)
-    archive_path = root / ".ai" / "todos" / f"TODO_UNTIL_{archive_date}.md"
+    dated_path = root / ".ai" / "todos" / f"TODO_UNTIL_{archive_date}.md"
 
     source = todo_path.read_text(encoding="utf-8")
     tree = parse_document(source.splitlines(keepends=True))
@@ -57,10 +61,7 @@ def main() -> int:
         print(f"Unchecked tasks remaining: {unchecked_count}")
         return 0
 
-    if archive_path.exists() and not args.force and not args.dry_run:
-        print(f"Archive already exists: {archive_path}", file=sys.stderr)
-        print("Pass --force to overwrite it.", file=sys.stderr)
-        return 1
+    archive_path, rolled_over = resolve_archive_path(dated_path, archive_date, force=args.force)
 
     archive_text = finalize(render(tree, True), fallback_heading="# TODO\n")
     remaining_text = finalize(render(tree, False), fallback_heading=first_heading(source) or "# TODO\n")
@@ -68,6 +69,8 @@ def main() -> int:
     if args.dry_run:
         print(f"TODO: {todo_path}")
         print(f"ARCHIVE: {archive_path}")
+        if rolled_over:
+            print(f"NOTE: {dated_path.name} exists; rolling this batch over to a timestamped file.")
         print(f"Checked tasks to archive: {checked_count}")
         print(f"Unchecked tasks remaining: {unchecked_count}")
         print("\n--- TODO.md ---")
@@ -83,7 +86,11 @@ def main() -> int:
     print(f"Archived checked tasks: {checked_count}")
     print(f"Unchecked tasks remaining: {unchecked_count}")
     print(f"Rewrote: {todo_path}")
-    print(f"Created: {archive_path}")
+    if rolled_over:
+        print(f"Kept existing archive: {dated_path}")
+        print(f"Created timestamped archive: {archive_path}")
+    else:
+        print(f"Created: {archive_path}")
     return 0
 
 
@@ -114,6 +121,29 @@ def normalize_date(value: Optional[str]) -> str:
     except ValueError:
         raise SystemExit("--date must be YYYY-MM-DD or YYYY_MM_DD")
     return normalized
+
+
+def resolve_archive_path(
+    dated_path: pathlib.Path, archive_date: str, force: bool
+) -> tuple[pathlib.Path, bool]:
+    """Pick the archive file to write and report whether it rolled over.
+
+    Default to the date-only file. When it already exists and we are not forcing
+    an in-place overwrite, roll the new batch over to a distinct timestamped
+    sibling (``TODO_UNTIL_<date>_<HHMM>.md``) so the earlier batch is never
+    clobbered. Append a counter on the rare same-minute collision.
+    """
+    if force or not dated_path.exists():
+        return dated_path, False
+
+    stamp = dt.datetime.now().strftime("%H%M")
+    todos_dir = dated_path.parent
+    candidate = todos_dir / f"TODO_UNTIL_{archive_date}_{stamp}.md"
+    counter = 2
+    while candidate.exists():
+        candidate = todos_dir / f"TODO_UNTIL_{archive_date}_{stamp}_{counter}.md"
+        counter += 1
+    return candidate, True
 
 
 def parse_document(lines: Iterable[str]) -> Node:
