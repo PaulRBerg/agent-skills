@@ -2,21 +2,6 @@
 
 set -u
 
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || {
-  printf 'error: cannot resolve commit skill script directory\n' >&2
-  exit 1
-}
-commit_lock_token=
-should_release_commit_lock=false
-
-release_commit_lock() {
-  [ "$should_release_commit_lock" = true ] || return 0
-  [ -n "$commit_lock_token" ] || return 0
-  bash "$script_dir/commit-lock.sh" release "$commit_lock_token" >/dev/null 2>&1 || true
-}
-
-trap release_commit_lock EXIT
-
 usage() {
   printf 'Usage: bash <skill-dir>/scripts/prepare-commit.sh [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]\n' >&2
 }
@@ -215,8 +200,6 @@ rebase_apply=$(git rev-parse --git-path rebase-apply 2>/dev/null) || die 'cannot
 [ ! -d "$rebase_apply" ] || die 'rebase in progress; resolve or abort it before committing'
 
 branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || die 'detached HEAD; check out a branch before committing'
-commit_lock_token=$(bash "$script_dir/commit-lock.sh" acquire) || exit 1
-should_release_commit_lock=true
 message_format=$(resolve_message_format) || exit 1
 
 if [ "$all" = true ]; then
@@ -271,9 +254,6 @@ printf '%s\n\n' "$message_format"
 printf '## branch\n'
 printf '%s\n\n' "$branch"
 
-printf '## commit lock token\n'
-printf '%s\n\n' "$commit_lock_token"
-
 printf '## staged name-status\n'
 git diff --cached --name-status --no-ext-diff --no-textconv -- || die 'failed to print staged name-status'
 printf '\n'
@@ -285,5 +265,3 @@ if [ "$diff_mode" = full ]; then
   printf '\n## staged diff\n'
   git diff --cached --no-ext-diff --no-textconv -- || die 'failed to print staged diff'
 fi
-
-should_release_commit_lock=false
