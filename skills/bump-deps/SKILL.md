@@ -233,6 +233,7 @@ Supported script arguments:
 ## Important Notes
 
 - Fixed-version dependencies (no `^` or `~`) indicate intentional pinning—never modify these
+- Non-semver protocol specifiers (`workspace:`, `file:`, `link:`, `github:`, tarball URLs) are not versionable—taze never reports them as updates and leaves them untouched, so they never enter the categorization, dry-run table, or `--include` write list
 - MAJOR updates may contain breaking changes—prompt the user unless the package is explicitly auto-approved
 - MINOR/PATCH updates are backward-compatible by semver convention—safe to auto-apply
 - The `--include` flag accepts comma-separated package names or regex patterns
