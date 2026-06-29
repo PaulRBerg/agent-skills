@@ -68,7 +68,7 @@ def inspect_claude_hooks(config_root: Path, project_root: Path) -> ClaudeHooksRe
             return ClaudeHooksReport(status="ok", path=path, missing_events=[], errors=errors)
 
         report = ClaudeHooksReport(
-            status="partial" if missing_events else "missing",
+            status="partial",  # the `not missing_events` (fully configured) case returned "ok" above
             path=path,
             missing_events=missing_events,
             errors=errors,
