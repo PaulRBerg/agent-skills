@@ -40,7 +40,7 @@ class NotificationConfig(BaseModel):
     """Notification-related configuration."""
 
     app_bundle: str = Field(
-        default="dev.warp.Warp-Stable",
+        default="com.googlecode.iterm2",
         description="Application bundle ID to focus on notification click",
     )
     mode: NotificationMode = Field(

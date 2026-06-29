@@ -58,7 +58,7 @@ alias rw := ruff-write
 # Check types with pyright
 [group("checks")]
 @pyright-check:
-    uv run pyright
+    PYRIGHT_PYTHON_IGNORE_WARNINGS=1 uv run pyright
 alias pyc := pyright-check
 
 # Check Markdown formatting with prettier (readonly)

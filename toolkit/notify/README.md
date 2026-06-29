@@ -87,7 +87,7 @@ logging:
   path: ~/.config/ai-notify/ai-notify.log # Path to log file
 
 notification:
-  app_bundle: dev.warp.Warp-Stable # Application bundle ID to focus on notification click
+  app_bundle: com.googlecode.iterm2 # Application bundle ID to focus on notification click
   mode: all # Notification mode: 'all' (default), 'permission_only', or 'disabled'
   sound: default # Notification sound (see /System/Library/Sounds for options)
   threshold_seconds: 10 # Minimum job duration in seconds to trigger notification (0 = notify all)

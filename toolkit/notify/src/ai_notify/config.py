@@ -13,7 +13,7 @@ DB_PATH = CONFIG_DIR / "ai-notify.db"
 LOG_PATH = CONFIG_DIR / "ai-notify.log"
 
 # Notification settings
-NOTIFICATION_APP_BUNDLE = "dev.warp.Warp-Stable"  # Focus Warp terminal on click
+NOTIFICATION_APP_BUNDLE = "com.googlecode.iterm2"  # Focus iTerm on click
 
 # Database schema
 DB_SCHEMA = """--sql
