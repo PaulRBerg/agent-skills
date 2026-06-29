@@ -52,7 +52,6 @@ Examples:
 
 ## Body
 
-- Use hyphenated lines for distinct changes
+- Use hyphenated lines for distinct changes, focusing on why the change exists
 - Skip the body for trivial changes
-- With `--deep`, write 2-3 hyphenated lines max and focus on why the change exists
 - For breaking changes, add `BREAKING CHANGE:` plus a one-line migration note

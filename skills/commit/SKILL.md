@@ -1,8 +1,9 @@
 ---
-argument-hint: '[--all] [--staged] [--deep] [--natural] [--push] [--close <issue_numbers>]'
+argument-hint: '[--all] [--staged] [--natural] [--push] [--close <issue_numbers>]'
+effort: high
 name: commit
 user-invocable: true
-description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft Conventional Prefix Format messages by default, Natural Language messages with --natural or configured repos, commit, and optionally --all, --staged, --deep, --close, or --push.'
+description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft Conventional Prefix Format messages by default, Natural Language messages with --natural or configured repos, commit, and optionally --all, --staged, --close, or --push.'
 ---
 
 # Git Commit
@@ -18,7 +19,6 @@ Arguments: `$ARGUMENTS`
 - Flags:
   - `--all` commit all changes
   - `--staged` commit exactly the current index; do not auto-stage or unstage (conflicts with `--all`)
-  - `--deep` deep analysis with the active session model, breaking changes, concise body
   - `--natural` force Natural Language Format
   - `--push` push after commit
   - `--close <issue_numbers>` append `Closes #N` trailers for listed issues (comma/space-separated)
@@ -39,7 +39,7 @@ Resolve `<skill-dir>` from the loaded `SKILL.md` path:
 bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]
 ```
 
-Use `--diff summary` by default. Use `--diff full` only when the intent is ambiguous or `--deep` was requested.
+Use `--diff summary` by default. Use `--diff full` only when the intent is ambiguous.
 
 The helper performs Git preflight checks, stages `--all` or the session-modified paths (or, with `--staged`, leaves the current index untouched), unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the message format, branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise suggested fix.
 
@@ -68,10 +68,10 @@ Read only the selected format reference before composing the message.
 
 **Issue linking** — scan the chat transcript for GitHub issue references (e.g. `#123`, `owner/repo#123`, issue URLs) that the current changes resolve. For each match, append a `Closes #N` trailer. Skip issues merely mentioned in passing; include only ones the commit actually closes.
 
-**If `--deep`:**
+**Analysis** — perform semantic analysis of the staged diff:
 
-- Deep semantic analysis; detect breaking changes
-- Infer Conventional Prefix Format scope or Natural Language context from code structure even when path isn't clear
+- Detect breaking changes
+- Infer Conventional Prefix Format scope or Natural Language context from code structure even when the path isn't clear
 - Follow the selected reference's body and breaking-change rules
 
 **If `--close`:**

@@ -34,9 +34,7 @@ Explicit type keyword in arguments takes precedence over inference.
 
 ## Scope
 
-Infer scope only when the path or code structure makes it obvious. Keep scope lowercase.
-
-With `--deep`, infer scope from code structure even when the path alone is unclear.
+Infer scope when the path or code structure makes it clear; code structure can justify a scope even when the path alone is unclear. Keep scope lowercase.
 
 ## Subject
 
@@ -48,7 +46,6 @@ With `--deep`, infer scope from code structure even when the path alone is uncle
 
 ## Body
 
-- Use hyphenated lines for distinct changes
+- Use hyphenated lines for distinct changes, focusing on why the change exists
 - Skip the body for trivial changes
-- With `--deep`, write 2-3 hyphenated lines max and focus on why the change exists
 - For breaking changes, add `BREAKING CHANGE:` plus a one-line migration note
