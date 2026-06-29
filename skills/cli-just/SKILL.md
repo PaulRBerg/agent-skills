@@ -388,7 +388,7 @@ Do not use `just --fmt` or `just --dump`. The user has bespoke formatting prefer
 
 ## Tips
 
-1. Use `@` prefix to suppress command echo: `@echo "quiet"`
+1. Use `@` on non-script recipes to suppress command echo; on `[script]` recipes it undoes the default quiet mode and prints the script body before command output.
 2. Use `+` for variadic parameters: `test +args`
 3. Use `*` for optional variadic: `build *flags`
 4. Quote glob patterns in variables: `GLOBS := "\"**/*.json\""`

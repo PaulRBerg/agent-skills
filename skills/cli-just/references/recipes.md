@@ -521,6 +521,8 @@ Each argument to a non-mapped dependency binds to exactly one parameter; passing
     echo "Quiet and ignores error"
 ```
 
+For non-script recipes, `@` suppresses the echoed command line. For `[script]` recipes, quiet behavior is inverted: script recipes are quiet by default, and adding `@` prints the script body before command output.
+
 ## Shebang Recipes
 
 Execute with specific interpreter:

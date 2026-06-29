@@ -50,6 +50,10 @@ status:
 
 `[shell]` overrides `default-script` for one recipe. `set shell` still controls linewise recipes and backticks; `set script-interpreter` controls `[script]` recipes with no explicit command.
 
+## Script Echoing
+
+Script recipes are quiet by default: Just does not print the generated script body before running it. Do not add `@` to a `[script]` recipe when trying to reduce output; for scripts, `@` undoes that default quiet mode and prints the script body before command output. On non-script recipes, `@` keeps its usual meaning and suppresses the echoed command line.
+
 ## Shebang Method
 
 Use `#!/usr/bin/env interpreter` at the recipe start:
