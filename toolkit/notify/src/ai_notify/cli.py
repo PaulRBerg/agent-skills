@@ -197,14 +197,14 @@ def link():
 @click.option(
     "--path",
     type=click.Path(path_type=Path),
-    default=Path.home() / ".claude" / "hooks" / "hooks.json",
+    default=Path.home() / ".claude" / "settings.json",
     show_default=True,
-    help="Path to Claude Code hooks.json",
+    help="Path to Claude Code settings.json",
 )
-@click.option("--force", is_flag=True, help="Overwrite existing hook commands")
+@click.option("--force", is_flag=True, help="Replace a conflicting hook entry for an event")
 @click.option("--dry-run", is_flag=True, help="Show changes without writing")
 def link_claude(path: Path, force: bool, dry_run: bool):
-    """Install ai-notify hooks for Claude Code."""
+    """Install ai-notify hooks into Claude Code's settings.json."""
     try:
         from ai_notify.claude_hooks import ensure_claude_hooks
 
@@ -221,6 +221,17 @@ def link_claude(path: Path, force: bool, dry_run: bool):
             click.echo("Errors:")
             for error in result.errors:
                 click.echo(f"  - {error}")
+
+        # Nudge users off the old, no-longer-read location.
+        legacy = Path.home() / ".claude" / "hooks" / "hooks.json"
+        if legacy.exists():
+            click.echo(
+                click.style(
+                    f"Note: {path_with_tilde(legacy)} is no longer read by Claude Code "
+                    "(hooks now live in settings.json); you can delete it.",
+                    dim=True,
+                )
+            )
     except Exception as e:
         logger.error(f"Claude hook install failed: {e}")
         sys.exit(1)

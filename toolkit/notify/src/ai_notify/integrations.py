@@ -10,13 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from ai_notify.claude_hooks import HOOK_SPECS, iter_hook_commands
 
-CLAUDE_REQUIRED_EVENTS = {
-    "UserPromptSubmit": "user-prompt-submit",
-    "Stop": "stop",
-    "Notification": "notification",
-    "PermissionRequest": "permission-request",
-}
+
+# Map of Claude Code event name -> ai-notify event subcommand, derived from the
+# installer's HOOK_SPECS so `check` and `link claude` can never drift.
+CLAUDE_REQUIRED_EVENTS = {spec.event: spec.command.split("event ", 1)[1] for spec in HOOK_SPECS}
 
 
 @dataclass
@@ -122,34 +121,10 @@ def _extract_hook_commands(hooks: Any) -> dict[str, list[str]]:
     if not isinstance(hooks, dict):
         return {}
 
-    commands_by_event: dict[str, list[str]] = {}
-    for event_name, hook_value in hooks.items():
-        commands_by_event[event_name] = _extract_commands(hook_value)
-    return commands_by_event
-
-
-def _extract_commands(value: Any) -> list[str]:
-    commands: list[str] = []
-
-    if isinstance(value, str):
-        commands.append(value)
-        return commands
-
-    if isinstance(value, dict):
-        command = value.get("command")
-        if isinstance(command, str):
-            commands.append(command)
-        nested = value.get("hooks")
-        if nested:
-            commands.extend(_extract_commands(nested))
-        return commands
-
-    if isinstance(value, list):
-        for item in value:
-            commands.extend(_extract_commands(item))
-        return commands
-
-    return commands
+    # Reuse the installer's traversal so `check` and `link claude` read the schema identically.
+    return {
+        event_name: list(iter_hook_commands(hook_value)) for event_name, hook_value in hooks.items()
+    }
 
 
 def _find_missing_events(commands_by_event: dict[str, list[str]]) -> list[str]:

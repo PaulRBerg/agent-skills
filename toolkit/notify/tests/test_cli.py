@@ -134,11 +134,11 @@ class TestCLICommands:
 
     def test_link_claude_installs_hooks(self, runner, tmp_path):
         """Test link claude installs hooks and reports skips."""
-        hooks_path = tmp_path / "hooks.json"
+        settings_path = tmp_path / "settings.json"
 
         with patch("ai_notify.claude_hooks.ensure_claude_hooks") as mock_ensure:
             mock_ensure.return_value = ClaudeHooksUpdate(
-                path=hooks_path,
+                path=settings_path,
                 changed=True,
                 added=["Stop"],
                 updated=[],
@@ -146,10 +146,10 @@ class TestCLICommands:
                 errors=[],
             )
 
-            result = runner.invoke(cli.cli, ["link", "claude", "--path", str(hooks_path)])
+            result = runner.invoke(cli.cli, ["link", "claude", "--path", str(settings_path)])
 
         assert result.exit_code == 0
-        mock_ensure.assert_called_once_with(hooks_path, force=False, dry_run=False)
+        mock_ensure.assert_called_once_with(settings_path, force=False, dry_run=False)
         assert "Updated hooks" in result.output
         assert "Skipped existing hooks" in result.output
         assert "Notification" in result.output

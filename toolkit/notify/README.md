@@ -45,7 +45,7 @@ Inspired by [CCNotify](https://github.com/dazuiba/CCNotify) with key improvement
 
 - **Independent CLI** — installable via `uv tool install`, not a script symlink
 - **Fully configurable** — YAML config with `ai-notify config` commands
-- **More events** — supports `PermissionRequest` (4 events vs 3)
+- **More events** — adds `PermissionRequest` and an AskUserQuestion notifier (5 hooks vs 3)
 - **Smart filtering** — configurable duration threshold and prompt exclusion patterns
 - **Notification modes** — all/permission_only/disabled
 
@@ -154,40 +154,48 @@ ai-notify event notification < event_data.json
 
 # Handle permission request
 ai-notify event permission-request < event_data.json
+
+# Notify when Claude asks a question (PreToolUse / AskUserQuestion)
+ai-notify event ask-user-question < event_data.json
 ```
 
 For Codex CLI, use `ai-notify codex` via the `notify` setting (see below).
 
 ## Claude Code Hook Integration
 
-To integrate ai-notify with Claude Code, update your `~/.claude/hooks/hooks.json`. You can also install the hooks
-automatically:
+Claude Code reads hooks from its settings files — `~/.claude/settings.json` (all projects) or a project's
+`.claude/settings.json` / `.claude/settings.local.json`. Install the ai-notify hooks automatically:
 
 ```bash
 ai-notify link claude
 ```
 
-For more information about Claude Code hooks, see the
+This merges the hooks into `~/.claude/settings.json` without touching your other settings. Use `--path` to target a
+project or local settings file, `--dry-run` to preview, and `--force` to replace a conflicting entry. For more
+information about Claude Code hooks, see the
 [official documentation](https://docs.claude.com/en/docs/claude-code/hooks).
+
+The resulting `hooks` section uses Claude Code's nested schema (each event maps to a list of matcher groups):
 
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": {
-      "command": "ai-notify event user-prompt-submit"
-    },
-    "Stop": {
-      "command": "ai-notify event stop"
-    },
-    "Notification": {
-      "command": "ai-notify event notification"
-    },
-    "PermissionRequest": {
-      "command": "ai-notify event permission-request"
-    }
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "ai-notify event user-prompt-submit" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "ai-notify event stop" }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "ai-notify event notification" }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "ai-notify event permission-request" }] }],
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [{ "type": "command", "command": "ai-notify event ask-user-question" }]
+      }
+    ]
   }
 }
 ```
+
+> **Upgrading:** older versions wrote `~/.claude/hooks/hooks.json`, which Claude Code no longer reads. Re-run
+> `ai-notify link claude` to install into `settings.json`, then delete the stale file.
 
 ## Codex CLI Integration
 
@@ -229,8 +237,10 @@ ai-notify check
    - Checks if prompt starts with any excluded pattern
    - Sends notification only if both checks pass (by default, whether the job took longer than >10 seconds)
    - Optionally runs auto-cleanup (every 24 hours)
-3. **Notification**: Suppresses "waiting for input" notifications (the Stop handler will send job completion)
-4. **PermissionRequest**: Sends immediate notification when Claude requests permissions
+3. **Notification**: Detects "waiting for input" notifications (via the `idle_prompt` notification type, with a keyword
+   fallback) and suppresses them — the Stop handler sends the job-completion notification
+4. **PermissionRequest**: Sends an immediate notification when Claude requests permission to run a tool
+5. **PreToolUse / AskUserQuestion**: Sends a notification when Claude asks you a question
 
 For Codex CLI, ai-notify runs on the `agent-turn-complete` notify event and sends a completion notification with the
 latest assistant message as context.

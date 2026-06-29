@@ -1,21 +1,40 @@
 """
-Helpers for managing Claude Code hooks.json configuration.
+Helpers for managing ai-notify hooks in Claude Code's settings.json.
+
+Claude Code reads hooks only from settings.json files (``~/.claude/settings.json``,
+``.claude/settings.json``, ``.claude/settings.local.json``) using the nested schema
+``"<Event>": [ { "matcher"?: str, "hooks": [ { "type": "command", "command": str } ] } ]``.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
-REQUIRED_HOOKS = {
-    "UserPromptSubmit": "ai-notify event user-prompt-submit",
-    "Stop": "ai-notify event stop",
-    "Notification": "ai-notify event notification",
-    "PermissionRequest": "ai-notify event permission-request",
-}
+@dataclass(frozen=True)
+class HookSpec:
+    """A single ai-notify hook registration."""
+
+    event: str
+    command: str
+    matcher: str | None = None
+
+
+# Single source of truth for the hooks ai-notify installs into Claude Code.
+# UserPromptSubmit/Stop ignore matchers (Claude Code drops them); Notification and
+# PermissionRequest use no matcher so they fire for every notification/request; the
+# AskUserQuestion notifier is a PreToolUse hook scoped to the AskUserQuestion tool.
+HOOK_SPECS: list[HookSpec] = [
+    HookSpec("UserPromptSubmit", "ai-notify event user-prompt-submit"),
+    HookSpec("Stop", "ai-notify event stop"),
+    HookSpec("Notification", "ai-notify event notification"),
+    HookSpec("PermissionRequest", "ai-notify event permission-request"),
+    HookSpec("PreToolUse", "ai-notify event ask-user-question", matcher="AskUserQuestion"),
+]
 
 
 @dataclass(frozen=True)
@@ -32,11 +51,11 @@ def ensure_claude_hooks(
     path: Path, force: bool = False, dry_run: bool = False
 ) -> ClaudeHooksUpdate:
     """
-    Ensure Claude Code hooks include ai-notify commands.
+    Ensure Claude Code settings include ai-notify hook commands.
 
     Args:
-        path: Path to hooks.json
-        force: Overwrite existing hook commands
+        path: Path to a Claude Code settings.json file
+        force: Replace a conflicting non-ai-notify entry for an event
         dry_run: Do not write changes
 
     Returns:
@@ -48,24 +67,14 @@ def ensure_claude_hooks(
 
     updated_data, report = _update_hooks_data(data, force=force)
 
-    if report.errors:
-        return ClaudeHooksUpdate(
-            path=path,
-            changed=False,
-            added=report.added,
-            updated=report.updated,
-            skipped=report.skipped,
-            errors=report.errors,
-        )
-
-    changed = report.changed
-    if changed and not dry_run:
+    # Every error path also reports changed=False, so this guard skips the write on errors too.
+    if report.changed and not dry_run:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(updated_data, indent=2) + "\n")
 
     return ClaudeHooksUpdate(
         path=path,
-        changed=changed,
+        changed=report.changed,
         added=report.added,
         updated=report.updated,
         skipped=report.skipped,
@@ -92,7 +101,7 @@ def _update_hooks_data(
 
     if not isinstance(data, dict):
         return data, _HooksUpdateReport(
-            False, added, updated, skipped, ["hooks.json is not a JSON object"]
+            False, added, updated, skipped, ["Claude settings file is not a JSON object"]
         )
 
     hooks = data.get("hooks")
@@ -109,44 +118,63 @@ def _update_hooks_data(
             ["hooks field must be an object"],
         )
 
-    for event, command in REQUIRED_HOOKS.items():
-        existing = hooks.get(event)
+    for spec in HOOK_SPECS:
+        existing = hooks.get(spec.event)
 
-        if _has_ai_notify_command(existing, command):
+        # Proper nested schema: append our group next to any existing hooks.
+        if isinstance(existing, list):
+            if _command_present(existing, spec.command):
+                continue
+            existing.append(_build_group(spec))
+            added.append(spec.event)
             continue
 
+        # No entry yet: create the event's hook list.
         if existing is None:
-            hooks[event] = {"command": command}
-            added.append(event)
+            hooks[spec.event] = [_build_group(spec)]
+            added.append(spec.event)
             continue
 
-        if force:
-            hooks[event] = {"command": command}
-            updated.append(event)
+        # Legacy/foreign non-list value (e.g. the old flat ``{"command": ...}`` form).
+        if _command_present(existing, spec.command):
+            # Old ai-notify flat entry — migrate it to the nested schema.
+            hooks[spec.event] = [_build_group(spec)]
+            updated.append(spec.event)
+        elif force:
+            hooks[spec.event] = [_build_group(spec)]
+            updated.append(spec.event)
         else:
-            skipped[event] = _summarize_hook(existing)
+            skipped[spec.event] = _summarize_hook(existing)
 
     changed = bool(added or updated)
     return data, _HooksUpdateReport(changed, added, updated, skipped, errors)
 
 
-def _has_ai_notify_command(existing: Any, expected: str) -> bool:
-    if existing is None:
-        return False
+def _build_group(spec: HookSpec) -> dict[str, Any]:
+    """Build a Claude Code matcher group for a single command hook."""
+    group: dict[str, Any] = {}
+    if spec.matcher is not None:
+        group["matcher"] = spec.matcher
+    group["hooks"] = [{"type": "command", "command": spec.command}]
+    return group
 
-    if isinstance(existing, str):
-        return existing.strip() == expected
 
-    if isinstance(existing, dict):
-        command = existing.get("command")
-        if isinstance(command, str) and command.strip() == expected:
-            return True
-        return False
+def iter_hook_commands(value: Any) -> Iterator[str]:
+    """Yield every ``command`` string nested anywhere under a hooks value."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        command = value.get("command")
+        if isinstance(command, str):
+            yield command
+        yield from iter_hook_commands(value.get("hooks"))
+    elif isinstance(value, list):
+        for item in value:
+            yield from iter_hook_commands(item)
 
-    if isinstance(existing, list):
-        return any(_has_ai_notify_command(item, expected) for item in existing)
 
-    return False
+def _command_present(value: Any, command: str) -> bool:
+    return any(found.strip() == command for found in iter_hook_commands(value))
 
 
 def _summarize_hook(existing: Any) -> str:

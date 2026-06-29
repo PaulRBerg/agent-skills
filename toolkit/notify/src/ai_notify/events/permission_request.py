@@ -18,7 +18,7 @@ def handle_permission(data: dict) -> None:
     requested tool or command and the job number if available.
 
     Args:
-        data: Event data containing session_id, cwd, and tool_input
+        data: Event data containing session_id, cwd, tool_name, and tool_input
 
     Raises:
         Exception: For failures during permission notification handling
@@ -26,6 +26,7 @@ def handle_permission(data: dict) -> None:
     # Extract required fields
     session_id = data.get("session_id", "")
     cwd = data.get("cwd", "")
+    tool_name = data.get("tool_name", "")  # top-level in current Claude Code payloads
     tool_input = data.get("tool_input", {})
 
     # Early exit if permission notifications disabled
@@ -39,22 +40,21 @@ def handle_permission(data: dict) -> None:
         tracker = SessionTracker()
         job_number = tracker.get_active_job_number(session_id)
 
-    # Get permission details
+    # Extract command/description and (for legacy payloads) the nested tool name
+    command = ""
+    description = ""
     if isinstance(tool_input, dict):
-        # Extract tool name or command being requested
-        tool_name = tool_input.get("name", "")
         command = tool_input.get("command", "")
         description = tool_input.get("description", "")
+        tool_name = tool_name or tool_input.get("name", "")
 
-        # Build notification message
-        if command:
-            message = f"Command: {command}"
-        elif tool_name:
-            message = f"Tool: {tool_name}"
-        elif description:
-            message = description
-        else:
-            message = "Permission requested"
+    # Build notification message
+    if command:
+        message = f"Command: {command}"
+    elif tool_name:
+        message = f"Tool: {tool_name}"
+    elif description:
+        message = description
     else:
         message = "Permission requested"
 

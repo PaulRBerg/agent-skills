@@ -15,7 +15,7 @@ def handle_notification(data: dict) -> None:
     Other notifications are logged but not sent to the user.
 
     Args:
-        data: Event data containing session_id and message
+        data: Event data containing session_id, message, and notification_type
 
     Raises:
         ValueError: If session_id is missing from data
@@ -24,13 +24,17 @@ def handle_notification(data: dict) -> None:
     # Extract required fields
     session_id = data.get("session_id", "")
     message = data.get("message", "")
+    notification_type = data.get("notification_type", "")
 
     if not session_id:
         raise ValueError("Missing session_id in input")
 
-    # Check if this is a "waiting for input" notification
+    # Detect the "waiting for input" case. Current Claude Code sends a structured
+    # notification_type ("idle_prompt"); fall back to keyword matching for older payloads.
     waiting_keywords = ["waiting for input", "waiting for user", "approval needed"]
-    is_waiting = any(keyword in message.lower() for keyword in waiting_keywords)
+    is_waiting = notification_type == "idle_prompt" or any(
+        keyword in message.lower() for keyword in waiting_keywords
+    )
 
     if is_waiting:
         # Track waiting state but don't send notification
