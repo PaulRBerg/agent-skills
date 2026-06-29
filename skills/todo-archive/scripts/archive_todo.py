@@ -23,6 +23,7 @@ class Node:
     level: int = 0
     indent: int = -1
     checked: Optional[bool] = None
+    archive: Optional[bool] = None
     marker: str = "-"
     text: str = ""
     children: list["Node"] = field(default_factory=list)
@@ -40,6 +41,11 @@ def main() -> int:
         action="store_true",
         help="overwrite the dated archive in place instead of rolling over to a timestamped file",
     )
+    parser.add_argument(
+        "--hint",
+        default=None,
+        help="archive only the section whose heading contains this text (case-insensitive)",
+    )
     args = parser.parse_args()
 
     root = resolve_root(args.root)
@@ -53,12 +59,25 @@ def main() -> int:
 
     source = todo_path.read_text(encoding="utf-8")
     tree = parse_document(source.splitlines(keepends=True))
-    checked_count = count_tasks(tree, True)
-    unchecked_count = count_tasks(tree, False)
 
-    if checked_count == 0:
-        print(f"No checked tasks found in {todo_path}; no archive written.")
-        print(f"Unchecked tasks remaining: {unchecked_count}")
+    matched = collect_matching_headings(tree, args.hint)
+    if args.hint is not None and not matched:
+        print(f"No heading matched hint {args.hint!r} in {todo_path}", file=sys.stderr)
+        headings = [heading_text(node) for node in iter_headings(tree)]
+        if headings:
+            print("Available sections:", file=sys.stderr)
+            for heading in headings:
+                print(f"  - {heading}", file=sys.stderr)
+        return 1
+
+    mark_tasks(tree, args.hint, in_section=args.hint is None)
+    archive_count = count_tasks(tree, True)
+    remaining_count = count_tasks(tree, False)
+
+    if archive_count == 0:
+        scope = f" in section matching {args.hint!r}" if args.hint else ""
+        print(f"No checked tasks found{scope} in {todo_path}; no archive written.")
+        print(f"Tasks remaining: {remaining_count}")
         return 0
 
     archive_path, rolled_over = resolve_archive_path(dated_path, archive_date, force=args.force)
@@ -69,10 +88,12 @@ def main() -> int:
     if args.dry_run:
         print(f"TODO: {todo_path}")
         print(f"ARCHIVE: {archive_path}")
+        if matched:
+            print(f"Section(s): {', '.join(matched)}")
         if rolled_over:
             print(f"NOTE: {dated_path.name} exists; rolling this batch over to a timestamped file.")
-        print(f"Checked tasks to archive: {checked_count}")
-        print(f"Unchecked tasks remaining: {unchecked_count}")
+        print(f"Checked tasks to archive: {archive_count}")
+        print(f"Tasks remaining: {remaining_count}")
         print("\n--- TODO.md ---")
         print(remaining_text, end="")
         print("\n--- archive ---")
@@ -83,8 +104,10 @@ def main() -> int:
     archive_path.write_text(archive_text, encoding="utf-8")
     todo_path.write_text(remaining_text, encoding="utf-8")
 
-    print(f"Archived checked tasks: {checked_count}")
-    print(f"Unchecked tasks remaining: {unchecked_count}")
+    print(f"Archived checked tasks: {archive_count}")
+    if matched:
+        print(f"Section(s): {', '.join(matched)}")
+    print(f"Tasks remaining: {remaining_count}")
     print(f"Rewrote: {todo_path}")
     if rolled_over:
         print(f"Kept existing archive: {dated_path}")
@@ -201,32 +224,71 @@ def leading_spaces(line: str) -> int:
     return len(line.expandtabs(4)) - len(line.expandtabs(4).lstrip(" "))
 
 
-def count_tasks(node: Node, checked: bool) -> int:
-    total = 1 if node.kind == "task" and node.checked is checked else 0
-    return total + sum(count_tasks(child, checked) for child in node.children)
+def heading_text(node: Node) -> str:
+    return re.sub(r"^#{1,6}\s+", "", node.line).strip()
 
 
-def has_task(node: Node, checked: bool) -> bool:
-    return count_tasks(node, checked) > 0
+def iter_headings(node: Node) -> Iterable[Node]:
+    for child in node.children:
+        if child.kind == "heading":
+            yield child
+        yield from iter_headings(child)
 
 
-def render(node: Node, checked: bool) -> str:
+def heading_matches(node: Node, hint: str) -> bool:
+    return hint.lower() in heading_text(node).lower()
+
+
+def collect_matching_headings(node: Node, hint: Optional[str]) -> list[str]:
+    if hint is None:
+        return []
+    return [heading_text(h) for h in iter_headings(node) if heading_matches(h, hint)]
+
+
+def mark_tasks(node: Node, hint: Optional[str], in_section: bool) -> None:
+    """Mark every task with whether it belongs in the archive output.
+
+    A task is archived when it is checked and within scope. Scope is the whole
+    document when no hint is given, or the subtree of any heading matching the
+    hint otherwise. Once inside a matched section, all descendants stay in scope.
+    """
+    if node.kind == "task":
+        node.archive = bool(node.checked) and in_section
+
+    child_in_section = in_section
+    if node.kind == "heading" and hint is not None and heading_matches(node, hint):
+        child_in_section = True
+
+    for child in node.children:
+        mark_tasks(child, hint, child_in_section)
+
+
+def count_tasks(node: Node, archive: bool) -> int:
+    total = 1 if node.kind == "task" and node.archive is archive else 0
+    return total + sum(count_tasks(child, archive) for child in node.children)
+
+
+def has_task(node: Node, archive: bool) -> bool:
+    return count_tasks(node, archive) > 0
+
+
+def render(node: Node, archive: bool) -> str:
     if node.kind == "root":
-        return "".join(render(child, checked) for child in node.children if has_task(child, checked))
+        return "".join(render(child, archive) for child in node.children if has_task(child, archive))
 
     if node.kind == "heading":
-        if not has_task(node, checked):
+        if not has_task(node, archive):
             return ""
-        return node.line + "".join(render_child(child, checked, parent_is_rendered=True) for child in node.children)
+        return node.line + "".join(render_child(child, archive, parent_is_rendered=True) for child in node.children)
 
     if node.kind == "task":
-        if not has_task(node, checked):
+        if not has_task(node, archive):
             return ""
-        if node.checked is checked:
+        if node.archive is archive:
             first_line = node.line
         else:
             first_line = context_line(node)
-        return first_line + "".join(render_child(child, checked, parent_is_rendered=True) for child in node.children)
+        return first_line + "".join(render_child(child, archive, parent_is_rendered=True) for child in node.children)
 
     if node.kind == "raw":
         return node.line
@@ -234,10 +296,10 @@ def render(node: Node, checked: bool) -> str:
     raise AssertionError(f"unknown node kind: {node.kind}")
 
 
-def render_child(node: Node, checked: bool, parent_is_rendered: bool) -> str:
+def render_child(node: Node, archive: bool, parent_is_rendered: bool) -> str:
     if node.kind == "raw":
         return node.line if parent_is_rendered else ""
-    return render(node, checked)
+    return render(node, archive)
 
 
 def context_line(node: Node) -> str:

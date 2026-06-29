@@ -1,5 +1,5 @@
 ---
-argument-hint: "[path] [--date YYYY-MM-DD|YYYY_MM_DD] [--dry-run] [--force]"
+argument-hint: "[path] [--hint TEXT] [--date YYYY-MM-DD|YYYY_MM_DD] [--dry-run] [--force]"
 disable-model-invocation: false
 name: todo-archive
 user-invocable: true
@@ -13,6 +13,7 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
 ## Arguments
 
 - `path` (optional): Repository root or any path inside the repository. Default to the current directory.
+- `--hint TEXT` (optional): Archive only the section whose heading contains `TEXT` (case-insensitive substring), including its subsections. Without it, archive checked tasks from the whole file. Checked tasks outside the matched section stay in `TODO.md`.
 - `--date YYYY-MM-DD|YYYY_MM_DD` (optional): Archive date. Default to today's local date.
 - `--dry-run` (optional): Preview target paths and rendered content without writing.
 - `--force` (optional): Overwrite the date-only archive in place instead of rolling a same-day re-run over to a timestamped file.
@@ -35,9 +36,9 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
    uv run python scripts/archive_todo.py --root "$repo_root"
    ```
 
-   Pass through `--date`, `--dry-run`, or `--force` when the user requested them.
+   Pass through `--hint`, `--date`, `--dry-run`, or `--force` when the user requested them.
 
-4. Report the rewritten `TODO.md`, the created archive path, and the checked/unchecked task counts. If an archive for the date already exists, the helper rolls the new batch over to `TODO_UNTIL_YYYY_MM_DD_HHMM.md` and keeps the earlier file; report both paths. If the helper reports no checked tasks, treat it as a no-op.
+4. Report the rewritten `TODO.md`, the created archive path, the matched section (when `--hint` was given), and the archived/remaining task counts. If an archive for the date already exists, the helper rolls the new batch over to `TODO_UNTIL_YYYY_MM_DD_HHMM.md` and keeps the earlier file; report both paths. If the helper reports no checked tasks, treat it as a no-op. If `--hint` matches no heading, the helper exits non-zero and lists the available sections; relay them.
 
 5. If useful, inspect only the touched paths:
 
@@ -51,7 +52,8 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
 
 - Reads only `<root>/TODO.md`.
 - Writes checked tasks to `<root>/.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`.
-- Rewrites `<root>/TODO.md` with unchecked tasks.
+- Rewrites `<root>/TODO.md` with the tasks that were not archived.
+- With `--hint`, restricts archiving to the subtree of any heading whose text contains the hint (case-insensitive); checked tasks elsewhere are left in place. Exits non-zero and lists available section headings when nothing matches.
 - Preserves non-task content inside any heading subtree that still has tasks for the output.
 - Drops headings whose subtree has no tasks for the output.
 - Keeps nested parent items as plain bullets when only descendants match the output, avoiding orphaned subtasks without copying the wrong checkbox state.
