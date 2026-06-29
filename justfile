@@ -68,9 +68,8 @@ skill-invocation-fix:
 alias sif := skill-invocation-fix
 
 # Publish staged skills, install into ~/.agents, sync ~/.claude, commit+push there
-[group("sync")]
-[script("bash")]
 [doc("Stage your changes first; commits them (ccc --staged), pushes, installs in ~/.agents, syncs ~/.claude, commits+pushes there")]
+[script("bash")]
 sync:
     set -euo pipefail
 
