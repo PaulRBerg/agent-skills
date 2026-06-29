@@ -10,6 +10,8 @@ description: Use only when explicitly asked to archive/prune/compact/roll over c
 
 Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, then leave only unchecked tasks in `TODO.md`.
 
+`TODO.md` and `.ai/` are conventionally git-ignored, so they are untracked and `git diff` shows nothing for them. Inspect changes against the filesystem, not git.
+
 ## Arguments
 
 - `path` (optional): Repository root or any path inside the repository. Default to the current directory.
@@ -40,10 +42,10 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
 
 4. Report the rewritten `TODO.md`, the created archive path, the matched section (when `--hint` was given), and the archived/remaining task counts. If an archive for the date already exists, the helper rolls the new batch over to `TODO_UNTIL_YYYY_MM_DD_HHMM.md` and keeps the earlier file; report both paths. If the helper reports no checked tasks, treat it as a no-op. If `--hint` matches no heading, the helper exits non-zero and lists the available sections; relay them.
 
-5. If useful, inspect only the touched paths:
+5. If useful, inspect only the touched paths. `TODO.md` and `.ai/` are git-ignored, so use the filesystem rather than `git diff`:
 
    ```sh
-   git diff -- TODO.md .ai/todos/
+   cat TODO.md && ls .ai/todos/
    ```
 
 ## Helper Behavior
