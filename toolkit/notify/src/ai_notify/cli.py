@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 ai-notify CLI - Command-line interface for managing ai-notify.
 """
