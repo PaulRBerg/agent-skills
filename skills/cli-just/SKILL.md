@@ -11,7 +11,7 @@ description: 'Use for just/justfile task automation: create justfiles, write rec
 
 Expert guidance for Just, a command runner with syntax inspired by make. Use this skill for creating justfiles, writing recipes, configuring settings, and implementing task automation workflows.
 
-**Targets just v1.53.0** (latest stable, released 2026-06-16). Features are tagged with the version that introduced them (e.g. `v1.51.0+`); a tag newer than your installed `just --version` means you must upgrade to use it. List features (`set lists`) and other gated capabilities additionally require `set unstable`.
+**Targets just v1.55.0** (latest stable, released 2026-06-29). Features are tagged with the version that introduced them (e.g. `v1.51.0+`); a tag newer than your installed `just --version` means you must upgrade to use it. List features (`set lists`) and other gated capabilities additionally require `set unstable`.
 
 **Key capabilities:**
 
@@ -26,11 +26,13 @@ Expert guidance for Just, a command runner with syntax inspired by make. Use thi
 ### Essential Settings
 
 ```just
+set minimum-version := '1.55.0'   # Error out on older just (v1.55.0+); place at top
 set allow-duplicate-recipes       # Allow recipes to override imported ones
 set allow-duplicate-variables     # Allow variables to override imported ones
 set shell := ["bash", "-euo", "pipefail", "-c"]  # Strict bash with error handling
 set unstable                      # Enable unstable features (user-defined functions, eager keyword)
 set dotenv-load                   # Auto-load .env file
+set dotenv-command := 'sops -d .enc.env'  # Load env from command stdout (v1.54.0+)
 set positional-arguments          # Pass recipe args as $1, $2, etc.
 set lazy                          # Defer evaluation of unused variables (v1.47.0; stable v1.48.0+)
 set no-cd                         # Don't change to justfile directory for any recipe (v1.51.0+)
@@ -41,24 +43,28 @@ set lists                         # Enable list-of-strings values; unstable, req
 
 ### Common Attributes
 
-| Attribute                  | Purpose                                                       |
-| -------------------------- | ------------------------------------------------------------- |
-| `[arg("p", long, ...)]`    | Configure parameter as `--flag` option (v1.46)                |
-| `[arg("p", long, flag)]`   | Valueless flag ⇒ `"true"`/`[]`; needs `set lists` (v1.53+)    |
-| `[arg("p", pattern="…")]`  | Constrain parameter to match regex pattern                    |
-| `[confirm("prompt")]`      | Require user confirmation (expressions OK as of v1.49)        |
-| `[doc("text")]`            | Override recipe documentation                                 |
-| `[env("NAME", "VALUE")]`   | Set env var for this recipe only (v1.47+, expr v1.51)         |
-| `[group("name")]`          | Group recipes in `just --list` output                         |
-| `[macos]`                  | Restrict a recipe to macOS                                    |
-| `[no-cd]`                  | Don't change to justfile directory                            |
-| `[parallel]`               | Run direct dependencies concurrently                          |
-| `[positional-arguments]`   | Enable positional args for this recipe only                   |
-| `[private]`                | Hide from `just --list` (same as `_` prefix)                  |
-| `[script]`                 | Execute recipe as single script block                         |
-| `[script("interpreter")]`  | Use specific interpreter (bash, python, etc.)                 |
-| `[shell]`                  | Force linewise shell mode under `set default-script` (v1.52+) |
-| `[working-directory: "…"]` | Run from given path (expressions OK as of v1.51)              |
+| Attribute                    | Purpose                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `[arg("p", long, ...)]`      | Configure parameter as `--flag` option (v1.46)                              |
+| `[arg("p", short)]`          | Short option; bare `short` ⇒ first char of name (v1.55+)                    |
+| `[arg("p", long, flag)]`     | Valueless flag ⇒ `"true"`/`[]`; needs `set lists` (v1.53+)                  |
+| `[arg("p", multiple)]`       | Repeatable option ⇒ list; needs `set lists` (v1.55+)                        |
+| `[arg("p", pattern="…")]`    | Constrain parameter to match regex pattern                                  |
+| `[cache(inputs=, outputs=)]` | Cache script-recipe runs; unstable, script-only (v1.54+)                    |
+| `[confirm("prompt")]`        | Require user confirmation (expressions OK as of v1.49)                      |
+| `[continue]`                 | Continue if child exits OK after a caught signal (default `SIGINT`; v1.54+) |
+| `[doc("text")]`              | Override recipe documentation                                               |
+| `[env("NAME", "VALUE")]`     | Set env var for this recipe only (v1.47+, expr v1.51)                       |
+| `[group("name")]`            | Group recipes in `just --list` output                                       |
+| `[macos]`                    | Restrict a recipe to macOS                                                  |
+| `[no-cd]`                    | Don't change to justfile directory                                          |
+| `[parallel]`                 | Run direct dependencies concurrently                                        |
+| `[positional-arguments]`     | Enable positional args for this recipe only                                 |
+| `[private]`                  | Hide from `just --list` (same as `_` prefix)                                |
+| `[script]`                   | Execute recipe as single script block                                       |
+| `[script("interpreter")]`    | Use specific interpreter (bash, python, etc.)                               |
+| `[shell]`                    | Force linewise shell mode under `set default-script` (v1.52+)               |
+| `[working-directory: "…"]`   | Run from given path (expressions OK as of v1.51)                            |
 
 ### Recipe Argument Flags (v1.46.0+)
 
@@ -130,6 +136,8 @@ Usage:
     echo -e '{{ BOLD + CYAN }}Building...{{ NORMAL }}'
 ```
 
+For dynamic styling — named/256/24-bit colors, `fg:`/`bg:` variants, and `stdout`/`stderr` stream gates — use the [`style()` function](references/syntax.md#style-function) (v1.55.0+) instead of these fixed constants.
+
 ### Key Functions
 
 ```just
@@ -138,6 +146,9 @@ jq := require("jq")
 
 # Get environment variable with default
 log_level := env("LOG_LEVEL", "info")
+
+# just version string (v1.55.0+)
+ver := just_version()                # e.g. "1.55.0"
 
 # Get justfile directory path
 root := justfile_dir()
@@ -214,6 +225,8 @@ Booleans are reformed under `set lists`: canonical true is `"true"`, canonical f
 
 When designing recipes that use status reporting, check/write semantics, or alias conventions, see [references/patterns.md](references/patterns.md).
 
+To skip re-running expensive script recipes, see Cached Recipes (`[cache]`, unstable, v1.54.0+) in [references/recipes.md](references/recipes.md#cached-recipes-unstable-v1540).
+
 ## Inline Scripts
 
 When writing recipes that need shell scripts (script attribute or shebang style), see [references/inline-scripts.md](references/inline-scripts.md). On stock macOS, `bash` resolves to `/bin/bash` 3.2 — see that file's Bash Version Pitfalls section before using Bash-4+ features.
@@ -238,6 +251,8 @@ Load submodule (requires `set unstable`):
 mod foo                   # Loads foo.just or foo/justfile
 mod bar "path/to/bar"     # Custom path
 mod? optional             # Optional module
+
+alias f := foo            # Alias a module (v1.55.0+); `just f build` runs `foo::build`
 
 # Call module recipes
 just foo::build

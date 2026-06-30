@@ -213,6 +213,39 @@ setup:
 
 Here `setup` runs once thanks to transitive dedup, then the three `_check` invocations run concurrently.
 
+### Continuing After Signals (v1.54.0+)
+
+`[continue]` makes `just` keep executing after it catches a fatal signal, as long as the child process exits successfully. With no arguments it handles `SIGINT` (`ctrl-c`), leaving `SIGQUIT` (`ctrl-\`) free to abort:
+
+```just
+[continue]
+test: && cleanup
+    python3 main.py
+
+cleanup:
+    echo cleanup
+```
+
+If `main.py` traps `SIGINT` and exits `0`, `cleanup` still runs and `just` exits successfully. Pass explicit signals to handle others — `[continue("SIGHUP", "SIGINT")]` accepts any of `"SIGHUP"`, `"SIGINT"`, and `"SIGQUIT"`.
+
+### Cached Recipes (unstable, v1.54.0+)
+
+`[cache]` skips a recipe invocation when a matching cache entry already exists. It is **unstable** (`set unstable`) and may be used on **script recipes only**:
+
+```just
+set unstable
+set lists
+
+[script]
+[cache(inputs = ["lib.c", "main.c"], outputs = ["main"], extra = `cc --version`)]
+build:
+    cc lib.c main.c -o main
+```
+
+The cache key covers input-file contents (BLAKE3-hashed), the recipe body, environment, positional args, working directory, and `extra`; `outputs` are **not** part of the key, but every output file must exist for a run to be skipped. `inputs`/`outputs`/`extra` are expressions evaluated with recipe args in scope — a lone path may be a bare string (`inputs = "image.png"`), while list literals require `set lists`.
+
+**Caveat:** caching is inherently fragile — the key captures none of wall-clock time, system binaries, OS version, the network, or databases. The cache lives in a `.justcache/` directory beside the justfile; **do not commit it**. Bypass a run with `--no-cache`; clear entries with `just --clean [RECIPE]`.
+
 ### Documentation
 
 ```just
@@ -328,6 +361,16 @@ run verbose="false":
 # Usage: just run -v true
 ```
 
+Bare `short` (no value) defaults to the first character of the parameter name (v1.55.0+):
+
+```just
+[arg("bar", short)]
+foo bar:
+    echo {{ bar }}
+
+# Usage: just foo -b hello
+```
+
 ### Combined Long and Short
 
 A parameter can accept both styles:
@@ -369,6 +412,32 @@ build release:
 # Usage:
 #   just build           → release=[] (falsy)
 #   just build --release → release="true"
+```
+
+### Repeatable Options (v1.55.0+)
+
+A variadic `*`/`+` parameter declared as an option becomes repeatable — each occurrence contributes one value (no `set lists` needed; the values space-join in interpolation as usual):
+
+```just
+[arg("file", long)]
+backup +file:
+    scp {{ file }} me@server.com:
+
+# Usage: just backup --file FAQ.md --file GRAMMAR.md
+#   → scp FAQ.md GRAMMAR.md me@server.com:
+```
+
+`+` options must be passed at least once; `*` options may be omitted. For a non-variadic parameter, `[arg(multiple)]` instead collects repeats into a list (requires `set unstable` + `set lists`); combined with `flag` or `value=VALUE`, the fixed value repeats once per occurrence:
+
+```just
+set unstable
+set lists
+
+[arg("file", long, multiple)]
+backup file:
+    scp {{ file }} me@server.com:
+
+# Usage: just backup --file FAQ.md --file GRAMMAR.md
 ```
 
 ### Help Strings
@@ -431,17 +500,31 @@ info flag:
 #   just info --foo       → error: argument doesn't match pattern
 ```
 
+As of v1.55.0, `pattern` may also be an expression or a **list** — the argument is accepted if it matches any element (an empty list accepts anything). The list form is a list literal, so it requires `set unstable` + `set lists` (the expression form does not):
+
+```just
+set unstable
+set lists
+
+[arg('flag', pattern=['--help', '--version'])]
+info flag:
+    just {{ flag }}
+```
+
+Likewise `help` may be an expression or list (joined with spaces), and a flag's `value` may be an expression (v1.54.0+).
+
 ### Arg Attribute Syntax Summary
 
-| Option            | Description                                                              |
-| ----------------- | ------------------------------------------------------------------------ |
-| `long`            | Accept `--param` (defaults to name)                                      |
-| `long="name"`     | Accept `--name`                                                          |
-| `short="x"`       | Accept `-x`                                                              |
-| `value="val"`     | Set this value when flag present (stable; v1.46.0+)                      |
-| `flag`            | Valueless flag ⇒ `"true"`/`[]`; needs `set lists`, no default (v1.53.0+) |
-| `help="text"`     | Description for `just --usage`                                           |
-| `pattern="regex"` | Constrain argument to match regex                                        |
+| Option            | Description                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| `long`            | Accept `--param` (defaults to name)                                                                      |
+| `long="name"`     | Accept `--name`                                                                                          |
+| `short[="x"]`     | Accept `-x`; bare `short` ⇒ first char of name (v1.55.0+)                                                |
+| `multiple`        | Repeatable option/flag ⇒ collects a list; needs `set lists` (v1.55.0+)                                   |
+| `value="val"`     | Set this value when flag present (stable, v1.46.0+; expression v1.54.0+)                                 |
+| `flag`            | Valueless flag ⇒ `"true"`/`[]`; needs `set lists`, no default (v1.53.0+)                                 |
+| `help="text"`     | Description for `just --usage`; may be an expression or list (v1.55.0+)                                  |
+| `pattern="regex"` | Constrain argument to match regex; may be an expression, or a match-any list with `set lists` (v1.55.0+) |
 
 ## Recipe Dependencies
 

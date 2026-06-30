@@ -10,34 +10,36 @@ Settings configure global behavior and must appear at the top of the justfile.
 
 Enable with `set NAME` or `set NAME := true`:
 
-| Setting                     | Description                                                                       |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `allow-duplicate-recipes`   | Allow later recipes to override earlier ones                                      |
-| `allow-duplicate-variables` | Allow later variables to override earlier ones                                    |
-| `default-list`              | List recipes instead of running the default recipe (v1.52.0+)                     |
-| `default-script`            | Treat unannotated recipes as script recipes (v1.52.0+)                            |
-| `dotenv-load`               | Load `.env` file automatically                                                    |
-| `dotenv-required`           | Error if `.env` file is missing                                                   |
-| `export`                    | Export all variables as environment variables                                     |
-| `fallback`                  | Search parent directories for justfile                                            |
-| `ignore-comments`           | Don't print comments in recipe listings                                           |
-| `lazy`                      | Defer evaluation of unused variables (v1.47.0; stable v1.48.0+)                   |
-| `lists`                     | Enable list-of-strings values (unstable, requires `set unstable`; v1.53.0+)       |
-| `no-cd`                     | Don't change to justfile directory for any recipe (v1.51.0+)                      |
-| `positional-arguments`      | Pass recipe arguments as $1, $2, etc.                                             |
-| `quiet`                     | Don't echo recipe lines                                                           |
-| `unstable`                  | Enable unstable features (user-defined functions, `eager` keyword, `lists`, etc.) |
+| Setting                     | Description                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `allow-duplicate-recipes`   | Allow later recipes to override earlier ones                                                 |
+| `allow-duplicate-variables` | Allow later variables to override earlier ones                                               |
+| `default-list`              | List recipes instead of running the default recipe (v1.52.0+)                                |
+| `default-script`            | Treat unannotated recipes as script recipes (v1.52.0+)                                       |
+| `dotenv-load`               | Load `.env` file automatically                                                               |
+| `dotenv-required`           | Error if `.env` file is missing                                                              |
+| `export`                    | Export all variables as environment variables                                                |
+| `fallback`                  | Search parent directories for justfile                                                       |
+| `ignore-comments`           | Don't print comments in recipe listings                                                      |
+| `lazy`                      | Defer evaluation of unused variables (v1.47.0; stable v1.48.0+)                              |
+| `lists`                     | Enable list-of-strings values (unstable, requires `set unstable`; v1.53.0+)                  |
+| `no-cd`                     | Don't change to justfile directory for any recipe (v1.51.0+)                                 |
+| `positional-arguments`      | Pass recipe arguments as $1, $2, etc.                                                        |
+| `quiet`                     | Don't echo recipe lines                                                                      |
+| `unstable`                  | Enable unstable features (user-defined functions, `eager` keyword, `lists`, `[cache]`, etc.) |
 
 ### Value Settings
 
-| Setting              | Example                              | Description                                                              |
-| -------------------- | ------------------------------------ | ------------------------------------------------------------------------ |
-| `shell`              | `["bash", "-euo", "pipefail", "-c"]` | Shell and arguments for linewise recipes                                 |
-| `script-interpreter` | `["bash", "-euo", "pipefail"]`       | Interpreter for empty `[script]` recipes                                 |
-| `dotenv-filename`    | `".env.local"`                       | Custom dotenv filename; accepts a list to load multiple files (v1.53.0+) |
-| `dotenv-path`        | `"config/.env"`                      | Custom dotenv path; accepts a list to load multiple files (v1.53.0+)     |
-| `tempdir`            | `"/tmp/just"`                        | Temporary file directory                                                 |
-| `working-directory`  | `"src"`                              | Default working directory                                                |
+| Setting              | Example                              | Description                                                                    |
+| -------------------- | ------------------------------------ | ------------------------------------------------------------------------------ |
+| `shell`              | `["bash", "-euo", "pipefail", "-c"]` | Shell and arguments for linewise recipes                                       |
+| `script-interpreter` | `["bash", "-euo", "pipefail"]`       | Interpreter for empty `[script]` recipes                                       |
+| `dotenv-filename`    | `".env.local"`                       | Custom dotenv filename; accepts a list to load multiple files (v1.53.0+)       |
+| `dotenv-path`        | `"config/.env"`                      | Custom dotenv path; accepts a list to load multiple files (v1.53.0+)           |
+| `dotenv-command`     | `'sops -d .enc.env'`                 | Load env from a command's stdout; repeatable via `--dotenv-command` (v1.54.0+) |
+| `tempdir`            | `"/tmp/just"`                        | Temporary file directory                                                       |
+| `working-directory`  | `"src"`                              | Default working directory                                                      |
+| `minimum-version`    | `'1.55.0'`                           | Error if `just` is older than this `MAJOR.MINOR.PATCH` (v1.55.0+)              |
 
 **Const expressions in settings (v1.46.0+):**
 
@@ -68,6 +70,16 @@ set unstable
 - `-c`: Execute following string as command
 
 Note: `bash` here resolves via `PATH`. In agent sandboxes and stock macOS environments this can be `/bin/bash` 3.2, even when Homebrew Bash exists at `/opt/homebrew/bin/bash`; see [inline-scripts.md > Bash Version Pitfalls](inline-scripts.md#bash-version-pitfalls-macos) before relying on Bash-4+ features in recipe bodies.
+
+### Requiring a Minimum Version (v1.55.0+)
+
+`set minimum-version` makes `just` error out if its own version is older than the given `MAJOR.MINOR.PATCH`. Place it at the very top of the justfile, before any feature it guards — the check runs in the parser, so lexer-level incompatibilities still surface as raw errors.
+
+```just
+set minimum-version := '1.55.0'
+```
+
+For runtime branching rather than a hard gate, read the version with `just_version()` (v1.55.0+), which returns the version string, e.g. `"1.55.0"`.
 
 ### Lazy Evaluation (v1.47.0; stable v1.48.0+)
 
@@ -260,6 +272,14 @@ mod internal
 
 [doc("Development tools")]
 mod dev
+```
+
+**Module aliases (v1.55.0+):** an `alias` may target a module, not just a recipe. `just f build` then runs `frontend::build`:
+
+```just
+mod frontend
+
+alias f := frontend
 ```
 
 As of v1.52.0, aliases and recipes that depend on an absent optional module are disabled with clearer errors instead of
