@@ -39,9 +39,9 @@ When the user mentions bridging, bridge tx, cross-chain swap, or a bridge provid
 
 Then route to the bridge reference that matches the prompt or evidence:
 
-- **Bungee / Socket / Bungee Auto:** read `./references/bungee-api.md`.
-- **LayerZero / Stargate / OFT / CCTP / Aori / Value Transfer API / LayerZeroScan:** read `./references/layerzero-bridging.md`.
-- **LI.FI / LiFi / li.quest / LI.FI Explorer:** read `./references/lifi-bridging.md`.
+- **Bungee / Socket / Bungee Auto:** read `./references/bridge-bungee.md`.
+- **LayerZero / Stargate / OFT / CCTP / Aori / Value Transfer API / LayerZeroScan:** read `./references/bridge-layerzero.md`.
+- **LI.FI / LiFi / li.quest / LI.FI Explorer:** read `./references/bridge-lifi.md`.
 
 Use bridge APIs as read-only enrichment sources alongside Etherscan, Blockscout, explorers, and RPC receipts. Do not treat bridge APIs as authoritative for on-chain execution by themselves; verify submitted transactions and terminal outcomes with explorer/RPC data whenever possible. Returned route steps, calldata, `userSteps`, `transactionRequest`, or signatures are for inspection only in this skill. Do not sign messages, submit signatures, execute user steps, or broadcast bridge transactions.
 
