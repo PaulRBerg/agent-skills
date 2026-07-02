@@ -25,7 +25,7 @@ Before choosing commands, check whether the target project has either:
 - `bun.lock` or `bun.lockb` plus `bunfig.toml` with `[install].minimumReleaseAge`
 - pnpm or Yarn minimum-age settings
 
-If present, follow [Minimum Release Age Mode](#minimum-release-age-mode).
+If present, read [Minimum Release Age Mode](references/conditional-workflows.md#minimum-release-age-mode) before scanning.
 
 The scan command in [Step 1](#step-1-scan-for-updates) also verifies that taze is installed.
 
@@ -41,32 +41,6 @@ Every `<skill-dir>/scripts/run-taze.sh` invocation below uses this form. Run the
 
 - Global install: `npm install -g taze`
 - One-time: `bunx taze`
-
-## Minimum Release Age Mode
-
-Use this mode for projects that configure a package-manager minimum-age policy.
-
-Taze calls this `maturityPeriod`:
-
-- `--maturity-period [days]` filters out package versions newer than the given number of days
-- `--maturity-period-exclude <packages>` excludes packages from that filter, when supported by the installed Taze version
-
-```bash
-# 7-day cooldown
-taze major -r --maturity-period 7
-```
-
-For Bun `minimumReleaseAge`, convert seconds to whole days using a ceiling division. Example: `604800` seconds becomes `--maturity-period 7`. If the configured seconds are not a whole number of days, round up so Taze is not weaker than the package manager policy.
-
-Taze v19.13.0+ auto-infers maturity periods from pnpm and Yarn workspace config, but not from Bun `bunfig.toml`. For Bun projects, pass `--maturity-period` explicitly.
-
-When the package manager config has an exclude list, pass matching Taze excludes if available:
-
-```bash
-taze major -r --maturity-period 7 --maturity-period-exclude react,webpack
-```
-
-Append the same maturity flags to every Taze scan and write command in the workflow. After Taze writes manifests, run the project package manager install as usual; the package manager remains the final enforcement layer for direct and transitive resolution.
 
 ## Update Workflow
 
@@ -169,36 +143,7 @@ The helper keeps the same monorepo and maturity-period flags used by the scan. I
 
 ### Step 6: Update Bun Catalogs
 
-After applying all updates, check the **root** `package.json` for Bun workspace catalogs. Bun monorepos can centralize dependency versions using `catalog` and `catalogs` fields inside the `workspaces` object:
-
-```json
-{
-  "workspaces": {
-    "packages": ["packages/*"],
-    "catalog": {
-      "react": "^19.0.0"
-    },
-    "catalogs": {
-      "testing": {
-        "jest": "^30.0.0"
-      }
-    }
-  }
-}
-```
-
-Workspace packages reference these with `"react": "catalog:"` (default catalog) or `"jest": "catalog:testing"` (named catalog).
-
-**Skip this step** if neither `workspaces.catalog` nor `workspaces.catalogs` exists in the root `package.json`.
-
-For each package that was updated in Step 5:
-
-1. Check if it appears in `workspaces.catalog` — if so, update the version there
-2. Check each named catalog in `workspaces.catalogs` — if the package appears, update the version there
-
-Preserve the existing range prefix (`^`, `~`, or none) from the catalog entry. For example, if the catalog has `"react": "^19.0.0"` and taze bumped react to `19.1.0`, update the catalog to `"react": "^19.1.0"`.
-
-Use `Edit` to apply the version changes directly to the root `package.json`.
+Check the **root** `package.json` for Bun workspace catalogs (`workspaces.catalog` / `workspaces.catalogs`). **Skip this step** if neither exists. Otherwise read [Update Bun Catalogs](references/conditional-workflows.md#update-bun-catalogs) and update matching catalog entries for each package updated in Step 5.
 
 ### Step 7: Install Dependencies
 
@@ -216,7 +161,7 @@ eslint       ^8.56.0  →  ^8.57.0   (patch)
 
 The rightmost column indicates update type (major/minor/patch).
 
-Packages shown with `--include-locked` that have no `^` or `~` are fixed versions—skip these entirely.
+Packages shown with `--include-locked` that have no `^` or `~` are fixed versions (see [Identifying fixed versions](#dry-run-mode)).
 
 ## Script Reference
 
@@ -232,7 +177,6 @@ Supported script arguments:
 
 ## Important Notes
 
-- Fixed-version dependencies (no `^` or `~`) indicate intentional pinning—never modify these
 - Non-semver protocol specifiers (`workspace:`, `file:`, `link:`, `github:`, tarball URLs) are not versionable—taze never reports them as updates and leaves them untouched, so they never enter the categorization, dry-run table, or `--include` write list
 - MAJOR updates may contain breaking changes—prompt the user unless the package is explicitly auto-approved
 - MINOR/PATCH updates are backward-compatible by semver convention—safe to auto-apply

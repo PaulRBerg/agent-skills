@@ -21,11 +21,8 @@ Parse `$ARGUMENTS` for optional flags:
 
 Defaults:
 
-- Subject: infer a conventional-commit subject from the squashed changes themselves; do not default to `chore`
-- Base detection order:
-  1. `refs/remotes/origin/HEAD`
-  2. `git remote show origin`
-  3. `main`, `master`, `trunk`
+- Subject: infer a conventional-commit subject from the squashed changes themselves (see step 6's chore rule)
+- Base detection order: see [step 2](#2-resolve-the-base-branch)
 
 ## Workflow
 
@@ -166,20 +163,3 @@ After the commit succeeds:
 git commit -F "$message_file"
 git push --force-with-lease
 ```
-
-## Behavior
-
-- Stop immediately if not inside a git repository.
-- Stop immediately if the current branch is the default branch.
-- Stop if the working tree is dirty, to avoid mixing unrelated local edits.
-- Inspect the commits being squashed before rewriting history.
-- Reset softly to the merge-base with the default branch.
-- Commit staged net changes as a single commit.
-- Generate a semantic commit message grounded in the net diff and informed by all commits being squashed.
-- Never use a fixed fallback like `chore: squash <branch> net changes` unless the user explicitly provided `--subject`.
-
-## Output
-
-- Prints how many commits were squashed.
-- Prints the resolved default branch reference.
-- Prints a reminder to force-push with lease when the branch already exists on remote.

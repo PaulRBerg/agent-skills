@@ -8,10 +8,6 @@ description: 'Use for targeted EVM chain, account, transaction, RPC, explorer, a
 
 # EVM Atlas
 
-Targeted EVM chain atlas (chain name, chain ID, public RPCs, native currency symbol, default block explorer URL, RouteMesh support) **and** a router for reading on-chain data: resolve the chain, then dispatch balance, token, transfer, transaction, and first-funding queries to Etherscan (preferred) or Blockscout (fallback). For bridge transactions and cross-chain swaps, enrich explorer/RPC verification with Bungee, LayerZero, or LI.FI data only when the relevant chains are target chains.
-
-Use this skill to resolve chain metadata before reading from an RPC, sending transactions, calling contracts, constructing chain-specific RPC URLs, or building explorer links to addresses, transactions, or blocks — and to query on-chain account data once the chain is resolved (see [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing)). Also use it when the user mentions bridging, bridge tx, cross-chain swap, Bungee, LayerZero, LI.FI, Socket, Stargate, OFT, CCTP, or Aori, or when a transaction is inferred to be bridge-related.
-
 Match chains by displayed name or numeric chain ID. `./references/target-mainnets.json` is the skill's authoritative scope. If the requested chain is not listed there, do not use Etherscan, Blockscout, Bungee, LayerZero, LI.FI, RouteMesh, Chainlist, web search, or public RPCs to work around the scope. Ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
 
 Also normalize common code aliases from `./references/chain-aliases.json` to their target mainnet rows.
@@ -24,18 +20,18 @@ If the prompt names a specific target chain, use [Querying On-Chain Data (Routin
 
 ## Querying On-Chain Data (Routing)
 
-To read account data — native balance, token holdings, ERC-20/721/1155 transfers, transaction history, or first-funding — resolve the chain, then dispatch to the right explorer API. Do not default to Ethereum; infer the chain from the prompt (explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, target-chain aliases). If ambiguous, ask. If the resolved chain is not a target chain, ask for a feature request instead of querying.
+To read account data — native balance, token holdings, ERC-20/721/1155 transfers, transaction history, or first-funding — resolve the chain, then dispatch to the right explorer API. Do not default to Ethereum; infer the chain from the prompt (explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, target-chain aliases). If ambiguous, ask.
 
 1. **Resolve the chain** — map the name or alias to a chain ID via `./references/target-mainnets.json` and `./references/chain-aliases.json`.
 2. **Etherscan (preferred)** — if the chain ID is listed in `./references/etherscan-chains.md`, follow `./references/etherscan-api.md` (unified API V2, needs `$ETHERSCAN_API_KEY`).
 3. **Blockscout (fallback)** — for target chains not served by Etherscan, or paid Etherscan chains on a free Etherscan plan, follow `./references/blockscout-api.md`.
-4. **Neither** — if the target chain is in neither registry, query the target chain's public RPC directly over JSON-RPC (`cast` from the `cli-cast` skill, or `curl`). If the chain is not a target chain, ask for a feature request instead of querying.
+4. **Neither** — if the target chain is in neither registry, query the target chain's public RPC directly over JSON-RPC (`cast` from the `cli-cast` skill, or `curl`).
 
 **Paid-chain auto-fallback.** Base (`8453`), Optimism (`10`), Avalanche (`43114`), and BNB Chain (`56`) are Etherscan-listed target chains, but their data endpoints require a paid Etherscan plan. If the target is one of these **and** `./scripts/etherscan-detect-plan.sh` reports `paid_chains=false` (free tier), route to Blockscout instead. Etherscan stays the default for every other Etherscan-listed target chain.
 
 ## Bridge Data Enrichment
 
-When the user mentions bridging, bridge tx, cross-chain swap, or a bridge provider, or when a transaction looks bridge-related from logs, counterparties, calldata, or token movement, first confirm the known origin and destination chains are target chains. If either known chain is outside `./references/target-mainnets.json`, ask for a feature request instead of continuing.
+When the user mentions bridging, bridge tx, cross-chain swap, or a bridge provider, or when a transaction looks bridge-related from logs, counterparties, calldata, or token movement, first confirm the known origin and destination chains are target chains.
 
 Then route to the bridge reference that matches the prompt or evidence:
 
@@ -63,7 +59,7 @@ Replace `CHAIN_ID` with the numeric chain ID and `ROUTEMESH_API_KEY` with the va
 
 Public RPCs are best-effort. Before relying on one for data fetches or contract calls, verify it with `eth_chainId`. If the primary endpoint fails, try the fallback endpoints for that chain from `./references/target-fallback-rpcs.json` in order. If a chain has no fallback row, only the primary public RPC is listed.
 
-Only use RPCs for target chains. For any chain not in `./references/target-mainnets.json`, ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
+Only use RPCs for target chains.
 
 ## Explorer URLs
 

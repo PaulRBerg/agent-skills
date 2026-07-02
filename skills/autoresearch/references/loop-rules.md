@@ -27,16 +27,7 @@
 
 ## Confidence Score Interpretation
 
-After 3+ experiments, the confidence score compares the best improvement to the session noise floor using Median Absolute Deviation (MAD).
-
-| Score    | Meaning                      | Action                                               |
-| -------- | ---------------------------- | ---------------------------------------------------- |
-| >= 2.0x  | Improvement is likely real   | Keep with confidence                                 |
-| 1.0-2.0x | Above noise but marginal     | Keep, but note it's marginal                         |
-| < 1.0x   | Within noise                 | Re-run the same experiment to confirm before keeping |
-| null     | Insufficient data (\<3 runs) | Keep/discard based on metric alone                   |
-
-The score is advisory — it never auto-discards. Use it to decide whether to re-run for confirmation.
+After 3+ experiments, the confidence score compares the best improvement to the session noise floor using Median Absolute Deviation (MAD) — see SKILL.md step 10 for the primary thresholds. Below 3 runs the score is `null`; keep/discard based on the metric alone. The score is advisory — it never auto-discards. Use it to decide whether to re-run for confirmation.
 
 ## Crash Handling
 
@@ -68,17 +59,6 @@ If you've reverted the same category of change 3+ times, stop trying that approa
 - Repeatedly hitting the same OOM/crash.
 
 When thrashing, step back and try something structurally different.
-
-## Resume Protocol
-
-When resuming from a context reset or new conversation:
-
-1. Read `autoresearch.md` — this has the full session context.
-2. Read `autoresearch.jsonl` — reconstruct run count, best metric, what's been tried.
-3. Read `git log --oneline -20` — see recent commits and their status.
-4. Check `autoresearch.ideas.md` — prune stale entries, queue promising ones.
-5. Do NOT re-run the baseline. Continue from the current best.
-6. Update `autoresearch.md` "What's Been Tried" if the previous agent left it stale.
 
 ## Ideas Backlog Management
 

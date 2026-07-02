@@ -185,13 +185,11 @@ When `autoresearch.md` exists in the working directory:
 
 ## Ideas Backlog
 
-When you discover complex but promising optimizations you won't pursue right now, append them as bullets to `autoresearch.ideas.md`. Don't let good ideas get lost.
-
-On resume, check this file — prune stale/tried entries, experiment with the rest. When all paths are exhausted, delete the file and write a final summary to `autoresearch.md`.
+Append promising-but-complex ideas to `autoresearch.ideas.md` as bullets rather than losing them. Read [Ideas Backlog Management](references/loop-rules.md#ideas-backlog-management) for when to add, prune, or delete entries.
 
 ## Loop Rules
 
-See `references/loop-rules.md` for the full reference. Key rules:
+Read [Loop Rules](references/loop-rules.md) when a keep/discard call is ambiguous, you're stuck, or thrashing on the same idea. Key rules used every run:
 
 - **Primary metric is king.** Improved → keep. Worse/equal → discard.
 - **Simpler is better.** Remove code for equal perf = keep. Ugly complexity for tiny gain = discard.

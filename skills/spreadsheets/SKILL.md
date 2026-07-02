@@ -12,7 +12,7 @@ Opinionated tabular-data handling for macOS. TSV/CSV is the primary format; `.xl
 
 ## Tool Selection
 
-`scripts/peek.py`, `scripts/profile.py`, and `scripts/recalc.py` are bundled with this skill. Resolve them relative to this `SKILL.md`'s directory, not the user's current project. They are not supposed to exist in the target repo.
+`scripts/peek.py`, `scripts/profile.py`, and `scripts/recalc.py` are bundled with this skill. Resolve them relative to this `SKILL.md`'s directory, not the user's current project.
 
 | Job                                                          | Use                                                 |
 | ------------------------------------------------------------ | --------------------------------------------------- |
@@ -41,11 +41,11 @@ Read [references/recipes.md](references/recipes.md) for common exact-decimal tra
 
 ## Inspect
 
-`peek.py` is at `scripts/peek.py` inside this skill directory, beside this `SKILL.md`. In normal installed-skill use, that means:
+`peek.py` is at `scripts/peek.py` inside this skill directory. In normal installed-skill use, that means:
 
 - `~/.agents/skills/spreadsheets/scripts/peek.py`
 
-It is not a project-local helper and does not need to be installed in the repo being edited. If your current directory is the skill directory, run:
+If your current directory is the skill directory, run:
 
 ```sh
 uv run scripts/peek.py <file> [--rows N] [--strict] [--house] [--expect-like before.peek.json]

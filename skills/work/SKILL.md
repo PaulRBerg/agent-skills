@@ -46,8 +46,8 @@ Execute the task directly without spawning subagents.
 3. **Verify**: Run the narrowest useful checks:
    - Formatter/linter on touched files.
    - Targeted tests for touched modules.
-   - Type check when relevant.
-   - If fast checks pass, run broader checks only when risk warrants it.
+   - Type check when the touched files are in a typed language with a configured checker.
+   - Run broader checks (full test suite, lint, typecheck) only when the change touches shared contracts, public APIs, or cross-module boundaries.
 4. Proceed to Step 5 (Polish).
 
 ### 4) Implement (Complex Path)

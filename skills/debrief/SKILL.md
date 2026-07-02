@@ -3,12 +3,12 @@ argument-hint: '[<slug>] [--md]'
 disable-model-invocation: false
 name: debrief
 user-invocable: true
-description: "Use for debriefs or saved findings/reports from the current task. Creates `.ai/debriefs/<slug>/index.html`; `--md` writes `index.md` instead."
+description: "Use for debriefs or saved findings/reports from the current task."
 ---
 
 # Debrief
 
-Persist the current task's findings as a self-contained, interactive HTML debrief at `./.ai/debriefs/<slug>/index.html`. Pick a slug from the user's task, build the page using the [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill's conventions, and pre-populate it with concrete findings drawn from the transcript. Pass `--md` to emit a plain Markdown report at `./.ai/debriefs/<slug>/index.md` instead; Markdown mode does not require the `playground` skill.
+Persist the current task's findings as an interactive HTML debrief at `./.ai/debriefs/<slug>/index.html`. Pick a slug from the user's task, build the page using the [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill's conventions, and pre-populate it with concrete findings drawn from the transcript. Pass `--md` to emit a plain Markdown report at `./.ai/debriefs/<slug>/index.md` instead; Markdown mode does not require the `playground` skill.
 
 ## Arguments
 
@@ -66,6 +66,8 @@ Read `$PLAYGROUND_DIR/SKILL.md`, then load **one** template under `$PLAYGROUND_D
 
 Read only the chosen template — don't load all six. If nothing fits cleanly, pick the closest and adapt; do not invent a new template.
 
+**Both formats:** pre-populate with concrete findings from the transcript — real paths, line numbers, severities, snippets, metrics, suggestions. Not lorem ipsum. Not placeholders. If the transcript has no findings, ask the user for the source material before writing.
+
 ### 4a. Build the debrief — HTML
 
 Write a single HTML file to `$DEBRIEF_PATH` that satisfies playground core requirements:
@@ -75,7 +77,6 @@ Write a single HTML file to `$DEBRIEF_PATH` that satisfies playground core requi
 - Prompt output at the bottom — natural language, mentions only non-default choices, with a "Copy" button and brief "Copied!" feedback.
 - Sensible defaults plus 3-5 named presets that snap controls to a cohesive combination.
 - System font for UI, monospace for code/values.
-- **Pre-populate with the actual findings from the transcript** — concrete file paths, line numbers, severities, metrics, suggestions, code snippets. Not lorem ipsum. Not placeholders. If the transcript has no findings, ask the user for the source material before writing.
 
 For larger payloads, embed findings as a JS array literal inside one inline `<script>` at the top of the file.
 
@@ -108,7 +109,6 @@ Write a single Markdown file to `$DEBRIEF_PATH`. Recommended skeleton:
 
 Rules:
 
-- Pre-populate with concrete findings from the transcript — real paths, line numbers, severities, snippets. No placeholders, no lorem ipsum. If the transcript has no findings, ask the user before writing.
 - Keep it terse: one H3 per finding, fenced code only when the exact text matters.
 - No HTML, no embedded scripts, no inline assets. Adjacent files (images, data) may live alongside in `$DEBRIEFS_DIR/` if needed.
 
@@ -135,6 +135,5 @@ With `--md`, the output is instead a plain Markdown report at `./.ai/debriefs/<s
 ## Notes
 
 - Write only under `./.ai/debriefs/<slug>/`. Never write elsewhere.
-- The HTML must be self-contained — no external CSS, JS, fonts, or images.
 - Re-run with a different slug to keep parallel debriefs.
 - Suggest the user add `.ai/debriefs/` to `.gitignore` if debriefs shouldn't be committed.
