@@ -3,7 +3,7 @@ argument-hint: '<skill-invocation> [--runs <n>]'
 disable-model-invocation: true
 name: loop-skill
 user-invocable: true
-description: 'Explicit-only meta skill for running another agent skill repeatedly, defaulting to 3 iterations, with one final net report.'
+description: 'Run another agent skill repeatedly (default 3 iterations), then report the net result once.'
 ---
 
 # Loop Skill

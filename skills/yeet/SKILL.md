@@ -4,7 +4,7 @@ disable-model-invocation: false
 effort: high
 name: yeet
 user-invocable: true
-description: 'Use for GitHub PR/issue/discussion workflows: create/update PRs or issues, post comments, start discussions; triggers include create/open PR, file/update issue, yeet.'
+description: 'Use for GitHub PR/issue/discussion workflows: create/update PRs or issues, post comments, start discussions; triggers include yeet.'
 ---
 
 # GitHub Contribution Workflows

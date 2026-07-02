@@ -3,7 +3,7 @@ argument-hint: <new-name>
 disable-model-invocation: true
 name: repo-rename
 user-invocable: true
-description: 'Use only when explicitly invoked to rename a GitHub upstream repo and matching local project folder, update the local origin remote, and preserve Codex CLI and Claude Code thread continuity references.'
+description: 'Rename a GitHub upstream repo and matching local project folder, update the local origin remote, and preserve Codex CLI and Claude Code thread continuity references.'
 ---
 
 # Repo Rename

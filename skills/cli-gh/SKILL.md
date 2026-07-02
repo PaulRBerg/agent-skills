@@ -2,7 +2,7 @@
 disable-model-invocation: false
 name: cli-gh
 user-invocable: false
-description: 'Use for GitHub CLI automation: gh commands, repo info, workflow triggers, GitHub search, codespaces, PR status, issues, repo browsing, or command-line GitHub tasks.'
+description: 'Use for GitHub CLI automation: repo info/browsing, workflow triggers, GitHub search, codespaces, PR status, or issues.'
 ---
 
 # GitHub CLI (gh)

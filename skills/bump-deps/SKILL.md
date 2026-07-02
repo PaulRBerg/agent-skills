@@ -5,7 +5,7 @@ effort: high
 model: opus
 name: bump-deps
 user-invocable: true
-description: 'Use for dependency updates: update/bump deps, npm/pnpm/yarn/bun package upgrades, outdated checks, package.json updates, or taze.'
+description: 'Use for dependency updates: bump npm/pnpm/yarn/bun packages, check outdated, or run taze.'
 ---
 
 # Bump Dependencies Skill

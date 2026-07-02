@@ -2,7 +2,7 @@
 disable-model-invocation: false
 name: cli-cast
 user-invocable: false
-description: 'Use for Foundry cast/on-chain actions: send tx, call contract, sign message, cast send/call/wallet, encode/decode ABI/calldata, or RPC interactions. For read-only balances/history, prefer evm-atlas.'
+description: 'Use for Foundry cast/on-chain actions: send tx, call contract, sign message, encode/decode ABI/calldata, or RPC interactions. For read-only balances/history, prefer evm-atlas.'
 ---
 
 # Foundry Cast CLI

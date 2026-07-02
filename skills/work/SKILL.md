@@ -3,7 +3,7 @@ argument-hint: <task>
 disable-model-invocation: true
 name: work
 user-invocable: true
-description: Run only on explicit invocation. Orchestrates end-to-end implementation, scales from direct work to subagents, and finishes with code-polish.
+description: 'Orchestrate end-to-end implementation: scale from direct work to subagents, finish with code-polish.'
 ---
 
 # Work

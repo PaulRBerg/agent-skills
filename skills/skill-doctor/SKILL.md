@@ -3,7 +3,7 @@ argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe] [--include-s
 disable-model-invocation: false
 name: skill-doctor
 user-invocable: true
-description: "Use to audit Agent Skills catalogs or installed skill roots: validate SKILL.md frontmatter, Codex openai.yaml metadata, README catalog coverage, cli-* version pins, and relative resource links; optionally apply conservative --fix-safe metadata repairs."
+description: "Use to audit Agent Skills catalogs or installed skill roots for metadata and doc-link issues; optionally apply conservative --fix-safe repairs."
 ---
 
 # Skill Doctor

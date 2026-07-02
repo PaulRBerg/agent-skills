@@ -5,7 +5,7 @@ effort: high
 model: opus
 name: git-squash
 user-invocable: true
-description: 'Use to squash a feature branch into one commit and rebase onto base: squash commits/branch, clean up commits, flatten branch history, prepare clean PR commit.'
+description: 'Squash a feature branch into one commit via soft reset to the merge base, ready for a clean PR.'
 ---
 
 # Git Squash

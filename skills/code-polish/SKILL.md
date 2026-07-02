@@ -3,7 +3,7 @@ argument-hint: '[paths] [--simplify] [--review] [--with-profile <name>] [--skip-
 disable-model-invocation: true
 name: code-polish
 user-invocable: true
-description: 'Use to polish recently changed code: simplify for readability/maintainability and run a risk-profiled review that autonomously applies fixes. Default runs both passes; pass --simplify or --review for one. Covers code/PR review, audits, bug/security checks, reviewing diffs or changes, cleanup, refactoring, and reducing complexity.'
+description: 'Polish recently changed code: simplify for readability/maintainability, then run a risk-profiled review that autonomously applies fixes.'
 ---
 
 # Code Polish
