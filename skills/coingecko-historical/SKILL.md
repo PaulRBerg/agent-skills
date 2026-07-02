@@ -1,10 +1,10 @@
 ---
 argument-hint: <coin-id> <date>
-disable-model-invocation: false
+disable-model-invocation: true
 model: opus
 name: coingecko-historical
 user-invocable: true
-description: Use to open CoinGecko historical-data pages in the default browser for a coin/date or to show historical price on date X.
+description: Open the CoinGecko historical-data page for a coin/date in the default browser.
 ---
 
 # CoinGecko Historical

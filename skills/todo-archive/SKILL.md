@@ -1,14 +1,12 @@
 ---
 argument-hint: "[path] [--hint TEXT] [--date YYYY-MM-DD|YYYY_MM_DD] [--dry-run] [--force]"
-disable-model-invocation: false
+disable-model-invocation: true
 name: todo-archive
 user-invocable: true
-description: Use only when explicitly asked to archive/prune/compact/roll over checked tasks from TODO.md into `.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, leaving unchecked tasks.
+description: Archive checked TODO.md tasks into `.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, leaving unchecked tasks.
 ---
 
 # TODO Archive
-
-Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, then leave only unchecked tasks in `TODO.md`.
 
 `TODO.md` and `.ai/` are conventionally git-ignored, so they are untracked and `git diff` shows nothing for them. Inspect changes against the filesystem, not git.
 
@@ -50,15 +48,4 @@ Archive checked Markdown task-list items from `TODO.md` into `.ai/todos/TODO_UNT
 
 ## Helper Behavior
 
-`scripts/archive_todo.py`:
-
-- Reads only `<root>/TODO.md`.
-- Writes checked tasks to `<root>/.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`.
-- Rewrites `<root>/TODO.md` with the tasks that were not archived.
-- With `--hint`, restricts archiving to the subtree of any heading whose text contains the hint (case-insensitive); checked tasks elsewhere are left in place. Exits non-zero and lists available section headings when nothing matches.
-- Preserves non-task content inside any heading subtree that still has tasks for the output.
-- Drops headings whose subtree has no tasks for the output.
-- Keeps nested parent items as plain bullets when only descendants match the output, avoiding orphaned subtasks without copying the wrong checkbox state.
-- Leaves a minimal `# TODO` stub when every task was archived.
-- Rolls a same-day re-run over to a timestamped `TODO_UNTIL_YYYY_MM_DD_HHMM.md` sibling (appending a counter on a same-minute collision) so an earlier batch is never clobbered.
-- Overwrites the date-only archive in place only when `--force` is passed.
+`scripts/archive_todo.py` reads only `<root>/TODO.md`, writes archived tasks to `<root>/.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, and rewrites `<root>/TODO.md` with the remaining tasks (a minimal `# TODO` stub if everything was archived). With `--hint`, it restricts archiving to the matched heading's subtree and exits non-zero listing available headings when nothing matches. It rolls a same-day re-run over to a timestamped `TODO_UNTIL_YYYY_MM_DD_HHMM.md` sibling instead of clobbering the earlier archive, unless `--force` is passed.

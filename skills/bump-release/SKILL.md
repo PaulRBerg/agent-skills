@@ -1,11 +1,11 @@
 ---
 argument-hint: '[packages...] [version] [--beta] [--dry-run]'
-disable-model-invocation: false
+disable-model-invocation: true
 effort: high
 model: opus
 name: bump-release
 user-invocable: true
-description: 'Use for release versioning: bump/cut/tag a release, bump version, create a release, changelog updates, or version tagging.'
+description: 'Cut a release: bump versions, write changelogs, commit, tag.'
 ---
 
 # Bump Release
@@ -43,17 +43,12 @@ If the helper exits `2`, stop: the cwd is not a git repo or has no root `package
 02. **Require a clean tree** - If `workingTree.clean` is false, stop and show the short status. Do not invoke the `commit` skill or commit unrelated work unless the user explicitly asks.
 03. **Resolve targets** - If `needsSelection` is true, ask the user which workspace packages to release. If package selectors are unknown or ambiguous, stop and ask for exact package names or directories.
 04. **Reject invalid version scope** - If an explicit `version` was supplied for more than one target package, stop. Explicit versions are single-package only.
-05. **Plan versions** - Determine a candidate version for each target package:
-    - Explicit `version`: use it as-is for a regular release; with `--beta`, append `-beta.1` unless it already has a prerelease suffix.
-    - Beta from stable `1.2.3`: use `1.2.4-beta.1`.
-    - Beta from beta `1.2.3-beta.1`: use `1.2.3-beta.2`.
-    - Regular from beta `1.2.3-beta.5`: use `1.2.3`.
-    - Regular from stable: inspect relevant net changes and choose patch, minor, or major by Semantic Versioning.
+05. **Plan versions** - Determine a candidate version for each target package. For explicit versions, beta suffixing, and prerelease transitions, follow the Version Examples table below. For a regular release from a stable version with no explicit version, inspect relevant net changes and choose patch, minor, or major by Semantic Versioning.
 06. **Skip no-op releases** - For regular releases, if a target has no `includedFiles` and no dependency-range cascade, report that there are no relevant release changes and do not bump it.
 07. **Cascade dependents** - Use `dependencyEdges` to find workspace packages whose `dependencies` or `peerDependencies` point at bumped packages. Check ranges with a structured semver parser or package manager API when available, not ad hoc string comparison. If the new version is outside the declared range, update the range and add the dependent to the release plan. Treat dependency range widening as patch by default; treat peer dependency major changes as major unless the user confirms otherwise.
 08. **Confirm inferred versions** - For non-dry-run regular releases without explicit versions, ask the user to confirm inferred versions. For multi-package releases, include requested packages and cascaded dependents in the same release-plan confirmation when the agent UI allows it.
 09. **Preview dry runs** - For `--dry-run`, print the package order, current versions, planned versions, changelog/tag/commit actions, dependency range updates, and skipped files. Stop before edits.
-10. **Write changelogs** - For regular releases only, read `references/common-changelog.md` after the final package set is known. Use each target's `includedFiles` to bound diff inspection against its `previousTags[package].tag`. Include only production-impacting changes; for `package.json`, include `dependencies` and `peerDependencies` changes only, not `devDependencies`.
+10. **Write changelogs** - For regular releases only, read `references/common-changelog.md` after the final package set is known, then apply the Changelog Rules below. Bound diff inspection per target using its `includedFiles` against `previousTags[package].tag`.
 11. **Edit release files** - Update each target package's `CHANGELOG.md` and `package.json`. For beta releases, skip `CHANGELOG.md`. Update any cascaded dependent ranges before committing the dependent release.
 12. **Format once** - After all release edits, run formatting once. If a `justfile` exists, inspect `just --list` and prefer the narrowest relevant write recipe; use broad recipes such as `just full-write` only when no narrower established recipe covers the touched files. Without a suitable recipe, use the repo's established formatter commands or leave formatting unchanged.
 13. **Commit and tag in dependency order** - Process dependencies before dependents. Use one commit and one annotated tag per package:
@@ -70,7 +65,7 @@ Regular releases must generate entries in `CHANGELOG.md` following `references/c
 - Start every entry with a present-tense imperative verb.
 - Reference PRs when available; fall back to commit links.
 - Merge related commits into one user-facing entry.
-- Exclude tests, CI/CD, dev tooling, style-only churn, and `devDependencies`.
+- Include only production-impacting changes: exclude tests, CI/CD, dev tooling, style-only churn, and `devDependencies`; for `package.json`, include only `dependencies` and `peerDependencies` changes.
 - If `package.json` has a `files` field, include only changes under those package files/directories, plus production dependency changes in `package.json`.
 
 Beta releases do not update changelogs.

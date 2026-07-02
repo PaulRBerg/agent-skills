@@ -1,9 +1,10 @@
 ---
 argument-hint: '[--all] [--staged] [--natural] [--push] [--close <issue_numbers>]'
+disable-model-invocation: true
 effort: high
 name: commit
 user-invocable: true
-description: 'Use only when explicitly invoked for Git commit workflows: stage intended changes, craft Conventional Prefix Format messages by default, Natural Language messages with --natural or configured repos, commit, and optionally --all, --staged, --close, or --push.'
+description: 'Commit staged or intended changes: craft a Conventional Prefix or Natural Language message, then commit — with --all, --staged, --close, or --push.'
 ---
 
 # Git Commit
@@ -27,7 +28,7 @@ Arguments: `$ARGUMENTS`
   - Natural Language Format: leading verb/category keyword overrides inferred verb
   - Quoted text overrides inferred description or subject
 
-Pass `--natural` through to the prepare helper when requested. The helper resolves the message format from the target repository cwd. Never `cd` into the skill directory.
+Pass `--natural` through to the prepare helper when requested. The helper resolves the message format from the target repository cwd.
 
 ### 2) Prepare staged diff
 

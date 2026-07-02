@@ -1,9 +1,9 @@
 ---
 argument-hint: <task>
-disable-model-invocation: false
+disable-model-invocation: true
 name: agents-introspection
 user-invocable: true
-description: Use to retrospect on a task against historical Codex and Claude Code chat transcripts in the current project, identify recurring agent mistakes, and recommend or apply durable fixes such as AGENTS.md updates or new skills.
+description: Retrospect on a task against local Codex/Claude Code transcripts; propose durable fixes (AGENTS.md, skills).
 ---
 
 # Agents Introspection
@@ -25,27 +25,7 @@ Analyze the user's task against prior Codex and Claude Code work in the current 
 
 ### 2. Discover project transcripts
 
-Look only at Codex and Claude Code transcripts for the current project unless the user explicitly names additional project paths.
-
-Prefer the bundled miner for the first pass:
-
-```sh
-uv run scripts/transcript-miner.py --keyword "<keyword>" --format json
-```
-
-When the user names multiple projects, pass each one explicitly and mine only those paths:
-
-```sh
-uv run scripts/transcript-miner.py --project /path/to/one --project /path/to/two --keyword "<keyword>" --format json
-```
-
-Use `--include-archived` only when active Codex sessions are too thin. Use `--max-sessions N` to keep the evidence set small.
-
-- Claude Code: inspect `~/.claude/projects/<encoded-absolute-path>/`, where `/Users/prb/projects/example` becomes `-Users-prb-projects-example`.
-- Codex: inspect `~/.codex/session_index.jsonl` and transcript files under `~/.codex/sessions/`; include `~/.codex/archived_sessions/` when recent active sessions are insufficient.
-
-Prefer metadata first: cwd, workspace roots, session title, timestamps, and git branch. Open transcript bodies only after a session plausibly matches the current project or task.
-The miner emits counts, candidate paths, themes, correction/failure/verification signals, tool-call counts, and privacy-gap categories; it never emits raw transcript excerpts. Use it to choose evidence, then open only the minimum matching transcript content needed for interpretation.
+Look only at Codex and Claude Code transcripts for the current project unless the user explicitly names additional project paths. Run the miner per [transcript sources](references/transcript-sources.md); pass `--max-sessions N` to keep the evidence set small. Open transcript bodies only after a session plausibly matches the current project or task.
 
 ### 3. Select evidence
 
@@ -68,7 +48,7 @@ For each relevant session, extract concise evidence for:
 - Quality gaps: missing tests, unverified claims, vague final reports, invented facts.
 - Positive patterns that avoided mistakes and should be preserved.
 
-Name the failure mode, not the model. Target only Codex and Claude Code.
+Target only Codex and Claude Code.
 
 ### 5. Connect history to the task
 
@@ -130,5 +110,5 @@ Keep the report terse and evidence-led. Mention exact files changed and checks r
 - Never read transcripts outside the current project scope unless the user explicitly expands scope.
 - Never write transcript excerpts or derived private data into repo files.
 - Never create broad policy from a single ambiguous transcript.
-- Never blame "the agent" generically when the fix can name a concrete instruction, command, check, or workflow step.
+- Never blame "the agent" or "the model" generically — name the concrete failure mode: the specific instruction, command, check, or workflow step that broke.
 - Prefer `rg`, `fd`, `jq`, and structured parsing over ad hoc pipelines.
