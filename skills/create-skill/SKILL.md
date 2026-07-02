@@ -137,6 +137,8 @@ Sketch the directory tree first, then create only the subdirectories the layout 
 
 ### 4. Create the Skill
 
+Before writing the frontmatter `description` or any body prose, read [references/writing-great-skills.md](references/writing-great-skills.md) — the predictability levers that shape every wording choice: invocation loads, one-trigger-per-branch descriptions, leading words, completion criteria, and the no-op/pruning tests.
+
 ```bash
 mkdir -p "<scope>/.agents/skills/<name>/agents"
 # Add only the subdirectories the layout calls for:
