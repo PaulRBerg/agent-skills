@@ -1,5 +1,7 @@
 # Automation Workflows
 
+> When to read: Read when the user wants ready-made gh CLI automation patterns — code review workflows, issue triage, daily/weekly reports, bulk operations, CI monitoring, or team collaboration scripts.
+
 Common workflow patterns and automation examples using gh CLI.
 
 ## Common Workflows

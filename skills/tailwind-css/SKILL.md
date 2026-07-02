@@ -7,8 +7,6 @@ description: 'Use for Tailwind v4 styling: add/fix classes, configure or migrate
 
 # Tailwind CSS v4
 
-Expert guidance for Tailwind CSS v4, CSS-first configuration, modern utility patterns, and type-safe component styling with tailwind-variants.
-
 ## CSS-First Configuration
 
 Tailwind CSS v4 eliminates `tailwind.config.ts` in favor of CSS-only configuration. All configuration lives in CSS files using special directives.
@@ -35,42 +33,9 @@ Tailwind CSS v4 eliminates `tailwind.config.ts` in favor of CSS-only configurati
 
 All theme tokens defined with `@theme` automatically become available as utility classes. For example, `--color-brand` can be used as `bg-brand`, `text-brand`, `border-brand`, etc.
 
-## ESLint Integration
+## Linting
 
-Use `eslint-plugin-better-tailwindcss` for Tailwind CSS v4 class validation and style enforcement.
-
-**Correctness Rules (errors):**
-
-- `no-conflicting-classes` - Detect classes that override each other
-- `no-unknown-classes` - Flag classes not registered with Tailwind
-
-**Stylistic Rules (warnings):**
-
-- `enforce-canonical-classes` - Use standard v4 class names
-- `enforce-shorthand-classes` - Use abbreviated class versions
-- `no-deprecated-classes` - Remove outdated class names
-- `no-duplicate-classes` - Eliminate redundant declarations
-- `no-unnecessary-whitespace` - Clean up extra spacing
-
-**Examples:**
-
-```typescript
-// ❌ Bad: separate padding
-<div className="px-6 py-6">
-
-// ✅ Good: shorthand
-<div className="p-6">
-```
-
-```typescript
-// ❌ Bad: separate width/height
-<div className="w-6 h-6">
-
-// ✅ Good: size utility
-<div className="size-6">
-```
-
-Run the project's ESLint check after modifying Tailwind classes to validate all changes across the codebase.
+Read [references/eslint.md](references/eslint.md) when wiring Tailwind lint rules.
 
 ## Coding Preferences
 
@@ -165,23 +130,18 @@ const button = tv({
 
 ## Quick Reference Table
 
-| Aspect             | Pattern                                           |
-| ------------------ | ------------------------------------------------- |
-| Configuration      | CSS-only: `@theme`, `@utility`, `@custom-variant` |
-| Gradients          | `bg-linear-*`, `bg-radial`, `bg-conic`            |
-| Opacity            | Modifier syntax: `bg-black/50`                    |
-| Line Height        | Modifier syntax: `text-base/7`                    |
-| Font Features      | `font-features-zero`, `font-features-ss01`, etc.  |
-| CSS Variables      | `bg-my-color` (auto-created from `@theme`)        |
-| CSS Modules        | `@reference "#tailwind";` at top                  |
-| Class Merging      | `cn()` for conditionals; plain string for static  |
-| Viewport           | `min-h-dvh` (not `min-h-screen`)                  |
-| Component Variants | `references/tailwind-variants.md`                 |
-| Animations         | `references/tw-animate-css.md`                    |
-| V4 Rules           | `references/tailwind-v4-rules.md`                 |
+| Aspect        | Pattern                                           |
+| ------------- | ------------------------------------------------- |
+| Configuration | CSS-only: `@theme`, `@utility`, `@custom-variant` |
+| Line Height   | Modifier syntax: `text-base/7`                    |
+| Font Features | `font-features-zero`, `font-features-ss01`, etc.  |
+| CSS Variables | `bg-my-color` (auto-created from `@theme`)        |
+| Class Merging | `cn()` for conditionals; plain string for static  |
+| Viewport      | `min-h-dvh` (not `min-h-screen`)                  |
 
 ## Reference Documentation
 
 - **Tailwind v4 Rules & Best Practices:** `references/tailwind-v4-rules.md` — Breaking changes, removed/renamed utilities, layout rules, typography, gradients, CSS variables, new v4 features, common pitfalls
 - **tailwind-variants Patterns:** `references/tailwind-variants.md` — Component variants, slots API, composition, TypeScript integration, responsive variants
 - **tw-animate-css Reference:** `references/tw-animate-css.md` — Enter/exit animations, slide/fade/zoom utilities, spacing gotchas
+- **ESLint Integration:** `references/eslint.md` — Correctness/stylistic rules for `eslint-plugin-better-tailwindcss`, read when wiring Tailwind lint rules

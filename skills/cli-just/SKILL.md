@@ -21,6 +21,10 @@ Expert guidance for Just, a command runner with syntax inspired by make. Use thi
 - Use built-in constants for terminal formatting
 - Implement check/write patterns for code quality tools
 
+## No Justfile Formatter
+
+Do not use `just --fmt` or `just --dump`. The user has bespoke formatting preferences that the built-in formatter does not respect. Preserve existing formatting as-is.
+
 ## Quick Reference
 
 ### Essential Settings
@@ -66,46 +70,7 @@ set lists                         # Enable list-of-strings values; unstable, req
 | `[shell]`                    | Force linewise shell mode under `set default-script` (v1.52+)               |
 | `[working-directory: "…"]`   | Run from given path (expressions OK as of v1.51)                            |
 
-### Recipe Argument Flags (v1.46.0+)
-
-The `[arg()]` attribute configures parameters as CLI-style options:
-
-```just
-# Long option (--target)
-[arg("target", long)]
-build target:
-    cargo build --target {{ target }}
-
-# Short option (-v)
-[arg("verbose", short="v")]
-run verbose="false":
-    echo "Verbose: {{ verbose }}"
-
-# Combined long + short
-[arg("output", long, short="o")]
-compile output:
-    gcc main.c -o {{ output }}
-
-# Flag without value (presence sets the given value); under `set lists`, `flag` is the v1.53+ alternative
-[arg("release", long, value="true")]
-build release="false":
-    cargo build {{ if release == "true" { "--release" } else { "" } }}
-
-# Help string (shown in `just --usage`)
-[arg("target", long, help="Build target architecture")]
-build target:
-    cargo build --target {{ target }}
-```
-
-**Usage examples:**
-
-```bash
-just build --target x86_64
-just build --target=x86_64
-just compile -o main
-just build --release
-just --usage build    # Show recipe argument help
-```
+When configuring recipe parameters as CLI-style `--flag`/`-x` options, read [Recipe Argument Flags](references/recipes.md#recipe-argument-flags-v1460) before using `[arg()]`.
 
 Multiple attributes can be combined:
 
@@ -166,60 +131,9 @@ self:
     echo "running {{ recipe_name() }}"
 ```
 
-### User-Defined Functions (v1.49.0+)
+When an expression repeats across recipes, read [User-Defined Functions](references/syntax.md#user-defined-functions-v1490) before adding a `name(args) := expression` (requires `set unstable`).
 
-Define reusable named expressions with `name(args) := expression`. Requires `set unstable`. Functions can reference module-level assignments.
-
-```just
-set unstable
-
-base := "foo"
-join(extension) := base + "." + extension
-
-# Use f-strings for interpolation
-hello(name) := f"Hello, {{ name }}!"
-
-create:
-    touch {{ join("c") }}
-    touch {{ join("html") }}
-    echo '{{ hello("World") }}'
-```
-
-Use these to dedupe expression logic that would otherwise repeat across recipes; prefer them over backtick-evaluated variables when the value depends on input.
-
-### Lists (unstable, v1.53.0+)
-
-`set lists` (also requires `set unstable`) turns values into lists of strings — still unstable and subject to breaking changes. Highlights:
-
-```just
-set unstable
-set lists
-
-targets := ["x86", "arm"]               # List literal (flattens; strings only)
-all := targets ++ ["wasm"]              # `++` concatenates lists
-files := split("a.ts b.ts")             # ["a.ts", "b.ts"] (whitespace by default)
-root_ox_paths := [
-    "package.json",
-    ".lintstagedrc.mjs",
-    ".mcp.json",
-    "biome.jsonc",
-    "knip.jsonc",
-    "oxlint.config.ts",
-    "oxfmt.config.ts",
-    "tsconfig.base.json",
-    "vitest.shared.ts",
-]
-
-# Map a dependency over a list: invoked once per element, parallelized
-[parallel]
-build *platform: *(compile *platform)
-compile platform:
-    echo "compiling for {{ platform }}"
-```
-
-Use list literals for file/path collections. Do not recommend parenthesized, space-joined string assembly for path sets.
-
-Booleans are reformed under `set lists`: canonical true is `"true"`, canonical false is the empty list `[]` (every other value, including `''`, is truthy). `!expr` negates, `==`/`!=`/`=~`/`!~` work in any expression, and an `if` without `else` evaluates to `[]` when false. Variadic params (`*args`) become lists. New functions: `split()`, `bool()`, `show()`, `join_list()`. Full behavior in [references/settings.md](references/settings.md#lists-unstable-v1530).
+When a variable needs to hold a list of strings rather than one joined string, read [Lists](references/settings.md#lists-unstable-v1530) before enabling `set lists` (unstable, requires `set unstable`) — it also reforms how booleans work. For mapping a dependency over a list, see [references/recipes.md](references/recipes.md#mapped-dependencies-over-lists-unstable-v1530).
 
 ## Recipe Patterns
 
@@ -313,18 +227,7 @@ Define a curated default recipe when one action should be the entrypoint:
 default: full-check
 ```
 
-If no single default makes sense, prefer `set default-list := true` (v1.52.0+) over a `default` recipe that shells out to
-`just --list`:
-
-```just
-set default-list := true
-
-# Optional: still define recipes normally; bare `just` now lists them.
-build:
-    cargo build
-```
-
-The setting is per-module. It can also be forced at runtime with `JUST_DEFAULT_LIST=true` or `just --default-list`.
+If no single default makes sense, prefer `set default-list := true` (v1.52.0+) over a `default` recipe that shells out to `just --list` — read [Default Listing](references/settings.md#default-listing-v1520) for the setting and its runtime alternatives.
 
 For compatibility with older `just` versions, keep the explicit listing recipe:
 
@@ -355,7 +258,7 @@ build:
     bun next build
 ```
 
-**Note:** `require()` validates the tool exists at recipe evaluation time. Use the variable name directly (e.g., `bun`), not with interpolation (`{{ bun }}`).
+See [Executable Functions](references/syntax.md#executable-functions) for how `require()` validates and resolves tools.
 
 ## Context7 Fallback
 
@@ -375,15 +278,6 @@ Example topics to search:
 
 ## Additional Resources
 
-### Reference Files
-
-For detailed patterns and comprehensive coverage, consult:
-
-- **[`references/settings.md`](references/settings.md)** - Settings configuration and module system
-- **[`references/recipes.md`](references/recipes.md)** - Recipe attributes, parameters, dependencies, and prefixes
-- **[`references/syntax.md`](references/syntax.md)** - Constants, functions, variables, and CLI options
-- **[`references/patterns.md`](references/patterns.md)** - Established conventions, section organization, helper patterns
-
 ### Example Templates
 
 Working justfile templates in `examples/`:
@@ -397,16 +291,7 @@ Working justfile templates in `examples/`:
 - **GitHub Repository**: https://github.com/casey/just
 - **Context7 Library ID**: `/websites/just_systems_man_en`
 
-## No Justfile Formatter
-
-Do not use `just --fmt` or `just --dump`. The user has bespoke formatting preferences that the built-in formatter does not respect. Preserve existing formatting as-is.
-
 ## Tips
 
-1. Use `@` on non-script recipes to suppress command echo; on `[script]` recipes it undoes the default quiet mode and prints the script body before command output.
-2. Use `+` for variadic parameters: `test +args`
-3. Use `*` for optional variadic: `build *flags`
-4. Quote glob patterns in variables: `GLOBS := "\"**/*.json\""`
-5. Use `[no-cd]` in monorepos to stay in current directory
-6. Private recipes start with `_` or use `[private]`
-7. Always define aliases after recipe names for discoverability
+1. Use `[no-cd]` in monorepos to stay in current directory.
+2. Always define aliases after recipe names for discoverability.

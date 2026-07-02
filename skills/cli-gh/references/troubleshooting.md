@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> When to read: Read when gh fails with auth/permission/rate-limit errors, or hits command errors, installation/config issues, or network problems.
+
 Common issues and solutions when using gh CLI.
 
 ## Authentication Issues

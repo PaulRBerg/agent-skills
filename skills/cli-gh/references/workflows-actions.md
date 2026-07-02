@@ -1,5 +1,7 @@
 # Workflows & Actions
 
+> When to read: Read when the user asks to trigger, monitor, cancel, rerun, or download artifacts from GitHub Actions workflows and runs.
+
 Comprehensive guide for managing GitHub Actions workflows and runs using gh CLI.
 
 ## Viewing Workflows

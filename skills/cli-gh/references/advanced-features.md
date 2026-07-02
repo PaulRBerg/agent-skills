@@ -1,5 +1,7 @@
 # Advanced Features
 
+> When to read: Read when the user needs aliases, direct API access, extensions, secrets/variables, SSH/GPG keys, organization or project management, repository rulesets, attestations, Copilot Agent Tasks, `gh skill` management, reading repo file/directory contents without cloning, or issue types/sub-issues/blocking relationships.
+
 Advanced gh CLI capabilities for power users and automation.
 
 ## Aliases
@@ -149,6 +151,97 @@ gh release verify <tag>
 
 # Verify specific asset
 gh release verify-asset <file> --repo owner/repo
+```
+
+## Issue Types, Sub-Issues & Relationships
+
+Issue types and sub-issues require GitHub.com or GHES 3.17+; blocking relationships require GHES 3.19+.
+
+```bash
+# Set or remove the issue type
+gh issue edit 456 --type Bug
+gh issue edit 456 --remove-type
+
+# Create a sub-issue under a parent
+gh issue create --parent 100
+
+# Organize existing issues into a parent/child hierarchy
+gh issue edit 100 --add-sub-issue 123,124
+gh issue edit 100 --remove-sub-issue 123
+gh issue edit 123 --parent 100
+gh issue edit 123 --remove-parent
+
+# Track blocked-by / blocking relationships
+gh issue create --blocked-by 200,201 --blocking 300
+gh issue edit 123 --add-blocked-by 200 --add-blocking 300,301
+gh issue edit 123 --remove-blocked-by 200 --remove-blocking 301
+```
+
+## Copilot Agent Tasks
+
+Delegate work to the Copilot coding agent and track its sessions. The `gh agent-task` command set (aliases `gh agent`, `gh agents`) is in preview.
+
+```bash
+# Create an agent task on the current repository
+gh agent-task create "Improve the performance of the data processing pipeline"
+
+# List your most recent agent tasks
+gh agent-task list
+gh agent-task list --json id,name,state
+
+# View an agent task session (by PR number, session ID, or URL)
+gh agent-task view 123
+gh agent-task view <session-id> --json state --jq '.state'
+```
+
+## Agent Skills
+
+Discover, install, and publish agent skills from GitHub repositories. The `gh skill` command set (alias `gh skills`) is in preview.
+
+```bash
+# Search for skills across GitHub
+gh skill search terraform
+
+# Preview a skill before installing
+gh skill preview github/awesome-copilot documentation-writer
+
+# Install a skill (default scope: project)
+gh skill install github/awesome-copilot documentation-writer
+gh skill install owner/repo skill-name --scope user --pin v1.2.0
+
+# Include skills in hidden dirs (.claude/skills/, .agents/skills/, .github/skills/)
+gh skill install owner/repo skill-name --allow-hidden-dirs
+
+# List installed skills and update them
+gh skill list
+gh skill update --all
+
+# Validate and publish your own skills
+gh skill publish --dry-run
+```
+
+## Reading Repository Contents
+
+Read files and directories without cloning. The `gh repo read-file` and `gh repo read-dir` commands are in preview and subject to change.
+
+```bash
+# Read a file from the default branch (paged in a TTY, raw when piped)
+gh repo read-file README.md --repo cli/cli
+
+# Read from a specific branch, tag, or commit
+gh repo read-file go.mod --ref v2.94.0 --repo cli/cli
+
+# Write to disk instead of stdout (--clobber to overwrite)
+gh repo read-file README.md --output ./README.md --clobber
+
+# Refuse escape sequences by default; opt in for TTY/piped output
+gh repo read-file script.sh --allow-escape-sequences
+
+# List a directory (root when no path given)
+gh repo read-dir script --repo cli/cli
+
+# Inspect entries as JSON for scripting
+gh repo read-dir docs --repo cli/cli --json name,path,type,size
 ```
 
 ## Advanced Scripting Patterns

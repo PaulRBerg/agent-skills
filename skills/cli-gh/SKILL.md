@@ -247,76 +247,9 @@ gh issue comment 456 --body "Update"
 gh issue develop 456 --checkout
 ```
 
-### Issue Types, Sub-Issues & Relationships
-
-Issue types and sub-issues require GitHub.com or GHES 3.17+; blocking relationships require GHES 3.19+.
-
-```bash
-# Set or remove the issue type
-gh issue edit 456 --type Bug
-gh issue edit 456 --remove-type
-
-# Create a sub-issue under a parent
-gh issue create --parent 100
-
-# Organize existing issues into a parent/child hierarchy
-gh issue edit 100 --add-sub-issue 123,124
-gh issue edit 100 --remove-sub-issue 123
-gh issue edit 123 --parent 100
-gh issue edit 123 --remove-parent
-
-# Track blocked-by / blocking relationships
-gh issue create --blocked-by 200,201 --blocking 300
-gh issue edit 123 --add-blocked-by 200 --add-blocking 300,301
-gh issue edit 123 --remove-blocked-by 200 --remove-blocking 301
-```
-
 ## Discussions
 
 When the user asks to list, view, create, edit, or comment on GitHub Discussions, see [references/discussions.md](references/discussions.md). The `gh discussion` command set is in preview and subject to change.
-
-## Copilot Agent Tasks
-
-Delegate work to the Copilot coding agent and track its sessions. The `gh agent-task` command set (aliases `gh agent`, `gh agents`) is in preview.
-
-```bash
-# Create an agent task on the current repository
-gh agent-task create "Improve the performance of the data processing pipeline"
-
-# List your most recent agent tasks
-gh agent-task list
-gh agent-task list --json id,name,state
-
-# View an agent task session (by PR number, session ID, or URL)
-gh agent-task view 123
-gh agent-task view <session-id> --json state --jq '.state'
-```
-
-## Agent Skills
-
-Discover, install, and publish agent skills from GitHub repositories. The `gh skill` command set (alias `gh skills`) is in preview.
-
-```bash
-# Search for skills across GitHub
-gh skill search terraform
-
-# Preview a skill before installing
-gh skill preview github/awesome-copilot documentation-writer
-
-# Install a skill (default scope: project)
-gh skill install github/awesome-copilot documentation-writer
-gh skill install owner/repo skill-name --scope user --pin v1.2.0
-
-# Include skills in hidden dirs (.claude/skills/, .agents/skills/, .github/skills/)
-gh skill install owner/repo skill-name --allow-hidden-dirs
-
-# List installed skills and update them
-gh skill list
-gh skill update --all
-
-# Validate and publish your own skills
-gh skill publish --dry-run
-```
 
 ## Repository Operations
 
@@ -359,29 +292,9 @@ gh repo set-default
 gh repo edit --squash-merge-commit-message COMMIT_MESSAGES
 ```
 
-### Reading Repo Contents
+## Workflows & Actions
 
-Read files and directories without cloning. The `gh repo read-file` and `gh repo read-dir` commands are in preview and subject to change.
-
-```bash
-# Read a file from the default branch (paged in a TTY, raw when piped)
-gh repo read-file README.md --repo cli/cli
-
-# Read from a specific branch, tag, or commit
-gh repo read-file go.mod --ref v2.94.0 --repo cli/cli
-
-# Write to disk instead of stdout (--clobber to overwrite)
-gh repo read-file README.md --output ./README.md --clobber
-
-# Refuse escape sequences by default; opt in for TTY/piped output
-gh repo read-file script.sh --allow-escape-sequences
-
-# List a directory (root when no path given)
-gh repo read-dir script --repo cli/cli
-
-# Inspect entries as JSON for scripting
-gh repo read-dir docs --repo cli/cli --json name,path,type,size
-```
+When the user asks to trigger, monitor, cancel, rerun, or download artifacts from GitHub Actions workflows and runs, see [references/workflows-actions.md](references/workflows-actions.md).
 
 ## Search
 
@@ -443,51 +356,19 @@ gh config list
 gh config set browser firefox
 ```
 
-## Quick Reference
+## Advanced Features
 
-Common gh operations at a glance:
+When the user needs aliases, direct API access, extensions, secrets/variables, SSH/GPG keys, organization or project management, repository rulesets, attestations, Copilot Agent Tasks, `gh skill` management, reading repo file/directory contents without cloning, or issue types/sub-issues/blocking relationships, see [references/advanced-features.md](references/advanced-features.md).
 
-| Operation         | Command                    | Common Flags                                |
-| ----------------- | -------------------------- | ------------------------------------------- |
-| Create PR         | `gh pr create`             | `--draft`, `--fill`, `--reviewer @copilot`  |
-| List PRs          | `gh pr list`               | `--author @me`, `--label`, `--search`       |
-| View PR           | `gh pr view <number>`      | `--web`, `--comments`                       |
-| Merge PR          | `gh pr merge <number>`     | `--squash`, `--rebase`, `--delete-branch`   |
-| Revert PR         | `gh pr revert <number>`    | `--body`                                    |
-| Create issue      | `gh issue create`          | `--title`, `--body`, `--template`, `--type` |
-| List issues       | `gh issue list`            | `--assignee @me`, `--label`, `--type`       |
-| Close issue       | `gh issue close <number>`  | `--duplicate-of`, `--reason`                |
-| View issue        | `gh issue view <number>`   | `--web`, `--comments`                       |
-| Link sub-issue    | `gh issue edit <number>`   | `--parent`, `--add-sub-issue`               |
-| Block issue       | `gh issue edit <number>`   | `--add-blocked-by`, `--add-blocking`        |
-| List discussions  | `gh discussion list`       | `--answered`, `--sort`, `--json`            |
-| Create agent task | `gh agent-task create`     | `--json` (on `list`/`view`)                 |
-| Install skill     | `gh skill install`         | `--scope`, `--pin`, `--allow-hidden-dirs`   |
-| Browse repo       | `gh browse`                | `--blame`, `--actions`, `--branch`          |
-| Clone repo        | `gh repo clone <repo>`     | `--no-upstream`                             |
-| Fork repo         | `gh repo fork`             | `--clone`, `--remote`                       |
-| View repo         | `gh repo view`             | `--web`                                     |
-| Read repo file    | `gh repo read-file <path>` | `--ref`, `--output`, `--clobber`, `--json`  |
-| Read repo dir     | `gh repo read-dir [path]`  | `--ref`, `--json`                           |
-| Create release    | `gh release create <tag>`  | `--title`, `--notes`, `--draft`             |
-| Verify release    | `gh release verify <tag>`  | `--repo`                                    |
-| Run workflow      | `gh workflow run <name>`   | `--ref`, `--field`                          |
-| Watch run         | `gh run watch <id>`        | `--exit-status`                             |
-| Search repos      | `gh search repos <query>`  | `--language`, `--stars`                     |
-| Create label      | `gh label create <name>`   | `--color`, `--description`                  |
-| Create codespace  | `gh codespace create`      | `--repo`, `--branch`                        |
+## Automation & Scripting
+
+When the user wants ready-made gh CLI automation patterns — code review workflows, issue triage, daily/weekly reports, bulk operations, CI monitoring, or team collaboration scripts, see [references/automation-workflows.md](references/automation-workflows.md).
+
+## Troubleshooting
+
+When gh fails with auth/permission/rate-limit errors, or hits command errors, installation/config issues, or network problems, see [references/troubleshooting.md](references/troubleshooting.md).
 
 ## Additional Resources
-
-### Reference Guides
-
-For detailed patterns and advanced usage, see:
-
-- **[Discussions](references/discussions.md)** - List, view, create, edit, and comment on GitHub Discussions (preview)
-- **[Workflows & Actions](references/workflows-actions.md)** - GitHub Actions workflows, runs, cache management, and CI/CD integration patterns
-- **[Advanced Features](references/advanced-features.md)** - Aliases, API access, extensions, secrets, SSH/GPG keys, organizations, projects, and advanced scripting
-- **[Automation Workflows](references/automation-workflows.md)** - Common automation patterns, daily reports, release automation, and team collaboration workflows
-- **[Troubleshooting](references/troubleshooting.md)** - Solutions for authentication, permissions, rate limiting, and common errors
 
 ### Example Scripts
 
@@ -511,10 +392,6 @@ When the user wants to use `--json` flags or needs the correct gh CLI JSON field
 
 ## Tips
 
-1. Use `--web` flag to open items in browser for detailed view
-2. Leverage interactive prompts by omitting parameters - most commands support interactive mode
-3. Apply filters with `--author`, `--label`, `--state` to narrow down lists efficiently
-4. Add `--json` flag to enable scriptable output for automation
-5. **Always check `--help` for valid JSON field names** - they differ from GitHub API
-6. Use `gh repo create --template` to scaffold from template repositories
-7. Enable auto-merge with `gh pr merge --auto` for PRs that pass checks
+1. Leverage interactive prompts by omitting parameters - most commands support interactive mode
+2. Use `gh repo create --template` to scaffold from template repositories
+3. Enable auto-merge with `gh pr merge --auto` for PRs that pass checks

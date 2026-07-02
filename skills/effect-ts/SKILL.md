@@ -12,15 +12,18 @@ composability, testing, and runtime-boundary patterns.
 
 ## Fast Path
 
-Use this skill for nontrivial Effect work. Do not route through this skill just because a file imports from `effect`; use
-it when the change depends on Effect semantics such as services, layers, typed errors, Schema, Config, runtime/concurrency,
-streams, or Effect-aware tests.
+Do not route through this skill just because a file imports from `effect`; use it only when the change depends on Effect
+semantics, not just Effect's presence.
 
 For small code edits:
 
 1. Inspect local project patterns first.
-2. Read `./references/critical-rules.md` before writing or changing Effect code.
-3. Open only the reference files that match the task.
+2. Read `./references/critical-rules.md` before writing or changing Effect code — this is the one mandatory reference. Key
+   guidelines:
+   - **INEFFECTIVE:** try-catch in Effect.gen (Effect failures aren't thrown)
+   - **AVOID:** Type assertions (as never/any/unknown)
+   - **RECOMMENDED:** `return yield*` pattern for errors (makes termination explicit)
+3. Open only the reference files that match the task — see [Reference Routing](#reference-routing).
 4. Run the narrowest project check that proves the changed Effect behavior.
 
 ## Upstream Source Check
@@ -98,26 +101,29 @@ environment explicitly supports them and the task has separable research tracks.
 
 ## Reference Routing
 
-Open references selectively:
+This is the single index for every reference file — renaming or adding a reference only requires editing this table. Open
+references selectively, only the row(s) that match the task:
 
-| Task shape                                                     | Read                                    |
-| -------------------------------------------------------------- | --------------------------------------- |
-| Writing/changing Effect code                                   | `./references/critical-rules.md`        |
-| Services, Layers, `Effect.Service`, `Context.Tag`, `Effect.fn` | `./references/services-layers.md`       |
-| Config, env vars, secrets, custom providers                    | `./references/config.md`                |
-| Schema decoding, JSON Schema, AI parameter shapes              | `./references/schema-jsonschema.md`     |
-| `@effect/vitest`, `TestClock`, sleeps/retries, fibers in tests | `./references/testing.md`               |
-| Resources, scheduling, refs, concurrency, `SubscriptionRef`    | `./references/runtime.md`               |
-| Streams, backpressure, bounded consumption                     | `./references/streams.md`               |
-| Pattern matching, tagged unions, `Data.taggedEnum`             | `./references/pattern-matching.md`      |
-| `@effect/ai` tools/providers/OpenAI integration                | `./references/ai.md`                    |
-| `@effect/sql`, `SqlSchema`, repository row decoding            | `./references/sql.md`                   |
-| `@effect/platform`, `@effect/rpc`, deployment runtimes         | `./references/platform-rpc.md`          |
-| `@prb/effect-next` / Next.js App Router                        | `./references/next-js.md`               |
-| `@effect-atom/*` React state                                   | `./references/effect-atom.md`           |
-| Array/Record reducers, filters, predicates, sorting            | `./references/collection-operations.md` |
-| Tiny utility functions, deprecations                           | `./references/quick-utils.md`           |
-| Upstream drift or recent package behavior                      | `./references/recent-upstream.md`       |
+| Task shape                                                                                                              | Read                                    |
+| ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Writing or changing any nontrivial Effect code (mandatory, read first)                                                  | `./references/critical-rules.md`        |
+| Services, Layers, `Effect.Service`, `Context.Tag`, `Effect.fn` (layers memoize by identity — `Layer.fresh` when needed) | `./references/services-layers.md`       |
+| Config, env vars, secrets, custom providers                                                                             | `./references/config.md`                |
+| Schema decoding, JSON Schema, AI parameter shapes (`Schema.Record(String, Never)` for closed records)                   | `./references/schema-jsonschema.md`     |
+| `@effect/vitest`, `TestClock`, sleeps/retries, fibers in tests                                                          | `./references/testing.md`               |
+| Resources, scheduling, refs, concurrency, `SubscriptionRef` (version mismatch shows as `unsafeMake is not a function`)  | `./references/runtime.md`               |
+| Streams, backpressure, bounded consumption (infinite streams hang without it)                                           | `./references/streams.md`               |
+| Pattern matching, tagged unions, `Data.taggedEnum`                                                                      | `./references/pattern-matching.md`      |
+| `@effect/ai` tools/providers/OpenAI integration (no-parameter tools: use `Tool.EmptyParams`)                            | `./references/ai.md`                    |
+| `@effect/sql`, `SqlSchema`, repository row decoding                                                                     | `./references/sql.md`                   |
+| `@effect/platform`, `@effect/rpc`, deployment runtimes                                                                  | `./references/platform-rpc.md`          |
+| `@prb/effect-next` / Next.js App Router                                                                                 | `./references/next-js.md`               |
+| `@effect-atom/*` React state                                                                                            | `./references/effect-atom.md`           |
+| Array/Record reducers, filters, predicates, sorting                                                                     | `./references/collection-operations.md` |
+| Tiny utility functions, deprecations                                                                                    | `./references/quick-utils.md`           |
+| Option vs `null`/`undefined` at boundaries                                                                              | `./references/option-null.md`           |
+| Upstream drift or recent package behavior                                                                               | `./references/recent-upstream.md`       |
+| Quick lookup: basic constructors, combinators, error taxonomy (cancellation/interrupts aren't the same as failures)     | `./references/quick-reference.md`       |
 
 ## Codebase Pattern Discovery
 
@@ -141,28 +147,23 @@ Apply these core principles when writing Effect code:
 - Prefer `Schema.TaggedError` for domain/API errors that cross serialization or HTTP boundaries
 - Use `Data.TaggedError` for internal, non-encoded errors when Schema integration is unnecessary
 - Use `Effect.fail`, `Effect.catchTag`, `Effect.catchAll` for error control flow
-- See `./references/critical-rules.md` for forbidden patterns
 
 ### Dependency Injection
 
-- Implement dependency injection using Services and Layers
 - Define services with `Context.Tag`
 - Compose layers with `Layer.merge`, `Layer.provide`
 - Use `Effect.provide` to inject dependencies
 
 ### Composability
 
-- Leverage Effect's composability for complex operations
 - Use appropriate constructors: `Effect.succeed`, `Effect.fail`, `Effect.tryPromise`, `Effect.try`
 - Apply proper resource management with scoped effects
 - Chain operations with `Effect.flatMap`, `Effect.map`, `Effect.tap`
 
 ### Code Quality
 
-- Write type-safe code that leverages Effect's type system
 - Prefer `Schema.Class` for domain and API models that need construction, validation, encoding, or equality
 - Use `Effect.gen` for readable sequential code
-- Implement proper testing patterns using Effect's testing utilities
 - Prefer `Effect.fn()` for automatic telemetry and better stack traces
 
 ### Boundary Refactors
@@ -176,158 +177,11 @@ Apply these core principles when writing Effect code:
 - Preserve local domain facades when they already centralize Effect services, for example filesystem, reporter, logger, or
   config services.
 
-## Critical Rules
-
-Read `./references/critical-rules.md` before writing or changing nontrivial Effect code. Key guidelines:
-
-- **INEFFECTIVE:** try-catch in Effect.gen (Effect failures aren't thrown)
-- **AVOID:** Type assertions (as never/any/unknown)
-- **RECOMMENDED:** `return yield*` pattern for errors (makes termination explicit)
-
-## Common Failure Modes
-
-Quick links to patterns that frequently cause issues:
-
-- **SubscriptionRef version mismatch** — `unsafeMake is not a function` → [runtime.md](./references/runtime.md)
-- **Cancellation vs Failure** — Interrupts aren't errors → [Error Taxonomy](#error-taxonomy)
-- **Option vs null** — Use Option internally, null at boundaries → [option-null.md](./references/option-null.md)
-- **Stream backpressure** — Infinite streams hang → [streams.md](./references/streams.md)
-- **JSON Schema closed records** — `Schema.Record(String, Never)` emits no extra properties →
-  [schema-jsonschema.md](./references/schema-jsonschema.md)
-- **No-parameter AI tools** — Use `Tool.EmptyParams` or omit `parameters` → [ai.md](./references/ai.md)
-- **Layer reuse surprises** — Layers memoize by object identity; use `Layer.fresh` only when needed →
-  [services-layers.md](./references/services-layers.md)
-
 ## Explaining Solutions
 
 When providing solutions, explain the Effect-TS concepts being used and why they're appropriate for the specific use
 case. If encountering patterns not covered in the documentation, suggest improvements while maintaining consistency with
 existing codebase patterns (when they exist).
-
-## Quick Reference
-
-### Creating Effects
-
-```typescript
-Effect.succeed(value)           // Wrap success value
-Effect.fail(error)              // Create failed effect
-Effect.tryPromise(fn)           // Wrap promise-returning function
-Effect.try(fn)                  // Wrap synchronous throwing function
-Effect.sync(fn)                 // Wrap synchronous non-throwing function
-```
-
-### Composing Effects
-
-```typescript
-Effect.flatMap(effect, fn)      // Chain effects
-Effect.map(effect, fn)          // Transform success value
-Effect.tap(effect, fn)          // Side effect without changing value
-Effect.all([...effects])        // Run effects (concurrency configurable)
-Effect.forEach(items, fn)       // Map over items with effects
-
-// Collect ALL errors (not just first)
-Effect.all([e1, e2, e3], { mode: "validate" })  // Returns all failures
-
-// Partial success handling
-Effect.partition([e1, e2, e3])  // Returns [failures, successes]
-```
-
-### Error Handling
-
-```typescript
-// Domain/API errors that cross boundaries: prefer Schema.TaggedError
-class UserNotFoundError extends Schema.TaggedError<UserNotFoundError>()(
-  "UserNotFoundError",
-  {
-    userId: Schema.String
-  }
-) {
-  get message() {
-    return `User not found: ${this.userId}`
-  }
-}
-
-// Internal-only errors may use Data.TaggedError
-class CacheMissError extends Data.TaggedError("CacheMissError")<{
-  userId: string
-}> {}
-
-// Direct yield of errors (no Effect.fail wrapper needed)
-Effect.gen(function* () {
-  if (!user) {
-    return yield* new UserNotFoundError({ userId })
-  }
-})
-
-Effect.catchTag(effect, tag, fn) // Handle specific error tag
-Effect.catchAll(effect, fn)      // Handle all errors
-Effect.result(effect)            // Convert to Exit value
-Effect.orElse(effect, alt)       // Fallback effect
-```
-
-### Error Taxonomy
-
-Categorize errors for appropriate handling:
-
-| Category                | Examples                   | Handling                  |
-| ----------------------- | -------------------------- | ------------------------- |
-| **Expected Rejections** | User cancel, deny          | Graceful exit, no retry   |
-| **Domain Errors**       | Validation, business rules | Show to user, don't retry |
-| **Defects**             | Bugs, assertions           | Log + alert, investigate  |
-| **Interruptions**       | Fiber cancel, timeout      | Cleanup, may retry        |
-| **Unknown/Foreign**     | Thrown exceptions          | Normalize at boundary     |
-
-```typescript
-// Pattern: Normalize unknown errors at boundary
-const safeBoundary = Effect.catchAllDefect(effect, (defect) =>
-  Effect.fail(new UnknownError({ cause: defect }))
-)
-
-// Pattern: Catch user-initiated cancellations separately
-Effect.catchTag(effect, "UserCancelledError", () => Effect.succeed(null))
-
-// Pattern: Handle interruptions differently from failures
-Effect.onInterrupt(effect, () => Effect.log("Operation cancelled"))
-```
-
-### Pattern Matching (Match Module)
-
-When you need to use Effect's Match module for pattern matching, see [references/pattern-matching.md](references/pattern-matching.md).
-
-### Schema and JSON Schema
-
-For schema decoding, JSON Schema generation, closed object shapes, and `Schema.Record({ key: Schema.String, value: Schema.Never })`, see [references/schema-jsonschema.md](references/schema-jsonschema.md).
-
-### AI Tooling
-
-For `@effect/ai` tool definitions, empty tool parameters, OpenAI strict schema behavior, and prompt cache enum gotchas,
-see [references/ai.md](references/ai.md).
-
-### Services and Layers / Generator Pattern
-
-For service definition patterns (`Context.Tag`, `Effect.Service`, `Context.Reference`, `Context.ReadonlyTag`) and the generator pattern (`Effect.gen`, `Effect.fn`), see [references/services-layers.md](references/services-layers.md).
-
-### Runtime Patterns (Resource Management, Duration, Scheduling, State, SubscriptionRef, Concurrency)
-
-For resource lifecycles, durations, scheduling, state management, reactive refs, and concurrency primitives, see [references/runtime.md](references/runtime.md).
-
-### Configuration & Environment Variables
-
-When you need to read configuration with `Config`, handle secrets via `Redacted`, or wire custom config providers, see [references/config.md](references/config.md).
-
-### Collection Operations (Array, Record, Order)
-
-For Effect's `Array`/`Record` reducers, filters, predicates, object traversal replacements, and `Order` sorting helpers,
-see [references/collection-operations.md](references/collection-operations.md).
-
-### Quick Utilities (Functions, Deprecations)
-
-For small utility functions like `constVoid` and the running list of deprecations, see [references/quick-utils.md](references/quick-utils.md).
-
-### Platform and RPC
-
-For `HttpLayerRouter`, `RpcSerialization.makeMsgPack`, and deployment gotchas such as Cloudflare Workers msgpack support,
-see [references/platform-rpc.md](references/platform-rpc.md).
 
 ## Additional Resources
 
@@ -338,23 +192,3 @@ see [references/platform-rpc.md](references/platform-rpc.md).
 ### External Resources
 
 - **Effect-Atom** — https://github.com/tim-smart/effect-atom (open in browser for reactive state management patterns)
-
-### Reference Files
-
-- **`./references/ai.md`** — `@effect/ai` tools, `Tool.EmptyParams`, OpenAI provider notes
-- **`./references/config.md`** — `Config`, `Redacted`, and custom config providers
-- **`./references/collection-operations.md`** — `Array`/`Record` reducers, filters, predicates, sorting
-- **`./references/critical-rules.md`** — Forbidden patterns and mandatory conventions
-- **`./references/effect-atom.md`** — Effect-Atom reactive state management for React
-- **`./references/next-js.md`** — Effect + Next.js 15+ App Router integration patterns
-- **`./references/option-null.md`** — Option vs null boundary patterns
-- **`./references/pattern-matching.md`** — `Match` module for tagged unions and conditionals
-- **`./references/platform-rpc.md`** — `@effect/platform` and `@effect/rpc` integration notes
-- **`./references/quick-utils.md`** — Utility helpers and deprecations
-- **`./references/recent-upstream.md`** — Recent upstream public changes reflected by this skill
-- **`./references/runtime.md`** — Resource management, Duration, Scheduling, State, SubscriptionRef, Concurrency
-- **`./references/schema-jsonschema.md`** — Schema decoding and JSON Schema generation patterns
-- **`./references/services-layers.md`** — Services, Layers, generator (`Effect.gen` / `Effect.fn`)
-- **`./references/sql.md`** — `@effect/sql`, `SqlSchema`, row decoding, repository patterns
-- **`./references/streams.md`** — Stream patterns and backpressure gotchas
-- **`./references/testing.md`** — Vitest deterministic testing patterns
