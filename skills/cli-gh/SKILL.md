@@ -24,9 +24,20 @@ Expert guidance for GitHub CLI (gh) operations and workflows. Use this skill for
 
 ## Safety Rules
 
-**CRITICAL: This skill NEVER uses destructive gh CLI operations.**
+**CRITICAL: This skill forbids destructive gh CLI operations except the controlled label-deletion workflow below.**
 
-This skill focuses exclusively on safe, read-only, or reversible GitHub operations. The following commands are **PROHIBITED** and must **NEVER** be used:
+This skill focuses on safe, read-only, or reversible GitHub operations. Treat destructive operations as prohibited unless this file explicitly defines an exception.
+
+**Controlled destructive exception:**
+
+`gh label delete` may be used only when every condition is met:
+
+- The user explicitly asks to delete one or more repository labels.
+- Before running any deletion command, present a deletion plan listing the target repository, exact label names, exact command(s), and the consequence that the labels will be removed from the repository and from existing issues and pull requests.
+- The user explicitly approves that deletion plan in a subsequent message. The original deletion request, broad cleanup approval, prior consent, or silence is not approval.
+- Run only the approved `gh label delete <name> --repo OWNER/REPO --yes` commands. If the repository, labels, or commands change, stop and present a revised plan for approval.
+
+The following commands are **PROHIBITED** and must **NEVER** be used:
 
 **Permanently destructive commands:**
 
@@ -38,7 +49,6 @@ This skill focuses exclusively on safe, read-only, or reversible GitHub operatio
 - `gh cache delete` - Cache deletion
 - `gh secret delete` - Secret deletion
 - `gh variable delete` - Variable deletion
-- `gh label delete` - Label deletion
 - `gh ssh-key delete` - SSH key deletion (can lock out users)
 - `gh gpg-key delete` - GPG key deletion
 - `gh codespace delete` - Codespace deletion
@@ -56,6 +66,7 @@ This skill focuses exclusively on safe, read-only, or reversible GitHub operatio
 - Reverting pull requests (creates a new revert PR)
 - Canceling workflow runs (stops execution without deleting data)
 - Merging pull requests (after proper review)
+- Deleting repository labels only through the controlled destructive exception above
 - Read-only git operations (`git status`, `git log`, `git diff`)
 
 ## Installation & Setup
@@ -302,7 +313,7 @@ When the user asks to search GitHub repositories, issues, or pull requests, see 
 
 ## Labels
 
-When the user asks to list, create, edit, or clone repository labels, see [references/labels.md](references/labels.md).
+When the user asks to list, create, edit, delete, or clone repository labels, see [references/labels.md](references/labels.md).
 
 ## Codespaces
 
