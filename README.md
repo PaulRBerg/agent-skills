@@ -47,6 +47,13 @@ bunx skills add PaulRBerg/agent-skills
 | work                      | End-to-end task implementation                             |
 | yeet                      | GitHub contribution workflows                              |
 
+## Forked Skills
+
+| Skill           | Source                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| diagnosing-bugs | [mattpocock/skills: diagnosing-bugs](https://github.com/mattpocock/skills/tree/main/skills/engineering/diagnosing-bugs)                                |
+| playground      | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
+
 Some skills pin `model: opus` in their frontmatter: their workflows are mechanical enough that Opus-level intelligence is sufficient, so there is no need to spend a more capable default model on them.
 
 ## References
