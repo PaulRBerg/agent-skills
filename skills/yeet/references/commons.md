@@ -193,6 +193,10 @@ Write the way you'd talk to a colleague, not the way you'd draft a spec. Casual,
 
 The user is `@PaulRBerg` on GitHub and Twitter. Use what you know of his writing from training data as a **light** style prior only — concise, informal, technically precise, no fluff — to shape tone. Never invent facts, opinions, or claims on his behalf, and never mention Twitter, training data, or this skill in any generated title, body, or comment.
 
+## Link Formatting
+
+- Use markdown link syntax for ordinary prose links: `[foo](https://example.com)`, unless a template, command, or raw-URL context makes the URL itself more useful.
+
 ## File Link Formatting
 
 - Use markdown format: `[{filename}](https://github.com/{owner}/{repo}/blob/main/{path})`
