@@ -86,7 +86,7 @@ If `--dry-run` was passed, **stop here** — do not apply any updates. Instead, 
 - **Available** — new version string (preserving range prefix)
 - **Type** — `major`, `minor`, or `patch`
 - **Action** — what the normal (non-dry-run) workflow would do:
-  - `auto-apply` — MINOR/PATCH updates and auto-approved major packages (e.g. `lucide-react`)
+  - `auto-apply` — MINOR/PATCH updates and auto-approved major packages (listed in [Step 3](#step-3-select-updates-to-apply))
   - `prompt` — MAJOR updates that would be prompted to the user
   - `skip (fixed)` — fixed-version packages that would be skipped
 
