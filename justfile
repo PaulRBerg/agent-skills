@@ -3,72 +3,99 @@ set allow-duplicate-recipes
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set unstable
 
+# ---------------------------------------------------------------------------- #
+#                                  VARIABLES                                   #
+# ---------------------------------------------------------------------------- #
+
+mdformat := "uvx --with mdformat-gfm --with mdformat-frontmatter mdformat"
+skill_invocation_script := "scripts/sync-invocation-policy.mjs"
+
+# ---------------------------------------------------------------------------- #
+#                                 ENTRYPOINTS                                  #
+# ---------------------------------------------------------------------------- #
+
+[group("meta")]
 @default:
     just --list
 alias d := default
 
-[group("checks")]
-[doc("Install Husky git hooks for this checkout")]
+# ---------------------------------------------------------------------------- #
+#                                    SETUP                                     #
+# ---------------------------------------------------------------------------- #
+
+# Install Husky git hooks for this checkout
+[group("setup")]
 @hooks-install:
     nlx husky
 alias hi := hooks-install
 
+# Install local developer dependencies
+[group("setup")]
 @install-deps: install-uv
 alias id := install-deps
 
+# Install uv
+[group("setup")]
 @install-uv:
     curl -LsSf https://astral.sh/uv/install.sh | sh
 alias iu := install-uv
 
+# ---------------------------------------------------------------------------- #
+#                                    CHECKS                                    #
+# ---------------------------------------------------------------------------- #
+
+# Check Markdown formatting
+[group("checks")]
 @mdformat-check:
-    uvx --with mdformat-gfm --with mdformat-frontmatter mdformat --check .
+    {{ mdformat }} --check .
 alias mc := mdformat-check
 
+# Format Markdown
+[group("checks")]
 @mdformat-write:
-    uvx --with mdformat-gfm --with mdformat-frontmatter mdformat .
+    {{ mdformat }} .
 alias mw := mdformat-write
 
+# Run staged-file checks
 [group("checks")]
-[doc("Run staged-file checks")]
 pre-commit:
     nlx lint-staged
 alias pc := pre-commit
 
-[group("skills")]
-[script("bash")]
-[doc("Move skills/<skill> to shelved/<skill>")]
-shelve skill:
-    set -euo pipefail
-    skill='{{ skill }}'
-    case "$skill" in ''|*[!a-z0-9_-]*) printf '{{ RED }}invalid skill name: %s{{ NORMAL }}\n' "$skill" >&2; exit 64;; esac
-    if [ -n "$(git status --porcelain)" ]; then
-        printf '{{ RED }}working tree has uncommitted changes; commit or stash first{{ NORMAL }}\n' >&2
-        git status --short >&2
-        exit 1
-    fi
-    test -d "skills/$skill" || { printf '{{ RED }}missing skills/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
-    test ! -e "shelved/$skill" || { printf '{{ RED }}already exists: shelved/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
-    mkdir -p shelved
-    mv "skills/$skill" "shelved/$skill"
-    git add -A
-    git commit -m "chore: shelve $skill skill"
-    printf '{{ GREEN }}Shelved and committed %s.{{ NORMAL }}\n' "$skill"
-alias sh := shelve
-
+# Check SKILL.md invocation fields against agents/openai.yaml
 [group("checks")]
-[doc("Check SKILL.md invocation fields against agents/openai.yaml")]
 skill-invocation-check:
-    node scripts/sync-invocation-policy.mjs
+    node {{ skill_invocation_script }}
 alias sic := skill-invocation-check
 
+# Update agents/openai.yaml invocation policy from SKILL.md
 [group("checks")]
-[doc("Update agents/openai.yaml invocation policy from SKILL.md")]
 skill-invocation-fix:
-    node scripts/sync-invocation-policy.mjs --fix
+    node {{ skill_invocation_script }} --fix
 alias sif := skill-invocation-fix
 
-# Publish staged skills, install into ~/.agents, sync ~/.claude, commit+push there
-[doc("Stage your changes first; commits them (ccc --staged), pushes, installs in ~/.agents, syncs ~/.claude, commits+pushes there")]
+# ---------------------------------------------------------------------------- #
+#                                    SKILLS                                    #
+# ---------------------------------------------------------------------------- #
+
+# Move skills/<skill> to shelved/<skill> and commit the move
+[group("skills")]
+@shelve skill:
+    just --quiet _move-skill {{ quote(skill) }} skills shelved shelve Shelved
+alias sh := shelve
+
+# Move shelved/<skill> to skills/<skill> and commit the move
+[group("skills")]
+@unshelve skill:
+    just --quiet _move-skill {{ quote(skill) }} shelved skills unshelve Unshelved
+alias u := unshelve
+
+# ---------------------------------------------------------------------------- #
+#                                  PUBLISHING                                  #
+# ---------------------------------------------------------------------------- #
+
+# Publish staged skills, install them into ~/.agents, sync ~/.claude, then commit and push there
+[group("publishing")]
 [script("bash")]
 sync:
     set -euo pipefail
@@ -115,23 +142,31 @@ sync:
     git -C "$agents_root" push
 alias s := sync
 
-[group("skills")]
+# ---------------------------------------------------------------------------- #
+#                              INTERNAL HELPERS                                #
+# ---------------------------------------------------------------------------- #
+
+[private]
 [script("bash")]
-[doc("Move shelved/<skill> to skills/<skill>")]
-unshelve skill:
+_move-skill skill from_dir to_dir verb past:
     set -euo pipefail
-    skill='{{ skill }}'
+
+    skill={{ quote(skill) }}
+    from_dir={{ quote(from_dir) }}
+    to_dir={{ quote(to_dir) }}
+    verb={{ quote(verb) }}
+    past={{ quote(past) }}
+
     case "$skill" in ''|*[!a-z0-9_-]*) printf '{{ RED }}invalid skill name: %s{{ NORMAL }}\n' "$skill" >&2; exit 64;; esac
     if [ -n "$(git status --porcelain)" ]; then
         printf '{{ RED }}working tree has uncommitted changes; commit or stash first{{ NORMAL }}\n' >&2
         git status --short >&2
         exit 1
     fi
-    test -d "shelved/$skill" || { printf '{{ RED }}missing shelved/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
-    test ! -e "skills/$skill" || { printf '{{ RED }}already exists: skills/%s{{ NORMAL }}\n' "$skill" >&2; exit 1; }
-    mkdir -p skills
-    mv "shelved/$skill" "skills/$skill"
+    test -d "$from_dir/$skill" || { printf '{{ RED }}missing %s/%s{{ NORMAL }}\n' "$from_dir" "$skill" >&2; exit 1; }
+    test ! -e "$to_dir/$skill" || { printf '{{ RED }}already exists: %s/%s{{ NORMAL }}\n' "$to_dir" "$skill" >&2; exit 1; }
+    mkdir -p "$to_dir"
+    mv "$from_dir/$skill" "$to_dir/$skill"
     git add -A
-    git commit -m "chore: unshelve $skill skill"
-    printf '{{ GREEN }}Unshelved and committed %s.{{ NORMAL }}\n' "$skill"
-alias u := unshelve
+    git commit -m "chore: $verb $skill skill"
+    printf '{{ GREEN }}%s and committed %s.{{ NORMAL }}\n' "$past" "$skill"
