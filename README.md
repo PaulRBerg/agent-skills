@@ -29,6 +29,7 @@ bunx skills add PaulRBerg/agent-skills
 | commit                    | Git commit with conventional commits                       |
 | create-skill              | Bootstrap a new agent skill                                |
 | debrief                   | Interactive HTML or Markdown task debrief                  |
+| diagnosing-bugs           | Loop-first bug diagnosis and regression tests              |
 | effect-ts                 | Effect-TS patterns and guidance                            |
 | evm-atlas                 | EVM chain/account lookup + cross-chain data routing        |
 | find-tool                 | Find and compare current developer tools                   |
