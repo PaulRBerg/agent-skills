@@ -4,12 +4,12 @@ disable-model-invocation: true
 model: opus
 name: coingecko-historical
 user-invocable: true
-description: Open the CoinGecko historical-data page for a coin/date in the default browser.
+description: Open the CoinGecko historical-data page for a coin/date in Chromium via Chrome DevTools MCP.
 ---
 
 # CoinGecko Historical
 
-Open the CoinGecko historical-data page for a coin in the user's default browser, centered on a one-day window around a target date.
+Open the CoinGecko historical-data page for a coin in Chromium via Chrome DevTools MCP, centered on a one-day window around a target date.
 
 ## Arguments
 
@@ -24,10 +24,13 @@ Compute `DATE-1` (the day before `date`) and `DATE+1` (the day after `date`), th
 https://coingecko.com/en/coins/<coin-id>/historical_data?start=<DATE-1>&end=<DATE+1>
 ```
 
-Use the macOS `open` command:
+Call the `mcp__chrome_devtools.new_page` tool with:
 
-```bash
-open "https://coingecko.com/en/coins/<coin-id>/historical_data?start=<DATE-1>&end=<DATE+1>"
+```json
+{
+  "url": "https://coingecko.com/en/coins/<coin-id>/historical_data?start=<DATE-1>&end=<DATE+1>",
+  "background": false
+}
 ```
 
 ### Date arithmetic
@@ -43,12 +46,16 @@ end=$(date -j -v+1d -f "%Y-%m-%d" "$DATE" +%Y-%m-%d)
 
 User invokes: `/coingecko-historical bitcoin 2024-03-14`
 
-Run:
+Call `mcp__chrome_devtools.new_page` with:
 
-```bash
-open "https://coingecko.com/en/coins/bitcoin/historical_data?start=2024-03-13&end=2024-03-15"
+```json
+{
+  "url": "https://coingecko.com/en/coins/bitcoin/historical_data?start=2024-03-13&end=2024-03-15",
+  "background": false
+}
 ```
 
 ## Notes
 
 - Validate the date format before computing offsets; stop and ask the user if `date` is missing or malformed.
+- Do not use macOS `open`; this skill specifically opens Chromium through Chrome DevTools MCP.

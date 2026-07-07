@@ -25,7 +25,7 @@ bunx skills add PaulRBerg/agent-skills
 | cli-just                  | Just command runner guidance                               |
 | code-polish               | Simplify and/or risk-profiled review with autofix          |
 | coingecko-cli             | CoinGecko CLI for prices and market data                   |
-| coingecko-historical      | Open CoinGecko historical data page in browser             |
+| coingecko-historical      | Open CoinGecko historical data page in Chromium            |
 | commit                    | Git commit with conventional commits                       |
 | create-skill              | Bootstrap a new agent skill                                |
 | debrief                   | Interactive HTML or Markdown task debrief                  |
