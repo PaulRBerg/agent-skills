@@ -80,6 +80,7 @@ Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer nam
 ## Target Mainnets
 
 Target mainnet metadata lives in `./references/target-mainnets.json`. The `slug` field is the Sablier SDK chain slug (`sablier` package `~/sablier/sdk`, `src/evm/chains/specs.ts`, resolved as `meta.slug ?? key`). Arbitrum Nova, Celo, Fantom, IoTeX, and Zora are not defined in the SDK; their slugs follow the same convention (lowercase, hyphenated name).
+Maintainers generate this file from `@prb/crypto-registry` plus `./references/atlas-overlays.json`; installed skills use the committed static file.
 
 ## Target Fallback RPCs
 

@@ -29,6 +29,8 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 - `just` - list recipes.
 - `just mdformat-check` - check Markdown formatting with `mdformat-gfm` and `mdformat-frontmatter`.
 - `just mdformat-write` - format Markdown in place.
+- `just evm-atlas-check` - verify generated `evm-atlas` references match `@prb/crypto-registry` plus atlas overlays.
+- `just evm-atlas-generate` - regenerate generated `evm-atlas` references from `@prb/crypto-registry` plus atlas overlays.
 - `just skill-invocation-check` - verify `SKILL.md` invocation fields match `agents/openai.yaml`.
 - `just skill-invocation-fix` - update `agents/openai.yaml` invocation policy from `SKILL.md`.
 - `just pre-commit` - run staged-file checks through `nlx lint-staged`.

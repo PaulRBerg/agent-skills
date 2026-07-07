@@ -8,6 +8,7 @@ set unstable
 # ---------------------------------------------------------------------------- #
 
 mdformat := "uvx --with mdformat-gfm --with mdformat-frontmatter mdformat"
+evm_atlas_generator := "scripts/generate-evm-atlas.mjs"
 skill_invocation_script := "scripts/sync-invocation-policy.mjs"
 
 # ---------------------------------------------------------------------------- #
@@ -61,6 +62,18 @@ alias mw := mdformat-write
 pre-commit:
     nlx lint-staged
 alias pc := pre-commit
+
+# Regenerate evm-atlas generated references from crypto-registry + atlas overlays
+[group("checks")]
+evm-atlas-generate:
+    node {{ evm_atlas_generator }} --write
+alias eag := evm-atlas-generate
+
+# Check evm-atlas generated references are current
+[group("checks")]
+evm-atlas-check:
+    node {{ evm_atlas_generator }} --check
+alias eac := evm-atlas-check
 
 # Check SKILL.md invocation fields against agents/openai.yaml
 [group("checks")]

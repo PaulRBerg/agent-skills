@@ -1,0 +1,426 @@
+{
+  "metadata": {
+    "blockscoutObservedAt": "2026-06-14",
+    "etherscanProviderChainCount": 64,
+    "etherscanVerifiedAt": "2026-06-14"
+  },
+  "chains": {
+    "abstract": {
+      "primaryPublicRpc": "https://api.mainnet.abs.xyz",
+      "fallbackPublicRpcs": ["https://abstract.drpc.org", "https://2741.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "arbitrum": {
+      "primaryPublicRpc": "https://arb1.arbitrum.io/rpc",
+      "fallbackPublicRpcs": [
+        "https://arbitrum-one-rpc.publicnode.com",
+        "https://42161.rpc.thirdweb.com",
+        "https://rpcfree.com/arbitrum-rpc"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://arbitrum.blockscout.com/"
+      }
+    },
+    "arbitrum-nova": {
+      "primaryPublicRpc": "https://nova.arbitrum.io/rpc",
+      "fallbackPublicRpcs": [
+        "https://arbitrum-nova-rpc.publicnode.com",
+        "https://42170.rpc.thirdweb.com",
+        "https://arbitrum-nova.drpc.org"
+      ],
+      "routeMesh": true,
+      "etherscan": {
+        "support": "unsupported",
+        "notes": "Not returned by the live chainlist; `nova.arbiscan.io` redirects to Blockscout"
+      },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://arbitrum-nova.blockscout.com/",
+        "notes": "Canonical explorer (Arbiscan Nova decommissioned)"
+      }
+    },
+    "avalanche": {
+      "primaryPublicRpc": "https://api.avax.network/ext/bc/C/rpc",
+      "fallbackPublicRpcs": [
+        "https://avalanche-c-chain-rpc.publicnode.com",
+        "https://43114.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "paid" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "base": {
+      "primaryPublicRpc": "https://mainnet.base.org",
+      "fallbackPublicRpcs": [
+        "https://base-rpc.publicnode.com",
+        "https://base.gateway.tenderly.co",
+        "https://developer-access-mainnet.base.org"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "paid" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://base.blockscout.com/"
+      }
+    },
+    "berachain": {
+      "primaryPublicRpc": "https://rpc.berachain.com",
+      "fallbackPublicRpcs": [
+        "https://berachain-rpc.publicnode.com",
+        "https://80094.rpc.thirdweb.com",
+        "https://rpc.berachain-apis.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "blast": {
+      "primaryPublicRpc": "https://rpc.blast.io",
+      "fallbackPublicRpcs": [
+        "https://blast-rpc.publicnode.com",
+        "https://blast.drpc.org",
+        "https://81457.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "bsc": {
+      "primaryPublicRpc": "https://bsc-dataseed1.bnbchain.org",
+      "fallbackPublicRpcs": [
+        "https://bsc-rpc.publicnode.com",
+        "https://bsc.drpc.org",
+        "https://56.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "paid" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" },
+      "chainscoutNamePattern": "BNB|BSC|Smart Chain"
+    },
+    "celo": {
+      "primaryPublicRpc": "https://forno.celo.org",
+      "fallbackPublicRpcs": [
+        "https://celo.drpc.org",
+        "https://celo-rpc.publicnode.com",
+        "https://42220.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://celo.blockscout.com/"
+      }
+    },
+    "chiliz": {
+      "primaryPublicRpc": "https://rpc.chiliz.com",
+      "fallbackPublicRpcs": [
+        "https://chiliz.publicnode.com",
+        "https://88888.rpc.thirdweb.com",
+        "https://rpc.ankr.com/chiliz"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "core-dao": {
+      "primaryPublicRpc": "https://rpc.coredao.org",
+      "fallbackPublicRpcs": [
+        "https://core.drpc.org",
+        "https://1116.rpc.thirdweb.com",
+        "https://rpc-core.icecreamswap.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" },
+      "chainscoutNamePattern": "Core"
+    },
+    "mainnet": {
+      "primaryPublicRpc": "https://ethereum-rpc.publicnode.com",
+      "fallbackPublicRpcs": [
+        "https://eth.drpc.org",
+        "https://rpc.flashbots.net",
+        "https://1.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free", "notes": "Default chain" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://eth.blockscout.com/"
+      }
+    },
+    "fantom": {
+      "primaryPublicRpc": "https://rpc.fantom.network",
+      "fallbackPublicRpcs": ["https://rpc2.fantom.network"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "self",
+        "instanceUrl": "https://ftmscout.com/"
+      }
+    },
+    "gnosis": {
+      "primaryPublicRpc": "https://rpc.gnosischain.com",
+      "fallbackPublicRpcs": [
+        "https://gnosis-rpc.publicnode.com",
+        "https://gnosis.drpc.org",
+        "https://100.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://gnosis.blockscout.com/"
+      }
+    },
+    "hyperevm": {
+      "primaryPublicRpc": "https://rpc.hyperliquid.xyz/evm",
+      "fallbackPublicRpcs": [
+        "https://hyperliquid.drpc.org",
+        "https://999.rpc.thirdweb.com",
+        "https://gwan-ssl.wandevs.org:46891"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "self",
+        "instanceUrl": "https://www.hyperscan.com/",
+        "notes": "Chainscout marks `isTestnet=true`"
+      },
+      "chainscoutNamePattern": "HyperEVM|Hyper"
+    },
+    "iotex": {
+      "primaryPublicRpc": "https://babel-api.mainnet.iotex.io",
+      "fallbackPublicRpcs": ["https://4689.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "lightlink": {
+      "primaryPublicRpc": "https://replicator.phoenix.lightlink.io/rpc/v1",
+      "fallbackPublicRpcs": ["https://1890.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://phoenix.lightlink.io/"
+      },
+      "chainscoutNamePattern": "Lightlink|LightLink"
+    },
+    "linea": {
+      "primaryPublicRpc": "https://rpc.linea.build",
+      "fallbackPublicRpcs": [
+        "https://linea-rpc.publicnode.com",
+        "https://59144.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "self",
+        "instanceUrl": "https://explorer.linea.build/"
+      }
+    },
+    "mode": {
+      "primaryPublicRpc": "https://mainnet.mode.network",
+      "fallbackPublicRpcs": ["https://mode.drpc.org", "https://34443.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://explorer.mode.network/"
+      }
+    },
+    "monad": {
+      "primaryPublicRpc": "https://rpc.monad.xyz",
+      "fallbackPublicRpcs": ["https://monad.drpc.org", "https://143.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "morph": {
+      "primaryPublicRpc": "https://rpc.morphl2.io",
+      "fallbackPublicRpcs": [
+        "https://morph.drpc.org",
+        "https://2818.rpc.thirdweb.com",
+        "https://rpc-quicknode.morphl2.io"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "self",
+        "instanceUrl": "https://explorer.morphl2.io/"
+      }
+    },
+    "optimism": {
+      "primaryPublicRpc": "https://mainnet.optimism.io",
+      "fallbackPublicRpcs": [
+        "https://optimism-rpc.publicnode.com",
+        "https://optimism.drpc.org",
+        "https://10.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "paid" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://explorer.optimism.io/"
+      },
+      "chainscoutNamePattern": "OP|Optimism"
+    },
+    "polygon": {
+      "primaryPublicRpc": "https://polygon-bor-rpc.publicnode.com",
+      "fallbackPublicRpcs": [
+        "https://polygon.drpc.org",
+        "https://137.rpc.thirdweb.com",
+        "https://rpc-mainnet.matic.quiknode.pro"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://polygon.blockscout.com/"
+      }
+    },
+    "ronin": {
+      "primaryPublicRpc": "https://api.roninchain.com/rpc",
+      "fallbackPublicRpcs": ["https://ronin.drpc.org", "https://2020.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "unsafe",
+        "notes": "Chainscout returns a different network for `2020`"
+      }
+    },
+    "scroll": {
+      "primaryPublicRpc": "https://rpc.scroll.io",
+      "fallbackPublicRpcs": ["https://scroll.drpc.org", "https://534352.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": {
+        "support": "unsupported",
+        "notes": "Removed from Etherscan V2 on 2026-04-16"
+      },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://scroll.blockscout.com"
+      }
+    },
+    "sei": {
+      "primaryPublicRpc": "https://evm-rpc.sei-apis.com",
+      "fallbackPublicRpcs": ["https://sei.drpc.org", "https://1329.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "sonic": {
+      "primaryPublicRpc": "https://rpc.soniclabs.com",
+      "fallbackPublicRpcs": [
+        "https://sonic-rpc.publicnode.com",
+        "https://sonic.drpc.org",
+        "https://146.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "sophon": {
+      "primaryPublicRpc": "https://rpc.sophon.xyz",
+      "fallbackPublicRpcs": ["https://50104.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "superseed": {
+      "primaryPublicRpc": "https://mainnet.superseed.xyz",
+      "fallbackPublicRpcs": ["https://superseed.drpc.org", "https://5330.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "self",
+        "instanceUrl": "https://explorer.superseed.xyz/"
+      }
+    },
+    "unichain": {
+      "primaryPublicRpc": "https://mainnet.unichain.org",
+      "fallbackPublicRpcs": [
+        "https://unichain-rpc.publicnode.com",
+        "https://130.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://unichain.blockscout.com"
+      }
+    },
+    "world-chain": {
+      "primaryPublicRpc": "https://worldchain-mainnet.g.alchemy.com/public",
+      "fallbackPublicRpcs": [
+        "https://worldchain.drpc.org",
+        "https://480.rpc.thirdweb.com",
+        "https://worldchain-mainnet.gateway.tenderly.co"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "alchemy",
+        "instanceUrl": "https://worldchain-mainnet.explorer.alchemy.com/",
+        "notes": "Alchemy-hosted instance; prefer Etherscan V2"
+      },
+      "chainscoutNamePattern": "World"
+    },
+    "xdc": {
+      "primaryPublicRpc": "https://rpc.xdcrpc.com",
+      "fallbackPublicRpcs": [
+        "https://50.rpc.thirdweb.com",
+        "https://erpc.xdcrpc.com",
+        "https://rpc.xdc.org"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
+    "zksync": {
+      "primaryPublicRpc": "https://mainnet.era.zksync.io",
+      "fallbackPublicRpcs": ["https://zksync.drpc.org", "https://324.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": {
+        "support": "unsupported",
+        "notes": "Not currently supported by Etherscan V2"
+      },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://zksync.blockscout.com/"
+      },
+      "chainscoutNamePattern": "ZKsync"
+    },
+    "zora": {
+      "primaryPublicRpc": "https://zora.drpc.org",
+      "fallbackPublicRpcs": ["https://7777777.rpc.thirdweb.com", "https://rpc.zora.energy"],
+      "routeMesh": false,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    }
+  }
+}

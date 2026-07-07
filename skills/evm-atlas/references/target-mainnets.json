@@ -168,7 +168,7 @@
       "slug": "mode",
       "primaryPublicRpc": "https://mainnet.mode.network",
       "nativeCurrencySymbol": "ETH",
-      "explorerUrl": "https://modescan.io",
+      "explorerUrl": "https://explorer.mode.network",
       "routeMesh": true
     },
     {
@@ -249,7 +249,7 @@
       "slug": "sophon",
       "primaryPublicRpc": "https://rpc.sophon.xyz",
       "nativeCurrencySymbol": "SOPH",
-      "explorerUrl": "https://sophscan.xyz",
+      "explorerUrl": "https://explorer.sophon.xyz",
       "routeMesh": true
     },
     {

@@ -1,14 +1,19 @@
 {
   "aliases": [
     {
-      "alias": "mainnet",
-      "chainName": "Ethereum",
-      "chainId": 1
+      "alias": "Arbitrum One",
+      "chainName": "Arbitrum",
+      "chainId": 42161
     },
     {
-      "alias": "op",
-      "chainName": "Optimism",
-      "chainId": 10
+      "alias": "avalanche c-chain",
+      "chainName": "Avalanche",
+      "chainId": 43114
+    },
+    {
+      "alias": "avax",
+      "chainName": "Avalanche",
+      "chainId": 43114
     },
     {
       "alias": "bsc",
@@ -16,14 +21,24 @@
       "chainId": 56
     },
     {
-      "alias": "worldchain",
-      "chainName": "World Chain",
-      "chainId": 480
+      "alias": "binance smart chain",
+      "chainName": "BNB Chain",
+      "chainId": 56
     },
     {
-      "alias": "hyperevm",
-      "chainName": "HyperEVM",
-      "chainId": 999
+      "alias": "bnb",
+      "chainName": "BNB Chain",
+      "chainId": 56
+    },
+    {
+      "alias": "BNB Smart Chain",
+      "chainName": "BNB Chain",
+      "chainId": 56
+    },
+    {
+      "alias": "Chiliz Chain",
+      "chainName": "Chiliz",
+      "chainId": 88888
     },
     {
       "alias": "coreDao",
@@ -31,9 +46,114 @@
       "chainId": 1116
     },
     {
+      "alias": "mainnet",
+      "chainName": "Ethereum",
+      "chainId": 1
+    },
+    {
+      "alias": "eth",
+      "chainName": "Ethereum",
+      "chainId": 1
+    },
+    {
+      "alias": "ethereum",
+      "chainName": "Ethereum",
+      "chainId": 1
+    },
+    {
+      "alias": "ethereum mainnet",
+      "chainName": "Ethereum",
+      "chainId": 1
+    },
+    {
+      "alias": "fantom opera",
+      "chainName": "Fantom",
+      "chainId": 250
+    },
+    {
+      "alias": "ftm",
+      "chainName": "Fantom",
+      "chainId": 250
+    },
+    {
+      "alias": "gnosis chain",
+      "chainName": "Gnosis",
+      "chainId": 100
+    },
+    {
+      "alias": "hyper evm",
+      "chainName": "HyperEVM",
+      "chainId": 999
+    },
+    {
+      "alias": "hyperliquid",
+      "chainName": "HyperEVM",
+      "chainId": 999
+    },
+    {
+      "alias": "lightlink phoenix",
+      "chainName": "Lightlink",
+      "chainId": 1890
+    },
+    {
+      "alias": "LightLink Phoenix Mainnet",
+      "chainName": "Lightlink",
+      "chainId": 1890
+    },
+    {
+      "alias": "Linea Mainnet",
+      "chainName": "Linea",
+      "chainId": 59144
+    },
+    {
+      "alias": "Mode Mainnet",
+      "chainName": "Mode",
+      "chainId": 34443
+    },
+    {
+      "alias": "op",
+      "chainName": "Optimism",
+      "chainId": 10
+    },
+    {
+      "alias": "OP Mainnet",
+      "chainName": "Optimism",
+      "chainId": 10
+    },
+    {
+      "alias": "matic",
+      "chainName": "Polygon",
+      "chainId": 137
+    },
+    {
+      "alias": "pol",
+      "chainName": "Polygon",
+      "chainId": 137
+    },
+    {
+      "alias": "Sei Network",
+      "chainName": "Sei",
+      "chainId": 1329
+    },
+    {
+      "alias": "worldchain",
+      "chainName": "World Chain",
+      "chainId": 480
+    },
+    {
+      "alias": "XDC Network",
+      "chainName": "XDC",
+      "chainId": 50
+    },
+    {
       "alias": "zksync",
       "chainName": "ZKsync Era",
       "chainId": 324
+    },
+    {
+      "alias": "zora network",
+      "chainName": "Zora",
+      "chainId": 7777777
     }
   ]
 }
