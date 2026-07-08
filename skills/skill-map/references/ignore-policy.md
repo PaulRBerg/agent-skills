@@ -13,11 +13,11 @@
 
 ## macOS Protected Paths
 
-Broad `$HOME` scans ignore `~/Library` and `~/.Trash` because macOS privacy protections can make ripgrep return `2` after producing partial results. Scoped explicit roots are the reliable way to cover additional local content without treating protected-path failures as successful scans.
+Broad home-directory scans ignore `~/Library` and `~/.Trash` because macOS privacy protections can make ripgrep return `2` after producing partial results. Scoped explicit roots are the reliable way to cover additional local content without treating protected-path failures as successful scans.
 
 ## Agent Home Install Roots
 
-Broad scans ignore the agent home roots themselves — `~/.agents`, `~/.claude`, `~/.codex`, and `~/.local/state/skills` — not just their state subdirectories. These hold installed skill copies and managed state, so during a default `$HOME` scan they are noise relative to authored sources and project references. Pass one explicitly as `--root` (e.g. `--root ~/.agents`) to audit installs there; an explicit root is never self-ignored, matching how `~/Library` and catalog source checkouts behave.
+Broad scans ignore the agent home roots themselves — `~/.agents`, `~/.claude`, `~/.codex`, and `~/.local/state/skills` — not just their state subdirectories. These hold installed skill copies and managed state, so during a default `~` scan they are noise relative to authored sources and project references. Pass one explicitly as `--root` (e.g. `--root ~/.agents`) to audit installs there; an explicit root is never self-ignored, matching how `~/Library` and catalog source checkouts behave.
 
 ## Claude Code State
 
@@ -40,4 +40,4 @@ Codex documents `CODEX_HOME` as defaulting to `~/.codex`; it stores config, skil
 
 The helper does not globally ignore every directory named `plans`, `sessions`, or `backups`. Those names are ignored only under known agent state roots such as `.claude/` and `.codex/`, so project-authored files with those names can still be scanned.
 
-Known skill catalog source checkouts are different: broad `$HOME` scans ignore them because installed copies under `~/.agents`, `~/.claude`, `.agents`, or `.claude` are the actionable skill locations. Explicit `--root` paths inside a catalog source tree still scan that catalog for repo-local audits.
+Known skill catalog source checkouts are different: broad home-directory scans ignore them because installed copies under `~/.agents`, `~/.claude`, `.agents`, or `.claude` are the actionable skill locations. Explicit `--root` paths inside a catalog source tree still scan that catalog for repo-local audits.

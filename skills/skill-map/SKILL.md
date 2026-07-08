@@ -12,7 +12,7 @@ Find skill installs and references across local files without scanning macOS pro
 
 ## Arguments
 
-- `--root PATH`: Scan this root. Repeatable. Default: `$HOME`.
+- `--root PATH`: Scan this root. Repeatable. Default: `~`.
 - `--skill NAME`: Restrict the report to one skill name. Repeatable.
 - `--format text|json|dot`: Select report format. Default: `text`.
 - `--include-catalog-sources`: Include known local source checkouts such as `~/projects/agent-skills`, `~/sablier/sablier-skills`, and `~/sablier/agent-skills` during broad scans. Explicit `--root` values inside those trees are always scanned.
@@ -52,7 +52,7 @@ Find skill installs and references across local files without scanning macOS pro
 ## Guard Rails
 
 - Do not search transcript or backup directories manually after the helper excludes them unless the user explicitly requests transcript/history analysis.
-- Do not broaden `$HOME` scans into macOS protected paths such as `~/Library` or `~/.Trash`; pass narrower explicit roots instead when a broad scan needs more coverage.
+- Do not broaden home-directory scans into macOS protected paths such as `~/Library` or `~/.Trash`; pass narrower explicit roots instead when a broad scan needs more coverage.
 - Treat local skill catalog source checkouts as false positives during broad machine scans; pass them explicitly as `--root` when auditing catalog contents.
 - Treat output paths as local private context. Do not paste snippets unless `--include-snippets` was intentionally used.
 - Prefer adding ignore rules in the helper and documenting the rationale in `references/ignore-policy.md` instead of ad hoc shell filters.

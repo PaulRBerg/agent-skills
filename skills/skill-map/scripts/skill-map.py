@@ -552,7 +552,7 @@ def as_text(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", action="append", default=[], help="root to scan; repeatable (default: $HOME)")
+    parser.add_argument("--root", action="append", default=[], help="root to scan; repeatable (default: ~)")
     parser.add_argument("--skill", action="append", default=[], help="skill name filter; repeatable")
     parser.add_argument("--format", choices=("text", "json", "dot"), default="text")
     parser.add_argument(
