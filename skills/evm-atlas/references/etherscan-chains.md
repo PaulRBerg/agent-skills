@@ -5,7 +5,7 @@
 Source: <https://docs.etherscan.io/supported-chains>
 Live list: <https://api.etherscan.io/v2/chainlist> (returns the provider's authoritative `chainid` set)
 
-Verified against the live `chainlist` endpoint on 2026-06-14 (64 provider chains). This file intentionally lists only chains from `./references/target-mainnets.json`; provider-supported chains outside that list are out of scope for this skill.
+Verified against the live `chainlist` endpoint on 2026-07-08 (64 provider chains). This file intentionally lists only chains from `./references/target-mainnets.json`; provider-supported chains outside that list are out of scope for this skill.
 
 ## Target Mainnets (Free Tier Available)
 
@@ -24,6 +24,7 @@ Verified against the live `chainlist` endpoint on 2026-06-14 (64 provider chains
 | Polygon     | `137`    |               |
 | Sei         | `1329`   |               |
 | Sonic       | `146`    |               |
+| Taiko       | `167000` |               |
 | Unichain    | `130`    |               |
 | World Chain | `480`    |               |
 | XDC         | `50`     |               |

@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "blockscoutObservedAt": "2026-06-14",
+    "blockscoutObservedAt": "2026-07-08",
     "etherscanProviderChainCount": 64,
-    "etherscanVerifiedAt": "2026-06-14"
+    "etherscanVerifiedAt": "2026-07-08"
   },
   "chains": {
     "abstract": {
@@ -357,6 +357,23 @@
         "hostedBy": "self",
         "instanceUrl": "https://explorer.superseed.xyz/"
       }
+    },
+    "taiko": {
+      "primaryPublicRpc": "https://rpc.mainnet.taiko.xyz",
+      "fallbackPublicRpcs": [
+        "https://taiko-rpc.publicnode.com",
+        "https://taiko.drpc.org",
+        "https://167000.rpc.thirdweb.com"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "self",
+        "instanceUrl": "https://blockscout.mainnet.taiko.xyz/",
+        "notes": "Chainscout name is Taiko Alethia"
+      },
+      "chainscoutNamePattern": "Taiko|Alethia"
     },
     "unichain": {
       "primaryPublicRpc": "https://mainnet.unichain.org",

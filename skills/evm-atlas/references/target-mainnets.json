@@ -262,6 +262,15 @@
       "routeMesh": true
     },
     {
+      "chainName": "Taiko",
+      "chainId": 167000,
+      "slug": "taiko",
+      "primaryPublicRpc": "https://rpc.mainnet.taiko.xyz",
+      "nativeCurrencySymbol": "ETH",
+      "explorerUrl": "https://taikoscan.io",
+      "routeMesh": true
+    },
+    {
       "chainName": "Unichain",
       "chainId": 130,
       "slug": "unichain",

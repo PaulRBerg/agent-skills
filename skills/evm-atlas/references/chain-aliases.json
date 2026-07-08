@@ -136,6 +136,16 @@
       "chainId": 1329
     },
     {
+      "alias": "Taiko Alethia",
+      "chainName": "Taiko",
+      "chainId": 167000
+    },
+    {
+      "alias": "Taiko Mainnet",
+      "chainName": "Taiko",
+      "chainId": 167000
+    },
+    {
       "alias": "worldchain",
       "chainName": "World Chain",
       "chainId": 480

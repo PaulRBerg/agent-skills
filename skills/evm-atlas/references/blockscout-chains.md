@@ -36,7 +36,7 @@ Use `./scripts/resolve-chain.sh <chain_id>` to extract these fields as `key=valu
 
 ## Target Chains Observed in Chainscout
 
-Observed on 2026-06-14. Presence here does not override the canonical explorer/RPC metadata in `./references/target-mainnets.json`.
+Observed on 2026-07-08. Presence here does not override the canonical explorer/RPC metadata in `./references/target-mainnets.json`.
 
 | Chain         | `chain_id` | Native | Hosted by  | Instance URL                                     | Notes                                             |
 | ------------- | ---------- | ------ | ---------- | ------------------------------------------------ | ------------------------------------------------- |
@@ -56,6 +56,7 @@ Observed on 2026-06-14. Presence here does not override the canonical explorer/R
 | Polygon       | `137`      | POL    | blockscout | https://polygon.blockscout.com/                  |                                                   |
 | Scroll        | `534352`   | ETH    | blockscout | https://scroll.blockscout.com                    |                                                   |
 | Superseed     | `5330`     | ETH    | self       | https://explorer.superseed.xyz/                  |                                                   |
+| Taiko         | `167000`   | ETH    | self       | https://blockscout.mainnet.taiko.xyz/            | Chainscout name is Taiko Alethia                  |
 | Unichain      | `130`      | ETH    | blockscout | https://unichain.blockscout.com                  |                                                   |
 | World Chain   | `480`      | ETH    | alchemy    | https://worldchain-mainnet.explorer.alchemy.com/ | Alchemy-hosted instance; prefer Etherscan V2      |
 | ZKsync Era    | `324`      | ETH    | blockscout | https://zksync.blockscout.com/                   |                                                   |

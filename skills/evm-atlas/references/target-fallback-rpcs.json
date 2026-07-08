@@ -245,6 +245,15 @@
       ]
     },
     {
+      "chainName": "Taiko",
+      "chainId": 167000,
+      "fallbackPublicRpcs": [
+        "https://taiko-rpc.publicnode.com",
+        "https://taiko.drpc.org",
+        "https://167000.rpc.thirdweb.com"
+      ]
+    },
+    {
       "chainName": "Unichain",
       "chainId": 130,
       "fallbackPublicRpcs": [

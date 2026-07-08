@@ -58,6 +58,7 @@ target_name_pattern() {
     146) printf '%s\n' 'Sonic' ;;
     50104) printf '%s\n' 'Sophon' ;;
     5330) printf '%s\n' 'Superseed' ;;
+    167000) printf '%s\n' 'Taiko|Alethia' ;;
     130) printf '%s\n' 'Unichain' ;;
     480) printf '%s\n' 'World' ;;
     50) printf '%s\n' 'XDC' ;;
