@@ -1,7 +1,7 @@
 ---
 argument-hint: '[--all] [--staged] [--natural] [--push] [--close <issue_numbers>]'
 disable-model-invocation: true
-effort: high
+effort: medium
 name: commit
 user-invocable: true
 description: 'Commit staged or intended changes: craft a Conventional Prefix or Natural Language message, then commit — with --all, --staged, --close, or --push.'
