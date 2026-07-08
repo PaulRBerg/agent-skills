@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -23,7 +24,20 @@ from typing import Any
 
 
 THRESHOLD = 1000
+TEST_THRESHOLD = 2000
 PLAN_LIMIT = 3
+
+TEST_DIR_NAMES = {
+    "test",
+    "tests",
+    "__tests__",
+    "spec",
+    "specs",
+}
+
+TEST_NAME_TOKENS = {"test", "tests", "spec", "specs"}
+
+_TOKEN_RE = re.compile(r"[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])")
 
 ALWAYS_IGNORED_DIRS = {
     ".git",
@@ -290,6 +304,26 @@ def is_refactorable_language(language: str) -> bool:
     return language in TOKEI_LANGUAGE_ALLOWLIST
 
 
+def tokenize_name(name: str) -> list[str]:
+    parts = re.split(r"[^A-Za-z0-9]+", name)
+    tokens: list[str] = []
+    for part in parts:
+        if part:
+            tokens.extend(_TOKEN_RE.findall(part))
+    return [token.lower() for token in tokens]
+
+
+def is_test_path(path: Path) -> bool:
+    for part in path.parts[:-1]:
+        if normalize_part(part) in TEST_DIR_NAMES:
+            return True
+    return bool(TEST_NAME_TOKENS & set(tokenize_name(path.name)))
+
+
+def threshold_for(path: Path) -> int:
+    return TEST_THRESHOLD if is_test_path(path) else THRESHOLD
+
+
 def run_tokei(path: Path, include_generated: bool) -> list[FileStat] | None:
     if shutil.which("tokei") is None:
         return None
@@ -461,7 +495,7 @@ def strip_slash_block_comment(line: str, in_block_comment: bool) -> tuple[str, b
 def large_files(stats: list[FileStat]) -> list[FileStat]:
     by_path: dict[Path, FileStat] = {}
     for stat in stats:
-        if stat.loc <= THRESHOLD:
+        if stat.loc <= threshold_for(stat.path):
             continue
         current = by_path.get(stat.path)
         if current is None or stat.loc > current.loc:
@@ -485,13 +519,13 @@ def print_report(scan_path: Path, files: list[FileStat], metric: str, include_ge
     print("# Large File Report")
     print()
     print(f"- Scan root: `{display_path(scan_path, base)}`")
-    print(f"- Threshold: files over {THRESHOLD} LOC")
+    print(f"- Threshold: files over {THRESHOLD} LOC (test files over {TEST_THRESHOLD} LOC)")
     print(f"- Metric: {metric}")
     print(f"- Noise policy: {'include generated/vendor/build/dependency paths' if include_generated else 'source-only default'}")
     print()
 
     if not files:
-        print(f"No files over {THRESHOLD} LOC found.")
+        print("No files over the threshold found.")
         return
 
     print("| Rank | LOC | Language | Path |")

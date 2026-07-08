@@ -3,12 +3,12 @@ argument-hint: "[path] [--include-generated]"
 disable-model-invocation: true
 name: large-file-refactor
 user-invocable: true
-description: Scan for source files over 1000 LOC and propose Serena-assisted split refactor plans.
+description: Scan for source files over 1000 LOC (2000 LOC for test files) and propose Serena-assisted split refactor plans.
 ---
 
 # Large File Refactor
 
-Scan a codebase for source files over 1000 LOC, report every match, and propose a focused split plan for the largest files.
+Scan a codebase for source files over 1000 LOC, report every match, and propose a focused split plan for the largest files. Test files (matched by `test`/`tests`/`spec`/`specs` directories or filename tokens) use a relaxed 2000 LOC threshold instead.
 
 ## Arguments
 
