@@ -32,4 +32,9 @@ gh release view v1.0.0
 
 # Download release assets
 gh release download v1.0.0
+
+# Download from a public repo without authentication
+gh release download v1.0.0 --repo owner/repo
 ```
+
+`gh release download` works against public repositories without authentication (a token is still used when present), matching `gh extension install`.
