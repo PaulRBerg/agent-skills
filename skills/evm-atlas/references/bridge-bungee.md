@@ -4,6 +4,10 @@
 
 Use Bungee as a read-only enrichment source for bridge transactions, cross-chain swaps, and Socket/Bungee route status after the known origin and destination chains are confirmed against `./references/target-mainnets.json`. Bungee can connect the source transaction to destination execution, route metadata, and refund details, but it does not replace explorer, RPC, or receipt verification.
 
+## Router Caveat
+
+Bungee/Socket is a routing layer, not a single bridge protocol. Socket Swap V3 exposes bridge providers including `cctp-v2` and `cctp-v2-slow`, so a Bungee/Socket route may use Circle CCTP under the hood. When logs, provider metadata, or destination mint events indicate CCTP, read `./references/bridge-circle.md` to interpret Circle CCTP contracts, fee recipients, and `MintAndWithdraw` logs.
+
 Default to the public sandbox API:
 
 ```text
@@ -92,4 +96,5 @@ Interpret `bungeeStatusCode` / history `statusCode` as:
 - https://docs.bungee.exchange/api-reference/core-api/get-request-status
 - https://docs.bungee.exchange/integrate/integration-guides/check-status
 - https://docs.bungee.exchange/llms.txt
+- https://docs.socket.tech/about/supported-providers.md
 - https://public-backend.bungee.exchange/swagger-json
