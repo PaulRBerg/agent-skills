@@ -33,7 +33,7 @@ The symlink target is always the relative path `../../.agents/skills/<name>` so 
 ├── SKILL.md       # Required: frontmatter + lean workflow (aim for <500 lines)
 ├── agents/
 │   └── openai.yaml # Required: Codex metadata; disables implicit invocation
-├── scripts/       # Optional: executable code (Bash/Python/etc.) the workflow invokes
+├── scripts/       # Optional: helper code (prefer TypeScript via bun run; Python via uv)
 ├── references/    # Optional: long-form docs loaded on demand
 └── assets/        # Optional: templates / fonts / images used in OUTPUT (never loaded into context)
 ```
@@ -56,6 +56,8 @@ Keep `SKILL.md` focused on workflow. Push bulk into `scripts/` (deterministic lo
 - A long heredoc keeps appearing inside `SKILL.md`.
 
 Scripts are token-efficient: the agent invokes them without reading them. Document the CLI signature in `SKILL.md` and leave the implementation in `scripts/`.
+
+Prefer `scripts/*.ts` run with `bun run scripts/<name>.ts`, unless there is a good reason TypeScript is the wrong fit for the helper. Python is also a good choice for data, text, and file processing; run Python helpers through `uv run scripts/<name>.py`, not raw `python` or `python3`.
 
 ### Use `references/` when
 
@@ -128,7 +130,7 @@ Use `WebFetch` to confirm the current frontmatter schema, naming rules, and prog
 
 Before writing anything, decide what belongs where:
 
-- Will the workflow invoke helper code? → `scripts/<name>.{sh,py,ts}`
+- Will the workflow invoke helper code? → Prefer `scripts/<name>.ts` run with `bun run`; use `scripts/<name>.py` through `uv run` when Python is a better fit.
 - Schemas, long examples, variant guides, domain knowledge? → `references/<topic>.md`
 - Templates or files the skill writes into the user's output? → `assets/`
 - None of the above? → ship just `SKILL.md`.
@@ -154,7 +156,7 @@ Write `<scope>/.agents/skills/<name>/SKILL.md` with:
 - `disable-model-invocation` and `user-invocable` fields set for Claude behavior. Omit only when intentionally relying on Claude defaults: `disable-model-invocation: false`, `user-invocable: true`.
 - `## Arguments` (if any) and `## Workflow` sections in **imperative form** with concrete steps.
 - Explicit links to every `references/` file the workflow may need, each with a one-line note describing *when* to read it.
-- CLI signatures for any bundled scripts so the agent can call them without reading them.
+- CLI signatures for any bundled scripts, including the runtime command (`bun run scripts/<name>.ts` or `uv run scripts/<name>.py`), so the agent can call them without reading them.
 
 Aim for `SKILL.md` under 500 lines. If a section grows past ~50 lines and is not core workflow, move it to `references/` and link it.
 
@@ -192,5 +194,6 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - Use imperative / infinitive form throughout `SKILL.md`.
 - All paths inside `SKILL.md` (e.g., `references/placeholder.md`, `scripts/example.sh`) are relative to the skill directory.
 - Every new skill must include `agents/openai.yaml` with `policy.allow_implicit_invocation` derived from `SKILL.md`, never the other way around.
+- Prefer TypeScript helper scripts run with `bun run`; use Python through `uv run`, never raw `python` or `python3`.
 - Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by default.
 - Do not commit the new skill — leave that to the user.
