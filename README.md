@@ -35,6 +35,7 @@ bunx skills add PaulRBerg/agent-skills
 | find-tool                 | Find and compare current developer tools                   |
 | git-squash                | Squash PR branch with semantic commit message              |
 | grill-me                  | Relentlessly stress-test plans and designs                 |
+| large-file-refactor       | Large source-file report and Serena split plans            |
 | loop-skill                | Repeat a skill multiple times with one net report          |
 | playground                | Interactive single-file HTML playgrounds                   |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references    |
