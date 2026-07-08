@@ -25,7 +25,7 @@ Analyze the user's task against prior Codex and Claude Code work in the current 
 
 ### 2. Discover project transcripts
 
-Look only at Codex and Claude Code transcripts for the current project unless the user explicitly names additional project paths. Run the miner per [transcript sources](references/transcript-sources.md); pass `--max-sessions N` to keep the evidence set small. Open transcript bodies only after a session plausibly matches the current project or task.
+Look only at Codex and Claude Code transcripts for the current project unless the user explicitly names additional project paths. Run the miner per [transcript sources](references/transcript-sources.md); resolve `scripts/transcript-miner.py` relative to this skill directory and pass `--project "$project_path"` so the helper scopes itself to the user's cwd. Pass `--max-sessions N` to keep the evidence set small. Open transcript bodies only after a session plausibly matches the current project or task.
 
 ### 3. Select evidence
 

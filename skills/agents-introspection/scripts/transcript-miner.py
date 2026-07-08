@@ -5,8 +5,9 @@
 """Mine Codex and Claude Code transcript metadata without emitting transcript excerpts.
 
 Usage:
-  uv run scripts/transcript-miner.py [--project PATH ...] [--keyword TEXT ...]
-      [--format text|json] [--max-sessions N] [--include-archived]
+  uv run /path/to/agents-introspection/scripts/transcript-miner.py
+      [--project PATH ...] [--keyword TEXT ...] [--format text|json]
+      [--max-sessions N] [--include-archived]
 """
 
 from __future__ import annotations
@@ -135,7 +136,7 @@ def mine_transcripts(
     include_archived: bool,
 ) -> dict[str, Any]:
     codex_home = Path(os.path.expanduser(os.environ.get("CODEX_HOME", "~/.codex"))).resolve()
-    claude_home = Path(os.path.expanduser(os.environ.get("CLAUDE_HOME", "~/.claude"))).resolve()
+    claude_home = claude_config_dir()
     codex_index = load_codex_index(codex_home / "session_index.jsonl")
     project_reports: list[dict[str, Any]] = []
     selected_sessions: list[SessionSummary] = []
@@ -261,13 +262,23 @@ def mine_claude_project(
     claude_home: Path,
     max_sessions: int,
 ) -> tuple[list[SessionSummary], Counter[str], list[str]]:
-    project_dir = claude_home / "projects" / encode_claude_project(project)
-    if not project_dir.is_dir():
+    project_dirs = [
+        claude_home / "projects" / project_key
+        for project_key in claude_project_keys(project)
+    ]
+    project_dirs = list(dict.fromkeys(project_dirs))
+    existing_project_dirs = [project_dir for project_dir in project_dirs if project_dir.is_dir()]
+    if not existing_project_dirs:
         return [], Counter(), []
 
     sessions: list[SessionSummary] = []
     max_candidate_files = max(25, max_sessions * 8)
-    for path in sorted(project_dir.glob("*.jsonl"), key=mtime_sort_key, reverse=True)[:max_candidate_files]:
+    candidate_paths = [
+        path
+        for project_dir in existing_project_dirs
+        for path in project_dir.glob("*.jsonl")
+    ]
+    for path in sorted(candidate_paths, key=mtime_sort_key, reverse=True)[:max_candidate_files]:
         summary = summarize_jsonl_session(
             path,
             source="claude",
@@ -281,19 +292,20 @@ def mine_claude_project(
 
     tool_failures: Counter[str] = Counter()
     tool_paths: list[str] = []
-    tool_results_dir = project_dir / "tool-results"
-    if tool_results_dir.is_dir():
-        for path in sorted(tool_results_dir.rglob("*"), key=mtime_sort_key, reverse=True):
-            if not path.is_file():
-                continue
-            if len(tool_paths) >= MAX_TOOL_RESULT_FILES:
-                break
-            tool_paths.append(str(path))
-            text = read_text_limited(path)
-            if not text:
-                continue
-            signals = count_patterns([text], FAILURE_PATTERNS)
-            tool_failures.update(signals)
+    for project_dir in existing_project_dirs:
+        tool_results_dir = project_dir / "tool-results"
+        if tool_results_dir.is_dir():
+            for path in sorted(tool_results_dir.rglob("*"), key=mtime_sort_key, reverse=True):
+                if not path.is_file():
+                    continue
+                if len(tool_paths) >= MAX_TOOL_RESULT_FILES:
+                    break
+                tool_paths.append(str(path))
+                text = read_text_limited(path)
+                if not text:
+                    continue
+                signals = count_patterns([text], FAILURE_PATTERNS)
+                tool_failures.update(signals)
 
     return sessions, tool_failures, tool_paths
 
@@ -560,7 +572,20 @@ def truncate(value: str, limit: int = 160) -> str:
     return value[: limit - 1].rstrip() + "..."
 
 
+def claude_config_dir() -> Path:
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or os.environ.get("CLAUDE_HOME") or "~/.claude"
+    return Path(os.path.expanduser(config_dir)).resolve()
+
+
+def claude_project_keys(project: Path) -> list[str]:
+    return [encode_claude_project(project), legacy_encode_claude_project(project)]
+
+
 def encode_claude_project(project: Path) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "-", str(project))
+
+
+def legacy_encode_claude_project(project: Path) -> str:
     return str(project).replace("/", "-")
 
 

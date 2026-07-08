@@ -2,19 +2,42 @@
 
 Use this reference to locate and sample Codex and Claude Code transcripts for the current working directory. Treat every transcript as sensitive plaintext.
 
-## Project Path
+## Local Paths
 
-Resolve the project path once:
+Resolve local paths once and reuse these variables in later snippets:
 
 ```sh
 project_path="$(pwd -P)"
+home_dir="$(cd ~ && pwd -P)"
+claude_config_dir="${CLAUDE_CONFIG_DIR:-$home_dir/.claude}"
+codex_home="${CODEX_HOME:-$home_dir/.codex}"
+skill_dir="${AGENTS_INTROSPECTION_SKILL_DIR:-}"
+if [ -z "$skill_dir" ]; then
+  for candidate in "$home_dir/.agents/skills/agents-introspection" "$home_dir/.claude/skills/agents-introspection"; do
+    if [ -f "$candidate/scripts/transcript-miner.py" ]; then
+      skill_dir="$candidate"
+      break
+    fi
+  done
+fi
+transcript_miner="$skill_dir/scripts/transcript-miner.py"
+test -f "$transcript_miner" || {
+  printf '%s\n' "missing agents-introspection transcript miner" >&2
+  exit 1
+}
+
 printf '%s\n' "$project_path"
+printf '%s\n' "$claude_config_dir"
+printf '%s\n' "$codex_home"
+printf '%s\n' "$transcript_miner"
 ```
 
-For Claude Code, encode the absolute path by replacing `/` with `-`:
+For Claude Code, use `CLAUDE_CONFIG_DIR` when set; otherwise use `~/.claude`.
+Encode the absolute path by replacing every non-alphanumeric character with
+`-`:
 
 ```sh
-claude_project_dir="$HOME/.claude/projects/$(printf '%s' "$project_path" | tr '/' '-')"
+claude_project_dir="$claude_config_dir/projects/$(printf '%s' "$project_path" | sed 's/[^A-Za-z0-9]/-/g')"
 printf '%s\n' "$claude_project_dir"
 ```
 
@@ -25,20 +48,20 @@ Example: `/Users/prb/projects/prb-math` maps to `~/.claude/projects/-Users-prb-p
 Run the bundled miner before opening transcript bodies:
 
 ```sh
-uv run scripts/transcript-miner.py --keyword "<keyword>" --format json
+uv run "$transcript_miner" --project "$project_path" --keyword "<keyword>" --format json
 ```
 
 For explicitly named projects, pass every path and mine only those scopes:
 
 ```sh
-uv run scripts/transcript-miner.py \
+uv run "$transcript_miner" \
   --project /Users/prb/projects/one \
   --project /Users/prb/projects/two \
   --keyword "<keyword>" \
   --format json
 ```
 
-Use `--include-archived` only when active Codex sessions do not provide enough signal. The helper reports project coverage, candidate sessions, task themes, correction/failure/verification signals, tool-call counts, and privacy-gap categories. It redacts emails, API-key-like strings, private-key-like hex, EVM addresses, transaction hashes, and long secret-like tokens; it does not emit raw transcript excerpts.
+Use `--include-archived` only when active Codex sessions do not provide enough signal. The helper reports project coverage, candidate sessions, task themes, correction/failure/verification signals, tool-call counts, and privacy-gap categories. It reads Claude transcripts from `CLAUDE_CONFIG_DIR` when set, falls back to `~/.claude`, and checks the legacy slash-only project key for older local history. It redacts emails, API-key-like strings, private-key-like hex, EVM addresses, transaction hashes, and long secret-like tokens; it does not emit raw transcript excerpts.
 
 ## Claude Code
 
@@ -92,14 +115,14 @@ Common record types:
 Use the index for titles and recency:
 
 ```sh
-test -f "$HOME/.codex/session_index.jsonl" &&
-  tail -n 200 "$HOME/.codex/session_index.jsonl"
+test -f "$codex_home/session_index.jsonl" &&
+  tail -n 200 "$codex_home/session_index.jsonl"
 ```
 
 Then find transcript files that mention the current project path:
 
 ```sh
-for dir in "$HOME/.codex/sessions" "$HOME/.codex/archived_sessions"; do
+for dir in "$codex_home/sessions" "$codex_home/archived_sessions"; do
   test -d "$dir" && rg -l -F "$project_path" "$dir"
 done
 ```
@@ -108,7 +131,7 @@ If exact-path matching misses relevant sessions, search for repo basename and ta
 
 ```sh
 project_name="${project_path##*/}"
-for dir in "$HOME/.codex/sessions" "$HOME/.codex/archived_sessions"; do
+for dir in "$codex_home/sessions" "$codex_home/archived_sessions"; do
   test -d "$dir" && rg -l -i -e "$project_name|<keyword-1>|<keyword-2>" "$dir"
 done
 ```
