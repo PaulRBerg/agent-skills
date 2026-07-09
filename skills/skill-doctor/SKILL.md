@@ -1,5 +1,5 @@
 ---
-argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe] [--include-shelved]"
+argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe]"
 disable-model-invocation: false
 name: skill-doctor
 user-invocable: true
@@ -15,7 +15,6 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 - `--root PATH`: Scan this catalog or installed skill root. Repeatable. Default: current working directory.
 - `--format text|json`: Select report format. Default: `text`.
 - `--fix-safe`: Create missing `agents/openai.yaml` files or update mismatched `policy.allow_implicit_invocation`.
-- `--include-shelved`: Include `shelved/*/SKILL.md` in metadata checks. Shelved skills are never required in `README.md`.
 
 ## Workflow
 

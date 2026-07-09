@@ -10,7 +10,7 @@
   "lint-staged": {
     "*": "bash -c 'just evm-atlas-check' --",
     "**/*.md": "uvx --with mdformat-gfm --with mdformat-frontmatter mdformat",
-    "{skills,shelved}/*/{SKILL.md,agents/openai.yaml}": "bash -c 'just skill-invocation-check' --",
+    "skills/*/{SKILL.md,agents/openai.yaml}": "bash -c 'just skill-invocation-check' --",
     "scripts/sync-invocation-policy.mjs": "bash -c 'just skill-invocation-check' --"
   }
 }

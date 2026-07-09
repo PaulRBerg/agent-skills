@@ -88,22 +88,6 @@ skill-invocation-fix:
 alias sif := skill-invocation-fix
 
 # ---------------------------------------------------------------------------- #
-#                                    SKILLS                                    #
-# ---------------------------------------------------------------------------- #
-
-# Move skills/<skill> to shelved/<skill> and commit the move
-[group("skills")]
-@shelve skill:
-    just --quiet _move-skill {{ quote(skill) }} skills shelved shelve Shelved
-alias sh := shelve
-
-# Move shelved/<skill> to skills/<skill> and commit the move
-[group("skills")]
-@unshelve skill:
-    just --quiet _move-skill {{ quote(skill) }} shelved skills unshelve Unshelved
-alias u := unshelve
-
-# ---------------------------------------------------------------------------- #
 #                                  PUBLISHING                                  #
 # ---------------------------------------------------------------------------- #
 
@@ -154,32 +138,3 @@ sync:
     ccc
     git -C "$agents_root" push
 alias s := sync
-
-# ---------------------------------------------------------------------------- #
-#                              INTERNAL HELPERS                                #
-# ---------------------------------------------------------------------------- #
-
-[private]
-[script("bash")]
-_move-skill skill from_dir to_dir verb past:
-    set -euo pipefail
-
-    skill={{ quote(skill) }}
-    from_dir={{ quote(from_dir) }}
-    to_dir={{ quote(to_dir) }}
-    verb={{ quote(verb) }}
-    past={{ quote(past) }}
-
-    case "$skill" in ''|*[!a-z0-9_-]*) printf '{{ RED }}invalid skill name: %s{{ NORMAL }}\n' "$skill" >&2; exit 64;; esac
-    if [ -n "$(git status --porcelain)" ]; then
-        printf '{{ RED }}working tree has uncommitted changes; commit or stash first{{ NORMAL }}\n' >&2
-        git status --short >&2
-        exit 1
-    fi
-    test -d "$from_dir/$skill" || { printf '{{ RED }}missing %s/%s{{ NORMAL }}\n' "$from_dir" "$skill" >&2; exit 1; }
-    test ! -e "$to_dir/$skill" || { printf '{{ RED }}already exists: %s/%s{{ NORMAL }}\n' "$to_dir" "$skill" >&2; exit 1; }
-    mkdir -p "$to_dir"
-    mv "$from_dir/$skill" "$to_dir/$skill"
-    git add -A
-    git commit -m "chore: $verb $skill skill"
-    printf '{{ GREEN }}%s and committed %s.{{ NORMAL }}\n' "$past" "$skill"

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const roots = ["skills", "shelved"];
+const roots = ["skills"];
 const fix = process.argv.includes("--fix");
 const errors = [];
 let fixed = 0;

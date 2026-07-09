@@ -7,7 +7,7 @@
 
 Usage:
   uv run scripts/skill-doctor.py [--root PATH ...] [--format text|json]
-      [--fix-safe] [--include-shelved]
+      [--fix-safe]
 """
 
 from __future__ import annotations
@@ -56,7 +56,6 @@ class SkillFile:
     root: Path
     path: Path
     active: bool
-    shelved: bool
 
     @property
     def directory(self) -> Path:
@@ -72,7 +71,6 @@ def main() -> int:
     parser.add_argument("--root", action="append", default=[], help="Catalog or installed skill root to scan")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--fix-safe", action="store_true", help="Apply narrow openai.yaml metadata fixes")
-    parser.add_argument("--include-shelved", action="store_true", help="Scan shelved/*/SKILL.md metadata")
     args = parser.parse_args()
 
     try:
@@ -81,7 +79,7 @@ def main() -> int:
         print(f"skill-doctor: {error}", file=sys.stderr)
         return 2
 
-    report = audit(roots, fix_safe=args.fix_safe, include_shelved=args.include_shelved)
+    report = audit(roots, fix_safe=args.fix_safe)
 
     if args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -107,14 +105,14 @@ def normalize_roots(raw_roots: list[str]) -> list[Path]:
     return roots
 
 
-def audit(roots: list[Path], *, fix_safe: bool, include_shelved: bool) -> dict[str, Any]:
+def audit(roots: list[Path], *, fix_safe: bool) -> dict[str, Any]:
     findings: list[Finding] = []
     fixes: list[Fix] = []
     root_reports: list[dict[str, Any]] = []
     seen_skill_paths: set[Path] = set()
 
     for root in roots:
-        skills = [skill for skill in discover_skills(root, include_shelved) if skill.path not in seen_skill_paths]
+        skills = [skill for skill in discover_skills(root) if skill.path not in seen_skill_paths]
         seen_skill_paths.update(skill.path for skill in skills)
 
         for skill in skills:
@@ -125,7 +123,6 @@ def audit(roots: list[Path], *, fix_safe: bool, include_shelved: bool) -> dict[s
             {
                 "path": str(root),
                 "active_skills": sum(1 for skill in skills if skill.active),
-                "shelved_skills": sum(1 for skill in skills if skill.shelved),
                 "readme": str(root / "README.md") if (root / "README.md").exists() else None,
             }
         )
@@ -147,25 +144,18 @@ def audit(roots: list[Path], *, fix_safe: bool, include_shelved: bool) -> dict[s
     }
 
 
-def discover_skills(root: Path, include_shelved: bool) -> list[SkillFile]:
+def discover_skills(root: Path) -> list[SkillFile]:
     skills: list[SkillFile] = []
 
     if (root / "SKILL.md").is_file():
-        skills.append(SkillFile(root=root, path=(root / "SKILL.md").resolve(), active=True, shelved=False))
+        skills.append(SkillFile(root=root, path=(root / "SKILL.md").resolve(), active=True))
 
     for skill_path in child_skill_paths(root, "skills"):
-        skills.append(SkillFile(root=root, path=skill_path.resolve(), active=True, shelved=False))
+        skills.append(SkillFile(root=root, path=skill_path.resolve(), active=True))
 
     if root.name == "skills":
         for skill_path in sorted(root.glob("*/SKILL.md")):
-            skills.append(SkillFile(root=root, path=skill_path.resolve(), active=True, shelved=False))
-
-    if include_shelved:
-        for skill_path in child_skill_paths(root, "shelved"):
-            skills.append(SkillFile(root=root, path=skill_path.resolve(), active=False, shelved=True))
-        if root.name == "shelved":
-            for skill_path in sorted(root.glob("*/SKILL.md")):
-                skills.append(SkillFile(root=root, path=skill_path.resolve(), active=False, shelved=True))
+            skills.append(SkillFile(root=root, path=skill_path.resolve(), active=True))
 
     deduped: dict[Path, SkillFile] = {}
     for skill in skills:
@@ -502,7 +492,6 @@ def check_readme(root: Path, skills: list[SkillFile], findings: list[Finding]) -
 
     table_names = parse_readme_skill_table(text)
     active_names = {skill.directory_name for skill in skills if skill.active}
-    shelved_names = {path.parent.name for path in child_skill_paths(root, "shelved")}
 
     for name in sorted(active_names - set(table_names)):
         findings.append(finding("README_SKILL_MISSING", "error", readme, None, False, f"active skill missing from README table: {name}"))
@@ -510,10 +499,7 @@ def check_readme(root: Path, skills: list[SkillFile], findings: list[Finding]) -
     for name, line in sorted(table_names.items()):
         if name in active_names:
             continue
-        if name in shelved_names:
-            findings.append(finding("README_LISTS_SHELVED", "error", readme, line, False, f"README lists shelved skill: {name}"))
-        else:
-            findings.append(finding("README_LISTS_MISSING", "error", readme, line, False, f"README lists missing skill: {name}"))
+        findings.append(finding("README_LISTS_MISSING", "error", readme, line, False, f"README lists missing skill: {name}"))
 
 
 def parse_readme_skill_table(text: str) -> dict[str, int]:
@@ -574,7 +560,7 @@ def print_text_report(report: dict[str, Any]) -> None:
     if report["roots"]:
         print("\nRoots:")
         for root in report["roots"]:
-            print(f"- {root['path']}: {root['active_skills']} active, {root['shelved_skills']} shelved")
+            print(f"- {root['path']}: {root['active_skills']} active")
 
     if report["fixes"]:
         print("\nFixes:")
