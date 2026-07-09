@@ -9,7 +9,7 @@ See `commons.md > Auth Validation`. The repository context read below is the aut
 ## Parse Repository Argument
 
 - If first token matches "owner/repo": use it as repository
-- Otherwise: infer from the local `origin` remote via `scripts/yeet-context.sh repo`
+- Otherwise: infer from the local `origin` remote via `{skill-dir}/scripts/yeet-context.sh repo`
 - Error if not in a repo and no explicit repository provided
 
 ## Collect Repository Context
@@ -17,7 +17,7 @@ See `commons.md > Auth Validation`. The repository context read below is the aut
 Fetch repo id, categories, and discussion-template tree once:
 
 ```bash
-scripts/yeet-context.sh repo "{owner}/{repo}" --discussion-categories --discussion-templates
+{skill-dir}/scripts/yeet-context.sh repo "{owner}/{repo}" --discussion-categories --discussion-templates
 ```
 
 If the repository was inferred from the current Git repo, omit `{owner}/{repo}`. Store `repository.id`, `repository.discussionCategories.nodes`, and `repository.discussionTemplateTree.entries`.

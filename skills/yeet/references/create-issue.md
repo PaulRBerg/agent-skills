@@ -21,7 +21,7 @@ Determine repository from arguments:
 Fetch once and reuse:
 
 ```bash
-scripts/yeet-context.sh repo "{owner}/{repo}" --issue-templates
+{skill-dir}/scripts/yeet-context.sh repo "{owner}/{repo}" --issue-templates
 ```
 
 If no explicit repository was provided and the workflow targets the current Git repository, omit `{owner}/{repo}` and let the helper infer it from `origin`.

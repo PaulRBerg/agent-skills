@@ -21,7 +21,7 @@ Rules:
 - IF first token matches `https://github.com/{owner}/{repo}/issues/{number}` or `.../pull/{number}`: parse owner, repo, number from URL
 - ELSE IF first token matches `{owner}/{repo}#{number}`: split on `#`
 - ELSE IF first token matches `{owner}/{repo}`: use it as repository; next token must be the issue number (strip leading `#`)
-- ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from the local `origin` remote via `scripts/yeet-context.sh issue`
+- ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from the local `origin` remote via `{skill-dir}/scripts/yeet-context.sh issue`
 - ELSE: ERROR "Couldn't figure out the issue. Pass `owner/repo#123` or a GitHub issue URL."
 
 Everything after the issue identifier is the **update instructions** — natural-language description of what to change.
@@ -31,7 +31,7 @@ Everything after the issue identifier is the **update instructions** — natural
 Always read the issue before editing — never regenerate based on the user's instructions alone.
 
 ```bash
-scripts/yeet-context.sh issue "{owner}/{repo}" {number}
+{skill-dir}/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
 ```
 
 ## Interpret Update Instructions

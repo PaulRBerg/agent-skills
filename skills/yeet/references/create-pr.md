@@ -14,7 +14,7 @@ See `commons.md > Auth Validation` for GitHub authentication. The repository con
 **Collect repo context once:**
 
 ```bash
-scripts/yeet-context.sh repo
+{skill-dir}/scripts/yeet-context.sh repo
 ```
 
 Use `repository.defaultBranchRef.name` as the default base branch unless args specify a base.

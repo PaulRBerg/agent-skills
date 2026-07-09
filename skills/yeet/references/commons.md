@@ -6,12 +6,12 @@ Shared conventions used across all GitHub contribution workflows.
 
 Do not run unconditional `gh auth status`. Treat the first required read-only `gh` command in the workflow as auth validation.
 
-When repository, template, discussion, label, or issue/PR thread context is needed, prefer:
+When repository, template, discussion, label, or issue/PR thread context is needed, prefer the bundled helper. In the commands below, `{skill-dir}` is the absolute path to the directory containing this skill's `SKILL.md`; never interpret `scripts/` relative to the target repository.
 
 ```bash
-scripts/yeet-context.sh repo "{owner}/{repo}" [--issue-templates] [--discussion-templates] [--discussion-categories]
-scripts/yeet-context.sh issue "{owner}/{repo}" {number}
-scripts/yeet-context.sh labels "{owner}/{repo}"
+{skill-dir}/scripts/yeet-context.sh repo "{owner}/{repo}" [--issue-templates] [--discussion-templates] [--discussion-categories]
+{skill-dir}/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
+{skill-dir}/scripts/yeet-context.sh labels "{owner}/{repo}"
 ```
 
 If the helper fails with an auth error, stop with: "Run `gh auth login` first".
@@ -28,7 +28,7 @@ Collect repository context once per workflow and reuse it. The `repo` helper out
 - optional issue/discussion template tree entries with `name`, `oid`, and `type`
 - optional discussion categories
 
-For workflows in the current Git repository, `scripts/yeet-context.sh repo` can infer `{owner}/{repo}` from the local `origin` remote before the GraphQL read. For explicit targets, pass `{owner}/{repo}`.
+For workflows in the current Git repository, `{skill-dir}/scripts/yeet-context.sh repo` can infer `{owner}/{repo}` from the local `origin` remote before the GraphQL read. For explicit targets, pass `{owner}/{repo}`.
 
 ## Fetch Repo Labels
 
@@ -41,7 +41,7 @@ Fetch labels only when labels may actually be applied:
 External repos without label-capable permission: skip this step entirely and omit labels. Never hardcode taxonomies.
 
 ```bash
-scripts/yeet-context.sh labels "{owner}/{repo}"
+{skill-dir}/scripts/yeet-context.sh labels "{owner}/{repo}"
 ```
 
 The helper preserves the current `gh label list --limit 200 --json name,description` behavior. Both `name` and `description` are required — match the user's request semantically against descriptions, not just names.
@@ -67,7 +67,7 @@ GitHub issue-form YAML can define top-level `labels` and `type`. The native web 
 
 Current `gh issue create --template` uses a template as interactive/editor starting body text. It is rejected with `--body` / `--body-file`, and it is not a non-interactive YAML issue-form submission API. For deterministic agent-created issues, fetch YAML forms, render matching markdown headings, and pass supported metadata explicitly.
 
-Use the cached `repository.viewerPermission` from `scripts/yeet-context.sh repo`. Treat `ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` as label-capable; omit `--label` for `READ`. If a label create fails anyway, run the idempotency check before retrying once without labels. When a YAML form has top-level `type`, pass `--type` if the repo supports issue types.
+Use the cached `repository.viewerPermission` from `{skill-dir}/scripts/yeet-context.sh repo`. Treat `ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` as label-capable; omit `--label` for `READ`. If a label create fails anyway, run the idempotency check before retrying once without labels. When a YAML form has top-level `type`, pass `--type` if the repo supports issue types.
 
 ## HEREDOC Syntax
 

@@ -13,7 +13,7 @@ Facilitate GitHub-based open source contribution workflows including pull reques
 
 ## Prerequisites
 
-Use the first required read-only `gh` command in each workflow as authentication validation. Prefer `scripts/yeet-context.sh` when the workflow needs repository, template, discussion, label, or issue/PR thread context.
+Use the first required read-only `gh` command in each workflow as authentication validation. The `scripts/yeet-context.sh` helper is bundled with this skill, not the target repository. Resolve it to an absolute path relative to the directory containing this `SKILL.md`, and never search for it in the target repository. Prefer the helper when the workflow needs repository, template, discussion, label, or issue/PR thread context.
 
 For pull request workflows, also verify:
 

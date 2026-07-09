@@ -17,7 +17,7 @@ See `commons.md > Auth Validation`. The repository context read below is the aut
 Before generating the issue body, verify the template specs in this file still match the upstream `.github/ISSUE_TEMPLATE` files. GitHub form templates change over time and silent drift produces issues with wrong section headers, missing fields, or invalid dropdown values.
 
 ```bash
-scripts/yeet-context.sh repo anthropics/claude-code --issue-templates
+{skill-dir}/scripts/yeet-context.sh repo anthropics/claude-code --issue-templates
 ```
 
 Use `repository.viewerPermission` for label capability. Compare `repository.issueTemplateTree.entries` names and SHAs against the known-good SHAs (last verified 2026-06-17):
