@@ -93,14 +93,7 @@ Never edit CONTRIBUTING.md. If it exists next to a target:
 
 ## Verification
 
-Prefer host repo recipes:
-
-```sh
-just mdformat-write
-just mdformat-check
-```
-
-If no formatter/checker exists, report the skip. For `--dry-run`, report the commands that would run.
+Check whether the repo defines Markdown lint/format rules (for example a `just` recipe, npm/package script, `.markdownlint.json`, `.prettierrc`, or lint-staged config). If found, apply them; otherwise report the skip. For `--dry-run`, report the commands that would run.
 
 ## Report
 

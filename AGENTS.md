@@ -46,6 +46,7 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 - Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under `skills/`. Do not add them to `README.md`, do not create `agents/openai.yaml`, and do not treat them as installable catalog skills.
 - After editing skills that must stay aligned, run the `sync-skills` internal skill to check coupled skills and helper data.
 - Keep skills self-contained. Do not de-duplicate content across skills by extracting shared references or canonical files; users install skills individually.
+- Write skill content for end users and other repos, not for this repo. Skills must not assume this repo's own tooling (e.g. `just mdformat-write`, `just skill-invocation-check`) is present elsewhere; have skills detect and use whatever the target repo provides instead of naming this repo's recipes.
 - Resolve `references/`, `scripts/`, `examples/`, and `assets/` paths relative to the owning skill directory.
 - Every `skills/cli-*` skill must maintain `references/version.txt` with exactly one normalized semver for the CLI version the docs were last refreshed against: no leading `v`, prose, comments, ranges, prerelease labels, or extra lines. The wakeup automation maps `skills/cli-<name>` to binary `<name>` and refreshes the skill when the installed binary is newer than this file.
 - Bash scripts must be compatible with Bash v3.2 (`/bin/bash`), because Codex uses the built-in Bash by default.

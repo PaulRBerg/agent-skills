@@ -127,20 +127,9 @@ rg -o '\b(references|scripts|assets|examples)/[A-Za-z0-9][A-Za-z0-9._/-]*' "$ski
 
 ## Verification
 
-Prefer host repo recipes, inspecting unclear recipes first:
+Check whether the repo defines Markdown lint/format rules (for example a `just` recipe, npm/package script, `.markdownlint.json`, `.prettierrc`, or lint-staged config). If found, inspect unclear recipes first, then apply them.
 
-```sh
-just mdformat-write
-just mdformat-check
-```
-
-If skill frontmatter or `agents/openai.yaml` changed in a skills catalog, also run:
-
-```sh
-just skill-invocation-check
-```
-
-If no formatter/checker exists, report the skip. For `--dry-run`, report the commands that would run.
+If no lint/format rules exist, report the skip. For `--dry-run`, report the commands that would run.
 
 ## Report
 
@@ -161,8 +150,7 @@ Project skills: <count> (<paths or "none">)
   - <advisory>
 
 ### Verification
-✓ just mdformat-write
-✓ just mdformat-check
+✓ <repo lint/format command, or "no rules found — skipped">
 
 ### Residual Risks
 None.

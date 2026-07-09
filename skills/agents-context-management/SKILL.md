@@ -132,8 +132,8 @@ Skip VCS, dependency, and build output directories: `.git`, `node_modules`, `ven
 
 After writes:
 
-1. Run the host repo's Markdown formatter/checker. Prefer `just mdformat-write`, then `just mdformat-check` when present.
-2. If any `SKILL.md` frontmatter or `agents/openai.yaml` changed in a skills catalog, run the host repo's invocation metadata check. Prefer `just skill-invocation-check` when present.
+1. Check whether the repo defines Markdown lint/format rules (for example a `just` recipe, npm/package script, `.markdownlint.json`, `.prettierrc`, or lint-staged config). If found, apply them; otherwise skip and report the skip.
+2. If any `SKILL.md` frontmatter or `agents/openai.yaml` changed in a skills catalog, check whether the repo defines an invocation metadata check (for example a `just` recipe or npm/package script). If found, run it.
 3. Verify changed `CLAUDE.md` symlinks resolve to sibling `AGENTS.md`.
 4. For `--dry-run`, skip writes and verification that depends on changed files; report the exact commands that would run.
 
