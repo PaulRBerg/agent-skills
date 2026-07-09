@@ -81,31 +81,6 @@ describe("Cache", () => {
 });
 ```
 
-### Testing Environment-Dependent Code
-
-```typescript
-import { describe, test, expect, afterEach } from "vitest";
-import { getEnvironment } from "./environment";
-
-describe("getEnvironment", () => {
-  const originalEnv = process.env.NODE_ENV;
-
-  afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
-  });
-
-  test("returns production when NODE_ENV is production", () => {
-    process.env.NODE_ENV = "production";
-    expect(getEnvironment()).toBe("production");
-  });
-
-  test("returns development by default", () => {
-    process.env.NODE_ENV = undefined;
-    expect(getEnvironment()).toBe("development");
-  });
-});
-```
-
 ## Mocking Patterns
 
 ### Basic Function Mocking

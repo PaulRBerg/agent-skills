@@ -13,11 +13,12 @@ npx skills add PaulRBerg/agent-skills#shelved
 
 ## Skills
 
-| Skill              | Description                             |
-| ------------------ | --------------------------------------- |
-| diagram-monochrome | Monochrome technical schematic diagrams |
-| oracle-codex       | Codex oracle for planning               |
-| vitest             | Vitest v4 testing guidance              |
+| Skill              | Description                                   |
+| ------------------ | --------------------------------------------- |
+| diagnosing-bugs    | Loop-first bug diagnosis and regression tests |
+| diagram-monochrome | Monochrome technical schematic diagrams       |
+| oracle-codex       | Codex oracle for planning                     |
+| vitest             | Vitest v4 testing guidance                    |
 
 ## References
 

@@ -1,13 +1,20 @@
 ---
-disable-model-invocation: false
 name: vitest
-user-invocable: true
-description: 'Use for Vitest in TypeScript React/Next.js: write, run, or debug unit/component tests, mocks, testing utilities, and coverage.'
+description: This skill should be used when the user asks to write, run, or debug tests with Vitest in TypeScript React/Next.js projects, or mentions unit/component tests, mocking, or testing utilities. Trigger phrases include "write tests", "run tests", "mock functions", "test coverage".
 ---
 
-# Quick Start
+# Your Role
 
-**Typical setup:** Vitest v4 with jsdom environment; globals enabled (`describe`, `test`, `expect`, `vi`); path aliases configured per project. In a workspace monorepo, read [references/monorepo-testing.md](references/monorepo-testing.md) for shared-vs-app test strategies, path aliases, and organization.
+You are an expert in writing tests with Vitest v4 for TypeScript React/Next.js projects. You help users write
+high-quality tests, debug failures, and maintain test suites efficiently.
+
+**Typical setup:**
+
+- Vitest v4 with jsdom environment
+- Globals enabled (`describe`, `test`, `expect`, `vi`)
+- Path aliases configured per project
+
+# Quick Start
 
 ## Running Tests
 
@@ -95,6 +102,38 @@ afterEach(() => {
 });
 ```
 
+## Factory Mock Pattern
+
+Prefer factory functions for complex mocks:
+
+```typescript
+// __mocks__/localStorage.ts
+import { vi } from "vitest";
+
+export function createLocalStorageMock() {
+  const store = new Map<string, string>();
+
+  return {
+    getItem: vi.fn((key: string) => store.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => {
+      store.set(key, value);
+    }),
+    removeItem: vi.fn((key: string) => {
+      store.delete(key);
+    }),
+    clear: vi.fn(() => {
+      store.clear();
+    })
+  };
+}
+
+// Usage in tests
+import { createLocalStorageMock } from "./__mocks__/localStorage";
+
+const mockStorage = createLocalStorageMock();
+global.localStorage = mockStorage as Storage;
+```
+
 ## Shared Setup File
 
 Global mocks and configuration live in a setup file (e.g., `tests/setup.ts`):
@@ -113,9 +152,47 @@ vi.mock("@/utils/logger", () => ({
 }));
 ```
 
-# Further Patterns
+# Common Testing Scenarios
 
-For component tests, complex mocking, async delays/callbacks, snapshot testing, type testing, custom matchers, and parameterized tests, read [references/testing-patterns.md](references/testing-patterns.md) when the basics above aren't enough.
+## Testing Utilities
+
+```typescript
+import { describe, test, expect, afterEach } from "vitest";
+import { getEnvironment } from "./environment";
+
+describe("getEnvironment", () => {
+  const originalEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  test("returns production when NODE_ENV is production", () => {
+    process.env.NODE_ENV = "production";
+    expect(getEnvironment()).toBe("production");
+  });
+
+  test("returns development by default", () => {
+    process.env.NODE_ENV = undefined;
+    expect(getEnvironment()).toBe("development");
+  });
+});
+```
+
+## Async Testing
+
+```typescript
+test("async function resolves correctly", async () => {
+  const result = await fetchData();
+  expect(result).toEqual({ data: "value" });
+});
+
+test("async function rejects with error", async () => {
+  await expect(failingFunction()).rejects.toThrow("Error message");
+});
+```
+
+## Mocking
 
 For function mocks (vi.fn, spyOn), module mocks (vi.mock, vi.doMock), and timer mocks (vi.useFakeTimers), see [references/mocking.md](references/mocking.md).
 
@@ -142,6 +219,37 @@ nlx vitest --coverage            # See what's tested
 nlx vitest --inspect             # Node debugger
 nlx vitest --run                 # Disable watch mode
 ```
+
+# Best Practices
+
+## DO
+
+- Colocate tests with source files (`feature.ts` + `feature.test.ts`)
+- Use `describe` blocks to group related tests
+- Add `afterEach()` cleanup for state/mocks
+- Use visual separators for clarity (`/* --- */`)
+- Test behavior, not implementation
+- Use explicit type annotations for mocks
+- Keep tests focused and independent
+- Write tests before fixing bugs (reproduce the bug first)
+
+## DON'T
+
+- Test implementation details (internal variables)
+- Share state between tests
+- Mock everything (only mock boundaries: network, storage, time)
+- Forget to restore mocks/timers
+- Use `any` types in tests
+- Create brittle tests tied to DOM structure
+- Add backward-compatibility hacks for test utilities
+
+# Advanced Topics
+
+For deeper dives, see the `./references/` directory:
+
+- **`testing-patterns.md`** - Complete pattern library (component tests, complex mocking, async patterns)
+- **`monorepo-testing.md`** - Workspace-specific strategies (shared vs. app tests, path aliases, organization)
+- **`troubleshooting.md`** - Debug guide (common errors, performance, coverage, CI/CD)
 
 # Coverage Analysis
 
@@ -179,3 +287,11 @@ Example config: `vitest.config.ts`
   },
 }
 ```
+
+# Next Steps
+
+1. **For component testing** - See `./references/testing-patterns.md` (React Testing Library setup)
+2. **For monorepo-specific strategies** - See `./references/monorepo-testing.md`
+3. **For debugging help** - See `./references/troubleshooting.md`
+
+Start with simple unit tests, add component tests as needed.
