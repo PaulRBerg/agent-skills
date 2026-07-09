@@ -29,7 +29,6 @@ bunx skills add PaulRBerg/agent-skills
 | commit                    | Git commit with conventional commits                       |
 | create-skill              | Bootstrap a new agent skill                                |
 | debrief                   | Interactive HTML or Markdown task debrief                  |
-| diagnosing-bugs           | Loop-first bug diagnosis and regression tests              |
 | effect-ts                 | Effect-TS patterns and guidance                            |
 | evm-atlas                 | EVM chain/account lookup + cross-chain data routing        |
 | find-tool                 | Find and compare current developer tools                   |
@@ -50,10 +49,9 @@ bunx skills add PaulRBerg/agent-skills
 
 ## Forked Skills
 
-| Skill           | Source                                                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| diagnosing-bugs | [mattpocock/skills: diagnosing-bugs](https://github.com/mattpocock/skills/tree/main/skills/engineering/diagnosing-bugs)                                |
-| playground      | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
+| Skill      | Source                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| playground | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
 
 Some skills pin `model: opus` in their frontmatter: their workflows are mechanical enough that Opus-level intelligence is sufficient, so there is no need to spend a more capable default model on them.
 
