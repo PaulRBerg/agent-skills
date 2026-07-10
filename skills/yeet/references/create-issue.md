@@ -4,7 +4,7 @@ Create GitHub issues with automatic labeling, template detection, and intelligen
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`. The repository context read below is the auth check.
+See `context.md > Auth Validation`. The repository context read below is the auth check.
 
 ## Parse Repository Argument
 
@@ -90,13 +90,13 @@ Extract owner from repository. Use cached `repository.viewerPermission`; `ADMIN`
 - IF owner = `viewer.login` OR owner = `sablier-labs`: continue with semantic labels.
 - ELSE: skip semantic labels. Only template-defined labels apply, and only when permission allows labels.
 
-Fetch the repo's live label set per `commons.md > Fetch Repo Labels` only if semantic labels are in scope or the selected template defines labels and permission allows them. Pick labels by semantically matching the user's request against the fetched `name + description` pairs. One label per dimension when a clear axis exists in the repo; skip dimensions that don't apply; never invent labels.
+Fetch the repo's live label set per `context.md > Fetch Repo Labels` only if semantic labels are in scope or the selected template defines labels and permission allows them. Pick labels by semantically matching the user's request against the fetched `name + description` pairs. One label per dimension when a clear axis exists in the repo; skip dimensions that don't apply; never invent labels.
 
 Stash the selected labels for the `gh issue create` call below.
 
 ## Generate Title and Body
 
-See `commons.md > Informal Tone` for tone guidance.
+See `writing.md > Informal Tone` for tone guidance.
 
 ### Title
 
@@ -130,13 +130,13 @@ If YAML template has `title` field (e.g., "[BUG] "), prepend it to a clear, conc
 </details>
 ```
 
-See `commons.md > GitHub Admonitions` for when/how to add admonitions. See `commons.md > Task List Syntax` for progress-tracking checklists (`- [ ]` / `- [x]`). See `commons.md > Markdown Tables` for rendering tabular content as tables. See `commons.md > File Link Formatting` for link rules. See `commons.md > Platform String Normalization` for OS fields.
+Use task lists only for trackable work, tables only for repeated comparable fields, and admonitions only for material warnings. See `writing.md > Link Formatting` for links and `context.md > Platform String Normalization` for OS fields.
 
 ## Attach Images
 
 **ONLY if `$image_paths` is non-empty.**
 
-See `commons.md > Image Uploads` for constraints and fallback rules.
+See `context.md > Image Uploads` for constraints and fallback rules.
 
 Default path: require `gh img` and upload before creating the issue.
 
@@ -177,7 +177,7 @@ Add `--type "$issue_type"` only when a template issue type applies. Add `--label
 
 Display: "Created: $URL"
 
-On failure: follow [commons.md > Error Handling](commons.md#error-handling) — run the idempotency check before any retry.
+On failure: follow [posting.md > Error Handling and Idempotency](posting.md#error-handling-and-idempotency) — run the idempotency check before any retry.
 
 ## Examples
 

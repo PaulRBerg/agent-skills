@@ -7,22 +7,23 @@ description: Use to find, compare, and recommend current tools, packages, librar
 
 # Find Tool
 
-Find and evaluate current tools, packages, and libraries across development ecosystems using fresh research.
+Recommend the current option that best fits the user's actual constraints, backed by fresh primary evidence.
 
 ## Workflow
 
-1. Identify the target ecosystem from the user's request or repository context. Default to JavaScript/TypeScript npm packages and Node.js tooling when no ecosystem is specified and repo context is unavailable.
-2. Ask only when the task or ecosystem is ambiguous enough to change the recommendation.
-3. Search current sources; never rely only on training data because package and tool ecosystems change quickly.
-4. Compare the top 3-5 viable options using ecosystem-appropriate metrics.
-5. Recommend one option, explain the tradeoffs, and call out red flags.
+1. Infer the ecosystem, existing stack, must-haves, switching cost, and decision criteria from the request and repository. Ask only when an unknown would materially change the recommendation.
+2. Check whether the standard library, platform, or an already-installed tool is sufficient before adding a dependency.
+3. Search current authoritative sources. Read [references/find-tool.md](references/find-tool.md) only for the relevant ecosystem's source routing, fallback criteria, install conventions, and red flags.
+4. Compare the viable options against the user's criteria. Use adoption, maintenance, security, documentation, performance, operational cost, and ecosystem fit only where they affect this decision; do not force fixed weights or a fixed number of candidates.
+5. Recommend one option when the evidence supports it. State the decisive tradeoff, material red flags, and the closest alternative. Say when the evidence is too close or no external tool is justified.
 
-**Read [references/find-tool.md](references/find-tool.md) before comparing or recommending anything** — it is the single source of truth for ecosystem-specific search queries, source priorities, evaluation criteria and weights, tie-breakers, output format, comparison tables, install commands, red flags, and examples.
+## Defaults
 
-## Research Requirements
+- With no repository evidence, default to JavaScript/TypeScript and Node.js tooling.
+- Prefer standard-library or platform primitives when adequate.
+- For JavaScript installs, prefer the repository's package manager and otherwise `ni`; for macOS CLIs, prefer an official or well-maintained Homebrew formula.
+- Prefer registries, official docs, repositories, changelogs, and security advisories over secondary comparisons. For agent skills, search registries and GitHub because no single index is complete.
 
-- Use web search or other current source lookups for every recommendation.
-- Prefer primary or authoritative sources for facts: official registries, package pages, docs, GitHub repositories, changelogs, security advisories, and marketplace listings.
-- Capture concrete evidence: GitHub URL, stars or adoption signal, release/update recency, install/download metric when available, license or security concerns when relevant, and ecosystem-specific fit.
-- Check whether the standard library or an already-available platform primitive solves the task before adding a dependency.
-- When researching agent skills, combine generic web search, skills.sh, agentskills.io, and GitHub searches for `SKILL.md`; registries miss skills published only in repositories or posts. Provide source/adoption guidance instead of assuming the user's host-agent install command.
+## Completion
+
+The answer is complete when the recommendation is traceable to current sources, the deciding criteria are explicit, installation guidance matches the user's environment, and uncertainties or disqualifying risks are visible. Use a table only when repeated fields make the comparison easier to scan.

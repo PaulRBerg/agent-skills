@@ -2,7 +2,6 @@
 argument-hint: '[--base <branch>]'
 disable-model-invocation: true
 effort: high
-model: opus
 name: git-squash
 user-invocable: true
 description: 'Squash a feature branch into one commit via soft reset to the merge base, ready for a clean PR.'
@@ -26,9 +25,9 @@ Defaults:
 
 ## Workflow
 
-### 1) Pre-flight
+### 1) Read-only Fact Gathering
 
-Start by confirming that history can be rewritten safely. Stop on the first failure.
+Gather and report the branch, clean-tree state, base candidate, ahead count, merge base, remote tracking state, and commits that would be replaced before mutating history. Stop on the first failure.
 
 - Verify inside a Git worktree: `git rev-parse --is-inside-work-tree`
 - Verify not detached: `git symbolic-ref --quiet --short HEAD`
@@ -82,12 +81,15 @@ You are not writing a changelog of every commit. You are deriving one accurate c
 
 ### 5) Rewrite the Branch into a Single Staged Diff
 
-Soft-reset to the merge-base. This keeps the branch's net changes staged while removing the intermediate commits from history. If the staged diff is empty after the reset, restore the original head and stop with an error, because there is no net change to commit.
+Record `original_head` immediately before mutation. Soft-reset to the merge-base; this keeps the branch's net changes staged while removing the intermediate commits from history. Until the replacement commit succeeds, any failure must restore `HEAD` and the index with `git reset --soft "$original_head"`. Because preflight requires a clean tree, that rollback returns the branch to its exact pre-squash commit and staged state without touching working-tree files.
 
 ```bash
+original_head="$(git rev-parse HEAD)"
 git reset --soft "$merge_base"
-git diff --cached --quiet
-git reset --soft "$original_head"
+if git diff --cached --quiet; then
+  git reset --soft "$original_head"
+  exit 1
+fi
 ```
 
 ### 6) Build the Commit Message from Commits + Net Diff

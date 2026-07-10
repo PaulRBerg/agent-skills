@@ -8,81 +8,26 @@ description: 'Use for targeted EVM chain, account, transaction, RPC, explorer, a
 
 # EVM Atlas
 
-Match chains by displayed name or numeric chain ID. `./references/target-mainnets.json` is the skill's authoritative scope. If the requested chain is not listed there, do not use Etherscan, Blockscout, Bungee, LayerZero, LI.FI, RouteMesh, Chainlist, web search, or public RPCs to work around the scope. Ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
+Resolve and query only the target mainnets in `references/target-mainnets.json`, under a strict read-only boundary.
 
-Also normalize common code aliases from `./references/chain-aliases.json` to their target mainnet rows.
+## Scope and Authority
 
-## Address-Wide Sweeps
+- Match displayed names, numeric chain IDs, and aliases from `references/chain-aliases.json` to the authoritative target-mainnet rows.
+- If a chain is absent, do not route through another provider, web search, Chainlist, or an unlisted RPC to work around scope. Ask for a feature request at <https://github.com/PaulRBerg/agent-skills>.
+- Never sign messages, submit signatures, execute bridge steps, or broadcast transactions. Route state-changing Cast work to `cli-cast`.
+- Do not default to Ethereum. Infer from explicit chain context and unambiguous chain-specific tokens; ask when ambiguous.
 
-When the user provides an EVM address and asks whether it was ever active on any chain, which chains it used, or whether it holds balances now across chains, read `./references/address-sweeps.md` before the single-chain router below. The sweep scope is still only `./references/target-mainnets.json`, not every provider-supported EVM chain.
+## Routing
 
-If the prompt names a specific target chain, use [Querying On-Chain Data (Routing)](#querying-on-chain-data-routing) instead.
+1. For an address-wide activity or current-balance sweep, read `references/address-sweeps.md`. Its scope remains the target-mainnet list.
+2. For a specific chain's balance, holdings, transfers, transaction history, receipt, or funding origin, resolve the chain and read `references/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and exceptional-chain routing.
+3. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load only the matching reference:
+   - Bungee / Socket: `references/bridge-bungee.md`
+   - Circle / CCTP / Gateway: `references/bridge-circle.md`
+   - LayerZero / Stargate / OFT / Aori: `references/bridge-layerzero.md`
+   - LI.FI: `references/bridge-lifi.md`
+4. Treat bridge APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC evidence.
 
-## Querying On-Chain Data (Routing)
+## Completion
 
-To read account data — native balance, token holdings, ERC-20/721/1155 transfers, transaction history, or first-funding — resolve the chain, then dispatch to the right explorer API. Do not default to Ethereum; infer the chain from the prompt (explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, target-chain aliases). If ambiguous, ask.
-
-1. **Resolve the chain** — map the name or alias to a chain ID via `./references/target-mainnets.json` and `./references/chain-aliases.json`.
-2. **Etherscan (preferred)** — if the chain ID is listed in `./references/etherscan-chains.md`, follow `./references/etherscan-api.md` (unified API V2, needs `$ETHERSCAN_API_KEY`).
-3. **Blockscout (fallback)** — for target chains not served by Etherscan, or paid Etherscan chains on a free Etherscan plan, follow `./references/blockscout-api.md`.
-4. **Neither** — if the target chain is in neither registry, query the target chain's public RPC directly over JSON-RPC (`cast` from the `cli-cast` skill, or `curl`).
-
-**Paid-chain auto-fallback.** Base (`8453`), Optimism (`10`), Avalanche (`43114`), and BNB Chain (`56`) are Etherscan-listed target chains, but their data endpoints require a paid Etherscan plan. If the target is one of these **and** `./scripts/etherscan-detect-plan.sh` reports `paid_chains=false` (free tier), route to Blockscout instead. Etherscan stays the default for every other Etherscan-listed target chain.
-
-## Bridge Data Enrichment
-
-When the user mentions bridging, bridge tx, cross-chain swap, or a bridge provider, or when a transaction looks bridge-related from logs, counterparties, calldata, or token movement, first confirm the known origin and destination chains are target chains.
-
-Then route to the bridge reference that matches the prompt or evidence:
-
-- **Bungee / Socket / Bungee Auto:** read `./references/bridge-bungee.md`.
-- **Circle / CCTP / CCTP v2 / Circle Gateway:** read `./references/bridge-circle.md`.
-- **LayerZero / Stargate / OFT / Aori / Value Transfer API / LayerZeroScan:** read `./references/bridge-layerzero.md`.
-- **LI.FI / LiFi / li.quest / LI.FI Explorer:** read `./references/bridge-lifi.md`.
-
-Use bridge APIs as read-only enrichment sources alongside Etherscan, Blockscout, explorers, and RPC receipts. Do not treat bridge APIs as authoritative for on-chain execution by themselves; verify submitted transactions and terminal outcomes with explorer/RPC data whenever possible. Returned route steps, calldata, `userSteps`, `transactionRequest`, or signatures are for inspection only in this skill. Do not sign messages, submit signatures, execute user steps, or broadcast bridge transactions.
-
-## RouteMesh
-
-Use RouteMesh only when the `routeMesh` field in `./references/target-mainnets.json` is `true` and the `ROUTEMESH_API_KEY` environment variable is available.
-
-To verify current RouteMesh support, call `GET https://lb.routeme.sh/chains`; use `https://lb2.routeme.sh/chains` as the backup endpoint. Do not use `https://rpc.routeme.sh/chains`; the hostname may not resolve even though it appears in RouteMesh's OpenAPI spec.
-
-Construct the RouteMesh RPC URL as:
-
-```text
-https://lb.routeme.sh/rpc/CHAIN_ID/ROUTEMESH_API_KEY
-```
-
-Replace `CHAIN_ID` with the numeric chain ID and `ROUTEMESH_API_KEY` with the value of the `ROUTEMESH_API_KEY` environment variable. If `routeMesh` is `false` or `ROUTEMESH_API_KEY` is not available, use the chain's primary public RPC first, then the listed fallback RPCs in order.
-
-## Public RPCs
-
-Public RPCs are best-effort. Before relying on one for data fetches or contract calls, verify it with `eth_chainId`. If the primary endpoint fails, try the fallback endpoints for that chain from `./references/target-fallback-rpcs.json` in order. If a chain has no fallback row, only the primary public RPC is listed.
-
-Only use RPCs for target chains.
-
-## Explorer URLs
-
-The `explorerUrl` field in `./references/target-mainnets.json` is the base URL of the chain's canonical block explorer. Append the path patterns from `./references/explorer-paths.json` to build links.
-
-Etherscan and Etherscan-stack explorers (Arbiscan, Basescan, BscScan, Polygonscan, Optimism Etherscan, Lineascan, Snowscan, Blastscan, Berascan, Uniscan, Gnosisscan, abscan.org) all follow this scheme. Most Blockscout-based and chain-native target explorers accept the same segments, but conventions can drift — verify against the explorer UI when in doubt.
-
-Explorer URL presence, Etherscan-style paths, or an Etherscan-stack explorer name do not imply Etherscan API V2 support. When API coverage matters, use `./references/etherscan-chains.md`. Etherscan's live `https://api.etherscan.io/v2/chainlist` endpoint may contain additional provider-supported chains, but those are outside this skill unless they appear in `./references/target-mainnets.json`. Treat this JSON as chain metadata for RPC and explorer-link construction only.
-
-## Caveats
-
-**OP Mainnet pre-regenesis history is not available through current explorer/RPC routes.** For OP Mainnet (`10`) queries before the final regenesis on `2021-11-11`, read `./references/optimism-pre-2021-11-11.md` before using Etherscan, Blockscout, or public RPC results.
-
-**Ronin (`app.roninchain.com`) does not follow the Etherscan path scheme.** Verify against the explorer UI before constructing a Ronin link.
-
-**Ronin (`2020`) collides with a non-target Chainscout registry entry.** Do not use Chainscout metadata for Ronin; use Ronin's listed explorer/RPC or another target-aware source.
-
-## Target Mainnets
-
-Target mainnet metadata lives in `./references/target-mainnets.json`. The `slug` field is the Sablier SDK chain slug (`sablier` package `~/sablier/sdk`, `src/evm/chains/specs.ts`, resolved as `meta.slug ?? key`). Arbitrum Nova, Celo, Fantom, IoTeX, and Zora are not defined in the SDK; their slugs follow the same convention (lowercase, hyphenated name).
-Maintainers generate this file from `@prb/crypto-registry` plus `./references/atlas-overlays.json`; installed skills use the committed static file.
-
-## Target Fallback RPCs
-
-Target fallback RPC metadata lives in `./references/target-fallback-rpcs.json`. Use each chain's `fallbackPublicRpcs` values in order after the `primaryPublicRpc` from `./references/target-mainnets.json` fails verification.
+Return the resolved target chain, provider route, requested on-chain facts, and source URLs/transaction identifiers. Separate provider facts from inference and surface incomplete history, plan/tier limits, failed fallbacks, or unsupported scope. Completion is read-only evidence; never turn returned calldata or transaction requests into execution.

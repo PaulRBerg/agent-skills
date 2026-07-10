@@ -2,7 +2,20 @@
 
 Predictability levers for skill authoring. Adapted from Matt Pocock's [writing-great-skills](https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-great-skills) (SKILL.md + GLOSSARY.md).
 
-A skill exists to wrangle determinism out of a stochastic system. **Predictability** — the agent taking the same *process* every run, not producing the same output — is the root virtue; every lever below serves it. A brainstorming skill should *predictably* diverge: its tokens vary, its behavior doesn't. Cost and maintainability are symptoms of predictability, not rivals.
+A skill exists to make a stochastic system reliably satisfy an observable contract. **Predictability** means reaching the intended outcome while respecting the same invariants, authority boundaries, and completion evidence; it does not require an identical execution path. A brainstorming skill should vary its ideas while consistently honoring its scope and stopping criteria.
+
+## Observable contract
+
+Write the smallest interface that makes success checkable:
+
+- **Outcome**: the state or artifact the user should receive.
+- **Invariants**: rules that must hold on every valid path.
+- **Preferred defaults**: opinionated choices to use when repository or user evidence does not override them.
+- **Authority**: which reads, local writes, external writes, and destructive actions are allowed or gated.
+- **Routing**: prerequisites, tools, scripts, and conditional references needed for each branch.
+- **Completion evidence**: the command, inspection, or artifact that proves the outcome.
+
+Let the agent choose the path inside that contract. Prescribe a sequence only when ordering is safety-critical, a prerequisite determines the next action, or a deterministic helper is the simpler interface.
 
 ## Invocation: two loads
 
@@ -43,7 +56,7 @@ A **context pointer**'s *wording* — not its target — decides when, and how r
 
 ### Completion criteria
 
-Every step ends on a **completion criterion** — the condition telling the agent the work is done. Two properties make it a lever:
+Every workflow and safety-critical phase ends on a **completion criterion** — the condition telling the agent the work is done. Two properties make it a lever:
 
 - **Clarity** (checkable: can the agent tell done from not-done?) resists premature completion. "Understanding reached" gives way; "every test passing" holds.
 - **Demand** (how much it requires) sets **legwork** — the digging the agent does within a step. "Every modified model accounted for" forces thorough work; "produce a change list" does not. Demand binds flat reference too: "every rule applied" is how a step-free skill still carries an exhaustiveness bar.

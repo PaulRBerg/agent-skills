@@ -4,7 +4,7 @@ Create issues in `sablier-labs/*` repositories. Labels are always applied (user 
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`. The label fetch below is the auth check.
+See `context.md > Auth Validation`. The label fetch below is the auth check.
 
 ## Parse Repository Argument
 
@@ -14,7 +14,7 @@ Example: `lockup "Bug in cliff streams"` → `repository = sablier-labs/lockup`
 
 ## Apply Labels
 
-Sablier repos are owner-managed — labels always apply. Follow `commons.md > Fetch Repo Labels` to fetch the live label set once and pick labels semantically. Scope labels (e.g., `scope: frontend`, `scope: evm`) are discovered organically from the fetched list for repos that define them — no special-case for `command-center`.
+Sablier repos are owner-managed — labels always apply. Follow `context.md > Fetch Repo Labels` to fetch the live label set once and pick labels semantically. Scope labels (e.g., `scope: frontend`, `scope: evm`) are discovered organically from the fetched list for repos that define them — no special-case for `command-center`.
 
 ## Generate Title and Body
 
@@ -46,7 +46,7 @@ Default template:
 </details>
 ```
 
-See `commons.md > GitHub Admonitions` for admonitions. See `commons.md > Task List Syntax` for progress-tracking checklists (`- [ ]` / `- [x]`). See `commons.md > Markdown Tables` for rendering tabular content as tables. See `commons.md > File Link Formatting` for link rules. Omit "Files Affected" if no files specified.
+Use task lists only for genuinely trackable work and tables only for repeated comparable fields. See `writing.md > Link Formatting` for links. Omit "Files Affected" if no files are specified.
 
 ## Create the Issue
 

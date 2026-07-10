@@ -3,7 +3,7 @@
 PRB's collection of AI agent skills. Designed to work across agents, but primarily built for [Claude Code](https://claude.com/product/claude-code) and [Codex](https://github.com/openai/codex).
 
 > [!WARNING]
-> These skills are optimized for my personal setup and workflow. If you install them, do your own due diligence and customize them to fit your stack and agents. No warranties, guarantees, or support are provided — use at your own risk.
+> This catalog intentionally reflects Paul's preferred tools, defaults, safety boundaries, and writing voice; it is not a neutral template. If you install it, review every workflow and customize it for your stack and agents. No warranties, guarantees, or support are provided — use at your own risk.
 
 ## Installation
 
@@ -35,7 +35,6 @@ bunx skills add PaulRBerg/agent-skills
 | git-squash                | Squash PR branch with semantic commit message              |
 | grill-me                  | Relentlessly stress-test plans and designs                 |
 | large-file-refactor       | Large source-file report and Serena split plans            |
-| loop-skill                | Repeat a skill multiple times with one net report          |
 | playground                | Interactive single-file HTML playgrounds                   |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references    |
 | skill-doctor              | Audit Agent Skills catalogs and installed skill roots      |
@@ -53,7 +52,7 @@ bunx skills add PaulRBerg/agent-skills
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | playground | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
 
-Some skills pin `model: opus` in their frontmatter: their workflows are mechanical enough that Opus-level intelligence is sufficient, so there is no need to spend a more capable default model on them.
+Some mechanical skills pin `model: sonnet` in their frontmatter so they do not spend a more capable inherited model where deterministic tooling already carries the workflow.
 
 ## References
 

@@ -4,7 +4,7 @@ Update an existing GitHub issue — title, body, labels, assignees, or state. Mi
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`. The issue context read below is the auth check.
+See `context.md > Auth Validation`. The issue context read below is the auth check.
 
 ## Parse Arguments
 
@@ -57,17 +57,17 @@ If user provides only an issue identifier with no instructions, ERROR: "Tell me 
 
 Only when the user explicitly asks for regeneration ("rewrite the body", "fix the title").
 
-Follow `create-issue.md > Generate Title and Body` and `commons.md > Informal Tone`. Preserve any existing template structure (sections, admonitions, file links). If the issue uses a YAML template's section headers, keep them.
+Follow `create-issue.md > Generate Title and Body` and `writing.md > Informal Tone`. Preserve any existing template structure (sections, admonitions, file links). If the issue uses a YAML template's section headers, keep them.
 
 For appends, show the existing body, then append the new content with a separator (blank line) — do not rewrite.
 
 ## Validate Labels Before Adding
 
-If adding labels, fetch the repo's label set per `commons.md > Fetch Repo Labels` and confirm the requested labels exist (case-sensitive match on `name`). Skip this read for non-label edits.
+If adding labels, fetch the repo's label set per `context.md > Fetch Repo Labels` and confirm the requested labels exist (case-sensitive match on `name`). Skip this read for non-label edits.
 
 IF a requested label doesn't exist: ERROR with the list of valid label names. Do not auto-create labels.
 
-For owner-managed repos (owner = `viewer.login` from issue context or `sablier-labs`), when the user asks for a label by intent rather than exact name ("tag this as a bug"), match semantically against the fetched `name + description` pairs per the rubric in `commons.md > Fetch Repo Labels`.
+For owner-managed repos (owner = `viewer.login` from issue context or `sablier-labs`), when the user asks for a label by intent rather than exact name ("tag this as a bug"), match semantically against the fetched `name + description` pairs per the rubric in `context.md > Fetch Repo Labels`.
 
 ## Execute Update
 
@@ -105,7 +105,7 @@ gh issue close {number}  --repo "{owner}/{repo}" [--comment "..."] [--reason "co
 gh issue reopen {number} --repo "{owner}/{repo}" [--comment "..."]
 ```
 
-See `commons.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
+See `writing.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
 
 Display: `Updated: https://github.com/{owner}/{repo}/issues/{number}` and a one-line summary of what changed.
 

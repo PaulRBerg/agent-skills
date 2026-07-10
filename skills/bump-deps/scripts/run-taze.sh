@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-taze.sh - Run taze in non-interactive mode
 #
-# Usage: run-taze.sh [--include pkg1,pkg2] [--concurrency n] [--write] [path]
+# Usage: run-taze.sh [--include pkg1,pkg2] [--concurrency n] [--plan|--write] [path]
 #
 # Automatically detects monorepo projects (workspaces in package.json
 # or pnpm-workspace.yaml) and enables recursive mode.
@@ -20,7 +20,9 @@ set -euo pipefail
 include=""
 concurrency=""
 write=false
+plan=false
 target_dir="."
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,6 +44,10 @@ while [[ $# -gt 0 ]]; do
     ;;
   --write)
     write=true
+    shift
+    ;;
+  --plan)
+    plan=true
     shift
     ;;
   -*)
@@ -103,6 +109,11 @@ if [[ "$write" == true && -z "$include" ]]; then
   exit 64
 fi
 
+if [[ "$write" == true && "$plan" == true ]]; then
+  echo "ERROR: --plan and --write are mutually exclusive" >&2
+  exit 64
+fi
+
 # Mirror Bun's delayed-resolution policy for direct dependency candidates.
 # bunfig.toml stores seconds; Taze expects whole days.
 if [[ -f bunfig.toml ]] && [[ -f bun.lock || -f bun.lockb ]]; then
@@ -125,4 +136,11 @@ else
   taze_args+=("--include-locked")
 fi
 
-taze "${taze_args[@]}" 2>&1
+if [[ "$plan" == true ]]; then
+  plan_output="$(mktemp "${TMPDIR:-/tmp}/taze-plan.XXXXXX")"
+  trap 'rm -f "$plan_output"' EXIT
+  NO_COLOR=1 taze "${taze_args[@]}" --no-group --no-timediff --no-nodecompat --sort name-asc >"$plan_output" 2>&1
+  uv run "$script_dir/parse-taze-plan.py" --input "$plan_output"
+else
+  taze "${taze_args[@]}" 2>&1
+fi

@@ -1,108 +1,49 @@
 # Browser Wallet Signing
 
-Cast's `--browser` flag delegates signing to a browser wallet extension (MetaMask, Rabby, Frame, etc.). This is the **preferred signing method** for any state-changing transaction: private keys never touch the terminal, the shell history, or the chat transcript.
+Use this flow only after the transaction or message review in `SKILL.md` has been explicitly approved.
 
-## How It Works
+## Availability
 
-When a cast command is invoked with `--browser`:
+Confirm the installed Cast supports browser signing:
 
-1. Cast starts a local HTTP server on port `9545`.
-2. It opens a browser tab that connects to the wallet extension.
-3. The user approves the connection and signs the transaction in the extension UI.
-4. The signature is returned to the local server and cast broadcasts the signed transaction (or returns the address for `cast wallet address`).
-
-Because signing happens in the browser, no key material is ever read by the CLI process.
-
-## Availability Check
-
-`--browser` is a recent Foundry addition. Before relying on it, confirm the installed `cast` version supports it:
-
-```bash
-if ! cast send --help 2>&1 | grep -q -- '--browser'; then
-  echo "Your cast version does not support --browser."
-  echo "Upgrade Foundry: https://getfoundry.sh/"
-  exit 1
-fi
+```sh
+cast send --help 2>&1 | rg -q -- '--browser'
 ```
 
-If the check fails, tell the user to upgrade Foundry with `foundryup` before continuing.
+If unavailable, offer an encrypted keystore or hardware wallet before an environment-backed private key. Browser signing requires an interactive browser and local port `9545`; it does not work in ordinary headless CI or SSH sessions.
 
-## Signing Hierarchy
+## Resolve the Sender
 
-For any command that signs (`cast send`, `cast mktx`, `cast wallet sign`, `cast wallet address`), use this order:
-
-1. **`--browser` (preferred)** — delegates signing to the browser wallet extension. Inform the user: *"A browser tab will open — approve the transaction in your wallet extension (e.g. MetaMask)."*
-2. **`--private-key` (fallback)** — only if `--browser` fails at runtime (no browser available, extension error, headless environment). Read the key from `ETH_PRIVATE_KEY`; never proactively ask the user to paste a private key into the chat.
-
-Do not continue without a signing method.
-
-## Resolving the Sender Address
-
-Use `cast wallet address --browser` to read the connected account from the browser wallet. This opens a browser tab for the user to connect and returns the selected address to stdout:
-
-```bash
+```sh
 OWNER=$(cast wallet address --browser)
-echo "Connected: $OWNER"
 ```
 
-Call this once at the start of a flow and cache the result in a shell variable; don't trigger a new browser prompt for every command.
+Cache the address for the approved flow. Confirm the wallet network matches the reviewed chain and `--from` matches `$OWNER`.
 
-## Sending a Transaction
+## Approved Broadcast
 
-Pass `--browser` in place of `--private-key` on `cast send`:
+Run the exact reviewed command, for example:
 
-```bash
-TX_HASH=$(cast send "$CONTRACT" "transfer(address,uint256)" "$TO" "$AMOUNT" \
-  --rpc-url "$RPC_URL" \
-  --from "$OWNER" \
-  --browser \
-  --async)
-```
-
-Notes:
-
-- `--from "$OWNER"` must match the account selected in the browser wallet; otherwise the extension will prompt to switch accounts or reject the request.
-- `--async` returns the transaction hash immediately without waiting for a receipt. Poll `cast receipt "$TX_HASH"` separately.
-- Omit `--private-key`, `--account`, `--ledger`, and other signer flags when `--browser` is set.
-
-## Sending Native Value
-
-`--value` works the same way as with any other signing method:
-
-```bash
-cast send "$CONTRACT" "deposit()" \
-  --value "$MSG_VALUE" \
+```sh
+cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
   --rpc-url "$RPC_URL" \
   --from "$OWNER" \
   --browser
 ```
 
-## Signing Messages and Typed Data
+Do not combine `--browser` with another signer flag. Capture the transaction hash, then verify it with `cast receipt` before reporting success.
 
-`cast wallet sign` also supports `--browser`:
+## Message Signing
 
-```bash
-# Sign a plain message
-cast wallet sign "Hello, world!" --browser
+Present the exact plain-message bytes or decoded EIP-712 domain and payload before approval. After approval:
 
-# Sign EIP-712 typed data from a file
+```sh
+cast wallet sign 'reviewed message' --browser
 cast wallet sign --data --from-file typed-data.json --browser
 ```
 
-## Failure Modes
+Return the signature and signer address. Do not broadcast or submit the signature elsewhere unless the user separately authorized that external write.
 
-Treat `--browser` as failed and fall back to `--private-key` when:
+## Failure Handling
 
-- The CLI reports that port `9545` is already in use.
-- No default browser is available (headless/CI environment, SSH session without X forwarding).
-- The wallet extension rejects the connection or times out.
-- The user explicitly opts for a private key or keystore account.
-
-On fallback, ask the user to export `ETH_PRIVATE_KEY` or provide a keystore account name; do not request a pasted private key inline.
-
-## Gotchas
-
-- **Port conflict:** if another cast process (or any other service) holds port `9545`, the browser flow fails. Kill the stale process or wait for it to exit.
-- **Chain mismatch:** the wallet extension must be on the same chain ID as `$RPC_URL`. Remind the user to switch networks in the extension if needed.
-- **Account mismatch:** if the wallet exposes multiple accounts, the one selected in the extension must match `--from`. Prefer resolving `--from` via `cast wallet address --browser` to avoid drift.
-- **Headless environments:** `--browser` cannot run in CI or over plain SSH. Gate it behind an interactive-shell check if the script must run in both contexts.
+On a port conflict, missing browser, rejected wallet request, timeout, chain mismatch, or account mismatch, stop and report the failure. Do not silently fall back to a private key or retry a broadcast. If the user selects another signer, update the transaction review when the sender or command changes.

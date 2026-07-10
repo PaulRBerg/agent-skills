@@ -5,143 +5,32 @@ user-invocable: false
 description: 'Use for Tailwind v4 styling: add/fix classes, configure or migrate Tailwind, use tailwind-variants, or tw-animate-css.'
 ---
 
-# Tailwind CSS v4
+# Tailwind CSS
 
-## CSS-First Configuration
+Style within the installed Tailwind version, existing design tokens, component patterns, and product context.
 
-Tailwind CSS v4 eliminates `tailwind.config.ts` in favor of CSS-only configuration. All configuration lives in CSS files using special directives.
+## Authority and Defaults
 
-**Core Directives:**
+- Inspect package versions, CSS entrypoints, theme declarations, shared components, class-merging utilities, and nearby UI before editing. Those are authoritative.
+- Apply this catalog's preferences only where the project is silent. Read [references/coding-preferences.md](references/coding-preferences.md) for that fallback style.
+- Prefer existing semantic tokens and components over arbitrary values, new colors, or one-off utilities.
+- Preserve responsive states, interaction states, accessibility, and dark-mode conventions. Do not add decorative UI or redesign beyond the request.
+- Use CSS Modules only when the behavior is materially clearer than utilities; preserve any project-specific Tailwind reference mechanism.
 
-- `@import "tailwindcss"` - Entry point that loads Tailwind
-- `@theme { }` - Define or extend design tokens
-- `@theme static { }` - Define tokens that should not generate utilities
-- `@utility` - Create custom utilities
-- `@custom-variant` - Define custom variants
+## Routing
 
-**Minimal Example:**
+- For v4 configuration, migration, removed utilities, variables, gradients, or CSS-first directives, read `references/tailwind-v4-rules.md` after confirming v4 is installed.
+- For component variants or slots with `tailwind-variants`, read `references/tailwind-variants.md`.
+- For `tw-animate-css`, read `references/tw-animate-css.md`.
+- For Tailwind ESLint integration, read `references/eslint.md`.
 
-```css
-@import "tailwindcss";
+Do not apply v4 syntax to an older project merely because this skill targets v4. If the installed version differs, use its official documentation or ask whether migration is intended.
 
-@theme {
-  --color-brand: oklch(0.72 0.11 178);
-  --font-display: "Inter", sans-serif;
-  --spacing-edge: 1.5rem;
-}
-```
+## Workflow
 
-All theme tokens defined with `@theme` automatically become available as utility classes. For example, `--color-brand` can be used as `bg-brand`, `text-brand`, `border-brand`, etc.
+1. Define the visual outcome and affected states from the request and product context.
+2. Reuse local tokens, spacing, typography, breakpoints, components, and variant conventions. Make the smallest class/config change that achieves the outcome.
+3. Run the repository's relevant lint/type/build checks.
+4. Render the affected screen or component at representative viewport sizes and inspect it visually, including changed interaction and theme states. Fix visible regressions before completion.
 
-## Linting
-
-Read [references/eslint.md](references/eslint.md) when wiring Tailwind lint rules.
-
-## Coding Preferences
-
-For detailed coding patterns covering layout, spacing, typography, colors, borders, gradients, arbitrary values, class merging, image sizing, z-index, and dark mode, see [references/coding-preferences.md](references/coding-preferences.md).
-
-## CSS Modules
-
-Use CSS Modules only as a last resort for complex CSS that cannot be easily written with Tailwind classes.
-
-All `.module.css` files must include `@reference "#tailwind";` at the top to enable Tailwind utilities and theme tokens inside the module.
-
-**Example:**
-
-```css
-/* component.module.css */
-@reference "#tailwind";
-
-.component {
-  /* Complex CSS that can't be expressed with Tailwind utilities */
-  /* Can still use Tailwind utilities and theme tokens */
-}
-```
-
-## Common Tasks
-
-### Adding a Component with Variants
-
-1. Read `references/tailwind-variants.md` for patterns
-2. Check the project's `@theme` configuration for available tokens
-3. Use `tv()` from `tailwind-variants` for type-safe variants
-
-**Example:**
-
-```typescript
-import { tv } from "tailwind-variants";
-
-const button = tv({
-  base: "rounded-lg px-4 py-2 font-medium",
-  variants: {
-    color: {
-      primary: "bg-blue-600 text-white",
-      secondary: "bg-gray-600 text-white",
-    },
-    size: {
-      sm: "text-sm",
-      md: "text-base",
-      lg: "text-lg",
-    },
-  },
-});
-```
-
-### Debugging Styles
-
-1. Check `references/tailwind-v4-rules.md` for breaking changes
-2. Verify gradient syntax (`bg-linear-*`, not `bg-gradient-*`)
-3. Verify CSS variable syntax (`bg-my-color`, not `bg-[--var-my-color]`)
-4. Check if arbitrary value exists in the project's `@theme` configuration
-
-### Working with Colors
-
-1. Check the project's `@theme` configuration first to see available colors
-2. Use semantic color names when available
-3. Use opacity modifiers for transparency (`/20`, `/50`, etc.)
-4. Avoid arbitrary colors unless absolutely necessary
-
-**Example:**
-
-```typescript
-// ✅ Good: theme token with opacity
-<div className="bg-brand/20 text-brand">
-
-// ❌ Avoid: arbitrary hex
-<div className="bg-[#4f46e5]/20 text-[#4f46e5]">
-```
-
-### Adding Animations
-
-1. Read `references/tw-animate-css.md` for available animations
-2. Combine a base class (`animate-in` or `animate-out`) with effect classes
-3. Note decimal spacing gotcha: use `[0.625rem]` syntax, not `2.5`
-
-**Example:**
-
-```typescript
-// Enter: fade + slide up
-<div className="fade-in slide-in-from-bottom-4 duration-300 animate-in">
-
-// Exit: fade + slide down
-<div className="fade-out slide-out-to-bottom-4 duration-200 animate-out">
-```
-
-## Quick Reference Table
-
-| Aspect        | Pattern                                           |
-| ------------- | ------------------------------------------------- |
-| Configuration | CSS-only: `@theme`, `@utility`, `@custom-variant` |
-| Line Height   | Modifier syntax: `text-base/7`                    |
-| Font Features | `font-features-zero`, `font-features-ss01`, etc.  |
-| CSS Variables | `bg-my-color` (auto-created from `@theme`)        |
-| Class Merging | `cn()` for conditionals; plain string for static  |
-| Viewport      | `min-h-dvh` (not `min-h-screen`)                  |
-
-## Reference Documentation
-
-- **Tailwind v4 Rules & Best Practices:** `references/tailwind-v4-rules.md` — Breaking changes, removed/renamed utilities, layout rules, typography, gradients, CSS variables, new v4 features, common pitfalls
-- **tailwind-variants Patterns:** `references/tailwind-variants.md` — Component variants, slots API, composition, TypeScript integration, responsive variants
-- **tw-animate-css Reference:** `references/tw-animate-css.md` — Enter/exit animations, slide/fade/zoom utilities, spacing gotchas
-- **ESLint Integration:** `references/eslint.md` — Correctness/stylistic rules for `eslint-plugin-better-tailwindcss`, read when wiring Tailwind lint rules
+Completion requires code checks plus rendered inspection; textual class review alone is insufficient.

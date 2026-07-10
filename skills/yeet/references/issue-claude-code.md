@@ -10,7 +10,7 @@ File links: `[{path}](https://github.com/anthropics/claude-code/blob/main/{path}
 
 ## Validate Authentication
 
-See `commons.md > Auth Validation`. The repository context read below is the auth check.
+See `context.md > Auth Validation`. The repository context read below is the auth check.
 
 ## Template Drift Check
 
@@ -91,13 +91,13 @@ EOF
 )"
 ```
 
-Add `--label "$label"` only when cached `repository.viewerPermission` allows labels. When used, `$label` must be one of `bug`, `enhancement`, `documentation`, `model` (matches the template's auto-applied label — see the routing table above). On a label permission error, follow `commons.md > Idempotency on Retry`, then retry once without `--label`.
+Add `--label "$label"` only when cached `repository.viewerPermission` allows labels. When used, `$label` must be one of `bug`, `enhancement`, `documentation`, `model` (matches the template's auto-applied label — see the routing table above). On a label permission error, follow `posting.md > Error Handling and Idempotency`, then retry once without `--label`.
 
 Display: "Created: $URL"
 
 ## Comment on Existing Issue
 
-See `commons.md > Comment on Existing Issue`, using repo `"anthropics/claude-code"`.
+See `posting.md > Comment on Existing Issue`, using repo `"anthropics/claude-code"`.
 
 ## Environment Detection
 

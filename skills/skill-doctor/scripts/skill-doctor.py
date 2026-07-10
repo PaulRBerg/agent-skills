@@ -32,6 +32,13 @@ MARKDOWN_RESOURCE_LINK_RE = re.compile(r"\]\((?P<path>(?:references|scripts|asse
 UV_SCRIPT_REF_RE = re.compile(r"(?<![A-Za-z0-9_./-])uv run (?P<path>scripts/[A-Za-z0-9][A-Za-z0-9._/-]*)")
 SEMVER_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 OPENAI_ALLOW_RE = re.compile(r"^(\s*allow_implicit_invocation:\s*)(true|false)(\s*)$", re.MULTILINE)
+COMPLETION_EVIDENCE_RE = re.compile(
+    r"(?im)^##+[^\n]*\b(?:completion|verify|verification|validation|output|report|result|exit codes)\b"
+    r"|\b(?:success means|complete when|completion requires|completion is|finish with)\b"
+)
+REQUIREMENT_RE = re.compile(r"\b(?:always|must(?!\s+not\b)|required to)\s+([^.!?\n]+)", re.IGNORECASE)
+PROHIBITION_RE = re.compile(r"\b(?:do not|don't|never|must not|forbid(?:s|den)?)\s+([^.!?\n]+)", re.IGNORECASE)
+STALE_MODEL_PINS = {"opus"}
 
 
 @dataclass(frozen=True)
@@ -185,6 +192,7 @@ def check_skill(skill: SkillFile, findings: list[Finding], fixes: list[Fix], *, 
     if skill.active:
         check_cli_version(skill, frontmatter, findings)
     check_resource_links(skill, text, findings)
+    check_prompt_hygiene(skill, text, frontmatter, field_lines, findings)
 
 
 def parse_frontmatter(
@@ -474,6 +482,92 @@ def check_resource_links(skill: SkillFile, text: str, findings: list[Finding]) -
                 f"referenced resource does not exist: {raw_ref}",
             )
         )
+
+
+def check_prompt_hygiene(
+    skill: SkillFile,
+    text: str,
+    frontmatter: dict[str, Any],
+    field_lines: dict[str, int],
+    findings: list[Finding],
+) -> None:
+    model = frontmatter.get("model")
+    if isinstance(model, str) and model.lower() in STALE_MODEL_PINS:
+        findings.append(
+            finding(
+                "STALE_MODEL_PIN",
+                "warning",
+                skill.path,
+                field_lines.get("model"),
+                False,
+                f"model pin {model!r} is a stale alias; verify that an explicit pin is still needed",
+            )
+        )
+
+    if not COMPLETION_EVIDENCE_RE.search(text):
+        findings.append(
+            finding(
+                "COMPLETION_EVIDENCE_MISSING",
+                "warning",
+                skill.path,
+                None,
+                False,
+                "skill has no explicit completion, verification, validation, output, or report contract",
+            )
+        )
+
+    for match in MARKDOWN_RESOURCE_LINK_RE.finditer(text):
+        raw_ref = match.group("path").split("#", 1)[0].split("?", 1)[0]
+        target = skill.directory / raw_ref
+        if target.suffix.lower() != ".md" or not target.is_file():
+            continue
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        line_end = text.find("\n", match.end())
+        line = text[line_start : None if line_end < 0 else line_end].lower()
+        unconditional = "mandatory" in line or "always read" in line or ("read" in line and "before" in line)
+        if not unconditional:
+            continue
+        reference_text = read_text(target)
+        if reference_text is None or len(reference_text.splitlines()) < 400:
+            continue
+        findings.append(
+            finding(
+                "UNCONDITIONAL_REFERENCE_OVERSIZED",
+                "warning",
+                skill.path,
+                line_number_at_offset(text, match.start()),
+                False,
+                f"unconditional reference has {len(reference_text.splitlines())} lines: {raw_ref}",
+            )
+        )
+
+    requirements = [(match, normalized_clause(match.group(1))) for match in REQUIREMENT_RE.finditer(text)]
+    prohibitions = [(match, normalized_clause(match.group(1))) for match in PROHIBITION_RE.finditer(text)]
+    for required_match, required in requirements:
+        if len(required) < 3:
+            continue
+        for prohibited_match, prohibited in prohibitions:
+            if len(prohibited) < 3:
+                continue
+            overlap = len(required & prohibited) / len(required | prohibited)
+            if overlap < 0.75:
+                continue
+            findings.append(
+                finding(
+                    "CONFLICTING_AUTHORITY",
+                    "warning",
+                    skill.path,
+                    line_number_at_offset(text, min(required_match.start(), prohibited_match.start())),
+                    False,
+                    "similar action appears in both requirement and prohibition language; review authority",
+                )
+            )
+            return
+
+
+def normalized_clause(value: str) -> set[str]:
+    words = re.findall(r"[a-z0-9_-]+", value.lower())[:10]
+    return {word for word in words if word not in {"the", "a", "an", "to", "of", "and", "or", "when", "if"}}
 
 
 def check_readme(root: Path, skills: list[SkillFile], findings: list[Finding]) -> None:

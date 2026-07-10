@@ -1,6 +1,8 @@
 ---
 argument-hint: "[path] [--hint TEXT] [--date YYYY-MM-DD|YYYY_MM_DD] [--dry-run] [--force]"
 disable-model-invocation: true
+effort: low
+model: sonnet
 name: todo-archive
 user-invocable: true
 description: Archive checked TODO.md tasks into `.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, leaving unchecked tasks.
@@ -49,3 +51,7 @@ description: Archive checked TODO.md tasks into `.ai/todos/TODO_UNTIL_YYYY_MM_DD
 ## Helper Behavior
 
 `scripts/archive_todo.py` reads only `<root>/TODO.md`, writes archived tasks to `<root>/.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, and rewrites `<root>/TODO.md` with the remaining tasks (a minimal `# TODO` stub if everything was archived). With `--hint`, it restricts archiving to the matched heading's subtree and exits non-zero listing available headings when nothing matches. It rolls a same-day re-run over to a timestamped `TODO_UNTIL_YYYY_MM_DD_HHMM.md` sibling instead of clobbering the earlier archive, unless `--force` is passed.
+
+## Completion
+
+Completion evidence is the helper's archive path plus archived and remaining task counts; a no-checked-task result is a successful no-op. Dry-run completion requires rendered paths/content with no filesystem changes.

@@ -17,7 +17,7 @@ Use these headings exactly for `openai/codex` issues using `3-cli.yml`.
 
 ### What platform is your computer?
 
-{see references/commons.md > Platform String Normalization}
+{see references/context.md > Platform String Normalization}
 
 ### What terminal emulator and version are you using (if applicable)?
 

@@ -10,7 +10,7 @@ File links: `[{path}](https://github.com/openai/codex/blob/main/{path})`
 
 ## Validate Authentication
 
-See `commons.md > Auth Validation`. The repository context read below is the auth check.
+See `context.md > Auth Validation`. The repository context read below is the auth check.
 
 ## Template Drift Check
 
@@ -114,13 +114,13 @@ Display: "Created: $URL"
 
 ## Comment on Existing Issue
 
-See `commons.md > Comment on Existing Issue`, using repo `"openai/codex"`.
+See `posting.md > Comment on Existing Issue`, using repo `"openai/codex"`.
 
 ## Environment Detection
 
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
 - **Codex doctor report**: `codex doctor --json 2>/dev/null || echo "not available"` — include for CLI bugs when supported; review/redact before posting.
-- **Platform**: See `commons.md > Platform String Normalization`; use `scripts/get-macos-version.sh` for macOS instead of raw `uname` output.
+- **Platform**: See `context.md > Platform String Normalization`; use `scripts/get-macos-version.sh` for macOS instead of raw `uname` output.
 - **IDE** (extension issues): Ask user or infer from context.
 - **Terminal** (CLI issues): Ask user — cannot be reliably auto-detected from inside an agent shell. `$TERM_PROGRAM` is a hint but not authoritative.
 - **Codex App version**: From the in-app "About Codex" dialog. Ask the user; do not guess.

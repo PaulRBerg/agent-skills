@@ -35,6 +35,8 @@ Read `references/transcript-sources.md`, resolve the current project with `pwd -
 
 Stop and report the coverage gap when the bounded fallbacks still lack useful evidence. Absence of evidence is not evidence that a failure never occurred.
 
+For unusually long searches, send sparse progress updates only when a retrieval fallback begins, a finding changes the likely intervention, or the search reaches its explicit bound. Ground counts and coverage claims in miner/tool output; do not narrate routine transcript reads.
+
 ## Evidence Contract
 
 For each relevant session, record only concise, auditable observations about:

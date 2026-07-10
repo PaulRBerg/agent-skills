@@ -8,132 +8,33 @@ description: "Use for debriefs or saved findings/reports from the current task."
 
 # Debrief
 
-Persist the current task's findings as an interactive HTML debrief at `./.ai/debriefs/<slug>/index.html`. Pick a slug from the user's task, build the page using the [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill's conventions, and pre-populate it with concrete findings drawn from the transcript. Pass `--md` to emit a plain Markdown report at `./.ai/debriefs/<slug>/index.md` instead; Markdown mode does not require the `playground` skill.
+Persist evidence from the current task as an opinionated interactive HTML report, or as terse Markdown with `--md`.
 
-## Arguments
+## Output and Authority
 
-- `<slug>` (optional): kebab-case folder name, e.g. `auth-security-review`. If omitted, derive a topical slug from the task — short (3-5 words), lowercase, dash-separated.
-- `--md` (optional): emit a Markdown report at `<debriefs_dir>/index.md` instead of HTML. Disables the `playground` dependency.
-
-## Prerequisites
-
-The [`playground`](https://github.com/anthropics/skills/tree/main/playground) skill is required only for HTML mode (the default). With `--md`, this skill has no external dependencies. `scripts/prepare.sh` probes for `playground` only when building HTML; if missing it prints the install command and exits non-zero. Manual install:
-
-```sh
-bunx skills add anthropics/skills --skill playground --global
-```
+- Default: `./.ai/debriefs/<slug>/index.html` using the installed `playground` skill.
+- `--md`: `./.ai/debriefs/<slug>/index.md`, with no playground dependency.
+- Derive a short topical kebab-case slug when omitted.
+- Write only inside the selected debrief directory. If the output exists, stop and ask whether to overwrite or choose a new slug.
+- Use only evidence present in the current task: real findings, paths, verified locations, metrics, decisions, and unresolved risks. Do not invent filler.
 
 ## Workflow
 
-### 1. Resolve slug
+1. Run the bundled preparer from the target repository:
 
-- Use `$ARGUMENTS` if provided.
-- Otherwise pick a topical kebab-case slug from the task: `auth-security-review`, `bundle-size-analysis`, `tailwind-v4-migration`, `lcp-regression-q1`. Avoid generic names (`report`, `findings`, `debrief`, `output`).
-- Reject slugs that don't match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$` — the helper script enforces this.
+   ```sh
+   bash <skill-dir>/scripts/prepare.sh [--md] <slug>
+   ```
 
-### 2. Prepare and verify dependencies
+   Use its `MODE`, `PLAYGROUND_DIR`, `DEBRIEF_PATH`, and `EXISTS` output. Relay dependency or slug errors and stop.
 
-Run from the skill directory:
+2. For HTML, read the resolved playground `SKILL.md` and exactly one matching template: diff review, document critique, code map, concept map, data explorer, or design playground. Adapt its interaction model to the evidence; do not load every template.
 
-```bash
-bash scripts/prepare.sh [--md] <slug>
-```
+3. Build one self-contained file:
 
-The script:
+   - HTML keeps the playground's live controls, useful presets, evidence view, natural-language prompt output, and copy feedback. No external dependencies.
+   - Markdown leads with the takeaway, then concise findings with severity/evidence/suggestion and actionable next steps. Use snippets only when exact text matters.
 
-- Validates the slug.
-- In HTML mode (default), probes `.agents/skills/playground`, `.claude/skills/playground`, `~/.agents/skills/playground`, `~/.claude/skills/playground`. In `--md` mode the probe is skipped entirely.
-- Exits `2` with the install command if `playground` is missing in HTML mode — relay the message verbatim and stop.
-- Creates `./.ai/debriefs/<slug>/`.
-- Prints five `KEY=VALUE` lines on stdout: `MODE`, `PLAYGROUND_DIR`, `DEBRIEFS_DIR`, `DEBRIEF_PATH`, `EXISTS`. `PLAYGROUND_DIR` is empty when `MODE=md`; `DEBRIEF_PATH` ends in `index.md` instead of `index.html`.
+4. Verify that every claim traces to the task transcript or tool evidence, the output contains no placeholders, and the file opens/renders. Then run `open "$DEBRIEF_PATH"` and report the absolute path.
 
-If `EXISTS=true`, ask the user before continuing: overwrite or pick a new slug.
-
-### 3. Pick a playground template (HTML mode only)
-
-Skip this step when `--md` is set.
-
-Read `$PLAYGROUND_DIR/SKILL.md`, then load **one** template under `$PLAYGROUND_DIR/templates/` whose shape best fits the debrief:
-
-| Debrief shape                   | Template               |
-| ------------------------------- | ---------------------- |
-| Code review / audit findings    | `diff-review.md`       |
-| Document or spec critique       | `document-critique.md` |
-| Architecture / codebase tour    | `code-map.md`          |
-| Learning, scope, knowledge gaps | `concept-map.md`       |
-| Data / query exploration        | `data-explorer.md`     |
-| Visual / design decisions       | `design-playground.md` |
-
-Read only the chosen template — don't load all six. If nothing fits cleanly, pick the closest and adapt; do not invent a new template.
-
-**Both formats:** pre-populate with concrete findings from the transcript — real paths, line numbers, severities, snippets, metrics, suggestions. Not lorem ipsum. Not placeholders. If the transcript has no findings, ask the user for the source material before writing.
-
-### 4a. Build the debrief — HTML
-
-Write a single HTML file to `$DEBRIEF_PATH` that satisfies playground core requirements:
-
-- Single file. Inline all CSS and JS. No external dependencies, fonts, or CDNs.
-- Live preview updating on every control change. No "Apply" button.
-- Prompt output at the bottom — natural language, mentions only non-default choices, with a "Copy" button and brief "Copied!" feedback.
-- Sensible defaults plus 3-5 named presets that snap controls to a cohesive combination.
-- System font for UI, monospace for code/values.
-
-For larger payloads, embed findings as a JS array literal inside one inline `<script>` at the top of the file.
-
-### 4b. Build the debrief — Markdown (when `--md`)
-
-Write a single Markdown file to `$DEBRIEF_PATH`. Recommended skeleton:
-
-````md
-# <Slug in Title Case>
-
-<One- or two-sentence summary of what was investigated and the headline takeaway.>
-
-## Findings
-
-### <Finding title> — severity: high|medium|low
-
-- **File:** `path/to/file.ts:42`
-- **Issue:** <one-line description>
-
-```ts
-// minimal snippet showing the issue
-```
-
-**Suggestion:** <concrete fix>.
-
-## Next steps
-
-- [ ] <actionable item>
-````
-
-Rules:
-
-- Keep it terse: one H3 per finding, fenced code only when the exact text matters.
-- No HTML, no embedded scripts, no inline assets. Adjacent files (images, data) may live alongside in `$DEBRIEFS_DIR/` if needed.
-
-### 5. Open
-
-After writing `$DEBRIEF_PATH`, open it in the user's default browser. Run this unconditionally — do not skip, prompt, or wait for confirmation:
-
-```bash
-open "$DEBRIEF_PATH"
-```
-
-Then print the absolute `$DEBRIEF_PATH` so the user can locate it.
-
-## Output
-
-A self-contained HTML debrief at `./.ai/debriefs/<slug>/index.html` that:
-
-- Surfaces concrete findings from the user's task.
-- Lets the user explore, filter, or annotate them interactively.
-- Generates a copyable prompt to act on the selected items.
-
-With `--md`, the output is instead a plain Markdown report at `./.ai/debriefs/<slug>/index.md` containing the same findings without the interactive UI.
-
-## Notes
-
-- Write only under `./.ai/debriefs/<slug>/`. Never write elsewhere.
-- Re-run with a different slug to keep parallel debriefs.
-- Suggest the user add `.ai/debriefs/` to `.gitignore` if debriefs shouldn't be committed.
+Completion requires a non-placeholder debrief at the selected path, evidence-grounded content, successful rendered/file inspection, and explicit overwrite handling.

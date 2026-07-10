@@ -7,60 +7,38 @@ description: Use to create interactive single-file HTML playgrounds/explorers/to
 
 # Playground Builder
 
-A playground is a self-contained HTML file with interactive controls on one side, a live preview on the other, and a prompt output at the bottom with a copy button. The user adjusts controls, explores visually, then copies the generated prompt back into Claude.
+Build a self-contained interactive HTML explorer with controls, live preview, and a copyable natural-language prompt.
 
-## How to use this skill
+## Workflow
 
-1. **Identify the playground type** from the user's request
-2. **Load the matching template** from `templates/`:
-   - `templates/design-playground.md` — Visual design decisions (components, layouts, spacing, color, typography)
-   - `templates/data-explorer.md` — Data and query building (SQL, APIs, pipelines, regex)
-   - `templates/concept-map.md` — Learning and exploration (concept maps, knowledge gaps, scope mapping)
-   - `templates/document-critique.md` — Document review (suggestions with approve/reject/comment workflow)
-   - `templates/diff-review.md` — Code review (git diffs, commits, PRs with line-by-line commenting)
-   - `templates/code-map.md` — Codebase architecture (component relationships, data flow, layer diagrams)
-3. **Follow the template** to build the playground. If the topic doesn't fit any template cleanly, use the one closest and adapt.
-4. **Open in browser.** After writing the HTML file, run `open <filename>.html` to launch it in the user's default browser.
+1. Infer the product context, audience, decisions to explore, and required states. Existing design systems and explicit user requirements override this skill's visual defaults.
+2. Read exactly one closest template and adapt it:
+   - `templates/design-playground.md`
+   - `templates/data-explorer.md`
+   - `templates/concept-map.md`
+   - `templates/document-critique.md`
+   - `templates/diff-review.md`
+   - `templates/code-map.md`
+3. Write one HTML file with inline CSS and JavaScript and no external runtime dependencies.
+4. Open it in a browser, interact with every control and preset, inspect representative viewport sizes, and verify live preview, prompt output, copy feedback, empty/error states, and keyboard usability. Fix rendered defects before completion.
 
-## Core requirements (every playground)
+## Opinionated Defaults
 
-- **Single HTML file.** Inline all CSS and JS. No external dependencies — if a CDN is down, the playground is dead.
-- **Live preview.** Updates instantly on every control change. No "Apply" button.
-- **Prompt output.** Natural language, not a value dump. Only mentions non-default choices. Includes enough context to act on without seeing the playground. Updates live.
-- **Copy button.** Clipboard copy with brief "Copied!" feedback.
-- **Sensible defaults + presets.** Looks good on first load — never starts empty or broken. Include 3-5 named presets that snap all controls to a cohesive combination.
-- **Light theme.** Default to a white/light background; offer a dark theme only as an opt-in toggle. System font for UI, monospace for code/values. Minimal chrome.
-- **Manage control count.** Group controls by concern; hide advanced options in a collapsible section instead of showing everything at once.
+Use these when product context does not indicate otherwise:
 
-## State management pattern
+- controls beside a live preview, with prompt output below;
+- a polished light theme, system UI font, monospace code/values, minimal chrome;
+- sensible non-empty initial state and 3–5 cohesive named presets;
+- one state object, one update path, and immediate preview/prompt refresh;
+- controls grouped by concern, with advanced controls collapsed;
+- prompt text that explains the desired outcome in natural language and mentions only non-default choices.
 
-Keep a single state object. Every control writes to it, every render reads from it.
+## Invariants
 
-```javascript
-const state = { /* all configurable values */ };
+- No Apply button: relevant changes render immediately.
+- The prompt is actionable without seeing the playground and is not a raw state dump.
+- Copy has visible transient feedback and a usable fallback when the Clipboard API fails.
+- Presets update controls, preview, and prompt consistently.
+- Do not add controls that do not affect either the preview or the generated prompt.
 
-function updateAll() {
-  renderPreview(); // update the visual
-  updatePrompt();  // rebuild the prompt text
-}
-// Every control calls updateAll() on change
-```
-
-## Prompt output pattern
-
-```javascript
-function updatePrompt() {
-  const parts = [];
-
-  // Only mention non-default values
-  if (state.borderRadius !== DEFAULTS.borderRadius) {
-    parts.push(`border-radius of ${state.borderRadius}px`);
-  }
-
-  // Use qualitative language alongside numbers
-  if (state.shadowBlur > 16) parts.push('a pronounced shadow');
-  else if (state.shadowBlur > 0) parts.push('a subtle shadow');
-
-  prompt.textContent = `Update the card to use ${parts.join(', ')}.`;
-}
-```
+Completion requires the self-contained file plus rendered, interactive inspection evidence; opening the file without exercising it is insufficient.

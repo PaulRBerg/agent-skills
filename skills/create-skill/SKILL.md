@@ -8,7 +8,7 @@ description: Use to create/scaffold/init a new agent skill in `.agents/skills` b
 
 # Create Skill
 
-Bootstrap a new agent skill, then symlink it into `.claude/skills/` so Claude Code can discover it. Default to splitting bulk content into `references/` and `scripts/` so `SKILL.md` stays lean.
+Bootstrap a skill with a small observable contract, then symlink it into `.claude/skills/` so Claude Code can discover it. Keep invariant workflow guidance in `SKILL.md`; move deterministic mechanics and conditional detail into scripts and references.
 
 ## Model Optimization
 
@@ -53,6 +53,16 @@ Agents load skills via **progressive disclosure**, in three stages:
 
 Keep `SKILL.md` focused on workflow. Push bulk into `scripts/` (deterministic logic) or `references/` (documentation).
 
+## Authoring Contract
+
+Before choosing a layout, separate the content into:
+
+- **Invariants** that every valid execution must preserve.
+- **Preferred defaults** that explicit user intent or repository evidence may override.
+- **Conditional examples and references** loaded only when their branch is active.
+
+Define the outcome, authority boundaries, stopping conditions, and completion evidence. Do not prescribe an identical execution path when several safe paths satisfy the same contract.
+
 ## When to Split Content
 
 ### Use `scripts/` when
@@ -71,14 +81,14 @@ Prefer `scripts/*.ts` run with `bun run scripts/<name>.ts`, unless there is a go
 - A topic exceeds ~100 lines of prose, examples, or schemas.
 - Content is conditionally relevant (variant-, framework-, or domain-specific) — splitting keeps irrelevant context out.
 - Detailed API surfaces, DB schemas, policies, or large templates would otherwise dominate `SKILL.md`.
-- The same explanation would be repeated across multiple skills (extract once, link from each).
+- A long explanation is needed only on one branch.
 
 Rules of thumb:
 
 - **One level deep** — link `references/placeholder.md` directly from `SKILL.md`, never reference-to-reference.
 - Files >100 lines: include a table of contents at the top.
 - Files >10k words: document grep patterns in `SKILL.md` so the agent can locate sections without reading the whole file.
-- **No duplication** — each fact lives in `SKILL.md` *or* a reference, never both.
+- **No duplication** — each fact lives in `SKILL.md` *or* a reference, never both. Keep skills self-contained rather than sharing references across independently installed skills.
 - For every reference, write one line in `SKILL.md` that says *when* to read it.
 
 ### Reference organization patterns
@@ -133,9 +143,9 @@ Use `WebFetch` to confirm the current frontmatter schema, naming rules, and prog
 - Accept local scopes nested under a larger repo; do not force the skill into the repo root when the task targets a nested project directory.
 - Stop if `<scope>/.agents/skills/<name>/` or `<scope>/.claude/skills/<name>` already exists.
 
-### 3. Plan the Layout
+### 3. Define the Contract and Layout
 
-Before writing anything, decide what belongs where:
+Before writing anything, define the observable outcome, invariants, preferred defaults, authority, routing, stop conditions, and completion evidence. Then decide what belongs where:
 
 - Will the workflow invoke helper code? → Prefer `scripts/<name>.ts` run with `bun run`; use `scripts/<name>.py` through `uv run` when Python is a better fit.
 - Schemas, long examples, variant guides, domain knowledge? → `references/<topic>.md`
@@ -161,7 +171,7 @@ Write `<scope>/.agents/skills/<name>/SKILL.md` with:
 - A short `# Title`.
 - A one-line summary of what the skill does.
 - `disable-model-invocation` and `user-invocable` fields set for Claude behavior. Omit only when intentionally relying on Claude defaults: `disable-model-invocation: false`, `user-invocable: true`.
-- `## Arguments` (if any) and `## Workflow` sections in **imperative form** with concrete steps.
+- `## Arguments` (if any) and a lean imperative workflow. Use fixed steps only when order matters; otherwise state the contract and let repository evidence guide execution.
 - Explicit links to every `references/` file the workflow may need, each with a one-line note describing *when* to read it.
 - CLI signatures for any bundled scripts, including the runtime command (`bun run scripts/<name>.ts` or `uv run scripts/<name>.py`), so the agent can call them without reading them.
 
@@ -203,4 +213,4 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - Every new skill must include `agents/openai.yaml` with `policy.allow_implicit_invocation` derived from `SKILL.md`, never the other way around.
 - Prefer TypeScript helper scripts run with `bun run`; use Python through `uv run`, never raw `python` or `python3`.
 - Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by default.
-- Do not commit the new skill — leave that to the user.
+- Report the created paths and verification evidence. Do not commit the new skill unless the user explicitly requested a commit.

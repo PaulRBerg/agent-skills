@@ -4,7 +4,7 @@ Create GitHub discussions using the GraphQL API with automatic category selectio
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`. The repository context read below is the auth check.
+See `context.md > Auth Validation`. The repository context read below is the auth check.
 
 ## Parse Repository Argument
 
@@ -76,7 +76,7 @@ Use default structure (see below).
 
 ## Generate Title and Body
 
-See `commons.md > Informal Tone` for tone guidance.
+See `writing.md > Informal Tone` for tone guidance.
 
 **Title**: If template has `title` field, prepend it. Otherwise create clear summary (5-10 words).
 
@@ -98,7 +98,7 @@ See `commons.md > Informal Tone` for tone guidance.
 [Background information, if applicable]
 ```
 
-See `commons.md > GitHub Admonitions` for admonitions. See `commons.md > Markdown Tables` for rendering tabular content as tables. See `commons.md > Platform String Normalization` if OS details needed.
+Use ordinary GitHub Markdown only where it improves this discussion. See `context.md > Platform String Normalization` if OS details are required.
 
 ## Create the Discussion
 

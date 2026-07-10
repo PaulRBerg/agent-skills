@@ -3,117 +3,35 @@ argument-hint: <task>
 disable-model-invocation: true
 name: work
 user-invocable: true
-description: 'Orchestrate end-to-end implementation: scale from direct work to subagents, finish with code-polish.'
+description: 'Orchestrate end-to-end implementation: execute directly or delegate independent tracks, integrate, and verify the requested outcome.'
 ---
 
 # Work
 
-Orchestrate end-to-end task implementation: understand the task, assess complexity, implement directly or distribute across a team, then polish the result.
+Deliver the requested implementation with the smallest coordination structure that gets to a verified result.
+
+## Contract
+
+- Treat `$ARGUMENTS` and the conversation as the scope and success criteria. Ask only when a missing decision changes scope, safety, implementation, or verification.
+- Preserve unrelated work and repository conventions. Do not add features, cleanup, abstractions, or compatibility layers outside the request.
+- Use subagents only when the environment supports them and at least two bounded tracks can proceed independently with distinct ownership and acceptance criteria. File count alone does not justify delegation.
+- Keep integration decisions with the coordinating agent. Verify the combined result, not merely each track in isolation.
 
 ## Workflow
 
-### 1) Parse Task
-
-Read the task description from `$ARGUMENTS`.
-
-- If `$ARGUMENTS` is empty, ask the user for a task description and stop.
-- Extract key signals: scope (files, modules, components mentioned), action type (new feature, bug fix, refactor, migration), and any constraints.
-- Note any referenced issues, PRs, or URLs for later context gathering.
-
-### 2) Assess Complexity
-
-Classify the task as **simple** or **complex** using these heuristics:
-
-| Signal           | Simple                   | Complex                                       |
-| ---------------- | ------------------------ | --------------------------------------------- |
-| File count       | 1-3 files                | 4+ files                                      |
-| Module span      | Single module or package | Cross-module or cross-package                 |
-| Dependency chain | No new dependencies      | New packages or service integrations          |
-| Risk surface     | Low (UI, docs, config)   | High (auth, payments, data, infra)            |
-| Parallelism      | Sequential steps only    | Independent subtasks benefit from concurrency |
-
-A task is complex when **3 or more** signals fall in the complex column. When in doubt, prefer the simple path — team overhead is only justified when parallelism provides a real speedup.
-
-- **Simple** — proceed to Step 3.
-- **Complex** — proceed to Step 4.
-
-### 3) Implement (Simple Path)
-
-Execute the task directly without spawning subagents.
-
-1. **Gather context**: Read all relevant files. Understand existing code, tests, and conventions.
-2. **Implement**: Make the changes. Follow project conventions inferred from existing code, linters, and formatters.
-3. **Verify**: Run the narrowest useful checks:
-   - Formatter/linter on touched files.
-   - Targeted tests for touched modules.
-   - Type check when the touched files are in a typed language with a configured checker.
-   - Run broader checks (full test suite, lint, typecheck) only when the change touches shared contracts, public APIs, or cross-module boundaries.
-4. Proceed to Step 5 (Polish).
-
-### 4) Implement (Complex Path)
-
-Distribute work across a team of subagents.
-
-#### 4a) Decompose
-
-Break the task into independent subtasks. Each subtask should:
-
-- Target a distinct set of files with minimal overlap.
-- Be completable without waiting on other subtasks (no circular dependencies).
-- Include clear acceptance criteria.
-
-Avoid over-decomposition. If subtasks cannot run in parallel, prefer the simple path.
-
-#### 4b) Create Team and Assign
-
-Create a team with a name derived from the task (e.g., "add-auth", "refactor-api"). Create a task for each subtask. Set up dependencies when ordering matters.
-
-Spawn implementation agents as teammates. Assign each agent one or more tasks.
-
-Recommended team sizing:
-
-- 1 agent per module when modules are independent.
-- Separate agent for shared utilities when consumers depend on them (utility blocks consumers).
-- Dedicated agent for tests if test volume is high.
-
-#### 4c) Coordinate
-
-Monitor progress. As agents complete tasks:
-
-- Review output for integration issues.
-- Resolve cross-agent conflicts (merge overlaps, API mismatches).
-- Assign follow-up tasks if gaps emerge.
-
-After all tasks complete:
-
-- Run integration verification: full test suite, type check, lint.
-- Fix any integration issues directly — do not re-spawn agents for small fixes.
-- Shut down teammates.
-- Proceed to Step 5 (Polish).
-
-### 5) Polish
-
-Invoke the `code-polish` skill to simplify and review all session-modified files. If the harness cannot invoke skills directly (e.g., Codex), read `../code-polish/SKILL.md` — sibling skill directory relative to this file — and follow its instructions inline.
-
-Wait for completion. If it reports residual risks or stop conditions, relay them to the user.
-
-This step is mandatory — always run it, even if the implementation seems clean.
-
-## Error Handling
-
-| Error                                | Response                                                      |
-| ------------------------------------ | ------------------------------------------------------------- |
-| Empty `$ARGUMENTS`                   | Ask for a task description and stop                           |
-| Verification failures after impl     | Attempt to fix; if unfixable, report to user before polishing |
-| Team agent fails or times out        | Reclaim the task and complete it directly                     |
-| `code-polish` reports stop condition | Relay to user with context                                    |
+1. Inspect the relevant code, tests, repository instructions, and task-runner recipes. State material assumptions and define the narrowest evidence that will prove completion.
+2. Choose execution shape:
+   - Work directly when the task is sequential, tightly coupled, small enough to keep coherent, or likely to create overlapping edits.
+   - Delegate independent research, implementation, or test tracks when concurrency materially helps. Give each agent a disjoint scope, explicit deliverable, and acceptance criterion; do not delegate the final integration judgment.
+3. Implement the minimum in-scope change. Incorporate agent results only after reviewing their evidence and reconciling contracts, naming, and shared state.
+4. Run targeted formatting, tests, types, builds, or smoke checks that exercise the changed behavior. Broaden validation only for shared contracts or cross-package effects.
+5. Use `code-polish` only when the result would materially benefit from a separate simplification or risk-profiled review, or when the user requested it. Do not make polishing a completion ritual.
+6. Report the outcome, files or behavior changed, exact validation results, and residual risks. Stop when the requested state is implemented and checkably verified.
 
 ## Stop Conditions
 
-Stop and ask for direction when:
+Stop for a destructive or irreversible action, a material scope expansion, an unrequested public-contract break, or input only the user can provide. A failed delegated track is not itself a blocker: reclaim it or continue directly when safe.
 
-- The task description is ambiguous and multiple interpretations exist.
-- Implementation requires changing public APIs or breaking contracts not mentioned in the task.
-- The task scope grows beyond the original description during implementation.
-- External dependencies (APIs, services, packages) are unavailable or broken.
-- A CRITICAL security concern is discovered in existing code adjacent to the task.
+## Completion
+
+Complete only when the requested behavior is integrated, the chosen success criteria pass, and the final report states the outcome, validation evidence, and residual risks.

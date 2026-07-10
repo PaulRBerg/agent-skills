@@ -77,21 +77,11 @@ Snapshot `git status --short` before broad edits. Preserve unrelated pre-existin
 
 ## Shared Constraints
 
-- Stay inside the current git repository. Never scan or write global installs under `~/.agents`, `~/.claude`, or `.claude/skills`.
-- Treat README.md as human-facing and AGENTS.md as agent-facing. Put stable shared rules in parent AGENTS.md files and local deltas in nested files.
-- Treat CLAUDE.md only as a compatibility symlink to sibling AGENTS.md. Never rewrite a regular CLAUDE.md file.
-- Treat existing project-installed `.agents/skills/<name>/` files as factual workflows to verify, not redesign.
-- Never treat catalog `skills/<name>/` directories as project-installed skills.
-- Never create, install, delete, or rename skills; edit CONTRIBUTING.md; or auto-commit.
-- Remove content only when repository evidence shows it is stale, misplaced, duplicated, or cheaply inferable. Do not invent descriptions, links, commands, conventions, or ownership rules.
+Stay inside the resolved repository, preserve unrelated changes, and do not commit or perform external writes. The selected workflow reference is authoritative for README.md, AGENTS.md, CLAUDE.md, and project-skill behavior; do not repeat or broaden its file-specific rules here.
 
 ## Discovery and Tool Routing
 
-- Use git-aware discovery for tracked and untracked README.md, AGENTS.md, manifests, and repository configuration.
-- Deliberately inspect ignored `.agents/skills/*/SKILL.md` targets when project skills are in scope. Canonicalize candidates and accept only paths beneath `repo_root`.
-- Exclude VCS, dependency, environment, and build-output directories. Skip hidden directories except explicit manifests and `.agents/skills` targets.
-- Prefer `fd` for filesystem discovery. If unavailable, use `find` with the same exclusions and path checks. An empty or suspiciously narrow result warrants one meaningful fallback before concluding that no target exists.
-- Read independent manifests and targets in parallel when practical; synthesize their evidence before writing.
+Use git-aware discovery, canonicalize every candidate beneath `repo_root`, and exclude VCS, dependency, environment, and build outputs. Deliberately include ignored `.agents/skills/*/SKILL.md` only when project skills are selected. Prefer `fd`, fall back once on suspiciously narrow results, and synthesize independent repository evidence before writing.
 
 ## Completion and Report
 

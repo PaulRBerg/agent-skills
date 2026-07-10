@@ -26,13 +26,13 @@ Interpret as natural language:
 
 ## Semantic Change Analysis
 
-Follow `commons.md > Semantic Change Analysis` with these differences:
+Follow `writing.md > Semantic Change Analysis` with these differences:
 
 1. Get base branch from PR metadata (not args)
 2. Fetch only that base branch: `git fetch origin "+refs/heads/$base_branch:refs/remotes/origin/$base_branch"`
 3. Preserve existing issue references (Closes #X, Related to #X) when regenerating
 
-If user provided additional context in args, append it naturally to the description. Write the regenerated title and body in the voice from `commons.md > Informal Tone`.
+If user provided additional context in args, append it naturally to the description. Write the regenerated title and body in the voice from `writing.md > Informal Tone`.
 
 ## Execute Update
 

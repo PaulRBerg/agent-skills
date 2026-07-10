@@ -104,15 +104,15 @@ Prioritize sources by ecosystem:
 
 ## Evaluation Criteria
 
-Rank tools with these default weights, then adjust for the ecosystem and task.
+Start from the user's decision criteria. When they are unstated, use these as evidence prompts rather than a scoring formula:
 
-| Criterion             | Weight | Evidence to collect                                               |
-| --------------------- | ------ | ----------------------------------------------------------------- |
-| Popularity/adoption   | 25%    | Downloads, installs, GitHub stars, community size, production use |
-| Maintenance status    | 25%    | Last release, recent commits, issue response, active maintainers  |
-| Security/quality      | 20%    | Known vulnerabilities, audits, test/CI quality, license           |
-| Documentation/DX      | 15%    | Docs quality, examples, API clarity, error messages               |
-| Performance/resources | 15%    | Benchmarks, bundle size, startup time, memory, scaling properties |
+| Criterion            | Evidence to collect                                               |
+| -------------------- | ----------------------------------------------------------------- |
+| Adoption             | Downloads, installs, GitHub stars, community size, production use |
+| Maintenance          | Last release, recent commits, issue response, active maintainers  |
+| Security and quality | Known vulnerabilities, audits, test/CI quality, license           |
+| Documentation and DX | Docs quality, examples, API clarity, error messages               |
+| Performance and cost | Benchmarks, bundle size, startup time, memory, operating cost     |
 
 ### Ecosystem-Specific Criteria
 
@@ -136,9 +136,9 @@ Rank tools with these default weights, then adjust for the ecosystem and task.
 - CLI tools: choose the tool with simpler installation and better structured output when capability is comparable.
 - Agent skills: choose the skill with clearer progressive-disclosure metadata and fewer bundled execution risks when capability is comparable.
 
-## Output Format
+## Output Shapes
 
-Use this structure for most answers:
+Choose the smallest shape that makes the decision legible. A concise recommendation with one alternative is often enough. When several options share comparable fields, adapt this structure:
 
 ````markdown
 ### Recommended: `tool-name`
@@ -182,7 +182,7 @@ Use this structure for most answers:
 
 GitHub columns in tables should use Markdown links, e.g. `[sindresorhus/execa](https://github.com/sindresorhus/execa)`.
 
-## Comparison Tables
+## Optional Comparison Tables
 
 Use the table that matches the ecosystem.
 
@@ -225,7 +225,7 @@ Use the table that matches the ecosystem.
 
 ## Red Flags
 
-Always call out:
+Call out any red flag that is material to the user's decision:
 
 - Abandoned tools with no updates in 12+ months.
 - Agent skills with no updates in 6+ months when the surrounding ecosystem is moving quickly.
@@ -333,7 +333,7 @@ Prefer no dependency when the standard library or platform primitive is adequate
 - Go `log/slog` for structured logging in ordinary workloads.
 - Browser `URL` and `Intl` APIs for many frontend parsing/formatting tasks.
 
-## Example Interactions
+## Example Routing
 
 ### JavaScript Default
 

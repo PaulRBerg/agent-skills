@@ -17,7 +17,7 @@ Use these headings exactly for `openai/codex` issues using `2-extension.yml`.
 
 ### What platform is your computer?
 
-{see references/commons.md > Platform String Normalization}
+{see references/context.md > Platform String Normalization}
 
 ### What issue are you seeing?
 

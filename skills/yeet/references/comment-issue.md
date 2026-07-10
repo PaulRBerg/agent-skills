@@ -4,7 +4,7 @@ Post a comment on an existing GitHub issue (or PR — on GitHub's data model, a 
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation`. The issue context read below is the auth check.
+See `context.md > Auth Validation`. The issue context read below is the auth check.
 
 ## Parse Arguments
 
@@ -44,7 +44,7 @@ Analyze:
 
 ## Generate Comment Body
 
-See `commons.md > Informal Tone` — same rules apply. Write like a colleague chiming in on a thread, not a changelog entry.
+See `writing.md > Informal Tone` — same rules apply. Write like a colleague chiming in on a thread, not a changelog entry.
 
 ### Guidelines
 
@@ -52,8 +52,8 @@ See `commons.md > Informal Tone` — same rules apply. Write like a colleague ch
 - **Match the thread's register.** If the thread is technical and terse, don't be fluffy. If it's collaborative and exploratory, don't be curt.
 - **No AI throat-clearing.** Skip "Great question!", "Thanks for filing this!", "Just chiming in here...". Go straight to substance.
 - **No fake enthusiasm.** Don't over-promise ("I'll dig into this right away") unless the user explicitly said so.
-- **Cite specifics.** If you reference code, link to it (see `commons.md > File Link Formatting`). If you reference a commit or PR, link it.
-- **Use admonitions sparingly** (see `commons.md > GitHub Admonitions`). Almost never needed in a comment — only for genuine warnings.
+- **Cite specifics.** If you reference code, link to it (see `writing.md > Link Formatting`). If you reference a commit or PR, link it.
+- **Use admonitions sparingly.** They are almost never needed in a comment; reserve them for genuine warnings.
 
 ### Comment Shapes
 
@@ -106,11 +106,11 @@ Fixed in {PR or commit link}. {One sentence on the root cause if non-obvious.}
 
 ### Platform / Environment
 
-If the comment includes environment info, follow `commons.md > Platform String Normalization`. Don't paste raw `uname` output.
+If the comment includes environment info, follow `context.md > Platform String Normalization`. Don't paste raw `uname` output.
 
 ### File / Code References
 
-Follow `commons.md > File Link Formatting`. Prefer permalinks (commit SHA) over branch links when citing specific lines, since branch links rot.
+Follow `writing.md > Link Formatting`. Prefer permalinks (commit SHA) over branch links when citing specific lines, since branch links rot.
 
 ## Post the Comment
 
@@ -123,7 +123,7 @@ EOF
 )"
 ```
 
-See `commons.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
+See `writing.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
 
 Display: `Commented: https://github.com/{owner}/{repo}/issues/{number}#issuecomment-{id}`
 

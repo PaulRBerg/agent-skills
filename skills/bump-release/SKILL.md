@@ -2,7 +2,7 @@
 argument-hint: '[packages...] [version] [--beta] [--dry-run]'
 disable-model-invocation: true
 effort: high
-model: opus
+model: sonnet
 name: bump-release
 user-invocable: true
 description: 'Cut a release: bump versions, write changelogs, commit, tag.'
@@ -48,7 +48,7 @@ If the helper exits `2`, stop: the cwd is not a git repo or has no root `package
 07. **Cascade dependents** - Use `dependencyEdges` to find workspace packages whose `dependencies` or `peerDependencies` point at bumped packages. Check ranges with a structured semver parser or package manager API when available, not ad hoc string comparison. If the new version is outside the declared range, update the range and add the dependent to the release plan. Treat dependency range widening as patch by default; treat peer dependency major changes as major unless the user confirms otherwise.
 08. **Confirm inferred versions** - For non-dry-run regular releases without explicit versions, ask the user to confirm inferred versions. For multi-package releases, include requested packages and cascaded dependents in the same release-plan confirmation when the agent UI allows it.
 09. **Preview dry runs** - For `--dry-run`, print the package order, current versions, planned versions, changelog/tag/commit actions, dependency range updates, and skipped files. Stop before edits.
-10. **Write changelogs** - For regular releases only, read `references/common-changelog.md` after the final package set is known, then apply the Changelog Rules below. Bound diff inspection per target using its `includedFiles` against `previousTags[package].tag`.
+10. **Write changelogs** - For regular releases only, read `references/common-changelog.md` after the final package set is known and apply it as the authoritative changelog contract. Bound diff inspection per target using its `includedFiles` against `previousTags[package].tag`.
 11. **Edit release files** - Update each target package's `CHANGELOG.md` and `package.json`. For beta releases, skip `CHANGELOG.md`. Update any cascaded dependent ranges before committing the dependent release.
 12. **Format once** - After all release edits, run formatting once. If a `justfile` exists, inspect `just --list` and prefer the narrowest relevant write recipe; use broad recipes such as `just full-write` only when no narrower established recipe covers the touched files. Without a suitable recipe, use the repo's established formatter commands or leave formatting unchanged.
 13. **Commit and tag in dependency order** - Process dependencies before dependents. Use one commit and one annotated tag per package:
@@ -56,19 +56,6 @@ If the helper exits `2`, stop: the cwd is not a git repo or has no root `package
     - Monorepo commit: `docs: release <package> <version>`
     - Single-package tag: `v<version>` unless existing tags use bare semver.
     - Monorepo tag: follow existing tag patterns from `previousTags`; default to `<package-dir>@<version>`.
-
-## Changelog Rules
-
-Regular releases must generate entries in `CHANGELOG.md` following `references/common-changelog.md`.
-
-- Use categories in this order: `Changed`, `Added`, `Removed`, `Fixed`.
-- Start every entry with a present-tense imperative verb.
-- Reference PRs when available; fall back to commit links.
-- Merge related commits into one user-facing entry.
-- Include only production-impacting changes: exclude tests, CI/CD, dev tooling, style-only churn, and `devDependencies`; for `package.json`, include only `dependencies` and `peerDependencies` changes.
-- If `package.json` has a `files` field, include only changes under those package files/directories, plus production dependency changes in `package.json`.
-
-Beta releases do not update changelogs.
 
 ## Script Reference
 
@@ -85,31 +72,6 @@ Planner output fields to use:
 - `workingTree`: dirty-tree status that must be clean before release edits.
 - `needsSelection` and `errors`: package-selection or argument problems to resolve before proceeding.
 
-## Examples
-
-```bash
-# Regular release
-/bump-release
-
-# Preview without writes
-/bump-release --dry-run
-
-# Beta release
-/bump-release --beta
-
-# Monorepo package release
-/bump-release evm
-
-# Multi-package monorepo release
-/bump-release evm evm-safe
-
-# Explicit single-package version
-/bump-release 2.0.0
-
-# Explicit beta version
-/bump-release 2.0.0-beta.1
-```
-
 ## Version Examples
 
 | Current Version | Release Type   | New Version     |
@@ -124,3 +86,7 @@ Planner output fields to use:
 ## Resources
 
 - `references/common-changelog.md` - Read only for regular releases after the final stable release package set is known.
+
+## Completion
+
+Dry-run completion is a planner-backed package/version/action preview with zero writes. Release completion requires the planned manifests and changelogs, repository formatting, one commit and annotated tag per target in dependency order, and a final report of created commits/tags and skipped packages.

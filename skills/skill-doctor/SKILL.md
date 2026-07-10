@@ -42,6 +42,7 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 
 - Treat `error` findings as catalog defects that should block publishing or syncing.
 - Treat `warning` findings as review-required catalog hygiene issues.
+- Prompt-hygiene warnings are advisory and never auto-fix: stale model pins, oversized unconditional Markdown references, conflicting requirement/prohibition language, and missing completion evidence.
 - Use `path` and `line` from JSON output for precise follow-up edits.
 
 ## Safe Fix Policy

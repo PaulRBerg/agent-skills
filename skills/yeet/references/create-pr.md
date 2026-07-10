@@ -4,7 +4,7 @@ Create GitHub pull requests with semantic change analysis, intelligent defaults,
 
 ## Validate Prerequisites
 
-See `commons.md > Auth Validation` for GitHub authentication. The repository context read below is the auth check.
+See `context.md > Auth Validation` for GitHub authentication. The repository context read below is the auth check.
 
 **Check git repository state:**
 
@@ -42,7 +42,7 @@ git fetch origin "+refs/heads/$base_branch:refs/remotes/origin/$base_branch"
 
 ## Semantic Change Analysis
 
-Follow the process in `commons.md > Semantic Change Analysis`. Write the title and body in the voice from `commons.md > Informal Tone`.
+Follow the process in `writing.md > Semantic Change Analysis`. Write the title and body in the voice from `writing.md > Informal Tone`.
 
 **Test Plan** (only if `--test-plan` flag): Add a "## Test Plan" section with testing/validation approach, manual steps, or checklist.
 
@@ -53,7 +53,7 @@ Follow the process in `commons.md > Semantic Change Analysis`. Write the title a
 - Otherwise use git blame for frequent contributors
 - Combine with reviewers from arguments
 
-See `commons.md > GitHub Admonitions` for admonition usage in PR descriptions.
+Use an admonition only for a material warning that would otherwise be missed.
 
 **Issue linking:** If an issue number was referenced in the conversation (e.g., "fixes #42", "for issue #100"), append `Closes #NUMBER` to the PR body so the issue auto-closes on merge.
 
@@ -86,4 +86,4 @@ gh pr create \
 
 Display: "Created PR: $PR_URL"
 
-On failure: check the specific error (auth, branch protection, validation) and follow [commons.md > Error Handling](commons.md#error-handling) — run the idempotency check before any retry.
+On failure: check the specific error (auth, branch protection, validation) and follow [posting.md > Error Handling and Idempotency](posting.md#error-handling-and-idempotency) — run the idempotency check before any retry.
