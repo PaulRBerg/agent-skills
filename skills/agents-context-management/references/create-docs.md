@@ -1,30 +1,12 @@
 # Create Docs Workflow
 
-Use this workflow to create missing README.md and AGENTS.md files. It may create sibling CLAUDE.md symlinks for AGENTS.md files. It must not create skills; for that, refer to `skills/create-skill`.
+Create missing README.md and AGENTS.md context from repository evidence. Regenerate existing targets only with `--force` or an equally explicit overwrite instruction. Never create skills.
 
-## Inputs
+Success means each selected package root has the requested human and agent context, every created AGENTS.md has a safe companion CLAUDE.md symlink where possible, and generated claims pass repository-defined validation.
 
-- Repo root.
-- Package roots: repo root plus manifest-bearing directories.
-- Nearest manifests and metadata files.
-- Existing README.md / AGENTS.md files for overwrite checks.
-- Optional user-provided description.
+## Select Targets
 
-## Steps
-
-1. Parse `path`, `--root-only`, `--dry-run`, `--minimal`, `--full` / `--thorough`, `--force`, and optional guided description.
-2. Run the guard rails from `SKILL.md` and snapshot `git status --short`.
-3. Enumerate package roots. Restrict by `path` or `--root-only`.
-4. For each package root, determine which files are missing: README.md, AGENTS.md, and CLAUDE.md symlink.
-5. If existing README.md or AGENTS.md files would be overwritten, require `--force` or explicit user confirmation. For multi-target sweeps, confirm once for the batch.
-6. Generate README.md for humans and AGENTS.md for agents from the same analysis, keeping the audience split strict.
-7. Create sibling CLAUDE.md symlinks for created AGENTS.md files.
-8. Recommend nested AGENTS.md / CLAUDE.md pairs when analysis finds distinct subtree rules outside the initial package-root set.
-9. Run the narrowest formatter/checker and report grouped results.
-
-## Package Roots
-
-Create files only at package roots: the repo root plus directories containing one of these manifests:
+Package roots are the repository root and directories containing one of these manifests:
 
 - `package.json`
 - `Cargo.toml`
@@ -35,80 +17,54 @@ Create files only at package roots: the repo root plus directories containing on
 - `Gemfile`
 - `composer.json`
 
-Do not create files in arbitrary leaf directories. Do not create `.agents/skills` directories or skill files.
+Create README.md only at package roots. Create package-root AGENTS.md files there as well. Apply `path` and `--root-only` before analyzing targets.
 
-## README.md Generation
+Nested AGENTS.md files may also be created when the user explicitly requests broad context creation and a subtree has a distinct command runner, generated-file boundary, ownership rule, deployment or data constraint, safety requirement, or review workflow. Otherwise, report the recommendation without writing it. Never create README.md in an arbitrary leaf directory.
 
-README.md is human-facing. Generate:
+For each selected target, classify README.md, AGENTS.md, and CLAUDE.md as missing, reusable, safely replaceable, or blocked. Without overwrite authority, skip existing README.md and AGENTS.md files and report them; do not silently route them through `polish`.
 
-- Title and a short description from metadata or the guided description.
-- Verified badges and links only.
-- Optional references, related projects, citations, funding, changelog, docs, package registry, demo, or license sections when the files or metadata exist.
-- A short contributing pointer to sibling `AGENTS.md`.
+## Ground the Content
 
-Do not include install/build/test/lint/dev/deploy commands unless the repo is an operator-run setup repo or the user explicitly asks for a setup guide. Even then, keep the guide short and task-focused; developer workflow commands belong in AGENTS.md.
+Derive claims from the nearest manifests and metadata, task runners, lock files, CI and lint configuration, generated-file notices, and relevant source boundaries. Use a user-provided description when present, but verify any factual claims it adds.
 
-## AGENTS.md Generation
+Do not invent project purpose, badges, links, commands, conventions, ownership, or safety rules. When evidence is missing, narrow the generated document instead of guessing.
 
-AGENTS.md is agent-facing. Generate concise, imperative guidance:
+## Generate README.md
 
-- Stack and package manager.
-- Commands with preferred runners and any non-obvious order or side effects.
-- Code style and architecture constraints that are not obvious from filenames.
-- Generated-file warnings and ownership boundaries.
-- Safety, secrets, data-handling, deployment, or financial constraints.
-- Contribution workflow when discoverable.
-- A `CONTRIBUTING.md` merge stub if that file exists next to the target.
+Keep README.md human-facing:
 
-Avoid long directory trees, generic tool tutorials, or package-script inventories that add no preference or warning. Create child AGENTS.md files only for real local deltas.
+- Add a title and short factual description.
+- Add only verified documentation, homepage, demo, package, changelog, citation, funding, reference, or license links that materially help readers.
+- Add a short contributing pointer to sibling AGENTS.md.
+- Include a short operator-run setup guide only for dotfiles, infrastructure, homelab, personal tooling, or an explicit setup request.
 
-## Nested Context Recommendations
+Do not add developer command inventories, directory trees, configuration manuals, contribution rules, marketing copy, or placeholders.
 
-After generating package-root files, scan for subtrees whose rules would be noisy or misleading in the parent:
+## Generate AGENTS.md
 
-- Distinct task runners or package managers.
-- Generated files with different ownership.
-- Separate deployment, data, credential, or safety constraints.
-- Different review or testing requirements.
-- Distinct app/library/contract boundaries in a monorepo.
+Keep AGENTS.md concise, imperative, and scoped:
 
-If such a subtree lacks AGENTS.md, recommend creating a nested AGENTS.md and sibling CLAUDE.md symlink. Create it during this workflow only when the user requested broad context creation and the scope is clear. Otherwise report the recommendation.
+- Name the stack and preferred package manager only when useful for choosing commands.
+- Include commands whose runner, order, side effects, environment, or failure behavior matters.
+- Include non-obvious architecture, style, naming, generated-file, ownership, safety, privacy, credential, deployment, financial, data-handling, and review constraints supported by evidence.
+- Exclude generic tool tutorials, long directory trees, and package-script inventories that add no preference or warning.
 
-## CLAUDE.md Symlinks
+Parent files hold shared defaults; nested files contain only local deltas.
 
-For each created AGENTS.md, create a sibling symlink:
+## Create CLAUDE.md Symlinks
+
+For each created AGENTS.md, create a sibling compatibility symlink:
 
 ```sh
 (cd "$dir" && ln -sf AGENTS.md CLAUDE.md)
 ```
 
-Before writing, check whether `$dir/CLAUDE.md` exists. If it is a regular file, stop for that target and report `✗`; do not overwrite it.
+Write only when CLAUDE.md is missing or already a symlink. A regular CLAUDE.md blocks only that symlink target; leave it untouched and report the conflict.
 
-## CONTRIBUTING.md
+## Handle CONTRIBUTING.md
 
-Never edit CONTRIBUTING.md. If it exists next to a target:
+Never edit CONTRIBUTING.md. If it exists next to a target, put only stable, relevant contribution guidance in AGENTS.md and advise the user to merge any remaining useful instructions manually before deleting CONTRIBUTING.md.
 
-1. Add or keep a concise Contribution Workflow stub in sibling AGENTS.md.
-2. Report an advisory recommending that the user merge CONTRIBUTING.md into AGENTS.md and delete CONTRIBUTING.md after review.
+## Finish
 
-## Verification
-
-Check whether the repo defines Markdown lint/format rules (for example a `just` recipe, npm/package script, `.markdownlint.json`, `.prettierrc`, or lint-staged config). If found, apply them; otherwise report the skip. For `--dry-run`, report the commands that would run.
-
-## Report
-
-Group by relative package root:
-
-```text
-### packages/core
-✓ Created README.md
-  - Human-facing overview and AGENTS.md pointer
-✓ Created AGENTS.md
-  - Commands, style, and local constraints
-✓ Created CLAUDE.md symlink
-
-⚠ CONTRIBUTING.md detected
-  - Merge into packages/core/AGENTS.md, then delete CONTRIBUTING.md after review.
-```
-
-Close with a tally: `Created 4 files, skipped 1 existing file, 1 advisory.`
+Run the completion checks and use the report contract from SKILL.md. In dry-run mode, show selected paths and concise section-level previews or diffs. Stop after the requested files are created or regenerated and validated; do not polish unrelated existing context.

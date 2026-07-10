@@ -1,159 +1,69 @@
 # Polish Workflow
 
-Use this workflow to update existing context as one surface: README.md, AGENTS.md with sibling CLAUDE.md symlinks, and existing project-installed `.agents/skills/<name>/SKILL.md` files. Polish means factual repair, noise removal, and better placement. It does not mean creating README.md, AGENTS.md, skills, or broad restyling.
+Update existing context for factual accuracy, useful placement, and lower noise. Do not create README.md, AGENTS.md, or skills, and do not broadly restyle accurate user-authored content.
 
-## Inputs
+Success means each changed claim is verified against the repository, each instruction lives at the narrowest useful scope, and no unrelated content or user work is disturbed.
 
-- Existing `README.md` files in scope.
-- Existing `AGENTS.md` files in scope.
-- Sibling `CLAUDE.md` symlinks in scope.
-- Existing repo-local `.agents/skills/<name>/SKILL.md` files and their bundled files.
-- Nearest manifests, task runners, lock files, lint configs, CI configs, and relevant source files needed to verify claims.
+## Discover and Inspect
 
-## Steps
+Select existing README.md and AGENTS.md files, sibling CLAUDE.md entries, and any in-scope project-installed `.agents/skills/<name>/SKILL.md` files. Apply `path`, `--root-only`, and `skill-name` filters before reading deeply.
 
-01. Parse `path`, `skill-name ...`, `--root-only`, `--dry-run`, `--preserve`, `--minimal`, and `--thorough` / `--full`.
-02. Run the guard rails from `SKILL.md` and snapshot `git status --short`.
-03. Discover README.md, AGENTS.md, CLAUDE.md symlinks, and existing project skills. Apply `path`, `--root-only`, and skill-name filters.
-04. Detect `CONTRIBUTING.md` next to each README.md or AGENTS.md target. Do not edit it; report a recommendation to merge it into sibling AGENTS.md and delete it after review.
-05. Read each target and extract verifiable claims: paths, commands, scripts, recipes, target names, env vars, file ownership, generated-file warnings, default branch, CI paths, and local conventions.
-06. Verify claims against the target directory, its nearest enclosing manifest, and repo-wide config where appropriate.
-07. Update README.md files for human-facing accuracy.
-08. Update and polish AGENTS.md hierarchy and CLAUDE.md symlinks.
-09. Update existing project skills with factual corrections only.
-10. Run the narrowest formatter/checker and report grouped results.
+Use the nearest manifests, task runners, lock files, lint and CI configuration, generated-file notices, and relevant source files to verify claims. Check paths, commands, scripts, recipes, environment variables, ownership rules, default branches, and local conventions.
 
-If a run would rewrite more than a handful of files, first list planned targets and treat the first pass as `--dry-run` unless the user already requested broad writes.
+Detect CONTRIBUTING.md next to documentation targets. Never edit it; advise the user when stable agent guidance should move into sibling AGENTS.md.
 
-## README.md Rules
+If a non-broad request would touch more than a handful of files, switch to dry-run, show the planned targets, and stop before writing.
 
-README.md is for humans browsing the repo, package registry, or project page.
+## README.md Decisions
 
-Keep:
+Keep README.md useful to humans browsing the repository, package registry, or project page:
 
-- Project name, short description, and badges.
-- Documentation, homepage, demo, package registry, changelog, citation, reference, funding, and license links that exist.
-- A short contributing pointer to sibling `AGENTS.md`.
-- A short operator-run setup guide only for dotfiles, infra, homelab, personal tooling, or explicit user requests.
+- Preserve an accurate project description, badges, documentation and package links, references, acknowledgments, funding, and license information.
+- Keep a short contributing pointer to sibling AGENTS.md.
+- Keep short operator-run setup instructions only for dotfiles, infrastructure, homelab, personal tooling, or when the user explicitly requests them.
+- Move developer commands, architecture constraints, review rules, configuration manuals, and contribution workflow into AGENTS.md when they provide durable value there.
+- Remove directory trees, command inventories, placeholders, and generic explanations that are cheaply discoverable or add no decision guidance.
 
-Remove or move to AGENTS.md:
+With `--preserve`, retain accurate custom prose and structure. Make the smallest edit that restores truth or correct placement.
 
-- Install, build, test, lint, dev, deploy, and release commands.
-- `just` recipes, package scripts, Makefile targets, and CI command inventories.
-- Project structure trees.
-- API reference and configuration manuals.
-- Developer workflow and review rules.
+## AGENTS.md Decisions
 
-When `--preserve` is present, keep custom human prose such as About, Background, References, Related Projects, Credits, and Acknowledgments unless it is factually wrong. Refresh metadata-driven sections and remove non-exempt technical sections.
+Keep AGENTS.md terse, imperative, repository-specific, and scoped to its directory tree:
 
-Use plain prose. Do not add marketing copy, placeholders, or links that have not been verified.
+- Preserve commands when their preferred order, runner, side effects, environment, or failure behavior matters.
+- Preserve non-obvious architecture, style, naming, review, generated-file, safety, privacy, credential, deployment, financial, and data-handling constraints.
+- Preserve speed traps, flaky checks, shell quirks, migration constraints, and external-system notes that prevent observed mistakes.
+- Remove generic tutorials, historical authoring notes, file inventories, lists of installed skills, and command lists with no preference or warning.
 
-## AGENTS.md Rules
+Move subtree-specific rules to the deepest common ancestor where they apply. Promote duplicated child guidance only when every affected child shares it. Recommend a missing nested AGENTS.md only for a distinct command, safety rule, generated-file boundary, ownership rule, data constraint, or review requirement; route actual creation through the `create` workflow.
 
-AGENTS.md is for agents and developers running commands. Keep it terse, imperative, and scoped to its directory tree.
+Never delete an empty or obsolete AGENTS.md automatically. Report it as a deletion candidate, together with any sibling CLAUDE.md symlink, and require explicit confirmation.
 
-Keep or sharpen:
+## CLAUDE.md Decisions
 
-- Commands with preferred order, side effects, environment needs, or failure guidance.
-- Coding preferences, architecture constraints, review standards, naming rules, and generated-file ownership.
-- Safety, privacy, credential, financial, deployment, and data-handling rules.
-- Repo-specific speed traps, flaky checks, migration constraints, shell quirks, and external system notes.
-- Contribution workflow and branch/review conventions when discoverable or already present.
-
-Remove or compress:
-
-- Directory trees and file-by-file inventories that only restate names discoverable with `rg --files`.
-- Generic textbook explanations of languages, frameworks, package managers, git, or Markdown.
-- Package script or recipe inventories copied verbatim without preference, ordering, side effects, or failure guidance.
-- Lists of installed skills or available skills.
-- Historical authoring notes, implementation logs, and why-a-file-was-created commentary.
-
-Required sections are not mandatory by title. Prefer a small number of useful sections over boilerplate. Commands can be exhaustive when that prevents drift, but do not duplicate commands across parent and child AGENTS.md files unless both scopes genuinely need them.
-
-## AGENTS.md Placement
-
-Treat each AGENTS.md as scoped instructions for its directory tree.
-
-- Move subtree-specific guidance to the deepest common ancestor where it applies.
-- Promote duplicated nested guidance to the nearest shared parent only when it applies across those children.
-- Recommend nested AGENTS.md only when the subtree has distinct commands, safety rules, generated files, ownership boundaries, data-handling rules, or review constraints. Do not create it during `polish`; route actual creation through the `create` workflow.
-- Delete an AGENTS.md only when no useful guidance remains after pruning. Delete only a sibling CLAUDE.md symlink that resolves to that deleted AGENTS.md.
-- Leave regular CLAUDE.md files untouched.
-- After moving, adding, or deleting AGENTS.md files or companion symlinks, rediscover targets and confirm no local constraint was orphaned.
-
-Create or refresh a sibling symlink with:
+Create or refresh a sibling symlink only when CLAUDE.md is missing or already a symlink:
 
 ```sh
 (cd "$dir" && ln -sf AGENTS.md CLAUDE.md)
 ```
 
-Before writing `CLAUDE.md`, check `test -L "$dir/CLAUDE.md" || test ! -e "$dir/CLAUDE.md"`. Stop for that file if it is a regular file.
+Before writing, require `test -L "$dir/CLAUDE.md" || test ! -e "$dir/CLAUDE.md"`. A regular CLAUDE.md blocks only that target; leave it untouched and report the conflict.
 
-## Project Skill Rules
+After changing placement or symlinks, rediscover affected targets and confirm no local constraint was orphaned.
 
-Only update existing project-installed skills discovered under `.agents/skills`. Never create, install, delete, or rename skills. Never target catalog `skills/<name>/` directories.
+## Project Skill Decisions
 
-For each discovered skill:
+Only update existing project-installed skills under `.agents/skills`. A minimal factual fix may touch SKILL.md or its existing bundled files. Never target catalog `skills/<name>/`, create skill or bundled files, or change a skill's purpose or structure.
 
-1. Resolve its project root:
+For each selected skill:
 
-   ```sh
-   project_root="${skill_md%/.agents/skills/*}"
-   ```
+- Confirm frontmatter parses and `name` matches the directory. Fix only mechanical, unambiguous drift.
+- Verify referenced `references/`, `scripts/`, `assets/`, and `examples/` paths relative to the skill directory.
+- Read only the bundled files needed to verify paths, commands, flags, environment variables, versions, symbols, ownership, and repository conventions.
+- Preserve structure and voice; use the smallest factual edit span.
+- Leave third-party behavior and paths outside the repository unchanged unless current repository evidence authoritatively establishes the correction.
+- Report an obsolete skill whose central subject no longer exists; do not delete or hollow it out.
 
-2. Verify frontmatter parses and `name` matches the skill directory. Fix only mechanical, unambiguous frontmatter drift.
+## Finish
 
-3. Verify every `references/`, `scripts/`, `assets/`, and `examples/` path mentioned in SKILL.md exists relative to the skill directory.
-
-4. Read SKILL.md and referenced files needed for claim verification.
-
-5. Fix only factual drift: paths, commands, flags, env vars, versions, symbols, generated-file ownership, and repo conventions.
-
-6. Preserve the skill's structure and voice. Use the smallest edit span.
-
-7. Leave external URLs, third-party API behavior, and paths outside the repo untouched unless the repo itself owns the claim.
-
-8. Flag obsolete skills when their central subject no longer exists. Suggest shelving or deleting; do not hollow them out.
-
-Bundled-file reference check:
-
-```sh
-rg -o '\b(references|scripts|assets|examples)/[A-Za-z0-9][A-Za-z0-9._/-]*' "$skill_dir/SKILL.md" \
-| sort -u \
-| while IFS= read -r rel; do
-    test -e "$skill_dir/$rel" || printf 'missing: %s\n' "$rel"
-  done
-```
-
-## Verification
-
-Check whether the repo defines Markdown lint/format rules (for example a `just` recipe, npm/package script, `.markdownlint.json`, `.prettierrc`, or lint-staged config). If found, inspect unclear recipes first, then apply them.
-
-If no lint/format rules exist, report the skip. For `--dry-run`, report the commands that would run.
-
-## Report
-
-Use this shape:
-
-```text
-### Scope
-README.md: <count> (<paths>)
-AGENTS.md: <count> (<paths>)
-CLAUDE.md symlinks: <count> (<paths>)
-Project skills: <count> (<paths or "none">)
-
-### Changes
-✓ <path>
-  - <concrete change>
-
-⚠ <path>
-  - <advisory>
-
-### Verification
-✓ <repo lint/format command, or "no rules found — skipped">
-
-### Residual Risks
-None.
-```
-
-For `--dry-run`, open with `## Planned Changes` and show target paths plus concise diffs or section-level previews.
+Run the completion checks and use the report contract from SKILL.md. Stop after the selected existing targets are accurate and validated; do not create recommended context or perform adjacent cleanup.
