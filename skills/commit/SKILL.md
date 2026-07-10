@@ -1,6 +1,6 @@
 ---
 argument-hint: '[--all] [--staged] [--natural] [--push] [--close <issue_numbers>]'
-disable-model-invocation: true
+disable-model-invocation: false
 effort: medium
 name: commit
 user-invocable: true
