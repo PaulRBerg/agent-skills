@@ -10,6 +10,13 @@ description: Use to create/scaffold/init a new agent skill in `.agents/skills` b
 
 Bootstrap a new agent skill, then symlink it into `.claude/skills/` so Claude Code can discover it. Default to splitting bulk content into `references/` and `scripts/` so `SKILL.md` stays lean.
 
+## Model Optimization
+
+Optimize every new skill and its content for GPT-5.6 and Claude Fable 5. The summaries below are reminders, not substitutes for the live guides. Read both guides before designing or writing a complex, long-running, multi-tool, or orchestration-heavy skill because their recommendations may evolve.
+
+- [GPT-5.6 prompting guidance](https://developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6): Prefer lean, outcome-first prompts that specify the goal, success and stopping criteria, constraints, evidence, permission boundaries, tool routing, output shape, and validation. Remove redundant scaffolding and evaluate changes on representative tasks.
+- [Claude Fable 5 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5): Use concise instructions that explain intent and boundaries; avoid over-prescription and scope creep; tune effort deliberately; ground progress claims in tool evidence; and make long-run verification and scaffolding explicit when needed.
+
 ## Arguments
 
 - **skill-name** (required): kebab-case name (e.g., `my-skill`). Stop if missing or invalid.

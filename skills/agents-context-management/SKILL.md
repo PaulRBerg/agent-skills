@@ -12,6 +12,13 @@ Create or polish repo-local context as one coherent system: human-facing README.
 
 Success means every selected target is grounded in repository evidence, respects its audience and scope, and passes the narrowest repository-defined validation. Stop after reporting completed or planned changes, validation, and any blockers.
 
+## Model Optimization
+
+Optimize skills and other agent-facing context for GPT-5.6 and Claude Fable 5 while preserving README.md as clear human-facing documentation. The summaries below are reminders, not substitutes for the live guides. Read both guides before complex, long-running, multi-tool, or orchestration-heavy context work because their recommendations may evolve.
+
+- [GPT-5.6 prompting guidance](https://developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6): Prefer lean, outcome-first prompts that specify the goal, success and stopping criteria, constraints, evidence, permission boundaries, tool routing, output shape, and validation. Remove redundant scaffolding and evaluate changes on representative tasks.
+- [Claude Fable 5 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5): Use concise instructions that explain intent and boundaries; avoid over-prescription and scope creep; tune effort deliberately; ground progress claims in tool evidence; and make long-run verification and scaffolding explicit when needed.
+
 ## Choose a Workflow
 
 Choose exactly one workflow and read only its reference.

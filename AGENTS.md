@@ -2,6 +2,13 @@
 
 Collection of self-contained agent skills for Claude Code, Codex, and compatible agents. Keep `README.md` minimal and human-facing; put maintainer and agent guidance here.
 
+## Model Optimization
+
+Optimize every skill and other agent-facing content for GPT-5.6 and Claude Fable 5. The summaries below are reminders, not substitutes for the live guides. Read both guides before complex, long-running, multi-tool, or orchestration-heavy work because their recommendations may evolve.
+
+- [GPT-5.6 prompting guidance](https://developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6): Prefer lean, outcome-first prompts that specify the goal, success and stopping criteria, constraints, evidence, permission boundaries, tool routing, output shape, and validation. Remove redundant scaffolding and evaluate changes on representative tasks.
+- [Claude Fable 5 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5): Use concise instructions that explain intent and boundaries; avoid over-prescription and scope creep; tune effort deliberately; ground progress claims in tool evidence; and make long-run verification and scaffolding explicit when needed.
+
 ## Structure
 
 - `skills/<name>/SKILL.md` is the skill entrypoint.
