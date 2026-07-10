@@ -34,7 +34,7 @@ Produce a decision-complete plan with this section:
 
 - Model: `<gpt-5.6-terra|gpt-5.6-sol>`
 - Effort: `<medium|high|xhigh|max>`
-- Timeout: `<seconds>`
+- Timeout: `<minutes> minutes`
 - Implementation brief: `<approved outcome, edits, constraints, and stopping criteria>`
 - Completion evidence: `<commands and observable results>`
 - Code polish: `<required|not required>` — `<reason>`
@@ -44,10 +44,10 @@ Select configuration deliberately:
 
 | Work                                     | Model                            | Effort             | Baseline timeout |
 | ---------------------------------------- | -------------------------------- | ------------------ | ---------------- |
-| Bounded, routine implementation          | `gpt-5.6-terra`                  | `medium` or `high` | 600s             |
-| Involved multi-file implementation       | `gpt-5.6-terra` or `gpt-5.6-sol` | `high`             | 1200s            |
-| Semantic or cross-cutting implementation | `gpt-5.6-sol`                    | `xhigh`            | 2400s            |
-| Exceptional, high-risk implementation    | `gpt-5.6-sol`                    | `max`              | 3600s            |
+| Bounded, routine implementation          | `gpt-5.6-terra`                  | `medium` or `high` | 10 minutes       |
+| Involved multi-file implementation       | `gpt-5.6-terra` or `gpt-5.6-sol` | `high`             | 20 minutes       |
+| Semantic or cross-cutting implementation | `gpt-5.6-sol`                    | `xhigh`            | 40 minutes       |
+| Exceptional, high-risk implementation    | `gpt-5.6-sol`                    | `max`              | 60 minutes       |
 
 Never select GPT-5.6 Luna, `low`, or `ultra`. Adjust the timeout when repository evidence shows that required validation
 needs materially more or less time.
@@ -60,13 +60,14 @@ Do not invoke Codex until the user approves the plan and Claude leaves Plan mode
 ## Execution Phase
 
 Resolve `scripts/run-codex-handoff.sh` to an absolute path relative to this `SKILL.md`; never search for it in the
-target repository. Invoke it from anywhere inside the target Git worktree:
+target repository. Convert the approved whole-minute timeout to seconds only at the wrapper boundary, then invoke it
+from anywhere inside the target Git worktree:
 
 ```bash
 bash <skill-dir>/scripts/run-codex-handoff.sh \
   --model <model> \
   --effort <effort> \
-  --timeout-seconds <seconds> <<'CODEX_PROMPT'
+  --timeout-seconds <minutes-times-60> <<'CODEX_PROMPT'
 <implementation prompt>
 CODEX_PROMPT
 ```
@@ -96,5 +97,5 @@ changes.
   default simplify-then-review mode. Do not recompute or broaden scope.
 - On `blocked`, timeout, or nonzero runner exit, skip polish. Report the blocker, partial edits, and diagnostics; do not
   silently take over implementation.
-- Finish with the selected model, effort, timeout, Codex summary, changed files, verification, polish result when run,
-  and residual risks.
+- Finish with the selected model, effort, timeout in minutes, Codex summary, changed files, verification, polish result
+  when run, and residual risks.
