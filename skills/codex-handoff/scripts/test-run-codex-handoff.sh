@@ -76,7 +76,7 @@ if [[ "${1:-}" == "--help" ]]; then
 fi
 
 if [[ "${1:-}" == "exec" && "${2:-}" == "--help" ]]; then
-  for flag in --ephemeral --color --cd --model --sandbox --output-schema --output-last-message; do
+  for flag in --ephemeral --color --cd --model --sandbox --output-schema --output-last-message --json; do
     print_flag "$flag"
   done
   exit 0
@@ -87,6 +87,22 @@ for arg in "$@"; do
   printf '%s\n' "$arg" >>"$FAKE_ARGS_FILE"
 done
 cat >"$FAKE_PROMPT_FILE"
+
+emit_json=0
+for arg in "$@"; do
+  if [[ "$arg" == "--json" ]]; then
+    emit_json=1
+  fi
+done
+if [[ $emit_json -eq 1 ]]; then
+  cat <<'EVENTS'
+{"type":"thread.started","thread_id":"thread_1"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"echo hi","status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"implementation done"}}
+{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":50,"output_tokens":42}}
+EVENTS
+fi
 
 if [[ -n "${FAKE_SLEEP:-}" ]]; then
   sleep "$FAKE_SLEEP"
@@ -158,6 +174,7 @@ assert_arg --output-last-message
 assert_arg -
 grep -Fxq -- '--search' "$args_file" && fail "runner enabled search"
 grep -Fxq -- '--ignore-user-config' "$args_file" && fail "runner ignored user config"
+grep -Fxq -- '--json' "$args_file" && fail "runner passed --json without --progress-file"
 [[ "$(cat "$prompt_file")" == 'approved implementation' ]] || fail "prompt was not forwarded exactly"
 
 ask_line="$(grep -nFx -- '--ask-for-approval' "$args_file" | cut -d: -f1)"
@@ -220,5 +237,85 @@ missing_codex_rc=$?
 set -e
 [[ $missing_codex_rc -eq 69 ]] || fail "missing codex should exit 69"
 assert_file_contains 'codex not found' "$stderr_file"
+
+# Progress mode: success path streams events, appends one sentinel, keeps stdout clean.
+success_progress="$tmp_dir/success.progress.jsonl"
+(
+  cd "$repo"
+  printf '%s\n' 'approved implementation' | PATH="$fake_path" "$runner" \
+    --model gpt-5.6-terra --effort high --timeout-seconds 5 \
+    --progress-file "$success_progress"
+) >"$stdout_file" 2>"$stderr_file"
+[[ "$(cat "$stdout_file")" == "$expected_result" ]] || fail "progress mode must keep result JSON as sole stdout"
+assert_arg --json
+assert_file_contains '"type":"thread.started"' "$success_progress"
+assert_file_contains '"type":"turn.completed"' "$success_progress"
+assert_file_contains 'codex-handoff: elapsed=' "$stderr_file"
+sentinel_line="$(grep '"type":"handoff.completed"' "$success_progress")"
+case "$sentinel_line" in
+*'"elapsed_seconds":'*'"output_tokens":42'*) ;;
+*) fail "sentinel missing elapsed_seconds/output_tokens: $sentinel_line" ;;
+esac
+sentinel_count="$(grep -c '"type":"handoff\.' "$success_progress")"
+[[ "$sentinel_count" == "1" ]] || fail "expected exactly one sentinel, got $sentinel_count"
+
+# Progress mode: every failure path appends exactly one handoff.failed sentinel.
+error_progress="$tmp_dir/error.progress.jsonl"
+timeout_progress="$tmp_dir/timeout.progress.jsonl"
+noresult_progress="$tmp_dir/noresult.progress.jsonl"
+(
+  cd "$repo"
+  expect_failure 17 'simulated codex failure' env PATH="$fake_path" FAKE_EXIT=17 \
+    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 --progress-file "$error_progress"
+  assert_file_contains '--- Codex last activity' "$stderr_file"
+  assert_file_contains 'implementation done' "$stderr_file"
+  assert_file_contains 'codex-handoff: elapsed=' "$stderr_file"
+  grep -Fq -- '--- Codex stdout' "$stderr_file" && fail "progress mode should not tail codex stdout"
+  expect_failure 124 'timed out after 1s' env PATH="$fake_path" FAKE_SLEEP=3 \
+    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 1 --progress-file "$timeout_progress"
+  expect_failure 70 'without a structured result' env PATH="$fake_path" FAKE_NO_RESULT=1 \
+    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 --progress-file "$noresult_progress"
+)
+assert_file_contains '"type":"handoff.failed","reason":"error","rc":17' "$error_progress"
+assert_file_contains '"type":"handoff.failed","reason":"timeout"' "$timeout_progress"
+assert_file_contains '"type":"handoff.failed","reason":"error","rc":70' "$noresult_progress"
+for progress in "$error_progress" "$timeout_progress" "$noresult_progress"; do
+  sentinel_count="$(grep -c '"type":"handoff\.' "$progress")"
+  [[ "$sentinel_count" == "1" ]] || fail "expected exactly one sentinel in $progress, got $sentinel_count"
+done
+
+# --json support is required only when --progress-file is requested.
+(
+  cd "$repo"
+  json_gate_result="$(printf '%s\n' 'approved implementation' | PATH="$fake_path" FAKE_HELP_MISSING=--json \
+    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5)"
+  [[ "$json_gate_result" == "$expected_result" ]] || fail "missing --json help must not fail without --progress-file"
+  expect_failure 69 'lacks required flag: --json' env PATH="$fake_path" FAKE_HELP_MISSING=--json \
+    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 \
+    --progress-file "$tmp_dir/gate.progress.jsonl"
+  expect_failure 66 'cannot create progress file' env PATH="$fake_path" \
+    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 \
+    --progress-file "$tmp_dir/missing-dir/progress.jsonl"
+)
+
+# Cancellation (TERM, e.g. the user stopping the background task) still writes a sentinel.
+cancel_progress="$tmp_dir/cancel.progress.jsonl"
+(
+  cd "$repo"
+  printf '%s\n' 'approved implementation' | PATH="$fake_path" FAKE_SLEEP=10 \
+    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 30 \
+    --progress-file "$cancel_progress" >"$stdout_file" 2>"$stderr_file" &
+  runner_pid=$!
+  sleep 1
+  kill -TERM "$runner_pid"
+  set +e
+  wait "$runner_pid"
+  cancel_rc=$?
+  set -e
+  [[ $cancel_rc -eq 143 ]] || fail "expected exit 143 on TERM, got $cancel_rc"
+)
+assert_file_contains '"type":"handoff.failed","reason":"cancelled"' "$cancel_progress"
+sentinel_count="$(grep -c '"type":"handoff\.' "$cancel_progress")"
+[[ "$sentinel_count" == "1" ]] || fail "expected exactly one sentinel after cancel, got $sentinel_count"
 
 echo "codex-handoff runner tests passed"

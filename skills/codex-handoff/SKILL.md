@@ -1,6 +1,8 @@
 ---
 argument-hint: "[task]"
-compatibility: Requires Claude Code Plan mode, Git, /bin/bash, and an authenticated Codex CLI.
+compatibility:
+  Requires Claude Code Plan mode, Git, /bin/bash, and an authenticated Codex CLI. Claude Code >= 2.1.98 recommended for
+  live progress via the Monitor tool.
 disable-model-invocation: true
 metadata:
   install-targets: claude-code
@@ -79,23 +81,28 @@ Do not invoke Codex until the user approves the plan and Claude leaves Plan mode
 ## Execution Phase
 
 Resolve `scripts/run-codex-handoff.sh` to an absolute path relative to this `SKILL.md`; never search for it in the
-target repository. Each invocation is one ephemeral Codex agent. For every agent in the manifest, convert its approved
-whole-minute timeout to seconds only at the wrapper boundary, then invoke the runner from anywhere inside the target Git
-worktree:
+target repository. Each invocation is one ephemeral Codex agent.
+
+### Launch
+
+For every agent, create a per-agent progress path such as `"${TMPDIR:-/tmp}/codex-handoff.<agent-id>.progress.jsonl"`,
+convert its approved whole-minute timeout to seconds only at the wrapper boundary, then start the runner from anywhere
+inside the target Git worktree as a background Bash task (`run_in_background: true`) with a description like
+`Codex A1/3: <scope> (<model>, <effort>, ≤<minutes>m)`:
 
 ```bash
 bash <skill-dir>/scripts/run-codex-handoff.sh \
   --model <agent-model> \
   --effort <agent-effort> \
-  --timeout-seconds <agent-minutes-times-60> <<'CODEX_PROMPT'
+  --timeout-seconds <agent-minutes-times-60> \
+  --progress-file <agent-progress-file> <<'CODEX_PROMPT'
 <agent implementation prompt>
 CODEX_PROMPT
 ```
 
-Start sequential agents only after reconciling their dependencies. Start every agent in a parallel wave as a separate
-Bash tool call in the same turn, then wait for the whole wave before continuing. Set each Bash tool timeout slightly
-above its wrapper timeout. If the host's foreground limit is shorter, run the affected call in the background and wait
-for it; do not create resumable Codex job state.
+Do not set a Bash tool timeout; the wrapper's `--timeout-seconds` is the sole timeout authority and the wrapper always
+terminates itself. Start sequential agents only after reconciling their dependencies. Start every agent in a parallel
+wave in the same turn. After launching a wave, post the 🚀 kickoff block (see Status Reporting).
 
 Build a self-contained, outcome-first prompt for each agent containing:
 
@@ -108,10 +115,45 @@ Build a self-contained, outcome-first prompt for each agent containing:
    with evidence instead of proposing a replacement plan.
 5. A requirement to report only files Codex actually touched and every validation command it ran.
 
-The wrapper emits one JSON object per agent matching `references/result.schema.json`. Treat each agent's `changed_files`
-as its authoritative post-pass scope. After every wave, reconcile all results with the manifest and the visible working
-tree without folding in unrelated concurrent changes. Unexpected out-of-scope edits or overlap between agents in the
-same parallel wave are blockers; do not start their dependents or polish.
+### Watch
+
+Each progress file streams Codex JSONL events and ends with exactly one wrapper sentinel — `handoff.completed` or
+`handoff.failed` with reason `timeout`, `error`, or `cancelled` (vocabulary, filters, and a ready-made watch loop:
+`references/progress-events.md`). The sentinel, not process state, is the completion signal.
+
+Arm ONE Monitor per wave that tails every progress file in the wave and emits each sentinel immediately plus a per-agent
+digest roughly every 300 seconds (elapsed vs budget, event count, last `command_execution` or `file_change` activity),
+exiting once all sentinels are seen. Set the Monitor `timeout_ms` above the wave's largest agent timeout. On each
+digest, post one short ⏳ wave-status block. If the Monitor tool is unavailable in the host, poll each progress file for
+its sentinel with short foreground Bash checks instead.
+
+### Collect
+
+When an agent's sentinel arrives, read that background task's output file (use the Read tool, not deprecated
+TaskOutput): stdout is one JSON object matching `references/result.schema.json`; stderr carries a
+`codex-handoff: elapsed=<seconds>s` line and, on failure, the agent's last recorded activity. Treat each agent's
+`changed_files` as its authoritative post-pass scope. After every wave, reconcile all results with the manifest and the
+visible working tree without folding in unrelated concurrent changes. Unexpected out-of-scope edits or overlap between
+agents in the same parallel wave are blockers; do not start their dependents or polish.
+
+## Status Reporting
+
+Use this legend consistently: 🚀 kickoff · ⏳ running · ✅ completed · ⛔ blocked · ⏱️ timed out · 💥 runner error · 🧹
+polish · 🏁 final report. Keep every update to one short block — no walls of text.
+
+Kickoff, once per wave: the wave's manifest rows (agent, scope, model, effort, timeout), one `tail -f <progress-file>`
+line per agent for real-time watching in another pane, and a note that `/tasks` lists and stops running agents.
+
+Wave status, on each digest or completion:
+
+```markdown
+### ⏳ Wave 1/2 — 15m elapsed
+
+| Agent | Status     | Activity                   |
+| ----- | ---------- | -------------------------- |
+| A1    | ⏳ 15m/20m | ran `cargo test`           |
+| A2    | ✅ 8m      | done — 3 files, tests pass |
+```
 
 ## Completion
 
@@ -123,5 +165,6 @@ same parallel wave are blockers; do not start their dependents or polish.
   verification evidence proves the approved plan.
 - When the plan marked polish as required, invoke `$code-polish` once with exactly that union and its default
   simplify-then-review mode. Skip polish if any required agent failed; do not recompute or broaden scope.
-- Finish with the strategy, agent count, each agent's model, effort, timeout in minutes, status and summary, the
-  combined changed files and verification, the polish result when run, blockers, and residual risks.
+- Finish with a 🏁 report: the strategy, agent count, and per agent — model, effort, timeout budget vs actual elapsed
+  (from `elapsed=`/the sentinel), output tokens when available, status, and summary — plus the combined changed files
+  and verification, the polish result when run, blockers, and residual risks.
