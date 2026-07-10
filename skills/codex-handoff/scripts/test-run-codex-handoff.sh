@@ -4,6 +4,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 runner="$script_dir/run-codex-handoff.sh"
+schema="$script_dir/../references/result.schema.json"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/codex-handoff-test.XXXXXX")"
 fake_bin="$tmp_dir/bin"
 repo="$tmp_dir/repo with spaces"
@@ -33,6 +34,8 @@ assert_arg() {
   needle="$1"
   grep -Fxq -- "$needle" "$args_file" || fail "missing argument: $needle"
 }
+
+grep -Fq -- '"uniqueItems"' "$schema" && fail "result schema uses unsupported uniqueItems"
 
 expect_failure() {
   expected_rc="$1"
