@@ -14,7 +14,7 @@ Optimize every skill and other agent-facing content for GPT-5.6 and Claude Fable
 - `skills/<name>/SKILL.md` is the skill entrypoint.
 - `skills/<name>/references/` contains skill-local reference docs.
 - `skills/<name>/scripts/` contains executable helpers.
-- `skills/<name>/agents/openai.yaml` contains Codex-specific metadata.
+- `skills/<name>/agents/openai.yaml` contains Codex-specific metadata, including for skills not installed into Codex.
 - `skills/<name>/examples/` contains sample files.
 - `skills/<name>/assets/` contains bundled media or other static assets.
 - `.agents/internal-skills/<name>.md` contains repo-private internal skills referenced with `@`.
@@ -48,7 +48,7 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 ## Rules
 
 - When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo, modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
-- Changes here are not live for the agents until installed into `~/.agents` and symlinked into `~/.claude`. After committing or pushing in this repo, recommend `just sync` (it does that propagation) and offer to run it on the user's behalf; do not run it unprompted.
+- Changes here are not live until installed into every target declared by the skill. After committing or pushing in this repo, recommend `just sync` (it performs target-aware propagation) and offer to run it on the user's behalf; do not run it unprompted.
 - When an installable catalog skill is added or removed, update the skills table in `README.md`.
 - Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under `skills/`. Do not add them to `README.md`, do not create `agents/openai.yaml`, and do not treat them as installable catalog skills.
 - After editing skills that must stay aligned, run the `sync-skills` internal skill to check coupled skills and helper data.
@@ -60,6 +60,24 @@ If `mdformat-check` fails, analyze the errors and fix only files you changed.
 - In `SKILL.md` frontmatter, sort fields alphabetically but always place `description` last.
 - Keep generated docs terse, imperative, and expert-to-expert.
 - Never leak personal crypto (EVM) addresses in any skill. Use well-known public addresses (e.g. Multicall3, token contracts) or the standard Etherscan doc example (`0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe`) for examples; never hardcode a real user, maintainer, or personal wallet address. The same applies to private keys, mnemonics, and API keys — reference env-var placeholders (`$ETH_PRIVATE_KEY`), never literal secrets.
+
+## Platform Targets
+
+Skills may target Claude Code, Codex, or both. Declare exceptions in `SKILL.md` frontmatter with the repository-specific string metadata field `metadata.install-targets`:
+
+| Value               | Installation target   |
+| ------------------- | --------------------- |
+| Omitted             | Claude Code and Codex |
+| `claude-code`       | Claude Code only      |
+| `codex`             | Codex only            |
+| `claude-code codex` | Claude Code and Codex |
+
+Use only these exact values and canonical order. `~/.agents/justfile` is the policy consumer; agent clients and the generic `skills` CLI do not interpret this field themselves.
+
+- Add `compatibility` for the human-facing product and environment requirement.
+- Write the skill only for its supported clients; do not add fallback branches for unsupported agents.
+- Install the skill only into its declared targets. A target change must remove stale installations from targets that are no longer allowed.
+- Keep `agents/openai.yaml` for every catalog skill. Its presence and invocation policy do not imply Codex compatibility.
 
 ## Codex Metadata
 

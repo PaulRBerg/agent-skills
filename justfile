@@ -91,7 +91,7 @@ alias sif := skill-invocation-fix
 #                                  PUBLISHING                                  #
 # ---------------------------------------------------------------------------- #
 
-# Publish staged skills, install them into ~/.agents, sync ~/.claude, then commit and push there
+# Publish staged skills, install them into their declared targets, then commit and push ~/.agents
 [group("publishing")]
 [script("bash")]
 sync:
@@ -129,10 +129,9 @@ sync:
         exit 1
     fi
 
-    # 4. Install latest skills, then refresh ~/.claude symlinks.
+    # 4. Install latest skills into their declared targets.
     cd "$agents_root"
     just install-all PaulRBerg/agent-skills
-    just sync-claude
 
     # 5. Commit the sync result (AI message via ccc) and push.
     ccc
