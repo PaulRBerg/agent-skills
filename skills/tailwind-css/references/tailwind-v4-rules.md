@@ -161,18 +161,23 @@ Be precise with font sizes - know the actual pixel values:
 ```html
 <!-- ✅ Correct - Mobile first, then scale up -->
 <div class="text-sm md:text-base lg:text-lg">
-<div class="flex-col md:flex-row">
-<div class="px-4 md:px-6 lg:px-8">
-<div class="grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+  <div class="flex-col md:flex-row">
+    <div class="px-4 md:px-6 lg:px-8">
+      <div class="grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <!-- ✅ Correct - Hide on mobile, show on desktop -->
+        <div class="hidden lg:block">
+          <!-- ❌ Wrong - Don't use sm: for mobile (it's redundant) -->
+          <div class="sm:text-sm md:text-base">
+            <!-- Just use text-sm -->
 
-<!-- ✅ Correct - Hide on mobile, show on desktop -->
-<div class="hidden lg:block">
-
-<!-- ❌ Wrong - Don't use sm: for mobile (it's redundant) -->
-<div class="sm:text-sm md:text-base">  <!-- Just use text-sm -->
-
-<!-- ❌ Wrong - Don't start with larger screens -->
-<div class="lg:text-lg md:text-base">  <!-- Wrong order -->
+            <!-- ❌ Wrong - Don't start with larger screens -->
+            <div class="lg:text-lg md:text-base"><!-- Wrong order --></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 ```
 
 **Key principle:** Think mobile-first, then progressively enhance for larger screens.
@@ -335,9 +340,12 @@ Use `font-features-*` for low-level OpenType font features via `font-feature-set
 
 **When to use `font-features-*` vs high-level properties:**
 
-- **Prefer `tabular-nums`** over `font-features-tnum` — `font-variant-numeric` is the high-level CSS property and doesn't conflict with other numeric features
-- **Use `font-features-*`** for OpenType features that lack high-level CSS equivalents: stylistic sets (`ss01`–`ss20`), character variants (`cv01`–`cv99`), capital spacing (`cpsp`), case-sensitive forms (`case`)
-- **`font-features-zero`** (slashed zero) overlaps with the `slashed-zero` utility but can be combined with other `font-features-*` values
+- **Prefer `tabular-nums`** over `font-features-tnum` — `font-variant-numeric` is the high-level CSS property and
+  doesn't conflict with other numeric features
+- **Use `font-features-*`** for OpenType features that lack high-level CSS equivalents: stylistic sets (`ss01`–`ss20`),
+  character variants (`cv01`–`cv99`), capital spacing (`cpsp`), case-sensitive forms (`case`)
+- **`font-features-zero`** (slashed zero) overlaps with the `slashed-zero` utility but can be combined with other
+  `font-features-*` values
 
 ## Component Patterns
 

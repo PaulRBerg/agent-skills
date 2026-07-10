@@ -7,7 +7,8 @@ set unstable
 #                                  VARIABLES                                   #
 # ---------------------------------------------------------------------------- #
 
-mdformat := "uvx --with mdformat-gfm --with mdformat-frontmatter mdformat"
+prettier := "bunx --no-install prettier"
+prettier_globs := "\"**/*.md\""
 evm_atlas_generator := "scripts/generate-evm-atlas.mjs"
 skill_invocation_script := "scripts/sync-invocation-policy.mjs"
 
@@ -32,14 +33,9 @@ alias hi := hooks-install
 
 # Install local developer dependencies
 [group("setup")]
-@install-deps: install-uv
+@install-deps:
+    bun install --frozen-lockfile
 alias id := install-deps
-
-# Install uv
-[group("setup")]
-@install-uv:
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-alias iu := install-uv
 
 # ---------------------------------------------------------------------------- #
 #                                    CHECKS                                    #
@@ -47,21 +43,30 @@ alias iu := install-uv
 
 # Check Markdown formatting
 [group("checks")]
-@mdformat-check:
-    {{ mdformat }} --check .
-alias mc := mdformat-check
+@prettier-check +globs=prettier_globs:
+    {{ prettier }} \
+        --check \
+        --cache \
+        --log-level warn \
+        --no-error-on-unmatched-pattern \
+        {{ globs }}
+alias pc := prettier-check
 
 # Format Markdown
 [group("checks")]
-@mdformat-write:
-    {{ mdformat }} .
-alias mw := mdformat-write
+@prettier-write +globs=prettier_globs:
+    {{ prettier }} \
+        --write \
+        --cache \
+        --log-level warn \
+        --no-error-on-unmatched-pattern \
+        {{ globs }}
+alias pw := prettier-write
 
 # Run staged-file checks
 [group("checks")]
 pre-commit:
     nlx lint-staged
-alias pc := pre-commit
 
 # Regenerate evm-atlas generated references from crypto-registry + atlas overlays
 [group("checks")]

@@ -53,7 +53,9 @@ Use these headings and dropdown values exactly for `anthropics/claude-code` issu
 
 ### Terminal/Shell
 
-{one of: Terminal.app (macOS) | Warp | Cursor | iTerm2 | IntelliJ IDEA terminal | VS Code integrated terminal | PyCharm terminal | Windows Terminal | PowerShell | WSL (Windows Subsystem for Linux) | Xterm | Non-interactive/CI environment | Other}
+{one of: Terminal.app (macOS) | Warp | Cursor | iTerm2 | IntelliJ IDEA terminal | VS Code integrated terminal | PyCharm
+terminal | Windows Terminal | PowerShell | WSL (Windows Subsystem for Linux) | Xterm | Non-interactive/CI environment |
+Other}
 
 ### Additional Information
 

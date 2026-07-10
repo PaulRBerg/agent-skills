@@ -42,9 +42,11 @@ git fetch origin "+refs/heads/$base_branch:refs/remotes/origin/$base_branch"
 
 ## Semantic Change Analysis
 
-Follow the process in `writing.md > Semantic Change Analysis`. Write the title and body in the voice from `writing.md > Informal Tone`.
+Follow the process in `writing.md > Semantic Change Analysis`. Write the title and body in the voice from
+`writing.md > Informal Tone`.
 
-**Test Plan** (only if `--test-plan` flag): Add a "## Test Plan" section with testing/validation approach, manual steps, or checklist.
+**Test Plan** (only if `--test-plan` flag): Add a "## Test Plan" section with testing/validation approach, manual steps,
+or checklist.
 
 **Identify reviewers:**
 
@@ -55,7 +57,8 @@ Follow the process in `writing.md > Semantic Change Analysis`. Write the title a
 
 Use an admonition only for a material warning that would otherwise be missed.
 
-**Issue linking:** If an issue number was referenced in the conversation (e.g., "fixes #42", "for issue #100"), append `Closes #NUMBER` to the PR body so the issue auto-closes on merge.
+**Issue linking:** If an issue number was referenced in the conversation (e.g., "fixes #42", "for issue #100"), append
+`Closes #NUMBER` to the PR body so the issue auto-closes on merge.
 
 ## Check for Existing PR
 
@@ -86,4 +89,6 @@ gh pr create \
 
 Display: "Created PR: $PR_URL"
 
-On failure: check the specific error (auth, branch protection, validation) and follow [posting.md > Error Handling and Idempotency](posting.md#error-handling-and-idempotency) — run the idempotency check before any retry.
+On failure: check the specific error (auth, branch protection, validation) and follow
+[posting.md > Error Handling and Idempotency](posting.md#error-handling-and-idempotency) — run the idempotency check
+before any retry.

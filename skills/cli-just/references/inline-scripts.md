@@ -31,8 +31,8 @@ deploy:
 
 ## Default Script Mode
 
-Use `set default-script := true` (v1.52.0+) when most recipes should run as complete scripts instead of independent shell
-lines:
+Use `set default-script := true` (v1.52.0+) when most recipes should run as complete scripts instead of independent
+shell lines:
 
 ```just
 set default-script := true
@@ -48,11 +48,14 @@ status:
     echo "force this one back to linewise shell execution"
 ```
 
-`[shell]` overrides `default-script` for one recipe. `set shell` still controls linewise recipes and backticks; `set script-interpreter` controls `[script]` recipes with no explicit command.
+`[shell]` overrides `default-script` for one recipe. `set shell` still controls linewise recipes and backticks;
+`set script-interpreter` controls `[script]` recipes with no explicit command.
 
 ## Script Echoing
 
-Script recipes are quiet by default: Just does not print the generated script body before running it. Do not add `@` to a `[script]` recipe when trying to reduce output; for scripts, `@` undoes that default quiet mode and prints the script body before command output. On non-script recipes, `@` keeps its usual meaning and suppresses the echoed command line.
+Script recipes are quiet by default: Just does not print the generated script body before running it. Do not add `@` to
+a `[script]` recipe when trying to reduce output; for scripts, `@` undoes that default quiet mode and prints the script
+body before command output. On non-script recipes, `@` keeps its usual meaning and suppresses the echoed command line.
 
 ## Shebang Method
 
@@ -82,7 +85,9 @@ bash-script:
 
 ## Bash Version Pitfalls (macOS)
 
-`[script("bash")]`, `#!/usr/bin/env bash`, and `set shell := ["bash", ...]` all resolve `bash` via `PATH`. On stock macOS — and in minimal-`PATH` agent sandboxes — that is `/bin/bash` 3.2 (2007), not Homebrew's 5.x. Recipes written against Bash 4+ fail with signatures like:
+`[script("bash")]`, `#!/usr/bin/env bash`, and `set shell := ["bash", ...]` all resolve `bash` via `PATH`. On stock
+macOS — and in minimal-`PATH` agent sandboxes — that is `/bin/bash` 3.2 (2007), not Homebrew's 5.x. Recipes written
+against Bash 4+ fail with signatures like:
 
 ```
 mapfile: command not found
@@ -99,13 +104,15 @@ declare: -A: invalid option
 | `${arr[-1]}`            | `${arr[${#arr[@]}-1]}`                         |
 | `cmd \|& other`         | `cmd 2>&1 \| other`                            |
 
-**Pinning a newer interpreter** works on this Apple Silicon/Homebrew profile when the path exists, but keep it explicit and guarded because agent sandboxes may expose only `/bin/bash`:
+**Pinning a newer interpreter** works on this Apple Silicon/Homebrew profile when the path exists, but keep it explicit
+and guarded because agent sandboxes may expose only `/bin/bash`:
 
 ```just
 set shell := ["/opt/homebrew/bin/bash", "-euo", "pipefail", "-c"]
 ```
 
-**3.2-safe version guard** when a recipe genuinely needs Bash 4+ (`BASH_VERSINFO` exists in 3.2, so the check itself never breaks):
+**3.2-safe version guard** when a recipe genuinely needs Bash 4+ (`BASH_VERSINFO` exists in 3.2, so the check itself
+never breaks):
 
 ```just
 [script("bash")]
@@ -117,4 +124,5 @@ modern:
     declare -A map=([a]=1)
 ```
 
-**Default recommendation:** write recipe bodies that are Bash-3.2-safe. Pin `/opt/homebrew/bin/bash` only when a recipe genuinely needs Bash 4+ semantics.
+**Default recommendation:** write recipe bodies that are Bash-3.2-safe. Pin `/opt/homebrew/bin/bash` only when a recipe
+genuinely needs Bash 4+ semantics.

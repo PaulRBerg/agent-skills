@@ -7,9 +7,12 @@
     "prepare": "nlx husky",
     "pre-commit": "just pre-commit"
   },
+  "devDependencies": {
+    "prettier": "3.9.4"
+  },
   "lint-staged": {
     "*": "bash -c 'just evm-atlas-check' --",
-    "**/*.md": "uvx --with mdformat-gfm --with mdformat-frontmatter mdformat",
+    "**/*.md": "bunx --no-install prettier --write --cache --log-level warn",
     "skills/*/{SKILL.md,agents/openai.yaml}": "bash -c 'just skill-invocation-check' --",
     "scripts/sync-invocation-policy.mjs": "bash -c 'just skill-invocation-check' --"
   }

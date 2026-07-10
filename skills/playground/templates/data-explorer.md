@@ -1,6 +1,7 @@
 # Data Explorer Template
 
-Use this template when the playground is about data queries, APIs, pipelines, or structured configuration: SQL builders, API designers, regex builders, pipeline visuals, cron schedules.
+Use this template when the playground is about data queries, APIs, pipelines, or structured configuration: SQL builders,
+API designers, regex builders, pipeline visuals, cron schedules.
 
 ## Layout
 
@@ -38,7 +39,7 @@ Render syntax-highlighted output using `<span>` tags with color classes:
 
 ```javascript
 function renderPreview() {
-  const el = document.getElementById('preview');
+  const el = document.getElementById("preview");
   // Color-code by token type
   el.innerHTML = sql
     .replace(/\b(SELECT|FROM|WHERE|JOIN|ON|GROUP BY|ORDER BY|LIMIT)\b/g, '<span class="kw">$1</span>')
@@ -47,13 +48,15 @@ function renderPreview() {
 }
 ```
 
-For pipeline-style playgrounds, render a horizontal or vertical flow diagram using positioned divs with arrow connectors.
+For pipeline-style playgrounds, render a horizontal or vertical flow diagram using positioned divs with arrow
+connectors.
 
 ## Prompt output for data
 
 Frame it as a specification of what to build, not the raw query itself:
 
-> "Write a SQL query that joins orders to users on user_id, filters for orders after 2024-01-01 with total > $50, groups by user, and returns the top 10 users by order count."
+> "Write a SQL query that joins orders to users on user_id, filters for orders after 2024-01-01 with total > $50, groups
+> by user, and returns the top 10 users by order count."
 
 Include the schema context (table names, column types) so the prompt is self-contained.
 

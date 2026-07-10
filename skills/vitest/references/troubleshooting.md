@@ -18,9 +18,9 @@ export default defineConfig({
   test: {
     alias: {
       "@shared": "./packages/shared", // Must match tsconfig.json
-      "@web": "./apps/web"
-    }
-  }
+      "@web": "./apps/web",
+    },
+  },
 });
 ```
 
@@ -98,11 +98,11 @@ import { fetchUser } from "./api";
 
 ```typescript
 const { mockFetchUser } = vi.hoisted(() => ({
-  mockFetchUser: vi.fn()
+  mockFetchUser: vi.fn(),
 }));
 
 vi.mock("./api", () => ({
-  fetchUser: mockFetchUser
+  fetchUser: mockFetchUser,
 }));
 
 // Now can configure before import
@@ -120,7 +120,7 @@ import { fetchUser } from "./api";
 ```typescript
 // tests/setup.ts
 vi.mock("@shared/utils/logger", () => ({
-  createLogger: vi.fn(() => ({ debug: vi.fn() }))
+  createLogger: vi.fn(() => ({ debug: vi.fn() })),
 }));
 
 // In test file - don't re-mock!
@@ -432,9 +432,9 @@ export default defineConfig({
     include: ["**/*.test.{js,ts,tsx}"],
     exclude: [
       "**/node_modules/**",
-      "**/e2e/**" // Excludes e2e tests
-    ]
-  }
+      "**/e2e/**", // Excludes e2e tests
+    ],
+  },
 });
 ```
 
@@ -460,8 +460,8 @@ nlx vitest run apps/web/
 // vitest.config.ts
 export default defineConfig({
   test: {
-    environment: "jsdom" // Required for React tests
-  }
+    environment: "jsdom", // Required for React tests
+  },
 });
 ```
 
@@ -482,8 +482,8 @@ import { render } from "@testing-library/react";
 // vitest.config.ts
 export default defineConfig({
   test: {
-    globals: true // Makes describe/test/expect global
-  }
+    globals: true, // Makes describe/test/expect global
+  },
 });
 ```
 
@@ -719,7 +719,7 @@ test("fetches data", async () => {
 
 // Fast: Mock API
 vi.mock("./api", () => ({
-  fetchUsers: vi.fn(() => Promise.resolve(mockUsers))
+  fetchUsers: vi.fn(() => Promise.resolve(mockUsers)),
 }));
 
 test("fetches data", async () => {
@@ -814,9 +814,9 @@ export default defineConfig({
     coverage: {
       provider: "v8", // More accurate than istanbul
       include: ["apps/**/*.ts", "packages/**/*.ts"],
-      exclude: ["**/*.test.ts", "**/__mocks__/**", "**/node_modules/**", "**/*.d.ts"]
-    }
-  }
+      exclude: ["**/*.test.ts", "**/__mocks__/**", "**/node_modules/**", "**/*.d.ts"],
+    },
+  },
 });
 ```
 

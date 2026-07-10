@@ -1,6 +1,7 @@
 # Codespaces
 
-> When to read: Read when the user asks to list, create, connect to, or manage files within GitHub Codespaces from the terminal.
+> When to read: Read when the user asks to list, create, connect to, or manage files within GitHub Codespaces from the
+> terminal.
 
 Manage GitHub Codespaces directly from the terminal.
 

@@ -1,6 +1,8 @@
 ---
 name: install-single-skill
-description: Commit and push this repo, then globally install exactly one named skill from the user prompt. Multiple skills are forbidden.
+description:
+  Commit and push this repo, then globally install exactly one named skill from the user prompt. Multiple skills are
+  forbidden.
 ---
 
 # Install Single Skill
@@ -20,8 +22,10 @@ Read the surrounding user prompt that referenced this internal skill.
 - Extract exactly one skill name.
 - Accept only kebab-case names matching `[a-z0-9]+(-[a-z0-9]+)*`.
 - Stop and ask for one skill name if the prompt is empty or ambiguous.
-- Stop if the prompt requests `all`, `both`, a comma-separated list, a space-separated list, repeated `--skill` flags, globs, or any other multi-skill form.
-- Do not infer additional skills or run this workflow in a loop. The user must reference this internal skill separately for each install.
+- Stop if the prompt requests `all`, `both`, a comma-separated list, a space-separated list, repeated `--skill` flags,
+  globs, or any other multi-skill form.
+- Do not infer additional skills or run this workflow in a loop. The user must reference this internal skill separately
+  for each install.
 
 ### 2. Commit and Push This Repo
 

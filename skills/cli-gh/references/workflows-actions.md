@@ -1,6 +1,7 @@
 # Workflows & Actions
 
-> When to read: Read when the user asks to trigger, monitor, cancel, rerun, or download artifacts from GitHub Actions workflows and runs.
+> When to read: Read when the user asks to trigger, monitor, cancel, rerun, or download artifacts from GitHub Actions
+> workflows and runs.
 
 Comprehensive guide for managing GitHub Actions workflows and runs using gh CLI.
 
@@ -327,13 +328,13 @@ gh api repos/:owner/:repo/contents/.github/workflows --jq '.[] | .name'
 
 ## Best Practices
 
-01. **Use specific workflow names** when triggering or listing runs to avoid ambiguity
-02. **Enable auto-merge** for PRs to merge automatically when CI passes
-03. **Monitor workflow cache** regularly to prevent cache bloat
-04. **Use JSON output** for scripting and automation
-05. **Watch runs interactively** during development to catch failures quickly
-06. **Clean up old workflow runs** to keep repository tidy
-07. **Use workflow dispatch inputs** for flexible, reusable workflows
-08. **Set appropriate timeouts** to prevent workflows from running indefinitely
-09. **Use artifacts judiciously** - they count against storage limits
+1.  **Use specific workflow names** when triggering or listing runs to avoid ambiguity
+2.  **Enable auto-merge** for PRs to merge automatically when CI passes
+3.  **Monitor workflow cache** regularly to prevent cache bloat
+4.  **Use JSON output** for scripting and automation
+5.  **Watch runs interactively** during development to catch failures quickly
+6.  **Clean up old workflow runs** to keep repository tidy
+7.  **Use workflow dispatch inputs** for flexible, reusable workflows
+8.  **Set appropriate timeouts** to prevent workflows from running indefinitely
+9.  **Use artifacts judiciously** - they count against storage limits
 10. **Leverage caching** to speed up workflows and reduce costs

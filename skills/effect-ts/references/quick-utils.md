@@ -6,15 +6,15 @@
 ## Utility Functions
 
 ```typescript
-import { constVoid as noop } from "effect/Function"
+import { constVoid as noop } from "effect/Function";
 
 // constVoid returns undefined, useful as a no-operation callback
-noop()  // undefined
+noop(); // undefined
 
 // Common use cases:
-Effect.tap(effect, noop)              // Ignore value, just run effect
-Promise.catch(noop)                   // Swallow errors
-eventEmitter.on("event", noop)        // Register empty handler
+Effect.tap(effect, noop); // Ignore value, just run effect
+Promise.catch(noop); // Swallow errors
+eventEmitter.on("event", noop); // Register empty handler
 ```
 
 ## Deprecations

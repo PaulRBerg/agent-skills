@@ -77,7 +77,8 @@ Available globally without definition:
 
 ### `style()` Function
 
-`style()` (v1.37.0; greatly expanded in v1.55.0) builds terminal escape sequences dynamically, unlike the fixed constants above. Two forms:
+`style()` (v1.37.0; greatly expanded in v1.55.0) builds terminal escape sequences dynamically, unlike the fixed
+constants above. Two forms:
 
 - `style(styles)` — return the escape-sequence prefix; reset with `NORMAL`.
 - `style(styles, text)` (v1.55.0+) — wrap `text` and auto-reset, so a trailing `NORMAL` is not needed.
@@ -88,7 +89,8 @@ error message:
     echo '{{ style("error", message) }}'              # two-arg form, auto-reset
 ```
 
-`styles` is a **single style token** as a string. To combine styles, pass a **list** of tokens (a list literal, so it needs `set unstable` + `set lists`) or concatenate single-token calls with `+`:
+`styles` is a **single style token** as a string. To combine styles, pass a **list** of tokens (a list literal, so it
+needs `set unstable` + `set lists`) or concatenate single-token calls with `+`:
 
 ```just
 echo '{{ style("bg:blue") + style("white") }}x{{ NORMAL }}'   # +-concat; no lists needed
@@ -102,8 +104,10 @@ Beyond `just`'s own semantic styles — `command`, `error`, `warning` — v1.55.
 - **256 indexed colors:** integers `0`–`255`, e.g. `style("133")`.
 - **24-bit colors:** `#RRGGBB` or `#RGB` hex, e.g. `style("#065535")`, `style("#AAA")`.
 - **Display properties:** `blink`, `bold`, `dim`, `hidden`, `italic`, `reverse`, `strikethrough`, `underline`.
-- **Foreground/background:** colors hit the foreground by default; prefix `fg:` / `bg:` to be explicit, e.g. `bg:blue`, `fg:133`.
-- **Stream gates:** `stdout` / `stderr` emit the style only when `just` would color that stream — honoring `--color`, `JUST_COLOR`, and whether the stream is a TTY. Combine with a color in a list, e.g. `style(["stderr", "red"], msg)`.
+- **Foreground/background:** colors hit the foreground by default; prefix `fg:` / `bg:` to be explicit, e.g. `bg:blue`,
+  `fg:133`.
+- **Stream gates:** `stdout` / `stderr` emit the style only when `just` would color that stream — honoring `--color`,
+  `JUST_COLOR`, and whether the stream is a TTY. Combine with a color in a list, e.g. `style(["stderr", "red"], msg)`.
 
 ## Functions
 
@@ -122,7 +126,8 @@ process:
 has_docker := `which docker > /dev/null 2>&1 && echo "true" || echo "false"`
 ```
 
-**Note:** `require()` validates the tool exists and stores its path. Use the variable name directly (e.g., `jq`), not with interpolation (`{{ jq }}`).
+**Note:** `require()` validates the tool exists and stores its path. Use the variable name directly (e.g., `jq`), not
+with interpolation (`{{ jq }}`).
 
 ### Environment Functions
 
@@ -265,14 +270,14 @@ build:
 **When to use:**
 
 - Replace repeated expression fragments across recipes.
-- Prefer over backtick-evaluated variables when the value depends on a parameter (backticks evaluate once at
-  justfile parse time; functions evaluate per call site).
+- Prefer over backtick-evaluated variables when the value depends on a parameter (backticks evaluate once at justfile
+  parse time; functions evaluate per call site).
 - Function bodies are pure expressions — no shell, no side effects. For shell logic, use a `[script]` recipe.
 
 ## Lists & Booleans (unstable, v1.53.0+)
 
-`set lists` (requires `set unstable`) adds a list-of-strings type and reforms booleans. Operators and functions it adds or
-changes:
+`set lists` (requires `set unstable`) adds a list-of-strings type and reforms booleans. Operators and functions it adds
+or changes:
 
 | Construct           | Meaning                                                                   |
 | ------------------- | ------------------------------------------------------------------------- |
@@ -354,7 +359,7 @@ files := ```
 | `just --choose`               | Interactive recipe selection (fzf)                                              |
 | `just --choose --group NAME`  | Restrict `--choose` to one group (v1.50.0+)                                     |
 | `just -f PATH`                | Use specific justfile (`-f -` reads stdin as of v1.51.0)                        |
-| `just -f FILE.md RECIPE`      | Extract & run ```` ```just ```` blocks from a markdown file (v1.53.0+)          |
+| `just -f FILE.md RECIPE`      | Extract & run ` ```just ` blocks from a markdown file (v1.53.0+)                |
 | `just --justfile-name NAME`   | Override justfile filename for auto-discovery (v1.49.0+)                        |
 | `just --dotenv-path P …`      | Load dotenv file(s); repeatable to load several (v1.53.0+)                      |
 | `just --dotenv-filename N …`  | Dotenv filename(s) to search for; repeatable (v1.53.0+)                         |

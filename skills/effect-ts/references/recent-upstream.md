@@ -1,7 +1,7 @@
 # Recent Upstream Notes
 
-> When to read: pull this in when checking whether local guidance is stale against `~/.effect` or when a behavior changed
-> recently.
+> When to read: pull this in when checking whether local guidance is stale against `~/.effect` or when a behavior
+> changed recently.
 
 Checked against `~/.effect` HEAD `05d72eab7` from 2026-06-05.
 

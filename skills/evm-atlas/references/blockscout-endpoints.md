@@ -3,7 +3,8 @@
 Bases:
 
 - Unified PRO: `https://api.blockscout.com/{chain_id}/api/v2/...` (key required)
-- Etherscan-V2 alias: `https://api.blockscout.com/v2/api?chain_id={id}&module=...&action=...` (key required; `{status,message,result}` shape)
+- Etherscan-V2 alias: `https://api.blockscout.com/v2/api?chain_id={id}&module=...&action=...` (key required;
+  `{status,message,result}` shape)
 - Per-instance: `https://{instance}/api/v2/...` (no key) and `https://{instance}/api?module=...` (no key)
 
 ## Native REST v2 — Endpoint Catalog
@@ -37,11 +38,16 @@ Beyond address (use the fallback docs for full schemas):
 | `search?q=...`                              | Unified search           |
 | `stats`                                     | Chain-level stats        |
 
-Pagination is keyset: responses include `next_page_params` (50/page); append those fields as query params for the next page. `null` means last page. No `sort` param — newest-first.
+Pagination is keyset: responses include `next_page_params` (50/page); append those fields as query params for the next
+page. `null` means last page. No `sort` param — newest-first.
 
 ## Etherscan-Compatible Actions
 
-Available on both `/{chain_id}/api?module=...` and the `/v2/api?chain_id=...` alias. `module=account` actions: `balance`, `balancemulti`, `tokenbalance`, `tokenlist`, `txlist`, `txlistinternal`, `tokentx`, `tokennfttx`, `token1155tx`. Other modules: `logs/getLogs`, `contract/getabi`, `contract/getsourcecode`, `block/*`, `stats/*`, `token/*`. The compat layer is legacy and does not implement every Etherscan action — prefer native v2; it supports `page`/`offset`/`sort` (asc/desc), which native v2 does not.
+Available on both `/{chain_id}/api?module=...` and the `/v2/api?chain_id=...` alias. `module=account` actions:
+`balance`, `balancemulti`, `tokenbalance`, `tokenlist`, `txlist`, `txlistinternal`, `tokentx`, `tokennfttx`,
+`token1155tx`. Other modules: `logs/getLogs`, `contract/getabi`, `contract/getsourcecode`, `block/*`, `stats/*`,
+`token/*`. The compat layer is legacy and does not implement every Etherscan action — prefer native v2; it supports
+`page`/`offset`/`sort` (asc/desc), which native v2 does not.
 
 ## Credit Costs (PRO host)
 

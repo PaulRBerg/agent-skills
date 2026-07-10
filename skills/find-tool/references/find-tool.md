@@ -75,7 +75,9 @@ Adapt search queries to the ecosystem and include the current year when recency 
 - `"[task] copilot skill"`
 - `"awesome agent skills" [task]`
 
-Never rely on a single registry for skills. Combine skills.sh, agentskills.io, GitHub topic search (`topic:agent-skills`, `topic:claude-skills`), GitHub code search for `path:SKILL.md`, and generic web search. Registries miss skills published only on GitHub or in blog posts.
+Never rely on a single registry for skills. Combine skills.sh, agentskills.io, GitHub topic search
+(`topic:agent-skills`, `topic:claude-skills`), GitHub code search for `path:SKILL.md`, and generic web search.
+Registries miss skills published only on GitHub or in blog posts.
 
 ### Databases / Infrastructure
 
@@ -104,7 +106,8 @@ Prioritize sources by ecosystem:
 
 ## Evaluation Criteria
 
-Start from the user's decision criteria. When they are unstated, use these as evidence prompts rather than a scoring formula:
+Start from the user's decision criteria. When they are unstated, use these as evidence prompts rather than a scoring
+formula:
 
 | Criterion            | Evidence to collect                                               |
 | -------------------- | ----------------------------------------------------------------- |
@@ -134,11 +137,13 @@ Start from the user's decision criteria. When they are unstated, use these as ev
 - Rust: choose safer and better-documented crates unless performance data clearly favors another.
 - Go: choose the standard library first, then packages with fewer dependencies and idiomatic cancellation support.
 - CLI tools: choose the tool with simpler installation and better structured output when capability is comparable.
-- Agent skills: choose the skill with clearer progressive-disclosure metadata and fewer bundled execution risks when capability is comparable.
+- Agent skills: choose the skill with clearer progressive-disclosure metadata and fewer bundled execution risks when
+  capability is comparable.
 
 ## Output Shapes
 
-Choose the smallest shape that makes the decision legible. A concise recommendation with one alternative is often enough. When several options share comparable fields, adapt this structure:
+Choose the smallest shape that makes the decision legible. A concise recommendation with one alternative is often
+enough. When several options share comparable fields, adapt this structure:
 
 ````markdown
 ### Recommended: `tool-name`
@@ -314,7 +319,8 @@ cursor --install-extension publisher.extension-name
 
 ### Multiple Tools Are Equal
 
-Pick the option with the lowest switching cost and best maintenance signal. Say when the choice is close and name the deciding factor.
+Pick the option with the lowest switching cost and best maintenance signal. Say when the choice is close and name the
+deciding factor.
 
 ### No Good Package Exists
 
@@ -365,7 +371,8 @@ Process:
 
 - Detect agent skill request.
 - Search generic web, skills.sh, agentskills.io, GitHub topics, and GitHub `path:SKILL.md`.
-- Compare install counts, GitHub stars, update recency, host-agent compatibility, token footprint, license, and bundled-script risk.
+- Compare install counts, GitHub stars, update recency, host-agent compatibility, token footprint, license, and
+  bundled-script risk.
 - Provide source links and adoption guidance without assuming the user's host-agent install command.
 
 ### Go

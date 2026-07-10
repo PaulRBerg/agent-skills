@@ -1,6 +1,7 @@
 # Code Map Template
 
-Use this template when the playground is about visualizing codebase architecture: component relationships, data flow, layer diagrams, system architecture with interactive commenting for feedback.
+Use this template when the playground is about visualizing codebase architecture: component relationships, data flow,
+layer diagrams, system architecture with interactive commenting for feedback.
 
 ## Layout
 
@@ -20,7 +21,8 @@ Use this template when the playground is about visualizing codebase architecture
 +-------------------+----------------------------------+
 ```
 
-Code map playgrounds use an SVG canvas for the architecture diagram. Users click components to add comments, which become part of the generated prompt. Layer and connection filters let users focus on specific parts of the system.
+Code map playgrounds use an SVG canvas for the architecture diagram. Users click components to add comments, which
+become part of the generated prompt. Layer and connection filters let users focus on specific parts of the system.
 
 ## Control types for code maps
 
@@ -44,22 +46,31 @@ Use an `<svg>` element with dynamically generated nodes and paths. Key patterns:
 
 ```javascript
 const nodes = [
-  { id: 'api-client', label: 'API Client', subtitle: 'src/api/client.ts',
-    x: 100, y: 50, w: 140, h: 45, layer: 'client', color: '#dbeafe' },
+  {
+    id: "api-client",
+    label: "API Client",
+    subtitle: "src/api/client.ts",
+    x: 100,
+    y: 50,
+    w: 140,
+    h: 45,
+    layer: "client",
+    color: "#dbeafe",
+  },
   // ...
 ];
 
 const connections = [
-  { from: 'api-client', to: 'server', type: 'data-flow', label: 'HTTP' },
-  { from: 'server', to: 'db', type: 'data-flow' },
+  { from: "api-client", to: "server", type: "data-flow", label: "HTTP" },
+  { from: "server", to: "db", type: "data-flow" },
   // ...
 ];
 
 function renderDiagram() {
-  const visibleNodes = nodes.filter(n => state.layers[n.layer]);
+  const visibleNodes = nodes.filter((n) => state.layers[n.layer]);
   // Draw connections first (under nodes), then nodes
-  connections.forEach(c => drawConnection(c));
-  visibleNodes.forEach(n => drawNode(n));
+  connections.forEach((c) => drawConnection(c));
+  visibleNodes.forEach((n) => drawNode(n));
 }
 ```
 
@@ -79,7 +90,7 @@ Use SVG markers for arrowheads:
 
 ```html
 <marker id="arrowhead-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-  <polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/>
+  <polygon points="0 0, 8 3, 0 6" fill="#3b82f6" />
 </marker>
 ```
 
@@ -100,7 +111,7 @@ state.comments.push({
   target: node.id,
   targetLabel: node.label,
   targetFile: node.subtitle,
-  text: userInput
+  text: userInput,
 });
 ```
 

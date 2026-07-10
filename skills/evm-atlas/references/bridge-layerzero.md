@@ -2,7 +2,8 @@
 
 ## Overview
 
-Use LayerZero as a read-only source for bridge route discovery, supported-token discovery, and deployment metadata on target chains. This reference covers unauthenticated LayerZero Value Transfer API (VTA) discovery endpoints only.
+Use LayerZero as a read-only source for bridge route discovery, supported-token discovery, and deployment metadata on
+target chains. This reference covers unauthenticated LayerZero Value Transfer API (VTA) discovery endpoints only.
 
 Default to the VTA base URL:
 
@@ -10,11 +11,14 @@ Default to the VTA base URL:
 https://transfer.layerzero-api.com/v1
 ```
 
-Do not use authenticated VTA transfer endpoints from this skill. Do not request API keys, build user steps, submit signatures, approve spenders, or broadcast transactions. If the user provides transaction hashes or LayerZeroScan links, verify them with explorer/RPC data instead.
+Do not use authenticated VTA transfer endpoints from this skill. Do not request API keys, build user steps, submit
+signatures, approve spenders, or broadcast transactions. If the user provides transaction hashes or LayerZeroScan links,
+verify them with explorer/RPC data instead.
 
 ## Legacy Stargate API
 
-The Stargate API at `https://stargate.finance/api/v1` is deprecated in favor of LayerZero VTA. Use Stargate docs only as legacy context when analyzing older integrations or URLs.
+The Stargate API at `https://stargate.finance/api/v1` is deprecated in favor of LayerZero VTA. Use Stargate docs only as
+legacy context when analyzing older integrations or URLs.
 
 Legacy discovery endpoints:
 
@@ -30,7 +34,8 @@ Do not prefer legacy Stargate endpoints for new data unless the user specificall
 Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
 
 1. **Supported chains:** call `GET /chains`.
-2. **Supported tokens or destinations:** call `GET /tokens`. Use `transferrableFromChainKey` and `transferrableFromTokenAddress` together to find valid destination tokens from a source token.
+2. **Supported tokens or destinations:** call `GET /tokens`. Use `transferrableFromChainKey` and
+   `transferrableFromTokenAddress` together to find valid destination tokens from a source token.
 3. **Deployment metadata:** call `GET /metadata` when contract addresses or deployment details matter.
 4. **Known transaction hash or LayerZeroScan link:** verify the referenced transaction on-chain with explorer/RPC data.
 
@@ -53,7 +58,8 @@ Extract and report these fields when present:
 | Token routes   | `tokens[].transferableTo[]`, token route metadata             |
 | Deployments    | metadata contract addresses and deployment labels             |
 
-Token amounts, if present in supplied external data, are raw integer units. Convert with token decimals when present, and preserve raw values when decimals are absent.
+Token amounts, if present in supplied external data, are raw integer units. Convert with token decimals when present,
+and preserve raw values when decimals are absent.
 
 ## Route Types
 
@@ -69,9 +75,11 @@ Common LayerZero route types and integrations to recognize in logs, explorer lab
 
 ## Failure Handling
 
-- Empty discovery results: report the missing chain, token, or deployment metadata; do not infer bridge support from token symbols alone.
+- Empty discovery results: report the missing chain, token, or deployment metadata; do not infer bridge support from
+  token symbols alone.
 - Rate limits and 5xx responses: report the API limitation and continue normal explorer/RPC analysis.
-- Non-target chains in VTA results: report that the leg is outside this skill and ask for a feature request rather than continuing analysis on that leg.
+- Non-target chains in VTA results: report that the leg is outside this skill and ask for a feature request rather than
+  continuing analysis on that leg.
 
 ## Sources
 

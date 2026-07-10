@@ -37,4 +37,5 @@ gh release download v1.0.0
 gh release download v1.0.0 --repo owner/repo
 ```
 
-`gh release download` works against public repositories without authentication (a token is still used when present), matching `gh extension install`.
+`gh release download` works against public repositories without authentication (a token is still used when present),
+matching `gh extension install`.

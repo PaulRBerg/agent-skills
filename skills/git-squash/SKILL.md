@@ -1,15 +1,16 @@
 ---
-argument-hint: '[--base <branch>]'
+argument-hint: "[--base <branch>]"
 disable-model-invocation: true
 effort: high
 name: git-squash
 user-invocable: true
-description: 'Squash a feature branch into one commit via soft reset to the merge base, ready for a clean PR.'
+description: "Squash a feature branch into one commit via soft reset to the merge base, ready for a clean PR."
 ---
 
 # Git Squash
 
-Squash the current PR branch into one commit based on net branch changes relative to the default branch. Do not create or invoke a helper script. Run the Git commands directly.
+Squash the current PR branch into one commit based on net branch changes relative to the default branch. Do not create
+or invoke a helper script. Run the Git commands directly.
 
 ## Arguments
 
@@ -27,7 +28,8 @@ Defaults:
 
 ### 1) Read-only Fact Gathering
 
-Gather and report the branch, clean-tree state, base candidate, ahead count, merge base, remote tracking state, and commits that would be replaced before mutating history. Stop on the first failure.
+Gather and report the branch, clean-tree state, base candidate, ahead count, merge base, remote tracking state, and
+commits that would be replaced before mutating history. Stop on the first failure.
 
 - Verify inside a Git worktree: `git rev-parse --is-inside-work-tree`
 - Verify not detached: `git symbolic-ref --quiet --short HEAD`
@@ -48,7 +50,9 @@ If `--base` was provided, use that branch name directly. Otherwise, detect the d
 2. `git remote show origin`
 3. `main`, `master`, `trunk`
 
-After the branch name is resolved, normalize it to a usable ref by preferring the local branch and falling back to `origin/<branch>`. Stop if neither exists. Also stop if the current branch is the default branch, because the skill should never squash the default branch into itself.
+After the branch name is resolved, normalize it to a usable ref by preferring the local branch and falling back to
+`origin/<branch>`. Stop if neither exists. Also stop if the current branch is the default branch, because the skill
+should never squash the default branch into itself.
 
 ```bash
 git symbolic-ref --quiet --short refs/remotes/origin/HEAD
@@ -59,7 +63,8 @@ git show-ref --verify --quiet "refs/remotes/origin/$default_branch"
 
 ### 3) Find the Squash Boundary
 
-Compute the merge-base between `HEAD` and the resolved default ref. That merge-base is the point where the branch diverged. Count how many commits are ahead of it. If the count is zero, there is nothing to squash.
+Compute the merge-base between `HEAD` and the resolved default ref. That merge-base is the point where the branch
+diverged. Count how many commits are ahead of it. If the count is zero, there is nothing to squash.
 
 ```bash
 merge_base="$(git merge-base HEAD "$default_ref")"
@@ -69,19 +74,27 @@ original_head="$(git rev-parse HEAD)"
 
 ### 4) Collect Semantic Context Before Rewriting
 
-Inspect the commits that will be squashed before mutating history. Use them to understand intent and distinct workstreams, but treat the staged net diff as the source of truth for what survives.
+Inspect the commits that will be squashed before mutating history. Use them to understand intent and distinct
+workstreams, but treat the staged net diff as the source of truth for what survives.
 
 - Read the commit list in chronological order: `git log --reverse --format='%H%x09%s' "$merge_base..HEAD"`
-- If subjects are vague or mixed, inspect the most important commits more deeply with `git show --stat --summary --format=fuller <commit>`
+- If subjects are vague or mixed, inspect the most important commits more deeply with
+  `git show --stat --summary --format=fuller <commit>`
 - Identify the dominant user-visible or developer-visible outcomes
 - Ignore intermediate work that does not survive in the final diff
-- Collect all unique authors from the squashed commits and identify which are co-authors (anyone other than the committer of the squash commit). Use `git log --format='%aN <%aE>' "$merge_base..HEAD" | sort -u` to get the list, then exclude the current user (`git config user.name` / `git config user.email`). Each remaining author becomes a `Co-authored-by` trailer
+- Collect all unique authors from the squashed commits and identify which are co-authors (anyone other than the
+  committer of the squash commit). Use `git log --format='%aN <%aE>' "$merge_base..HEAD" | sort -u` to get the list,
+  then exclude the current user (`git config user.name` / `git config user.email`). Each remaining author becomes a
+  `Co-authored-by` trailer
 
 You are not writing a changelog of every commit. You are deriving one accurate commit message for the final net change.
 
 ### 5) Rewrite the Branch into a Single Staged Diff
 
-Record `original_head` immediately before mutation. Soft-reset to the merge-base; this keeps the branch's net changes staged while removing the intermediate commits from history. Until the replacement commit succeeds, any failure must restore `HEAD` and the index with `git reset --soft "$original_head"`. Because preflight requires a clean tree, that rollback returns the branch to its exact pre-squash commit and staged state without touching working-tree files.
+Record `original_head` immediately before mutation. Soft-reset to the merge-base; this keeps the branch's net changes
+staged while removing the intermediate commits from history. Until the replacement commit succeeds, any failure must
+restore `HEAD` and the index with `git reset --soft "$original_head"`. Because preflight requires a clean tree, that
+rollback returns the branch to its exact pre-squash commit and staged state without touching working-tree files.
 
 ```bash
 original_head="$(git rev-parse HEAD)"
@@ -149,7 +162,8 @@ git diff --cached --stat
 git diff --cached
 ```
 
-If co-authors were collected in step 4, append a blank line followed by one `Co-authored-by: Name <email>` trailer per co-author at the end of the message. Do not add trailers for the current user.
+If co-authors were collected in step 4, append a blank line followed by one `Co-authored-by: Name <email>` trailer per
+co-author at the end of the message. Do not add trailers for the current user.
 
 Write the final message to a temporary file and commit with `git commit -F`.
 

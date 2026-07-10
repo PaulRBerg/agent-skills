@@ -30,13 +30,15 @@ A release starts with a second-level heading:
 ## VERSION - DATE
 ```
 
-`VERSION` is semver-valid (no "v" prefix) matching a git tag (with optional "v" prefix). `DATE` is `YYYY-MM-DD` (ISO 8601).
+`VERSION` is semver-valid (no "v" prefix) matching a git tag (with optional "v" prefix). `DATE` is `YYYY-MM-DD` (ISO
+8601).
 
 ```md
 ## 1.0.1 - 2019-08-24
 ```
 
-The version should link to further information. If hosted on GitHub, link to a GitHub release. Use reference-style links to keep raw Markdown readable:
+The version should link to further information. If hosted on GitHub, link to a GitHub release. Use reference-style links
+to keep raw Markdown readable:
 
 ```md
 ## [1.0.1] - 2019-08-24
@@ -86,7 +88,8 @@ Categories must be one of (in this order):
 - `Removed` — removed functionality
 - `Fixed` — bug fixes
 
-The heading is followed by an unnumbered Markdown list. Each item is a single line: a change, then references, then optional authors.
+The heading is followed by an unnumbered Markdown list. Each item is a single line: a change, then references, then
+optional authors.
 
 ```md
 - Prevent buffer overflow ([#28](https://github.com/owner/name/pull/28))
@@ -96,7 +99,8 @@ Sort the list: breaking changes first, then by importance, then latest-first.
 
 #### Change
 
-Write using imperative mood. Must start with a present-tense verb (e.g. `Add`, `Refactor`, `Bump`, `Document`, `Fix`, `Deprecate`).
+Write using imperative mood. Must start with a present-tense verb (e.g. `Add`, `Refactor`, `Bump`, `Document`, `Fix`,
+`Deprecate`).
 
 Each change must be self-describing, as if no category heading exists. Instead of:
 
@@ -118,7 +122,8 @@ Write:
 
 #### References
 
-Each change should reference a PR when available; fall back to a commit hash only if no PR exists. References are written after the change on the same line, wrapped in parentheses. Each reference must be a Markdown link.
+Each change should reference a PR when available; fall back to a commit hash only if no PR exists. References are
+written after the change on the same line, wrapped in parentheses. Each reference must be a Markdown link.
 
 **Pull requests (preferred):**
 
@@ -136,7 +141,8 @@ When there are more than two references, only include the best starting point.
 
 #### Authors
 
-Author names are optional and should generally be omitted. Only include them in multi-contributor projects where attribution matters.
+Author names are optional and should generally be omitted. Only include them in multi-contributor projects where
+attribution matters.
 
 #### Prefixes
 
@@ -230,7 +236,8 @@ Exception — if the commit lacks a description:
 
 Three approaches:
 
-**A. Copy content to release** — Merge content from prereleases into the release entry, following the same writing practices. Write as if prereleases don't exist.
+**A. Copy content to release** — Merge content from prereleases into the release entry, following the same writing
+practices. Write as if prereleases don't exist.
 
 **B. Skip changelog entry for prerelease** — When the prerelease is for internal testing only.
 

@@ -20,7 +20,8 @@ Fetch repo id, categories, and discussion-template tree once:
 {skill-dir}/scripts/yeet-context.sh repo "{owner}/{repo}" --discussion-categories --discussion-templates
 ```
 
-If the repository was inferred from the current Git repo, omit `{owner}/{repo}`. Store `repository.id`, `repository.discussionCategories.nodes`, and `repository.discussionTemplateTree.entries`.
+If the repository was inferred from the current Git repo, omit `{owner}/{repo}`. Store `repository.id`,
+`repository.discussionCategories.nodes`, and `repository.discussionTemplateTree.entries`.
 
 ## Check for Similar Discussions (Optional)
 
@@ -68,7 +69,8 @@ Use `repository.discussionTemplateTree.entries` from the cached context. Keep en
 
 3. Parse YAML: `title` (prefix), `body` array (fields with `type`, `id`, `attributes`)
 
-4. Field types: `textarea`/`input` → section header; `dropdown` → select option; `checkboxes` → auto-acknowledge; `markdown` → skip
+4. Field types: `textarea`/`input` → section header; `dropdown` → select option; `checkboxes` → auto-acknowledge;
+   `markdown` → skip
 
 ### If No Templates Found
 
@@ -98,7 +100,8 @@ See `writing.md > Informal Tone` for tone guidance.
 [Background information, if applicable]
 ```
 
-Use ordinary GitHub Markdown only where it improves this discussion. See `context.md > Platform String Normalization` if OS details are required.
+Use ordinary GitHub Markdown only where it improves this discussion. See `context.md > Platform String Normalization` if
+OS details are required.
 
 ## Create the Discussion
 

@@ -2,7 +2,8 @@
 
 Tailwind CSS v4 compatible animation library.
 
-**Package:** `tw-animate-css` ([npm](https://www.npmjs.com/package/tw-animate-css) | [GitHub](https://github.com/Wombosvideo/tw-animate-css))
+**Package:** `tw-animate-css` ([npm](https://www.npmjs.com/package/tw-animate-css) |
+[GitHub](https://github.com/Wombosvideo/tw-animate-css))
 
 ## Setup
 
@@ -68,12 +69,12 @@ Decimal spacing values like `2.5` are NOT supported directly:
 ```html
 <!-- ❌ Invalid: decimal spacing not recognized -->
 <div class="slide-in-from-bottom-2.5 animate-in">
-
-<!-- ✅ Valid: use arbitrary value instead -->
-<div class="slide-in-from-bottom-[0.625rem] animate-in">
-
-<!-- ✅ Valid: use integer spacing -->
-<div class="slide-in-from-bottom-2 animate-in">
+  <!-- ✅ Valid: use arbitrary value instead -->
+  <div class="slide-in-from-bottom-[0.625rem] animate-in">
+    <!-- ✅ Valid: use integer spacing -->
+    <div class="slide-in-from-bottom-2 animate-in"></div>
+  </div>
+</div>
 ```
 
 **Spacing to rem conversion:** `value × 0.25rem`
@@ -110,33 +111,25 @@ Control element visibility after animation:
 ### Enter Animation
 
 ```html
-<div class="fade-in slide-in-from-bottom-4 duration-300 animate-in">
-  Content slides up and fades in
-</div>
+<div class="fade-in slide-in-from-bottom-4 duration-300 animate-in">Content slides up and fades in</div>
 ```
 
 ### Exit Animation
 
 ```html
-<div class="fade-out slide-out-to-bottom-4 duration-200 animate-out">
-  Content slides down and fades out
-</div>
+<div class="fade-out slide-out-to-bottom-4 duration-200 animate-out">Content slides down and fades out</div>
 ```
 
 ### Responsive Animation
 
 ```html
-<div class="lg:fade-in lg:slide-in-from-bottom-[0.625rem] lg:animate-in">
-  Only animates on lg+ breakpoints
-</div>
+<div class="lg:fade-in lg:slide-in-from-bottom-[0.625rem] lg:animate-in">Only animates on lg+ breakpoints</div>
 ```
 
 ### Combined Animation
 
 ```html
-<div class="fade-in zoom-in-50 slide-in-from-bottom-8 duration-500 animate-in">
-  Multiple effects combined
-</div>
+<div class="fade-in zoom-in-50 slide-in-from-bottom-8 duration-500 animate-in">Multiple effects combined</div>
 ```
 
 ## Quick Reference

@@ -25,7 +25,7 @@ spy.mockRestore();
 ```typescript
 // At top level, before imports
 vi.mock("./api-client", () => ({
-  fetchUser: vi.fn(() => Promise.resolve({ id: 1, name: "Test" }))
+  fetchUser: vi.fn(() => Promise.resolve({ id: 1, name: "Test" })),
 }));
 
 import { fetchUser } from "./api-client";

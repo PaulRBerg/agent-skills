@@ -22,11 +22,13 @@ Use these headings and dropdown values exactly for `anthropics/claude-code` issu
 
 ### Priority
 
-{one of: Critical - Blocking my work | High - Significant impact on productivity | Medium - Would be very helpful | Low - Nice to have}
+{one of: Critical - Blocking my work | High - Significant impact on productivity | Medium - Would be very helpful |
+Low - Nice to have}
 
 ### Feature Category
 
-{one of: CLI commands and flags | Interactive mode (TUI) | File operations | API and model interactions | MCP server integration | Performance and speed | Configuration and settings | Developer tools/SDK | Documentation | Other}
+{one of: CLI commands and flags | Interactive mode (TUI) | File operations | API and model interactions | MCP server
+integration | Performance and speed | Configuration and settings | Developer tools/SDK | Documentation | Other}
 
 ### Use Case Example
 

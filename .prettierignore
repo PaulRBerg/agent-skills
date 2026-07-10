@@ -1,0 +1,7 @@
+# local agent state
+.agents/skills/
+.claude/
+.serena/
+
+# generated symlink
+CLAUDE.md

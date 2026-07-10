@@ -1,6 +1,7 @@
 # Issue Comment Workflow
 
-Post a comment on an existing GitHub issue (or PR — on GitHub's data model, a PR is an issue with extras, so `gh issue comment` works for both). Use the same informal, conversational tone as `create-issue.md`.
+Post a comment on an existing GitHub issue (or PR — on GitHub's data model, a PR is an issue with extras, so
+`gh issue comment` works for both). Use the same informal, conversational tone as `create-issue.md`.
 
 ## Validate Prerequisites
 
@@ -18,17 +19,22 @@ Expected forms:
 
 Rules:
 
-- IF first token matches `https://github.com/{owner}/{repo}/issues/{number}` or `.../pull/{number}`: parse owner, repo, number from URL
+- IF first token matches `https://github.com/{owner}/{repo}/issues/{number}` or `.../pull/{number}`: parse owner, repo,
+  number from URL
 - ELSE IF first token matches `{owner}/{repo}#{number}`: split on `#`
-- ELSE IF first token matches `{owner}/{repo}`: use it as repository; next token must be the issue number (strip leading `#`)
-- ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from the local `origin` remote via `{skill-dir}/scripts/yeet-context.sh issue`
+- ELSE IF first token matches `{owner}/{repo}`: use it as repository; next token must be the issue number (strip leading
+  `#`)
+- ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from the local `origin` remote via
+  `{skill-dir}/scripts/yeet-context.sh issue`
 - ELSE: ERROR "Couldn't figure out the issue. Pass `owner/repo#123` or a GitHub issue URL."
 
-Everything after the issue identifier is the **comment context** — the user's description of what they want to say. May be empty if the user just wants a canned reaction (e.g., "+1", "same here").
+Everything after the issue identifier is the **comment context** — the user's description of what they want to say. May
+be empty if the user just wants a canned reaction (e.g., "+1", "same here").
 
 ## Fetch Issue Context
 
-Always read the issue before writing the comment — never generate a reply based on the user's context alone, because tone/terminology should match the thread.
+Always read the issue before writing the comment — never generate a reply based on the user's context alone, because
+tone/terminology should match the thread.
 
 ```bash
 {skill-dir}/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
@@ -44,15 +50,20 @@ Analyze:
 
 ## Generate Comment Body
 
-See `writing.md > Informal Tone` — same rules apply. Write like a colleague chiming in on a thread, not a changelog entry.
+See `writing.md > Informal Tone` — same rules apply. Write like a colleague chiming in on a thread, not a changelog
+entry.
 
 ### Guidelines
 
-- **Lead with the point.** If it's a reproduction, show it. If it's a "+1", say so and explain what specifically bit you. If it's a proposed fix, link or paste it.
-- **Match the thread's register.** If the thread is technical and terse, don't be fluffy. If it's collaborative and exploratory, don't be curt.
-- **No AI throat-clearing.** Skip "Great question!", "Thanks for filing this!", "Just chiming in here...". Go straight to substance.
+- **Lead with the point.** If it's a reproduction, show it. If it's a "+1", say so and explain what specifically bit
+  you. If it's a proposed fix, link or paste it.
+- **Match the thread's register.** If the thread is technical and terse, don't be fluffy. If it's collaborative and
+  exploratory, don't be curt.
+- **No AI throat-clearing.** Skip "Great question!", "Thanks for filing this!", "Just chiming in here...". Go straight
+  to substance.
 - **No fake enthusiasm.** Don't over-promise ("I'll dig into this right away") unless the user explicitly said so.
-- **Cite specifics.** If you reference code, link to it (see `writing.md > Link Formatting`). If you reference a commit or PR, link it.
+- **Cite specifics.** If you reference code, link to it (see `writing.md > Link Formatting`). If you reference a commit
+  or PR, link it.
 - **Use admonitions sparingly.** They are almost never needed in a comment; reserve them for genuine warnings.
 
 ### Comment Shapes
@@ -74,20 +85,18 @@ Reproduced on {platform} with {version}. Steps:
 2. {step}
 3. {step}
 
-Expected: {...}
-Actual: {...}
+Expected: {...} Actual: {...}
 
 Relevant log:
 
-\`\`\`
-{log snippet}
-\`\`\`
+\`\`\` {log snippet} \`\`\`
 ```
 
 **Proposed solution**:
 
 ```markdown
-Looked into this — the issue is in [`{path}`](https://github.com/{owner}/{repo}/blob/main/{path}#L{line}) where {short explanation}.
+Looked into this — the issue is in [`{path}`](https://github.com/{owner}/{repo}/blob/main/{path}#L{line}) where {short
+explanation}.
 
 One fix: {short description}. PR: #{number} (if applicable).
 ```
@@ -106,11 +115,13 @@ Fixed in {PR or commit link}. {One sentence on the root cause if non-obvious.}
 
 ### Platform / Environment
 
-If the comment includes environment info, follow `context.md > Platform String Normalization`. Don't paste raw `uname` output.
+If the comment includes environment info, follow `context.md > Platform String Normalization`. Don't paste raw `uname`
+output.
 
 ### File / Code References
 
-Follow `writing.md > Link Formatting`. Prefer permalinks (commit SHA) over branch links when citing specific lines, since branch links rot.
+Follow `writing.md > Link Formatting`. Prefer permalinks (commit SHA) over branch links when citing specific lines,
+since branch links rot.
 
 ## Post the Comment
 
@@ -133,7 +144,8 @@ On failure: show the specific error (auth, permissions, locked issue, etc.) and 
 
 ## Editing a Prior Comment
 
-If the user asks to "edit my last comment" or "update the comment I just posted", use `gh issue comment --edit-last` (operates on the most recent comment by the authenticated user on that issue):
+If the user asks to "edit my last comment" or "update the comment I just posted", use `gh issue comment --edit-last`
+(operates on the most recent comment by the authenticated user on that issue):
 
 ```bash
 gh issue comment {number} \

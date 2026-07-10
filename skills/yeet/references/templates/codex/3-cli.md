@@ -21,8 +21,8 @@ Use these headings exactly for `openai/codex` issues using `3-cli.yml`.
 
 ### What terminal emulator and version are you using (if applicable)?
 
-{e.g. iTerm2 3.5.0, Ghostty 1.0, Terminal.app, VS Code integrated terminal, Cursor integrated terminal}
-{note any multiplexer: tmux / screen / zellij}
+{e.g. iTerm2 3.5.0, Ghostty 1.0, Terminal.app, VS Code integrated terminal, Cursor integrated terminal} {note any
+multiplexer: tmux / screen / zellij}
 
 ### Codex doctor report
 

@@ -3,7 +3,9 @@ argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe]"
 disable-model-invocation: false
 name: skill-doctor
 user-invocable: true
-description: "Use to audit Agent Skills catalogs or installed skill roots for metadata and doc-link issues; optionally apply conservative --fix-safe repairs."
+description:
+  "Use to audit Agent Skills catalogs or installed skill roots for metadata and doc-link issues; optionally apply
+  conservative --fix-safe repairs."
 ---
 
 # Skill Doctor
@@ -42,7 +44,8 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 
 - Treat `error` findings as catalog defects that should block publishing or syncing.
 - Treat `warning` findings as review-required catalog hygiene issues.
-- Prompt-hygiene warnings are advisory and never auto-fix: stale model pins, oversized unconditional Markdown references, conflicting requirement/prohibition language, and missing completion evidence.
+- Prompt-hygiene warnings are advisory and never auto-fix: stale model pins, oversized unconditional Markdown
+  references, conflicting requirement/prohibition language, and missing completion evidence.
 - Use `path` and `line` from JSON output for precise follow-up edits.
 
 ## Safe Fix Policy
@@ -52,7 +55,8 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 - Create a missing `agents/openai.yaml` with `policy.allow_implicit_invocation` derived from `SKILL.md`.
 - Update an existing `allow_implicit_invocation` boolean when it disagrees with `disable-model-invocation`.
 
-Do not use the helper to rewrite frontmatter order, descriptions, README rows, `references/version.txt`, or relative links. Make those edits manually and verify with a fresh audit.
+Do not use the helper to rewrite frontmatter order, descriptions, README rows, `references/version.txt`, or relative
+links. Make those edits manually and verify with a fresh audit.
 
 ## Exit Codes
 

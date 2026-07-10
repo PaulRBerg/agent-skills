@@ -100,9 +100,9 @@ export default defineConfig({
     alias: {
       "@shared": "./packages/shared",
       "@web": "./apps/web",
-      "@admin": "./apps/admin"
-    }
-  }
+      "@admin": "./apps/admin",
+    },
+  },
 });
 ```
 
@@ -229,8 +229,8 @@ vi.mock("@shared/utils/logger", () => ({
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
-    error: vi.fn()
-  }))
+    error: vi.fn(),
+  })),
 }));
 
 // Setup global test utilities
@@ -262,9 +262,9 @@ export default defineConfig({
   test: {
     setupFiles: [
       "./tests/setup.ts", // Global
-      "./apps/web/tests/setup.ts" // Web-specific
-    ]
-  }
+      "./apps/web/tests/setup.ts", // Web-specific
+    ],
+  },
 });
 ```
 
@@ -300,8 +300,8 @@ vi.mock("@shared/utils/logger", () => ({
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
-    error: vi.fn()
-  }))
+    error: vi.fn(),
+  })),
 }));
 ```
 
@@ -334,7 +334,7 @@ export function createLocalStorageMock() {
     }),
     clear: vi.fn(() => {
       store.clear();
-    })
+    }),
   };
 }
 ```

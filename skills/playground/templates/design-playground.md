@@ -1,6 +1,7 @@
 # Design Playground Template
 
-Use this template when the playground is about visual design decisions: components, layouts, spacing, color, typography, animation, responsive behavior.
+Use this template when the playground is about visual design decisions: components, layouts, spacing, color, typography,
+animation, responsive behavior.
 
 ## Layout
 
@@ -37,12 +38,12 @@ Apply state values directly to a preview element's inline styles:
 
 ```javascript
 function renderPreview() {
-  const el = document.getElementById('preview');
-  el.style.borderRadius = state.radius + 'px';
-  el.style.padding = state.padding + 'px';
+  const el = document.getElementById("preview");
+  el.style.borderRadius = state.radius + "px";
+  el.style.padding = state.padding + "px";
   el.style.boxShadow = state.shadow
     ? `0 ${state.shadowY}px ${state.shadowBlur}px rgba(0,0,0,${state.shadowOpacity})`
-    : 'none';
+    : "none";
 }
 ```
 
@@ -52,7 +53,8 @@ Show the preview on both light and dark backgrounds if relevant. Include a conte
 
 Frame it as a direction to a developer, not a spec sheet:
 
-> "Update the card to feel soft and elevated: 12px border-radius, 24px horizontal padding, a medium box-shadow (0 4px 12px rgba(0,0,0,0.1)). On hover, lift it with translateY(-1px) and deepen the shadow slightly."
+> "Update the card to feel soft and elevated: 12px border-radius, 24px horizontal padding, a medium box-shadow (0 4px
+> 12px rgba(0,0,0,0.1)). On hover, lift it with translateY(-1px) and deepen the shadow slightly."
 
 If the user is working in Tailwind, suggest Tailwind classes. If raw CSS, use CSS properties.
 

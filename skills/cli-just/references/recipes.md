@@ -141,7 +141,8 @@ deploy:
 
 ### Per-Recipe Environment Variables
 
-The `[env(NAME, VALUE)]` attribute (v1.47.0+) sets environment variables scoped to one recipe — narrower than `export` (whole justfile) or `set dotenv-load` (everything).
+The `[env(NAME, VALUE)]` attribute (v1.47.0+) sets environment variables scoped to one recipe — narrower than `export`
+(whole justfile) or `set dotenv-load` (everything).
 
 ```just
 [env("RUST_BACKTRACE", "1")]
@@ -166,8 +167,8 @@ build:
     cargo build
 ```
 
-`[env(...)]` is the preferred mechanism for one-recipe env overrides — it composes with `set dotenv-load` and module-level
-exports (which it overrides as of v1.51.0).
+`[env(...)]` is the preferred mechanism for one-recipe env overrides — it composes with `set dotenv-load` and
+module-level exports (which it overrides as of v1.51.0).
 
 ### Parallel Execution
 
@@ -215,7 +216,8 @@ Here `setup` runs once thanks to transitive dedup, then the three `_check` invoc
 
 ### Continuing After Signals (v1.54.0+)
 
-`[continue]` makes `just` keep executing after it catches a fatal signal, as long as the child process exits successfully. With no arguments it handles `SIGINT` (`ctrl-c`), leaving `SIGQUIT` (`ctrl-\`) free to abort:
+`[continue]` makes `just` keep executing after it catches a fatal signal, as long as the child process exits
+successfully. With no arguments it handles `SIGINT` (`ctrl-c`), leaving `SIGQUIT` (`ctrl-\`) free to abort:
 
 ```just
 [continue]
@@ -226,11 +228,13 @@ cleanup:
     echo cleanup
 ```
 
-If `main.py` traps `SIGINT` and exits `0`, `cleanup` still runs and `just` exits successfully. Pass explicit signals to handle others — `[continue("SIGHUP", "SIGINT")]` accepts any of `"SIGHUP"`, `"SIGINT"`, and `"SIGQUIT"`.
+If `main.py` traps `SIGINT` and exits `0`, `cleanup` still runs and `just` exits successfully. Pass explicit signals to
+handle others — `[continue("SIGHUP", "SIGINT")]` accepts any of `"SIGHUP"`, `"SIGINT"`, and `"SIGQUIT"`.
 
 ### Cached Recipes (unstable, v1.54.0+)
 
-`[cache]` skips a recipe invocation when a matching cache entry already exists. It is **unstable** (`set unstable`) and may be used on **script recipes only**:
+`[cache]` skips a recipe invocation when a matching cache entry already exists. It is **unstable** (`set unstable`) and
+may be used on **script recipes only**:
 
 ```just
 set unstable
@@ -242,9 +246,14 @@ build:
     cc lib.c main.c -o main
 ```
 
-The cache key covers input-file contents (BLAKE3-hashed), the recipe body, environment, positional args, working directory, and `extra`; `outputs` are **not** part of the key, but every output file must exist for a run to be skipped. `inputs`/`outputs`/`extra` are expressions evaluated with recipe args in scope — a lone path may be a bare string (`inputs = "image.png"`), while list literals require `set lists`.
+The cache key covers input-file contents (BLAKE3-hashed), the recipe body, environment, positional args, working
+directory, and `extra`; `outputs` are **not** part of the key, but every output file must exist for a run to be skipped.
+`inputs`/`outputs`/`extra` are expressions evaluated with recipe args in scope — a lone path may be a bare string
+(`inputs = "image.png"`), while list literals require `set lists`.
 
-**Caveat:** caching is inherently fragile — the key captures none of wall-clock time, system binaries, OS version, the network, or databases. The cache lives in a `.justcache/` directory beside the justfile; **do not commit it**. Bypass a run with `--no-cache`; clear entries with `just --clean [RECIPE]`.
+**Caveat:** caching is inherently fragile — the key captures none of wall-clock time, system binaries, OS version, the
+network, or databases. The cache lives in a `.justcache/` directory beside the justfile; **do not commit it**. Bypass a
+run with `--no-cache`; clear entries with `just --clean [RECIPE]`.
 
 ### Documentation
 
@@ -387,7 +396,8 @@ compile output:
 
 ### Flags Without Values
 
-Use `value` (v1.46.0+) for boolean-style flags that set a predefined value when present. Give the parameter a default so the flag is optional. This is the stable form and works on any `just` ≥ 1.46.0:
+Use `value` (v1.46.0+) for boolean-style flags that set a predefined value when present. Give the parameter a default so
+the flag is optional. This is the stable form and works on any `just` ≥ 1.46.0:
 
 ```just
 [arg("release", long, value="true")]
@@ -399,7 +409,9 @@ build release="false":
 #   just build --release → release="true"
 ```
 
-Under `set lists` (unstable, v1.53.0+), the `flag` keyword is an alternative: presence sets the parameter to `"true"`, absence leaves it `[]` (the canonical false). Flag parameters may **not** have a default, and `set unstable` + `set lists` are required:
+Under `set lists` (unstable, v1.53.0+), the `flag` keyword is an alternative: presence sets the parameter to `"true"`,
+absence leaves it `[]` (the canonical false). Flag parameters may **not** have a default, and `set unstable` +
+`set lists` are required:
 
 ```just
 set unstable
@@ -416,7 +428,8 @@ build release:
 
 ### Repeatable Options (v1.55.0+)
 
-A variadic `*`/`+` parameter declared as an option becomes repeatable — each occurrence contributes one value (no `set lists` needed; the values space-join in interpolation as usual):
+A variadic `*`/`+` parameter declared as an option becomes repeatable — each occurrence contributes one value (no
+`set lists` needed; the values space-join in interpolation as usual):
 
 ```just
 [arg("file", long)]
@@ -427,7 +440,9 @@ backup +file:
 #   → scp FAQ.md GRAMMAR.md me@server.com:
 ```
 
-`+` options must be passed at least once; `*` options may be omitted. For a non-variadic parameter, `[arg(multiple)]` instead collects repeats into a list (requires `set unstable` + `set lists`); combined with `flag` or `value=VALUE`, the fixed value repeats once per occurrence:
+`+` options must be passed at least once; `*` options may be omitted. For a non-variadic parameter, `[arg(multiple)]`
+instead collects repeats into a list (requires `set unstable` + `set lists`); combined with `flag` or `value=VALUE`, the
+fixed value repeats once per occurrence:
 
 ```just
 set unstable
@@ -500,7 +515,9 @@ info flag:
 #   just info --foo       → error: argument doesn't match pattern
 ```
 
-As of v1.55.0, `pattern` may also be an expression or a **list** — the argument is accepted if it matches any element (an empty list accepts anything). The list form is a list literal, so it requires `set unstable` + `set lists` (the expression form does not):
+As of v1.55.0, `pattern` may also be an expression or a **list** — the argument is accepted if it matches any element
+(an empty list accepts anything). The list form is a list literal, so it requires `set unstable` + `set lists` (the
+expression form does not):
 
 ```just
 set unstable
@@ -562,7 +579,8 @@ test: && lint
 
 ### Mapped Dependencies over Lists (unstable, v1.53.0+)
 
-With `set lists`, a dependency can be invoked once per element of a list argument using `*(recipe *arg)`. Combine with `[parallel]` to fan out concurrently:
+With `set lists`, a dependency can be invoked once per element of a list argument using `*(recipe *arg)`. Combine with
+`[parallel]` to fan out concurrently:
 
 ```just
 set unstable
@@ -581,7 +599,8 @@ compiling foo for x86…
 compiling bar for x86…
 ```
 
-Each argument to a non-mapped dependency binds to exactly one parameter; passing extra arguments to a variadic dependency is an error.
+Each argument to a non-mapped dependency binds to exactly one parameter; passing extra arguments to a variadic
+dependency is an error.
 
 ## Command Prefixes
 
@@ -604,7 +623,8 @@ Each argument to a non-mapped dependency binds to exactly one parameter; passing
     echo "Quiet and ignores error"
 ```
 
-For non-script recipes, `@` suppresses the echoed command line. For `[script]` recipes, quiet behavior is inverted: script recipes are quiet by default, and adding `@` prints the script body before command output.
+For non-script recipes, `@` suppresses the echoed command line. For `[script]` recipes, quiet behavior is inverted:
+script recipes are quiet by default, and adding `@` prints the script body before command output.
 
 ## Shebang Recipes
 

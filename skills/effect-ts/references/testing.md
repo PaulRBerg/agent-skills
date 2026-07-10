@@ -3,7 +3,8 @@
 > When to read: pull this in when using `@effect/vitest`, `it.effect`, `TestClock`, `Effect.sleep`, retry schedules,
 > streams, background fibers, scoped resources, or Effect runtime boundaries in tests.
 
-This is a pragmatic guide for writing _deterministic_ tests in Effect-TS codebases, especially when using `@effect/vitest`.
+This is a pragmatic guide for writing _deterministic_ tests in Effect-TS codebases, especially when using
+`@effect/vitest`.
 
 ## The #1 gotcha: `it.effect` uses `TestClock`
 
@@ -13,7 +14,8 @@ Implications:
 
 - Time starts at **0**.
 - Time does **not** pass unless you advance it.
-- Any `Effect.sleep(...)`, `Schedule.spaced(...)`, retry backoff, polling loop, etc. will **stall forever** unless you call `TestClock.adjust(...)`.
+- Any `Effect.sleep(...)`, `Schedule.spaced(...)`, retry backoff, polling loop, etc. will **stall forever** unless you
+  call `TestClock.adjust(...)`.
 
 Use `it.live` when you truly want wall-clock time.
 
@@ -42,9 +44,9 @@ That makes your code controllable via `TestClock`.
 `BigInt`.
 
 ```ts
-yield* TestClock.setTime(199023438.0000004)
-const testClock = yield* TestClock.testClock()
-testClock.unsafeCurrentTimeNanos() // 199023438000000n
+yield * TestClock.setTime(199023438.0000004);
+const testClock = yield * TestClock.testClock();
+testClock.unsafeCurrentTimeNanos(); // 199023438000000n
 ```
 
 Still prefer `Clock.currentTimeMillis`, `Clock.currentTimeNanos`, or `DateTime.now` inside Effect code. Reach for unsafe
@@ -79,7 +81,7 @@ import { Effect, Fiber, TestClock } from "effect";
 
 const runWithTime = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
-  adjust: Parameters<typeof TestClock.adjust>[0] = "1000 millis"
+  adjust: Parameters<typeof TestClock.adjust>[0] = "1000 millis",
 ) =>
   Effect.gen(function* () {
     const fiber = yield* Effect.fork(effect);
@@ -113,9 +115,11 @@ When you write a test like:
 - fork 2–3 fibers
 - then immediately `Deferred.succeed(gate, ...)`
 
-…you have **not** guaranteed that the forked fibers have reached the code you intend to coordinate (e.g. `Deferred.await(gate)`).
+…you have **not** guaranteed that the forked fibers have reached the code you intend to coordinate (e.g.
+`Deferred.await(gate)`).
 
-`Effect.fork` creates a fiber and schedules it, but the scheduler may not run it until later. If you open the gate too early:
+`Effect.fork` creates a fiber and schedules it, but the scheduler may not run it until later. If you open the gate too
+early:
 
 - each fiber can observe the gate as already-open
 - your “concurrent” test can become **effectively sequential**

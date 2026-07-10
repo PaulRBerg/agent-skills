@@ -9,24 +9,24 @@
 use `Tool.EmptyParams` when the emptiness needs to be explicit.
 
 ```typescript
-import { Tool } from "@effect/ai"
-import { Schema } from "effect"
+import { Tool } from "@effect/ai";
+import { Schema } from "effect";
 
 const GetCurrentTime = Tool.make("GetCurrentTime", {
   description: "Returns the current timestamp",
-  success: Schema.Number
-})
+  success: Schema.Number,
+});
 
 const Ping = Tool.make("Ping", {
   parameters: Tool.EmptyParams,
-  success: Schema.String
-})
+  success: Schema.String,
+});
 
 const ReadFile = Tool.make("ReadFile").setParameters({
-  filePath: Schema.String
-})
+  filePath: Schema.String,
+});
 
-const NoArgsAgain = ReadFile.setParameters(Tool.EmptyParams)
+const NoArgsAgain = ReadFile.setParameters(Tool.EmptyParams);
 ```
 
 `Tool.EmptyParams` is `Schema.Record({ key: Schema.String, value: Schema.Never })`, so generated JSON Schema should be a
@@ -37,9 +37,9 @@ closed empty object shape. Do not replace it with a loose `Record<string, unknow
 Use the built-in utility types when handlers need the decoded or encoded parameter shape:
 
 ```typescript
-type Params = Tool.Parameters<typeof ReadFile>
-type EncodedParams = Tool.ParametersEncoded<typeof ReadFile>
-type ParamsSchema = Tool.ParametersSchema<typeof ReadFile>
+type Params = Tool.Parameters<typeof ReadFile>;
+type EncodedParams = Tool.ParametersEncoded<typeof ReadFile>;
+type ParamsSchema = Tool.ParametersSchema<typeof ReadFile>;
 ```
 
 ## OpenAI Strict Mode
@@ -56,7 +56,7 @@ type ParamsSchema = Tool.ParametersSchema<typeof ReadFile>
 Use `"in_memory"` for prompt cache retention enum values. Older examples that use `"in-memory"` are stale.
 
 ```typescript
-const promptCacheRetention = "in_memory"
+const promptCacheRetention = "in_memory";
 ```
 
 ## Response Output Handling

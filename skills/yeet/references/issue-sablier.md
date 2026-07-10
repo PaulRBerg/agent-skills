@@ -1,6 +1,7 @@
 # Sablier Issue Workflow
 
-Create issues in `sablier-labs/*` repositories. Labels are always applied (user is org owner). Sablier repos don't use GitHub issue templates.
+Create issues in `sablier-labs/*` repositories. Labels are always applied (user is org owner). Sablier repos don't use
+GitHub issue templates.
 
 ## Validate Prerequisites
 
@@ -8,13 +9,16 @@ See `context.md > Auth Validation`. The label fetch below is the auth check.
 
 ## Parse Repository Argument
 
-The **first token** is the repo name (without org prefix) → `sablier-labs/{repo_name}`. Remove it from arguments; remaining text is the issue description.
+The **first token** is the repo name (without org prefix) → `sablier-labs/{repo_name}`. Remove it from arguments;
+remaining text is the issue description.
 
 Example: `lockup "Bug in cliff streams"` → `repository = sablier-labs/lockup`
 
 ## Apply Labels
 
-Sablier repos are owner-managed — labels always apply. Follow `context.md > Fetch Repo Labels` to fetch the live label set once and pick labels semantically. Scope labels (e.g., `scope: frontend`, `scope: evm`) are discovered organically from the fetched list for repos that define them — no special-case for `command-center`.
+Sablier repos are owner-managed — labels always apply. Follow `context.md > Fetch Repo Labels` to fetch the live label
+set once and pick labels semantically. Scope labels (e.g., `scope: frontend`, `scope: evm`) are discovered organically
+from the fetched list for repos that define them — no special-case for `command-center`.
 
 ## Generate Title and Body
 
@@ -46,7 +50,8 @@ Default template:
 </details>
 ```
 
-Use task lists only for genuinely trackable work and tables only for repeated comparable fields. See `writing.md > Link Formatting` for links. Omit "Files Affected" if no files are specified.
+Use task lists only for genuinely trackable work and tables only for repeated comparable fields. See
+`writing.md > Link Formatting` for links. Omit "Files Affected" if no files are specified.
 
 ## Create the Issue
 

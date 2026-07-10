@@ -1,6 +1,7 @@
 # Update Pull Request Workflow
 
-Update existing GitHub pull requests with semantic change analysis, regenerating titles and descriptions based on actual code changes.
+Update existing GitHub pull requests with semantic change analysis, regenerating titles and descriptions based on actual
+code changes.
 
 ## Validate Prerequisites
 
@@ -12,8 +13,8 @@ Same as `create-pr.md > Validate Prerequisites`, except the `gh pr view` read be
 gh pr view --json number,url,title,baseRefName 2>/dev/null
 ```
 
-IF no PR found: ERROR "No PR exists for this branch. Use `/yeet create-pr` to create one first."
-IF found: parse number, URL, title, base branch. Display: "Found PR #$number: $title"
+IF no PR found: ERROR "No PR exists for this branch. Use `/yeet create-pr` to create one first." IF found: parse number,
+URL, title, base branch. Display: "Found PR #$number: $title"
 
 ## Parse Arguments Naturally
 
@@ -32,7 +33,8 @@ Follow `writing.md > Semantic Change Analysis` with these differences:
 2. Fetch only that base branch: `git fetch origin "+refs/heads/$base_branch:refs/remotes/origin/$base_branch"`
 3. Preserve existing issue references (Closes #X, Related to #X) when regenerating
 
-If user provided additional context in args, append it naturally to the description. Write the regenerated title and body in the voice from `writing.md > Informal Tone`.
+If user provided additional context in args, append it naturally to the description. Write the regenerated title and
+body in the voice from `writing.md > Informal Tone`.
 
 ## Execute Update
 

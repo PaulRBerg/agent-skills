@@ -1,6 +1,8 @@
 # Services and Layers
 
-> When to read: pull this in when defining or composing Effect services, choosing between `Context.Tag` / `Effect.Service` / `Context.Reference` / `Context.ReadonlyTag`, or writing generator-based effects with `Effect.gen` and `Effect.fn`.
+> When to read: pull this in when defining or composing Effect services, choosing between `Context.Tag` /
+> `Effect.Service` / `Context.Reference` / `Context.ReadonlyTag`, or writing generator-based effects with `Effect.gen`
+> and `Effect.fn`.
 
 ## Services and Layers
 
@@ -52,8 +54,8 @@ authorization context.
 const handleRequest = (request: Request) =>
   program.pipe(
     Effect.provideService(CurrentUserId, extractUserId(request)),
-    Effect.provideService(RequestId, extractRequestId(request))
-  )
+    Effect.provideService(RequestId, extractRequestId(request)),
+  );
 ```
 
 Avoid constructing a Layer for one request's data. Per-request values are not application services, and wrapping them in
@@ -64,10 +66,10 @@ Avoid constructing a Layer for one request's data. Per-request values are not ap
 Choose the layer constructor by lifecycle:
 
 ```typescript
-Layer.succeed(Tag, value)     // Static pure value, common for tests and simple constants
-Layer.effect(Tag, make)       // Effectful construction without cleanup
-Layer.scoped(Tag, acquire)    // Resourceful construction with cleanup
-Layer.unwrapEffect(makeLayer) // Effectfully builds a Layer
+Layer.succeed(Tag, value); // Static pure value, common for tests and simple constants
+Layer.effect(Tag, make); // Effectful construction without cleanup
+Layer.scoped(Tag, acquire); // Resourceful construction with cleanup
+Layer.unwrapEffect(makeLayer); // Effectfully builds a Layer
 ```
 
 For live services that read dependencies, config, or allocate resources, prefer `Layer.effect` or `Layer.scoped` over
@@ -79,14 +81,11 @@ Layers are memoized by object identity. Reusing the same layer object in one com
 new layer object creates a distinct instance.
 
 ```typescript
-const Shared = Layer.effect(Client, makeClient)
+const Shared = Layer.effect(Client, makeClient);
 
-const oneClient = Layer.mergeAll(Shared, Shared)
+const oneClient = Layer.mergeAll(Shared, Shared);
 
-const twoClients = Layer.mergeAll(
-  Layer.effect(Client, makeClient),
-  Layer.effect(Client, makeClient)
-)
+const twoClients = Layer.mergeAll(Layer.effect(Client, makeClient), Layer.effect(Client, makeClient));
 ```
 
 Use `Layer.fresh(layer)` only when you need to escape memoization for the same layer reference, such as a module-level
@@ -107,8 +106,8 @@ Effect.gen(function* () {
 
 // Effect.fn - automatic tracing and telemetry (preferred for named functions)
 const fetchUser = Effect.fn("fetchUser")(function* (id: string) {
-  const db = yield* Database
-  return yield* db.query(id)
-})
+  const db = yield* Database;
+  return yield* db.query(id);
+});
 // Creates spans, captures call sites, provides better stack traces
 ```

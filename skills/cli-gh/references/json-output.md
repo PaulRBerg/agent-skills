@@ -1,8 +1,10 @@
 # JSON Output
 
-> When to read: Read when the user wants to use the `--json` flag for scriptable output, or needs to know the correct gh CLI JSON field names (which differ from GitHub API names).
+> When to read: Read when the user wants to use the `--json` flag for scriptable output, or needs to know the correct gh
+> CLI JSON field names (which differ from GitHub API names).
 
-Use `--json` flag for structured output. **Always verify field names with `--help`** as they differ from GitHub API names.
+Use `--json` flag for structured output. **Always verify field names with `--help`** as they differ from GitHub API
+names.
 
 ```bash
 # Check available JSON fields for any command

@@ -4,12 +4,15 @@ Use this format by default. Prefix the subject with a Conventional Commits-style
 
 ## Type Inference
 
-Infer the type from the dominant user-visible intent, not the largest file diff or the presence of dependency/config churn.
+Infer the type from the dominant user-visible intent, not the largest file diff or the presence of dependency/config
+churn.
 
 Choose the highest-signal behavior that explains why the commit exists:
 
-- If a dependency bump only enables a migration/refactor/fix, use the migration/refactor/fix type instead of `chore(deps)`.
-- If tooling/scripts/config changes keep existing behavior working after a code migration, use the same type as the migration.
+- If a dependency bump only enables a migration/refactor/fix, use the migration/refactor/fix type instead of
+  `chore(deps)`.
+- If tooling/scripts/config changes keep existing behavior working after a code migration, use the same type as the
+  migration.
 - Use `chore` only for maintenance that does not fit a more specific behavioral category.
 - Use `chore(deps)` only for dependency-only updates or dependency updates whose main purpose is routine maintenance.
 
@@ -34,7 +37,8 @@ Explicit type keyword in arguments takes precedence over inference.
 
 ## Scope
 
-Infer scope when the path or code structure makes it clear; code structure can justify a scope even when the path alone is unclear. Keep scope lowercase.
+Infer scope when the path or code structure makes it clear; code structure can justify a scope even when the path alone
+is unclear. Keep scope lowercase.
 
 ## Subject
 

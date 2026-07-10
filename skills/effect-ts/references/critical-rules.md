@@ -71,15 +71,12 @@ Do not model expected failures as `Error` in `Effect.Effect<A, Error, R>`. It er
 
 ```typescript
 // Avoid
-Effect.fail(new Error("User not found"))
+Effect.fail(new Error("User not found"));
 
 // Prefer for domain/API errors
-class UserNotFound extends Schema.TaggedError<UserNotFound>()(
-  "UserNotFound",
-  { userId: UserId }
-) {}
+class UserNotFound extends Schema.TaggedError<UserNotFound>()("UserNotFound", { userId: UserId }) {}
 
-Effect.fail(new UserNotFound({ userId }))
+Effect.fail(new UserNotFound({ userId }));
 ```
 
 Use `Data.TaggedError` for internal errors that do not need Schema decoding, encoding, annotations, or HTTP/OpenAPI
@@ -91,18 +88,10 @@ integration.
 
 ```typescript
 // Avoid: catches defects too
-effect.pipe(
-  Effect.catchAllCause((cause) =>
-    Effect.fail(new RepositoryError({ cause }))
-  )
-)
+effect.pipe(Effect.catchAllCause((cause) => Effect.fail(new RepositoryError({ cause }))));
 
 // Prefer: transform only expected errors
-effect.pipe(
-  Effect.mapError((error) =>
-    new RepositoryError({ cause: error })
-  )
-)
+effect.pipe(Effect.mapError((error) => new RepositoryError({ cause: error })));
 ```
 
 Reach for `catchAllCause` only when you intentionally need full cause inspection at a runtime/reporting boundary.
@@ -114,14 +103,10 @@ security checks, and notification guarantees should not quietly become `Effect.v
 
 ```typescript
 // Avoid for important side effects
-yield* audit.log(entry).pipe(
-  Effect.catchTag("AuditLogError", () => Effect.void)
-)
+yield * audit.log(entry).pipe(Effect.catchTag("AuditLogError", () => Effect.void));
 
 // Prefer: propagate or map the error
-yield* audit.log(entry).pipe(
-  Effect.mapError((error) => new CreateUserError({ cause: error }))
-)
+yield * audit.log(entry).pipe(Effect.mapError((error) => new CreateUserError({ cause: error })));
 ```
 
 Fallback values are fine for optional queries; swallowing side-effect failures is not.
@@ -133,10 +118,10 @@ them "Effect-shaped".
 
 ```typescript
 // Avoid
-const names = Effect.try(() => users.map((user) => user.name))
+const names = Effect.try(() => users.map((user) => user.name));
 
 // Prefer
-const names = users.map((user) => user.name)
+const names = users.map((user) => user.name);
 ```
 
 Use `Effect.sync` for synchronous effects with observable side effects, and `Effect.try` only for code that can throw.

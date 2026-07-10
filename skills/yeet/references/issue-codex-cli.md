@@ -4,7 +4,8 @@ Create issues in the `openai/codex` repository using the appropriate variant tem
 
 ## Repo Isolation
 
-This workflow targets **`openai/codex`** exclusively. Every `gh` command must use `--repo "openai/codex"`. Do not infer from working directory.
+This workflow targets **`openai/codex`** exclusively. Every `gh` command must use `--repo "openai/codex"`. Do not infer
+from working directory.
 
 File links: `[{path}](https://github.com/openai/codex/blob/main/{path})`
 
@@ -14,13 +15,16 @@ See `context.md > Auth Validation`. The repository context read below is the aut
 
 ## Template Drift Check
 
-Before generating the issue body, verify the template specs in this file still match the upstream `.github/ISSUE_TEMPLATE` files. GitHub form templates change over time and silent drift produces issues with wrong section headers, missing fields, or invalid dropdown values.
+Before generating the issue body, verify the template specs in this file still match the upstream
+`.github/ISSUE_TEMPLATE` files. GitHub form templates change over time and silent drift produces issues with wrong
+section headers, missing fields, or invalid dropdown values.
 
 ```bash
 {skill-dir}/scripts/yeet-context.sh repo openai/codex --issue-templates
 ```
 
-Use `repository.viewerPermission` for label capability. Compare `repository.issueTemplateTree.entries` names and SHAs against the known-good SHAs (last verified 2026-06-17):
+Use `repository.viewerPermission` for label capability. Compare `repository.issueTemplateTree.entries` names and SHAs
+against the known-good SHAs (last verified 2026-06-17):
 
 | File                    | SHA                                        |
 | ----------------------- | ------------------------------------------ |
@@ -39,11 +43,16 @@ Use `repository.viewerPermission` for label capability. Compare `repository.issu
    gh api repos/openai/codex/contents/.github/ISSUE_TEMPLATE/{file}.yml --jq '.content' | base64 -d
    ```
 
-2. Diff against this routing file and the matching `references/templates/codex/` template reference (field labels, dropdown options, required fields, auto-applied labels).
+2. Diff against this routing file and the matching `references/templates/codex/` template reference (field labels,
+   dropdown options, required fields, auto-applied labels).
 
 3. Tell the user:
 
-   > ⚠️ Codex's issue templates have drifted from the spec in this skill (e.g., `3-cli.yml` SHA `<old>` → `<new>`). Please update the `yeet` skill in [`PaulRBerg/agent-skills`](https://github.com/PaulRBerg/agent-skills) — specifically `skills/yeet/references/issue-codex-cli.md` and the matching file under `skills/yeet/references/templates/codex/` — and refresh the SHA table. Continue filing this issue using the closest matching fields, but flag any new required fields you couldn't fill.
+   > ⚠️ Codex's issue templates have drifted from the spec in this skill (e.g., `3-cli.yml` SHA `<old>` → `<new>`).
+   > Please update the `yeet` skill in [`PaulRBerg/agent-skills`](https://github.com/PaulRBerg/agent-skills) —
+   > specifically `skills/yeet/references/issue-codex-cli.md` and the matching file under
+   > `skills/yeet/references/templates/codex/` — and refresh the SHA table. Continue filing this issue using the closest
+   > matching fields, but flag any new required fields you couldn't fill.
 
 4. Proceed with best-effort body generation using the fields the user can still fill from the new template.
 
@@ -72,18 +81,21 @@ Heuristics:
 
 **If ambiguous**: Use AskUserQuestion with the surface options above.
 
-Labels listed above are template metadata. Direct `gh issue create --body` creation does not apply YAML issue-form labels; omit `--label` unless cached `repository.viewerPermission` returns `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`.
+Labels listed above are template metadata. Direct `gh issue create --body` creation does not apply YAML issue-form
+labels; omit `--label` unless cached `repository.viewerPermission` returns `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`.
 
 ## Title
 
-Plain, concise (5-10 words). **Do not** add `[BUG]`, `[FEATURE]`, or any other prefix — label metadata lives in the templates and current issues in the repo do not use prefixes.
+Plain, concise (5-10 words). **Do not** add `[BUG]`, `[FEATURE]`, or any other prefix — label metadata lives in the
+templates and current issues in the repo do not use prefixes.
 
-Good: `CLI hangs when piping large stdin`, `Add support for custom system prompts`
-Bad: `[BUG] CLI hangs ...`, `[FEATURE] Add support ...`
+Good: `CLI hangs when piping large stdin`, `Add support for custom system prompts` Bad: `[BUG] CLI hangs ...`,
+`[FEATURE] Add support ...`
 
 ## Generate Issue Body
 
-Each template renders an H3 heading per field. Match the labels exactly so GitHub maps the body back to the form. Required fields must be non-empty; optional fields may be omitted entirely or filled with "None".
+Each template renders an H3 heading per field. Match the labels exactly so GitHub maps the body back to the form.
+Required fields must be non-empty; optional fields may be omitted entirely or filled with "None".
 
 After selecting the issue type, load exactly one template reference:
 
@@ -108,7 +120,8 @@ EOF
 )"
 ```
 
-Direct CLI creation with `--body` does not apply YAML issue-form labels. Do not pass `--label` on the external repo unless cached `repository.viewerPermission` says labels are allowed.
+Direct CLI creation with `--body` does not apply YAML issue-form labels. Do not pass `--label` on the external repo
+unless cached `repository.viewerPermission` says labels are allowed.
 
 Display: "Created: $URL"
 
@@ -119,10 +132,13 @@ See `posting.md > Comment on Existing Issue`, using repo `"openai/codex"`.
 ## Environment Detection
 
 - **Codex CLI version**: `codex --version 2>/dev/null || echo "unknown"`
-- **Codex doctor report**: `codex doctor --json 2>/dev/null || echo "not available"` — include for CLI bugs when supported; review/redact before posting.
-- **Platform**: See `context.md > Platform String Normalization`; use `scripts/get-macos-version.sh` for macOS instead of raw `uname` output.
+- **Codex doctor report**: `codex doctor --json 2>/dev/null || echo "not available"` — include for CLI bugs when
+  supported; review/redact before posting.
+- **Platform**: See `context.md > Platform String Normalization`; use `scripts/get-macos-version.sh` for macOS instead
+  of raw `uname` output.
 - **IDE** (extension issues): Ask user or infer from context.
-- **Terminal** (CLI issues): Ask user — cannot be reliably auto-detected from inside an agent shell. `$TERM_PROGRAM` is a hint but not authoritative.
+- **Terminal** (CLI issues): Ask user — cannot be reliably auto-detected from inside an agent shell. `$TERM_PROGRAM` is
+  a hint but not authoritative.
 - **Codex App version**: From the in-app "About Codex" dialog. Ask the user; do not guess.
 
 ## Examples

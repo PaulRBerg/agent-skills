@@ -2,7 +2,8 @@
 
 ## Overview
 
-**tailwind-variants** provides a first-class variant API for composable, type-safe component styling with automatic Tailwind class conflict resolution.
+**tailwind-variants** provides a first-class variant API for composable, type-safe component styling with automatic
+Tailwind class conflict resolution.
 
 **Key Benefits:**
 
@@ -267,9 +268,7 @@ Make specific variants required:
 ```typescript
 type ButtonVariants = VariantProps<typeof button>;
 
-interface ButtonProps
-  extends Omit<ButtonVariants, "size">,
-    Required<Pick<ButtonVariants, "size">> {
+interface ButtonProps extends Omit<ButtonVariants, "size">, Required<Pick<ButtonVariants, "size">> {
   children: React.ReactNode;
 }
 ```
@@ -301,7 +300,7 @@ const button = tv(
   {
     twMerge: true, // Enable tailwind-merge
     twMergeConfig: {}, // Custom tailwind-merge config
-  }
+  },
 );
 ```
 
@@ -398,15 +397,15 @@ const input = tv({
 
 ## Best Practices
 
-01. **Use `extend` for composition** - Provides type safety and automatic config merging
-02. **Leverage compound variants** - Handle complex conditional styling declaratively
-03. **Use slots for multi-part components** - Enables granular control
-04. **Define default variants** - Reduces repetition in usage
-05. **Use boolean variants for states** - Clean API for conditional states
-06. **Keep original build unless bundle size critical** - Automatic conflict resolution prevents bugs
-07. **Use `VariantProps` for TypeScript** - Extract types automatically
-08. **Use `as const` for external definitions** - Ensures proper type inference
-09. **Apply responsive prefixes in variants** - Leverage Tailwind's responsive utilities
+1.  **Use `extend` for composition** - Provides type safety and automatic config merging
+2.  **Leverage compound variants** - Handle complex conditional styling declaratively
+3.  **Use slots for multi-part components** - Enables granular control
+4.  **Define default variants** - Reduces repetition in usage
+5.  **Use boolean variants for states** - Clean API for conditional states
+6.  **Keep original build unless bundle size critical** - Automatic conflict resolution prevents bugs
+7.  **Use `VariantProps` for TypeScript** - Extract types automatically
+8.  **Use `as const` for external definitions** - Ensures proper type inference
+9.  **Apply responsive prefixes in variants** - Leverage Tailwind's responsive utilities
 10. **Reuse `tv()` instances** - Define once, use multiple times
 
 ## API Reference

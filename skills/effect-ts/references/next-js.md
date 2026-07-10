@@ -1,7 +1,7 @@
 # Effect + Next.js Integration
 
-> When to read: pull this in when using `@prb/effect-next`, Next.js App Router handlers/actions/middleware, request-scoped
-> runtime caches, Effect React hooks, or the `@prb/effect-next` testing kit.
+> When to read: pull this in when using `@prb/effect-next`, Next.js App Router handlers/actions/middleware,
+> request-scoped runtime caches, Effect React hooks, or the `@prb/effect-next` testing kit.
 
 `@prb/effect-next` provides typed helpers for integrating Effect with Next.js 15+ App Router—route handlers, server
 actions, middleware, and React hooks.
@@ -22,7 +22,7 @@ export const GET = effectHandler(
     const user = yield* fetchUser(params.id);
     return Response.json(user);
   }),
-  AppLayer
+  AppLayer,
 );
 ```
 
@@ -38,7 +38,7 @@ export const createUser = effectAction(
     const db = yield* Database;
     return yield* db.insert(users).values({ name: "Alice" });
   }),
-  AppLayer
+  AppLayer,
 );
 
 // Returns Exit-like result with _tag: "Success" | "Failure"
@@ -63,7 +63,7 @@ const AuthLayer = Layer.effect(
     const token = headers.get("authorization");
     if (!token) yield* Effect.fail({ _tag: "Unauthorized" });
     return { validateToken: () => Effect.succeed(true) };
-  })
+  }),
 );
 
 export const middleware = effectMiddleware(
@@ -71,7 +71,7 @@ export const middleware = effectMiddleware(
     yield* AuthService;
     return NextResponse.next();
   }),
-  AuthLayer
+  AuthLayer,
 );
 ```
 
@@ -131,23 +131,24 @@ export const getUsers = reactCache(
     const db = yield* Database;
     return yield* db.query("SELECT * FROM users");
   }),
-  runtime
+  runtime,
 );
 
 // Cache a function with arguments
-export const getUserById = reactCacheFn((id: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    return yield* db.query(`SELECT * FROM users WHERE id = ${id}`);
-  }),
-  runtime
+export const getUserById = reactCacheFn(
+  (id: string) =>
+    Effect.gen(function* () {
+      const db = yield* Database;
+      return yield* db.query(`SELECT * FROM users WHERE id = ${id}`);
+    }),
+  runtime,
 );
 
 // Cache with custom key
 export const getUser = reactCacheWithKey(
   (opts) => fetchUserEffect(opts),
   (opts) => `user:${opts.id}`,
-  runtime
+  runtime,
 );
 ```
 
@@ -201,7 +202,7 @@ import {
   expectDefect,
   runExpectSuccess,
   runExpectFailure,
-  makeMockRuntime
+  makeMockRuntime,
 } from "@prb/effect-next/testing-kit";
 
 // Assert success

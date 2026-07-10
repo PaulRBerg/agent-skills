@@ -5,7 +5,8 @@ Load when the diff touches trust boundaries.
 ## Checks
 
 - `SEC-001` Injection sink (`CRITICAL`): SQL/shell/template/path input reaches execution without safe binding.
-- `SEC-002` Broken auth/authz (`CRITICAL`): missing ownership checks, privilege escalation paths, or trust on client-only checks.
+- `SEC-002` Broken auth/authz (`CRITICAL`): missing ownership checks, privilege escalation paths, or trust on
+  client-only checks.
 - `SEC-003` Secret exposure (`HIGH`): credentials in source, logs, artifacts, or client bundles.
 - `SEC-004` Unsafe execution/parsing (`CRITICAL`): `eval`/unsafe deserialization/untrusted code execution.
 - `SEC-005` Session/token weakness (`HIGH`): missing validation/rotation/expiry constraints.

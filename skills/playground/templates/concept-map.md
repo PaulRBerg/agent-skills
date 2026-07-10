@@ -1,6 +1,7 @@
 # Concept Map Template
 
-Use this template when the playground is about learning, exploration, or mapping relationships: concept maps, knowledge gap identification, scope mapping, task decomposition with dependencies.
+Use this template when the playground is about learning, exploration, or mapping relationships: concept maps, knowledge
+gap identification, scope mapping, task decomposition with dependencies.
 
 ## Layout
 
@@ -18,7 +19,8 @@ Use this template when the playground is about learning, exploration, or mapping
 +-------------------------+------------+
 ```
 
-Canvas-based playgrounds differ from the two-panel split. The interactive visual IS the control — users drag nodes and draw connections rather than adjusting sliders. The sidebar supplements with toggles and list controls.
+Canvas-based playgrounds differ from the two-panel split. The interactive visual IS the control — users drag nodes and
+draw connections rather than adjusting sliders. The sidebar supplements with toggles and list controls.
 
 ## Control types for concept maps
 
@@ -38,13 +40,14 @@ Use a `<canvas>` element with manual draw calls. Key patterns:
 - **Drag:** On mousedown on a node, track offset and update position on mousemove
 - **Edge drawing:** Click node A, then click node B. Draw arrow between them with the selected relationship type
 - **Tooltips:** On hover, position a div absolutely over the canvas with description text
-- **Force-directed auto-layout:** Simple spring simulation — repulsion between all pairs, attraction along edges, iterate 100-200 times with damping
+- **Force-directed auto-layout:** Simple spring simulation — repulsion between all pairs, attraction along edges,
+  iterate 100-200 times with damping
 
 ```javascript
 function draw() {
   ctx.clearRect(0, 0, W, H);
-  edges.forEach(e => drawEdge(e));  // edges first, under nodes
-  nodes.forEach(n => drawNode(n));  // nodes on top
+  edges.forEach((e) => drawEdge(e)); // edges first, under nodes
+  nodes.forEach((n) => drawNode(n)); // nodes on top
 }
 ```
 
@@ -52,7 +55,10 @@ function draw() {
 
 The prompt should be a targeted learning request shaped by the user's knowledge markings:
 
-> "I'm learning [CODEBASE/DOMAIN]. I already understand: [know nodes]. I'm fuzzy on: [fuzzy nodes]. I have no idea about: [unknown nodes]. Here are the relationships I want to understand: [edge list in natural language]. Please explain the fuzzy and unknown concepts, focusing on these relationships. Build on what I already know. Use concrete code references."
+> "I'm learning [CODEBASE/DOMAIN]. I already understand: [know nodes]. I'm fuzzy on: [fuzzy nodes]. I have no idea
+> about: [unknown nodes]. Here are the relationships I want to understand: [edge list in natural language]. Please
+> explain the fuzzy and unknown concepts, focusing on these relationships. Build on what I already know. Use concrete
+> code references."
 
 Only include edges the user drew. Only mention concepts they marked as fuzzy or unknown in the explanation request.
 

@@ -1,6 +1,8 @@
 # Advanced Features
 
-> When to read: Read when the user needs aliases, direct API access, extensions, secrets/variables, SSH/GPG keys, organization or project management, repository rulesets, attestations, Copilot Agent Tasks, `gh skill` management, reading repo file/directory contents without cloning, or issue types/sub-issues/blocking relationships.
+> When to read: Read when the user needs aliases, direct API access, extensions, secrets/variables, SSH/GPG keys,
+> organization or project management, repository rulesets, attestations, Copilot Agent Tasks, `gh skill` management,
+> reading repo file/directory contents without cloning, or issue types/sub-issues/blocking relationships.
 
 Advanced gh CLI capabilities for power users and automation.
 
@@ -179,7 +181,8 @@ gh issue edit 123 --remove-blocked-by 200 --remove-blocking 301
 
 ## Copilot Agent Tasks
 
-Delegate work to the Copilot coding agent and track its sessions. The `gh agent-task` command set (aliases `gh agent`, `gh agents`) is in preview.
+Delegate work to the Copilot coding agent and track its sessions. The `gh agent-task` command set (aliases `gh agent`,
+`gh agents`) is in preview.
 
 ```bash
 # Create an agent task on the current repository
@@ -196,7 +199,8 @@ gh agent-task view <session-id> --json state --jq '.state'
 
 ## Agent Skills
 
-Discover, install, and publish agent skills from GitHub repositories. The `gh skill` command set (alias `gh skills`) is in preview.
+Discover, install, and publish agent skills from GitHub repositories. The `gh skill` command set (alias `gh skills`) is
+in preview.
 
 ```bash
 # Search for skills across GitHub
@@ -222,7 +226,8 @@ gh skill publish --dry-run
 
 ## Reading Repository Contents
 
-Read files and directories without cloning. The `gh repo read-file` and `gh repo read-dir` commands are in preview and subject to change.
+Read files and directories without cloning. The `gh repo read-file` and `gh repo read-dir` commands are in preview and
+subject to change.
 
 ```bash
 # Read a file from the default branch (paged in a TTY, raw when piped)

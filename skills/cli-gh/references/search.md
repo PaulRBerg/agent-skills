@@ -1,6 +1,7 @@
 # Search
 
-> When to read: Read when the user asks to search GitHub repositories, issues, or pull requests using the `gh search` family of commands.
+> When to read: Read when the user asks to search GitHub repositories, issues, or pull requests using the `gh search`
+> family of commands.
 
 Search across all of GitHub for repositories, issues, and pull requests.
 
@@ -36,7 +37,8 @@ gh search issues "panic" --repo cli/cli --state=open
 gh issue list --repo cli/cli --search "is:open label:bug sort:created-desc"
 ```
 
-`gh search issues` hits GitHub's search index (cross-repo, relevance-ranked, ~1000-result cap). `gh issue list --search` lists one repo's issues with the same `is:`/`label:`/`sort:` qualifiers and honors `--limit`.
+`gh search issues` hits GitHub's search index (cross-repo, relevance-ranked, ~1000-result cap). `gh issue list --search`
+lists one repo's issues with the same `is:`/`label:`/`sort:` qualifiers and honors `--limit`.
 
 ## Search Pull Requests
 

@@ -1,12 +1,14 @@
 # Coding Preferences
 
-> When to read: when writing or fixing Tailwind utility class usage, layout, spacing, typography, color, border, gradient, arbitrary value, class-merging, image-sizing, z-index, or dark-mode patterns.
+> When to read: when writing or fixing Tailwind utility class usage, layout, spacing, typography, color, border,
+> gradient, arbitrary value, class-merging, image-sizing, z-index, or dark-mode patterns.
 
 ## Layout and Spacing
 
 **Use `gap` for flex/grid spacing, not `space-x`/`space-y`:**
 
-The `gap` utilities handle wrapping correctly, while `space-*` utilities break when flex/grid items wrap to multiple lines.
+The `gap` utilities handle wrapping correctly, while `space-*` utilities break when flex/grid items wrap to multiple
+lines.
 
 ```typescript
 // ✅ Good: gap handles wrapping
@@ -28,7 +30,8 @@ The `gap` utilities handle wrapping correctly, while `space-*` utilities break w
 
 **Always use `min-h-dvh` instead of `min-h-screen`:**
 
-Dynamic viewport height (`dvh`) accounts for mobile browser chrome, while `vh` units ignore it and cause layout issues on mobile Safari.
+Dynamic viewport height (`dvh`) accounts for mobile browser chrome, while `vh` units ignore it and cause layout issues
+on mobile Safari.
 
 ```typescript
 // ✅ Good: works on mobile Safari
@@ -183,7 +186,8 @@ Check the project's `@theme` configuration for available tokens before using arb
 <div className="ml-[16px]">
 ```
 
-**General rule:** Prefer sizing scale over pixel values. Three similar lines of code is better than a premature abstraction.
+**General rule:** Prefer sizing scale over pixel values. Three similar lines of code is better than a premature
+abstraction.
 
 ## Class Merging
 

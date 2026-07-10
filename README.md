@@ -1,9 +1,11 @@
 # Agent Skills
 
-PRB's collection of AI agent skills. Designed to work across agents, but primarily built for [Claude Code](https://claude.com/product/claude-code) and [Codex](https://github.com/openai/codex).
+PRB's collection of AI agent skills. Designed to work across agents, but primarily built for
+[Claude Code](https://claude.com/product/claude-code) and [Codex](https://github.com/openai/codex).
 
-> [!WARNING]
-> This catalog intentionally reflects Paul's preferred tools, defaults, safety boundaries, and writing voice; it is not a neutral template. If you install it, review every workflow and customize it for your stack and agents. No warranties, guarantees, or support are provided — use at your own risk.
+> [!WARNING] This catalog intentionally reflects Paul's preferred tools, defaults, safety boundaries, and writing voice;
+> it is not a neutral template. If you install it, review every workflow and customize it for your stack and agents. No
+> warranties, guarantees, or support are provided — use at your own risk.
 
 ## Installation
 
@@ -53,7 +55,8 @@ bunx skills add PaulRBerg/agent-skills
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | playground | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
 
-Some mechanical skills pin `model: sonnet` in their frontmatter so they do not spend a more capable inherited model where deterministic tooling already carries the workflow.
+Some mechanical skills pin `model: sonnet` in their frontmatter so they do not spend a more capable inherited model
+where deterministic tooling already carries the workflow.
 
 ## References
 

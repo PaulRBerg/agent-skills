@@ -5,11 +5,13 @@ Use these headings and dropdown values exactly for `anthropics/claude-code` issu
 ```markdown
 ### Documentation Type
 
-{one of: Missing documentation (feature not documented) | Unclear/confusing documentation | Incorrect/outdated documentation | Typo or formatting issue | Missing code examples | Broken links | Other}
+{one of: Missing documentation (feature not documented) | Unclear/confusing documentation | Incorrect/outdated
+documentation | Typo or formatting issue | Missing code examples | Broken links | Other}
 
 ### Documentation Location
 
-{URL where you encountered this issue, e.g., https://docs.anthropic.com/en/docs/claude-code/... — omit section if unknown}
+{URL where you encountered this issue, e.g., https://docs.anthropic.com/en/docs/claude-code/... — omit section if
+unknown}
 
 ### Section/Topic
 
@@ -29,7 +31,8 @@ Use these headings and dropdown values exactly for `anthropics/claude-code` issu
 
 ### Impact
 
-{one of: High - Prevents users from using a feature | Medium - Makes feature difficult to understand | Low - Minor confusion or inconvenience}
+{one of: High - Prevents users from using a feature | Medium - Makes feature difficult to understand | Low - Minor
+confusion or inconvenience}
 
 ### Additional Context
 

@@ -16,11 +16,11 @@ workarounds.
 `@effect/rpc@0.75.1` adds configurable msgpack serialization:
 
 ```typescript
-import { RpcSerialization } from "@effect/rpc"
+import { RpcSerialization } from "@effect/rpc";
 
 const serialization = RpcSerialization.makeMsgPack({
-  useRecords: true
-})
+  useRecords: true,
+});
 ```
 
 The default `RpcSerialization.msgPack` is equivalent to `makeMsgPack({ useRecords: true })`.

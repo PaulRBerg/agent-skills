@@ -1,6 +1,7 @@
 # Labels
 
-> When to read: Read when the user asks to list, create, edit, delete, or clone repository labels for issue and PR organization.
+> When to read: Read when the user asks to list, create, edit, delete, or clone repository labels for issue and PR
+> organization.
 
 Manage repository labels for issue and PR organization.
 
@@ -34,7 +35,8 @@ Label deletion is destructive. It removes the label from the repository and from
 
 Before deleting labels:
 
-1. Present a deletion plan with the target repository, exact label names, exact `gh label delete` commands, and the consequence above.
+1. Present a deletion plan with the target repository, exact label names, exact `gh label delete` commands, and the
+   consequence above.
 2. Wait for the user to explicitly approve that plan in a subsequent message.
 3. Run only the approved commands. If anything changes, present a revised plan and wait for approval again.
 

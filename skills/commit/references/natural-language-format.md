@@ -1,10 +1,14 @@
 # Natural Language Format
 
-Use this format only when `--natural` is present. Write a human-readable commit subject in the spirit of Common Changelog entries: present-tense, imperative, impact-focused, and self-describing. Do not add a Conventional Commits prefix.
+Use this format only when `--natural` is present. Write a human-readable commit subject in the spirit of Common
+Changelog entries: present-tense, imperative, impact-focused, and self-describing. Do not add a Conventional Commits
+prefix.
 
 ## Verb Selection
 
-Choose the leading verb from the dominant user-visible intent, not the largest file diff or the presence of dependency/config churn. Common Changelog's core wording is useful, but do not stop at `Change`, `Add`, `Remove`, and `Fix` when a sharper verb exists.
+Choose the leading verb from the dominant user-visible intent, not the largest file diff or the presence of
+dependency/config churn. Common Changelog's core wording is useful, but do not stop at `Change`, `Add`, `Remove`, and
+`Fix` when a sharper verb exists.
 
 | Behavior                                            | Leading verb          |
 | --------------------------------------------------- | --------------------- |
@@ -27,11 +31,13 @@ Choose the leading verb from the dominant user-visible intent, not the largest f
 | AI config (CLAUDE.md, .claude/, .gemini/, .codex/)  | `Update`              |
 | Other maintenance                                   | `Update`              |
 
-Use `Change` only for a meaningful behavior/API change. For maintenance, prefer a more precise verb such as `Configure`, `Bump`, `Document`, or `Refactor`.
+Use `Change` only for a meaningful behavior/API change. For maintenance, prefer a more precise verb such as `Configure`,
+`Bump`, `Document`, or `Refactor`.
 
 If a dependency bump only enables a migration/refactor/fix, choose the migration/refactor/fix verb instead of `Bump`.
 
-Explicit leading verb/category keywords in arguments take precedence over inference. Normalize lowercase keywords and `Changed`, `Added`, `Removed`, and `Fixed` to the table's imperative forms.
+Explicit leading verb/category keywords in arguments take precedence over inference. Normalize lowercase keywords and
+`Changed`, `Added`, `Removed`, and `Fixed` to the table's imperative forms.
 
 ## Subject
 

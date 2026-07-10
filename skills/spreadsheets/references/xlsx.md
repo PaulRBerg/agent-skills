@@ -1,12 +1,17 @@
 # Excel (.xlsx) Workflows
 
-Contents: [Choose the Path](#choose-the-path) · [Read](#read) · [Create](#create) · [Edit](#edit) · [Formulas](#formulas) · [Recalculate](#recalculate) · [Convert](#convert) · [Formatting Defaults](#formatting-defaults) · [Pitfalls](#pitfalls)
+Contents: [Choose the Path](#choose-the-path) · [Read](#read) · [Create](#create) · [Edit](#edit) ·
+[Formulas](#formulas) · [Recalculate](#recalculate) · [Convert](#convert) · [Formatting Defaults](#formatting-defaults)
+· [Pitfalls](#pitfalls)
 
 ## Choose the Path
 
-- **Values only** (analyze, extract, convert): use `qsv excel` for fast export/metadata, DuckDB for SQL over `.xlsx`, or `fastexcel` when Python/Polars/Arrow is truly needed. Prefer converting to TSV early and doing the real work there.
-- **New workbook deliverable** (formulas, styling, tables, charts): build with XlsxWriter, then run the mandatory recalculation loop.
-- **Existing workbook edit** (preserve sheets, formulas, macros where possible): use openpyxl surgically, then run the recalculation loop.
+- **Values only** (analyze, extract, convert): use `qsv excel` for fast export/metadata, DuckDB for SQL over `.xlsx`, or
+  `fastexcel` when Python/Polars/Arrow is truly needed. Prefer converting to TSV early and doing the real work there.
+- **New workbook deliverable** (formulas, styling, tables, charts): build with XlsxWriter, then run the mandatory
+  recalculation loop.
+- **Existing workbook edit** (preserve sheets, formulas, macros where possible): use openpyxl surgically, then run the
+  recalculation loop.
 
 ## Read
 
@@ -47,10 +52,12 @@ for ws in wb.worksheets:
     print(ws.title, ws.max_row, ws.max_column)
 ```
 
-- `data_only=True` returns the values cached by the last application that saved the file. A workbook freshly written by openpyxl has no cache — formula cells read as `None` until recalculated.
+- `data_only=True` returns the values cached by the last application that saved the file. A workbook freshly written by
+  openpyxl has no cache — formula cells read as `None` until recalculated.
 - Never save a workbook loaded with `data_only=True`: formulas are silently replaced by values, permanently.
 - Large values-only reads should not default to openpyxl; prefer `qsv excel`, DuckDB, or fastexcel.
-- Bulk multi-sheet dump when pandas is genuinely convenient: `uv run --with pandas python -c "..."` with `pd.read_excel(path, sheet_name=None, dtype=str)` — `dtype=str` is non-negotiable for amount columns.
+- Bulk multi-sheet dump when pandas is genuinely convenient: `uv run --with pandas python -c "..."` with
+  `pd.read_excel(path, sheet_name=None, dtype=str)` — `dtype=str` is non-negotiable for amount columns.
 
 ## Create
 
@@ -101,7 +108,8 @@ wb.save("book.xlsx")
 
 ## Formulas
 
-A spreadsheet must stay recalculable: when source cells change, derived cells must follow. Write formulas, not constants computed in Python.
+A spreadsheet must stay recalculable: when source cells change, derived cells must follow. Write formulas, not constants
+computed in Python.
 
 ```python
 ws["D10"] = "=SUM(D2:D9)"                        # not the Python-side sum
@@ -111,18 +119,22 @@ ws["B2"] = "=Inputs!B2*(1+Inputs!B3)"            # assumptions live in cells, no
 
 - Put assumptions (rates, fees, multipliers) in dedicated cells and reference them; no magic numbers inside formulas.
 - Guard divisions: `=IF(C2=0, 0, B2/C2)`.
-- Mind the offset: with one header row, list/DataFrame row `N` lands on worksheet row `N + 2`. Verify two or three references against the actual data before filling a whole column.
+- Mind the offset: with one header row, list/DataFrame row `N` lands on worksheet row `N + 2`. Verify two or three
+  references against the actual data before filling a whole column.
 - Cross-sheet references quote names containing spaces: `='FX Rates'!B2`.
 
 ## Recalculate
 
-Python libraries write formula strings without computing them; errors only become visible after a real engine recalculates. Always finish with:
+Python libraries write formula strings without computing them; errors only become visible after a real engine
+recalculates. Always finish with:
 
 ```sh
 uv run scripts/recalc.py book.xlsx [timeout-seconds]   # exits nonzero unless status is success
 ```
 
-The script resolves LibreOffice (`soffice` on `PATH`, else the macOS app bundle under `/Applications` or `~/Applications`), uses an isolated temporary LibreOffice profile, recalculates and saves the workbook in place, then audits every cell and prints JSON:
+The script resolves LibreOffice (`soffice` on `PATH`, else the macOS app bundle under `/Applications` or
+`~/Applications`), uses an isolated temporary LibreOffice profile, recalculates and saves the workbook in place, then
+audits every cell and prints JSON:
 
 ```json
 {
@@ -137,9 +149,12 @@ The script resolves LibreOffice (`soffice` on `PATH`, else the macOS app bundle 
 Loop until `status` is `success`: fix the listed cells, rerun. Statuses:
 
 - `success` — deliverable.
-- `errors_found` — exits `1`; fix and rerun. Typical causes: `#REF!` broken references after inserting/deleting rows or columns; `#DIV/0!` unguarded division; `#VALUE!` text where a number is expected; `#NAME?` misspelled function or unquoted sheet name.
+- `errors_found` — exits `1`; fix and rerun. Typical causes: `#REF!` broken references after inserting/deleting rows or
+  columns; `#DIV/0!` unguarded division; `#VALUE!` text where a number is expected; `#NAME?` misspelled function or
+  unquoted sheet name.
 - `recalc_incomplete` — exits `1`; LibreOffice did not write cached values.
-- `error` — exits `1`; the JSON `hint` says what to do (e.g. `brew install --cask libreoffice` when LibreOffice is missing).
+- `error` — exits `1`; the JSON `hint` says what to do (e.g. `brew install --cask libreoffice` when LibreOffice is
+  missing).
 
 Use `--soft` only when automation must capture a non-success report without failing the shell command.
 
@@ -156,9 +171,11 @@ duckdb -c "COPY (FROM read_xlsx('book.xlsx', sheet = 'Trades', all_varchar = tru
 duckdb -c "INSTALL excel; LOAD excel; COPY (FROM read_csv('data.tsv', delim = '\t', header = true, all_varchar = true)) TO 'data.xlsx' (FORMAT xlsx, HEADER true)"
 ```
 
-`read_xlsx` autoloads DuckDB's excel extension; `COPY ... (FORMAT xlsx)` does not — keep the `INSTALL excel; LOAD excel;` prefix.
+`read_xlsx` autoloads DuckDB's excel extension; `COPY ... (FORMAT xlsx)` does not — keep the
+`INSTALL excel; LOAD excel;` prefix.
 
-`all_varchar` keeps amounts as text on both sides — the precision rule survives conversion. Type the columns only when explicitly asked.
+`all_varchar` keeps amounts as text on both sides — the precision rule survives conversion. Type the columns only when
+explicitly asked.
 
 After any `.xlsx` to TSV export, validate the TSV before using or delivering it:
 
@@ -166,23 +183,32 @@ After any `.xlsx` to TSV export, validate the TSV before using or delivering it:
 uv run ~/.agents/skills/spreadsheets/scripts/peek.py book.tsv --strict
 ```
 
-When replacing an existing TSV export and the sheet shape should not change, save a before-report first and finish with `--expect-like`.
+When replacing an existing TSV export and the sheet shape should not change, save a before-report first and finish with
+`--expect-like`.
 
 ## Formatting Defaults
 
 For new workbooks; conventions in an existing template always win.
 
 - One font family for the whole workbook (Calibri or Arial); bold header row; freeze it (`ws.freeze_panes = "A2"`).
-- Number formats, not data mangling: set `cell.number_format` (`"yyyy-mm-dd"`, `"0.0%"`, `"#,##0.00;(#,##0.00)"`) instead of writing formatted strings into cells.
-- Money: a currency `number_format` like `"$#,##0.00"` or a unit-suffixed header (`value_usd`); never currency symbols inside cell values.
+- Number formats, not data mangling: set `cell.number_format` (`"yyyy-mm-dd"`, `"0.0%"`, `"#,##0.00;(#,##0.00)"`)
+  instead of writing formatted strings into cells.
+- Money: a currency `number_format` like `"$#,##0.00"` or a unit-suffixed header (`value_usd`); never currency symbols
+  inside cell values.
 - Set column widths so nothing displays truncated.
 - Zero formula errors at delivery — enforced by the recalc loop.
 
 ## Pitfalls
 
-- Homebrew-cask LibreOffice stays Gatekeeper-quarantined, and `soffice` writes `.pyc` files into the app bundle on first run, breaking its signature seal — a later GUI launch then claims "LibreOffice.app is damaged". The app is fine; do not trash it: `xattr -dr com.apple.quarantine /Applications/LibreOffice.app` (or install with `--no-quarantine`). Headless recalculation is unaffected either way.
-- openpyxl round-trips drop charts and images, and can degrade pivot tables and other advanced features. If a workbook contains them, confine edits to what was asked, save to a new file, and tell the user what may be lost.
+- Homebrew-cask LibreOffice stays Gatekeeper-quarantined, and `soffice` writes `.pyc` files into the app bundle on first
+  run, breaking its signature seal — a later GUI launch then claims "LibreOffice.app is damaged". The app is fine; do
+  not trash it: `xattr -dr com.apple.quarantine /Applications/LibreOffice.app` (or install with `--no-quarantine`).
+  Headless recalculation is unaffected either way.
+- openpyxl round-trips drop charts and images, and can degrade pivot tables and other advanced features. If a workbook
+  contains them, confine edits to what was asked, save to a new file, and tell the user what may be lost.
 - `.xlsm`: pass `keep_vba=True` to `load_workbook`, or the macros are stripped.
-- Write `datetime`/`date` objects for date cells (with a date `number_format`), not strings — strings stay text and break date arithmetic.
-- Column letters: use `openpyxl.utils.get_column_letter` / `column_index_from_string`; never hand-compute (column 64 is `BL`, not `BK`).
+- Write `datetime`/`date` objects for date cells (with a date `number_format`), not strings — strings stay text and
+  break date arithmetic.
+- Column letters: use `openpyxl.utils.get_column_letter` / `column_index_from_string`; never hand-compute (column 64 is
+  `BL`, not `BK`).
 - `.numbers` files are out of scope: ask the user to export CSV/xlsx from Numbers first (`open -a Numbers <file>`).

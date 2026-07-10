@@ -2,7 +2,9 @@
 disable-model-invocation: false
 name: coingecko-cli
 user-invocable: false
-description: 'Use for CoinGecko/cg CLI crypto market data: prices, market cap, trending coins, top gainers/losers, coin search, or historical/OHLC data.'
+description:
+  "Use for CoinGecko/cg CLI crypto market data: prices, market cap, trending coins, top gainers/losers, coin search, or
+  historical/OHLC data."
 ---
 
 # CoinGecko CLI
@@ -21,19 +23,28 @@ Use the installed CLI's machine-readable command catalog as the source of truth 
 
    Do not run interactive `cg auth` or write config without the user's approval.
 
-2. Select the command, flags, enum values, output formats, endpoint, auth requirement, and `paid_only` status from `cg commands -o json`. Use `cg <command> --help` only when the catalog lacks a needed detail.
+2. Select the command, flags, enum values, output formats, endpoint, auth requirement, and `paid_only` status from
+   `cg commands -o json`. Use `cg <command> --help` only when the catalog lacks a needed detail.
 
-3. Resolve CoinGecko IDs with `cg search <term> -o json` when the user supplied a name or ambiguous symbol. Do not silently treat symbols as unique.
+3. Resolve CoinGecko IDs with `cg search <term> -o json` when the user supplied a name or ambiguous symbol. Do not
+   silently treat symbols as unique.
 
-4. Preview unfamiliar or quota-sensitive requests with `--dry-run`. Execute parseable queries with `-o json`; use `--export` only when the user requested a CSV artifact.
+4. Preview unfamiliar or quota-sensitive requests with `--dry-run`. Execute parseable queries with `-o json`; use
+   `--export` only when the user requested a CSV artifact.
 
-5. Present the requested result in the user's format. For ordinary human-readable output, use a compact table and preserve enough precision for the asset's magnitude.
+5. Present the requested result in the user's format. For ordinary human-readable output, use a compact table and
+   preserve enough precision for the asset's magnitude.
 
 ## Boundaries and Defaults
 
-- Batch IDs in one request when the command supports it. On 429, respect the reported reset/backoff rather than retrying aggressively.
-- Detect paid-only commands before execution. If the current tier cannot serve the request, say so and offer a supported route.
-- `cg` does not cover every CoinGecko endpoint. For unsupported contract-address prices, global stats, NFT detail, GeckoTerminal, or logo metadata, fetch the relevant current API documentation from <https://docs.coingecko.com/llms.txt> and state that the CLI route is unavailable.
+- Batch IDs in one request when the command supports it. On 429, respect the reported reset/backoff rather than retrying
+  aggressively.
+- Detect paid-only commands before execution. If the current tier cannot serve the request, say so and offer a supported
+  route.
+- `cg` does not cover every CoinGecko endpoint. For unsupported contract-address prices, global stats, NFT detail,
+  GeckoTerminal, or logo metadata, fetch the relevant current API documentation from
+  <https://docs.coingecko.com/llms.txt> and state that the CLI route is unavailable.
 - Never expose API keys or send private wallet/account data to market-data endpoints.
 
-Completion requires the resolved coin/command, successful JSON or requested export evidence, and explicit handling of tier, ambiguity, or rate-limit constraints.
+Completion requires the resolved coin/command, successful JSON or requested export evidence, and explicit handling of
+tier, ambiguity, or rate-limit constraints.

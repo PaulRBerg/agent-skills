@@ -10,7 +10,8 @@ Confirm the installed Cast supports browser signing:
 cast send --help 2>&1 | rg -q -- '--browser'
 ```
 
-If unavailable, offer an encrypted keystore or hardware wallet before an environment-backed private key. Browser signing requires an interactive browser and local port `9545`; it does not work in ordinary headless CI or SSH sessions.
+If unavailable, offer an encrypted keystore or hardware wallet before an environment-backed private key. Browser signing
+requires an interactive browser and local port `9545`; it does not work in ordinary headless CI or SSH sessions.
 
 ## Resolve the Sender
 
@@ -18,7 +19,8 @@ If unavailable, offer an encrypted keystore or hardware wallet before an environ
 OWNER=$(cast wallet address --browser)
 ```
 
-Cache the address for the approved flow. Confirm the wallet network matches the reviewed chain and `--from` matches `$OWNER`.
+Cache the address for the approved flow. Confirm the wallet network matches the reviewed chain and `--from` matches
+`$OWNER`.
 
 ## Approved Broadcast
 
@@ -31,7 +33,8 @@ cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
   --browser
 ```
 
-Do not combine `--browser` with another signer flag. Capture the transaction hash, then verify it with `cast receipt` before reporting success.
+Do not combine `--browser` with another signer flag. Capture the transaction hash, then verify it with `cast receipt`
+before reporting success.
 
 ## Message Signing
 
@@ -42,8 +45,11 @@ cast wallet sign 'reviewed message' --browser
 cast wallet sign --data --from-file typed-data.json --browser
 ```
 
-Return the signature and signer address. Do not broadcast or submit the signature elsewhere unless the user separately authorized that external write.
+Return the signature and signer address. Do not broadcast or submit the signature elsewhere unless the user separately
+authorized that external write.
 
 ## Failure Handling
 
-On a port conflict, missing browser, rejected wallet request, timeout, chain mismatch, or account mismatch, stop and report the failure. Do not silently fall back to a private key or retry a broadcast. If the user selects another signer, update the transaction review when the sender or command changes.
+On a port conflict, missing browser, rejected wallet request, timeout, chain mismatch, or account mismatch, stop and
+report the failure. Do not silently fall back to a private key or retry a broadcast. If the user selects another signer,
+update the transaction review when the sender or command changes.

@@ -51,7 +51,8 @@ for row in candidate_rows:
 
 ## Schema Validation
 
-Generate a draft schema from representative data, edit it, then validate future files. `qsv schema` creates stats sidecars next to its input, so run it against a temp copy when the source directory must stay clean.
+Generate a draft schema from representative data, edit it, then validate future files. `qsv schema` creates stats
+sidecars next to its input, so run it against a temp copy when the source directory must stay clean.
 
 ```sh
 tmpdir=$(mktemp -d)

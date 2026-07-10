@@ -143,7 +143,7 @@ import { vi } from "vitest";
 test("spy on object method", () => {
   const user = {
     name: "John",
-    greet: () => `Hello, ${this.name}`
+    greet: () => `Hello, ${this.name}`,
   };
 
   const greetSpy = vi.spyOn(user, "greet");
@@ -185,7 +185,7 @@ test("uses automatic mock", () => {
 ```typescript
 vi.mock("./api-client", () => ({
   fetchUser: vi.fn(() => Promise.resolve({ id: 1, name: "Test" })),
-  deleteUser: vi.fn(() => Promise.resolve())
+  deleteUser: vi.fn(() => Promise.resolve()),
 }));
 
 import { fetchUser, deleteUser } from "./api-client";
@@ -203,7 +203,7 @@ import * as apiClient from "./api-client";
 
 vi.spyOn(apiClient, "fetchUser").mockResolvedValue({
   id: 1,
-  name: "Test"
+  name: "Test",
 });
 
 // Other exports work normally
@@ -213,11 +213,11 @@ vi.spyOn(apiClient, "fetchUser").mockResolvedValue({
 
 ```typescript
 const { mockFetchUser } = vi.hoisted(() => ({
-  mockFetchUser: vi.fn()
+  mockFetchUser: vi.fn(),
 }));
 
 vi.mock("./api-client", () => ({
-  fetchUser: mockFetchUser
+  fetchUser: mockFetchUser,
 }));
 
 test("can access mock before import", () => {
@@ -239,7 +239,7 @@ export function createApiMock() {
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
-    delete: vi.fn()
+    delete: vi.fn(),
   };
 }
 
@@ -284,7 +284,7 @@ export function createStorageMock() {
     }),
     get size() {
       return store.size;
-    }
+    },
   };
 }
 ```
@@ -728,9 +728,9 @@ expect.extend({
     const pass = received >= min && received <= max;
     return {
       pass,
-      message: () => `expected ${received} to be within range ${min} - ${max}`
+      message: () => `expected ${received} to be within range ${min} - ${max}`,
     };
-  }
+  },
 });
 
 // Usage
@@ -747,7 +747,7 @@ import { describe, test, expect } from "vitest";
 describe.each([
   { input: 1, expected: 2 },
   { input: 2, expected: 4 },
-  { input: 3, expected: 6 }
+  { input: 3, expected: 6 },
 ])("double($input)", ({ input, expected }) => {
   test(`returns ${expected}`, () => {
     expect(double(input)).toBe(expected);
@@ -758,7 +758,7 @@ describe.each([
 test.each([
   [1, 2],
   [2, 4],
-  [3, 6]
+  [3, 6],
 ])("double(%i) returns %i", (input, expected) => {
   expect(double(input)).toBe(expected);
 });

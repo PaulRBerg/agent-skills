@@ -2,7 +2,9 @@
 disable-model-invocation: false
 name: playground
 user-invocable: true
-description: Use to create interactive single-file HTML playgrounds/explorers/tools with visual controls, live preview, and prompt copy-out.
+description:
+  Use to create interactive single-file HTML playgrounds/explorers/tools with visual controls, live preview, and prompt
+  copy-out.
 ---
 
 # Playground Builder
@@ -11,7 +13,8 @@ Build a self-contained interactive HTML explorer with controls, live preview, an
 
 ## Workflow
 
-1. Infer the product context, audience, decisions to explore, and required states. Existing design systems and explicit user requirements override this skill's visual defaults.
+1. Infer the product context, audience, decisions to explore, and required states. Existing design systems and explicit
+   user requirements override this skill's visual defaults.
 2. Read exactly one closest template and adapt it:
    - `templates/design-playground.md`
    - `templates/data-explorer.md`
@@ -20,7 +23,9 @@ Build a self-contained interactive HTML explorer with controls, live preview, an
    - `templates/diff-review.md`
    - `templates/code-map.md`
 3. Write one HTML file with inline CSS and JavaScript and no external runtime dependencies.
-4. Open it in a browser, interact with every control and preset, inspect representative viewport sizes, and verify live preview, prompt output, copy feedback, empty/error states, and keyboard usability. Fix rendered defects before completion.
+4. Open it in a browser, interact with every control and preset, inspect representative viewport sizes, and verify live
+   preview, prompt output, copy feedback, empty/error states, and keyboard usability. Fix rendered defects before
+   completion.
 
 ## Opinionated Defaults
 
@@ -41,4 +46,5 @@ Use these when product context does not indicate otherwise:
 - Presets update controls, preview, and prompt consistently.
 - Do not add controls that do not affect either the preview or the generated prompt.
 
-Completion requires the self-contained file plus rendered, interactive inspection evidence; opening the file without exercising it is insufficient.
+Completion requires the self-contained file plus rendered, interactive inspection evidence; opening the file without
+exercising it is insufficient.

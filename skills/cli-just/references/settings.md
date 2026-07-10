@@ -69,17 +69,23 @@ set unstable
 - `-o pipefail`: Pipeline fails if any command fails
 - `-c`: Execute following string as command
 
-Note: `bash` here resolves via `PATH`. In agent sandboxes and stock macOS environments this can be `/bin/bash` 3.2, even when Homebrew Bash exists at `/opt/homebrew/bin/bash`; see [inline-scripts.md > Bash Version Pitfalls](inline-scripts.md#bash-version-pitfalls-macos) before relying on Bash-4+ features in recipe bodies.
+Note: `bash` here resolves via `PATH`. In agent sandboxes and stock macOS environments this can be `/bin/bash` 3.2, even
+when Homebrew Bash exists at `/opt/homebrew/bin/bash`; see
+[inline-scripts.md > Bash Version Pitfalls](inline-scripts.md#bash-version-pitfalls-macos) before relying on Bash-4+
+features in recipe bodies.
 
 ### Requiring a Minimum Version (v1.55.0+)
 
-`set minimum-version` makes `just` error out if its own version is older than the given `MAJOR.MINOR.PATCH`. Place it at the very top of the justfile, before any feature it guards — the check runs in the parser, so lexer-level incompatibilities still surface as raw errors.
+`set minimum-version` makes `just` error out if its own version is older than the given `MAJOR.MINOR.PATCH`. Place it at
+the very top of the justfile, before any feature it guards — the check runs in the parser, so lexer-level
+incompatibilities still surface as raw errors.
 
 ```just
 set minimum-version := '1.55.0'
 ```
 
-For runtime branching rather than a hard gate, read the version with `just_version()` (v1.55.0+), which returns the version string, e.g. `"1.55.0"`.
+For runtime branching rather than a hard gate, read the version with `just_version()` (v1.55.0+), which returns the
+version string, e.g. `"1.55.0"`.
 
 ### Lazy Evaluation (v1.47.0; stable v1.48.0+)
 
@@ -154,8 +160,8 @@ status:
     echo "linewise shell recipe"
 ```
 
-`set shell` still controls linewise shell recipes and backticks. `set script-interpreter` controls `[script]` recipes with
-no explicit command, including unannotated recipes when `default-script` is enabled.
+`set shell` still controls linewise shell recipes and backticks. `set script-interpreter` controls `[script]` recipes
+with no explicit command, including unannotated recipes when `default-script` is enabled.
 
 ### Lists (unstable, v1.53.0+)
 
@@ -196,21 +202,26 @@ Do not build path sets with parenthesized, space-joined string assembly.
 **Recipes & dependencies:**
 
 - Variadic parameters (`*args`, `+args`) are lists of strings instead of one space-joined string.
-- A parameter evaluates to its default when given an empty list; passing `[]` to a non-`*` parameter without a default is an error.
-- Map a dependency over a list with `*(recipe *arg)` — see [recipes.md](recipes.md#mapped-dependencies-over-lists-unstable-v1530).
+- A parameter evaluates to its default when given an empty list; passing `[]` to a non-`*` parameter without a default
+  is an error.
+- Map a dependency over a list with `*(recipe *arg)` — see
+  [recipes.md](recipes.md#mapped-dependencies-over-lists-unstable-v1530).
 - Lists in recipe and `f`-string interpolations are space-joined into a single string.
 
 **Booleans (reformed under `set lists`):** canonical true is `"true"`; canonical false is the empty list `[]`. Every
 other value is truthy, **including `''`**.
 
 - `!expr` evaluates to `"true"` when `expr` is `[]`, else `[]`.
-- `==`, `!=`, `=~`, `!~` work in any expression (not just `if`/`assert`) and evaluate to `"true"` or `[]`. `==`/`!=` check structural equality.
-- `value =~ regexes` is true if any element of `value` matches any regex in `regexes` (false if either is empty); `!~` is the negation.
+- `==`, `!=`, `=~`, `!~` work in any expression (not just `if`/`assert`) and evaluate to `"true"` or `[]`. `==`/`!=`
+  check structural equality.
+- `value =~ regexes` is true if any element of `value` matches any regex in `regexes` (false if either is empty); `!~`
+  is the negation.
 - An `if` with no `else` evaluates to `[]` when its condition is false.
 
 **Functions that accept lists:** `quote()`, `append()`, `prepend()`, `absolute_path()` map over each element; `env()`
-and `[env]` take a list of keys / set the joined value (`[]` unsets the variable); `which()` now **requires** `set lists`
-and returns `[]` when not found; `is_dependency()`, `path_exists()`, `semver_matches()` return the canonical booleans.
+and `[env]` take a list of keys / set the joined value (`[]` unsets the variable); `which()` now **requires**
+`set lists` and returns `[]` when not found; `is_dependency()`, `path_exists()`, `semver_matches()` return the canonical
+booleans.
 
 **New functions:**
 
@@ -221,8 +232,8 @@ and returns `[]` when not found; `is_dependency()`, `path_exists()`, `semver_mat
 | `bool(v)`           | `[]` for `""`/`"0"`/`"false"`/`[]`, `"true"` for `"1"`/`"true"`; any other value errors           |
 | `show(v)`           | Literal representation, e.g. `"[]"`, `["foo", "bar"]`; single-element lists render as the element |
 
-**Caveat:** using a list where a string is expected is an error — reach for `join_list()` (or interpolation) to bridge to
-functions not yet list-aware.
+**Caveat:** using a list where a string is expected is an error — reach for `join_list()` (or interpolation) to bridge
+to functions not yet list-aware.
 
 **Multiple `.env` files:** under `set lists`, `dotenv-path` and `dotenv-filename` accept lists (and the matching
 `--dotenv-path`/`--dotenv-filename` flags may be repeated). `dotenv-path` values are tried first; otherwise the
@@ -274,7 +285,8 @@ mod internal
 mod dev
 ```
 
-**Module aliases (v1.55.0+):** an `alias` may target a module, not just a recipe. `just f build` then runs `frontend::build`:
+**Module aliases (v1.55.0+):** an `alias` may target a module, not just a recipe. `just f build` then runs
+`frontend::build`:
 
 ```just
 mod frontend

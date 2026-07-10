@@ -4,7 +4,8 @@ Load only the sections linked by the active workflow.
 
 ## Auth Validation
 
-Do not run unconditional `gh auth status`. Treat the first required read-only `gh` command as auth validation. Resolve the bundled helper relative to the skill directory, never the target repository:
+Do not run unconditional `gh auth status`. Treat the first required read-only `gh` command as auth validation. Resolve
+the bundled helper relative to the skill directory, never the target repository:
 
 ```sh
 <skill-dir>/scripts/yeet-context.sh repo "<owner>/<repo>" [--issue-templates] [--discussion-templates] [--discussion-categories]
@@ -16,22 +17,32 @@ If it fails with an auth error, stop with: `Run gh auth login first`.
 
 ## Repository Context
 
-Collect repository context once and reuse it: authenticated login, repository identity and permission, default branch, and only the templates/categories required by the workflow.
+Collect repository context once and reuse it: authenticated login, repository identity and permission, default branch,
+and only the templates/categories required by the workflow.
 
 ## Fetch Repo Labels
 
-Fetch labels only when labels may be applied: owner-managed repositories, requested label edits, or a selected template that defines labels and the viewer has `ADMIN`, `MAINTAIN`, `WRITE`, or `TRIAGE` permission.
+Fetch labels only when labels may be applied: owner-managed repositories, requested label edits, or a selected template
+that defines labels and the viewer has `ADMIN`, `MAINTAIN`, `WRITE`, or `TRIAGE` permission.
 
-Treat the live `name` and `description` list as authoritative. Match intent, use the smallest set, respect template labels, and never invent labels. Skip maintainer workflow labels such as `good first issue`, `needs triage`, `duplicate`, or `stale` on creation. An empty list is a valid no-label result; a failed fetch is an error.
+Treat the live `name` and `description` list as authoritative. Match intent, use the smallest set, respect template
+labels, and never invent labels. Skip maintainer workflow labels such as `good first issue`, `needs triage`,
+`duplicate`, or `stale` on creation. An empty list is a valid no-label result; a failed fetch is an error.
 
 ## Template Metadata and Issue Forms
 
-Issue-form YAML may define labels and type, but `gh issue create --body-file` does not execute the form. For deterministic posting, render the relevant fields into Markdown and pass supported metadata explicitly. Do not combine `--template` with `--body` or `--body-file`.
+Issue-form YAML may define labels and type, but `gh issue create --body-file` does not execute the form. For
+deterministic posting, render the relevant fields into Markdown and pass supported metadata explicitly. Do not combine
+`--template` with `--body` or `--body-file`.
 
 ## Platform String Normalization
 
-Use `scripts/get-macos-version.sh` for macOS fields. Skip environment details for repositories owned by the authenticated viewer or `sablier-labs` unless the user explicitly asks; preserve required upstream template enums.
+Use `scripts/get-macos-version.sh` for macOS fields. Skip environment details for repositories owned by the
+authenticated viewer or `sablier-labs` unless the user explicitly asks; preserve required upstream template enums.
 
 ## Image Uploads
 
-GitHub has no public issue/PR attachment API. Prefer `gh img` when installed; for existing issues/PRs, `gh attach --url-only` is an acceptable fallback. Do not create a placeholder artifact just to upload an image. A release-asset fallback is a separate external mutation and requires explicit authorization. If an image is required and no approved upload path works, stop before posting.
+GitHub has no public issue/PR attachment API. Prefer `gh img` when installed; for existing issues/PRs,
+`gh attach --url-only` is an acceptable fallback. Do not create a placeholder artifact just to upload an image. A
+release-asset fallback is a separate external mutation and requires explicit authorization. If an image is required and
+no approved upload path works, stop before posting.

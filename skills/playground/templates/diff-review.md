@@ -1,6 +1,7 @@
 # Diff Review Template
 
-Use this template when the playground is about reviewing code diffs: git commits, pull requests, code changes with interactive line-by-line commenting for feedback.
+Use this template when the playground is about reviewing code diffs: git commits, pull requests, code changes with
+interactive line-by-line commenting for feedback.
 
 ## Layout
 
@@ -19,7 +20,8 @@ Use this template when the playground is about reviewing code diffs: git commits
 +------------------------------------------------------+
 ```
 
-Diff review playgrounds display git diffs with syntax highlighting. Users click lines to add comments, which become part of the generated prompt for code review feedback.
+Diff review playgrounds display git diffs with syntax highlighting. Users click lines to add comments, which become part
+of the generated prompt for code review feedback.
 
 ## Control types for diff review
 
@@ -45,10 +47,10 @@ const diffData = [
           { type: "context", oldNum: 41, newNum: 41, content: "unchanged line" },
           { type: "deletion", oldNum: 42, newNum: null, content: "removed line" },
           { type: "addition", oldNum: null, newNum: 42, content: "added line" },
-        ]
-      }
-    ]
-  }
+        ],
+      },
+    ],
+  },
 ];
 ```
 
@@ -70,14 +72,12 @@ const comments = {}; // { lineId: commentText }
 
 function selectLine(lineId, lineEl) {
   // Deselect previous
-  document.querySelectorAll('.diff-line.selected').forEach(el =>
-    el.classList.remove('selected'));
-  document.querySelectorAll('.comment-box.active').forEach(el =>
-    el.classList.remove('active'));
+  document.querySelectorAll(".diff-line.selected").forEach((el) => el.classList.remove("selected"));
+  document.querySelectorAll(".comment-box.active").forEach((el) => el.classList.remove("active"));
 
   // Select new
-  lineEl.classList.add('selected');
-  document.getElementById(`comment-box-${lineId}`).classList.add('active');
+  lineEl.classList.add("selected");
+  document.getElementById(`comment-box-${lineId}`).classList.add("active");
 }
 
 function saveComment(lineId) {
@@ -108,9 +108,9 @@ function updatePromptOutput() {
     return;
   }
 
-  let output = 'Code Review Comments:\n\n';
+  let output = "Code Review Comments:\n\n";
 
-  commentKeys.forEach(lineId => {
+  commentKeys.forEach((lineId) => {
     const lineEl = document.querySelector(`[data-line-id="${lineId}"]`);
     const file = lineEl.dataset.file;
     const lineNum = lineEl.dataset.lineNum;
@@ -130,11 +130,13 @@ function updatePromptOutput() {
 Store metadata on each line element for prompt generation:
 
 ```html
-<div class="diff-line addition"
-     data-line-id="0-1-5"
-     data-file="src/utils/handler.py"
-     data-line-num="45"
-     data-content="subagent_id = tracker.register()">
+<div
+  class="diff-line addition"
+  data-line-id="0-1-5"
+  data-file="src/utils/handler.py"
+  data-line-num="45"
+  data-content="subagent_id = tracker.register()"
+></div>
 ```
 
 ## Pre-populating with real data
@@ -151,16 +153,36 @@ Default to light mode; offer dark mode as an opt-in toggle:
 
 ```css
 /* Light mode (default) */
-body { background: #f6f8fa; color: #1f2328; }
-.file-card { background: #ffffff; border: 1px solid #d0d7de; }
-.diff-line.addition { background: #dafbe1; }
-.diff-line.deletion { background: #ffebe9; }
+body {
+  background: #f6f8fa;
+  color: #1f2328;
+}
+.file-card {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+}
+.diff-line.addition {
+  background: #dafbe1;
+}
+.diff-line.deletion {
+  background: #ffebe9;
+}
 
 /* Dark mode (opt-in, e.g. body.dark or @media (prefers-color-scheme: dark)) */
-body.dark { background: #0d1117; color: #c9d1d9; }
-body.dark .file-card { background: #161b22; border: 1px solid #30363d; }
-body.dark .diff-line.addition { background: rgba(46, 160, 67, 0.15); }
-body.dark .diff-line.deletion { background: rgba(248, 81, 73, 0.15); }
+body.dark {
+  background: #0d1117;
+  color: #c9d1d9;
+}
+body.dark .file-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+}
+body.dark .diff-line.addition {
+  background: rgba(46, 160, 67, 0.15);
+}
+body.dark .diff-line.deletion {
+  background: rgba(248, 81, 73, 0.15);
+}
 ```
 
 ## Interactive features

@@ -4,13 +4,20 @@
 
 Query blockchain data across any EVM chain that Blockscout indexes. Blockscout exposes three compatible surfaces:
 
-- **Native REST API v2** (`/api/v2/...`) — rich JSON, the recommended surface. Returns balances, full token holdings, transactions, and transfers with embedded token/exchange-rate metadata.
-- **Etherscan-compatible RPC** (`/api?module=...&action=...`) — legacy `{status,message,result}` shape. Useful for porting existing Etherscan code; superseded by v2.
-- **Unified PRO API** (`https://api.blockscout.com/...`) — a single keyed host fronting both of the above across major chains, selected by `chain_id`.
+- **Native REST API v2** (`/api/v2/...`) — rich JSON, the recommended surface. Returns balances, full token holdings,
+  transactions, and transfers with embedded token/exchange-rate metadata.
+- **Etherscan-compatible RPC** (`/api?module=...&action=...`) — legacy `{status,message,result}` shape. Useful for
+  porting existing Etherscan code; superseded by v2.
+- **Unified PRO API** (`https://api.blockscout.com/...`) — a single keyed host fronting both of the above across major
+  chains, selected by `chain_id`.
 
-This skill covers read-only account/address queries: native balance, ERC-20/721/1155 holdings and transfers, transaction history, and first-funding tracing.
+This skill covers read-only account/address queries: native balance, ERC-20/721/1155 holdings and transfers, transaction
+history, and first-funding tracing.
 
-**Relationship to Etherscan (`./etherscan-api.md`):** Same problem space, different explorer. Prefer Blockscout when the target chain is **not** on Etherscan, when a paid Etherscan target chain needs free-tier data, when you want full token holdings on the free tier, or when the user names Blockscout/Chainscout. The two surfaces are interchangeable for native-balance and transfer queries.
+**Relationship to Etherscan (`./etherscan-api.md`):** Same problem space, different explorer. Prefer Blockscout when the
+target chain is **not** on Etherscan, when a paid Etherscan target chain needs free-tier data, when you want full token
+holdings on the free tier, or when the user names Blockscout/Chainscout. The two surfaces are interchangeable for
+native-balance and transfer queries.
 
 ## Prerequisites
 
@@ -26,7 +33,10 @@ if [ -z "$BLOCKSCOUT_API_KEY" ]; then
 fi
 ```
 
-The key is **only** required for the unified PRO host (`api.blockscout.com`), which returns `401 {"error":"Unauthorized"}` without it. Per-instance public hosts (e.g., `eth.blockscout.com`) need **no key** — see [Per-Instance Fallback](#per-instance-fallback-any-chain-no-key). If the key is missing, fall back to per-instance hosts rather than halting.
+The key is **only** required for the unified PRO host (`api.blockscout.com`), which returns
+`401 {"error":"Unauthorized"}` without it. Per-instance public hosts (e.g., `eth.blockscout.com`) need **no key** — see
+[Per-Instance Fallback](#per-instance-fallback-any-chain-no-key). If the key is missing, fall back to per-instance hosts
+rather than halting.
 
 ### Plan & Credit Detection
 
@@ -54,7 +64,10 @@ credits_remaining=99880
 | `15`             | **Standard** | $49/mo  | 100M / month |
 | `30`             | **Pro**      | $199/mo | 500M / month |
 
-**Credits:** most endpoints cost **20 credits/call**; a handful cost more (`coin-balance-history` and `raw-trace` 50; `internal-transactions` per-tx 40; `logs` and per-tx `token-transfers` 30; `search/quick` 25). At 20 credits, the free 100K/day ≈ 5,000 calls/day. `blockscout-detect-plan.sh` itself costs ~20 credits — do not re-run mid-session. Full table: `./references/blockscout-endpoints.md`.
+**Credits:** most endpoints cost **20 credits/call**; a handful cost more (`coin-balance-history` and `raw-trace` 50;
+`internal-transactions` per-tx 40; `logs` and per-tx `token-transfers` 30; `search/quick` 25). At 20 credits, the free
+100K/day ≈ 5,000 calls/day. `blockscout-detect-plan.sh` itself costs ~20 credits — do not re-run mid-session. Full
+table: `./references/blockscout-endpoints.md`.
 
 Per-instance public hosts are not credit-metered but are rate-limited to **3 req/s (300/min) per IP**.
 
@@ -68,11 +81,16 @@ Decide per query:
 | Porting existing Etherscan **V2** code (minimal diff)                  | **Etherscan-V2 alias** `https://api.blockscout.com/v2/api?chain_id={id}&module=...` |
 | Chain returns `404` on the PRO host, or no key available               | **Per-instance** `https://{instance}/api/v2/...` (no key) — resolve via Chainscout  |
 
-The PRO host fronts major Blockscout-hosted target chains but **not all** of them. On any `404`, fall back to the per-instance host resolved through `./scripts/resolve-chain.sh`. If the target chain is absent from Chainscout, use Etherscan (`./etherscan-api.md`) or the `primaryPublicRpc` from `./references/target-mainnets.json`. If the requested chain is not in `./references/target-mainnets.json`, stop and ask the user to file a feature request in <https://github.com/PaulRBerg/agent-skills>.
+The PRO host fronts major Blockscout-hosted target chains but **not all** of them. On any `404`, fall back to the
+per-instance host resolved through `./scripts/resolve-chain.sh`. If the target chain is absent from Chainscout, use
+Etherscan (`./etherscan-api.md`) or the `primaryPublicRpc` from `./references/target-mainnets.json`. If the requested
+chain is not in `./references/target-mainnets.json`, stop and ask the user to file a feature request in
+<https://github.com/PaulRBerg/agent-skills>.
 
 ## Chain Resolution
 
-Do **not** default to Ethereum Mainnet. Infer the chain from the prompt first (same rules as `./etherscan-api.md`: explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, testnet keywords). If ambiguous, ask.
+Do **not** default to Ethereum Mainnet. Infer the chain from the prompt first (same rules as `./etherscan-api.md`:
+explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, testnet keywords). If ambiguous, ask.
 
 Two-step resolution:
 
@@ -94,7 +112,9 @@ layer=1
 rollup_type=
 ```
 
-`hosted_by=blockscout` indicates the chain is a candidate for the PRO host; community-hosted chains (`hosted_by` other than `blockscout`) are per-instance only. Chainscout indexes many networks, but this skill only uses target chains — see `./references/blockscout-chains.md`.
+`hosted_by=blockscout` indicates the chain is a candidate for the PRO host; community-hosted chains (`hosted_by` other
+than `blockscout`) are per-instance only. Chainscout indexes many networks, but this skill only uses target chains — see
+`./references/blockscout-chains.md`.
 
 ## Authentication
 
@@ -109,7 +129,8 @@ curl -s -H "authorization: Bearer $BLOCKSCOUT_API_KEY" "https://api.blockscout.c
 
 ## Native REST API v2
 
-The recommended surface. Base URL is `https://api.blockscout.com/{chain_id}/api/v2` (PRO) or `https://{instance}/api/v2` (per-instance). Examples below use the PRO host; swap the base for the per-instance host and drop the key when needed.
+The recommended surface. Base URL is `https://api.blockscout.com/{chain_id}/api/v2` (PRO) or `https://{instance}/api/v2`
+(per-instance). Examples below use the PRO host; swap the base for the per-instance host and drop the key when needed.
 
 ### Address Overview (native balance + metadata)
 
@@ -152,7 +173,10 @@ Each entry embeds full token metadata and balance:
   {
     "token": {
       "address_hash": "0xC02aaA39…",
-      "name": "WETH", "symbol": "WETH", "decimals": "18", "type": "ERC-20",
+      "name": "WETH",
+      "symbol": "WETH",
+      "decimals": "18",
+      "type": "ERC-20",
       "exchange_rate": "1977.19"
     },
     "value": "214140968121599991968",
@@ -185,7 +209,9 @@ curl -s -H "authorization: Bearer $BLOCKSCOUT_API_KEY" \
   "https://api.blockscout.com/1/api/v2/addresses/0xADDR/token-transfers?type=ERC-20"
 ```
 
-`type` accepts `ERC-20`, `ERC-721`, or `ERC-1155`. Each item carries `block_number`, `timestamp` (ISO-8601 UTC), `from`, `to`, `total` (`value`/`decimals` for fungible; `token_id` for NFTs), and embedded `token` metadata. Derive mint/burn from `from`/`to` being the zero address.
+`type` accepts `ERC-20`, `ERC-721`, or `ERC-1155`. Each item carries `block_number`, `timestamp` (ISO-8601 UTC), `from`,
+`to`, `total` (`value`/`decimals` for fungible; `token_id` for NFTs), and embedded `token` metadata. Derive mint/burn
+from `from`/`to` being the zero address.
 
 ### Pagination (keyset)
 
@@ -204,14 +230,16 @@ When `next_page_params` is `null`, the last page was reached. There is no `sort`
 
 ## Etherscan-Compatible Layer
 
-For porting existing Etherscan V2 code (`./etherscan-api.md`) with minimal changes, use the **Etherscan-V2 alias**. It returns the familiar `{status,message,result}` shape:
+For porting existing Etherscan V2 code (`./etherscan-api.md`) with minimal changes, use the **Etherscan-V2 alias**. It
+returns the familiar `{status,message,result}` shape:
 
 ```bash
 curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=balance&address=0xADDR&apikey=$BLOCKSCOUT_API_KEY"
 # → {"message":"OK","result":"9774452722498812330011","status":"1"}
 ```
 
-Porting checklist from Etherscan V2: change host `api.etherscan.io` → `api.blockscout.com`, use `chain_id` (canonical; `chainid` is tolerated), and swap the key var. Action → v2 mapping:
+Porting checklist from Etherscan V2: change host `api.etherscan.io` → `api.blockscout.com`, use `chain_id` (canonical;
+`chainid` is tolerated), and swap the key var. Action → v2 mapping:
 
 | Need                 | Etherscan action            | Native v2 (preferred)                       | Compat action              |
 | -------------------- | --------------------------- | ------------------------------------------- | -------------------------- |
@@ -227,22 +255,27 @@ Porting checklist from Etherscan V2: change host `api.etherscan.io` → `api.blo
 | Logs                 | `getLogs`                   | —                                           | `getLogs`                  |
 | ABI / source         | `getabi` / `getsourcecode`  | `smart-contracts/{h}`                       | `getabi` / `getsourcecode` |
 
-Blockscout's compat layer does not implement every Etherscan action; when one is missing, use the native v2 equivalent. Full endpoint catalog: `./references/blockscout-endpoints.md`.
+Blockscout's compat layer does not implement every Etherscan action; when one is missing, use the native v2 equivalent.
+Full endpoint catalog: `./references/blockscout-endpoints.md`.
 
 ## First Funding Transaction
 
-Blockscout has **no `fundedby` equivalent**. Use the compat `txlist`/`txlistinternal` with ascending sort (the native v2 surface only sorts newest-first, which is awkward for "earliest"):
+Blockscout has **no `fundedby` equivalent**. Use the compat `txlist`/`txlistinternal` with ascending sort (the native v2
+surface only sorts newest-first, which is awkward for "earliest"):
 
 ```bash
 curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=txlist&address=0xADDR&sort=asc&page=1&offset=10&apikey=$BLOCKSCOUT_API_KEY"
 curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=txlistinternal&address=0xADDR&sort=asc&page=1&offset=10&apikey=$BLOCKSCOUT_API_KEY"
 ```
 
-Pick the earliest entry where `to == address` (lowercased), `value > 0`, and (normal txs) `isError == "0"`. The funding tx is the lower `blockNumber` across both lists. Check both because addresses are often funded internally (CEX router/proxy withdrawals). Genesis-allocated balances appear in neither list — report explicitly.
+Pick the earliest entry where `to == address` (lowercased), `value > 0`, and (normal txs) `isError == "0"`. The funding
+tx is the lower `blockNumber` across both lists. Check both because addresses are often funded internally (CEX
+router/proxy withdrawals). Genesis-allocated balances appear in neither list — report explicitly.
 
 ## Per-Instance Fallback (any chain, no key)
 
-For chains that `404` on the PRO host, or when no key is set, query the chain's own Blockscout instance directly — no key, every chain Blockscout indexes:
+For chains that `404` on the PRO host, or when no key is set, query the chain's own Blockscout instance directly — no
+key, every chain Blockscout indexes:
 
 ```bash
 # 1. Resolve the instance URL
@@ -255,11 +288,13 @@ curl -s "${CS_instance_url}api/v2/addresses/0xADDR/token-balances"
 curl -s "${CS_instance_url}api?module=account&action=balance&address=0xADDR"
 ```
 
-Note `instance_url` already ends in `/`. Per-instance hosts are community-operated for many chains — uptime and indexing depth vary. Prefer the PRO host when the chain is available there.
+Note `instance_url` already ends in `/`. Per-instance hosts are community-operated for many chains — uptime and indexing
+depth vary. Prefer the PRO host when the chain is available there.
 
 ## Unit Conversion
 
-Native balances and token `value`s are in the smallest unit. Divide by `10^decimals` (18 for native and most tokens; USDC/USDT 6; WBTC 8):
+Native balances and token `value`s are in the smallest unit. Divide by `10^decimals` (18 for native and most tokens;
+USDC/USDT 6; WBTC 8):
 
 ```bash
 echo "scale=18; 9774452722498812330011 / 1000000000000000000" | bc
@@ -271,9 +306,9 @@ echo "scale=18; 9774452722498812330011 / 1000000000000000000" | bc
 Default to a Markdown table:
 
 ```markdown
-| Address       | Balance        | Token | Chain   |
-| ------------- | -------------- | ----- | ------- |
-| 0xde0B…7BAe   | 9,774.45       | ETH   | Ethereum |
+| Address     | Balance  | Token | Chain    |
+| ----------- | -------- | ----- | -------- |
+| 0xde0B…7BAe | 9,774.45 | ETH   | Ethereum |
 ```
 
 If the user requests JSON/CSV/plain text, use that instead.
@@ -291,7 +326,8 @@ If the user requests JSON/CSV/plain text, use that instead.
 ## Reference Files
 
 - **`./references/blockscout-chains.md`** — Target-gated Chainscout registry usage and target-chain observations.
-- **`./references/blockscout-endpoints.md`** — full native v2 endpoint catalog, compat action list, and per-endpoint credit costs.
+- **`./references/blockscout-endpoints.md`** — full native v2 endpoint catalog, compat action list, and per-endpoint
+  credit costs.
 - **`./scripts/blockscout-detect-plan.sh`** — header-based plan/credit detection (run once per session).
 - **`./scripts/resolve-chain.sh`** — `chain_id` → Blockscout instance URL via Chainscout.
 

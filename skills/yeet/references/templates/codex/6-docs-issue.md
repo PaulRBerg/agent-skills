@@ -7,7 +7,8 @@ The "type" field is a multi-select dropdown; render selected items as a bullet l
 ```markdown
 ### What is the type of issue?
 
-- {Documentation is missing | Documentation is incorrect | Documentation is confusing | Example code is not working | Something else}
+- {Documentation is missing | Documentation is incorrect | Documentation is confusing | Example code is not working |
+  Something else}
 
 ### What is the issue?
 

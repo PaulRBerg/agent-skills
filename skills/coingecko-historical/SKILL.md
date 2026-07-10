@@ -14,7 +14,8 @@ Open a validated one-day window around the requested date in Chromium.
 
 ## Workflow
 
-1. Require a CoinGecko coin ID and an ISO date (`YYYY-MM-DD`). Resolve a supplied name or symbol with `cg search <term> -o json` before continuing.
+1. Require a CoinGecko coin ID and an ISO date (`YYYY-MM-DD`). Resolve a supplied name or symbol with
+   `cg search <term> -o json` before continuing.
 
 2. Build the URL with the portable helper:
 

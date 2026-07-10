@@ -10,7 +10,10 @@ Use these headings and dropdown values exactly for `anthropics/claude-code` issu
 
 ### Type of Behavior Issue
 
-{one of: Claude modified files I didn't ask it to modify | Claude accessed files outside the working directory | Claude ignored my instructions or configuration | Claude reverted/undid previous changes without asking | Claude made incorrect assumptions about my project | Claude refused a reasonable request | Claude's behavior changed between sessions | Subagent behaved unexpectedly | Other unexpected behavior}
+{one of: Claude modified files I didn't ask it to modify | Claude accessed files outside the working directory | Claude
+ignored my instructions or configuration | Claude reverted/undid previous changes without asking | Claude made incorrect
+assumptions about my project | Claude refused a reasonable request | Claude's behavior changed between sessions |
+Subagent behaved unexpectedly | Other unexpected behavior}
 
 ### What You Asked Claude to Do
 
@@ -30,11 +33,13 @@ Use these headings and dropdown values exactly for `anthropics/claude-code` issu
 
 ### Permission Mode
 
-{one of: Accept Edits was ON (auto-accepting changes) | Accept Edits was OFF (manual approval required) | I don't know / Not sure}
+{one of: Accept Edits was ON (auto-accepting changes) | Accept Edits was OFF (manual approval required) | I don't know /
+Not sure}
 
 ### Can You Reproduce This?
 
-{one of: Yes, every time with the same prompt | Sometimes (intermittent) | No, only happened once | Haven't tried to reproduce}
+{one of: Yes, every time with the same prompt | Sometimes (intermittent) | No, only happened once | Haven't tried to
+reproduce}
 
 ### Steps to Reproduce
 
@@ -50,7 +55,8 @@ Use these headings and dropdown values exactly for `anthropics/claude-code` issu
 
 ### Impact
 
-{one of: Critical - Data loss or corrupted project | High - Significant unwanted changes | Medium - Extra work to undo changes | Low - Minor inconvenience}
+{one of: Critical - Data loss or corrupted project | High - Significant unwanted changes | Medium - Extra work to undo
+changes | Low - Minor inconvenience}
 
 ### Claude Code Version
 
