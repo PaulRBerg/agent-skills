@@ -3,7 +3,7 @@
 PRB's shelved AI agent skills. These are kept off the default branch but preserved for manual install or future restoration.
 
 > [!WARNING]
-> These skills are optimized for my personal setup and workflow. If you install them, do your own due diligence and customize them to fit your stack and agents. No warranties, guarantees, or support are provided — use at your own risk.
+> This catalog intentionally reflects Paul's preferred tools, defaults, safety boundaries, and writing voice; it is not a neutral template. If you install it, review every workflow and customize it for your stack and agents. No warranties, guarantees, or support are provided — use at your own risk.
 
 ## Installation
 
@@ -17,6 +17,7 @@ npx skills add PaulRBerg/agent-skills#shelved
 | ------------------ | --------------------------------------------- |
 | diagnosing-bugs    | Loop-first bug diagnosis and regression tests |
 | diagram-monochrome | Monochrome technical schematic diagrams       |
+| loop-skill         | Repeat a skill until stable or an exact count |
 | oracle-codex       | Codex oracle for planning                     |
 | vitest             | Vitest v4 testing guidance                    |
 
