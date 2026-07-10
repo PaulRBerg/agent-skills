@@ -111,9 +111,12 @@ fi
 
 top_help="$("$codex_bin" --help 2>/dev/null || true)"
 exec_help="$("$codex_bin" exec --help 2>/dev/null || true)"
-[[ "$top_help" == *"--ask-for-approval"* ]] || { echo "ERROR: codex lacks --ask-for-approval" >&2; exit 69; }
+[[ "$top_help" == *"--dangerously-bypass-approvals-and-sandbox"* ]] || {
+  echo "ERROR: codex lacks --dangerously-bypass-approvals-and-sandbox" >&2
+  exit 69
+}
 
-required_flags="--ephemeral --color --cd --model --sandbox --output-schema --output-last-message"
+required_flags="--ephemeral --color --cd --model --output-schema --output-last-message"
 if [[ -n "$progress_file" ]]; then
   required_flags="$required_flags --json"
 fi
@@ -206,13 +209,12 @@ if [[ ! -s "$prompt_file" ]]; then
   exit 64
 fi
 
-codex_args=(--ask-for-approval never exec
+codex_args=(--dangerously-bypass-approvals-and-sandbox exec
   --ephemeral
   --color never
   -C "$repo_root"
   -m "$model"
   -c "model_reasoning_effort=\"$effort\""
-  --sandbox workspace-write
   --output-schema "$schema_file"
   --output-last-message "$result_file")
 codex_stdout="$stdout_file"

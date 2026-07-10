@@ -1,8 +1,8 @@
 ---
 argument-hint: "[task]"
 compatibility:
-  Requires Claude Code Plan mode, Git, /bin/bash, and an authenticated Codex CLI. Claude Code >= 2.1.98 recommended for
-  live progress via the Monitor tool.
+  Requires Claude Code Plan mode, Git, /bin/bash, and an authenticated Codex CLI with dangerous bypass support. Claude
+  Code >= 2.1.98 recommended for live progress via the Monitor tool.
 disable-model-invocation: true
 metadata:
   install-targets: claude-code
@@ -13,8 +13,9 @@ description: Orchestrate one to five Codex CLI agents to implement an approved C
 
 # Codex Handoff
 
-Plan in Claude Code, then hand the approved implementation to one to five constrained Codex CLI agents in the sequence
-the task requires.
+Plan in Claude Code, then hand the approved implementation to one to five Codex CLI agents in the sequence the task
+requires. The runner uses `--dangerously-bypass-approvals-and-sandbox`, so agents can write anywhere the host user can,
+including outside the worktree.
 
 ## Contract
 
@@ -84,6 +85,9 @@ Resolve `scripts/run-codex-handoff.sh` to an absolute path relative to this `SKI
 target repository. Each invocation is one ephemeral Codex agent.
 
 ### Launch
+
+The runner deliberately disables Codex approvals and sandboxing. Use it only when the user has accepted that agents can
+read, modify, or delete any files accessible to the host account.
 
 For every agent, create a per-agent progress path such as `"${TMPDIR:-/tmp}/codex-handoff.<agent-id>.progress.jsonl"`,
 convert its approved whole-minute timeout to seconds only at the wrapper boundary, then start the runner from anywhere

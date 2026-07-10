@@ -71,12 +71,12 @@ if [[ "${1:-}" == "login" && "${2:-}" == "status" ]]; then
 fi
 
 if [[ "${1:-}" == "--help" ]]; then
-  print_flag --ask-for-approval
+  print_flag --dangerously-bypass-approvals-and-sandbox
   exit 0
 fi
 
 if [[ "${1:-}" == "exec" && "${2:-}" == "--help" ]]; then
-  for flag in --ephemeral --color --cd --model --sandbox --output-schema --output-last-message --json; do
+  for flag in --ephemeral --color --cd --model --output-schema --output-last-message --json; do
     print_flag "$flag"
   done
   exit 0
@@ -155,8 +155,7 @@ for model in gpt-5.6-sol gpt-5.6-terra; do
   done
 done
 
-assert_arg --ask-for-approval
-assert_arg never
+assert_arg --dangerously-bypass-approvals-and-sandbox
 assert_arg exec
 assert_arg --ephemeral
 assert_arg --color
@@ -167,19 +166,19 @@ assert_arg -m
 assert_arg gpt-5.6-terra
 assert_arg -c
 assert_arg 'model_reasoning_effort="max"'
-assert_arg --sandbox
-assert_arg workspace-write
 assert_arg --output-schema
 assert_arg --output-last-message
 assert_arg -
+grep -Fxq -- '--ask-for-approval' "$args_file" && fail "runner configured a separate approval policy"
+grep -Fxq -- '--sandbox' "$args_file" && fail "runner configured a sandbox alongside dangerous bypass"
 grep -Fxq -- '--search' "$args_file" && fail "runner enabled search"
 grep -Fxq -- '--ignore-user-config' "$args_file" && fail "runner ignored user config"
 grep -Fxq -- '--json' "$args_file" && fail "runner passed --json without --progress-file"
 [[ "$(cat "$prompt_file")" == 'approved implementation' ]] || fail "prompt was not forwarded exactly"
 
-ask_line="$(grep -nFx -- '--ask-for-approval' "$args_file" | cut -d: -f1)"
+bypass_line="$(grep -nFx -- '--dangerously-bypass-approvals-and-sandbox' "$args_file" | cut -d: -f1)"
 exec_line="$(grep -nFx -- 'exec' "$args_file" | cut -d: -f1)"
-[[ $ask_line -lt $exec_line ]] || fail "--ask-for-approval must precede exec"
+[[ $bypass_line -lt $exec_line ]] || fail "--dangerously-bypass-approvals-and-sandbox must precede exec"
 
 (
   cd "$repo"
@@ -193,7 +192,8 @@ exec_line="$(grep -nFx -- 'exec' "$args_file" | cut -d: -f1)"
     "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 0
   expect_failure 69 'not authenticated' env PATH="$fake_path" FAKE_AUTH_FAIL=1 \
     "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
-  expect_failure 69 'lacks --ask-for-approval' env PATH="$fake_path" FAKE_HELP_MISSING=--ask-for-approval \
+  expect_failure 69 'lacks --dangerously-bypass-approvals-and-sandbox' env PATH="$fake_path" \
+    FAKE_HELP_MISSING=--dangerously-bypass-approvals-and-sandbox \
     "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
   expect_failure 69 'lacks required flag: --output-schema' env PATH="$fake_path" FAKE_HELP_MISSING=--output-schema \
     "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
