@@ -20,9 +20,8 @@ Use RouteMesh only when the target row has `routeMesh: true` and `ROUTEMESH_API_
 https://lb.routeme.sh/rpc/CHAIN_ID/ROUTEMESH_API_KEY
 ```
 
-Verify current support through `https://lb.routeme.sh/chains`, falling back to `https://lb2.routeme.sh/chains`.
-Otherwise verify the target's `primaryPublicRpc` with `eth_chainId`, then try `target-fallback-rpcs.json` in order.
-Public RPCs are best-effort and may be rate limited.
+Verify current support through `https://api.routeme.sh/chains`. Otherwise verify the target's `primaryPublicRpc` with
+`eth_chainId`, then try `target-fallback-rpcs.json` in order. Public RPCs are best-effort and may be rate limited.
 
 ## Explorer Links
 
