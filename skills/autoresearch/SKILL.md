@@ -1,5 +1,5 @@
 ---
-argument-hint: <goal> [--max-runs N] [--max-runtime DURATION] [--max-cost AMOUNT]
+argument-hint: <goal> [--max-runs N] [--max-runtime DURATION]
 disable-model-invocation: false
 name: autoresearch
 user-invocable: true
