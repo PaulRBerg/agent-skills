@@ -65,30 +65,30 @@ alias pw := prettier-write
 
 # Run staged-file checks
 [group("checks")]
-pre-commit:
+@pre-commit:
     nlx lint-staged
 
 # Regenerate evm-atlas generated references from crypto-registry + atlas overlays
 [group("checks")]
-evm-atlas-generate:
+@evm-atlas-generate:
     node {{ evm_atlas_generator }} --write
 alias eag := evm-atlas-generate
 
 # Check evm-atlas generated references are current
 [group("checks")]
-evm-atlas-check:
+@evm-atlas-check:
     node {{ evm_atlas_generator }} --check
 alias eac := evm-atlas-check
 
 # Check SKILL.md invocation fields against agents/openai.yaml
 [group("checks")]
-skill-invocation-check:
+@skill-invocation-check:
     node {{ skill_invocation_script }}
 alias sic := skill-invocation-check
 
 # Update agents/openai.yaml invocation policy from SKILL.md
 [group("checks")]
-skill-invocation-fix:
+@skill-invocation-fix:
     node {{ skill_invocation_script }} --fix
 alias sif := skill-invocation-fix
 
