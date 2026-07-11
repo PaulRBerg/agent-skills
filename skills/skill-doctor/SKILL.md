@@ -58,6 +58,11 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 Do not use the helper to rewrite frontmatter order, descriptions, README rows, `references/version.txt`, or relative
 links. Make those edits manually and verify with a fresh audit.
 
+## Related Skills
+
+- `skill-doctor` only audits the roots you pass; it does not search for them. To locate skill installs, duplicates, and
+  cross-references across the machine, use the `skill-map` skill when it is installed.
+
 ## Exit Codes
 
 - `0`: Clean, or all requested safe fixes succeeded and no findings remain.

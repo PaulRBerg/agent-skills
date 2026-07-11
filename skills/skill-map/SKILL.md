@@ -56,6 +56,11 @@ cache, dependency, and backup noise.
 - `duplicate-install`: multiple discovered `SKILL.md` files declare or resolve to the same skill name.
 - `unresolved-like-reference`: explicit `$kebab-name` or `/kebab-name` tokens that do not match a discovered skill.
 
+## Related Skills
+
+- `skill-map` only locates and cross-references skills; it does not validate them. To audit a catalog or installed root
+  for metadata and doc-link issues, use the `skill-doctor` skill when it is installed.
+
 ## Guard Rails
 
 - Do not search transcript or backup directories manually after the helper excludes them unless the user explicitly
