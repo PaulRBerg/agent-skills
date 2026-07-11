@@ -26,8 +26,8 @@ GLOBS_PRETTIER := "\"**/*.{json,jsonc,yaml,yml}\""
 # ---------------------------------------------------------------------------- #
 
 # Show available commands
-default:
-    @just --list
+@default:
+    just --list
 
 # Install dependencies
 [no-cd]

@@ -152,8 +152,8 @@ set default-list := true
 Keep the explicit listing recipe only when supporting older `just` versions:
 
 ```just
-default:
-    @just --list
+@default:
+    just --list
 ```
 
 ## Monorepo Patterns

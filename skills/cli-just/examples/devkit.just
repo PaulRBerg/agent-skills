@@ -14,8 +14,8 @@ jq := require("jq")
 # ---------------------------------------------------------------------------- #
 
 # Default recipe
-default:
-    @just --list
+@default:
+    just --list
 
 # Build the project
 @build:

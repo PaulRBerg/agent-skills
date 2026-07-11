@@ -20,6 +20,9 @@ Create readable task automation that matches the repository's installed Just ver
   formatting source.
 - Prefer explicit, small recipes; `require()` for tool dependencies; private helpers; check/write recipe pairs; and
   aliases after their target recipes.
+- Make recipes quiet by default: prefix the recipe name with `@` unless echoing commands has clear value. Recipe-level
+  `@` inverts per-line `@`, so never also prefix lines inside a `@recipe`. Never add `@` to a `[script]` recipe: scripts
+  are already quiet, and `@` un-mutes them. See "Quiet Recipes and Command Prefixes" in `references/recipes.md`.
 - On stock macOS, assume `/bin/bash` 3.2 unless the recipe explicitly selects a newer shell.
 - Use the user's section-banner style when creating a new standalone justfile; existing repository organization
   overrides it.

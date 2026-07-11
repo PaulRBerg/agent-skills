@@ -602,7 +602,9 @@ compiling bar for x86…
 Each argument to a non-mapped dependency binds to exactly one parameter; passing extra arguments to a variadic
 dependency is an error.
 
-## Command Prefixes
+## Quiet Recipes and Command Prefixes
+
+Line prefixes apply to one command:
 
 | Prefix       | Effect             |
 | ------------ | ------------------ |
@@ -610,21 +612,26 @@ dependency is an error.
 | `-`          | Ignore errors      |
 | `@-` or `-@` | Both               |
 
+Prefixing the recipe **name** with `@` quiets every line and inverts the meaning of per-line `@`:
+
 ```just
 @quiet:
-    echo "Only output shown"
+    echo "command not echoed"
+    @echo "command echoed: @ is inverted inside a @recipe"
 
 -ignore-error:
     false
     echo "Still runs"
-
-@-both:
-    false
-    echo "Quiet and ignores error"
 ```
 
-For non-script recipes, `@` suppresses the echoed command line. For `[script]` recipes, quiet behavior is inverted:
-script recipes are quiet by default, and adding `@` prints the script body before command output.
+Rules:
+
+- Default to quiet recipes: `@name:` with unprefixed lines. Use per-line `@` only in recipes whose name lacks `@`.
+- Inside a `@recipe`, add `@` to a line only to deliberately echo that one command; it is never a redundant no-op.
+- Never add `@` to a `[script]` recipe: scripts are quiet by default, and `@` un-mutes them, printing the whole script
+  body before command output.
+- `set quiet := true` quiets all recipes; opt a recipe out with `[no-quiet]`. Under `set quiet`, per-line `@` is not
+  inverted.
 
 ## Shebang Recipes
 
