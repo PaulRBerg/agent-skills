@@ -19,6 +19,7 @@ skill.
 | Blast       | `81457`  |               |
 | Celo        | `42220`  |               |
 | Ethereum    | `1`      | Default chain |
+| Fraxtal     | `252`    |               |
 | Gnosis      | `100`    |               |
 | HyperEVM    | `999`    |               |
 | Linea       | `59144`  |               |

@@ -80,6 +80,7 @@ Use Etherscan or the public RPC/explorer in `./references/target-mainnets.json` 
 | BNB Chain | `56`       | Not returned by Chainscout                        |
 | Chiliz    | `88888`    | Not returned by Chainscout                        |
 | Core Dao  | `1116`     | Not returned by Chainscout                        |
+| Fraxtal   | `252`      | Not returned by Chainscout                        |
 | IoTeX     | `4689`     | Not returned by Chainscout                        |
 | Monad     | `143`      | Not returned by Chainscout                        |
 | Ronin     | `2020`     | Chainscout returns a different network for `2020` |

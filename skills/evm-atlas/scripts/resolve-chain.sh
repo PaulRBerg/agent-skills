@@ -42,6 +42,7 @@ target_name_pattern() {
     1116) printf '%s\n' 'Core' ;;
     1) printf '%s\n' 'Ethereum' ;;
     250) printf '%s\n' 'Fantom' ;;
+    252) printf '%s\n' 'Fraxtal' ;;
     100) printf '%s\n' 'Gnosis' ;;
     999) printf '%s\n' 'HyperEVM|Hyper' ;;
     4689) printf '%s\n' 'IoTeX' ;;

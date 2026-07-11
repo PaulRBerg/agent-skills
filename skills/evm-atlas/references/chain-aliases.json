@@ -76,6 +76,11 @@
       "chainId": 250
     },
     {
+      "alias": "frax",
+      "chainName": "Fraxtal",
+      "chainId": 252
+    },
+    {
       "alias": "gnosis chain",
       "chainName": "Gnosis",
       "chainId": 100

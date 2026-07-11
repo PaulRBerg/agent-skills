@@ -169,6 +169,17 @@
         "instanceUrl": "https://ftmscout.com/"
       }
     },
+    "fraxtal": {
+      "primaryPublicRpc": "https://rpc.frax.com",
+      "fallbackPublicRpcs": [
+        "https://fraxtal-rpc.publicnode.com",
+        "https://fraxtal.drpc.org",
+        "https://fraxtal.gateway.tenderly.co"
+      ],
+      "routeMesh": true,
+      "etherscan": { "support": "free" },
+      "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
+    },
     "gnosis": {
       "primaryPublicRpc": "https://rpc.gnosischain.com",
       "fallbackPublicRpcs": [

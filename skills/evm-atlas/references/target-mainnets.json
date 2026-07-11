@@ -118,6 +118,15 @@
       "routeMesh": true
     },
     {
+      "chainName": "Fraxtal",
+      "chainId": 252,
+      "slug": "fraxtal",
+      "primaryPublicRpc": "https://rpc.frax.com",
+      "nativeCurrencySymbol": "FRAX",
+      "explorerUrl": "https://fraxscan.com",
+      "routeMesh": true
+    },
+    {
       "chainName": "Gnosis",
       "chainId": 100,
       "slug": "gnosis",

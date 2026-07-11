@@ -114,6 +114,15 @@
       ]
     },
     {
+      "chainName": "Fraxtal",
+      "chainId": 252,
+      "fallbackPublicRpcs": [
+        "https://fraxtal-rpc.publicnode.com",
+        "https://fraxtal.drpc.org",
+        "https://fraxtal.gateway.tenderly.co"
+      ]
+    },
+    {
       "chainName": "Gnosis",
       "chainId": 100,
       "fallbackPublicRpcs": [
