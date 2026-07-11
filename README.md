@@ -20,6 +20,7 @@ npx skills add PaulRBerg/agent-skills#shelved
 | loop-skill         | Repeat a skill until stable or an exact count |
 | oracle-codex       | Codex oracle for planning                     |
 | vitest             | Vitest v4 testing guidance                    |
+| work               | End-to-end task implementation                |
 
 ## References
 
