@@ -46,7 +46,6 @@ bunx skills add PaulRBerg/agent-skills
 | tailwind-css              | Tailwind CSS v4 styling guidance                           |
 | todo-archive              | Archive checked TODO.md tasks into .ai/todos               |
 | vitest                    | Vitest test writing and debugging                          |
-| work                      | End-to-end task implementation                             |
 | yeet                      | GitHub contribution workflows                              |
 
 ## Forked Skills
