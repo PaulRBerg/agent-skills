@@ -1,13 +1,13 @@
 ---
 disable-model-invocation: false
-name: playground
+name: html-playground
 user-invocable: true
 description:
-  Use to create interactive single-file HTML playgrounds/explorers/tools with visual controls, live preview, and prompt
-  copy-out.
+  Use to build interactive single-file HTML playgrounds, explorers, or tools with visual controls, live preview, and
+  prompt copy-out.
 ---
 
-# Playground Builder
+# HTML Playground Builder
 
 Build a self-contained interactive HTML explorer with controls, live preview, and a copyable natural-language prompt.
 

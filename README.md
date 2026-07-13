@@ -32,15 +32,15 @@ bunx skills add PaulRBerg/agent-skills
 | coingecko-open-page       | Open CoinGecko historical data page in Chromium            |
 | commit                    | Git commit with conventional commits                       |
 | create-skill              | Bootstrap a new agent skill                                |
-| debrief                   | Interactive HTML or Markdown task debrief                  |
 | effect-ts                 | Effect-TS patterns and guidance                            |
 | evm-atlas                 | EVM chain/account lookup + cross-chain data routing        |
 | find-tool                 | Find and compare current developer tools                   |
 | git-squash                | Squash PR branch with semantic commit message              |
 | grill-me                  | Relentlessly stress-test plans and designs                 |
+| html-debrief              | Interactive HTML task debriefs                             |
+| html-playground           | Interactive single-file HTML playgrounds                   |
 | large-file-refactor       | Large source-file report and Serena split plans            |
 | night-shift               | Autonomous overnight codebase improvement                  |
-| playground                | Interactive single-file HTML playgrounds                   |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references    |
 | skill-doctor              | Audit Agent Skills catalogs and installed skill roots      |
 | skill-map                 | Find skill dependencies and references across machine      |
@@ -52,9 +52,9 @@ bunx skills add PaulRBerg/agent-skills
 
 ## Forked Skills
 
-| Skill      | Source                                                                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| playground | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
+| Skill           | Source                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| html-playground | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
 
 Some mechanical skills pin `model: sonnet` in their frontmatter so they do not spend a more capable inherited model
 where deterministic tooling already carries the workflow.
