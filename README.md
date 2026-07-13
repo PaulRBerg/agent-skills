@@ -39,6 +39,7 @@ bunx skills add PaulRBerg/agent-skills
 | git-squash                | Squash PR branch with semantic commit message              |
 | grill-me                  | Relentlessly stress-test plans and designs                 |
 | large-file-refactor       | Large source-file report and Serena split plans            |
+| night-shift               | Autonomous overnight codebase improvement                  |
 | playground                | Interactive single-file HTML playgrounds                   |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references    |
 | skill-doctor              | Audit Agent Skills catalogs and installed skill roots      |
