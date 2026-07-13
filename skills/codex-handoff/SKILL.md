@@ -176,6 +176,11 @@ Wave status, on each digest or completion:
   verification evidence proves the approved plan.
 - When the plan marked polish as required, invoke `$code-polish` once with exactly that union and its default
   simplify-then-review mode. Skip polish if any required agent failed; do not recompute or broaden scope.
+- If the approved work changes one or more Git repositories on this machine other than the repository where the handoff
+  began, automatically invoke `$commit` from each additional repository after its work, validation, and any required
+  polish are complete. Scope each invocation to the files changed there, do not ask for separate confirmation, and do
+  not commit incomplete, blocked, unexpected, or out-of-scope changes. Push only when the user explicitly requested it.
 - Finish with a 🏁 report: the strategy, agent count, and per agent — requested model, effort, timeout budget vs actual
   elapsed (from `elapsed=`/the sentinel), output tokens when available, status, and summary — plus the combined changed
-  files and verification, the polish result when run, blockers, and residual risks.
+  files and verification, the polish result when run, any automatic cross-repository commit hashes, blockers, and
+  residual risks.
