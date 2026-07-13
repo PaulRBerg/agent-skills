@@ -44,9 +44,10 @@ If `prettier-check` fails, analyze the errors and fix only files you changed.
 - `just` - list recipes.
 - `just prettier-check` - check Markdown formatting with Prettier.
 - `just prettier-write` - format Markdown in place.
-- `just evm-atlas-check` - verify generated `evm-atlas` references match `@prb/crypto-registry` plus atlas overlays.
-- `just evm-atlas-generate` - regenerate generated `evm-atlas` references from `@prb/crypto-registry` plus atlas
-  overlays.
+- `just evm-atlas-check` - verify generated `evm-atlas` references match `@prb/crypto-registry`'s canonical chain JSON
+  plus atlas overlays.
+- `just evm-atlas-generate` - regenerate generated `evm-atlas` references from `@prb/crypto-registry`'s canonical chain
+  JSON plus atlas overlays.
 - `just skill-invocation-check` - verify `SKILL.md` invocation fields match `agents/openai.yaml`.
 - `just skill-invocation-fix` - update `agents/openai.yaml` invocation policy from `SKILL.md`.
 - `just pre-commit` - run staged-file checks through `nlx lint-staged`.

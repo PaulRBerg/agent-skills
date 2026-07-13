@@ -68,7 +68,7 @@ alias pw := prettier-write
 @pre-commit:
     nlx lint-staged
 
-# Regenerate evm-atlas generated references from crypto-registry + atlas overlays
+# Regenerate evm-atlas references from crypto-registry's canonical chain JSON + atlas overlays
 [group("checks")]
 @evm-atlas-generate:
     node {{ evm_atlas_generator }} --write

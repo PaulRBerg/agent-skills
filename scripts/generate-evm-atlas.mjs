@@ -1,7 +1,7 @@
 import { constants as fsConstants } from "node:fs";
-import { access, chmod, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { access, chmod, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import prettier from "prettier";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -17,15 +17,19 @@ const blockscoutChainsPath = path.join(referencesDir, "blockscout-chains.md");
 const mode = parseMode(process.argv.slice(2));
 const overlay = await readJson(overlayPath);
 const registryDir = await resolveRegistryDir();
-await assertRegistryDistFresh(registryDir);
-const registry = await import(pathToFileURL(path.join(registryDir, "dist", "index.js")).href);
-const chains = registry.CHAINS;
+const registry = await readJson(path.join(registryDir, "data", "chains.json"));
+const registryChains = registry?.chains;
 
-if (!Array.isArray(chains) || chains.length === 0) {
-  fail("crypto-registry dist/index.js did not export a non-empty CHAINS array.");
+if (registry?.schemaVersion !== 1) {
+  fail(`Unsupported crypto-registry chains schema version: ${registry?.schemaVersion ?? "missing"}.`);
+}
+if (!Array.isArray(registryChains) || registryChains.length === 0) {
+  fail("crypto-registry data/chains.json did not contain a non-empty chains array.");
 }
 
-validateOverlay(overlay, chains);
+validateOverlay(overlay, registryChains);
+const chainsBySlug = new Map(registryChains.map((chain) => [chain.slug, chain]));
+const chains = Object.keys(overlay.chains).map((slug) => chainsBySlug.get(slug));
 
 const files = new Map([
   [path.join(referencesDir, "target-mainnets.json"), `${JSON.stringify({ chains: targetMainnets(chains, overlay) }, null, 2)}\n`],
@@ -100,37 +104,6 @@ async function resolveRegistryDir() {
   }
 
   fail("Missing @prb/crypto-registry checkout. Set CRYPTO_REGISTRY_DIR or clone it at ../crypto-registry.");
-}
-
-async function assertRegistryDistFresh(registryDir) {
-  const distIndex = path.join(registryDir, "dist", "index.js");
-  const distChains = path.join(registryDir, "dist", "chains", "chains.js");
-  for (const filePath of [distIndex, distChains]) {
-    try {
-      await access(filePath, fsConstants.R_OK);
-    } catch {
-      fail(`Missing ${filePath}. Run \`cd ${registryDir} && just tsc-build\` first.`);
-    }
-  }
-
-  const sourceFiles = await walk(path.join(registryDir, "src", "chains"));
-  const sourceStats = await Promise.all(sourceFiles.filter((file) => file.endsWith(".ts")).map((file) => stat(file)));
-  const latestSourceMtime = Math.max(...sourceStats.map((fileStat) => fileStat.mtimeMs));
-  const oldestDistMtime = Math.min((await stat(distIndex)).mtimeMs, (await stat(distChains)).mtimeMs);
-  if (oldestDistMtime + 1000 < latestSourceMtime) {
-    fail(`crypto-registry dist is older than src/chains. Run \`cd ${registryDir} && just tsc-build\` first.`);
-  }
-}
-
-async function walk(dir) {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...(await walk(fullPath)));
-    else files.push(fullPath);
-  }
-  return files;
 }
 
 function validateOverlay(data, registryChains) {
