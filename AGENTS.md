@@ -52,8 +52,8 @@ If `prettier-check` fails, analyze the errors and fix only files you changed.
 - `just skill-invocation-fix` - update `agents/openai.yaml` invocation policy from `SKILL.md`.
 - `just pre-commit` - run staged-file checks through `nlx lint-staged`.
 - `just hooks-install` - install Husky hooks for this checkout through `nlx husky`.
-- `just sync` - commit your staged changes via `ccc --staged` and push, install skills into `~/.agents`, sync
-  `~/.claude`, then commit and push there.
+- `just sync` - rough fallback that commits and pushes staged changes, performs a catalog-wide reinstall into
+  `~/.agents` and `~/.claude`, then commits and pushes `~/.agents`.
 
 `package.json` exists only for local formatting and hook wiring; there is no build step. Treat Markdown formatting,
 invocation metadata checks, and skill-specific helper scripts as the verification surface unless a task introduces a
@@ -63,9 +63,10 @@ narrower check.
 
 - When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo,
   modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
-- Changes here are not live until installed into every target declared by the skill. After committing or pushing in this
-  repo, recommend `just sync` (it performs target-aware propagation) and offer to run it on the user's behalf; do not
-  run it unprompted.
+- Changes here are not live until installed into every target declared by the skill. After editing installable catalog
+  skills, recommend the `publish-skills` internal skill and offer to run `@publish-skills`; do not run it unprompted
+  because it commits, pushes, and changes global installations. Use `just sync` only as a rough fallback when surgical,
+  transcript-scoped propagation is unavailable.
 - When an installable catalog skill is added or removed, update the skills table in `README.md`.
 - Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under
   `skills/`. Do not add them to `README.md`, do not create `agents/openai.yaml`, and do not treat them as installable
