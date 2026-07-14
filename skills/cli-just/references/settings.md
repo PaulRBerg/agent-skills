@@ -37,6 +37,7 @@ Enable with `set NAME` or `set NAME := true`:
 | `dotenv-filename`    | `".env.local"`                       | Custom dotenv filename; accepts a list to load multiple files (v1.53.0+)       |
 | `dotenv-path`        | `"config/.env"`                      | Custom dotenv path; accepts a list to load multiple files (v1.53.0+)           |
 | `dotenv-command`     | `'sops -d .enc.env'`                 | Load env from a command's stdout; repeatable via `--dotenv-command` (v1.54.0+) |
+| `indentation`        | `"    "`                             | Indentation string `--fmt`/`--dump` use for recipe bodies (v1.56.0+)           |
 | `tempdir`            | `"/tmp/just"`                        | Temporary file directory                                                       |
 | `working-directory`  | `"src"`                              | Default working directory                                                      |
 | `minimum-version`    | `'1.55.0'`                           | Error if `just` is older than this `MAJOR.MINOR.PATCH` (v1.55.0+)              |

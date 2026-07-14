@@ -217,6 +217,9 @@ this:
 # Number of CPUs
 cpus := num_cpus()
 
+# Parallelism cap for [parallel] recipes, i.e. the --jobs / JUST_JOBS value (v1.56.0+)
+jobs := num_jobs()
+
 # UUID generation
 id := uuid()
 
@@ -365,6 +368,7 @@ files := ```
 | `just --dotenv-filename N …`  | Dotenv filename(s) to search for; repeatable (v1.53.0+)                         |
 | `just --dotenv-command CMD …` | Load env from a command's stdout; repeatable, later wins (v1.54.0+)             |
 | `just -d DIR`                 | Set working directory                                                           |
+| `just --jobs N`               | Cap `[parallel]` recipes to N concurrent (env `JUST_JOBS`; v1.56.0+)            |
 | `just --indentation STR`      | Use STR for recipe indentation when formatting (v1.49.0+)                       |
 | `just --no-cache`             | Bypass the recipe cache for this run (v1.54.0+)                                 |
 | `just --clean [RECIPE]`       | Clear cached recipe entries, optionally filtered by recipe/module (v1.54.0+)    |

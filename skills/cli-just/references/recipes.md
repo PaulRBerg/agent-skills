@@ -192,7 +192,8 @@ build:
 - Only **direct** dependencies fan out. The recipe body itself still runs after all parallel deps finish.
 - **Shared transitive deps run exactly once before the parallel fan-out**, so this is the right primitive for
   `setup → fan-out work` graphs — a dep referenced by multiple parallel siblings is deduped, not run once per sibling.
-- No concurrency cap is exposed; just launches all direct deps at once.
+- By default just launches all direct deps at once. Cap concurrency with `--jobs N` (env `JUST_JOBS`; v1.56.0+); read
+  the active limit inside a recipe with `num_jobs()` (v1.56.0+).
 - Empirical timing on a sleep-0.5 fan-out of three deps: **1.54 s sequential → 0.54 s with `[parallel]`**.
 
 Pairs naturally with parameterized dependencies (`recipe: (sub-recipe "arg1" "arg2")`) for table-driven fan-out where
@@ -273,6 +274,8 @@ build:
 internal-helper:
     echo "hidden"
 ```
+
+The `[doc]` string may be a const expression, not just a literal (v1.56.0+).
 
 ### Combining Attributes
 
@@ -542,6 +545,8 @@ Likewise `help` may be an expression or list (joined with spaces), and a flag's 
 | `flag`            | Valueless flag ⇒ `"true"`/`[]`; needs `set lists`, no default (v1.53.0+)                                 |
 | `help="text"`     | Description for `just --usage`; may be an expression or list (v1.55.0+)                                  |
 | `pattern="regex"` | Constrain argument to match regex; may be an expression, or a match-any list with `set lists` (v1.55.0+) |
+| `min="N"`         | Minimum count for a variadic option; needs `set lists` (v1.56.0+)                                        |
+| `max="N"`         | Maximum count for a variadic option; needs `set lists` (v1.56.0+)                                        |
 
 ## Recipe Dependencies
 
