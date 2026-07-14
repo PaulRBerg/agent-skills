@@ -152,19 +152,39 @@ agents in the same parallel wave are blockers; do not start their dependents or 
 Use this legend consistently: 🚀 kickoff · ⏳ running · ✅ completed · ⛔ blocked · ⏱️ timed out · 💥 runner error · 🧹
 polish · 🏁 final report. Keep every update to one short block — no walls of text.
 
-Kickoff, once per wave: the wave's manifest rows (agent, scope, model, effort, timeout), one `tail -f <progress-file>`
-line per agent for real-time watching in another pane, and a note that `/tasks` lists and stops running agents.
+Prefix every wave-scoped kickoff, digest, and completion update with a 10-cell Unicode progress bar and percentage.
+Progress means agent settlement, not estimated implementation completion:
+
+- `settled` is the number of agents whose wrapper sentinel has arrived, regardless of the structured result status or
+  sentinel reason.
+- Percentage is `round(100 * settled / agents)`. Filled cells are `floor(10 * settled / agents + 0.5)`; render filled
+  cells as `█` and remaining cells as `░`.
+- Use the exact structure `[<10 cells>] <percentage>% (<settled>/<agents> settled)`. Never derive the percentage from
+  elapsed time, event count, or recent activity. Keep failures visible through the existing status emoji and agent row.
+
+Kickoff, once per wave:
+
+```markdown
+### 🚀 Wave 1/2 [░░░░░░░░░░] 0% (0/3 settled) — 3 agents launched
+```
+
+Follow it with the wave's manifest rows (agent, scope, model, effort, timeout), one `tail -f <progress-file>` line per
+agent for real-time watching in another pane, and a note that `/tasks` lists and stops running agents.
 
 Wave status, on each digest or completion:
 
 ```markdown
-### ⏳ Wave 1/2 — 15m elapsed
+### ⏳ Wave 1/2 [███░░░░░░░] 33% (1/3 settled) — 15m elapsed
 
 | Agent | Status     | Activity                   |
 | ----- | ---------- | -------------------------- |
 | A1    | ⏳ 15m/20m | ran `cargo test`           |
 | A2    | ✅ 8m      | done — 3 files, tests pass |
+| A3    | ⏳ 15m/20m | no recent activity         |
 ```
+
+At full settlement, render `[██████████] 100% (3/3 settled)`. A wave that settled with failures still reaches 100%; its
+heading and agent rows must show the failure status rather than implying successful completion.
 
 ## Completion
 
