@@ -1,8 +1,8 @@
 ---
 name: publish-skills
 description:
-  Commit and push catalog skills changed in the current chat, then surgically add, refresh, or remove only those global
-  installations.
+  Commit and push catalog skills changed in the current chat, surgically propagate only those global installations, then
+  commit and push the affected global skill paths.
 ---
 
 # Publish Skills
@@ -79,7 +79,7 @@ bunx skills add PaulRBerg/agent-skills --global --agent codex --skill "skill-a" 
 `skills add` refreshes an existing named installation and also handles newly introduced skills. If any command fails,
 stop and report the failed command plus the sets already completed; do not fall back to a catalog-wide reinstall.
 
-### 4. Verify and Report
+### 4. Verify the Installations
 
 Verify every recorded skill:
 
@@ -92,5 +92,21 @@ Verify every recorded skill:
 
 Treat a path as absent only when both `test ! -e` and `test ! -L` pass, so dangling symlinks fail verification.
 
-Report the pushed commit summary and the introduced, refreshed, and deleted skill names. Completion requires every
-recorded skill to match its declared target state.
+### 5. Commit and Push the Global Repositories
+
+Inspect `~/.agents` and `~/.claude` separately. In each Git worktree with a diff under a recorded skill path, invoke the
+commit skill from that worktree as:
+
+```text
+$commit --push
+```
+
+Treat only `skills/<recorded-name>/` paths as session-modified paths. Include deletions with `git add -A` semantics, and
+do not stage or commit unrelated changes. Skip a worktree when none of its recorded skill paths changed. Wait for every
+required commit and push to succeed; if one fails, stop and report which global worktrees were already pushed.
+
+### 6. Report
+
+Report the source and global-repository commit summaries plus the introduced, refreshed, and deleted skill names.
+Completion requires every recorded skill to match its declared target state and every resulting diff under
+`~/.agents/skills/<name>/` or `~/.claude/skills/<name>/` to be committed and pushed.
