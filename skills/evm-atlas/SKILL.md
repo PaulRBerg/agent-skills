@@ -5,8 +5,8 @@ name: evm-atlas
 user-invocable: true
 description:
   "Use for targeted EVM chain, account, transaction, RPC, explorer, and bridge data: chain name/ID, native symbol,
-  RouteMesh, balances, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout;
-  Bungee, LayerZero, LI.FI, Socket enrichment."
+  RouteMesh, wallet balances via Blockscan in Chromium, token/NFT holdings/transfers, tx history, funding origin via
+  Etherscan/Blockscout/Chainscout; Bungee, LayerZero, LI.FI, Socket enrichment."
 ---
 
 # EVM Atlas
@@ -26,18 +26,20 @@ Resolve and query only the target mainnets in `references/target-mainnets.json`,
 
 ## Routing
 
-1. For an address-wide activity or current-balance sweep, read `references/address-sweeps.md`. Its scope remains the
-   target-mainnet list.
-2. For a specific chain's balance, holdings, transfers, transaction history, receipt, or funding origin, resolve the
-   chain and read `references/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and
-   exceptional-chain routing.
-3. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
+1. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
+   read `references/blockscan-balances.md` first.
+2. For an address-wide historical-activity or current-NFT sweep, read `references/address-sweeps.md`. Its
+   current-balance workflow is also the API fallback for Blockscan gaps.
+3. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, receipt, or
+   funding origin, resolve the chain and read `references/provider-routing.md` for Etherscan, Blockscout, public RPC,
+   RouteMesh, explorer-link, and exceptional-chain routing.
+4. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
    only the matching reference:
    - Bungee / Socket: `references/bridge-bungee.md`
    - Circle / CCTP / Gateway: `references/bridge-circle.md`
    - LayerZero / Stargate / OFT / Aori: `references/bridge-layerzero.md`
    - LI.FI: `references/bridge-lifi.md`
-4. Treat bridge APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
+5. Treat bridge APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
    evidence.
 
 ## Completion

@@ -3,8 +3,11 @@
 Use this reference when the prompt gives an EVM address and asks across "any chain", "all chains", "where has this
 address been active?", "has this address ever been used?", or "does this address hold anything now?".
 
-Scope is exactly `./references/target-mainnets.json` (34 target mainnets). Do not expand to every Etherscan, Blockscout,
-Chainscout, Chainlist, or RPC-supported EVM chain. If the user wants non-target coverage, ask for a feature request in
+For a current native or fungible-token portfolio, enter through `blockscan-balances.md`. Use the current-balance
+workflow below when Blockscan needs an API fallback or when the request requires NFT enumeration.
+
+Scope is exactly `./references/target-mainnets.json`. Do not expand to every Etherscan, Blockscout, Chainscout,
+Chainlist, or RPC-supported EVM chain. If the user wants non-target coverage, ask for a feature request in
 <https://github.com/PaulRBerg/agent-skills>.
 
 ## Provider Routing
@@ -104,7 +107,7 @@ api/v2/addresses/<addr>/token-transfers?type=ERC-721
 api/v2/addresses/<addr>/token-transfers?type=ERC-1155
 ```
 
-## Current Balance Sweep
+## Current Balance Sweep: API Fallback and NFT Coverage
 
 Goal: answer whether an address currently holds any native balance, ERC-20 balance, ERC-721 NFT, or ERC-1155 item on
 target mainnets. Report only positive balances by default, plus explicit provider gaps.
@@ -172,7 +175,7 @@ chain:
 
 Include explicit gaps such as "Etherscan paid-chain unavailable on free plan; Blockscout absent" or "RPC native balance
 only". Do not say "inactive on all EVM chains" unless the checked scope is clear; say "no indexed activity found across
-the 34 target mainnets".
+the target mainnets".
 
 ## Provider Docs
 
