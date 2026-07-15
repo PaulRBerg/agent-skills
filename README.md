@@ -35,6 +35,7 @@ bunx skills add PaulRBerg/agent-skills
 | effect-ts                 | Effect-TS patterns and guidance                            |
 | evm-atlas                 | EVM chain/account lookup + cross-chain data routing        |
 | find-tool                 | Find and compare current developer tools                   |
+| fresh-eyes-sweep          | Meticulous whole-repository audit and verified fixes       |
 | git-squash                | Squash PR branch with semantic commit message              |
 | grill-me                  | Relentlessly stress-test plans and designs                 |
 | html-debrief              | Interactive HTML task debriefs                             |
