@@ -61,7 +61,7 @@ Route these target chains to Blockscout when available, then to the `primaryPubl
 | Morph           | `2818`    | Not returned by the live chainlist                                             |
 | Robinhood Chain | `4663`    | Not returned by the live chainlist                                             |
 | Ronin           | `2020`    | Not returned by the live chainlist                                             |
-| Scroll          | `534352`  | Removed from Etherscan V2 on 2026-04-16                                        |
+| Scroll          | `534352`  | Removed from Etherscan V2 on 2026-04-16; api.scrollscan.com no longer resolves |
 | Sophon          | `50104`   | Not returned by the live chainlist                                             |
 | Superseed       | `5330`    | Not returned by the live chainlist                                             |
 | ZKsync Era      | `324`     | Not currently supported by Etherscan V2                                        |

@@ -72,24 +72,24 @@ Observed on 2026-07-08. Presence here does not override the canonical explorer/R
 
 Use Etherscan or the public RPC/explorer in `./references/target-mainnets.json` for these.
 
-| Chain     | `chain_id` | Notes                                             |
-| --------- | ---------- | ------------------------------------------------- |
-| Abstract  | `2741`     | Not returned by Chainscout                        |
-| Avalanche | `43114`    | Not returned by Chainscout                        |
-| Berachain | `80094`    | Not returned by Chainscout                        |
-| Blast     | `81457`    | Not returned by Chainscout                        |
-| BNB Chain | `56`       | Not returned by Chainscout                        |
-| Chiliz    | `88888`    | Not returned by Chainscout                        |
-| Core Dao  | `1116`     | Not returned by Chainscout                        |
-| Fraxtal   | `252`      | Not returned by Chainscout                        |
-| IoTeX     | `4689`     | Not returned by Chainscout                        |
-| Monad     | `143`      | Not returned by Chainscout                        |
-| Ronin     | `2020`     | Chainscout returns a different network for `2020` |
-| Sei       | `1329`     | Not returned by Chainscout                        |
-| Sonic     | `146`      | Not returned by Chainscout                        |
-| Sophon    | `50104`    | Not returned by Chainscout                        |
-| XDC       | `50`       | Not returned by Chainscout                        |
-| Zora      | `7777777`  | Not returned by Chainscout                        |
+| Chain     | `chain_id` | Notes                                                                                                                                                                |
+| --------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Abstract  | `2741`     | Not returned by Chainscout                                                                                                                                           |
+| Avalanche | `43114`    | Not returned by Chainscout                                                                                                                                           |
+| Berachain | `80094`    | Not returned by Chainscout                                                                                                                                           |
+| Blast     | `81457`    | Not returned by Chainscout                                                                                                                                           |
+| BNB Chain | `56`       | Not returned by Chainscout                                                                                                                                           |
+| Chiliz    | `88888`    | Not returned by Chainscout                                                                                                                                           |
+| Core Dao  | `1116`     | Not returned by Chainscout                                                                                                                                           |
+| Fraxtal   | `252`      | Not returned by Chainscout                                                                                                                                           |
+| IoTeX     | `4689`     | Not returned by Chainscout                                                                                                                                           |
+| Monad     | `143`      | Not returned by Chainscout                                                                                                                                           |
+| Ronin     | `2020`     | Chainscout returns a different network for `2020`; app.roninchain.com blocks scripted access, so verify through chrome-devtools/Chromium instead of curl or WebFetch |
+| Sei       | `1329`     | Not returned by Chainscout                                                                                                                                           |
+| Sonic     | `146`      | Not returned by Chainscout                                                                                                                                           |
+| Sophon    | `50104`    | Not returned by Chainscout                                                                                                                                           |
+| XDC       | `50`       | Not returned by Chainscout                                                                                                                                           |
+| Zora      | `7777777`  | Not returned by Chainscout                                                                                                                                           |
 
 ## Contributing
 

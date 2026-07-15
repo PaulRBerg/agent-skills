@@ -327,7 +327,7 @@
       "etherscan": { "support": "unsupported" },
       "blockscout": {
         "status": "unsafe",
-        "notes": "Chainscout returns a different network for `2020`"
+        "notes": "Chainscout returns a different network for `2020`; app.roninchain.com blocks scripted access, so verify through chrome-devtools/Chromium instead of curl or WebFetch"
       }
     },
     "scroll": {
@@ -336,7 +336,7 @@
       "routeMesh": true,
       "etherscan": {
         "support": "unsupported",
-        "notes": "Removed from Etherscan V2 on 2026-04-16"
+        "notes": "Removed from Etherscan V2 on 2026-04-16; api.scrollscan.com no longer resolves"
       },
       "blockscout": {
         "status": "observed",

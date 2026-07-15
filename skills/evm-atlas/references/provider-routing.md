@@ -26,7 +26,9 @@ Verify current support through `https://api.routeme.sh/chains`. Otherwise verify
 ## Explorer Links
 
 Use the target row's `explorerUrl` plus `explorer-paths.json`. Verify nonstandard explorers in their UI; Ronin does not
-reliably follow Etherscan paths and its chain ID collides with a non-target Chainscout entry.
+reliably follow Etherscan paths and its chain ID collides with a non-target Chainscout entry. Ronin's explorer
+(`app.roninchain.com`) also blocks scripted access, so open it with `chrome-devtools`/Chromium rather than `curl` or
+`WebFetch`, the same way `blockscan-balances.md` requires Chromium for Blockscan.
 
 ## Exceptional History
 
