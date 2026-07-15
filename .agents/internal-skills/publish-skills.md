@@ -1,25 +1,36 @@
 ---
 name: publish-skills
 description:
-  Commit and push catalog skills changed in the current chat, surgically propagate only those global installations, then
-  commit and push the affected global skill paths.
+  Commit and push catalog skills changed in the current chat or a user-specified commit range, surgically propagate only
+  those global installations, then commit and push the affected global skill paths.
 ---
 
 # Publish Skills
 
-Publish and propagate only the catalog skills changed in the current chat.
+Publish and propagate only the catalog skills changed in the current chat, or in a commit range the user specifies.
 
 ## Workflow
 
 ### 1. Resolve the Skill Sets
 
-Use the chat transcript as the source of ownership and Git state as supporting evidence. Inspect session-modified paths
-under `skills/<name>/` and classify every attributable skill as introduced, modified, or deleted.
+Run in one of two modes, chosen by how the user invoked this skill:
+
+- **Chat mode** (default): use the chat transcript as the source of ownership and Git state as supporting evidence.
+  Inspect session-modified paths under `skills/<name>/`.
+- **Commit-range mode**: the user names commits instead of relying on this chat's own edits — a date ("today"), a range,
+  specific SHAs, or similar. Resolve the range with Git (e.g. `git log --since/--until`, explicit SHAs) and use
+  `git show --stat` per commit as the source of ownership in place of the transcript. Confirm every resolved commit is
+  reachable from the current branch; if some are and some aren't, stop and report the mismatch rather than guessing
+  which the user meant.
+
+In either mode, inspect the resolved paths under `skills/<name>/` and classify every attributable skill as introduced,
+modified, or deleted.
 
 - Ignore changes outside `skills/`, including internal skills and documentation.
 - Treat a rename as one deletion plus one introduction.
 - De-duplicate names and accept only kebab-case names matching `[a-z0-9]+(-[a-z0-9]+)*`.
-- Stop before committing if no catalog skills changed in this chat or if ownership or classification is ambiguous.
+- Stop before committing if no catalog skills changed in the resolved scope or if ownership or classification is
+  ambiguous.
 
 For each introduced or modified skill, read `metadata.install-targets` from its current `SKILL.md` and group it as:
 
@@ -39,6 +50,10 @@ $commit --push
 
 Do not add `--all`. Wait for both the commit and push to succeed. On failure, stop without changing global skill
 installations.
+
+In commit-range mode the resolved commits are usually already committed, sometimes already pushed. Skip creating a new
+commit when the working tree is clean; still push if the branch is ahead of its upstream. If matching uncommitted
+changes exist locally, commit them as in chat mode before pushing.
 
 ### 3. Propagate Only the Recorded Skills
 
