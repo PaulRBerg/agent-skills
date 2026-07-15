@@ -206,6 +206,13 @@
       ]
     },
     {
+      "chainName": "Robinhood Chain",
+      "chainId": 4663,
+      "fallbackPublicRpcs": [
+        "https://robinhoodchain.blockscout.com/api/eth-rpc"
+      ]
+    },
+    {
       "chainName": "Ronin",
       "chainId": 2020,
       "fallbackPublicRpcs": [

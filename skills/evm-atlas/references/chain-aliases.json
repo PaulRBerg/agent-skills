@@ -136,6 +136,11 @@
       "chainId": 137
     },
     {
+      "alias": "robinhood",
+      "chainName": "Robinhood Chain",
+      "chainId": 4663
+    },
+    {
       "alias": "Sei Network",
       "chainName": "Sei",
       "chainId": 1329

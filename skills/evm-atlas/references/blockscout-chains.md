@@ -44,28 +44,29 @@ chain IDs and rejects Chainscout responses whose name does not match the target 
 Observed on 2026-07-08. Presence here does not override the canonical explorer/RPC metadata in
 `./references/target-mainnets.json`.
 
-| Chain         | `chain_id` | Native | Hosted by  | Instance URL                                     | Notes                                             |
-| ------------- | ---------- | ------ | ---------- | ------------------------------------------------ | ------------------------------------------------- |
-| Arbitrum      | `42161`    | ETH    | blockscout | https://arbitrum.blockscout.com/                 |                                                   |
-| Arbitrum Nova | `42170`    | ETH    | blockscout | https://arbitrum-nova.blockscout.com/            | Canonical explorer (Arbiscan Nova decommissioned) |
-| Base          | `8453`     | ETH    | blockscout | https://base.blockscout.com/                     |                                                   |
-| Celo          | `42220`    | CELO   | blockscout | https://celo.blockscout.com/                     |                                                   |
-| Ethereum      | `1`        | ETH    | blockscout | https://eth.blockscout.com/                      |                                                   |
-| Fantom        | `250`      | FTM    | self       | https://ftmscout.com/                            |                                                   |
-| Gnosis        | `100`      | xDAI   | blockscout | https://gnosis.blockscout.com/                   |                                                   |
-| HyperEVM      | `999`      | HYPE   | self       | https://www.hyperscan.com/                       | Chainscout marks `isTestnet=true`                 |
-| Lightlink     | `1890`     | ETH    | blockscout | https://phoenix.lightlink.io/                    |                                                   |
-| Linea         | `59144`    | ETH    | self       | https://explorer.linea.build/                    |                                                   |
-| Mode          | `34443`    | ETH    | blockscout | https://explorer.mode.network/                   |                                                   |
-| Morph         | `2818`     | ETH    | self       | https://explorer.morphl2.io/                     |                                                   |
-| Optimism      | `10`       | ETH    | blockscout | https://explorer.optimism.io/                    |                                                   |
-| Polygon       | `137`      | POL    | blockscout | https://polygon.blockscout.com/                  |                                                   |
-| Scroll        | `534352`   | ETH    | blockscout | https://scroll.blockscout.com                    |                                                   |
-| Superseed     | `5330`     | ETH    | self       | https://explorer.superseed.xyz/                  |                                                   |
-| Taiko         | `167000`   | ETH    | self       | https://blockscout.mainnet.taiko.xyz/            | Chainscout name is Taiko Alethia                  |
-| Unichain      | `130`      | ETH    | blockscout | https://unichain.blockscout.com                  |                                                   |
-| World Chain   | `480`      | ETH    | alchemy    | https://worldchain-mainnet.explorer.alchemy.com/ | Alchemy-hosted instance; prefer Etherscan V2      |
-| ZKsync Era    | `324`      | ETH    | blockscout | https://zksync.blockscout.com/                   |                                                   |
+| Chain           | `chain_id` | Native | Hosted by  | Instance URL                                     | Notes                                             |
+| --------------- | ---------- | ------ | ---------- | ------------------------------------------------ | ------------------------------------------------- |
+| Arbitrum        | `42161`    | ETH    | blockscout | https://arbitrum.blockscout.com/                 |                                                   |
+| Arbitrum Nova   | `42170`    | ETH    | blockscout | https://arbitrum-nova.blockscout.com/            | Canonical explorer (Arbiscan Nova decommissioned) |
+| Base            | `8453`     | ETH    | blockscout | https://base.blockscout.com/                     |                                                   |
+| Celo            | `42220`    | CELO   | blockscout | https://celo.blockscout.com/                     |                                                   |
+| Ethereum        | `1`        | ETH    | blockscout | https://eth.blockscout.com/                      |                                                   |
+| Fantom          | `250`      | FTM    | self       | https://ftmscout.com/                            |                                                   |
+| Gnosis          | `100`      | xDAI   | blockscout | https://gnosis.blockscout.com/                   |                                                   |
+| HyperEVM        | `999`      | HYPE   | self       | https://www.hyperscan.com/                       | Chainscout marks `isTestnet=true`                 |
+| Lightlink       | `1890`     | ETH    | blockscout | https://phoenix.lightlink.io/                    |                                                   |
+| Linea           | `59144`    | ETH    | self       | https://explorer.linea.build/                    |                                                   |
+| Mode            | `34443`    | ETH    | blockscout | https://explorer.mode.network/                   |                                                   |
+| Morph           | `2818`     | ETH    | self       | https://explorer.morphl2.io/                     |                                                   |
+| Optimism        | `10`       | ETH    | blockscout | https://explorer.optimism.io/                    |                                                   |
+| Polygon         | `137`      | POL    | blockscout | https://polygon.blockscout.com/                  |                                                   |
+| Robinhood Chain | `4663`     | ETH    | blockscout | https://robinhoodchain.blockscout.com/           |                                                   |
+| Scroll          | `534352`   | ETH    | blockscout | https://scroll.blockscout.com                    |                                                   |
+| Superseed       | `5330`     | ETH    | self       | https://explorer.superseed.xyz/                  |                                                   |
+| Taiko           | `167000`   | ETH    | self       | https://blockscout.mainnet.taiko.xyz/            | Chainscout name is Taiko Alethia                  |
+| Unichain        | `130`      | ETH    | blockscout | https://unichain.blockscout.com                  |                                                   |
+| World Chain     | `480`      | ETH    | alchemy    | https://worldchain-mainnet.explorer.alchemy.com/ | Alchemy-hosted instance; prefer Etherscan V2      |
+| ZKsync Era      | `324`      | ETH    | blockscout | https://zksync.blockscout.com/                   |                                                   |
 
 ## Target Chains Absent or Unsafe in Chainscout
 

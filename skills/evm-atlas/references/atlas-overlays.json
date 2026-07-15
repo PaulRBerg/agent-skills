@@ -309,6 +309,17 @@
         "instanceUrl": "https://polygon.blockscout.com/"
       }
     },
+    "robinhood": {
+      "primaryPublicRpc": "https://rpc.mainnet.chain.robinhood.com",
+      "fallbackPublicRpcs": ["https://robinhoodchain.blockscout.com/api/eth-rpc"],
+      "routeMesh": false,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://robinhoodchain.blockscout.com/"
+      }
+    },
     "ronin": {
       "primaryPublicRpc": "https://api.roninchain.com/rpc",
       "fallbackPublicRpcs": ["https://ronin.drpc.org", "https://2020.rpc.thirdweb.com"],

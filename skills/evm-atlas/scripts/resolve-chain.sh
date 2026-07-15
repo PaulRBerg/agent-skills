@@ -53,6 +53,7 @@ target_name_pattern() {
     2818) printf '%s\n' 'Morph' ;;
     10) printf '%s\n' 'OP|Optimism' ;;
     137) printf '%s\n' 'Polygon' ;;
+    4663) printf '%s\n' 'Robinhood Chain' ;;
     2020) printf '%s\n' 'Ronin' ;;
     534352) printf '%s\n' 'Scroll' ;;
     1329) printf '%s\n' 'Sei' ;;
