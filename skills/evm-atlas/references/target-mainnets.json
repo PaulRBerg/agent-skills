@@ -223,7 +223,7 @@
       "primaryPublicRpc": "https://rpc.mainnet.chain.robinhood.com",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://robinhoodchain.blockscout.com",
-      "routeMesh": false
+      "routeMesh": true
     },
     {
       "chainName": "Ronin",
@@ -331,7 +331,7 @@
       "primaryPublicRpc": "https://zora.drpc.org",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://explorer.zora.energy",
-      "routeMesh": false
+      "routeMesh": true
     }
   ]
 }

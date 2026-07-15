@@ -80,6 +80,12 @@ alias eag := evm-atlas-generate
     node {{ evm_atlas_generator }} --check
 alias eac := evm-atlas-check
 
+# Refresh atlas-overlays.json routeMesh flags from RouteMesh's live chain list (network call)
+[group("checks")]
+@evm-atlas-discover-routemesh:
+    node {{ evm_atlas_generator }} --discover-routemesh
+alias eadr := evm-atlas-discover-routemesh
+
 # Check SKILL.md invocation fields against agents/openai.yaml
 [group("checks")]
 @skill-invocation-check:

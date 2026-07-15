@@ -47,6 +47,8 @@ if (mode === "write") {
   for (const [filePath, content] of files) await writeFile(filePath, content);
   await chmod(path.join(scriptsDir, "resolve-chain.sh"), 0o755);
   process.stdout.write(`Generated ${files.size} evm-atlas files from ${registryDir}\n`);
+} else if (mode === "discover-routemesh") {
+  await discoverRouteMesh(chains, overlay);
 } else {
   const dirty = [];
   for (const [filePath, expected] of files) {
@@ -63,10 +65,12 @@ if (mode === "write") {
 }
 
 function parseMode(args) {
-  if (args.length !== 1 || !["--write", "--check"].includes(args[0])) {
-    fail("Usage: node scripts/generate-evm-atlas.mjs --write|--check");
+  if (args.length !== 1 || !["--write", "--check", "--discover-routemesh"].includes(args[0])) {
+    fail("Usage: node scripts/generate-evm-atlas.mjs --write|--check|--discover-routemesh");
   }
-  return args[0] === "--write" ? "write" : "check";
+  if (args[0] === "--write") return "write";
+  if (args[0] === "--check") return "check";
+  return "discover-routemesh";
 }
 
 async function formatMarkdown(filePath, content) {
@@ -151,6 +155,52 @@ function assertStringArray(value, name) {
   if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string" || item.length === 0)) {
     fail(`${name} must be a non-empty string array.`);
   }
+}
+
+async function discoverRouteMesh(registryChains, data) {
+  let response;
+  try {
+    response = await fetch("https://api.routeme.sh/chains");
+  } catch (error) {
+    fail(`RouteMesh chains request failed: ${error.message}`);
+  }
+  if (!response.ok) fail(`RouteMesh chains request failed: HTTP ${response.status}`);
+  const liveChains = await response.json();
+  const liveChainIds = new Set(liveChains.map((chain) => Number(chain.chain_id)));
+
+  // Patch the raw text in place instead of round-tripping through JSON.stringify, so the
+  // hand-formatted overlay (compact single-line arrays/objects) isn't reflowed wholesale.
+  let text = await readFile(overlayPath, "utf8");
+  const changes = [];
+  for (const chain of registryChains) {
+    const live = liveChainIds.has(chain.chainId);
+    if (data.chains[chain.slug].routeMesh === live) continue;
+    const pattern = new RegExp(`("${escapeRegExp(chain.slug)}":\\s*\\{[\\s\\S]*?"routeMesh":\\s*)(?:true|false)`);
+    if (!pattern.test(text)) fail(`Could not locate ${chain.slug}.routeMesh in atlas-overlays.json.`);
+    text = text.replace(pattern, `$1${live}`);
+    changes.push(`${chain.name} (${chain.slug}): ${data.chains[chain.slug].routeMesh} -> ${live}`);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (/"routeMeshVerifiedAt":\s*"[^"]*"/.test(text)) {
+    text = text.replace(/"routeMeshVerifiedAt":\s*"[^"]*"/, `"routeMeshVerifiedAt": "${today}"`);
+  } else {
+    const indent = text.match(/\n(\s*)"etherscanVerifiedAt":/)?.[1] ?? "    ";
+    text = text.replace(/("etherscanVerifiedAt":\s*"[^"]*")/, `$1,\n${indent}"routeMeshVerifiedAt": "${today}"`);
+  }
+  await writeFile(overlayPath, text);
+
+  if (changes.length > 0) {
+    process.stdout.write(`Updated routeMesh for ${changes.length} chain(s):\n`);
+    for (const change of changes) process.stdout.write(`  - ${change}\n`);
+    process.stdout.write("\nRun `just evm-atlas-generate` to propagate into target-mainnets.json.\n");
+  } else {
+    process.stdout.write(`All ${registryChains.length} target chains already match RouteMesh's live support list.\n`);
+  }
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function targetMainnets(registryChains, data) {

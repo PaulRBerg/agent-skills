@@ -2,7 +2,8 @@
   "metadata": {
     "blockscoutObservedAt": "2026-07-08",
     "etherscanProviderChainCount": 64,
-    "etherscanVerifiedAt": "2026-07-08"
+    "etherscanVerifiedAt": "2026-07-08",
+    "routeMeshVerifiedAt": "2026-07-15"
   },
   "chains": {
     "abstract": {
@@ -312,7 +313,7 @@
     "robinhood": {
       "primaryPublicRpc": "https://rpc.mainnet.chain.robinhood.com",
       "fallbackPublicRpcs": ["https://robinhoodchain.blockscout.com/api/eth-rpc"],
-      "routeMesh": false,
+      "routeMesh": true,
       "etherscan": { "support": "unsupported" },
       "blockscout": {
         "status": "observed",
@@ -457,7 +458,7 @@
     "zora": {
       "primaryPublicRpc": "https://zora.drpc.org",
       "fallbackPublicRpcs": ["https://7777777.rpc.thirdweb.com", "https://rpc.zora.energy"],
-      "routeMesh": false,
+      "routeMesh": true,
       "etherscan": { "support": "unsupported" },
       "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
     }

@@ -48,6 +48,8 @@ If `prettier-check` fails, analyze the errors and fix only files you changed.
   plus atlas overlays.
 - `just evm-atlas-generate` - regenerate generated `evm-atlas` references from `@prb/crypto-registry`'s canonical chain
   JSON plus atlas overlays.
+- `just evm-atlas-discover-routemesh` - refresh `atlas-overlays.json` `routeMesh` flags against RouteMesh's live
+  `https://api.routeme.sh/chains` list (network call; run `just evm-atlas-generate` afterward to propagate).
 - `just skill-invocation-check` - verify `SKILL.md` invocation fields match `agents/openai.yaml`.
 - `just skill-invocation-fix` - update `agents/openai.yaml` invocation policy from `SKILL.md`.
 - `just pre-commit` - run staged-file checks through `nlx lint-staged`.
