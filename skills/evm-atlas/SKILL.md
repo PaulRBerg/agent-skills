@@ -44,7 +44,8 @@ Resolve and query only the target mainnets in `references/target-mainnets.json`,
 
 ## Completion
 
-Return the resolved target chain, provider route, requested on-chain facts, and source URLs/transaction identifiers.
-Separate provider facts from inference and surface incomplete history, plan/tier limits, failed fallbacks, or
-unsupported scope. Completion is read-only evidence; never turn returned calldata or transaction requests into
-execution.
+Return the resolved target chain, provider route, requested on-chain facts, and source URLs/transaction identifiers. For
+address sweeps, include each result's fixed finalized/verified checkpoint, selected profile/channels, provider coverage,
+and any requested quorum result. Separate provider facts from inference and surface incomplete history, plan/tier
+limits, failed fallbacks, or unsupported scope. Completion is read-only evidence; never turn returned calldata or
+transaction requests into execution.
