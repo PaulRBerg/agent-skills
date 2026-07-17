@@ -279,7 +279,7 @@ key, every chain Blockscout indexes:
 
 ```bash
 # 1. Resolve the instance URL
-eval "$(./scripts/resolve-chain.sh 8217 | sed 's/^/CS_/')"   # CS_instance_url, CS_name, …
+eval "$(./scripts/resolve-chain.sh 42170 | sed 's/^/CS_/')"   # CS_instance_url, CS_name, …
 
 # 2. Hit native v2 on that host (no key)
 curl -s "${CS_instance_url}api/v2/addresses/0xADDR/token-balances"

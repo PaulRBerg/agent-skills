@@ -399,11 +399,11 @@ gh auth status
 ### Inspect JSON Output
 
 ```bash
-# Get full JSON response
+# Discover available fields (bare --json errors with the full field list)
 gh pr view <number> --json
 
 # Pretty print with jq
-gh pr view <number> --json | jq .
+gh pr view <number> --json state,title,number | jq .
 
 # Inspect specific fields
 gh pr view <number> --json state,title,number

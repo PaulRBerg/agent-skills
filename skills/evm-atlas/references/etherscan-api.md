@@ -499,23 +499,26 @@ Specify the `chainid` parameter to query different blockchains.
 
 ### Target Chain IDs (Free Tier)
 
-| Chain     | Chain ID |
-| --------- | -------- |
-| Abstract  | `2741`   |
-| Arbitrum  | `42161`  |
-| Berachain | `80094`  |
-| Blast     | `81457`  |
-| Celo      | `42220`  |
-| Ethereum  | `1`      |
-| Gnosis    | `100`    |
-| HyperEVM  | `999`    |
-| Linea     | `59144`  |
-| Monad     | `143`    |
-| Polygon   | `137`    |
-| Sei       | `1329`   |
-| Sonic     | `146`    |
-| Unichain  | `130`    |
-| XDC       | `50`     |
+| Chain       | Chain ID |
+| ----------- | -------- |
+| Abstract    | `2741`   |
+| Arbitrum    | `42161`  |
+| Berachain   | `80094`  |
+| Blast       | `81457`  |
+| Celo        | `42220`  |
+| Ethereum    | `1`      |
+| Fraxtal     | `252`    |
+| Gnosis      | `100`    |
+| HyperEVM    | `999`    |
+| Linea       | `59144`  |
+| Monad       | `143`    |
+| Polygon     | `137`    |
+| Sei         | `1329`   |
+| Sonic       | `146`    |
+| Taiko       | `167000` |
+| Unichain    | `130`    |
+| World Chain | `480`    |
+| XDC         | `50`     |
 
 ### Example: Polygon Query
 
@@ -625,9 +628,9 @@ metadata CSV exports.
 
 ### All Plans
 
-All other Etherscan-supported target chains — Abstract, Arbitrum, Berachain, Blast, Celo, Ethereum, Gnosis, HyperEVM,
-Linea, Monad, Polygon, Sei, Sonic, Unichain, and XDC — are available on every plan including Free. On Lite and higher,
-the paid-only target chains above also become available.
+All other Etherscan-supported target chains — Abstract, Arbitrum, Berachain, Blast, Celo, Ethereum, Fraxtal, Gnosis,
+HyperEVM, Linea, Monad, Polygon, Sei, Sonic, Taiko, Unichain, World Chain, and XDC — are available on every plan
+including Free. On Lite and higher, the paid-only target chains above also become available.
 
 See `./references/etherscan-chains.md` for the target-filtered list with chain IDs.
 

@@ -1,5 +1,7 @@
 ---
-argument-hint: "[--skill NAME] [--root PATH] [--format text|json|dot]"
+argument-hint:
+  "[--skill NAME] [--root PATH] [--format text|json|dot] [--include-catalog-sources] [--include-self]
+  [--include-snippets] [--show-skipped]"
 disable-model-invocation: false
 name: skill-map
 user-invocable: true

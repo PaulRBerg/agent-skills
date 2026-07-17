@@ -691,5 +691,5 @@ beforeEach(() => {
 
 ## Next Steps
 
-- For detailed testing patterns - See `TESTING_PATTERNS.md`
-- For debugging strategies - See `TROUBLESHOOTING.md`
+- For detailed testing patterns - See `testing-patterns.md`
+- For debugging strategies - See `troubleshooting.md`

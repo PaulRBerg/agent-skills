@@ -26,7 +26,8 @@ that changes the experiment:
 
 Defaults when the user gives none: 20 runs, two hours wall time, 10 minutes per benchmark, five minutes per correctness
 check, no new paid API spend, and convergence after five consecutive valid runs without a new best result. An explicit
-`--max-runs N` is exact unless another hard limit is reached first.
+`--max-runs N` is exact unless another hard limit is reached first; `--max-runtime DURATION` (for example `90m` or `2h`)
+overrides the wall-clock limit the same way.
 
 ## Isolation
 
@@ -46,11 +47,14 @@ Create these inside the experiment worktree:
   tried/learned notes.
 - `autoresearch.sh`: deterministic benchmark that emits `METRIC name=value` lines.
 - `autoresearch.checks.sh`: correctness checks, only when correctness constraints require it.
-- `autoresearch.jsonl`: append-only run evidence.
+- `autoresearch.jsonl`: append-only run evidence. Each run record needs a numeric `metric` (primary metric value; `0`
+  for crashes), a `status` of `keep`, `discard`, `crash`, or `checks_failed`, and an integer `segment` that increments
+  when the primary metric changes; lines without `status` are treated as config and skipped.
 - `autoresearch.ideas.md`: optional backlog for deferred hypotheses.
 
 Use `set -euo pipefail` in shell helpers. For noisy fast benchmarks, report a median from repeated samples. Keep
-correctness-check time outside the primary metric.
+correctness-check time outside the primary metric. The bundled helpers `scripts/confidence.sh [jsonl-path]` (MAD-based
+confidence for the current segment) and `scripts/summary.sh [jsonl-path]` (session dashboard) read these records.
 
 ## Workflow
 
@@ -65,8 +69,9 @@ correctness-check time outside the primary metric.
    - Keep a result only when the primary metric improves and every hard constraint passes. Re-run marginal/noisy wins
      before accepting them.
    - Prefer simpler code when results are equivalent; otherwise revert the current experiment's paths only.
-6. Append one JSONL record with run number, commit or snapshot ID, metrics, status, elapsed time, estimated paid cost,
-   description, and confidence. Update `autoresearch.md` when a result changes the best value or rules out an approach.
+6. Append one JSONL record with run number, commit or snapshot ID, `metric`, `status`, `segment`, elapsed time,
+   estimated paid cost, description, and confidence. Update `autoresearch.md` when a result changes the best value or
+   rules out an approach.
 7. Between completed run cycles, incorporate user steering immediately. Do not wait for the entire session when the user
    changes scope, limits, or priorities.
 8. Stop at the first hard limit, user interruption, satisfied target, or convergence condition. Read

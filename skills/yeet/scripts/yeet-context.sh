@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  yeet-context.sh repo [owner/repo] [--issue-templates] [--discussion-templates] [--discussion-categories]
+  yeet-context.sh repo [owner/repo] [--issue-templates] [--discussion-templates] [--discussion-categories] [--all]
   yeet-context.sh issue [owner/repo] <number>
   yeet-context.sh labels [owner/repo]
 
@@ -89,7 +89,7 @@ repo_context() {
   local query
 
   repo_arg_or_origin "$@"
-  set -- "${REMAINING_ARGS[@]}"
+  set -- ${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}
 
   while [ "$#" -gt 0 ]; do
     case "$1" in

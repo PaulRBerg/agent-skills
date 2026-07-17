@@ -1026,5 +1026,5 @@ test("slow operation", async () => {
 
 ## Next Steps
 
-- For testing patterns - See `TESTING_PATTERNS.md`
-- For monorepo strategies - See `MONOREPO_TESTING.md`
+- For testing patterns - See `testing-patterns.md`
+- For monorepo strategies - See `monorepo-testing.md`

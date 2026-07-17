@@ -1,5 +1,5 @@
 ---
-argument-hint: "[--base <branch>]"
+argument-hint: "[--subject <line>] [--base <branch>]"
 disable-model-invocation: true
 effort: high
 name: git-squash

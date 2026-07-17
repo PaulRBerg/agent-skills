@@ -859,5 +859,5 @@ test.concurrent("runs in parallel 2", async () => {
 
 ## Next Steps
 
-- For monorepo-specific testing - See `MONOREPO_TESTING.md`
-- For debugging strategies - See `TROUBLESHOOTING.md`
+- For monorepo-specific testing - See `monorepo-testing.md`
+- For debugging strategies - See `troubleshooting.md`
