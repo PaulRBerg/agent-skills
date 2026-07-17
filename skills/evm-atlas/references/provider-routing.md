@@ -28,18 +28,28 @@ not infer API support from an Etherscan-shaped explorer URL.
 
 Fix one required ISO-8601 UTC cutoff for the whole sweep. Resolve it once per chain to an exact finalized or otherwise
 independently verified block at or before that time. Record the requested cutoff, resolution kind (`finalized` or
-`verified`), block number, hash, timestamp, and observation time, then reuse that exact numeric block in every request.
-Do not mix `latest`, different provider heads, or a newly resolved block into the same result. If no route can establish
-the checkpoint, mark the result unknown rather than inventing one.
+`verified`), block number, hash, timestamp, and observation time. For a timestamp lookup, prove that the returned `B` is
+the greatest block at or before the cutoff by checking `B.timestamp <= requestedAt` and either
+`B+1.timestamp > requestedAt` or that `B` is independently the current finalized head. Reuse that exact checkpoint in
+every request. Do not mix `latest`, different provider heads, or a newly resolved block into the same result. If no
+route can establish the checkpoint, mark the result unknown rather than inventing one.
 
-Batch `eth_getTransactionCount` and `eth_getBalance` at that cutoff before indexed history. The target row's
-`accountActivityModel` controls whether zero nonce plus zero balance may satisfy a profile's native-history shortcut:
+Batch `eth_getTransactionCount` and `eth_getBalance` with the EIP-1898 `{ blockHash, requireCanonical: true }` selector
+before indexed history. If a provider rejects that selector, a numeric fallback requires matching block-number/hash
+headers from the same endpoint immediately before and after the batch; otherwise try the next RPC or report unknown. The
+target row's `accountActivityModel` controls whether zero nonce plus zero balance may satisfy a profile's native-history
+shortcut:
 
 - Allow the shortcut only for exact `ethereum-eoa`.
 - Default-deny it for `native-account-abstraction`, `cross-vm`, `unknown`, a missing field, or an unrecognized value.
 - Under the prb-finance bootstrap profile, the exact `ethereum-eoa` zero-state invariant may omit both `txlist` and
-  `txlistinternal` wholesale. It never covers token/NFT transfers. Apply the profile rules in `address-sweeps.md` before
-  calling a whole address inactive; a general policy that counts zero-value calls must still query those channels.
+  `txlistinternal` wholesale. That profile counts a successful outgoing normal row or a successful positive-value
+  normal/internal row touching the address; zero-value inbound normal/internal noise is outside it. The invariant never
+  covers token/NFT transfers. Apply the profile rules in `address-sweeps.md` before calling an address inactive; a
+  general policy that counts zero-value calls must still query those channels.
+
+For `cross-vm`, scope all state, history, and negative claims to the chain's EVM execution environment. EVM evidence
+does not cover the native non-EVM account environment and cannot prove whole-chain inactivity.
 
 An indexer result is cutoff-complete only when the provider is synced through the checkpoint and the query is bounded to
 it. Filter or paginate past post-cutoff rows; an unbounded newest-first empty/non-empty page is not equivalent to a
@@ -47,9 +57,11 @@ checkpointed result.
 
 Quorum is optional and must be explicit. When requested, enforce it strictly across independent indexed providers that
 cover the same checkpoint and channel set. PRO and per-instance Blockscout surfaces backed by the same index are one
-provider. A positive quorum requires the same earliest transaction hash, block, action/channel, and timestamp; a
-negative quorum requires valid empty coverage from every provider. Errors and unsupported channels are not votes; never
-weaken the requested quorum, and report disagreement as unknown.
+provider. Descending one-row probes establish existence only. For a positive quorum, every provider must query every
+required channel ascending from genesis or fully paginate its bounded result, apply the same profile predicates, and
+return the same earliest qualifying transaction hash, block, action/channel, and timestamp. A negative quorum requires
+valid empty coverage from every provider. Errors and unsupported channels are not votes; never weaken the requested
+quorum, and report disagreement as unknown.
 
 ## RouteMesh and Public RPC
 

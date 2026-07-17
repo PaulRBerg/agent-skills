@@ -12,5 +12,10 @@ bash "$script_dir/validate-blockscout-address-counters.sh" \
   < "$fixture_dir/blockscout-address-counters.json" >/dev/null
 bash "$script_dir/validate-etherscan-transfer-topics.sh" "$example_address" \
   < "$fixture_dir/etherscan-transfer-topic-response.json" >/dev/null
+if bash "$script_dir/validate-etherscan-transfer-topics.sh" "$example_address" \
+  < "$fixture_dir/etherscan-transfer-topic-self-transfer.json" >/dev/null 2>&1; then
+  echo "Error: a self-transfer incorrectly proved distinct inbound-only and outbound-only OR semantics." >&2
+  exit 1
+fi
 
 echo "evm-atlas conformance fixtures are valid"

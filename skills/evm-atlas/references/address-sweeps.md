@@ -16,12 +16,21 @@ Name the profile before querying. Its required channels define what a complete n
 
 - **General activity:** normal transactions, internal transactions, ERC-20 transfers, ERC-721 transfers, and ERC-1155
   transfers. This is the default five-channel evm-atlas sweep.
-- **prb-finance bootstrap:** finalized native state plus normal transactions, internal transactions, ERC-20 transfers,
-  and ERC-721 transfers. ERC-1155 is deliberately excluded by prb-finance policy. Use this profile only when that repo
-  or its bootstrap/discovery workflow is explicitly in scope.
+- **prb-finance bootstrap:** finalized native state plus qualifying normal transactions, qualifying internal
+  transactions, ERC-20 transfers, and ERC-721 transfers. A qualifying normal row is successful and is either outgoing
+  from the address or carries positive native value while touching the address as `from`, `to`, or contract-creation
+  address. A qualifying internal row is successful, carries positive native value, and touches the address. Treat
+  `isError=1`, `txreceipt_status=0`, or a nonblank `errCode` as failure. Zero-value inbound normal rows and zero-value
+  internal rows are noise outside this profile; a successful zero-value outgoing normal row remains qualifying. ERC-1155
+  is deliberately excluded by prb-finance policy. Use this profile only when that repo or its bootstrap/discovery
+  workflow is explicitly in scope.
 
 Do not silently apply the bootstrap exclusion to a general sweep. A complete bootstrap result is complete for that
 profile only; it is not a claim that the address has no ERC-1155 or other EVM activity.
+
+For a target row whose `accountActivityModel` is `cross-vm`, every profile and negative is scoped only to that chain's
+EVM execution environment. Never claim whole-chain inactivity or coverage of its native, non-EVM account environment
+from EVM RPC or explorer evidence.
 
 ## Fix the Checkpoint and Provider
 
@@ -29,12 +38,15 @@ For each target chain:
 
 1. Fix one required ISO-8601 UTC cutoff for the whole sweep; if the prompt does not supply one, freeze the workflow
    start time once and report it. Resolve it once per chain to an exact finalized or otherwise independently verified
-   block at or before that time. Record the requested cutoff, resolution kind (`finalized` or `verified`), chain ID,
-   block number, block hash, block timestamp, and observation time. Reuse that exact numeric block for state and every
-   history channel; never mix it with `latest` or a later provider head.
-2. Batch `eth_getTransactionCount(<addr>, <cutoff>)` and `eth_getBalance(<addr>, <cutoff>)` before history. For an
-   address set, include both calls for every address in bounded per-chain JSON-RPC batches. Validate every response ID
-   and hex quantity. A nonzero nonce or balance is immediately positive state evidence.
+   block at or before that time. A timestamp lookup must return the greatest such block: verify
+   `B.timestamp <= requestedAt` and either `B+1.timestamp > requestedAt` or that `B` is independently established as the
+   current finalized head. Reject stale or unverifiable lookup results. Record the requested cutoff, resolution kind
+   (`finalized` or `verified`), chain ID, block number, block hash, block timestamp, and observation time. Reuse that
+   exact checkpoint for state and every history channel; never mix it with `latest` or a later provider head.
+2. Batch `eth_getTransactionCount(<addr>, { blockHash: <cutoff-hash>, requireCanonical: true })` and
+   `eth_getBalance(<addr>, { blockHash: <cutoff-hash>, requireCanonical: true })` before history. For an address set,
+   include both calls for every address in bounded per-chain JSON-RPC batches. Validate every response ID and hex
+   quantity. A nonzero nonce or balance is immediately positive state evidence.
 3. Select one authoritative indexed-history provider for the chain using `provider-routing.md`. Blockscout is primary on
    every declared overlap; Etherscan is fallback there and primary only when Blockscout is unavailable. Trigger the
    fallback only on an error, malformed response, lag, plan/rate limit, or unsupported required action. A valid empty
@@ -47,7 +59,7 @@ If no RPC can establish the finalized/verified checkpoint, or no indexed provide
 through it, report the chain as unknown/partial. Do not substitute `latest`, an explorer page count, or a provider error
 for a negative result.
 
-Example state batch; use the pinned block number, not the symbolic `finalized` tag, after checkpoint resolution:
+Example state batch; bind reads to the pinned block hash, not the symbolic `finalized` tag, after checkpoint resolution:
 
 ```json
 [
@@ -55,16 +67,21 @@ Example state batch; use the pinned block number, not the symbolic `finalized` t
     "jsonrpc": "2.0",
     "id": "nonce",
     "method": "eth_getTransactionCount",
-    "params": ["<addr>", "<cutoff-hex>"]
+    "params": ["<addr>", { "blockHash": "<cutoff-hash>", "requireCanonical": true }]
   },
   {
     "jsonrpc": "2.0",
     "id": "balance",
     "method": "eth_getBalance",
-    "params": ["<addr>", "<cutoff-hex>"]
+    "params": ["<addr>", { "blockHash": "<cutoff-hash>", "requireCanonical": true }]
   }
 ]
 ```
+
+If an RPC rejects the EIP-1898 block selector, a numeric fallback is valid only when the same endpoint returns the
+requested block number and hash immediately before and after the bounded state batch. Any missing/mismatched header or
+state response makes that endpoint incomplete; try the next RPC candidate or report unknown. A numeric block tag by
+itself does not bind a state response to the recorded checkpoint hash.
 
 ### Zero-State Shortcut
 
@@ -74,8 +91,10 @@ Zero nonce plus zero native balance can satisfy a profile's native-history short
 
 The shortcut does not cover ERC-20, ERC-721, or ERC-1155 transfers. For the prb-finance bootstrap profile, record both
 `txlist` and `txlistinternal` as omitted by the `ethereum-eoa` zero-state invariant, then still query `tokentx` plus
-`tokennfttx`. This profile-level shortcut deliberately does not claim that zero-value normal/internal calls are absent.
-For a general sweep where those calls count as activity, query normal and internal history as well.
+`tokennfttx`. This is sound for the bootstrap predicates: zero nonce excludes a successful outgoing normal row, while
+any positive-value native receipt would remain in the zero-nonce account's balance for this exact EOA model. It
+deliberately does not claim that zero-value inbound normal/internal calls are absent; those rows are outside the
+bootstrap profile. For a general sweep where those calls count as activity, query normal and internal history as well.
 
 ### Provider Detection
 
@@ -99,10 +118,12 @@ per-instance Blockscout hosts from `./scripts/resolve-chain.sh` where available.
 
 Quorum is off by default: one complete authoritative-provider result is enough. If the user requests quorum, require
 that many independent indexers to cover the same cutoff, profile, and channels. Blockscout PRO and a per-instance
-surface backed by the same index count once. A positive quorum requires the same earliest transaction hash, block,
-action/channel, and timestamp from every provider; a negative quorum requires valid empty coverage from every provider.
-Unsupported actions, errors, lag, and state RPC calls are not history votes. Never weaken the requested quorum; provider
-disagreement is unknown, not a majority decision.
+surface backed by the same index count once. Latest-first probes may establish existence, but they cannot establish a
+positive quorum. After any positive, query every required channel from every quorum provider ascending from genesis, or
+fully paginate and order the bounded rows, apply the selected profile's qualifying-row predicates, and compare the same
+earliest qualifying transaction hash, block, action/channel, and timestamp. A negative quorum requires valid empty
+coverage from every provider. Unsupported actions, errors, lag, and state RPC calls are not history votes. Never weaken
+the requested quorum; provider disagreement is unknown, not a majority decision.
 
 ## Historical Activity Sweep
 
@@ -115,10 +136,12 @@ these exists:
 - ERC-721 transfer where the address is sender or recipient
 - ERC-1155 transfer where the address is sender or recipient
 
-Use `sort=desc&page=1&offset=1` wherever the provider supports it. This proves existence without full pagination. Stop
-at the first positive result when the user only asks "has this address ever been active?". Continue across all target
-chains when the user asks which chains or wants a report. A negative is valid only after every channel required by the
-selected profile is covered through the pinned cutoff or satisfied by an allowed invariant.
+Use `sort=desc&page=1&offset=1` wherever the provider supports it for a non-quorum existence probe. This proves
+existence without full pagination, subject to the selected profile's qualifying-row predicates. It does not identify
+earliest evidence and cannot be compared as a quorum positive. Stop at the first positive result when the user only asks
+"has this address ever been active?". Continue across all target chains when the user asks which chains or wants a
+report. A negative is valid only after every channel required by the selected profile is covered through the pinned
+cutoff or satisfied by an allowed invariant.
 
 ### Etherscan
 
@@ -139,8 +162,11 @@ If an action rejects the advanced filter shape, fall back to the standard addres
 https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=<action>&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1&apikey=$ETHERSCAN_API_KEY
 ```
 
-Treat `status=1` with a non-empty `result` array as positive. Treat Etherscan's "No transactions found" / empty result
-as negative for that action only; still check the remaining activity actions before marking the chain inactive.
+For the general profile, treat `status=1` with a non-empty `result` array as positive. For the bootstrap profile, apply
+its qualifying-row predicates first; a page containing only nonqualifying normal/internal noise is not positive, and the
+action is not negative until bounded pagination finds a qualifying row or is exhausted. Treat Etherscan's "No
+transactions found" / empty result as negative for that action only; still check the remaining activity actions before
+marking the chain inactive.
 
 For the prb-finance bootstrap profile, a conformant `logs/getLogs` query may combine the ERC-20 and ERC-721 existence
 checks because both use `Transfer(address,address,uint256)`. Set the Transfer signature as `topic0`, the left-padded
@@ -150,22 +176,24 @@ address as both `topic1` and `topic2`, `topic0_1_opr=and`, `topic0_2_opr=and`, a
 https://api.etherscan.io/v2/api?chainid=<id>&module=logs&action=getLogs&fromBlock=<vector-start>&toBlock=<vector-end>&topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef&topic0_1_opr=and&topic1=<padded-addr>&topic0_2_opr=and&topic2=<padded-addr>&topic1_2_opr=or&page=1&offset=1000&apikey=$ETHERSCAN_API_KEY
 ```
 
-First run that shape over a known public vector whose bounded response contains both an inbound and outbound Transfer.
-Validate the saved response with `bash ./scripts/validate-etherscan-transfer-topics.sh <address> < response.json`. After
-conformance, existence probes use the same topic/operator shape with `fromBlock=0`, `toBlock=<cutoff>`, and `offset=1`.
-Treat an empty response as negative only when that shape is known to work for the selected chain and plan; otherwise use
-separate `tokentx` and `tokennfttx` calls. This optimization does not cover ERC-1155 (`TransferSingle`/`TransferBatch`)
-and never changes the general five-channel profile. Treat a returned raw log as a candidate until the emitting contract
-is confirmed as ERC-20 or ERC-721; the shared signature alone does not prove the token standard.
+First run that shape over a known public vector whose bounded response contains distinct inbound-only and outbound-only
+Transfers. Validate the saved response with
+`bash ./scripts/validate-etherscan-transfer-topics.sh <address> < response.json`. After conformance, existence probes
+use the same topic/operator shape with `fromBlock=0`, `toBlock=<cutoff>`, and `offset=1`. Treat an empty response as
+negative only when that shape is known to work for the selected chain and plan; otherwise use separate `tokentx` and
+`tokennfttx` calls. This optimization does not cover ERC-1155 (`TransferSingle`/`TransferBatch`) and never changes the
+general five-channel profile. Treat a returned raw log as a candidate until the emitting contract is confirmed as ERC-20
+or ERC-721; the shared signature alone does not prove the token standard.
 
 ### Blockscout
 
 When native v2 exposes `addresses/<addr>/counters`, validate its required string counters with
-`bash ./scripts/validate-blockscout-address-counters.sh < response.json`. If the instance is indexed through the cutoff,
-`transactions_count=0` can satisfy the normal-transaction channel and `token_transfers_count=0` can satisfy all token
-transfer channels. The endpoint has no cutoff parameter: a nonzero counter requires a bounded item query, and a zero
-counter is usable only when the indexer's head is at or above the pinned cutoff. Counters do not cover internal
-transactions. A missing, malformed, or unvalidated counter is only an optimization miss.
+`bash ./scripts/validate-blockscout-address-counters.sh < response.json`. The endpoint has no cutoff parameter, so its
+counters are hints unless cryptographic proof or provider response metadata explicitly binds that exact counter snapshot
+to the pinned block number and hash. Merely observing the indexer's head at or above the cutoff does not bind counter
+freshness to the checkpoint. A nonzero counter requires a bounded item query to locate qualifying pre-cutoff evidence;
+an unbound zero counter still requires bounded action queries before a negative. Counters do not cover internal
+transactions. A missing, malformed, unvalidated, or unbound counter is only an optimization miss.
 
 For bounded existence probes, prefer the Etherscan-compatible layer because it supports `sort`, `page`, `offset`, and
 block bounds. On the PRO host, pass `$BLOCKSCOUT_API_KEY` with `authorization: Bearer $BLOCKSCOUT_API_KEY` rather than a
@@ -188,7 +216,8 @@ curl -s "${CS_instance_url}api?module=account&action=txlist&address=<addr>&start
 ```
 
 If the compat action is unavailable on that instance, use native v2 newest-first endpoints and treat a non-empty `items`
-array as positive:
+array as positive for the general profile. For the bootstrap profile, filter normal/internal items through its
+qualifying-row predicates and paginate past nonqualifying rows before deciding the channel:
 
 ```text
 api/v2/addresses/<addr>/transactions
@@ -278,12 +307,14 @@ unavailable on free plan; Blockscout absent", "Blockscout index behind cutoff", 
 For machine-readable results, expose `checked` and `omitted` channel arrays rather than collapsing coverage into prose.
 The prb-finance bootstrap vocabulary is `nonce`, `native-balance`, `txlist`, `txlistinternal`, `tokentx`, and
 `tokennfttx`; the general profile also requires `token1155tx`. Record whether the row was reused `fromCheckpoint`, and
-key reusable evidence by normalized address, chain ID, goal, requested cutoff, `accountActivityModel`, and the
-checkpoint schema/semantics so a policy change cannot reuse an incompatible negative.
+key reusable evidence by normalized address, chain ID, goal, named profile, normalized required-channel set, exact
+quorum requirement (including quorum off), requested cutoff, resolved block number and hash, `accountActivityModel`, and
+checkpoint schema version/semantics so a policy or checkpoint change cannot reuse incompatible evidence.
 
 Do not say "inactive on all EVM chains" unless the checked target scope and profile are clear. For the bootstrap
 profile, say "no prb-finance bootstrap-profile activity found"; reserve "no indexed activity found across the target
-mainnets" for a complete general five-channel sweep.
+mainnets" for a complete general five-channel sweep. For `cross-vm`, append "in the EVM execution environment" and never
+present the result as inactivity or coverage in the chain's native environment.
 
 ## Provider Docs
 

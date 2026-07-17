@@ -1,7 +1,7 @@
 #!/bin/bash
 # Validate a saved Etherscan Transfer-topic OR-query response from stdin.
-# A conformant vector contains at least one inbound and one outbound result for
-# the target. This helper performs no network requests and reads no credentials.
+# A conformant vector contains distinct inbound-only and outbound-only results
+# for the target. This helper performs no network requests and reads no credentials.
 
 set -eu
 
@@ -40,16 +40,32 @@ if ! printf '%s' "$response" | jq -e \
         )
       ) catch false
     ) and
-    any(.result[]; try ((.topics[1] | ascii_downcase) == $address_topic) catch false) and
-    any(.result[]; try ((.topics[2] | ascii_downcase) == $address_topic) catch false)
+    any(.result[];
+      try (
+        ((.topics[1] | ascii_downcase) == $address_topic) and
+        ((.topics[2] | ascii_downcase) != $address_topic)
+      ) catch false
+    ) and
+    any(.result[];
+      try (
+        ((.topics[2] | ascii_downcase) == $address_topic) and
+        ((.topics[1] | ascii_downcase) != $address_topic)
+      ) catch false
+    )
   ' >/dev/null; then
-  echo "Error: response does not prove conformant inbound-and-outbound Transfer topic OR semantics." >&2
+  echo "Error: response does not prove distinct inbound-only and outbound-only Transfer topic OR semantics." >&2
   exit 1
 fi
 
 printf '%s' "$response" | jq -r \
   --arg address_topic "$address_topic" '
     "transfer_topic_query=conformant",
-    "outbound_results=\([.result[] | select((.topics[1] | ascii_downcase) == $address_topic)] | length)",
-    "inbound_results=\([.result[] | select((.topics[2] | ascii_downcase) == $address_topic)] | length)"
+    "outbound_only_results=\([.result[] | select(
+      ((.topics[1] | ascii_downcase) == $address_topic) and
+      ((.topics[2] | ascii_downcase) != $address_topic)
+    )] | length)",
+    "inbound_only_results=\([.result[] | select(
+      ((.topics[2] | ascii_downcase) == $address_topic) and
+      ((.topics[1] | ascii_downcase) != $address_topic)
+    )] | length)"
   '
