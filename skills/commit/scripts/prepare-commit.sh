@@ -22,17 +22,6 @@ add_unique_path() {
   return 0
 }
 
-path_in_list() {
-  _needle=$1
-  shift
-  for _candidate in "$@"; do
-    if [ "$_candidate" = "$_needle" ]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
 physical_dir() {
   _dir=$1
   [ -d "$_dir" ] || return 1
@@ -47,38 +36,37 @@ collect_path_output() {
   done
 }
 
-collect_stageable_paths() {
-  for _path in "$@"; do
-    if [ -e "$_path" ] || [ -L "$_path" ] || git ls-files --error-unmatch -- "$_path" >/dev/null 2>&1; then
-      if add_unique_path "$_path" ${stageable_paths[@]+"${stageable_paths[@]}"}; then
-        stageable_paths[${#stageable_paths[@]}]=$_path
-      fi
+collect_untracked_intent_paths() {
+  while IFS= read -r -d '' _path; do
+    if add_unique_path "$_path" ${untracked_intent_paths[@]+"${untracked_intent_paths[@]}"}; then
+      untracked_intent_paths[${#untracked_intent_paths[@]}]=$_path
     fi
-  done
+  done < <(git ls-files --others --exclude-standard -z -- "$@")
 }
 
-collect_unstage_path() {
-  _path=$1
-  if add_unique_path "$_path" ${unstage_paths[@]+"${unstage_paths[@]}"}; then
-    unstage_paths[${#unstage_paths[@]}]=$_path
-  fi
-}
-
-unstage_collected_paths() {
-  [ "${#unstage_paths[@]}" -gt 0 ] || return 0
-
-  _chunk=()
-  for _path in "${unstage_paths[@]}"; do
-    _chunk[${#_chunk[@]}]=$_path
-    if [ "${#_chunk[@]}" -ge "$unstage_chunk_size" ]; then
-      git restore --staged -- "${_chunk[@]}" || return 1
-      _chunk=()
-    fi
+# Runs a git command that takes the index lock, retrying if another agent is
+# mid-operation. Retries up to 5 attempts (4 retries) with a 1s pause between
+# attempts, but only when the failure is an index.lock contention; any other
+# failure is reported immediately.
+run_with_lock_retry() {
+  _lock_attempt=1
+  while :; do
+    _lock_output=$("$@" 2>&1)
+    _lock_rc=$?
+    [ "$_lock_rc" -eq 0 ] && return 0
+    case "$_lock_output" in
+      *index.lock*)
+        [ "$_lock_attempt" -lt 5 ] || break
+        _lock_attempt=$((_lock_attempt + 1))
+        sleep 1
+        ;;
+      *)
+        break
+        ;;
+    esac
   done
-
-  if [ "${#_chunk[@]}" -gt 0 ]; then
-    git restore --staged -- "${_chunk[@]}" || return 1
-  fi
+  printf '%s\n' "$_lock_output" >&2
+  return 1
 }
 
 resolve_message_format() {
@@ -120,11 +108,9 @@ all=false
 staged=false
 force_natural=false
 diff_mode=summary
-unstage_chunk_size=100
 session_paths=()
 session_git_paths=()
-stageable_paths=()
-unstage_paths=()
+untracked_intent_paths=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -206,46 +192,37 @@ if [ "$all" = true ]; then
   if [ -z "$(git status --porcelain=v1 --untracked-files=all)" ]; then
     die 'No changes to commit'
   fi
-  git add -A || die 'failed to stage all changes'
+  run_with_lock_retry git add -A || die 'failed to stage all changes'
 elif [ "$staged" = true ]; then
   : # commit the current index as-is; the empty-index guard below applies
 else
   [ "${#session_paths[@]}" -gt 0 ] || die 'No files modified in this session'
 
-  collect_path_output < <(git diff --cached --name-only -z --no-ext-diff --no-textconv -- "${session_paths[@]}") || exit 1
-  collect_path_output < <(git ls-files --full-name -z --modified --deleted --others --exclude-standard -- "${session_paths[@]}") || exit 1
+  # Untracked session paths need an intent-to-add entry so pathspec diffs and
+  # the eventual `git commit -- <paths>` can see them; tracked paths need
+  # nothing here. Never `git add` their content — that would stage it into
+  # the shared index for other agents to see before the commit is made.
+  collect_untracked_intent_paths "${session_paths[@]}"
+  if [ "${#untracked_intent_paths[@]}" -gt 0 ]; then
+    run_with_lock_retry git add -N -- "${untracked_intent_paths[@]}" || die 'failed to intent-to-add untracked session paths'
+  fi
 
-  while IFS= read -r -d '' staged_status; do
-    case "$staged_status" in
-      R* | C*)
-        IFS= read -r -d '' staged_old_path || die 'failed to parse staged rename/copy'
-        IFS= read -r -d '' staged_new_path || die 'failed to parse staged rename/copy'
-        if ! path_in_list "$staged_old_path" ${session_git_paths[@]+"${session_git_paths[@]}"} && ! path_in_list "$staged_new_path" ${session_git_paths[@]+"${session_git_paths[@]}"}; then
-          collect_unstage_path "$staged_old_path"
-          collect_unstage_path "$staged_new_path"
-        fi
-        ;;
-      *)
-        IFS= read -r -d '' staged_path || die 'failed to parse staged path'
-        if ! path_in_list "$staged_path" ${session_git_paths[@]+"${session_git_paths[@]}"}; then
-          collect_unstage_path "$staged_path"
-        fi
-        ;;
-    esac
-  done < <(git diff --cached --name-status -z --no-ext-diff --no-textconv)
+  if git diff HEAD --quiet --no-ext-diff --no-textconv -- "${session_paths[@]}"; then
+    die 'No files modified in this session'
+  fi
 
-  unstage_collected_paths || die 'failed to unstage unrelated staged paths'
+  # --no-renames: a collapsed "R100 old new" name-only entry would report only
+  # the new path, silently dropping the old path from the commit pathspec and
+  # leaving a rename half-staged (see the rename caveat in SKILL.md).
+  collect_path_output < <(git diff HEAD --no-renames --name-only -z --no-ext-diff --no-textconv -- "${session_paths[@]}") || exit 1
 
   [ "${#session_git_paths[@]}" -gt 0 ] || die 'No files modified in this session'
-
-  collect_stageable_paths "${session_paths[@]}"
-  if [ "${#stageable_paths[@]}" -gt 0 ]; then
-    git add -- "${stageable_paths[@]}" || die 'failed to stage session-modified paths'
-  fi
 fi
 
-if git diff --cached --quiet --exit-code; then
-  die 'No staged changes to commit'
+if [ "$all" = true ] || [ "$staged" = true ]; then
+  if git diff --cached --quiet --exit-code; then
+    die 'No staged changes to commit'
+  fi
 fi
 
 printf '## message format\n'
@@ -254,14 +231,33 @@ printf '%s\n\n' "$message_format"
 printf '## branch\n'
 printf '%s\n\n' "$branch"
 
-printf '## staged name-status\n'
-git diff --cached --name-status --no-ext-diff --no-textconv -- || die 'failed to print staged name-status'
-printf '\n'
+if [ "$all" = true ] || [ "$staged" = true ]; then
+  printf '## staged name-status\n'
+  git diff --cached --name-status --no-ext-diff --no-textconv -- || die 'failed to print staged name-status'
+  printf '\n'
 
-printf '## shortstat\n'
-git diff --cached --shortstat --no-ext-diff --no-textconv -- || die 'failed to print staged shortstat'
+  printf '## shortstat\n'
+  git diff --cached --shortstat --no-ext-diff --no-textconv -- || die 'failed to print staged shortstat'
 
-if [ "$diff_mode" = full ]; then
-  printf '\n## staged diff\n'
-  git diff --cached --no-ext-diff --no-textconv -- || die 'failed to print staged diff'
+  if [ "$diff_mode" = full ]; then
+    printf '\n## staged diff\n'
+    git diff --cached --no-ext-diff --no-textconv -- || die 'failed to print staged diff'
+  fi
+else
+  printf '## staged name-status\n'
+  git diff HEAD --name-status --no-ext-diff --no-textconv -- "${session_git_paths[@]}" || die 'failed to print name-status'
+  printf '\n'
+
+  printf '## shortstat\n'
+  git diff HEAD --shortstat --no-ext-diff --no-textconv -- "${session_git_paths[@]}" || die 'failed to print shortstat'
+
+  if [ "$diff_mode" = full ]; then
+    printf '\n## staged diff\n'
+    git diff HEAD --no-ext-diff --no-textconv -- "${session_git_paths[@]}" || die 'failed to print diff'
+  fi
+
+  printf '\n## commit pathspec\n'
+  for _commit_path in "${session_git_paths[@]}"; do
+    printf '%s\n' "$_commit_path"
+  done
 fi

@@ -47,20 +47,26 @@ bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--d
 
 Use `--diff summary` by default. Use `--diff full` only when the intent is ambiguous.
 
-The helper performs Git preflight checks, stages `--all` or the session-modified paths (or, with `--staged`, leaves the
-current index untouched), unstages unrelated pre-staged paths, rejects empty staged diffs, and prints the message
-format, branch, staged name-status, shortstat, and optional full diff. If it fails, stop with its error and a concise
-suggested fix.
+The helper performs Git preflight checks, rejects empty change sets, and prints the message format, branch, name-status,
+shortstat, and optional full diff. It is safe to run alongside other agents committing in the same working tree: `--all`
+and `--staged` stage or read the index directly (index-trusting by design); the default mode never stages, unstages, or
+otherwise touches the index — it marks new session files with `git add -N` (intent-to-add, no content staged) so diffs
+can see them, then diffs the session paths against `HEAD` in the working tree. If it fails, stop with its error and a
+concise suggested fix.
 
 - If `--all`:
-  - Include all tracked, untracked, modified, deleted, and already staged changes
+  - Include all tracked, untracked, modified, deleted, and already staged changes — this also sweeps in any other
+    agent's in-flight work by design; see the step 4 output contract for the resulting flag.
 - If `--staged`:
   - Commit exactly what is already staged; pass no session paths. The helper neither stages nor unstages. Conflicts with
-    `--all`.
+    `--all`. The index may hold another agent's staged files; committing it verbatim is the user's explicit choice.
 - Otherwise (atomic commits):
   - Session-modified files = files edited in this session
   - Pass every session-modified path after `--`
-  - The helper stages only those paths and unstages unrelated pre-staged paths
+  - The helper never stages, unstages, or touches paths another agent has staged; it prints a `## commit pathspec` list
+    of the resolved session paths to commit with in step 4
+  - **Renames**: pass both the old and new path of a renamed file as session paths, so the pathspec commit in step 4
+    captures both sides
 - **Unrelated changes**: session-modified files may contain pre-existing uncommitted changes (hunks not from this
   session). Include the entire file—partial staging is impractical. Never revert, discard, or `git checkout` unrelated
   changes.
@@ -97,22 +103,34 @@ include only ones the commit actually closes.
 
 ### 4) Commit
 
-- Use `git commit -m "subject"` (add `-m "body"` only if body is non-empty)
-- Output exactly: commit hash, subject, and `N files changed` summary. Nothing else.
+- Default mode (no `--all`/`--staged`): commit with an explicit pathspec —
+  `git commit -m "subject" [-m "body"] -- <paths from the "## commit pathspec" section>`. A pathspec commit builds the
+  commit from `HEAD` plus the working-tree content of exactly those paths, so concurrent staging by other agents cannot
+  leak into the commit.
+- `--all` / `--staged`: commit the prepared index as-is with `git commit -m "subject"` (add `-m "body"` only if body is
+  non-empty).
+- Output exactly: commit hash, subject, and `N files changed` summary. In `--all` mode, if the committed set plausibly
+  includes files not modified in this session, also print one line listing those files so the user can catch an
+  accidental sweep of another agent's work. Nothing else.
 - Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or
   pre-commit hook activity unless a command failed.
-- If failed: show error + suggest fix
+- If failed: show error + suggest fix. If `git commit` itself fails on an index.lock error, wait a moment and retry;
+  never delete the lock file.
 - **Pre-commit hook failure:** retry automatically with `git commit --no-verify` only when the hook output identifies
   the failing check/path and the staged diff plus session scope conclusively show it is unrelated pre-existing work. A
-  generic failure, repo-wide check, or uncertain ownership is not enough evidence. Never bypass a failure caused by or
-  plausibly affected by the staged changes; fix it or surface the error. When bypassing, keep the existing one-line
-  disclosure that the unrelated hook failure was skipped.
+  generic failure, repo-wide check, or uncertain ownership is not enough evidence — with parallel agents, the common
+  cause of an unrelated repo-wide hook failure is another agent's in-flight work, but the same evidence bar applies.
+  Never bypass a failure caused by or plausibly affected by the staged changes; fix it or surface the error. When
+  bypassing, keep the existing one-line disclosure that the unrelated hook failure was skipped.
 
 ### 5) Push (if `--push`)
 
 - If upstream exists: `git push`
 - If no upstream: `git push -u origin HEAD`
-- If failed: show error + suggest fix (pull/rebase first, set upstream, check auth)
+- If rejected as non-fast-forward: retry `git push` once (push races between agents are routine). If still rejected, run
+  `git pull --rebase` only when `git status --porcelain` is clean; otherwise stop and report. Never use `--autostash` in
+  a shared tree — it can stash another agent's uncommitted work and conflict on pop.
+- If failed for another reason: show error + suggest fix (set upstream, check auth)
 
 ## Completion
 
