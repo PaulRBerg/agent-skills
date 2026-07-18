@@ -1,863 +1,212 @@
-# Testing Patterns Reference
+# Testing patterns
 
-Complete pattern library for Vitest testing in TypeScript React/Next.js projects.
+> Read for component tests, async boundaries, fixtures, tables, snapshots, type tests, filtering, or tags.
 
-## Unit Testing Patterns
+Import APIs explicitly from `vitest` even when the repository enables globals. Match the repository's colocated test
+naming, commonly `.test.ts` and `.test.tsx`.
 
-### Testing Pure Functions
+## Component tests
 
-```typescript
-import { describe, test, expect } from "vitest";
-import { formatCurrency } from "./format-currency";
+Test accessible behavior through the DOM and user interactions:
 
-describe("formatCurrency", () => {
-  test("formats USD correctly", () => {
-    expect(formatCurrency(1234.56, "USD")).toBe("$1,234.56");
-  });
-
-  test("handles zero", () => {
-    expect(formatCurrency(0, "USD")).toBe("$0.00");
-  });
-
-  test("handles negative values", () => {
-    expect(formatCurrency(-100, "USD")).toBe("-$100.00");
-  });
-});
-```
-
-### Testing Functions with Side Effects
-
-```typescript
-import { describe, test, expect, vi, afterEach } from "vitest";
-import { logError } from "./error-logger";
-
-describe("logError", () => {
-  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  afterEach(() => {
-    consoleSpy.mockClear();
-  });
-
-  test("logs error message", () => {
-    logError("Test error");
-    expect(consoleSpy).toHaveBeenCalledWith("Test error");
-  });
-
-  test("logs error object", () => {
-    const error = new Error("Something failed");
-    logError(error);
-    expect(consoleSpy).toHaveBeenCalledWith(error);
-  });
-});
-```
-
-### Testing Utility Classes
-
-```typescript
-import { describe, test, expect, beforeEach } from "vitest";
-import { Cache } from "./cache";
-
-describe("Cache", () => {
-  let cache: Cache<string>;
-
-  beforeEach(() => {
-    cache = new Cache<string>();
-  });
-
-  test("stores and retrieves values", () => {
-    cache.set("key", "value");
-    expect(cache.get("key")).toBe("value");
-  });
-
-  test("returns undefined for missing keys", () => {
-    expect(cache.get("missing")).toBeUndefined();
-  });
-
-  test("overwrites existing values", () => {
-    cache.set("key", "first");
-    cache.set("key", "second");
-    expect(cache.get("key")).toBe("second");
-  });
-});
-```
-
-### Testing Environment-Dependent Code
-
-```typescript
-import { describe, test, expect, afterEach } from "vitest";
-import { getEnvironment } from "./environment";
-
-describe("getEnvironment", () => {
-  const originalEnv = process.env.NODE_ENV;
-
-  afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
-  });
-
-  test("returns production when NODE_ENV is production", () => {
-    process.env.NODE_ENV = "production";
-    expect(getEnvironment()).toBe("production");
-  });
-
-  test("returns development by default", () => {
-    process.env.NODE_ENV = undefined;
-    expect(getEnvironment()).toBe("development");
-  });
-});
-```
-
-## Mocking Patterns
-
-### Basic Function Mocking
-
-```typescript
-import { vi } from "vitest";
-
-// Create mock function
-const mockFn = vi.fn();
-
-// With implementation
-const mockAdd = vi.fn((a: number, b: number) => a + b);
-
-// With return value
-const mockGetUser = vi.fn().mockReturnValue({ id: 1, name: "Test" });
-
-// With resolved promise
-const mockFetch = vi.fn().mockResolvedValue({ data: "test" });
-
-// With rejected promise
-const mockFailingFetch = vi.fn().mockRejectedValue(new Error("Network error"));
-
-// Assertions
-expect(mockFn).toHaveBeenCalled();
-expect(mockFn).toHaveBeenCalledTimes(2);
-expect(mockFn).toHaveBeenCalledWith("arg1", "arg2");
-expect(mockFn).toHaveReturnedWith("value");
-```
-
-### Spying on Methods
-
-```typescript
-import { vi } from "vitest";
-
-test("spy on object method", () => {
-  const user = {
-    name: "John",
-    greet: () => `Hello, ${this.name}`,
-  };
-
-  const greetSpy = vi.spyOn(user, "greet");
-
-  user.greet();
-
-  expect(greetSpy).toHaveBeenCalled();
-  greetSpy.mockRestore(); // Restore original implementation
-});
-
-test("spy with mock implementation", () => {
-  const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-  console.log("test");
-
-  expect(spy).toHaveBeenCalledWith("test");
-  spy.mockRestore();
-});
-```
-
-### Module Mocking
-
-**Automatic mock:**
-
-```typescript
-// At top level, before imports
-vi.mock("./api-client");
-
-import { fetchUser } from "./api-client";
-
-test("uses automatic mock", () => {
-  // All exports are mocked automatically
-  expect(vi.isMockFunction(fetchUser)).toBe(true);
-});
-```
-
-**Manual mock:**
-
-```typescript
-vi.mock("./api-client", () => ({
-  fetchUser: vi.fn(() => Promise.resolve({ id: 1, name: "Test" })),
-  deleteUser: vi.fn(() => Promise.resolve()),
-}));
-
-import { fetchUser, deleteUser } from "./api-client";
-
-test("uses manual mock", async () => {
-  const user = await fetchUser();
-  expect(user.name).toBe("Test");
-});
-```
-
-**Partial mock:**
-
-```typescript
-import * as apiClient from "./api-client";
-
-vi.spyOn(apiClient, "fetchUser").mockResolvedValue({
-  id: 1,
-  name: "Test",
-});
-
-// Other exports work normally
-```
-
-**Factory mock with `vi.hoisted()`:**
-
-```typescript
-const { mockFetchUser } = vi.hoisted(() => ({
-  mockFetchUser: vi.fn(),
-}));
-
-vi.mock("./api-client", () => ({
-  fetchUser: mockFetchUser,
-}));
-
-test("can access mock before import", () => {
-  mockFetchUser.mockResolvedValue({ id: 1 });
-  // Now import and use
-});
-```
-
-### Factory Mock Pattern
-
-**Create reusable mock factories:**
-
-```typescript
-// __mocks__/create-api-mock.ts
-import { vi } from "vitest";
-
-export function createApiMock() {
-  return {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  };
-}
-
-// In test file
-import { createApiMock } from "./__mocks__/create-api-mock";
-
-describe("API client", () => {
-  let api: ReturnType<typeof createApiMock>;
-
-  beforeEach(() => {
-    api = createApiMock();
-  });
-
-  test("makes GET request", async () => {
-    api.get.mockResolvedValue({ data: "test" });
-
-    const response = await api.get("/users");
-    expect(response.data).toBe("test");
-  });
-});
-```
-
-**Complex factory with state:**
-
-```typescript
-// __mocks__/create-storage-mock.ts
-import { vi } from "vitest";
-
-export function createStorageMock() {
-  const store = new Map<string, string>();
-
-  return {
-    getItem: vi.fn((key: string) => store.get(key) ?? null),
-    setItem: vi.fn((key: string, value: string) => {
-      store.set(key, value);
-    }),
-    removeItem: vi.fn((key: string) => {
-      store.delete(key);
-    }),
-    clear: vi.fn(() => {
-      store.clear();
-    }),
-    get size() {
-      return store.size;
-    },
-  };
-}
-```
-
-## Async Testing Patterns
-
-### Testing Promises
-
-```typescript
-test("resolves with value", async () => {
-  const result = await Promise.resolve("success");
-  expect(result).toBe("success");
-});
-
-test("rejects with error", async () => {
-  await expect(Promise.reject(new Error("failed"))).rejects.toThrow("failed");
-});
-
-test("async function resolves", async () => {
-  async function fetchData() {
-    return { data: "value" };
-  }
-
-  const result = await fetchData();
-  expect(result).toEqual({ data: "value" });
-});
-```
-
-### Testing Async Functions with Delays
-
-```typescript
-import { vi } from "vitest";
-
-test("waits for async operation", async () => {
-  const delayedFunction = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    return "done";
-  };
-
-  const result = await delayedFunction();
-  expect(result).toBe("done");
-});
-
-test("uses fake timers for delays", async () => {
-  vi.useFakeTimers();
-
-  const promise = new Promise((resolve) => {
-    setTimeout(() => resolve("done"), 1000);
-  });
-
-  vi.advanceTimersByTime(1000);
-
-  const result = await promise;
-  expect(result).toBe("done");
-
-  vi.useRealTimers();
-});
-```
-
-### Testing Callbacks
-
-```typescript
-test("callback is called", (done) => {
-  function asyncOperation(callback: (result: string) => void) {
-    setTimeout(() => callback("success"), 10);
-  }
-
-  asyncOperation((result) => {
-    expect(result).toBe("success");
-    done(); // Signal test completion
-  });
-});
-
-// Or use promises (preferred)
-test("callback is called with promise", async () => {
-  function asyncOperation(callback: (result: string) => void) {
-    setTimeout(() => callback("success"), 10);
-  }
-
-  const result = await new Promise((resolve) => {
-    asyncOperation(resolve);
-  });
-
-  expect(result).toBe("success");
-});
-```
-
-### Testing Error Handling
-
-```typescript
-test("handles async errors", async () => {
-  async function failingFunction() {
-    throw new Error("Something went wrong");
-  }
-
-  await expect(failingFunction()).rejects.toThrow("Something went wrong");
-});
-
-test("handles try-catch", async () => {
-  async function withErrorHandling() {
-    try {
-      throw new Error("Error");
-    } catch (error) {
-      return "handled";
-    }
-  }
-
-  const result = await withErrorHandling();
-  expect(result).toBe("handled");
-});
-```
-
-## Timer and Date Mocking
-
-### Fake Timers
-
-```typescript
-import { vi } from "vitest";
-
-test("debounce function", () => {
-  vi.useFakeTimers();
-
-  const callback = vi.fn();
-  const debounced = debounce(callback, 1000);
-
-  debounced();
-  expect(callback).not.toHaveBeenCalled();
-
-  vi.advanceTimersByTime(500);
-  expect(callback).not.toHaveBeenCalled();
-
-  vi.advanceTimersByTime(500);
-  expect(callback).toHaveBeenCalledTimes(1);
-
-  vi.useRealTimers();
-});
-
-test("throttle function", () => {
-  vi.useFakeTimers();
-
-  const callback = vi.fn();
-  const throttled = throttle(callback, 1000);
-
-  throttled();
-  throttled();
-  throttled();
-
-  expect(callback).toHaveBeenCalledTimes(1);
-
-  vi.advanceTimersByTime(1000);
-  throttled();
-
-  expect(callback).toHaveBeenCalledTimes(2);
-
-  vi.useRealTimers();
-});
-```
-
-### System Time Mocking
-
-```typescript
-import { vi } from "vitest";
-
-test("mocks system time", () => {
-  const mockDate = new Date("2024-01-01T00:00:00.000Z");
-  vi.setSystemTime(mockDate);
-
-  expect(new Date().toISOString()).toBe("2024-01-01T00:00:00.000Z");
-  expect(Date.now()).toBe(mockDate.getTime());
-
-  vi.useRealTimers();
-});
-
-test("advances time", () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2024-01-01"));
-
-  const start = Date.now();
-
-  vi.advanceTimersByTime(1000); // Advance 1 second
-
-  const end = Date.now();
-  expect(end - start).toBe(1000);
-
-  vi.useRealTimers();
-});
-```
-
-### Testing Intervals
-
-```typescript
-import { vi } from "vitest";
-
-test("interval callback", () => {
-  vi.useFakeTimers();
-
-  const callback = vi.fn();
-  setInterval(callback, 1000);
-
-  vi.advanceTimersByTime(2500);
-
-  expect(callback).toHaveBeenCalledTimes(2);
-
-  vi.clearAllTimers();
-  vi.useRealTimers();
-});
-```
-
-## Component Testing Setup
-
-To add React Testing Library:
-
-```bash
-npm add -D @testing-library/react @testing-library/user-event
-```
-
-### Basic Component Test
-
-```typescript
+```tsx
 import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { describe, test, expect, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { expect, test, vi } from "vitest";
 import { Button } from "./Button";
 
-describe("Button", () => {
-  test("renders children", () => {
-    render(<Button>Click me</Button>);
-    expect(screen.getByRole("button")).toHaveTextContent("Click me");
-  });
-
-  test("calls onClick handler", async () => {
-    const user = userEvent.setup();
-    const handleClick = vi.fn();
-
-    render(<Button onClick={handleClick}>Click</Button>);
-
-    await user.click(screen.getByRole("button"));
-
-    expect(handleClick).toHaveBeenCalledTimes(1);
-  });
-
-  test("is disabled when disabled prop is true", () => {
-    render(<Button disabled>Click</Button>);
-    expect(screen.getByRole("button")).toBeDisabled();
-  });
-});
-```
-
-### Testing with Props
-
-```typescript
-import { render, screen } from "@testing-library/react";
-
-test("renders with variant", () => {
-  render(<Button variant="primary">Click</Button>);
-
-  const button = screen.getByRole("button");
-  expect(button).toHaveClass("bg-primary");
-});
-
-test("renders with custom className", () => {
-  render(<Button className="custom-class">Click</Button>);
-
-  const button = screen.getByRole("button");
-  expect(button).toHaveClass("custom-class");
-});
-```
-
-### Testing User Interactions
-
-```typescript
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-
-test("input value changes on type", async () => {
+test("submits once", async () => {
   const user = userEvent.setup();
+  const onSubmit = vi.fn();
 
-  render(<input type="text" />);
+  render(<Button onClick={onSubmit}>Submit</Button>);
+  const button = screen.getByRole("button", { name: "Submit" });
+  await user.click(button);
 
-  const input = screen.getByRole("textbox");
-
-  await user.type(input, "Hello");
-
-  expect(input).toHaveValue("Hello");
-});
-
-test("form submission", async () => {
-  const user = userEvent.setup();
-  const handleSubmit = vi.fn((e) => e.preventDefault());
-
-  render(
-    <form onSubmit={handleSubmit}>
-      <input name="username" />
-      <button type="submit">Submit</button>
-    </form>,
-  );
-
-  await user.type(screen.getByRole("textbox"), "testuser");
-  await user.click(screen.getByRole("button"));
-
-  expect(handleSubmit).toHaveBeenCalledTimes(1);
+  expect(button.textContent).toBe("Submit");
+  expect(onSubmit).toHaveBeenCalledOnce();
 });
 ```
 
-### Testing Async Components
+Use plain DOM assertions unless setup imports `@testing-library/jest-dom`:
 
 ```typescript
-import { render, screen, waitFor } from "@testing-library/react";
+expect(button.disabled).toBe(true);
+expect(button.classList.contains("primary")).toBe(true);
+expect(message.textContent).toContain("Saved");
+```
 
-test("shows loading state then data", async () => {
+For async rendering, use `findBy*` for one awaited element and `waitFor` for an assertion that must be retried. Wire
+module failures at file scope, not inside a test:
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import { expect, test, vi } from "vitest";
+import { UserProfile } from "./UserProfile";
+
+const { fetchUserMock } = vi.hoisted(() => ({
+  fetchUserMock: vi.fn(),
+}));
+
+vi.mock("./api", () => ({ fetchUser: fetchUserMock }));
+
+test("renders the error state", async () => {
+  fetchUserMock.mockRejectedValueOnce(new Error("offline"));
   render(<UserProfile userId="1" />);
 
-  expect(screen.getByText("Loading...")).toBeInTheDocument();
-
-  await waitFor(() => {
-    expect(screen.getByText("John Doe")).toBeInTheDocument();
-  });
-});
-
-test("handles error state", async () => {
-  // Mock API to fail
-  vi.mock("./api", () => ({
-    fetchUser: vi.fn().mockRejectedValue(new Error("Failed")),
-  }));
-
-  render(<UserProfile userId="1" />);
-
-  await waitFor(() => {
-    expect(screen.getByText("Error loading user")).toBeInTheDocument();
-  });
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Could not load user");
 });
 ```
 
-### Query Priorities
+Prefer queries by role or label, then visible text, then semantic test IDs as a last resort. Avoid selectors tied to
+markup structure or styling.
 
-Use queries in this order:
+Centralize providers only when multiple tests need the same wrapper:
 
-1. **getByRole** - Accessible to everyone
+```tsx
+import { render, type RenderOptions } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
 
-```typescript
-screen.getByRole("button", { name: /submit/i });
-screen.getByRole("textbox", { name: /username/i });
-```
-
-2. **getByLabelText** - For form elements
-
-```typescript
-screen.getByLabelText("Username");
-```
-
-3. **getByPlaceholderText** - If no label
-
-```typescript
-screen.getByPlaceholderText("Enter username");
-```
-
-4. **getByText** - For non-interactive content
-
-```typescript
-screen.getByText("Welcome");
-```
-
-5. **getByTestId** - Last resort
-
-```typescript
-screen.getByTestId("user-profile");
-```
-
-### Custom Render with Providers
-
-```typescript
-// test-utils.tsx
-import { render, RenderOptions } from "@testing-library/react";
-import { ReactElement } from "react";
-
-function AllProviders({ children }: { children: React.ReactNode }) {
-  return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </ThemeProvider>
-  );
+function Providers({ children }: { children: ReactNode }) {
+  return <ThemeProvider theme={testTheme}>{children}</ThemeProvider>;
 }
 
-export function renderWithProviders(
-  ui: ReactElement,
-  options?: Omit<RenderOptions, "wrapper">,
-) {
-  return render(ui, { wrapper: AllProviders, ...options });
+export function renderWithProviders(ui: ReactElement, options?: Omit<RenderOptions, "wrapper">) {
+  return render(ui, { wrapper: Providers, ...options });
 }
-
-// In tests
-import { renderWithProviders } from "./test-utils";
-
-test("component with providers", () => {
-  renderWithProviders(<MyComponent />);
-  // ...
-});
 ```
 
-## Snapshot Testing
+Keep provider state fresh per render. Do not hide scenario-specific data or mocks in the render helper.
+
+## Async boundaries and timeouts
+
+Return or await every promise. Convert callback APIs to a promise; the first test callback argument is Vitest's test
+context, not a completion callback.
 
 ```typescript
-import { render } from "@testing-library/react";
-
-test("matches snapshot", () => {
-  const { container } = render(<Button>Click me</Button>);
-  expect(container.firstChild).toMatchSnapshot();
-});
-
-// Update snapshots with: nlx vitest -u
-```
-
-**Use sparingly:** Snapshots are brittle. Prefer targeted assertions.
-
-## Type Testing
-
-Vitest can validate TypeScript types:
-
-```typescript
-import { expectTypeOf } from "vitest";
-
-test("type checks", () => {
-  expectTypeOf({ a: 1 }).toMatchTypeOf<{ a: number }>();
-  expectTypeOf([1, 2, 3]).toEqualTypeOf<number[]>();
-  expectTypeOf<string>().toBeString();
-  expectTypeOf<number>().toBeNumber();
-});
-```
-
-## Custom Matchers
-
-Extend expect with custom matchers:
-
-```typescript
-import { expect } from "vitest";
-
-expect.extend({
-  toBeWithinRange(received: number, min: number, max: number) {
-    const pass = received >= min && received <= max;
-    return {
-      pass,
-      message: () => `expected ${received} to be within range ${min} - ${max}`,
-    };
-  },
-});
-
-// Usage
-test("custom matcher", () => {
-  expect(5).toBeWithinRange(1, 10);
-});
-```
-
-## Parameterized Tests
-
-```typescript
-import { describe, test, expect } from "vitest";
-
-describe.each([
-  { input: 1, expected: 2 },
-  { input: 2, expected: 4 },
-  { input: 3, expected: 6 },
-])("double($input)", ({ input, expected }) => {
-  test(`returns ${expected}`, () => {
-    expect(double(input)).toBe(expected);
+test("receives the result", async () => {
+  const result = await new Promise<string>((resolve, reject) => {
+    legacyOperation((error, value) => (error ? reject(error) : resolve(value)));
   });
+
+  expect(result).toBe("ready");
 });
 
-// Or with test.each
+test("slow integration", { timeout: 10_000 }, async () => {
+  await runIntegration();
+});
+```
+
+Pass test options as the second argument. The positional third-argument timeout form is not valid in Vitest 4.
+
+## Fixtures and lifecycle wrappers
+
+Use `test.extend` for reusable setup with ownership and cleanup. Vitest 4.1's builder pattern infers fixture types:
+
+```typescript
+import { expect, test as baseTest } from "vitest";
+
+const test = baseTest
+  .extend("config", { baseUrl: "https://api.test" })
+  .extend("client", async ({ config }, { onCleanup }) => {
+    const client = createClient(config.baseUrl);
+    onCleanup(() => client.close());
+    return client;
+  });
+
+test("loads health", async ({ client }) => {
+  await expect(client.health()).resolves.toEqual({ ok: true });
+});
+```
+
+Retain object-style `test.extend<Fixtures>({...})` when established locally. Put shared factories and fixture builders
+in the repository's shared-test location, commonly a `__tests__/` directory; keep scenario data beside its test.
+
+Use `aroundEach` or `aroundAll` when the test or suite must execute inside a transaction, trace, or async context. The
+hook must invoke its `runTest` or `runSuite` callback exactly once:
+
+```typescript
+test.aroundEach(async (runTest, { client }) => {
+  await client.transaction(runTest);
+});
+```
+
+## Tables and fixtures
+
+Use `test.each` for positional tables and `test.for` when the test needs the case as one typed value:
+
+```typescript
 test.each([
-  [1, 2],
+  [0, 0],
   [2, 4],
-  [3, 6],
+  [-2, -4],
 ])("double(%i) returns %i", (input, expected) => {
   expect(double(input)).toBe(expected);
 });
+
+test.for([
+  { input: " A ", expected: "a" },
+  { input: "B", expected: "b" },
+])("normalizes $input", ({ input, expected }) => {
+  expect(normalize(input)).toBe(expected);
+});
 ```
 
-## Global Test Patterns
+Name cases so failures identify the input without reading the implementation.
 
-### Setup and Teardown
+## Type tests, matchers, and snapshots
+
+Use type assertions for public type contracts:
 
 ```typescript
-import { beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { expectTypeOf, test } from "vitest";
 
-beforeAll(() => {
-  // Runs once before all tests in this file
-});
-
-afterAll(() => {
-  // Runs once after all tests in this file
-});
-
-beforeEach(() => {
-  // Runs before each test
-});
-
-afterEach(() => {
-  // Runs after each test
+test("result type stays compatible", () => {
+  expectTypeOf<Result>().toExtend<BaseResult>();
+  expectTypeOf({ id: 1, name: "Ada" }).toMatchObjectType<{ id: number }>();
+  expectTypeOf<string>().not.toEqualTypeOf<number>();
 });
 ```
 
-### Test Lifecycle
+Add a custom matcher only when it makes repeated domain assertions clearer:
 
 ```typescript
-describe("nested describe blocks", () => {
-  beforeAll(() => console.log("1 - beforeAll"));
-  afterAll(() => console.log("1 - afterAll"));
-  beforeEach(() => console.log("1 - beforeEach"));
-  afterEach(() => console.log("1 - afterEach"));
-
-  test("test 1", () => console.log("1 - test"));
-
-  describe("nested", () => {
-    beforeAll(() => console.log("2 - beforeAll"));
-    afterAll(() => console.log("2 - afterAll"));
-    beforeEach(() => console.log("2 - beforeEach"));
-    afterEach(() => console.log("2 - afterEach"));
-
-    test("test 2", () => console.log("2 - test"));
-  });
+expect.extend({
+  toBeWithinRange(value: number, min: number, max: number) {
+    const pass = value >= min && value <= max;
+    return { pass, message: () => `expected ${value} to be within ${min}..${max}` };
+  },
 });
-
-// Output:
-// 1 - beforeAll
-// 2 - beforeAll
-// 1 - beforeEach
-// 1 - test
-// 1 - afterEach
-// 1 - beforeEach
-// 2 - beforeEach
-// 2 - test
-// 2 - afterEach
-// 1 - afterEach
-// 2 - afterAll
-// 1 - afterAll
 ```
 
-## Test Filtering
+Use snapshots sparingly for stable, reviewable output. Prefer inline snapshots for short values and focused assertions
+for behavior. Update intentionally with the repository's script or `nlx vitest run -u` as a fallback.
+
+## Selection and tags
+
+Use `only` temporarily; do not commit it. Use `skip`, `skipIf`, `runIf`, and `concurrent` only when their condition or
+parallel-safety is explicit:
 
 ```typescript
-// Run only this test
-test.only("focused test", () => {
-  // ...
-});
-
-// Skip this test
-test.skip("skipped test", () => {
-  // ...
-});
-
-// Skip conditionally
-test.skipIf(process.env.CI)("runs only locally", () => {
-  // ...
-});
-
-// Run conditionally
-test.runIf(process.platform === "darwin")("runs only on macOS", () => {
-  // ...
-});
-
-// Concurrent tests
-test.concurrent("runs in parallel 1", async () => {
-  // ...
-});
-
-test.concurrent("runs in parallel 2", async () => {
-  // ...
-});
+test.skipIf(process.platform === "win32")("uses Unix permissions", () => {});
+test.runIf(Boolean(process.env.RUN_INTEGRATION))("calls the sandbox", async () => {});
+test.concurrent("parses independently", async () => {});
 ```
 
-## Next Steps
+Vitest 4.1 tags must first be declared in `test.tags`. Attach them through the options object and filter with an
+expression:
 
-- For monorepo-specific testing - See `monorepo-testing.md`
-- For debugging strategies - See `troubleshooting.md`
+```typescript
+test("persists a user", { tags: ["db", "integration"] }, async () => {});
+```
+
+```bash
+nlx vitest run --tags-filter='integration && !flaky'
+```
+
+## Browser mode
+
+If the repository already uses browser mode, import browser APIs from `vitest/browser`, configure `playwright()` from
+`@vitest/browser-playwright`, and use `toMatchScreenshot` for intentional visual assertions. Do not introduce browser
+mode solely for component tests that the existing jsdom setup covers.
