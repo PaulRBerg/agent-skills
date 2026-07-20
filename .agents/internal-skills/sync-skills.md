@@ -38,6 +38,41 @@ Treat these as out of scope unless the request explicitly names them:
 - Backwards-compatible argument parsing in `select-message-format.sh`.
 - Adding a shared sourced helper file.
 
+### Handoff Planning Guidance
+
+Files:
+
+- `skills/codex-handoff/SKILL.md`
+- `skills/claude-handoff/SKILL.md`
+
+Both skills plan in Claude Code Plan mode and delegate implementation to subagents; only the agent runtime differs
+(Codex CLI runner vs Claude Code Agent tool). Treat these shared blocks as in scope and keep them semantically
+identical, adjusted only for the agent noun and runtime:
+
+- Contract bullets: the Plan-mode gate, Claude's ownership of planning and orchestration, the no-redesign rule for
+  agents, the smallest-effective-team and five-agent limits, and Claude's implementation work being limited to
+  orchestration, integrity checks, failure handling, and the conditional polish pass.
+- Strategy selection guidance: sequential vs parallel vs hybrid criteria, disjoint-write-scope requirement, wave
+  semantics, the slowest-agent note, and the whole-handoff five-agent limit with stable IDs and dependencies.
+- The single-validation-owner rule: aggregate checks run once; every other agent runs only the narrowest checks proving
+  its own edits; aggregate-check failures confined to files outside every agent's scope are attributed to unrelated
+  concurrent work, not treated as blockers.
+- The `$code-polish` trigger list, including "file count alone is not a trigger".
+- Platform-agnostic agent prompt requirements: outcome plus brief, exact write scope and dirty-work boundaries,
+  validation assignment, authority boundary, stopping rule, and reporting requirement.
+- Completion rules: success verification, dependent gating on failure, changed-files union dedupe, polish invocation and
+  skip conditions, and cross-repository `$commit` behavior.
+
+Treat these as out of scope unless the request explicitly names them:
+
+- Launch mechanics: `run-codex-handoff.sh` and its artifacts vs Agent-tool calls.
+- Codex-only content: model/effort/timeout selection tables, progress streams, Monitor guidance, sentinel handling, and
+  Codex command conventions.
+- Status reporting: codex-handoff's dashboard system vs claude-handoff's concise prose summary.
+- Frontmatter and `references/`/`scripts/` contents.
+
+Verification is prose comparison of the in-scope blocks; there is no extractable helper data.
+
 ## Workflow
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git
