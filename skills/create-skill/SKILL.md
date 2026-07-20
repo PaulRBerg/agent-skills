@@ -250,5 +250,4 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - Prefer TypeScript helper scripts run with `bun run`; use Python through `uv run`, never raw `python` or `python3`.
 - Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by
   default.
-- Report the created paths and verification evidence. Do not commit the new skill unless the user explicitly requested a
-  commit.
+- Report the created paths and verification evidence.

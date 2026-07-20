@@ -54,7 +54,7 @@ If the intent is unclear, select `polish` in `--dry-run` mode and report the sma
   documented overwrites, not deletions.
 - Treat a broad write request as authorization for the requested scope. Otherwise, preview a change set larger than a
   handful of files and stop before writing.
-- Do not expand from documentation work into source changes, skill creation, external writes, or commits.
+- Do not expand from documentation work into source changes, skill creation, or external writes.
 
 ## Arguments
 
@@ -98,9 +98,8 @@ after generators or broad commands.
 
 ## Shared Constraints
 
-Stay inside the resolved repository, preserve unrelated changes, and do not commit or perform external writes. The
-selected workflow reference is authoritative for README.md, AGENTS.md, CLAUDE.md, and project-skill behavior; do not
-repeat or broaden its file-specific rules here.
+Stay inside the resolved repository and preserve unrelated changes. The selected workflow reference is authoritative for
+README.md, AGENTS.md, CLAUDE.md, and project-skill behavior; do not repeat or broaden its file-specific rules here.
 
 ## Discovery and Tool Routing
 
