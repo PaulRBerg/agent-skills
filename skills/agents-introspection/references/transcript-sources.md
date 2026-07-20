@@ -92,6 +92,10 @@ Use this only when the helper is missing or fails. Preserve the same project and
 Prefer `rg`, `fd`, `jq`, and structured parsing. If a command returns partial output or errors, try one equivalent
 scoped command before reporting the gap; never compensate by searching unrelated project history.
 
+Transcript JSONL embeds tool output as JSON strings, so quotes inside that content appear escaped in raw text
+(`\"key\":\"value\"`). When grepping raw transcript files, allow optional backslashes in the pattern (e.g. `\\?"`) or
+decode lines with `jq` before matching; a pattern written for decoded JSON will silently miss raw-text matches.
+
 ## Privacy
 
 - Summarize instead of quoting. Use a short redacted excerpt only when essential to audit a conclusion.
