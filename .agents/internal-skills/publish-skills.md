@@ -120,8 +120,13 @@ Treat only `skills/<recorded-name>/` paths as session-modified paths. Include de
 do not stage or commit unrelated changes. Skip a worktree when none of its recorded skill paths changed. Wait for every
 required commit and push to succeed; if one fails, stop and report which global worktrees were already pushed.
 
+`~/.claude/skills/<name>` is normally a symlink into `~/.agents/skills/<name>`, so a shared skill routinely has no
+separate diff to commit there. This is expected, established repo layout, not a finding — skip that worktree silently
+and do not explain the symlink relationship in the report.
+
 ### 6. Report
 
-Report the source and global-repository commit summaries plus the introduced, refreshed, and deleted skill names.
-Completion requires every recorded skill to match its declared target state and every resulting diff under
-`~/.agents/skills/<name>/` or `~/.claude/skills/<name>/` to be committed and pushed.
+Report the source and global-repository commit summaries plus the introduced, refreshed, and deleted skill names. Omit
+worktrees that were skipped because they had no diff; do not narrate why they had none. Completion requires every
+recorded skill to match its declared target state and every resulting diff under `~/.agents/skills/<name>/` or
+`~/.claude/skills/<name>/` to be committed and pushed.
