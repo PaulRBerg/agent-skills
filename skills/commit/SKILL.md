@@ -122,6 +122,14 @@ include only ones the commit actually closes.
   cause of an unrelated repo-wide hook failure is another agent's in-flight work, but the same evidence bar applies.
   Never bypass a failure caused by or plausibly affected by the staged changes; fix it or surface the error. When
   bypassing, keep the existing one-line disclosure that the unrelated hook failure was skipped.
+- **Signing failure (signer unreachable):** if `git commit` fails _after_ the pre-commit/commit-msg hooks already
+  passed, with an error naming the configured signer rather than the content or a hook (e.g. `1Password`,
+  `failed to fill whole buffer`, `ssh-agent`, `gpg failed to sign the data`, `no such identity`) — retry once, same
+  command, with `--no-gpg-sign` appended. Interactive/hardware signers (1Password, YubiKey, etc.) can be unreachable
+  when unattended, and the user has authorized landing unsigned commits in that case rather than blocking. Only retry on
+  a genuine signer error at the signing step, never speculatively, and never edit repo/global git config
+  (`commit.gpgsign`, `gpg.format`, etc.) — the bypass is per-commit only. Disclose with one line:
+  `Commit created unsigned — signer unavailable ("<short error>")`.
 
 ### 5) Push (if `--push`)
 
@@ -135,4 +143,5 @@ include only ones the commit actually closes.
 ## Completion
 
 Completion evidence is the created commit hash, subject, and changed-file count; with `--push`, also require the
-successful remote update. A hook bypass is complete only with the one-line unrelated-failure disclosure.
+successful remote update. A hook bypass is complete only with the one-line unrelated-failure disclosure; a signing
+bypass is complete only with the one-line unsigned-commit disclosure.
