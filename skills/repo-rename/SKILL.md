@@ -16,14 +16,23 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 
 - Rename the current GitHub repository, matching local folder, and `origin` URL.
 - Update literal old paths in `~/.claude/projects`, `~/claude/projects` when present, `~/.codex/sessions`, and
-  `~/.codex/config.toml`.
+  `~/.codex/config.toml` only when the repository has an active Claude Code or Codex transcript; this continuity update
+  does not apply to repos with no active transcripts.
 - Update constrained literal old-name references inside the repository, excluding VCS, dependencies, and generated build
   directories.
 - Do not modify other transcript stores, archives, remotes, or repositories.
 
 ## Workflow
 
-1. Resolve the skill directory and run the helper from the repository to produce a read-only preview:
+1. Check whether the repository has any active AI chat transcript before treating continuity preservation as in scope:
+   - Claude Code: resolve `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<absolute-repo-path-with-/-replaced-by-->` and check
+     it exists and is non-empty.
+   - Codex: resolve `${CODEX_HOME:-~/.codex}/sessions` and check whether any session file references the exact absolute
+     repo path.
+   - If neither exists, state that the transcript-continuity update does not apply; the rename may still proceed for the
+     GitHub, git, filesystem, and repository-content changes below.
+
+2. Resolve the skill directory and run the helper from the repository to produce a read-only preview:
 
    ```sh
    uv run <skill-dir>/scripts/repo-rename.py <new-name> --dry-run
@@ -33,14 +42,14 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
    context. It prints the old/new repo and paths, exact confirmation token, external commands, directory moves, every
    replacement file, occurrence counts, and rollback coverage.
 
-2. If `--dry-run` was requested, return the preview and stop. A successful dry run must not change the GitHub repo,
+3. If `--dry-run` was requested, return the preview and stop. A successful dry run must not change the GitHub repo,
    remote, folder, config, transcripts, or repository files.
 
-3. Otherwise present the complete preview and require explicit confirmation in a subsequent user message. Explain that
+4. Otherwise present the complete preview and require explicit confirmation in a subsequent user message. Explain that
    the confirmation authorizes the GitHub rename, local folder move, origin update, and every listed
    continuity/repository replacement. If any preview fact changes, regenerate it and ask again.
 
-4. After confirmation, pass the preview's exact token:
+5. After confirmation, pass the preview's exact token:
 
    ```sh
    uv run <skill-dir>/scripts/repo-rename.py <new-name> --apply --confirm '<owner/old->owner/new>'
@@ -49,7 +58,7 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
    The helper re-runs preflight, backs up every replacement file, applies deterministic literal replacements, and
    attempts rollback on failure. Never bypass its clean-tree, target-path, or confirmation checks.
 
-5. Verify the helper's result with `gh repo view`, `git remote get-url origin`, `pwd -P`, and a search for remaining old
+6. Verify the helper's result with `gh repo view`, `git remote get-url origin`, `pwd -P`, and a search for remaining old
    absolute-path/name references in the listed scope. Report intentional remaining matches separately.
 
 ## Completion
