@@ -12,12 +12,13 @@ description:
 
 # EVM Atlas
 
-Resolve and query only the target mainnets in `references/target-mainnets.json`, under a strict read-only boundary.
+Resolve and query only the target mainnets in `references/generated/target-mainnets.json`, under a strict read-only
+boundary.
 
 ## Scope and Authority
 
-- Match displayed names, numeric chain IDs, and aliases from `references/chain-aliases.json` to the authoritative
-  target-mainnet rows.
+- Match displayed names, numeric chain IDs, and aliases from `references/generated/chain-aliases.json` to the
+  authoritative target-mainnet rows.
 - If a chain is absent, do not route through another provider, web search, Chainlist, or an unlisted RPC to work around
   scope. Ask for a feature request at <https://github.com/PaulRBerg/agent-skills>.
 - Never sign messages, submit signatures, execute bridge steps, or broadcast transactions. Route state-changing Cast
@@ -28,25 +29,27 @@ Resolve and query only the target mainnets in `references/target-mainnets.json`,
 ## Routing
 
 1. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
-   read `references/blockscan-balances.md` first.
-2. For an address-wide historical-activity or current-NFT sweep, read `references/address-sweeps.md`. Its
+   read `references/workflows/blockscan-balances.md` first.
+2. For an address-wide historical-activity or current-NFT sweep, read `references/workflows/address-sweeps.md`. Its
    current-balance workflow is also the API fallback for Blockscan gaps.
 3. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, receipt, or
-   funding origin, resolve the chain and read `references/provider-routing.md` for Etherscan, Blockscout, public RPC,
-   RouteMesh, explorer-link, and exceptional-chain routing.
-4. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
+   funding origin, resolve the chain and read `references/workflows/provider-routing.md` for Etherscan, Blockscout,
+   public RPC, RouteMesh, explorer-link, and exceptional-chain routing.
+4. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
+5. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
+6. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
    only the matching reference:
-   - Across: `references/bridge-across.md`
-   - Bungee / Socket: `references/bridge-bungee.md`
-   - Circle / CCTP / Gateway: `references/bridge-circle.md`
-   - deBridge / DLN: `references/bridge-debridge.md`
-   - Hop: `references/bridge-hop.md`
-   - Layerswap: `references/bridge-layerswap.md`
-   - LayerZero / Stargate / OFT / Aori: `references/bridge-layerzero.md`
-   - LI.FI: `references/bridge-lifi.md`
-   - Relay / Relay.link: `references/bridge-relay.md`
-   - Symbiosis: `references/bridge-symbiosis.md`
-5. Treat bridge APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
+   - Across: `references/bridges/across.md`
+   - Bungee / Socket: `references/bridges/bungee.md`
+   - Circle / CCTP / Gateway: `references/bridges/circle.md`
+   - deBridge / DLN: `references/bridges/debridge.md`
+   - Hop: `references/bridges/hop.md`
+   - Layerswap: `references/bridges/layerswap.md`
+   - LayerZero / Stargate / OFT / Aori: `references/bridges/layerzero.md`
+   - LI.FI: `references/bridges/lifi.md`
+   - Relay / Relay.link: `references/bridges/relay.md`
+   - Symbiosis: `references/bridges/symbiosis.md`
+7. Treat bridge APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
    evidence.
 
 ## Completion

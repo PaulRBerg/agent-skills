@@ -6,8 +6,8 @@ Source: <https://docs.etherscan.io/supported-chains> Live list: <https://api.eth
 provider's authoritative `chainid` set)
 
 Verified against the live `chainlist` endpoint on 2026-07-08 (64 provider chains). This file intentionally lists only
-chains from `./references/target-mainnets.json`; provider-supported chains outside that list are out of scope for this
-skill.
+chains from `references/generated/target-mainnets.json`; provider-supported chains outside that list are out of scope
+for this skill.
 
 ## Target Mainnets (Free Tier Available)
 
@@ -47,7 +47,7 @@ The following target chains require a paid Etherscan plan for data endpoints (ba
 ## Target Mainnets Not on Etherscan V2
 
 Route these target chains to Blockscout when available, then to the `primaryPublicRpc` from
-`./references/target-mainnets.json` if needed. Do not query Etherscan V2 for them.
+`references/generated/target-mainnets.json` if needed. Do not query Etherscan V2 for them.
 
 | Chain           | Chain ID  | Notes                                                                          |
 | --------------- | --------- | ------------------------------------------------------------------------------ |

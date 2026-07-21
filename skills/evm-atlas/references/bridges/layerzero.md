@@ -31,7 +31,8 @@ Do not prefer legacy Stargate endpoints for new data unless the user specificall
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Supported chains:** call `GET /chains`.
 2. **Supported tokens or destinations:** call `GET /tokens`. Use `transferrableFromChainKey` and

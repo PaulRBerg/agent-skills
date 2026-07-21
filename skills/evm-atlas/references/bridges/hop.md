@@ -25,7 +25,8 @@ destination event is a bonder-funded withdrawal, not a mint.
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Known source tx hash or transfer ID:** call `GET /v1/transfer-status?transactionHash=<hash>` (or `?transferId=<id>`
    if a transfer ID rather than a tx hash is known — the two params are mutually alternative, and at least one is
@@ -86,7 +87,7 @@ token. The Arbitrum One `L2_AmmWrapper` is at `0x33ceb27b39d2Bb7D2e61F7564d3Df29
 `L2_AmmWrapper` on block explorers). The AMM wrapper swaps the canonical bridge token (`h<TOKEN>`) against the native
 token via Hop's AMM on send/receive, so a single user-facing transfer can appear on-chain as a wrapper swap plus a
 bridge send rather than a single bridge call. Resolve other chains' bridge/wrapper addresses from
-`./references/target-mainnets.json` or the chain's block explorer rather than hardcoding a full table here.
+`references/generated/target-mainnets.json` or the chain's block explorer rather than hardcoding a full table here.
 
 A destination-chain withdrawal is bonded (fronted immediately by a bonder, pending later settlement) unless the bonder
 has insufficient available liquidity, in which case the recipient must wait for the slower canonical-message-based

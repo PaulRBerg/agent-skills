@@ -1,6 +1,6 @@
 # Provider Routing
 
-Read this reference only after resolving a chain in `target-mainnets.json`.
+Read this reference only after resolving a chain in `references/generated/target-mainnets.json`.
 
 ## Account and Transaction Data
 
@@ -10,8 +10,8 @@ globally canonical source. Keep a second provider only as a fallback:
 1. Use Blockscout on covered overlaps, especially when Etherscan cannot serve the chain on the detected plan, its
    pagination/rate/PRO limits make the requested sweep less complete, or Blockscout's native holdings/counters avoid
    those limits.
-2. Otherwise use Etherscan V2 when the chain is in `etherscan-chains.md`, the detected plan can query it, and the needed
-   actions accept the fixed cutoff.
+2. Otherwise use Etherscan V2 when the chain is in `references/generated/etherscan-chains.md`, the detected plan can
+   query it, and the needed actions accept the fixed cutoff.
 3. Use the other indexed provider as fallback when the authoritative provider is unavailable, malformed, behind the
    cutoff, rate/plan limited, or missing a required action. A valid empty response is a completed negative, not a
    fallback trigger. Move the affected result to the fallback; do not silently splice two negative responses into one
@@ -23,6 +23,9 @@ On overlaps, Blockscout is not automatically secondary. In particular, prefer it
 Avalanche (`43114`), and BNB Chain (`56`) when `scripts/etherscan-detect-plan.sh` reports `paid_chains=false`, and when
 its unmetered per-instance or full-holdings routes are materially more complete than the available Etherscan plan. Do
 not infer API support from an Etherscan-shaped explorer URL.
+
+For raw Etherscan V2 endpoint parameters, plan gating, and error handling, see `references/explorers/etherscan-api.md`.
+For raw Blockscout endpoint parameters, plan gating, and error handling, see `references/explorers/blockscout-api.md`.
 
 ## Checkpoints and State
 
@@ -45,8 +48,8 @@ shortcut:
 - Under the prb-finance bootstrap profile, the exact `ethereum-eoa` zero-state invariant may omit both `txlist` and
   `txlistinternal` wholesale. That profile counts a successful outgoing normal row or a successful positive-value
   normal/internal row touching the address; zero-value inbound normal/internal noise is outside it. The invariant never
-  covers token/NFT transfers. Apply the profile rules in `address-sweeps.md` before calling an address inactive; a
-  general policy that counts zero-value calls must still query those channels.
+  covers token/NFT transfers. Apply the profile rules in `references/workflows/address-sweeps.md` before calling an
+  address inactive; a general policy that counts zero-value calls must still query those channels.
 
 For `cross-vm`, scope all state, history, and negative claims to the chain's EVM execution environment. EVM evidence
 does not cover the native non-EVM account environment and cannot prove whole-chain inactivity.
@@ -72,15 +75,17 @@ https://lb.routeme.sh/rpc/CHAIN_ID/ROUTEMESH_API_KEY
 ```
 
 Verify current support through `https://api.routeme.sh/chains`. Otherwise verify the target's `primaryPublicRpc` with
-`eth_chainId`, then try `target-fallback-rpcs.json` in order. Public RPCs are best-effort and may be rate limited.
+`eth_chainId`, then try `references/generated/target-fallback-rpcs.json` in order. Public RPCs are best-effort and may
+be rate limited.
 
 ## Explorer Links
 
-Use the target row's `explorerUrl` plus `explorer-paths.json`. Verify nonstandard explorers in their UI; Ronin does not
-reliably follow Etherscan paths and its chain ID collides with a non-target Chainscout entry. Ronin's explorer
-(`app.roninchain.com`) also blocks scripted access, so open it with `chrome-devtools`/Chromium rather than `curl` or
-`WebFetch`, the same way `blockscan-balances.md` requires Chromium for Blockscan.
+Use the target row's `explorerUrl` plus `references/explorers/explorer-paths.json`. Verify nonstandard explorers in
+their UI; Ronin does not reliably follow Etherscan paths and its chain ID collides with a non-target Chainscout entry.
+Ronin's explorer (`app.roninchain.com`) also blocks scripted access, so open it with `chrome-devtools`/Chromium rather
+than `curl` or `WebFetch`, the same way `references/workflows/blockscan-balances.md` requires Chromium for Blockscan.
 
 ## Exceptional History
 
-For OP Mainnet data before `2021-11-11`, read `optimism-pre-2021-11-11.md` before interpreting provider or RPC results.
+For OP Mainnet data before `2021-11-11`, read `references/explorers/optimism-pre-regenesis.md` before interpreting
+provider or RPC results.

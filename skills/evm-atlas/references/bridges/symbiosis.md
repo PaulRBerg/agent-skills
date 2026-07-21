@@ -3,7 +3,7 @@
 ## Overview
 
 Use Symbiosis Finance's public explorer API as a read-only source for cross-chain swap status after the known origin and
-destination chains are confirmed against `./references/target-mainnets.json`. Symbiosis is a liquidity-network
+destination chains are confirmed against `references/generated/target-mainnets.json`. Symbiosis is a liquidity-network
 aggregator: it does not move tokens directly between arbitrary chains but routes every cross-chain swap through
 synthesized-token liquidity pools ("Octopools") on its own host chain, converting a source token to a synthetic
 representation, moving that synthetic across the host chain, then converting to the requested destination token. A swap
@@ -22,7 +22,8 @@ route data are for inspection only.
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Known source tx hash and its origin chain ID:** call `GET /transactions/<originChainId>/<txHash>` for the single
    matching record.
@@ -109,7 +110,8 @@ context, not a field mapping to implement against.
 - Non-target chains in `from_chain_id`/`to_chain_id`: report that the leg is outside this skill and ask for a feature
   request rather than continuing analysis on that leg.
 - `join_chain_id` values reflect Symbiosis's internal host chain, not necessarily a chain tracked in
-  `./references/target-mainnets.json`; do not treat it as a target chain requiring its own explorer verification.
+  `references/generated/target-mainnets.json`; do not treat it as a target chain requiring its own explorer
+  verification.
 
 ## Sources
 

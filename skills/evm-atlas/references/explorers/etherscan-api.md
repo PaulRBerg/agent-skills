@@ -36,7 +36,7 @@ Run the detection helper **once per session** and cache the result. It maps `get
 balance call to disambiguate Free from Lite:
 
 ```bash
-./scripts/etherscan-detect-plan.sh
+scripts/etherscan-detect-plan.sh
 ```
 
 Output (key=value lines):
@@ -108,16 +108,16 @@ Do not default to Ethereum Mainnet. Always infer the chain from the user's promp
 
 ### Unsupported Chains
 
-If the user references a chain that is not in `./references/target-mainnets.json`, halt and ask them to file a feature
-request in <https://github.com/PaulRBerg/agent-skills>. Do not query Etherscan, Blockscout, Bungee, Chainlist, web
-search, or public RPCs for non-target chains.
+If the user references a chain that is not in `references/generated/target-mainnets.json`, halt and ask them to file a
+feature request in <https://github.com/PaulRBerg/agent-skills>. Do not query Etherscan, Blockscout, Bungee, Chainlist,
+web search, or public RPCs for non-target chains.
 
 If the user references a **target EVM chain** that Etherscan API V2 does not cover, do **not** halt. Prefer Blockscout
-(`./blockscout-api.md`) before direct RPC. If Blockscout doesn't index the target chain either, fall back to direct RPC
-calls against the target chain's default public RPC:
+(`references/explorers/blockscout-api.md`) before direct RPC. If Blockscout doesn't index the target chain either, fall
+back to direct RPC calls against the target chain's default public RPC:
 
-1. Resolve the chain via `./references/target-mainnets.json` and `./references/chain-aliases.json` to get the default
-   public RPC, chain ID, native currency symbol, and explorer URL.
+1. Resolve the chain via `references/generated/target-mainnets.json` and `references/generated/chain-aliases.json` to
+   get the default public RPC, chain ID, native currency symbol, and explorer URL.
 2. Issue equivalent JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against that RPC
    using `curl` or the `cast` CLI from the `cli-cast` skill.
 3. Note in the response that the data came from the chain's public RPC, not Etherscan, so PRO-style aggregations (full
@@ -130,7 +130,8 @@ The chain "[chain name]" is outside the evm-atlas target list.
 Please file a feature request in https://github.com/PaulRBerg/agent-skills.
 ```
 
-For the target-filtered list of Etherscan-supported chains and their IDs, see `./references/etherscan-chains.md`.
+For the target-filtered list of Etherscan-supported chains and their IDs, see
+`references/generated/etherscan-chains.md`.
 
 ## API Base URL
 
@@ -499,26 +500,7 @@ Specify the `chainid` parameter to query different blockchains.
 
 ### Target Chain IDs (Free Tier)
 
-| Chain       | Chain ID |
-| ----------- | -------- |
-| Abstract    | `2741`   |
-| Arbitrum    | `42161`  |
-| Berachain   | `80094`  |
-| Blast       | `81457`  |
-| Celo        | `42220`  |
-| Ethereum    | `1`      |
-| Fraxtal     | `252`    |
-| Gnosis      | `100`    |
-| HyperEVM    | `999`    |
-| Linea       | `59144`  |
-| Monad       | `143`    |
-| Polygon     | `137`    |
-| Sei         | `1329`   |
-| Sonic       | `146`    |
-| Taiko       | `167000` |
-| Unichain    | `130`    |
-| World Chain | `480`    |
-| XDC         | `50`     |
+See `references/generated/etherscan-chains.md` for the free-tier target chain list with chain IDs.
 
 ### Example: Polygon Query
 
@@ -526,7 +508,7 @@ Specify the `chainid` parameter to query different blockchains.
 curl -s "https://api.etherscan.io/v2/api?chainid=137&module=account&action=balance&address=0x...&tag=latest&apikey=$ETHERSCAN_API_KEY"
 ```
 
-For the target-filtered list of supported chains, see `./references/etherscan-chains.md`.
+For the target-filtered list of supported chains, see `references/generated/etherscan-chains.md`.
 
 ## Wei to Human-Readable Conversion
 
@@ -574,27 +556,21 @@ not generate a Markdown table when the user specifies an alternative output form
 
 ## Plan-Gated Capabilities
 
-Decisions in this section depend on the cached output of `./scripts/etherscan-detect-plan.sh`.
+Decisions in this section depend on the cached output of `scripts/etherscan-detect-plan.sh`.
 
 ### Paid-Only Chains
 
 Four target mainnets require any paid Etherscan plan. **Lite ($49/mo) is sufficient** — it grants access to every
 Etherscan-supported target chain at the same 100,000 daily-credit limit as Free. Data endpoints (balance, txlist, logs,
-etc.) fail only when `plan=free` (i.e., `paid_chains=false`):
-
-| Chain             | Chain ID |
-| ----------------- | -------- |
-| Base Mainnet      | `8453`   |
-| OP Mainnet        | `10`     |
-| Avalanche C-Chain | `43114`  |
-| BNB Smart Chain   | `56`     |
+etc.) fail only when `plan=free` (i.e., `paid_chains=false`). See `references/generated/etherscan-chains.md` for the
+paid-plan target chain list with chain IDs.
 
 **Exception:** `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on **all** chains for every plan
 including free. The paid-plan requirement applies only to data endpoints.
 
 If `paid_chains=false` (i.e., `plan=free`) and the user requests a data query on the chains above, route to Blockscout
-(`./blockscout-api.md`) before direct RPC. Only mention upgrading to Lite or higher if the user specifically needs
-Etherscan as the source.
+(`references/explorers/blockscout-api.md`) before direct RPC. Only mention upgrading to Lite or higher if the user
+specifically needs Etherscan as the source.
 
 ### PRO-Only Endpoints
 
@@ -628,11 +604,9 @@ metadata CSV exports.
 
 ### All Plans
 
-All other Etherscan-supported target chains — Abstract, Arbitrum, Berachain, Blast, Celo, Ethereum, Fraxtal, Gnosis,
-HyperEVM, Linea, Monad, Polygon, Sei, Sonic, Taiko, Unichain, World Chain, and XDC — are available on every plan
-including Free. On Lite and higher, the paid-only target chains above also become available.
-
-See `./references/etherscan-chains.md` for the target-filtered list with chain IDs.
+All other Etherscan-supported target chains are available on every plan including Free. On Lite and higher, the
+paid-only target chains above also become available. See `references/generated/etherscan-chains.md` for the
+target-filtered list with chain IDs.
 
 ## Error Handling
 
@@ -663,8 +637,8 @@ If rate limited, wait briefly and retry.
 
 ## Reference Files
 
-- **`./references/etherscan-chains.md`** - Target-filtered list of supported chains with chain IDs
-- **`./scripts/etherscan-detect-plan.sh`** - Plan-tier detection helper (run once per session)
+- **`references/generated/etherscan-chains.md`** - Target-filtered list of supported chains with chain IDs
+- **`scripts/etherscan-detect-plan.sh`** - Plan-tier detection helper (run once per session)
 
 ## Fallback Documentation
 

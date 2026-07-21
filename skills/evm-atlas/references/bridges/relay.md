@@ -3,7 +3,7 @@
 ## Overview
 
 Use Relay (relay.link) as a read-only source for cross-chain request status, solver-fill details, and route metadata
-after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+after the known origin and destination chains are confirmed against `references/generated/target-mainnets.json`.
 
 Default to the API base URL:
 
@@ -33,7 +33,8 @@ typically unique per request; do not assume they are stable across requests.
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Known source or destination tx hash:** call `GET /requests/v2?hash=<tx-hash>`. Relay indexes this against both
    `inTxs[].hash` (origin deposit) and `outTxs[].hash` (destination fill).

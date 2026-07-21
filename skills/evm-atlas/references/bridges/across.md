@@ -24,7 +24,8 @@ to look for; the report-relevant destination event is a relayer-funded fill, not
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Known origin deposit tx hash:** call `GET /deposit/status?depositTxHash=<hash>&originChainId=<id>`. This is the
    most useful lookup — connects a known origin-chain deposit transaction to its relayer fill.
@@ -99,7 +100,7 @@ token decimals when present. USD fee fields (`bridgeFeeUsd`, `fillGasFeeUsd`) ar
 Across routes deposits and fills through per-chain `SpokePool` contracts rather than a single hub contract. The Ethereum
 mainnet `SpokePool` is at `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` (an EIP-1967 proxy; current implementation
 labeled `Ethereum_SpokePool` on block explorers). Resolve `SpokePool` addresses on other target chains from
-`./references/target-mainnets.json` or the chain's block explorer rather than hardcoding a full table here.
+`references/generated/target-mainnets.json` or the chain's block explorer rather than hardcoding a full table here.
 
 When decoding logs directly instead of using the API, the relevant `SpokePool` events are:
 

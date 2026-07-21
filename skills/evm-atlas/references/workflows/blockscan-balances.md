@@ -6,8 +6,8 @@ inventories remain on the existing provider routes.
 
 ## Chromium Workflow
 
-1. Validate the address, then resolve any named chain against `target-mainnets.json`. Do not send a non-target chain to
-   Blockscan.
+1. Validate the address, then resolve any named chain against `references/generated/target-mainnets.json`. Do not send a
+   non-target chain to Blockscan.
 2. Open `https://blockscan.com/address/<addr>` with `mcp__chrome_devtools.new_page`, using Chromium rather than a direct
    Blockscan API or a general web search.
 3. Wait for the address page and `Token Holdings` portfolio to replace any initial `Just a moment...` challenge, then
@@ -31,15 +31,16 @@ Its `data-search` value includes the Blockscan chain symbol. Use that symbol to 
 
 - For a named chain, the exact `data-chainid` match proves Blockscan currently offers that chain. A matching card with a
   zero token count or `$0.00` is a successful zero result, not a fallback condition.
-- For a wallet-wide check, intersect Blockscan's `data-chainid` values with `target-mainnets.json`. Query the existing
-  API routes for target chains outside that intersection.
+- For a wallet-wide check, intersect Blockscan's `data-chainid` values with `references/generated/target-mainnets.json`.
+  Query the existing API routes for target chains outside that intersection.
 - Ignore Blockscan chains outside the target-mainnet list. Do not report the page-wide `NET WORTH` as a target-only
   total because it can include those chains.
 - Keep successful Blockscan results when only some target chains or requested details require fallback.
 
 ## Fallbacks
 
-Use `provider-routing.md` for a named chain and `address-sweeps.md` for a wallet-wide check when:
+Use `references/workflows/provider-routing.md` for a named chain and `references/workflows/address-sweeps.md` for a
+wallet-wide check when:
 
 - Chrome DevTools MCP or Chromium is unavailable;
 - navigation fails, a challenge or error persists, the page is rate limited, or the required portfolio DOM is absent;

@@ -22,10 +22,10 @@ or any gasless/deposit-action endpoint to create a swap, or broadcast a returned
 target. Returned swap, quote, and deposit data are for inspection only.
 
 Layerswap identifies networks by its own name strings (e.g. `ETHEREUM_MAINNET`, `ARBITRUM_MAINNET`), not by
-`./references/target-mainnets.json`'s `chainName`. Call `GET /api/v2/networks` to resolve a Layerswap `name` to its
-`chain_id`, then match against `target-mainnets.json`'s numeric `chainId`. Layerswap returns `chain_id` as a JSON string
-(e.g. `"1"`, `"42161"`) — cast before comparing. Treat `/networks` as the live authoritative source; do not hardcode a
-name-to-chain-ID table.
+`references/generated/target-mainnets.json`'s `chainName`. Call `GET /api/v2/networks` to resolve a Layerswap `name` to
+its `chain_id`, then match against `references/generated/target-mainnets.json`'s numeric `chainId`. Layerswap returns
+`chain_id` as a JSON string (e.g. `"1"`, `"42161"`) — cast before comparing. Treat `/networks` as the live authoritative
+source; do not hardcode a name-to-chain-ID table.
 
 Layerswap settles some transfers through shared service infrastructure rather than a per-user deposit address. The
 Ethereum address `0x2Fc617E933a52713247CE25730f6695920B3befe` is Etherscan-labeled "Layerswap 1", a shared service
@@ -35,7 +35,8 @@ this address; confirm the actual swap and counterparties via `GET /api/v2/swaps/
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Known source tx hash:** call `GET /api/v2/swaps/by_transaction_hash/{transactionHash}`. The most useful lookup —
    connects a known source-chain transaction to its Layerswap swap and destination outcome.
@@ -95,7 +96,7 @@ Extract and report these fields when present:
 
 Unlike other bridge references in this skill, Layerswap amounts are already decimal, human-readable values scaled by the
 token's decimals — do not divide by `10^decimals` again. `chain_id` fields are JSON strings, not numbers; cast before
-comparing to `target-mainnets.json`.
+comparing to `references/generated/target-mainnets.json`.
 
 ## Status Values
 

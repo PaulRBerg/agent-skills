@@ -3,10 +3,10 @@
 Use this reference when the prompt gives an EVM address and asks across "any chain", "all chains", "where has this
 address been active?", "has this address ever been used?", or "does this address hold anything now?".
 
-For a current native or fungible-token portfolio, enter through `blockscan-balances.md`. Use the current-balance
-workflow below when Blockscan needs an API fallback or when the request requires NFT enumeration.
+For a current native or fungible-token portfolio, enter through `references/workflows/blockscan-balances.md`. Use the
+current-balance workflow below when Blockscan needs an API fallback or when the request requires NFT enumeration.
 
-Scope is exactly `./references/target-mainnets.json`. Do not expand to every Etherscan, Blockscout, Chainscout,
+Scope is exactly `references/generated/target-mainnets.json`. Do not expand to every Etherscan, Blockscout, Chainscout,
 Chainlist, or RPC-supported EVM chain. If the user wants non-target coverage, ask for a feature request in
 <https://github.com/PaulRBerg/agent-skills>.
 
@@ -47,10 +47,10 @@ For each target chain:
    `eth_getBalance(<addr>, { blockHash: <cutoff-hash>, requireCanonical: true })` before history. For an address set,
    include both calls for every address in bounded per-chain JSON-RPC batches. Validate every response ID and hex
    quantity. A nonzero nonce or balance is immediately positive state evidence.
-3. Select one authoritative indexed-history provider for the chain using `provider-routing.md`. Blockscout is primary on
-   every declared overlap; Etherscan is fallback there and primary only when Blockscout is unavailable. Trigger the
-   fallback only on an error, malformed response, lag, plan/rate limit, or unsupported required action. A valid empty
-   primary response is authoritative and must not trigger fallback.
+3. Select one authoritative indexed-history provider for the chain using `references/workflows/provider-routing.md`.
+   Blockscout is primary on every declared overlap; Etherscan is fallback there and primary only when Blockscout is
+   unavailable. Trigger the fallback only on an error, malformed response, lag, plan/rate limit, or unsupported required
+   action. A valid empty primary response is authoritative and must not trigger fallback.
 4. Require the history provider to be indexed through the cutoff and bound every query to `endblock=<cutoff>`. For a
    newest-first native endpoint without a server-side cutoff, discard rows above the cutoff and paginate until a row at
    or below it is reached. Otherwise the result is incomplete.
@@ -101,18 +101,18 @@ bootstrap profile. For a general sweep where those calls count as activity, quer
 For Etherscan, run plan detection once per session before querying Etherscan, then cache it:
 
 ```bash
-./scripts/etherscan-detect-plan.sh
+scripts/etherscan-detect-plan.sh
 ```
 
 For Blockscout PRO, run plan detection once per session before using the PRO host, then cache it:
 
 ```bash
-./scripts/blockscout-detect-plan.sh
+scripts/blockscout-detect-plan.sh
 ```
 
 If `$ETHERSCAN_API_KEY` is missing, route Etherscan-supported chains to Blockscout where Blockscout covers them;
 otherwise report the Etherscan gap. If `$BLOCKSCOUT_API_KEY` is missing, skip Blockscout PRO detection and use
-per-instance Blockscout hosts from `./scripts/resolve-chain.sh` where available.
+per-instance Blockscout hosts from `scripts/resolve-chain.sh` where available.
 
 ### Optional Quorum
 
@@ -178,8 +178,8 @@ https://api.etherscan.io/v2/api?chainid=<id>&module=logs&action=getLogs&fromBloc
 
 First run that shape over a known public vector whose bounded response contains distinct inbound-only and outbound-only
 Transfers. Validate the saved response with
-`bash ./scripts/validate-etherscan-transfer-topics.sh <address> < response.json`. After conformance, existence probes
-use the same topic/operator shape with `fromBlock=0`, `toBlock=<cutoff>`, and `offset=1`. Treat an empty response as
+`bash scripts/validate-etherscan-transfer-topics.sh <address> < response.json`. After conformance, existence probes use
+the same topic/operator shape with `fromBlock=0`, `toBlock=<cutoff>`, and `offset=1`. Treat an empty response as
 negative only when that shape is known to work for the selected chain and plan; otherwise use separate `tokentx` and
 `tokennfttx` calls. This optimization does not cover ERC-1155 (`TransferSingle`/`TransferBatch`) and never changes the
 general five-channel profile. Treat a returned raw log as a candidate until the emitting contract is confirmed as ERC-20
@@ -188,7 +188,7 @@ or ERC-721; the shared signature alone does not prove the token standard.
 ### Blockscout
 
 When native v2 exposes `addresses/<addr>/counters`, validate its required string counters with
-`bash ./scripts/validate-blockscout-address-counters.sh < response.json`. The endpoint has no cutoff parameter, so its
+`bash scripts/validate-blockscout-address-counters.sh < response.json`. The endpoint has no cutoff parameter, so its
 counters are hints unless cryptographic proof or provider response metadata explicitly binds that exact counter snapshot
 to the pinned block number and hash. Merely observing the indexer's head at or above the cutoff does not bind counter
 freshness to the checkpoint. A nonzero counter requires a bounded item query to locate qualifying pre-cutoff evidence;
@@ -211,7 +211,7 @@ If the PRO host returns `404` or no key is available, resolve the per-instance U
 actions against that host:
 
 ```bash
-CS_instance_url=$(./scripts/resolve-chain.sh <id> | sed -n 's/^instance_url=//p')
+CS_instance_url=$(scripts/resolve-chain.sh <id> | sed -n 's/^instance_url=//p')
 curl -s "${CS_instance_url}api?module=account&action=txlist&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1"
 ```
 
@@ -269,7 +269,7 @@ https://api.blockscout.com/<id>/api/v2/addresses/<addr>/token-balances
 On `404` or missing key, resolve the per-instance URL and use:
 
 ```bash
-CS_instance_url=$(./scripts/resolve-chain.sh <id> | sed -n 's/^instance_url=//p')
+CS_instance_url=$(scripts/resolve-chain.sh <id> | sed -n 's/^instance_url=//p')
 curl -s "${CS_instance_url}api/v2/addresses/<addr>"
 curl -s "${CS_instance_url}api/v2/addresses/<addr>/token-balances"
 ```

@@ -24,7 +24,8 @@ transaction data is for inspection only.
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Simple quote:** call `GET /quote` when the user wants one best route or a specific bridge/swap estimate.
 2. **Multiple routes:** call `POST /advanced/routes` when the user needs route comparison, multiple options, or complex
@@ -52,7 +53,7 @@ If `$LIFI_API_KEY` is set, add `-H "x-lifi-api-key: $LIFI_API_KEY"`.
 
 ## Request Fields
 
-For quote or route inspection, use explicit chain IDs from `./references/target-mainnets.json`.
+For quote or route inspection, use explicit chain IDs from `references/generated/target-mainnets.json`.
 
 | Field                          | Use                                                                    |
 | ------------------------------ | ---------------------------------------------------------------------- |

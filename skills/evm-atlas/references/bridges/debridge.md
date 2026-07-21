@@ -3,7 +3,7 @@
 ## Overview
 
 Use deBridge's DLN (deBridge Liquidity Network) as a read-only source for order-based cross-chain transfer status after
-the known origin and destination chains are confirmed against `./references/target-mainnets.json`. DLN is an
+the known origin and destination chains are confirmed against `references/generated/target-mainnets.json`. DLN is an
 order/intent protocol, not a lock-and-mint bridge: a maker places an order on the source chain (`DlnSource`), a taker
 fills it on the destination chain (`DlnDestination`), and the source-side collateral is later unlocked to the taker.
 
@@ -25,7 +25,8 @@ not assume a deBridge chain ID is always the target EVM chain ID; cross-check no
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against `./references/target-mainnets.json`.
+Use this router after the known origin and destination chains are confirmed against
+`references/generated/target-mainnets.json`.
 
 1. **Known source tx hash, order ID unknown:** call `GET /v1.0/dln/tx/<tx-hash>/order-ids` on `dln.debridge.finance` to
    resolve the order ID(s) created in that transaction. Empty `orderIds` means the hash did not create a DLN order (or
