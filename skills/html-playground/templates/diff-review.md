@@ -116,7 +116,7 @@ function updatePromptOutput() {
     const lineNum = lineEl.dataset.lineNum;
     const content = lineEl.dataset.content;
 
-    output += `📍 ${file}:${lineNum}\n`;
+    output += `${file}:${lineNum}\n`;
     output += `   Code: ${content.trim()}\n`;
     output += `   Comment: ${comments[lineId]}\n\n`;
   });
@@ -188,7 +188,7 @@ body.dark .diff-line.deletion {
 ## Interactive features
 
 - **Hover hint:** Show "Click to comment" tooltip on line hover
-- **Comment indicator:** Badge (💬) on lines with saved comments
+- **Comment indicator:** Visible `Commented · <count>` badge with a matching accessible name
 - **Toast notification:** "Copied to clipboard!" feedback on copy
 - **Edit existing:** Allow editing previously saved comments
 

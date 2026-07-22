@@ -51,6 +51,15 @@ cache, dependency, and backup noise.
 6. Read [references/ignore-policy.md](references/ignore-policy.md) only when explaining, auditing, or changing the
    ignore policy.
 
+## User-Facing Output
+
+Keep JSON and DOT byte-valid and undecorated. For human output, lead with
+`### 🗺 Skill Map — <skills> skills · <duplicates> duplicates · <unresolved> unresolved` and a compact
+skills/dependencies/duplicates/unresolved summary table. Always state the effective roots and material exclusions; for
+the default broad scan, explicitly say that standard agent homes and catalog source checkouts were excluded. Make a
+missing explicit `--skill` filter a visible `⚠️ Not found` result rather than a clean-looking empty map. Use section
+labels sparingly and keep snippets, private paths, exact edges, commands, and diagnostics undecorated.
+
 ## Output Semantics
 
 - `dependency`: a skill file or support file references another discovered skill.

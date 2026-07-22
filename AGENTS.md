@@ -18,6 +18,24 @@ work because their recommendations may evolve.
   deliberately; ground progress claims in tool evidence; and make long-run verification and scaffolding explicit when
   needed.
 
+## User-Facing Communication
+
+Treat visual structure as information architecture, not decoration.
+
+- Use a small semantic status vocabulary consistently: `🔎` preview/read-only, `⏳` running, `✅` verified success, `⚠️`
+  caveat/approval/risk, `⛔` blocked/not written, `❓` unknown, and `↩` reverted/rolled back. When a status icon is
+  used, pair it with a status word; never make color or emoji the only carrier of meaning.
+- Lead reports with one outcome line. Use at most one non-status domain icon per heading for identity, then add compact
+  headings for changed artifacts, verification, and risks only when those sections are useful.
+- Use tables for repeated fields, trees for real hierarchy or file structure, and progress bars only when a measured
+  numerator and denominator exist. Never imply progress from elapsed time, activity, or guesswork.
+- Keep JSON, JSONL, DOT, CSV/TSV, exact commands, confirmation tokens, identifiers, addresses, hashes, signatures,
+  diagnostics, logs, copied prompts, and other machine-consumed or verbatim content undecorated. Keep safety and
+  rollback wording direct.
+- Decoration belongs to the agent's status wrapper. Do not add emoji or ASCII ornament to source code, generated
+  artifacts, product UI copy, GitHub contributions, spreadsheet data, or user-authored content unless the task itself
+  calls for it.
+
 ## Structure
 
 - `skills/<name>/SKILL.md` is the skill entrypoint.

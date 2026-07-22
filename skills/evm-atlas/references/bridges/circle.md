@@ -60,6 +60,23 @@ officially deployed and reachable by target-chain RPC at the checked block heigh
 | World Chain |      480 | `0xA64915EAf58B245b2d2bBE7a7Dc8c69956AC8670` |
 | XDC         |       50 | `0xA64915EAf58B245b2d2bBE7a7Dc8c69956AC8670` |
 
+## Report Fields
+
+Report these fields when they were already obtained by the active lookup; do not initiate additional reads solely to
+fill the table:
+
+| Field                 | Evidence                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| Origin / destination  | Target chain names and IDs                                                                  |
+| Burn                  | Source transaction, sender, recipient, native USDC amount, and checked block                |
+| Message / attestation | Message hash or nonce and Circle/Iris attestation status or identifier                      |
+| Mint / withdraw       | Destination transaction, recipient, amount, and checked block                               |
+| Fee                   | Fast-transfer fee or `feeCollected`, configured fee recipient, and the block it was checked |
+| Coverage              | Missing message, attestation, destination, or provider evidence                             |
+
+Use the common bridge presentation from `SKILL.md`. Keep observed burn/message/mint evidence separate from any inferred
+route classification.
+
 ## Failure Handling
 
 - If a bridge router such as Bungee, Socket, LI.FI, or LayerZero labels a route as CCTP, verify the submitted source

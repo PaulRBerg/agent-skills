@@ -84,5 +84,12 @@ Findings include severity, location, impact, evidence, fix, and confidence. A re
 consequence if wrong, and how to check it. Completion requires fixed scope, traceable edits/findings, and validation
 evidence.
 
+Render a successful report as `### ✨ Code polish — ✅ complete`, a small summary-count table, the exact
+`resolved-scope` block, `### ✨ Simplifications`, `### 🔎 Review findings and fixes`, `### 🧪 Verification`, and
+`### ⚠️ Residual risks`, omitting inapplicable sections. When review is clean, state `✅ No verified review findings.`
+If a stop condition below prevents completion, lead with `### ✨ Code polish — ⛔ blocked` and report the evidence and
+required decision. Keep severity tokens, profile IDs, scope block names, commands, locations, reproduction inputs, and
+security evidence exact and undecorated.
+
 Stop when behavior parity or required high-risk validation cannot be established, or a fix requires an unrequested
 public-contract change or larger redesign.

@@ -14,7 +14,7 @@ gh pr view --json number,url,title,baseRefName 2>/dev/null
 ```
 
 IF no PR found: ERROR "No PR exists for this branch. Use `/yeet create-pr` to create one first." IF found: parse number,
-URL, title, base branch. Display: "Found PR #$number: $title"
+URL, title, and base branch without emitting a separate discovery message.
 
 ## Parse Arguments Naturally
 
@@ -49,12 +49,12 @@ gh pr edit --body "$generated_body"
 gh pr edit --title "$generated_title" --body "$generated_body"
 ```
 
-Display: "Updated PR #$number: $PR_URL" with what was updated.
+Display the verified URL with the `### ✅ PR updated` receipt from `SKILL.md` and name what changed.
 
 **Push local commits:**
 
 ```bash
-git push 2>&1 || echo "No new commits to push"
+git push
 ```
 
 On failure: check specific error, provide fix. Do not retry.

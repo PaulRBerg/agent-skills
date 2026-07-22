@@ -35,6 +35,11 @@ documentation together — so cross-file relationships are visible. Delegate ind
 subagents when the environment supports them, and keep inspecting while they run; findings return to the main context,
 which owns all edits.
 
+After mapping, send `### 🔎 Sweep mapped — <files> files · <slices> slices`. On long runs, update only after coherent
+slices settle, using `[<10 cells>] <accounted>/<mapped> files` from the ledger plus fixed/reported/excluded counts. Use
+`floor(10 * accounted / mapped + 0.5)` filled `█` cells and fill the remainder with empty `░` cells; omit the bar when
+no files were mapped. The bar represents ledger accounting, not inspection coverage; never estimate progress.
+
 Trace important control, data, and error paths end to end rather than skimming file by file. Hunt for evidenced
 mistakes: bugs, omissions, invalid assumptions, unhandled edge cases, security and reliability failures, cross-file
 inconsistencies, duplication, dead code, misleading or stale documentation, and needless complexity. Style preferences
@@ -56,7 +61,10 @@ against tool output from this session; anything not verified is reported as unve
 
 ## Report
 
-Lead with the outcome: what was fixed, what was found but not fixed, or that the sweep was clean. Then give changed
-files, the exact validation commands with their results, unresolved findings with evidence and blocker, ledger
-exclusions with reasons, and residual risk. Completion requires every mapped file accounted for in the ledger, every
-finding fixed and verified or reported with evidence, and every relevant check passing or its failure explained.
+Lead with
+`### ✅ Sweep ledger complete — <accounted>/<mapped> files accounted (<inspected> inspected, <excluded> excluded)` when
+every file is accounted for, or a truthful `### ⛔ Sweep incomplete` otherwise. Give a fixed/reported/excluded/checks
+summary table, then `### 📦 Fixed`, `### 🧪 Verification`, `### ⛔ Unresolved`, and `### ⚠️ Residual risk`, omitting
+empty sections. Do not expose the scratch ledger, pre-existing changes, or private/bulk data. Keep paths, commands,
+diagnostics, and exact output excerpts undecorated. Completion requires every mapped file accounted for in the ledger,
+every finding fixed and verified or reported with evidence, and every relevant check passing or its failure explained.

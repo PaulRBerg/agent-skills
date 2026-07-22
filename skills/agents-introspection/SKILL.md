@@ -50,8 +50,10 @@ Stop and report the coverage gap when the bounded fallbacks still lack useful ev
 evidence that a failure never occurred.
 
 For unusually long searches, send sparse progress updates only when a retrieval fallback begins, a finding changes the
-likely intervention, or the search reaches its explicit bound. Ground counts and coverage claims in miner/tool output;
-do not narrate routine transcript reads.
+likely intervention, or the search reaches its explicit bound. Use an outcome-first line such as
+`🔎 Broadening transcript search — <verified reason and bound>` or
+`⏳ Checking archived sessions — <verified active/archived coverage>`. Ground counts and coverage claims in miner/tool
+output; do not narrate routine transcript reads.
 
 ## Evidence Contract
 
@@ -89,14 +91,15 @@ failure that exposes a missing stable invariant. Treat lower-impact one-offs as 
 
 ## Report and Stop
 
-Report only:
+Lead with `### 🔎 Introspection complete — <intervention or coverage-gap outcome>` for read-only work or
+`### ✅ Introspection fixes applied — <outcome>` when explicitly requested fixes were written, then report only:
 
-1. **Historical Coverage**: project paths, sources checked, fallbacks used, and sessions inspected.
-2. **Findings**: confidence, observed evidence with auditable session references, relevance, inference, and
-   contradictory evidence.
-3. **Durable Recommendations**: apply now, consider later, or no change, with the target and prevention mechanism.
-4. **Validation and Gaps**: commands run, checks performed, privacy limitations, and missing evidence.
+1. `🗂 Historical coverage`: project paths, sources checked, fallbacks used, and sessions inspected.
+2. `🔎 Findings`: a compact table with confidence, observed evidence, inference, relevance, and intervention. Keep
+   confidence visibly separate from severity or impact.
+3. `🛡 Durable recommendations`: apply now, consider later, or no change, with the target and prevention mechanism.
+4. `🧪 Validation and gaps`: commands run, checks performed, privacy limitations, and missing evidence.
 
 When fixes were explicitly requested, include exact files changed and validation outcomes. Stop after the current task
 has an evidence-backed recommendation or an explicit coverage gap; do not mine additional history merely to add examples
-or strengthen prose.
+or strengthen prose. Keep transcript references, paths, counters, redactions, and miner JSON exact and undecorated.

@@ -65,7 +65,8 @@ Only when the user explicitly asks for regeneration ("rewrite the body", "fix th
 Follow `create-issue.md > Generate Title and Body` and `writing.md > Informal Tone`. Preserve any existing template
 structure (sections, admonitions, file links). If the issue uses a YAML template's section headers, keep them.
 
-For appends, show the existing body, then append the new content with a separator (blank line) — do not rewrite.
+For appends, preserve the existing body verbatim, then append the new content with a separator (blank line) — do not
+rewrite or echo the full existing body to the user.
 
 ## Validate Labels Before Adding
 
@@ -116,7 +117,7 @@ gh issue reopen {number} --repo "{owner}/{repo}" [--comment "..."]
 
 See `writing.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
 
-Display: `Updated: https://github.com/{owner}/{repo}/issues/{number}` and a one-line summary of what changed.
+Display the verified URL with the `### ✅ Issue updated` receipt from `SKILL.md` and a one-line summary of what changed.
 
 On failure: show the specific error (auth, permissions, missing label, locked issue) and what to do. Do not retry
 automatically.

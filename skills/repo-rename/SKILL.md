@@ -47,7 +47,9 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 
 4. Otherwise present the complete preview and require explicit confirmation in a subsequent user message. Explain that
    the confirmation authorizes the GitHub rename, local folder move, origin update, and every listed
-   continuity/repository replacement. If any preview fact changes, regenerate it and ask again.
+   continuity/repository replacement. Lead with `### ⚠️ Rename preview — no changes made`; show GitHub, folder, origin,
+   replacement counts, and rollback coverage in compact tables, then the exhaustive file/count list. Put the exact
+   confirmation token alone in code formatting. If any preview fact changes, regenerate it and ask again.
 
 5. After confirmation, pass the preview's exact token:
 
@@ -65,4 +67,6 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 
 Dry-run completion is a full mutation preview with zero writes. Apply completion requires the new GitHub identity,
 folder, remote, and listed continuity references to agree, plus a clean verification report. If rollback is incomplete,
-stop and report every failed rollback action before doing anything else.
+stop and lead with `### ⛔ Rollback incomplete`, then report every failed rollback action before doing anything else. On
+success, use `### ✅ Repository renamed` and a surface/expected/verified table. Keep helper JSON, confirmation tokens,
+commands, paths, URLs, and rollback errors exact and undecorated.

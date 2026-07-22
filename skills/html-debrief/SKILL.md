@@ -38,7 +38,9 @@ Persist evidence from the current task as an opinionated interactive HTML report
    natural-language prompt output, and copy feedback. Use no external dependencies.
 
 4. Verify that every claim traces to the task transcript or tool evidence, the output contains no placeholders, and the
-   file opens/renders. Then run `open "$DEBRIEF_PATH"` and report the absolute path.
+   file opens/renders. Then run `open "$DEBRIEF_PATH"` and finish with `### 📊 Debrief ready — <title>`, the clickable
+   absolute path, `Opened in browser`, and one compact line naming the evidence view and presets.
 
 Completion requires a non-placeholder HTML debrief at the selected path, evidence-grounded content, successful
-rendered/file inspection, and explicit overwrite handling.
+rendered/file inspection, and explicit overwrite handling. Keep preparer `KEY=VALUE` output, dependency commands, paths,
+and slug errors exact and undecorated.

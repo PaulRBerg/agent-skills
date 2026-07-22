@@ -48,7 +48,8 @@ Inspect changes against the filesystem, not git.
    archived/remaining task counts. If an archive for the date already exists, the helper rolls the new batch over to
    `TODO_UNTIL_YYYY_MM_DD_HHMM.md` and keeps the earlier file; report both paths. If the helper reports no checked
    tasks, treat it as a no-op. If `--hint` matches no heading, the helper exits non-zero and lists the available
-   sections; relay them.
+   sections; relay them. When `--force` replaces an existing archive, say `⚠️ Overwrote existing archive`, never
+   `Created`.
 
 5. If useful, inspect only the touched paths. `TODO.md` and `.ai/` are git-ignored, so use the filesystem rather than
    `git diff`:
@@ -68,4 +69,8 @@ non-zero listing available headings when nothing matches. It rolls a same-day re
 ## Completion
 
 Completion evidence is the helper's archive path plus archived and remaining task counts; a no-checked-task result is a
-successful no-op. Dry-run completion requires rendered paths/content with no filesystem changes.
+successful no-op. Dry-run completion requires rendered paths/content with no filesystem changes. Finish with
+`### 📦 Archived <count> checked tasks` and concise TODO/archive/scope/count rows; use
+`### ✅ Nothing to archive — no files written` for a no-op and `### 🔎 Archive preview — no files written` for dry runs.
+Do not repeat full dry-run document content in the final message or add decoration to TODO/archive files, paths,
+commands, or helper diagnostics.

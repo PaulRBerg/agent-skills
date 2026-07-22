@@ -18,10 +18,26 @@ Write the smallest interface that makes success checkable:
 - **Preferred defaults**: opinionated choices to use when repository or user evidence does not override them.
 - **Authority**: which reads, local writes, external writes, and destructive actions are allowed or gated.
 - **Routing**: prerequisites, tools, scripts, and conditional references needed for each branch.
+- **User communication**: the kickoff, progress, decision, blocker, and completion events worth surfacing, with the
+  smallest useful output shape for each.
 - **Completion evidence**: the command, inspection, or artifact that proves the outcome.
 
 Let the agent choose the path inside that contract. Prescribe a sequence only when ordering is safety-critical, a
 prerequisite determines the next action, or a deterministic helper is the simpler interface.
+
+## User-facing presentation
+
+Design presentation as part of the observable contract when a skill reports meaningful state:
+
+- Lead with the outcome and use a small semantic status vocabulary consistently: `🔎` preview/read-only, `⏳` running,
+  `✅` verified success, `⚠️` caveat/approval/risk, `⛔` blocked/not written, `❓` unknown, and `↩` reverted/rolled
+  back. Pair every status symbol with text.
+- Use at most one non-status domain icon per heading for identity. Use tables only for repeated fields, trees only for
+  real structure, and progress bars only from a measured numerator and denominator.
+- Keep exact commands, machine-readable output, identifiers, confirmation tokens, diagnostics, safety wording, and
+  copied downstream content undecorated.
+- Keep decoration in the agent's wrapper unless the requested artifact itself calls for it. Do not inject emoji into
+  code, product copy, user-authored prose, external contributions, or structured data by default.
 
 ## Invocation: two loads
 

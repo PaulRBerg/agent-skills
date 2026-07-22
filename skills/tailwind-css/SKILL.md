@@ -44,3 +44,8 @@ its official documentation or ask whether migration is intended.
    interaction and theme states. Fix visible regressions before completion.
 
 Completion requires code checks plus rendered inspection; textual class review alone is insufficient.
+
+Finish with `### 🎨 Tailwind — ✅ styling updated` after edits or `### 🎨 Tailwind — 🔎 inspected, no files written` for
+read-only work, a compact viewport/theme/changed-states/result table, and separate `### 🧪 Code checks` and
+`### 🔎 Rendered inspection` evidence. Add `### ⚠️ Remaining` only when non-empty. Do not inject decorative emoji into
+source classes, product copy, or snapshots unless the request calls for it; keep commands and diagnostics exact.

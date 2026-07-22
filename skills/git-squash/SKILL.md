@@ -31,6 +31,10 @@ Defaults:
 Gather and report the branch, clean-tree state, base candidate, ahead count, merge base, remote tracking state, and
 commits that would be replaced before mutating history. Stop on the first failure.
 
+Present these safety-critical facts in a plain compact table before mutation: branch, resolved base ref, merge base,
+commits replaced, tree state, remote state, and rollback anchor. Keep this preflight, commands, hashes, errors, and
+rollback wording undecorated.
+
 - Verify inside a Git worktree: `git rev-parse --is-inside-work-tree`
 - Verify not detached: `git symbolic-ref --quiet --short HEAD`
 - Verify working tree is clean: `git status --porcelain`
@@ -173,9 +177,8 @@ After the commit succeeds:
 
 - Report how many commits were squashed
 - Report which default ref was used
+- Report the new commit hash and subject
 - If the branch already exists on remote, remind the user to force-push with lease
 
-```bash
-git commit -F "$message_file"
-git push --force-with-lease
-```
+Lead the success receipt with `### ✅ Squashed — <old count> commits → 1`. Keep the next action plain and exact:
+`git push --force-with-lease`. Do not run it unless the user explicitly requested the push.

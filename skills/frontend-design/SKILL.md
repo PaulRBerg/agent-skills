@@ -104,3 +104,8 @@ render the UI, state that limitation and report exactly what was verified instea
 Completion requires the requested artifact or code, a subject-specific direction reflected in the implementation,
 passing relevant local checks, and rendered inspection evidence when tooling permits. Report the direction in one
 sentence, the checks and viewports exercised, and any remaining limitation.
+
+Finish builds with `### ✨ Built: <surface>`, `🎨 Direction — <one sentence>`, and `### 🧪 Verification`; use a compact
+viewport/state/result table when several states were inspected and link screenshots or artifacts when available. Add
+`### ⚠️ Remaining` only when non-empty. Agent-report decoration does not authorize emoji or ASCII ornament in shipped
+interface copy, snapshots, or source unless the brief or design system calls for it.

@@ -73,7 +73,7 @@ Pick the shape that fits the context. Don't force structure onto short comments.
 **Short reply** (most comments — default to this):
 
 ```markdown
-Hitting this too on {platform}. Repro: {minimal steps}. Happy to send a PR if you point me at the right spot.
+Hitting this too on {platform}. Repro: {minimal steps}.
 ```
 
 **Repro report**:
@@ -136,7 +136,7 @@ EOF
 
 See `writing.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
 
-Display: `Commented: https://github.com/{owner}/{repo}/issues/{number}#issuecomment-{id}`
+Display the verified anchored URL with the `### ✅ Comment posted` receipt from `SKILL.md`.
 
 The URL with the comment anchor is returned by `gh` on success — parse it from the output.
 

@@ -59,15 +59,16 @@ if kept:
         direction = 'higher'
     best_metric = best['metric']
 
-    if baseline_metric != 0:
-        pct = ((best_metric - baseline_metric) / abs(baseline_metric)) * 100
-        pct_str = f'{pct:+.2f}%'
+    if best_metric == baseline_metric:
+        comparison = 'matches baseline; no kept improvement'
+    elif baseline_metric != 0:
+        pct = abs((best_metric - baseline_metric) / baseline_metric) * 100
+        comparison = f'{pct:.2f}% better; {direction} is better'
     else:
-        pct_str = 'N/A'
+        comparison = f'percentage N/A; {direction} is better'
 else:
     best_metric = baseline_metric
-    direction = 'N/A'
-    pct_str = 'N/A'
+    comparison = 'no kept improvement'
 
 # Header
 print('=' * 72)
@@ -75,12 +76,12 @@ print('AUTORESEARCH SUMMARY')
 print('=' * 72)
 print(f'Runs: {total} total | {len(kept)} kept | {discarded} discarded | {crashed} crashed | {checks_failed} checks_failed')
 print(f'Baseline: {baseline_metric}')
-print(f'Best:     {best_metric} ({pct_str}, {direction} is better)')
+print(f'Best:     {best_metric} ({comparison})')
 print('-' * 72)
 
 # Table header
-print(f'{\"#\":>4}  {\"Commit\":>7}  {\"Metric\":>12}  {\"Status\":<14}  Description')
-print(f'{\"─\"*4}  {\"─\"*7}  {\"─\"*12}  {\"─\"*14}  {\"─\"*30}')
+print(f'{\"#\":>4}  {\"Commit\":>7}  {\"Metric\":>12}  {\"Status\":<14}  {\"Best\":<4}  Description')
+print(f'{\"─\"*4}  {\"─\"*7}  {\"─\"*12}  {\"─\"*14}  {\"─\"*4}  {\"─\"*30}')
 
 for r in segment_results:
     run = r.get('run', '?')
@@ -89,12 +90,10 @@ for r in segment_results:
     status = r['status']
     desc = r.get('description', '')[:40]
 
-    # Mark best with star
-    marker = ''
-    if kept and r.get('commit') == best.get('commit') and r.get('run') == best.get('run'):
-        marker = ' *'
+    is_best = kept and r.get('commit') == best.get('commit') and r.get('run') == best.get('run')
+    best_label = 'yes' if is_best else '-'
 
-    print(f'{run:>4}  {commit:>7}  {metric:>12.6f}  {status:<14}  {desc}{marker}')
+    print(f'{run:>4}  {commit:>7}  {metric:>12.6f}  {status:<14}  {best_label:<4}  {desc}')
 
 print('-' * 72)
 

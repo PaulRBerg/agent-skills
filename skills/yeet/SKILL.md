@@ -50,8 +50,19 @@ Each workflow reference links only the shared context, writing, or posting guida
 user requested creation or update; do not add a confirmation gate. After a failed write, run the linked idempotency
 check before any retry.
 
+Never check an external template attestation unless repository or user evidence verifies it. If a required attestation
+or field cannot be verified, ask for that missing fact rather than inventing agreement. Agent-status decoration belongs
+outside the authored contribution; add emoji to a PR, issue, discussion, or comment only when the user's content or the
+thread's register calls for it.
+
 ## Completion
 
 Complete when the requested contribution exists in its final authored state and the returned GitHub URL has been
 verified. For updates/comments, report the changed artifact once; for failures, report the idempotency check and next
 action without claiming a write succeeded.
+
+Use `### 🚀 <artifact> created`, `### ✅ <artifact> updated`, or `### ✅ Comment posted`, followed by one Markdown link
+containing the repository, number, and title or action. Add a compact field list only when base, draft state, reviewers,
+labels, or changed fields matter. On failure, lead with `### ⛔ <artifact> not <action>`, then state the attempted
+target, concrete error, idempotency result, and next action. Keep `gh` output, JSON, diagnostics, template fields, URLs,
+and authored contribution text exact and undecorated.

@@ -61,5 +61,10 @@ version is authoritative.
   boundary validation is needed.
 - Do not broaden environment requirements merely to replace a small platform call.
 
-Completion requires code consistent with local Effect architecture, selected references/upstream evidence where needed,
-and the narrowest test/typecheck that exercises the changed semantics.
+For changes, completion requires code consistent with local Effect architecture, selected references/upstream evidence
+where needed, and the narrowest test/typecheck that exercises the changed semantics. Read-only work requires evidence
+for the reported conclusion. Finish with `### ⚡ Effect — ✅ change complete` after verified edits or
+`### ⚡ Effect — 🔎 reviewed, no files written` for read-only work, one sentence naming the boundary or pattern used,
+and `### 🧪 Verification` with exact scoped commands/results. If required validation is incomplete, use
+`### ⚡ Effect — ⛔ blocked` instead. Add `### ⚠️ Limitation` only for non-blocking caveats. Never decorate typed
+errors, Schema messages, logs, tests, generated JSON/API responses, or command output.

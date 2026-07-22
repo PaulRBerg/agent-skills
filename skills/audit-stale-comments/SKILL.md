@@ -70,28 +70,33 @@ result is valid and should not be padded with low-confidence observations.
 Return:
 
 ```markdown
-# Stale Comments Report
+### 🔎 Stale-comments audit — <finding count or clean>
 
-## Summary
+| Scope   | Files analyzed | Confirmed | Not reviewed    |
+| ------- | -------------- | --------- | --------------- |
+| <paths> | <count>        | <count>   | <count or none> |
 
-- Scope: <paths>
-- Files analyzed: <count>
-- Confirmed findings: <count>
-- Files not reviewed: <paths and reasons, or none>
+### Findings
 
-## Findings
-
-### STALE
+#### STALE
 
 - path/to/file.ts:42 — <comment claim, contradictory evidence, and why it matters>
 
-### ORPHANED
+#### ORPHANED
 
-### MISLEADING
+#### MISLEADING
 
-### REDUNDANT
+#### REDUNDANT
+
+### ⚠️ Not reviewed
+
+- <path and reason>
 ```
 
-Omit empty category sections. When no findings remain, state that the reviewed scope is clean. Completion requires the
-exact scope, analyzed-file count, confirmed findings with current lines and evidence, and any files that could not be
-reviewed.
+Omit empty category and not-reviewed sections. When no findings remain and every file was reviewed, lead with
+`### ✅ Clean — no confirmed stale, orphaned, misleading, or redundant comments`. If files were not reviewed, lead with
+`### ⚠️ Review incomplete — no confirmed findings in reviewed scope` instead. When fixes were requested and applied,
+lead with `### ✅ Comments fixed — <count>`, then add `### 📦 Changed` and `### 🧪 Verification`; do not collapse a
+write receipt into `Clean`. Keep classifier tokens, paths, line numbers, directives, and quoted comment text exact and
+undecorated. Completion requires the exact scope, analyzed-file count, confirmed findings with current lines and
+evidence, and any files that could not be reviewed.

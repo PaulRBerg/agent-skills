@@ -66,6 +66,14 @@ links. Make those edits manually and verify with a fresh audit.
 ## Exit Codes
 
 - `0`: Clean, or all requested safe fixes succeeded and no findings remain.
-- `1`: Findings remain.
+- `1`: The audit completed and findings remain; report them as review work, not as an operational crash.
 - `2`: Invalid arguments or unreadable environment.
 - `3`: A requested safe fix failed.
+
+## User-Facing Output
+
+Keep `--format json` byte-valid and undecorated. For human output, lead with `### 🩺 Skill Doctor — ✅ clean`,
+`### 🩺 Skill Doctor — ⚠️ review required`, or `### 🩺 Skill Doctor — ⛔ blocked` for exit 2/3, then show roots and
+error/warning/fix counts in a compact table. List safe fixes separately from remaining findings. For review-required or
+blocked outcomes, end with the smallest manual next action; for a clean result, stop after the summary. Keep paths, line
+numbers, codes, raw findings, commands, and diagnostics exact.

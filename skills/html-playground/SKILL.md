@@ -43,8 +43,12 @@ Use these when product context does not indicate otherwise:
 - No Apply button: relevant changes render immediately.
 - The prompt is actionable without seeing the playground and is not a raw state dump.
 - Copy has visible transient feedback and a usable fallback when the Clipboard API fails.
+- Standardize copy microcopy as `Copy prompt`, then `Copied`; on failure use `Copy failed — select the prompt below` in
+  an `aria-live="polite"` region.
 - Presets update controls, preview, and prompt consistently.
 - Do not add controls that do not affect either the preview or the generated prompt.
 
 Completion requires the self-contained file plus rendered, interactive inspection evidence; opening the file without
-exercising it is insufficient.
+exercising it is insufficient. Finish with `### ✨ Playground ready`, the linked artifact, and a compact
+artifact/controls/viewports/copy-fallback table. Keep generated prompts free of decorative icons unless the requested
+prompt content itself needs them; report decoration does not authorize ornament in copied output.

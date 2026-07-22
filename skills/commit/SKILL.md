@@ -111,7 +111,8 @@ include only ones the commit actually closes.
   non-empty).
 - Output exactly: commit hash, subject, and `N files changed` summary. In `--all` mode, if the committed set plausibly
   includes files not modified in this session, also print one line listing those files so the user can catch an
-  accidental sweep of another agent's work. Nothing else.
+  accidental sweep of another agent's work. Nothing else. This exact receipt is intentionally plain: do not add emoji,
+  headings, trees, or labels.
 - Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or
   pre-commit hook activity unless a command failed.
 - If failed: show error + suggest fix. If `git commit` itself fails on an index.lock error, wait a moment and retry;

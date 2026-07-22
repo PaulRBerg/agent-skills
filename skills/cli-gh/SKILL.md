@@ -57,3 +57,12 @@ other GitHub automation.
 
 Completion requires the requested GitHub state or data plus command/output evidence. On a partial or ambiguous write
 failure, check whether the resource changed before retrying.
+
+## User-Facing Output
+
+Use `### ⚠️ GitHub write preview` for broad writes, showing the repository, exact targets, and issue/PR impact in a
+compact table, with each exact command in its own fenced block; an already requested ordinary write does not require a
+second approval. For label deletion, use `### ⛔ Destructive approval required` and ask for approval in a later message.
+After a verified write, use `### ✅ GitHub operation complete` with the action, repository, resource, and URL or stable
+ID. On failure, state the attempted operation, verified resulting state, concrete error, and next action without
+implying a write succeeded. Keep commands, JSON, identifiers, diagnostics, and output intended for piping undecorated.

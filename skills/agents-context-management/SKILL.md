@@ -113,14 +113,18 @@ After writes, run repository-defined Markdown formatting or checks when present.
 `agents/openai.yaml` changed in a catalog, run its invocation metadata check. Verify changed CLAUDE.md symlinks resolve
 to sibling AGENTS.md. In `--dry-run`, report commands that would depend on planned files instead of running them.
 
-Report only:
+Lead with `### ✅ Context updated` only after writes and required validation pass,
+`### ⚠️ Context updated — validation failed` when files were written but required checks fail,
+`### 🔎 Context preview — no files written` in dry-run mode, or `### ⛔ Context blocked — no files written` for a
+pre-write stop. Then report only:
 
-1. **Mode and Scope**: workflow, dry-run status, target counts, and relative paths.
-2. **Changes**: completed or planned changes grouped by directory.
-3. **Validation**: exact commands and outcomes, including justified skips.
-4. **Blockers and Risks**: conflicts, advisories, unrecognized flags, or `None.`
+1. `🧭 Mode and scope`: workflow, dry-run status, target counts, and relative paths in a compact table.
+2. `📦 Changes`: completed or planned changes grouped by directory; use a tree when it makes path ownership clearer.
+3. `🧪 Validation`: exact commands, result, and any justified skip in a table.
+4. `⚠️ Blockers and risks`: conflicts, advisories, and unrecognized flags; omit when empty.
 
-Omit empty detail and stop once the selected targets meet the completion bar.
+Keep paths, commands, guard-rail errors, symlink targets, and user-authored content exact and undecorated. Omit empty
+detail and stop once the selected targets meet the completion bar.
 
 ## References
 

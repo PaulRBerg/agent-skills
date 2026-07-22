@@ -29,23 +29,23 @@ Handle tabular data with exact values, minimal diffs, local privacy, atomic writ
 
 Resolve bundled scripts relative to this `SKILL.md`, not the target repository.
 
-| Task                                       | Tool                                          |
-| ------------------------------------------ | --------------------------------------------- |
-| First look / CSV or TSV structure          | `uv run scripts/peek.py <file>`               |
-| Detailed local quality profile             | `uv run scripts/profile.py <file>`            |
-| Counts, stats, frequencies, select, dedupe | `qsv`                                         |
-| Joins, pivots, aggregation, conversion     | DuckDB with `all_varchar = true`              |
-| Exact row transforms                       | `uv run` Python, stdlib `csv`, `Decimal`      |
-| Any `.xlsx`/`.xlsm` input or output        | read `references/xlsx.md` first               |
-| Exact transform and validation recipes     | read `references/recipes.md` only when needed |
+| Task                                       | Tool                                                           |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| First look / CSV or TSV structure          | `uv run scripts/peek.py <file> --redact-samples`               |
+| Detailed local quality profile             | `uv run scripts/profile.py <file> --markdown --redact-samples` |
+| Counts, stats, frequencies, select, dedupe | `qsv`                                                          |
+| Joins, pivots, aggregation, conversion     | DuckDB with `all_varchar = true`                               |
+| Exact row transforms                       | `uv run` Python, stdlib `csv`, `Decimal`                       |
+| Any `.xlsx`/`.xlsm` input or output        | read `references/xlsx.md` first                                |
+| Exact transform and validation recipes     | read `references/recipes.md` only when needed                  |
 
 Prefer `qsv --cache-threshold 0` where supported to avoid sidecar caches. When qsv stdout must remain TSV, use
 `-o out.tsv`; do not rely on redirection because stdout defaults to CSV.
 
 ## Workflow
 
-1. Inspect the file with `peek.py`. For a no-shape-change edit, save its JSON report; for intentional row/schema
-   changes, record the expected resulting width and invariants.
+1. Inspect the file with `peek.py --redact-samples` unless the user explicitly requested raw rows. For a no-shape-change
+   edit, save its JSON report; for intentional row/schema changes, record the expected resulting width and invariants.
 2. Choose the smallest tool that preserves values and formatting. Avoid pandas unless necessary; if used, load all
    columns as strings.
 3. Apply the transformation atomically. For idempotent appends with legitimate duplicate rows, use multiset difference
@@ -57,6 +57,13 @@ Prefer `qsv --cache-threshold 0` where supported to avoid sidecar caches. When q
    - formulas: recalculate with `uv run scripts/recalc.py <file.xlsx>` and require success.
 5. Report paths, row/column effects, validation results, and any formulas or workbook features that could not be
    preserved.
+
+For human output, lead with `### 📊 Spreadsheet — ✅ updated` only after a write and all required structural/domain
+validation pass, or `### 📊 Spreadsheet — 🔎 inspected, no files written` for read-only work, then use an
+artifact/effect/validation table and short `✅ Atomic replacement`, `✅ Precision preserved`, or `⚠️ <limitation>` lines
+as applicable. When any required validation fails, lead with `### 📊 Spreadsheet — ⛔ not deliverable` and summarize the
+failure counts. Do not paste private helper JSON; when raw rows were explicitly requested, show only the requested
+fields and rows. Do not decorate cells, headers, formulas, JSON, paths, commands, or diagnostics.
 
 ## prb-finance
 

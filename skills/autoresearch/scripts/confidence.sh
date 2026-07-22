@@ -97,12 +97,16 @@ else:
 total = len(segment_results)
 kept_count = len(kept)
 discarded = sum(1 for r in segment_results if r['status'] == 'discard')
-crashed = sum(1 for r in segment_results if r['status'] in ('crash', 'checks_failed'))
+crashed = sum(1 for r in segment_results if r['status'] == 'crash')
+checks_failed = sum(1 for r in segment_results if r['status'] == 'checks_failed')
 
 print(f'Confidence: {confidence:.2f}x ({level})')
 print(f'Baseline:   {baseline_metric}')
 print(f'Best:       {best_metric} ({direction} is better)')
 print(f'Delta:      {delta:.6f}')
 print(f'MAD:        {mad:.6f}')
-print(f'Runs:       {total} total, {kept_count} kept, {discarded} discarded, {crashed} crashed')
+print(
+    f'Runs:       {total} total, {kept_count} kept, {discarded} discarded, '
+    f'{crashed} crashed, {checks_failed} checks_failed'
+)
 " "$JSONL_FILE"

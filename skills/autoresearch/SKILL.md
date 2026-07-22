@@ -82,8 +82,12 @@ confidence for the current segment) and `scripts/summary.sh [jsonl-path]` (sessi
 
 For long runs, send sparse updates at the baseline, every five completed runs or major best-result change, and final
 stop. Ground every claim in the current session's logs: current/best metric, runs completed, elapsed time, cost used,
-and next hypothesis.
+and next hypothesis. Render each update as `### 🧪 Autoresearch [<10 cells>] <completed>/<max> runs`, followed by a
+compact metric/budget table and one `Next hypothesis: <text>` line. Filled `█` and empty `░` cells represent completed
+runs only: use `floor(10 * completed / max + 0.5)` filled cells and fill the remainder with empty cells. Omit the bar
+when the run limit is unknown. Never infer progress from elapsed time or activity.
 
-Finish with the baseline, best verified result and delta, kept changes, limits reached, checks run, discarded approaches
-worth remembering, worktree/branch location, and any cleanup or integration action the user still owns. Do not claim
-convergence when the session merely hit a resource limit.
+Finish with `### 🏁 Autoresearch complete — <stop reason>`, a baseline/best/delta/confidence table; counts for kept,
+discarded, crashed, and checks-failed runs; a tree of kept files; exact checks; worktree/branch location; and any
+cleanup or integration action the user still owns. Keep `METRIC` lines, JSONL fields/status values, commands, and
+diagnostics undecorated. Do not claim convergence when the session merely hit a resource limit.

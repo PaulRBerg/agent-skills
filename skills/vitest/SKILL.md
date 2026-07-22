@@ -43,5 +43,8 @@ Follow the repository's Vitest configuration and test conventions before introdu
   patterns.
 - For a bug fix, reproduce the failure before relying on the passing result when practical.
 
-Completion requires a focused test that fails for the intended regression or meaningfully exercises the new behavior,
-then passes under the repository's configuration with no leaked state.
+Completion requires a focused test that meaningfully exercises the requested behavior and passes under the repository's
+configuration. For a bug with observed red-before-green evidence, finish with `### 🧪 Regression covered`; otherwise use
+`### 🧪 Tests verified`. Include a phase/command/result table with only the phases actually run. Report mock, timer,
+environment, or shared-state cleanup only when the checks provide that evidence. Keep reporter output, snapshots,
+assertions, failure text, commands, and diagnostics exact and undecorated.

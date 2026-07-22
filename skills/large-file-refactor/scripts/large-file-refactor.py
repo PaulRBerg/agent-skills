@@ -537,7 +537,7 @@ def print_report(scan_path: Path, files: list[FileStat], metric: str, include_ge
         )
 
     print()
-    print("## Refactor Focus Candidates")
+    print("## Largest Candidates to Inspect")
     print()
     for index, stat in enumerate(files[:PLAN_LIMIT], start=1):
         print(f"{index}. `{display_path(stat.path, base)}` ({stat.loc} LOC)")

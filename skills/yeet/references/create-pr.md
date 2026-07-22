@@ -73,7 +73,7 @@ IF existing PR found: ERROR "PR already exists for this branch: $URL". Do not cr
 **Push branch:**
 
 ```bash
-git push -u origin $(git branch --show-current) 2>&1 || echo "Already pushed"
+git push -u origin "$(git branch --show-current)"
 ```
 
 **Create PR:**
@@ -87,7 +87,7 @@ gh pr create \
   $(test -n "$reviewers" && echo "--reviewer $reviewers")
 ```
 
-Display: "Created PR: $PR_URL"
+Display the verified URL with the `### 🚀 PR created` receipt from `SKILL.md`.
 
 On failure: check the specific error (auth, branch protection, validation) and follow
 [posting.md > Error Handling and Idempotency](posting.md#error-handling-and-idempotency) — run the idempotency check

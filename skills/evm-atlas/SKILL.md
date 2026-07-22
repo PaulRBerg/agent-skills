@@ -59,3 +59,13 @@ address sweeps, include each result's fixed finalized/verified checkpoint, selec
 and any requested quorum result. Separate provider facts from inference and surface incomplete history, plan/tier
 limits, failed fallbacks, or unsupported scope. Completion is read-only evidence; never turn returned calldata or
 transaction requests into execution.
+
+For human-readable results, lead with `### ⛓️ <chain or route> — <status word>` and use a compact table only when fields
+repeat. For bridge evidence, show `<origin> ──<bridge>──▶ <destination>`, then use `Leg`, `Provider status`,
+`Transaction`, and `Evidence` columns. Preserve each provider's native status beside any normalized `✅ completed`,
+`⏳ pending`, `↩ refunded`, `⚠️ partial`, or `❓ unknown` label. Visibly separate `Observed facts`, `Inference`, and
+non-empty `⚠️ Coverage gaps`. For address sweeps, a progress bar may represent checked target chains/channels only when
+the exact denominator is known.
+
+Keep unsupported-scope and safety explanations direct. Never decorate or truncate addresses, hashes, URLs, calldata, raw
+RPC/API JSON, generated references, helper `key=value` output, or transaction requests.

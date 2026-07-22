@@ -38,3 +38,9 @@ Recommend the current option that best fits the user's actual constraints, backe
 The answer is complete when the recommendation is traceable to current sources, the deciding criteria are explicit,
 installation guidance matches the user's environment, and uncertainties or disqualifying risks are visible. Use a table
 only when repeated fields make the comparison easier to scan.
+
+Lead with `### 🏆 Pick: <tool>` and the decisive reason. Follow with `### 📦 Install` and the exact command, a compact
+criteria/evidence table only when fields repeat, `### 🥈 Closest alternative` only for a credible material runner-up,
+and `### ⚠️ Caveats` only when material. Use symbols in comparison cells only with text; never manufacture scores. Keep
+URL targets exact and use descriptive Markdown links for human output. Keep install commands, versions, security
+advisories, and installer-risk wording exact and undecorated.

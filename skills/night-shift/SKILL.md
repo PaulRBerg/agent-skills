@@ -103,9 +103,14 @@ During the reserved window, stop new implementation, reconcile all owned edits, 
 type, test, build, and invariant checks justified by the final changed-file union. Compare final results with the
 recorded baseline. Ground every kept change and progress claim in tool evidence from this run.
 
+For long runs, send sparse phase updates only after evidence-backed transitions: `🌙 Grounded`, `🔎 Audit complete`,
+`🛠 Wave <N> verified`, and `⏳ Entering final validation`. Do not use a percentage bar because candidate discovery has
+no stable denominator.
+
 ## Final Report
 
-Lead with the outcome. Report:
+Lead with `### 🌙 Night Shift complete — <elapsed> · <stop reason>`. Compare checks in a compact
+`Check | Baseline | Final` table, then report:
 
 - elapsed time and stop reason;
 - baseline and final checks, including failures and skipped checks;
@@ -116,4 +121,6 @@ Lead with the outcome. Report:
 - residual risks and the next proving check;
 - that this run made no commit, push, or sync.
 
-A verified no-op is complete. Write the report as a self-contained re-grounding for a user who did not observe the run.
+Group retained work under `✅ Kept`, failed experiments under `↩ Reverted`, and unresolved work under `⚠️ Deferred`,
+always with text and counts. Keep commands, diagnostics, paths, and the no-commit/push/sync statement undecorated. A
+verified no-op is complete. Write the report as a self-contained re-grounding for a user who did not observe the run.

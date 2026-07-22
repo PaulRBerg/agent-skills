@@ -56,4 +56,6 @@ For a new standalone file, prefer dependency declarations, constants, public rec
 starting points live in `examples/standalone.just` and `examples/devkit.just`; load one only when creating that shape.
 
 Completion requires a parsable justfile, the requested recipe behavior, and execution or dry-run evidence appropriate to
-its side effects.
+its side effects. Finish with `### ✅ Just workflow ready`, a compact recipe/alias/purpose table when several entries
+changed, and `### 🧪 Verification` with exact commands and outcomes. Keep confirmation prompts, recipe data output,
+compiler output, and `just --list` output undecorated; preserve the repository's own banner vocabulary.

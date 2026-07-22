@@ -146,44 +146,31 @@ Choose the smallest shape that makes the decision legible. A concise recommendat
 enough. When several options share comparable fields, adapt this structure:
 
 ````markdown
-### Recommended: `tool-name`
+### 🏆 Pick: `tool-name`
 
-**Installation:**
+<One sentence naming the decisive reason.>
+
+### 📦 Install
 
 ```bash
 [ecosystem-appropriate install command]
 ```
 
-**Why this tool:**
+| Criterion            | Why it wins                | Evidence                 |
+| -------------------- | -------------------------- | ------------------------ |
+| [material criterion] | [decision-relevant reason] | [current primary source] |
 
-- [Key strength 1 with metric]
-- [Key strength 2 with metric]
-- [Key strength 3 with metric]
+### 🥈 Closest alternative: `alternative-tool`
 
-**Key Stats:**
+[Why it is viable and the tradeoff that keeps it second.]
 
-- GitHub: [full URL]
-- Stars: [count]
-- [Size/Performance]: [metric]
-- [Ecosystem-specific]: [metric]
-- Last Updated: [date]
+### ⚠️ Caveats
 
-### Alternative Options
-
-**Option 2: `alternative-tool`**
-
-- [Why it is viable but not recommended]
-- [Key differentiator]
-
-**Option 3: `another-alternative`**
-
-- [Why it is viable but not recommended]
-- [Key differentiator]
-
-### Comparison
-
-[ecosystem-specific table]
+[Only material caveats; omit this section when empty.]
 ````
+
+Omit the criteria table when one sentence carries the evidence. Do not force a fixed number of strengths, alternatives,
+or popularity statistics; include only fields that affect this decision.
 
 GitHub columns in tables should use Markdown links, e.g. `[sindresorhus/execa](https://github.com/sindresorhus/execa)`.
 

@@ -123,7 +123,7 @@ EOF
 Direct CLI creation with `--body` does not apply YAML issue-form labels. Do not pass `--label` on the external repo
 unless cached `repository.viewerPermission` says labels are allowed.
 
-Display: "Created: $URL"
+Display the verified URL with the `### 🚀 Issue created` receipt from `SKILL.md`.
 
 ## Comment on Existing Issue
 

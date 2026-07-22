@@ -27,4 +27,5 @@ Open a validated ±1-day window around the requested date in Chromium.
 
 3. Pass the returned URL to `mcp__chrome-devtools__new_page` with `background: false`.
 
-4. Completion is the successfully opened page URL. Do not use the macOS `open` command.
+4. Completion is `### 🌐 CoinGecko history opened — <coin-id> · <date> (±1 day)` followed by the linked page URL. Do not
+   use the macOS `open` command. Keep the helper's bare-URL stdout and validation errors undecorated.

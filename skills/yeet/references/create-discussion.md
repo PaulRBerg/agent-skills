@@ -35,7 +35,8 @@ If `--check` flag is present:
    gh search discussions "{key_terms}" --repo "{owner}/{repo}" --limit 10 --json number,title,url
    ```
 
-3. IF found: display the list as a heads-up, then continue (don't block on confirmation)
+3. IF found: display a compact `### 🔎 Similar discussions` table, say `Creation is continuing`, then continue without
+   blocking on confirmation
 
 4. IF none found: inform user, continue
 
@@ -69,8 +70,9 @@ Use `repository.discussionTemplateTree.entries` from the cached context. Keep en
 
 3. Parse YAML: `title` (prefix), `body` array (fields with `type`, `id`, `attributes`)
 
-4. Field types: `textarea`/`input` → section header; `dropdown` → select option; `checkboxes` → auto-acknowledge;
-   `markdown` → skip
+4. Field types: `textarea`/`input` → section header; `dropdown` → select option; `checkboxes` → check only attestations
+   verified from repository/user evidence; `markdown` → skip. If a required checkbox cannot be verified, stop for the
+   missing fact rather than auto-acknowledging it.
 
 ### If No Templates Found
 
@@ -120,7 +122,7 @@ gh api graphql -f query='
 ' -f repositoryId="$REPO_ID" -f categoryId="$CAT_ID" -f title="$TITLE" -f body="$BODY"
 ```
 
-Display: "Created discussion: $URL"
+Display the verified URL with the `### 🚀 Discussion created` receipt from `SKILL.md`.
 
 ## Examples
 

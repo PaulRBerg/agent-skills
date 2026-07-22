@@ -82,9 +82,12 @@ If the helper exits `2`, stop: the cwd is not a git repo or has no root `package
     - Monorepo commit: `docs: release <package> <version>`
     - Single-package tag: `v<version>` unless existing tags use bare semver.
     - Monorepo tag: follow existing tag patterns from `previousTags`; default to `<package-dir>@<version>`.
-14. **Recommend pushing tags** - Do not push. After a successful non-dry-run release, tell the user to run
-    `git push origin --tags` so the newly created tag(s) reach the remote. Include one emoji in this specific
-    recommendation.
+14. **Recommend pushing tags** - Do not push. After a successful non-dry-run release, end with `🚀 Push tags`, then
+    render the exact command alone so the newly created tag(s) reach the remote:
+
+    ```bash
+    git push origin --tags
+    ```
 
 ## Script Reference
 
@@ -122,3 +125,14 @@ Planner output fields to use:
 Dry-run completion is a planner-backed package/version/action preview with zero writes. Release completion requires the
 planned manifests and changelogs, repository formatting, one commit and annotated tag per target in dependency order,
 and a final report of created commits/tags and skipped packages.
+
+Render user-facing states consistently:
+
+- Dirty tree: lead with `### ⛔ Release stopped — working tree is not clean`, then show the exact short status.
+- Version choice: use `### ⚠️ Confirm release plan` and a table with package, current version, planned version, reason,
+  and dependency cascade.
+- Dry run: use `### 🔎 Release preview — no files, commits, or tags written`, followed by the ordered action table.
+- Success: use `### 🏁 Release complete`, a package/version/commit/tag table, skipped packages, `### 🧪 Verification`,
+  and the exact push-tags recommendation above.
+
+Keep planner JSON/errors, versions, hashes, tags, commands, and changelog content exact and undecorated.

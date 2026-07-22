@@ -108,7 +108,7 @@ Add `--label "$label"` only when cached `repository.viewerPermission` allows lab
 above). On a label permission error, follow `posting.md > Error Handling and Idempotency`, then retry once without
 `--label`.
 
-Display: "Created: $URL"
+Display the verified URL with the `### 🚀 Issue created` receipt from `SKILL.md`.
 
 ## Comment on Existing Issue
 

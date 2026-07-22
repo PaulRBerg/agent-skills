@@ -54,7 +54,8 @@ present; otherwise ignore it.
    gh search issues "{key_terms}" --repo "{owner}/{repo}" --state open --limit 10 --json number,title,url
    ```
 
-3. IF found: display the list as a heads-up, then continue (don't block on confirmation)
+3. IF found: display a compact `### 🔎 Similar open issues` table, say `Creation is continuing`, then continue without
+   blocking on confirmation
 
 4. IF none found: inform user, continue
 
@@ -83,7 +84,8 @@ Infer best match from user's description keywords (bug, feature, docs, etc.). Pr
    `attributes`)
 
 3. Field types: `textarea`/`input` → section header from `attributes.label`; `dropdown` → select option from context;
-   `checkboxes` → auto-acknowledge; `markdown` → skip
+   `checkboxes` → check only attestations verified from repository/user evidence; `markdown` → skip. If a required
+   checkbox cannot be verified, stop for the missing fact rather than auto-acknowledging it.
 
 **Markdown (`.md`):** Fetch and populate template structure.
 
@@ -197,7 +199,7 @@ gh issue create \
 Add `--type "$issue_type"` only when a template issue type applies. Add `--label "label1,label2"` only when labels apply
 and permission allows labels.
 
-Display: "Created: $URL"
+Display the verified URL with the `### 🚀 Issue created` receipt from `SKILL.md`.
 
 On failure: follow [posting.md > Error Handling and Idempotency](posting.md#error-handling-and-idempotency) — run the
 idempotency check before any retry.

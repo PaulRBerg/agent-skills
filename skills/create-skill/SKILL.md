@@ -76,7 +76,8 @@ Before choosing a layout, separate the content into:
 - **Conditional examples and references** loaded only when their branch is active.
 
 Define the outcome, authority boundaries, stopping conditions, and completion evidence. Do not prescribe an identical
-execution path when several safe paths satisfy the same contract.
+execution path when several safe paths satisfy the same contract. For user-facing workflows, also define which kickoff,
+progress, decision, blocker, and completion events deserve a message and the smallest useful shape for each.
 
 ## When to Split Content
 
@@ -234,7 +235,8 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - `test -f "<scope>/.agents/skills/<name>/SKILL.md"`
 - `test -f "<scope>/.agents/skills/<name>/agents/openai.yaml"`
 - `readlink "<scope>/.claude/skills/<name>"` resolves to the source directory.
-- Print both absolute paths to the user.
+- Finish with `### 🧩 Skill created: <name>`, a tree of created paths, and `### ✅ Verified` with the exact checks. Link
+  both absolute source and symlink paths.
 
 ## Notes
 
@@ -250,4 +252,5 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - Prefer TypeScript helper scripts run with `bun run`; use Python through `uv run`, never raw `python` or `python3`.
 - Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by
   default.
-- Report the created paths and verification evidence.
+- Keep helper stdout, commands, paths, frontmatter, and generated skill content undecorated unless that skill's own
+  output contract requires otherwise.

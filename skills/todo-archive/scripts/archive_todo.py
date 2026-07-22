@@ -81,6 +81,7 @@ def main() -> int:
         return 0
 
     archive_path, rolled_over = resolve_archive_path(dated_path, archive_date, force=args.force)
+    overwrote_existing = args.force and dated_path.exists()
 
     archive_text = finalize(render(tree, True), fallback_heading="# TODO\n")
     remaining_text = finalize(render(tree, False), fallback_heading=first_heading(source) or "# TODO\n")
@@ -92,6 +93,8 @@ def main() -> int:
             print(f"Section(s): {', '.join(matched)}")
         if rolled_over:
             print(f"NOTE: {dated_path.name} exists; rolling this batch over to a timestamped file.")
+        elif overwrote_existing:
+            print(f"NOTE: {dated_path.name} exists; --force will overwrite it.")
         print(f"Checked tasks to archive: {archive_count}")
         print(f"Tasks remaining: {remaining_count}")
         print("\n--- TODO.md ---")
@@ -112,6 +115,8 @@ def main() -> int:
     if rolled_over:
         print(f"Kept existing archive: {dated_path}")
         print(f"Created timestamped archive: {archive_path}")
+    elif overwrote_existing:
+        print(f"Overwrote: {archive_path}")
     else:
         print(f"Created: {archive_path}")
     return 0

@@ -63,7 +63,7 @@ gh issue create \
   --label "label1,label2,label3"
 ```
 
-Display: "Created: $URL"
+Display the verified URL with the `### 🚀 Issue created` receipt from `SKILL.md`.
 
 ## Examples
 

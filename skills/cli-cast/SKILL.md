@@ -66,8 +66,9 @@ Before any signature or broadcast, present one concrete review containing:
 - simulation command and outcome;
 - selected signer and the exact signing/broadcast command with secrets redacted.
 
-Stop and require explicit user confirmation of this review in a subsequent message. If any reviewed field changes,
-simulate again and present a revised review.
+Lead the review with `### ⚠️ Transaction approval required`. Put repeated fields in a compact table, keep the exact
+command in a fenced block, and state precisely what confirmation authorizes. Stop and require explicit user confirmation
+of this review in a subsequent message. If any reviewed field changes, simulate again and present a revised review.
 
 ### Sign and Broadcast
 
@@ -79,11 +80,14 @@ only when the user explicitly opts in or no safer method is available; never ask
 also requires a review of the exact payload, domain, chain binding, and intended use before approval.
 
 After broadcast, capture the transaction hash and verify the receipt on the reviewed chain. Report status, block, gas
-used, and the explorer link. Do not retry a failed or uncertain broadcast without first checking whether the transaction
-exists.
+used, and the explorer link under `### ✅ Transaction confirmed` for a successful receipt or
+`### ↩ Transaction reverted` for a mined failure. For an ambiguous outcome, lead with
+`### ⛔ Broadcast unresolved — do not retry` and state the evidence still needed. Do not retry a failed or uncertain
+broadcast without first checking whether the transaction exists.
 
 ## Stop Conditions
 
 Stop before signing when the signer, sender, chain, target, decoded intent, cost ceiling, or simulation result is
 unresolved. Stop before retrying when broadcast outcome is ambiguous. Completion requires either a verified read result,
-an approved signature artifact, or a mined receipt matching the reviewed transaction.
+an approved signature artifact, or a mined receipt matching the reviewed transaction. Never decorate or truncate
+addresses, calldata, signatures, hashes, RPC URLs, fee values, commands, or safety wording.

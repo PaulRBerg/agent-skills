@@ -58,6 +58,10 @@ For each selected file, include:
 - Migration order: small, reviewable steps that preserve public behavior.
 - Verification: narrow tests, type checks, builds, or smoke checks that prove the split.
 
+Lead each plan with one explicit verdict: `### ✂ Split justified`, `### 🧱 Keep intact`, or
+`### ⚠️ Generated — change the generator`. Use a compact evidence table for repeated criteria. When proposing a split,
+show the source and target modules as a tree only when it clarifies ownership.
+
 If a selected file is generated or vendored because `--include-generated` was used, plan against the generator, schema,
 or upstream source instead of hand-splitting generated output.
 
@@ -71,4 +75,6 @@ or upstream source instead of hand-splitting generated output.
 ## Completion
 
 Complete with the exhaustive threshold report plus evidence-ranked plans only for candidates whose cohesion or change
-risk justifies a split. State when a large file should remain intact and why.
+risk justifies a split. Lead with `### 🔎 Large-file scan — <candidate count>`, state when a large file should remain
+intact and why, and surface the portable-LOC fallback as `⚠️ Approximate counts` when used. Keep the helper's exhaustive
+table, paths, LOC values, and commands exact and undecorated.
