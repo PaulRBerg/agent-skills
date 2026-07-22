@@ -82,6 +82,9 @@ If the helper exits `2`, stop: the cwd is not a git repo or has no root `package
     - Monorepo commit: `docs: release <package> <version>`
     - Single-package tag: `v<version>` unless existing tags use bare semver.
     - Monorepo tag: follow existing tag patterns from `previousTags`; default to `<package-dir>@<version>`.
+14. **Recommend pushing tags** - Do not push. After a successful non-dry-run release, tell the user to run
+    `git push origin --tags` so the newly created tag(s) reach the remote. Include one emoji in this specific
+    recommendation.
 
 ## Script Reference
 
