@@ -42,7 +42,15 @@ batch.
    repository's package manager updates its lockfile.
 
 6. Inspect the manifest and lockfile diff. Run the narrowest package-manager or repository checks that exercise updated
-   dependencies, with extra attention to approved major migrations.
+   dependencies, with extra attention to approved major migrations. Also run whatever lint command the repository
+   exposes (package script, task runner recipe, or equivalent) — dependency bumps can introduce new lint violations even
+   when tests and the build stay green (e.g. an updated linter or plugin adding rules, or a typing change surfacing
+   stricter checks).
+
+7. Fix newly flagged lint errors, but judge each one before changing code: a bump can introduce a rule the user may not
+   want enabled at all, not just a violation to fix. If a new error's fix is unclear, or fixing it would fight the
+   rule's intent rather than follow it, stop and ask the user how to proceed (fix, suppress, or disable the rule)
+   instead of guessing.
 
 ## Invariants
 
