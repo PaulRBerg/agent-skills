@@ -22,13 +22,19 @@ for and a full pass turns up nothing new. A verified no-op is a valid result —
    instructions they depend on.
 3. Map every tracked and non-ignored file in scope. Classify generated, vendored, minified, binary, and bulk-data
    artifacts; validate those through their generator, schema, or invariants instead of line-by-line reading.
-4. Discover the repository's checks: build, test, lint, typecheck, format, and codegen verification.
-5. Record existing worktree changes before touching anything. Pre-existing edits stay untouched: never revert, absorb,
+4. Inspect recent Git history and diffs, especially commits from today and yesterday, to identify the newest changes and
+   the callers, dependencies, tests, configuration, and documentation they may affect.
+5. Discover the repository's checks: build, test, lint, typecheck, format, and codegen verification.
+6. Record existing worktree changes before touching anything. Pre-existing edits stay untouched: never revert, absorb,
    or commit them, and never report them as findings.
-6. Create a coverage ledger in a scratch file listing every mapped file with a status: `pending`, `inspected`, `fixed`,
+7. Create a coverage ledger in a scratch file listing every mapped file with a status: `pending`, `inspected`, `fixed`,
    `reported`, or `excluded` with the reason. Keep it current; never claim coverage the ledger does not show.
 
 ## Inspect
+
+Prioritize slices containing the newest changes because they are the most likely to contain newly introduced bugs,
+omissions, inconsistencies, or duplication. Recency determines inspection order, never scope: older and untouched code
+can expose integration faults or pre-existing mistakes, and every mapped file must still be accounted for.
 
 Work through the ledger in coherent slices — a package, subsystem, or directory with its tests, configuration, and
 documentation together — so cross-file relationships are visible. Delegate independent slices to parallel read-only
