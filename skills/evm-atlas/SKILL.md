@@ -30,15 +30,18 @@ boundary.
 
 1. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
    read `references/workflows/blockscan-balances.md` first.
-2. For an address-wide historical-activity or prb-finance bootstrap sweep, read `references/workflows/address-sweeps.md`
+2. For a specific transaction hash — resolving which target chain it belongs to, or its status, parties, value, fee, or
+   timestamp — read `references/workflows/blockscan-tx-lookup.md` first, whether or not the chain is already known.
+3. For an address-wide historical-activity or prb-finance bootstrap sweep, read `references/workflows/address-sweeps.md`
    and use its deterministic plan/evaluate helper. For current holdings, use
    `references/workflows/blockscan-balances.md` first and provider routing for gaps.
-3. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, receipt, or
-   funding origin, resolve the chain and read `references/workflows/provider-routing.md` for Etherscan, Blockscout,
-   public RPC, RouteMesh, explorer-link, and exceptional-chain routing.
-4. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
-5. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
-6. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
+4. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's
+   full raw receipt/logs/decoded input, or funding origin, resolve the chain and read
+   `references/workflows/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and
+   exceptional-chain routing.
+5. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
+6. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
+7. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
    only the matching reference:
    - Across: `references/bridges/across.md`
    - Bungee / Socket: `references/bridges/bungee.md`
@@ -50,7 +53,7 @@ boundary.
    - LI.FI: `references/bridges/lifi.md`
    - Relay / Relay.link: `references/bridges/relay.md`
    - Symbiosis: `references/bridges/symbiosis.md`
-7. Treat bridge APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
+8. Treat bridge APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
    evidence.
 
 ## Completion
