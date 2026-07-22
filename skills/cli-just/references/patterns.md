@@ -84,6 +84,8 @@ codegen-envio:
     ./codegen.sh
 ```
 
+Listing the same group twice on one recipe is a compile error as of v1.57.0.
+
 ## Alias Conventions
 
 Define aliases immediately after recipe names for discoverability:

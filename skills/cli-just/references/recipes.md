@@ -168,7 +168,8 @@ build:
 ```
 
 `[env(...)]` is the preferred mechanism for one-recipe env overrides — it composes with `set dotenv-load` and
-module-level exports (which it overrides as of v1.51.0).
+module-level exports (which it overrides as of v1.51.0). As of v1.57.0, `[env(...)]` variables are also visible to
+`shell()` calls evaluated while the recipe runs, not just to the recipe's own command lines.
 
 ### Parallel Execution
 
@@ -530,6 +531,8 @@ set lists
 info flag:
     just {{ flag }}
 ```
+
+As of v1.57.0, `flag` and `pattern` are mutually exclusive on the same `[arg(...)]` — combining them is a compile error.
 
 Likewise `help` may be an expression or list (joined with spaces), and a flag's `value` may be an expression (v1.54.0+).
 

@@ -226,12 +226,13 @@ booleans.
 
 **New functions:**
 
-| Function            | Behavior                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------- |
-| `split(s, sep)`     | Split `s` into a list on `sep`; default splits on whitespace with ends trimmed                    |
-| `join_list(v, sep)` | Join list `v` into one string (default separator is a single space) — bridge to un-upgraded funcs |
-| `bool(v)`           | `[]` for `""`/`"0"`/`"false"`/`[]`, `"true"` for `"1"`/`"true"`; any other value errors           |
-| `show(v)`           | Literal representation, e.g. `"[]"`, `["foo", "bar"]`; single-element lists render as the element |
+| Function            | Behavior                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `split(s, sep)`     | Split `s` into a list on `sep`; default splits on whitespace with ends trimmed; `sep=""` splits into individual characters (v1.57.0+) |
+| `join_list(v, sep)` | Join list `v` into one string (default separator is a single space) — bridge to un-upgraded funcs                                     |
+| `len(v)`            | Length of a string or list (v1.57.0+)                                                                                                 |
+| `bool(v)`           | `[]` for `""`/`"0"`/`"false"`/`[]`, `"true"` for `"1"`/`"true"`; any other value errors                                               |
+| `show(v)`           | Literal representation, e.g. `"[]"`, `["foo", "bar"]`; single-element lists render as the element                                     |
 
 **Caveat:** using a list where a string is expected is an error — reach for `join_list()` (or interpolation) to bridge
 to functions not yet list-aware.
