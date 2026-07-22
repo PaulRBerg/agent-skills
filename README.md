@@ -43,6 +43,7 @@ bunx skills add PaulRBerg/agent-skills
 | html-debrief              | Interactive HTML task debriefs                             |
 | html-playground           | Interactive single-file HTML playgrounds                   |
 | large-file-refactor       | Large source-file report and Serena split plans            |
+| naming-refactor           | Exhaustive behavior-preserving repository naming refactor  |
 | night-shift               | Autonomous overnight codebase improvement                  |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references    |
 | skill-doctor              | Audit Agent Skills catalogs and installed skill roots      |
