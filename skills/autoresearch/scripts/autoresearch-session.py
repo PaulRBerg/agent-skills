@@ -98,6 +98,7 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
     config = current_config(records)
     segment = config["segment"]
     runs = [record for record in records if record.get("status") in STATUSES and record["segment"] == segment]
+    all_runs = [record for record in records if record.get("status") in STATUSES]
     valid = [record for record in runs if record["status"] in {"keep", "discard"}]
     kept = [record for record in valid if record["status"] == "keep"]
     baseline = valid[0] if valid else None
@@ -129,10 +130,10 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         else:
             consecutive += 1
 
-    total_runs = len([record for record in records if record.get("status") in STATUSES])
+    total_runs = len(all_runs)
     max_runs = config.get("maxRuns")
-    elapsed = sum(float(record.get("elapsedSeconds", 0)) for record in runs)
-    cost = sum(float(record.get("estimatedCost", 0)) for record in runs)
+    elapsed = sum(float(record.get("elapsedSeconds", 0)) for record in all_runs)
+    cost = sum(float(record.get("estimatedCost", 0)) for record in all_runs)
     convergence_runs = config.get("convergenceRuns")
     filled = None if not max_runs else min(10, math.floor(10 * total_runs / max_runs + 0.5))
     counts = {status: sum(record["status"] == status for record in runs) for status in sorted(STATUSES)}
@@ -163,7 +164,7 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
             "cost": {
                 "used": cost,
                 "limit": config.get("maxCost"),
-                "exhausted": bool(config.get("maxCost") is not None and cost >= config["maxCost"]),
+                "exhausted": bool(config.get("maxCost") is not None and cost > config["maxCost"]),
             },
         },
         "progress": None if filled is None else {"filled": filled, "empty": 10 - filled, "bar": "█" * filled + "░" * (10 - filled)},

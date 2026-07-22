@@ -30,8 +30,9 @@ boundary.
 
 1. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
    read `references/workflows/blockscan-balances.md` first.
-2. For an address-wide historical-activity or current-NFT sweep, read `references/workflows/address-sweeps.md`. Its
-   current-balance workflow is also the API fallback for Blockscan gaps.
+2. For an address-wide historical-activity or prb-finance bootstrap sweep, read `references/workflows/address-sweeps.md`
+   and use its deterministic plan/evaluate helper. For current holdings, use
+   `references/workflows/blockscan-balances.md` first and provider routing for gaps.
 3. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, receipt, or
    funding origin, resolve the chain and read `references/workflows/provider-routing.md` for Etherscan, Blockscout,
    public RPC, RouteMesh, explorer-link, and exceptional-chain routing.

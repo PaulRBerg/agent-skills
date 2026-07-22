@@ -68,6 +68,9 @@ def inspect_form(text: str, repo: str | None = None, template: str | None = None
     body = document.get("body")
     if not isinstance(body, list):
         raise FormError("issue form body must be an array")
+    for key in ("name", "description", "title", "type"):
+        if document.get(key) is not None and not isinstance(document[key], str):
+            raise FormError(f"top-level {key} must be a string")
     fields: list[dict[str, Any]] = []
     ids: set[str] = set()
     for index, raw_field in enumerate(body):
@@ -76,11 +79,12 @@ def inspect_form(text: str, repo: str | None = None, template: str | None = None
         field_type = raw_field.get("type")
         if field_type == "markdown":
             continue
-        if field_type not in {"input", "textarea", "dropdown", "checkboxes"}:
+        if field_type not in {"input", "textarea", "dropdown", "checkboxes", "upload"}:
             raise FormError(f"body item {index} has unsupported type: {field_type}")
-        field_id = raw_field.get("id")
-        if not isinstance(field_id, str) or not field_id:
-            raise FormError(f"body item {index} must have a non-empty id")
+        source_id = raw_field.get("id")
+        if source_id is not None and (not isinstance(source_id, str) or not source_id):
+            raise FormError(f"body item {index} has an invalid id")
+        field_id = source_id or f"__field_{index + 1}"
         if field_id in ids:
             raise FormError(f"duplicate field id: {field_id}")
         ids.add(field_id)
@@ -111,6 +115,7 @@ def inspect_form(text: str, repo: str | None = None, template: str | None = None
         fields.append(
             {
                 "id": field_id,
+                "sourceId": source_id,
                 "type": field_type,
                 "label": label,
                 "description": attributes.get("description") if isinstance(attributes.get("description"), str) else None,
@@ -169,9 +174,11 @@ def render_form(form: dict[str, Any], answers: dict[str, Any]) -> dict[str, Any]
         field_id = field["id"]
         value = answers.get(field_id)
         content: str
-        if field["type"] in {"input", "textarea"}:
+        if field["type"] in {"input", "textarea", "upload"}:
             if value is None:
                 value = ""
+            if field["type"] == "upload" and isinstance(value, list) and all(isinstance(item, str) for item in value):
+                value = "\n".join(value)
             if not isinstance(value, str):
                 raise FormError(f"answer for {field_id} must be a string")
             if field["required"] and not value.strip():

@@ -21,6 +21,10 @@ Use the first required read-only `gh` command in each workflow as authentication
 relative to the directory containing this `SKILL.md`, and never search for it in the target repository. Prefer the
 helper when the workflow needs repository, template, discussion, label, or issue/PR thread context.
 
+For YAML issue forms, resolve `scripts/issue-form.py` the same way. `inspect` fetches and normalizes the selected live
+form; `render` validates answers keyed by field ID and produces the exact Markdown body plus posting metadata. The
+helper never selects a template, writes answers or titles, performs privacy review, or posts externally.
+
 For pull request workflows, also verify:
 
 - Working tree is clean or changes are committed

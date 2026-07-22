@@ -88,7 +88,8 @@ Use redaction when a report may be pasted into chat or an issue.
 uv run ~/.agents/skills/spreadsheets/scripts/profile.py txs.tsv --markdown --redact-samples
 ```
 
-The profile still includes shape, issues, inferred types, null/cardinality signals, and recommendations.
+The profile includes shape, issues, inferred types, null/cardinality signals, formula-prefix cells, and tool
+availability without making transformation recommendations.
 
 ## Safe Workbook Creation
 

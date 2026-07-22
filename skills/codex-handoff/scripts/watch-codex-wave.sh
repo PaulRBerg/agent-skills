@@ -91,13 +91,14 @@ def settlement() -> None:
     settled = sum(agent["settled"] for agent in agents)
     total = len(agents)
     filled = min(10, math.floor(10 * settled / total + 0.5))
+    percentage = math.floor(100 * settled / total + 0.5)
     emit(
         {
             "type": "watcher.settlement",
             "elapsedSeconds": elapsed(),
             "settled": settled,
             "total": total,
-            "settledPercentage": 100 * settled / total,
+            "settledPercentage": percentage,
             "bar": "█" * filled + "░" * (10 - filled),
         }
     )

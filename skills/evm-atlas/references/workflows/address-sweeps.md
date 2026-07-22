@@ -1,325 +1,137 @@
 # Address Sweeps
 
-Use this reference when the prompt gives an EVM address and asks across "any chain", "all chains", "where has this
-address been active?", "has this address ever been used?", or "does this address hold anything now?".
+Use for address-wide historical activity and prb-finance bootstrap discovery on target mainnets. The deterministic
+request/evidence rules live in `scripts/sweep-core.py`; this reference defines safety, agent decisions, and coverage
+interpretation.
 
-For a current native or fungible-token portfolio, enter through `references/workflows/blockscan-balances.md`. Use the
-current-balance workflow below when Blockscan needs an API fallback or when the request requires NFT enumeration.
+## Safety Model
 
-Scope is exactly `references/generated/target-mainnets.json`. Do not expand to every Etherscan, Blockscout, Chainscout,
-Chainlist, or RPC-supported EVM chain. If the user wants non-target coverage, ask for a feature request in
-<https://github.com/PaulRBerg/agent-skills>.
+- Accept only a 20-byte public EVM address. Never read or expose keys, mnemonics, or credentials.
+- Query only rows in `references/generated/target-mainnets.json`. A `cross-vm` result covers that chain's EVM execution
+  environment only.
+- Fix one ISO-8601 UTC cutoff and one finalized or independently verified block per target chain. Record requested
+  cutoff, resolution kind, chain ID, block number/hash/timestamp, and observation time. The checkpoint block must be at
+  or before the cutoff. Reuse its exact hash and height for state and indexed history.
+- Never turn `latest`, an explorer page count, a provider error, an unbound zero counter, or a lagging index into a
+  negative result.
+- Keep credentials out of plan/response artifacts. Supply them only to the agent-selected read-only provider command.
 
-## Select the Coverage Profile
+If a checkpoint cannot be established, or required indexed channels cannot cover it, the result is unknown/partial.
 
-Name the profile before querying. Its required channels define what a complete negative means:
+## Profiles
 
-- **General activity:** normal transactions, internal transactions, ERC-20 transfers, ERC-721 transfers, and ERC-1155
-  transfers. This is the default five-channel evm-atlas sweep.
-- **prb-finance bootstrap:** finalized native state plus qualifying normal transactions, qualifying internal
-  transactions, ERC-20 transfers, and ERC-721 transfers. A qualifying normal row is successful and is either outgoing
-  from the address or carries positive native value while touching the address as `from`, `to`, or contract-creation
-  address. A qualifying internal row is successful, carries positive native value, and touches the address. Treat
-  `isError=1`, `txreceipt_status=0`, or a nonblank `errCode` as failure. Zero-value inbound normal rows and zero-value
-  internal rows are noise outside this profile; a successful zero-value outgoing normal row remains qualifying. ERC-1155
-  is deliberately excluded by prb-finance policy. Use this profile only when that repo or its bootstrap/discovery
-  workflow is explicitly in scope.
+Name the profile before planning:
 
-Do not silently apply the bootstrap exclusion to a general sweep. A complete bootstrap result is complete for that
-profile only; it is not a claim that the address has no ERC-1155 or other EVM activity.
+- `general`: normal transactions, internal transactions, ERC-20, ERC-721, and ERC-1155 transfers, plus checkpointed
+  nonce/native balance facts. This is the default historical-activity profile.
+- `prb-finance-bootstrap`: the narrower discovery policy used only when prb-finance bootstrap is explicitly in scope. It
+  includes checkpointed native state, qualifying normal/internal native activity, ERC-20, and ERC-721; ERC-1155 and
+  nonqualifying native noise are outside this profile.
 
-For a target row whose `accountActivityModel` is `cross-vm`, every profile and negative is scoped only to that chain's
-EVM execution environment. Never claim whole-chain inactivity or coverage of its native, non-EVM account environment
-from EVM RPC or explorer evidence.
+The helper owns the exact success/noise predicates. Do not silently apply bootstrap exclusions to a general sweep. A
+bootstrap negative means only “no prb-finance bootstrap-profile activity found.”
 
-## Fix the Checkpoint and Provider
+For the bootstrap profile, the helper may omit normal/internal history only when checkpointed nonce and balance are both
+zero and `accountActivityModel` is exactly `ethereum-eoa`. It default-denies this shortcut for missing, unrecognized,
+native-account-abstraction, cross-VM, or unknown models. Token history remains required.
 
-For each target chain:
+## Agent Decisions Before Planning
 
-1. Fix one required ISO-8601 UTC cutoff for the whole sweep; if the prompt does not supply one, freeze the workflow
-   start time once and report it. Resolve it once per chain to an exact finalized or otherwise independently verified
-   block at or before that time. A timestamp lookup must return the greatest such block: verify
-   `B.timestamp <= requestedAt` and either `B+1.timestamp > requestedAt` or that `B` is independently established as the
-   current finalized head. Reject stale or unverifiable lookup results. Record the requested cutoff, resolution kind
-   (`finalized` or `verified`), chain ID, block number, block hash, block timestamp, and observation time. Reuse that
-   exact checkpoint for state and every history channel; never mix it with `latest` or a later provider head.
-2. Batch `eth_getTransactionCount(<addr>, { blockHash: <cutoff-hash>, requireCanonical: true })` and
-   `eth_getBalance(<addr>, { blockHash: <cutoff-hash>, requireCanonical: true })` before history. For an address set,
-   include both calls for every address in bounded per-chain JSON-RPC batches. Validate every response ID and hex
-   quantity. A nonzero nonce or balance is immediately positive state evidence.
-3. Select one authoritative indexed-history provider for the chain using `references/workflows/provider-routing.md`.
-   Blockscout is primary on every declared overlap; Etherscan is fallback there and primary only when Blockscout is
-   unavailable. Trigger the fallback only on an error, malformed response, lag, plan/rate limit, or unsupported required
-   action. A valid empty primary response is authoritative and must not trigger fallback.
-4. Require the history provider to be indexed through the cutoff and bound every query to `endblock=<cutoff>`. For a
-   newest-first native endpoint without a server-side cutoff, discard rows above the cutoff and paginate until a row at
-   or below it is reached. Otherwise the result is incomplete.
+The agent owns:
 
-If no RPC can establish the finalized/verified checkpoint, or no indexed provider can cover a required history channel
-through it, report the chain as unknown/partial. Do not substitute `latest`, an explorer page count, or a provider error
-for a negative result.
+- target-chain selection and whether to stop after the first positive;
+- cutoff acquisition and checkpoint proof;
+- provider selection and fallback activation using `provider-routing.md`;
+- declared provider capabilities and independence groups;
+- optional quorum requirement;
+- final observed-fact versus inference wording.
 
-Example state batch; bind reads to the pinned block hash, not the symbolic `finalized` tag, after checkpoint resolution:
+Prefer Blockscout on declared overlaps; use Etherscan where it is primary or after a concrete fallback trigger. A valid
+empty authoritative response does not trigger fallback. Run the existing plan-detection helpers before using paid
+Etherscan or Blockscout PRO capabilities. Quorum counts independent indexers, not hosts or state RPCs; provider
+disagreement is unknown, never a majority decision.
+
+## Plan Interface
+
+Create an agent-selected input JSON with:
+
+- `address`;
+- `chain`: at least `id`, display name, and `accountActivityModel`;
+- `goal`: `historical-activity` or `bootstrap-discovery`;
+- named `profile`;
+- `checkpoint`: `requestedAt`, `resolutionKind`, `blockNumber`, `blockHash`, `blockTimestamp`, `observedAt`;
+- `providers`: stable ID, provider kind, independent-index group, and supported history-channel names;
+- `quorum`: positive integer, default `1`.
+
+Then run:
+
+```sh
+uv run scripts/sweep-core.py plan --input <spec.json> > <plan.json>
+```
+
+The credential-free plan has `schemaVersion: 1`, normalized required channels, checkpoint-bound JSON-RPC state requests,
+bounded indexed-history request specifications, and quorum ordering requirements. It does not acquire a checkpoint,
+choose a provider, or construct credential-bearing URLs.
+
+Execute only the emitted requests through the selected provider's documented adapter. Save responses in this shape:
 
 ```json
-[
-  {
-    "jsonrpc": "2.0",
-    "id": "nonce",
-    "method": "eth_getTransactionCount",
-    "params": ["<addr>", { "blockHash": "<cutoff-hash>", "requireCanonical": true }]
+{
+  "state": {
+    "nonce": { "ok": true, "result": "0x0", "blockHash": "<checkpoint-hash>" },
+    "native-balance": { "ok": true, "result": "0x0", "blockHash": "<checkpoint-hash>" }
   },
-  {
-    "jsonrpc": "2.0",
-    "id": "balance",
-    "method": "eth_getBalance",
-    "params": ["<addr>", { "blockHash": "<cutoff-hash>", "requireCanonical": true }]
+  "providers": {
+    "<provider-id>": {
+      "indexedThrough": 123,
+      "channels": {
+        "txlist": { "ok": true, "complete": true, "rows": [] }
+      }
+    }
   }
-]
+}
 ```
 
-If an RPC rejects the EIP-1898 block selector, a numeric fallback is valid only when the same endpoint returns the
-requested block number and hash immediately before and after the bounded state batch. Any missing/mismatched header or
-state response makes that endpoint incomplete; try the next RPC candidate or report unknown. A numeric block tag by
-itself does not bind a state response to the recorded checkpoint hash.
+`complete: true` means bounded pagination for that channel is exhausted through the checkpoint. Preserve native provider
+row fields; do not preclassify them.
 
-### Zero-State Shortcut
+## Evaluate Interface
 
-Zero nonce plus zero native balance can satisfy a profile's native-history shortcut only when the target row's
-`accountActivityModel` is exactly `ethereum-eoa`. Default-deny the shortcut for `native-account-abstraction`,
-`cross-vm`, `unknown`, a missing field, or any unrecognized value.
-
-The shortcut does not cover ERC-20, ERC-721, or ERC-1155 transfers. For the prb-finance bootstrap profile, record both
-`txlist` and `txlistinternal` as omitted by the `ethereum-eoa` zero-state invariant, then still query `tokentx` plus
-`tokennfttx`. This is sound for the bootstrap predicates: zero nonce excludes a successful outgoing normal row, while
-any positive-value native receipt would remain in the zero-nonce account's balance for this exact EOA model. It
-deliberately does not claim that zero-value inbound normal/internal calls are absent; those rows are outside the
-bootstrap profile. For a general sweep where those calls count as activity, query normal and internal history as well.
-
-### Provider Detection
-
-For Etherscan, run plan detection once per session before querying Etherscan, then cache it:
-
-```bash
-scripts/etherscan-detect-plan.sh
+```sh
+uv run scripts/sweep-core.py evaluate \
+  --plan <plan.json> --responses <responses.json> > <result.json>
 ```
 
-For Blockscout PRO, run plan detection once per session before using the PRO host, then cache it:
+The evaluator validates checkpoint binding, quantities, index bounds, response shapes, required channels, profile
+predicates, EOA zero-state eligibility, earliest qualifying evidence, and quorum agreement. It returns
+`positive|negative|unknown`, `checked`, `omitted`, explicit `gaps`, coverage, earliest evidence, and provider/quorum
+facts. Malformed external responses become coverage gaps when they can be isolated; malformed plan input fails.
 
-```bash
-scripts/blockscout-detect-plan.sh
+For offline conformance checks, use:
+
+```sh
+uv run scripts/sweep-core.py validate blockscout-address-counters < response.json
+uv run scripts/sweep-core.py validate etherscan-transfer-topics --address <address> < response.json
 ```
 
-If `$ETHERSCAN_API_KEY` is missing, route Etherscan-supported chains to Blockscout where Blockscout covers them;
-otherwise report the Etherscan gap. If `$BLOCKSCOUT_API_KEY` is missing, skip Blockscout PRO detection and use
-per-instance Blockscout hosts from `scripts/resolve-chain.sh` where available.
+The existing shell validator commands remain output-compatible adapters.
 
-### Optional Quorum
+## Coverage and Reporting
 
-Quorum is off by default: one complete authoritative-provider result is enough. If the user requests quorum, require
-that many independent indexers to cover the same cutoff, profile, and channels. Blockscout PRO and a per-instance
-surface backed by the same index count once. Latest-first probes may establish existence, but they cannot establish a
-positive quorum. After any positive, query every required channel from every quorum provider ascending from genesis, or
-fully paginate and order the bounded rows, apply the selected profile's qualifying-row predicates, and compare the same
-earliest qualifying transaction hash, block, action/channel, and timestamp. A negative quorum requires valid empty
-coverage from every provider. Unsupported actions, errors, lag, and state RPC calls are not history votes. Never weaken
-the requested quorum; provider disagreement is unknown, not a majority decision.
+A positive needs qualifying checkpoint-bounded evidence; it may still have partial channel coverage. A negative is valid
+only when every profile channel is checkpoint-bound and complete or appears in `omitted` under the named safe invariant.
+Missing channels, lag, malformed responses, provider disagreement, and unsupported actions make the result
+unknown/partial.
 
-## Historical Activity Sweep
+For yes/no requests, lead with the result and first qualifying chain/action. For reports, include chain, checkpoint,
+profile, activity result, checked/omitted channels, coverage, provider, fallback, and quorum. Express checkpoints as at
+least `chain_id:block_number:block_hash` plus cutoff time.
 
-Goal: answer whether an address has ever had indexed activity on any target mainnet. Count a chain as active when any of
-these exists:
+Do not claim inactivity on all EVM chains unless the exact target scope and general profile are complete. For
+`cross-vm`, append “in the EVM execution environment.” Keep observed provider facts separate from inference.
 
-- normal transaction involving the address
-- internal transaction involving the address
-- ERC-20 transfer where the address is sender or recipient
-- ERC-721 transfer where the address is sender or recipient
-- ERC-1155 transfer where the address is sender or recipient
+## Current Holdings
 
-Use `sort=desc&page=1&offset=1` wherever the provider supports it for a non-quorum existence probe. This proves
-existence without full pagination, subject to the selected profile's qualifying-row predicates. It does not identify
-earliest evidence and cannot be compared as a quorum positive. Stop at the first positive result when the user only asks
-"has this address ever been active?". Continue across all target chains when the user asks which chains or wants a
-report. A negative is valid only after every channel required by the selected profile is covered through the pinned
-cutoff or satisfied by an allowed invariant.
-
-### Etherscan
-
-Use the advanced filter parameters when accepted by the endpoint. Set `from=<addr>&to=<addr>&fromto_opr=or` for
-direction-agnostic checks:
-
-```text
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=txlist&from=<addr>&to=<addr>&fromto_opr=or&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1&apikey=$ETHERSCAN_API_KEY
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=txlistinternal&from=<addr>&to=<addr>&fromto_opr=or&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1&apikey=$ETHERSCAN_API_KEY
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=tokentx&from=<addr>&to=<addr>&fromto_opr=or&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1&apikey=$ETHERSCAN_API_KEY
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=tokennfttx&from=<addr>&to=<addr>&fromto_opr=or&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1&apikey=$ETHERSCAN_API_KEY
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=token1155tx&from=<addr>&to=<addr>&fromto_opr=or&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1&apikey=$ETHERSCAN_API_KEY
-```
-
-If an action rejects the advanced filter shape, fall back to the standard address-list shape:
-
-```text
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=<action>&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1&apikey=$ETHERSCAN_API_KEY
-```
-
-For the general profile, treat `status=1` with a non-empty `result` array as positive. For the bootstrap profile, apply
-its qualifying-row predicates first; a page containing only nonqualifying normal/internal noise is not positive, and the
-action is not negative until bounded pagination finds a qualifying row or is exhausted. Treat Etherscan's "No
-transactions found" / empty result as negative for that action only; still check the remaining activity actions before
-marking the chain inactive.
-
-For the prb-finance bootstrap profile, a conformant `logs/getLogs` query may combine the ERC-20 and ERC-721 existence
-checks because both use `Transfer(address,address,uint256)`. Set the Transfer signature as `topic0`, the left-padded
-address as both `topic1` and `topic2`, `topic0_1_opr=and`, `topic0_2_opr=and`, and `topic1_2_opr=or`:
-
-```text
-https://api.etherscan.io/v2/api?chainid=<id>&module=logs&action=getLogs&fromBlock=<vector-start>&toBlock=<vector-end>&topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef&topic0_1_opr=and&topic1=<padded-addr>&topic0_2_opr=and&topic2=<padded-addr>&topic1_2_opr=or&page=1&offset=1000&apikey=$ETHERSCAN_API_KEY
-```
-
-First run that shape over a known public vector whose bounded response contains distinct inbound-only and outbound-only
-Transfers. Validate the saved response with
-`bash scripts/validate-etherscan-transfer-topics.sh <address> < response.json`. After conformance, existence probes use
-the same topic/operator shape with `fromBlock=0`, `toBlock=<cutoff>`, and `offset=1`. Treat an empty response as
-negative only when that shape is known to work for the selected chain and plan; otherwise use separate `tokentx` and
-`tokennfttx` calls. This optimization does not cover ERC-1155 (`TransferSingle`/`TransferBatch`) and never changes the
-general five-channel profile. Treat a returned raw log as a candidate until the emitting contract is confirmed as ERC-20
-or ERC-721; the shared signature alone does not prove the token standard.
-
-### Blockscout
-
-When native v2 exposes `addresses/<addr>/counters`, validate its required string counters with
-`bash scripts/validate-blockscout-address-counters.sh < response.json`. The endpoint has no cutoff parameter, so its
-counters are hints unless cryptographic proof or provider response metadata explicitly binds that exact counter snapshot
-to the pinned block number and hash. Merely observing the indexer's head at or above the cutoff does not bind counter
-freshness to the checkpoint. A nonzero counter requires a bounded item query to locate qualifying pre-cutoff evidence;
-an unbound zero counter still requires bounded action queries before a negative. Counters do not cover internal
-transactions. A missing, malformed, unvalidated, or unbound counter is only an optimization miss.
-
-For bounded existence probes, prefer the Etherscan-compatible layer because it supports `sort`, `page`, `offset`, and
-block bounds. On the PRO host, pass `$BLOCKSCOUT_API_KEY` with `authorization: Bearer $BLOCKSCOUT_API_KEY` rather than a
-query parameter:
-
-```text
-https://api.blockscout.com/v2/api?chain_id=<id>&module=account&action=txlist&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1
-https://api.blockscout.com/v2/api?chain_id=<id>&module=account&action=txlistinternal&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1
-https://api.blockscout.com/v2/api?chain_id=<id>&module=account&action=tokentx&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1
-https://api.blockscout.com/v2/api?chain_id=<id>&module=account&action=tokennfttx&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1
-https://api.blockscout.com/v2/api?chain_id=<id>&module=account&action=token1155tx&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1
-```
-
-If the PRO host returns `404` or no key is available, resolve the per-instance URL and repeat the same five compat
-actions against that host:
-
-```bash
-CS_instance_url=$(scripts/resolve-chain.sh <id> | sed -n 's/^instance_url=//p')
-curl -s "${CS_instance_url}api?module=account&action=txlist&address=<addr>&startblock=0&endblock=<cutoff>&sort=desc&page=1&offset=1"
-```
-
-If the compat action is unavailable on that instance, use native v2 newest-first endpoints and treat a non-empty `items`
-array as positive for the general profile. For the bootstrap profile, filter normal/internal items through its
-qualifying-row predicates and paginate past nonqualifying rows before deciding the channel:
-
-```text
-api/v2/addresses/<addr>/transactions
-api/v2/addresses/<addr>/internal-transactions
-api/v2/addresses/<addr>/token-transfers?type=ERC-20
-api/v2/addresses/<addr>/token-transfers?type=ERC-721
-api/v2/addresses/<addr>/token-transfers?type=ERC-1155
-```
-
-## Current Balance Sweep: API Fallback and NFT Coverage
-
-Goal: answer whether an address currently holds any native balance, ERC-20 balance, ERC-721 NFT, or ERC-1155 item on
-target mainnets. Report only positive balances by default, plus explicit provider gaps. Pin the finalized/verified
-checkpoint before reading native state. Holdings endpoints that expose only the provider's current indexed head are not
-cutoff-exact; record their own observed/indexed freshness and do not merge them into the checkpointed native-state
-claim.
-
-### Etherscan
-
-Always check native balance when the chain is queryable:
-
-```text
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=balance&address=<addr>&tag=<cutoff-hex>&apikey=$ETHERSCAN_API_KEY
-```
-
-When `pro_endpoints=true`, enumerate token and NFT holdings:
-
-```text
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=addresstokenbalance&address=<addr>&page=1&offset=100&apikey=$ETHERSCAN_API_KEY
-https://api.etherscan.io/v2/api?chainid=<id>&module=account&action=addresstokennftbalance&address=<addr>&page=1&offset=100&apikey=$ETHERSCAN_API_KEY
-```
-
-Paginate PRO holdings while returned pages are full. If `pro_endpoints=false`, Etherscan can only check native balance
-and known single-token balances (`tokenbalance` with a provided contract). Use Blockscout for full holdings when
-Blockscout covers the chain; otherwise report token/NFT holdings as not enumerable through available indexed providers.
-Etherscan's free/Lite historical-balance window may reject an older pinned cutoff; fall back to the already selected RPC
-state result rather than changing the cutoff.
-
-### Blockscout
-
-Use native v2 with bearer auth on the PRO host. `addresses/{hash}` gives native balance;
-`addresses/{hash}/token-balances` gives full ERC-20/721/1155 holdings where indexed:
-
-```text
-https://api.blockscout.com/<id>/api/v2/addresses/<addr>
-https://api.blockscout.com/<id>/api/v2/addresses/<addr>/token-balances
-```
-
-On `404` or missing key, resolve the per-instance URL and use:
-
-```bash
-CS_instance_url=$(scripts/resolve-chain.sh <id> | sed -n 's/^instance_url=//p')
-curl -s "${CS_instance_url}api/v2/addresses/<addr>"
-curl -s "${CS_instance_url}api/v2/addresses/<addr>/token-balances"
-```
-
-Count `coin_balance > 0` as native holdings. Count token entries with `value > 0` as holdings; include `token.type`,
-`token.symbol`, `token.address_hash`, `token_id` when present, and raw `value` plus decimals where available.
-
-### RPC Fallback
-
-For chains with no usable indexed provider, query only the native balance:
-
-```text
-eth_getBalance(<addr>, <cutoff-hex>)
-```
-
-Do not infer token/NFT emptiness from RPC-only coverage. Token and NFT holdings require a token contract list or indexed
-provider.
-
-## Output
-
-For a yes/no answer, lead with the boolean result and the first positive chain/action found. Every chain result must
-identify its profile, fixed checkpoint, channel coverage, authoritative history provider, fallback use, and quorum
-status. For reports, group by chain:
-
-```markdown
-| Chain | Checkpoint | Profile | Activity | Covered channels | Coverage | Provider/quorum |
-| ----- | ---------- | ------- | -------- | ---------------- | -------- | --------------- |
-```
-
-Express the checkpoint as at least `chain_id:block_number:block_hash` plus the cutoff timestamp. Use `complete` only
-when every profile channel is bounded through that checkpoint or covered by a named safe invariant. Use `partial` for
-known gaps and `unknown` when no defensible negative can be formed. Include explicit gaps such as "Etherscan paid-chain
-unavailable on free plan; Blockscout absent", "Blockscout index behind cutoff", or "RPC native balance only".
-
-For machine-readable results, expose `checked` and `omitted` channel arrays rather than collapsing coverage into prose.
-The prb-finance bootstrap vocabulary is `nonce`, `native-balance`, `txlist`, `txlistinternal`, `tokentx`, and
-`tokennfttx`; the general profile also requires `token1155tx`. Record whether the row was reused `fromCheckpoint`, and
-key reusable evidence by normalized address, chain ID, goal, named profile, normalized required-channel set, exact
-quorum requirement (including quorum off), requested cutoff, resolved block number and hash, `accountActivityModel`, and
-checkpoint schema version/semantics so a policy or checkpoint change cannot reuse incompatible evidence.
-
-Do not say "inactive on all EVM chains" unless the checked target scope and profile are clear. For the bootstrap
-profile, say "no prb-finance bootstrap-profile activity found"; reserve "no indexed activity found across the target
-mainnets" for a complete general five-channel sweep. For `cross-vm`, append "in the EVM execution environment" and never
-present the result as inactivity or coverage in the chain's native environment.
-
-## Provider Docs
-
-- Etherscan introduction: <https://docs.etherscan.io/introduction>
-- Etherscan advanced normal transaction filter:
-  <https://docs.etherscan.io/api-reference/endpoint/advanced-filter-txlist>
-- Etherscan advanced ERC-20 transfer filter: <https://docs.etherscan.io/api-reference/endpoint/advanced-filter-tokentx>
-- Blockscout PRO API: <https://docs.blockscout.com/devs/pro-api>
+For current native/token/NFT holdings, use `blockscan-balances.md` first and `provider-routing.md` for API gaps. Pin
+native state to a finalized/verified checkpoint. Treat holdings endpoints observed at a provider head as separately
+timed evidence, and never infer token/NFT emptiness from native RPC alone.

@@ -173,8 +173,8 @@ def apply_squash(args: argparse.Namespace) -> dict[str, Any]:
     mutated = False
     committed = False
     try:
-        git(root, "reset", "--soft", facts["mergeBase"])
         mutated = True
+        git(root, "reset", "--soft", facts["mergeBase"])
         if git(root, "diff", "--cached", "--quiet", check=False).returncode == 0:
             raise GitError("squash would produce an empty commit")
         commit = git(root, "commit", "-F", str(args.message_file), check=False)

@@ -15,10 +15,10 @@ batch.
 
 ## Workflow
 
-1. Resolve the skill directory and run the helper from the target repository:
+1. Resolve the skill directory and save the helper plan from the target repository:
 
    ```sh
-   bash <skill-dir>/scripts/run-taze.sh --plan [--include package-a,package-b]
+   bash <skill-dir>/scripts/run-taze.sh --plan [--include package-a,package-b] > <taze-plan.json>
    ```
 
    The JSON plan classifies every discovered update as `apply`, `review-major`, `review`, or `skip-fixed`. The helper
@@ -32,22 +32,34 @@ batch.
    `review-major` and unknown updates in one decision batch with current version, target version, package role when
    discoverable, and relevant migration/release notes. Apply only the majors the user selects.
 
-4. If nothing is selected, report the no-op and stop. Otherwise write all selected updates in one command:
+4. If nothing is selected, report the no-op and stop. If the root manifest uses Bun catalogs, preview the exact selected
+   catalog transitions from the accepted plan:
+
+   ```sh
+   uv run <skill-dir>/scripts/update-bun-catalogs.py \
+     --root <repo> --plan <taze-plan.json> --include package-a,package-b
+   ```
+
+   The preview is read-only. Missing catalog entries, conflicting plan rows, unsupported versions, or a catalog value
+   that no longer matches the plan fail before writes. The helper does not select upgrades.
+
+5. Write all selected Taze updates in one command:
 
    ```sh
    bash <skill-dir>/scripts/run-taze.sh --write --include package-a,package-b
    ```
 
-5. Update matching root Bun catalog entries when present, preserving their existing range prefixes. Then run `ni` so the
-   repository's package manager updates its lockfile.
+6. For Bun catalogs, rerun `update-bun-catalogs.py` with the same plan and include set plus `--write`. It atomically
+   updates every matching default/named catalog occurrence and preserves each existing `^`, `~`, or empty prefix. Then
+   run `ni` so the repository's package manager updates its lockfile.
 
-6. Inspect the manifest and lockfile diff. Run the narrowest package-manager or repository checks that exercise updated
+7. Inspect the manifest and lockfile diff. Run the narrowest package-manager or repository checks that exercise updated
    dependencies, with extra attention to approved major migrations. Also run whatever lint command the repository
    exposes (package script, task runner recipe, or equivalent) — dependency bumps can introduce new lint violations even
    when tests and the build stay green (e.g. an updated linter or plugin adding rules, or a typing change surfacing
    stricter checks).
 
-7. Fix newly flagged lint errors, but judge each one before changing code: a bump can introduce a rule the user may not
+8. Fix newly flagged lint errors, but judge each one before changing code: a bump can introduce a rule the user may not
    want enabled at all, not just a violation to fix. If a new error's fix is unclear, or fixing it would fight the
    rule's intent rather than follow it, stop with `### ⚠️ Dependency lint decision required`. Show the rule, affected
    locations, likely effects, and the explicit `fix`, `suppress`, or `disable` choices in one table instead of guessing.
@@ -72,6 +84,7 @@ exact and undecorated.
 - Fixed versions and non-semver protocols remain unchanged unless the user explicitly asks otherwise.
 - Package arguments constrain both scan and write phases.
 - The same maturity-period policy applies to scan and write.
+- Bun catalog preview and write use the same accepted Taze plan and selected package set; stale plans never write.
 - Do not infer compatibility from SemVer alone when repository evidence, peer ranges, or release notes indicate
   otherwise.
 

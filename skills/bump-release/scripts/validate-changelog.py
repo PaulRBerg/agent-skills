@@ -90,8 +90,8 @@ def validate(text: str, version: str, date: str, tag: str | None) -> list[str]:
             allowed_tags = {tag} if tag else {version, f"v{version}"}
             if actual_tag not in allowed_tags:
                 errors.append(f"release link tag is {actual_tag}, expected {' or '.join(sorted(allowed_tags))}")
-    elif version in references:
-        errors.append(f"release {version} has a link definition but an unlinked heading")
+    else:
+        errors.append(f"release {version} heading must be linked")
     return errors
 
 

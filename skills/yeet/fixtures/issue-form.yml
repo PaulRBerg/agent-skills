@@ -6,6 +6,9 @@ labels:
 type: Bug
 body:
   - type: input
+    attributes:
+      label: Optional context
+  - type: input
     id: summary
     attributes:
       label: Summary

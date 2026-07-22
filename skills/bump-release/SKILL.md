@@ -11,128 +11,91 @@ description: "Cut a release: bump versions, write changelogs, commit, tag."
 # Bump Release
 
 Release one package or several packages with version bumps, changelog entries, commits, and tags. Supports
-single-package repos, workspace monorepos, regular releases, beta releases, and dry runs.
+single-package repositories, workspace monorepos, stable releases, beta releases, and dry runs.
 
 ## Arguments
 
-- `packages`: Optional monorepo package names or directories, such as `evm` or `evm-safe`. Omit in single-package repos.
-- `version`: Optional explicit semver, such as `2.0.0`. Only valid for one target package.
-- `--beta`: Create or advance a `-beta.X` prerelease.
-- `--dry-run`: Preview the release plan without modifying files, committing, or tagging.
+- `packages`: optional package names or directories. Omit in a single-package repository.
+- `version`: optional explicit semver. Valid only for one user-selected package.
+- `--beta`: create or advance a `-beta.X` prerelease.
+- `--dry-run`: preview without modifying files, committing, or tagging.
 
-## Fast Planner
+## Helper Interface
 
-Run the bundled planner before manual inspection. It is read-only and gives one JSON fact base for package discovery,
-previous tags, scoped changed files, dependency edges, and dirty-tree status. In pnpm workspaces, it uses
-`pnpm list -r --depth -1 --json` when available and falls back to local workspace-glob discovery. Bun and npm-style
-`package.json` workspaces use the local glob discovery, including negative workspace patterns.
-
-Resolve `<skill-dir>` from the loaded `SKILL.md` path:
+Resolve `<skill-dir>` from this `SKILL.md`. Keep helper stdout as JSON and diagnostics on stderr.
 
 ```sh
-node "<skill-dir>/scripts/plan-release.mjs" [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] [--package <name-or-dir>]...
+node "<skill-dir>/scripts/plan-release.mjs" \
+  [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] \
+  [--package <name-or-dir>]...
 ```
 
-Map user arguments directly:
+The read-only discovery output has `schemaVersion: 2`. It reports package identity, complete per-package `changedFiles`,
+workspace edges and declared ranges, previous-tag facts, selected targets, and worktree state. `changeHints` are
+filename-based, explicitly non-authoritative navigation hints. Never use them to decide release relevance or changelog
+inclusion.
 
-- Pass every package selector as `--package <selector>`.
-- Pass an explicit version as `--version <semver>`.
-- Pass `--beta` and `--dry-run` when requested.
+After the agent decides every stable patch/minor/major version, write discovery JSON to a temporary file and run:
 
-If the helper exits `2`, stop: the cwd is not a git repo or has no root `package.json`. If it exits `64`, read the JSON
-`errors` when present, report the invalid arguments, and stop.
+```sh
+uv run "<skill-dir>/scripts/finalize-release-plan.py" \
+  --discovery <discovery.json> \
+  [--version <package>=<semver>]...
+```
+
+The finalizer performs beta and explicit-version transitions, stable prerelease promotion, npm-range satisfaction,
+simple dependency-range suggestions, and dependency ordering. It reports complex ranges, peer ranges, dependency cycles,
+and stable versions not supplied by the agent as unresolved decisions. When an unsatisfied edge adds a dependent, choose
+that package's release version and rerun with another `--version` assignment. The finalizer never chooses a regular
+release magnitude or dependency policy.
+
+For every stable changelog written, validate its deterministic structure:
+
+```sh
+uv run "<skill-dir>/scripts/validate-changelog.py" \
+  --file <CHANGELOG.md> --version <semver> --date <YYYY-MM-DD> [--tag <tag>]
+```
+
+This checks the expected release and date, heading/category order, allowed categories, list structure, and release-link
+tag. It does not judge importance, wording, or semantic category.
 
 ## Workflow
 
-1.  **Run the planner** - Use the JSON output as the source of truth for `mode`, `packages`, `targets`, `previousTags`,
-    `changedFiles`, `includedFiles`, `excludedFiles`, `dependencyEdges`, `needsSelection`, and `workingTree`.
-2.  **Require a clean tree** - If `workingTree.clean` is false, stop and show the short status. Do not invoke the
-    `commit` skill or commit unrelated work unless the user explicitly asks.
-3.  **Resolve targets** - If `needsSelection` is true, ask the user which workspace packages to release. If package
-    selectors are unknown or ambiguous, stop and ask for exact package names or directories.
-4.  **Reject invalid version scope** - If an explicit `version` was supplied for more than one target package, stop.
-    Explicit versions are single-package only.
-5.  **Plan versions** - Determine a candidate version for each target package. For explicit versions, beta suffixing,
-    and prerelease transitions, follow the Version Examples table below. For a regular release from a stable version
-    with no explicit version, inspect relevant net changes and choose patch, minor, or major by Semantic Versioning.
-6.  **Skip no-op releases** - For regular releases, if a target has no `includedFiles` and no dependency-range cascade,
-    report that there are no relevant release changes and do not bump it.
-7.  **Cascade dependents** - Use `dependencyEdges` to find workspace packages whose `dependencies` or `peerDependencies`
-    point at bumped packages. Check ranges with a structured semver parser or package manager API when available, not ad
-    hoc string comparison. If the new version is outside the declared range, update the range and add the dependent to
-    the release plan. Treat dependency range widening as patch by default; treat peer dependency major changes as major
-    unless the user confirms otherwise.
-8.  **Confirm inferred versions** - For non-dry-run regular releases without explicit versions, ask the user to confirm
-    inferred versions. For multi-package releases, include requested packages and cascaded dependents in the same
-    release-plan confirmation when the agent UI allows it.
-9.  **Preview dry runs** - For `--dry-run`, print the package order, current versions, planned versions,
-    changelog/tag/commit actions, dependency range updates, and skipped files. Stop before edits.
-10. **Write changelogs** - For regular releases only, read `references/common-changelog.md` after the final package set
-    is known and apply it as the authoritative changelog contract. Bound diff inspection per target using its
-    `includedFiles` against `previousTags[package].tag`.
-11. **Edit release files** - Update each target package's `CHANGELOG.md` and `package.json`. For beta releases, skip
-    `CHANGELOG.md`. Update any cascaded dependent ranges before committing the dependent release.
-12. **Format once** - After all release edits, run formatting once. If a `justfile` exists, inspect `just --list` and
-    prefer the narrowest relevant write recipe; use broad recipes such as `just full-write` only when no narrower
-    established recipe covers the touched files. Without a suitable recipe, use the repo's established formatter
-    commands or leave formatting unchanged.
-13. **Commit and tag in dependency order** - Process dependencies before dependents. Use one commit and one annotated
-    tag per package:
-    - Single-package commit: `docs: release <version>`
-    - Monorepo commit: `docs: release <package> <version>`
-    - Single-package tag: `v<version>` unless existing tags use bare semver.
-    - Monorepo tag: follow existing tag patterns from `previousTags`; default to `<package-dir>@<version>`.
-14. **Recommend pushing tags** - Do not push. After a successful non-dry-run release, end with `🚀 Push tags`, then
-    render the exact command alone so the newly created tag(s) reach the remote:
+1. Run discovery with the user arguments mapped directly. Exit `2` means the target is not a releasable Git/package
+   repository; exit `64` means invalid input. Stop on either.
+2. Require `workingTree.clean`. Do not absorb unrelated work.
+3. Resolve unknown or ambiguous package selection. An explicit user version remains single-package only.
+4. Inspect each target's complete `changedFiles` and the net diff from its previous tag. Decide whether the surviving
+   changes warrant a release. Runtime environments, refactors, documentation, tests, and tooling can all be relevant in
+   context; filenames never decide this.
+5. For every relevant stable target without an explicit version, choose patch, minor, or major from the consumer-facing
+   change. For beta releases, let the finalizer compute the mechanical transition.
+6. Run the finalizer. Review unsatisfied workspace edges. Accept its suggestion only for a simple dependency range when
+   that policy fits; choose peer and complex range policy explicitly. Add dependents and their agent-chosen release
+   versions, then rerun until the package set and dependency order are resolved.
+7. For a dry run, report the ordered package/version plan, range edits, changelog/tag/commit actions, and agent-decided
+   skips. Stop before writes.
+8. For a stable release, read `references/common-changelog.md` and write consumer-facing entries from the bounded net
+   diff. The agent owns entry selection, wording, importance, and category. Beta releases do not update changelogs.
+9. Update manifests and accepted dependency ranges. Validate every stable changelog with the helper.
+10. Format once using the repository's narrowest established command.
+11. Commit and tag dependencies before dependents. Use one commit and one annotated tag per package:
+    - single-package commit: `docs: release <version>`;
+    - monorepo commit: `docs: release <package> <version>`;
+    - single-package tag: follow observed `v<version>` or bare-semver facts;
+    - monorepo tag: follow observed package tag facts, defaulting to `<package-dir>@<version>`.
+12. Do not push. Recommend the exact `git push origin --tags` command after success.
 
-    ```bash
-    git push origin --tags
-    ```
+## Safety and Completion
 
-## Script Reference
+Helper failures mean malformed input, violated invariants, or failed validation; an agent decision remaining unresolved
+is data in the JSON, not a helper failure. Discovery and dry-run are read-only. Do not write changelogs before the final
+stable package set is known, and do not infer a tag convention when discovery reports observed facts.
 
-| Script                     | Purpose                                           |
-| -------------------------- | ------------------------------------------------- |
-| `scripts/plan-release.mjs` | Read-only release discovery and scoped diff facts |
+Dry-run completion requires a discovery-backed, agent-reviewed action preview with zero writes. Release completion
+requires validated manifests and stable changelogs, formatting, one commit and annotated tag per package in dependency
+order, and a report of created commits/tags and agent-decided skips.
 
-Planner output fields to use:
-
-- `packages` and `targets`: package identity, directory, name, version, `files`, dependency names, and peer dependency
-  names.
-- `previousTags`: per-package previous release tag and tag patterns used.
-- `changedFiles`, `includedFiles`, `excludedFiles`: scoped file lists for changelog and no-op decisions.
-- `dependencyEdges`: workspace dependency and peer dependency relationships.
-- `workingTree`: dirty-tree status that must be clean before release edits.
-- `needsSelection` and `errors`: package-selection or argument problems to resolve before proceeding.
-
-## Version Examples
-
-| Current Version | Release Type   | New Version     |
-| --------------- | -------------- | --------------- |
-| `1.2.3`         | Regular        | `1.2.4` (patch) |
-| `1.2.3`         | Beta           | `1.2.4-beta.1`  |
-| `1.2.3-beta.1`  | Beta           | `1.2.3-beta.2`  |
-| `1.2.3-beta.5`  | Regular        | `1.2.3`         |
-| `1.2.3`         | `2.0.0`        | `2.0.0`         |
-| `1.2.3`         | `2.0.0` + Beta | `2.0.0-beta.1`  |
-
-## Resources
-
-- `references/common-changelog.md` - Read only for regular releases after the final stable release package set is known.
-
-## Completion
-
-Dry-run completion is a planner-backed package/version/action preview with zero writes. Release completion requires the
-planned manifests and changelogs, repository formatting, one commit and annotated tag per target in dependency order,
-and a final report of created commits/tags and skipped packages.
-
-Render user-facing states consistently:
-
-- Dirty tree: lead with `### ⛔ Release stopped — working tree is not clean`, then show the exact short status.
-- Version choice: use `### ⚠️ Confirm release plan` and a table with package, current version, planned version, reason,
-  and dependency cascade.
-- Dry run: use `### 🔎 Release preview — no files, commits, or tags written`, followed by the ordered action table.
-- Success: use `### 🏁 Release complete`, a package/version/commit/tag table, skipped packages, `### 🧪 Verification`,
-  and the exact push-tags recommendation above.
-
-Keep planner JSON/errors, versions, hashes, tags, commands, and changelog content exact and undecorated.
+Use `### ⛔ Release stopped — working tree is not clean`, `### ⚠️ Confirm release plan`,
+`### 🔎 Release preview — no files, commits, or tags written`, or `### 🏁 Release complete` as applicable. Keep helper
+JSON, versions, hashes, tags, commands, and changelog text exact and undecorated.

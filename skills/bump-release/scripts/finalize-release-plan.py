@@ -218,6 +218,20 @@ def resolve_versions(discovery: dict[str, Any], explicit_args: list[str]) -> tup
         versions[package_id] = {"current": current, "planned": planned, "source": source, "resolved": planned is not None}
         if planned is None:
             unresolved.append({"package": package_id, "decision": "choose patch, minor, or major version"})
+    for package_id, explicit_version in explicit.items():
+        if package_id in versions:
+            continue
+        current = by_id[package_id].get("version")
+        if not isinstance(current, str):
+            raise InputError(f"package has no version: {package_id}")
+        Version.parse(current)
+        planned = beta_version(current, explicit_version) if discovery.get("beta") else explicit_version
+        versions[package_id] = {
+            "current": current,
+            "planned": planned,
+            "source": "cascade-explicit-beta" if discovery.get("beta") else "cascade-explicit",
+            "resolved": True,
+        }
     return versions, unresolved
 
 
@@ -239,8 +253,42 @@ def dependency_order(nodes: set[str], edges: list[dict[str, Any]]) -> tuple[list
             if indegree[dependent] == 0:
                 ready.append(dependent)
                 ready.sort()
-    remaining = sorted(nodes - set(ordered))
-    return ordered, [remaining] if remaining else []
+    cycles: list[list[str]] = []
+    stack: list[str] = []
+    on_stack: set[str] = set()
+    indexes: dict[str, int] = {}
+    lowlinks: dict[str, int] = {}
+    next_index = 0
+
+    def visit(node: str) -> None:
+        nonlocal next_index
+        indexes[node] = lowlinks[node] = next_index
+        next_index += 1
+        stack.append(node)
+        on_stack.add(node)
+        for adjacent in sorted(outgoing[node]):
+            if adjacent not in indexes:
+                visit(adjacent)
+                lowlinks[node] = min(lowlinks[node], lowlinks[adjacent])
+            elif adjacent in on_stack:
+                lowlinks[node] = min(lowlinks[node], indexes[adjacent])
+        if lowlinks[node] != indexes[node]:
+            return
+        component: list[str] = []
+        while True:
+            adjacent = stack.pop()
+            on_stack.remove(adjacent)
+            component.append(adjacent)
+            if adjacent == node:
+                break
+        component.sort()
+        if len(component) > 1 or node in outgoing[node]:
+            cycles.append(component)
+
+    for node in sorted(nodes):
+        if node not in indexes:
+            visit(node)
+    return ordered, sorted(cycles)
 
 
 def finalize(discovery: dict[str, Any], explicit_args: list[str]) -> dict[str, Any]:

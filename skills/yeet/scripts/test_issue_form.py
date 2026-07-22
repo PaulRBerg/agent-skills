@@ -31,6 +31,7 @@ class IssueFormTests(unittest.TestCase):
         self.assertEqual(self.form["labels"], ["bug"])
         self.assertEqual(self.form["issueType"], "Bug")
         by_id = {field["id"]: field for field in self.form["fields"]}
+        self.assertIn("__field_1", by_id)
         self.assertTrue(by_id["summary"]["required"])
         self.assertEqual(by_id["logs"]["render"], "shell")
         self.assertTrue(by_id["affected-surfaces"]["multiple"])

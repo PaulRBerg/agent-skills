@@ -9,176 +9,69 @@ description: "Squash a feature branch into one commit via soft reset to the merg
 
 # Git Squash
 
-Squash the current PR branch into one commit based on net branch changes relative to the default branch. Do not create
-or invoke a helper script. Run the Git commands directly.
+Squash the current feature branch into one commit representing its net change relative to the resolved default branch.
 
 ## Arguments
 
-Parse `$ARGUMENTS` for optional flags:
+- `--subject <line>`: require this exact first line in the replacement commit message.
+- `--base <branch>`: override default-branch detection.
 
-- `--subject <line>`: Override the generated commit subject line
-- `--base <branch>`: Override default-branch auto-detection
+Without `--subject`, the agent writes a conventional-commit subject from the surviving net diff. Without `--base`, the
+helper resolves `origin/HEAD`, then origin's advertised head, then local/remote `main`, `master`, or `trunk`.
 
-Defaults:
+## Plan Interface
 
-- Subject: infer a conventional-commit subject from the squashed changes themselves (see step 6's chore rule)
-- Base detection order: see [step 2](#2-resolve-the-base-branch)
+Resolve the helper from this `SKILL.md`. Write its JSON to a scratch path outside the repository so preflight remains
+clean:
 
-## Workflow
-
-### 1) Read-only Fact Gathering
-
-Gather and report the branch, clean-tree state, base candidate, ahead count, merge base, remote tracking state, and
-commits that would be replaced before mutating history. Stop on the first failure.
-
-Present these safety-critical facts in a plain compact table before mutation: branch, resolved base ref, merge base,
-commits replaced, tree state, remote state, and rollback anchor. Keep this preflight, commands, hashes, errors, and
-rollback wording undecorated.
-
-- Verify inside a Git worktree: `git rev-parse --is-inside-work-tree`
-- Verify not detached: `git symbolic-ref --quiet --short HEAD`
-- Verify working tree is clean: `git status --porcelain`
-- After base detection, stop if the current branch is the default branch
-
-```bash
-git rev-parse --is-inside-work-tree
-git symbolic-ref --quiet --short HEAD
-git status --porcelain
+```sh
+uv run "<skill-dir>/scripts/git-squash.py" plan \
+  [--cwd <repo>] [--base <branch>] [--subject <line>] > <plan.json>
 ```
 
-### 2) Resolve the Base Branch
+`plan` is read-only. It verifies the Git worktree, attached branch, clean tree/index, resolved base, non-default current
+branch, merge base, positive ahead count, and remote facts. It returns `schemaVersion: 1`, the immutable original HEAD,
+merge base, base ref, commits in chronological order, unique authors, tree/remote state, and rollback facts. A failed
+precondition exits without changing history.
 
-If `--base` was provided, use that branch name directly. Otherwise, detect the default branch in this order:
+Show the branch, base ref, merge base, commits replaced, tree state, remote state, and rollback HEAD in a compact plain
+table before mutation.
 
-1. `refs/remotes/origin/HEAD`
-2. `git remote show origin`
-3. `main`, `master`, `trunk`
+## Agent-Owned Commit Message
 
-After the branch name is resolved, normalize it to a usable ref by preferring the local branch and falling back to
-`origin/<branch>`. Stop if neither exists. Also stop if the current branch is the default branch, because the skill
-should never squash the default branch into itself.
+Inspect the plan's commits and the net diff from `mergeBase..originalHead`. The net diff is authoritative; intermediate
+commits supply intent and attribution only. Inspect targeted hunks when the summary is ambiguous.
 
-```bash
-git symbolic-ref --quiet --short refs/remotes/origin/HEAD
-git remote show origin
-git show-ref --verify --quiet "refs/heads/$default_branch"
-git show-ref --verify --quiet "refs/remotes/origin/$default_branch"
+Use `--subject` exactly when supplied. Otherwise choose the conventional type from the surviving outcome: `feat`, `fix`,
+`refactor`, `docs`, `test`, `build`, `ci`, `chore(deps)`, `style`, `perf`, `ai`, or `chore`. Do not call the change
+`chore` merely because it is a squash.
+
+Keep the subject imperative, lowercase after the prefix, specific, and without a trailing period. Add at most five body
+bullets for distinct surviving outcomes; omit the body when the subject is sufficient. Do not dump paths or statistics.
+Append one `Co-authored-by: Name <email>` trailer for each plan author other than the current Git user. The agent owns
+all semantic wording and must ensure every statement is supported by the net diff.
+
+Write the final message to a scratch file outside the repository.
+
+## Apply Interface
+
+```sh
+uv run "<skill-dir>/scripts/git-squash.py" apply \
+  --plan <plan.json> --message-file <message.txt>
 ```
 
-### 3) Find the Squash Boundary
+`apply` binds the rewrite to the plan's original HEAD, branch, merge base, base ref, clean state, rollback index, and
+optional subject. It revalidates them immediately before mutation; a stale plan fails without changing history. It
+soft-resets to the merge base, verifies the staged net diff is non-empty, and commits from the message file.
 
-Compute the merge-base between `HEAD` and the resolved default ref. That merge-base is the point where the branch
-diverged. Count how many commits are ahead of it. If the count is zero, there is nothing to squash.
+If any operation fails after mutation but before the replacement commit completes, the helper restores the original HEAD
+and exact index. It leaves working-tree files untouched. Do not reproduce the reset/rollback sequence manually or
+continue after a helper failure without inspecting its diagnostic and current Git state.
 
-```bash
-merge_base="$(git merge-base HEAD "$default_ref")"
-ahead_count="$(git rev-list --count "$merge_base..HEAD")"
-original_head="$(git rev-parse HEAD)"
-```
+## Report
 
-### 4) Collect Semantic Context Before Rewriting
+On success, report the plan's replaced count, resolved base ref, new hash, and subject. If the branch exists on origin,
+state the exact next action `git push --force-with-lease`; do not run it unless explicitly requested.
 
-Inspect the commits that will be squashed before mutating history. Use them to understand intent and distinct
-workstreams, but treat the staged net diff as the source of truth for what survives.
-
-- Read the commit list in chronological order: `git log --reverse --format='%H%x09%s' "$merge_base..HEAD"`
-- If subjects are vague or mixed, inspect the most important commits more deeply with
-  `git show --stat --summary --format=fuller <commit>`
-- Identify the dominant user-visible or developer-visible outcomes
-- Ignore intermediate work that does not survive in the final diff
-- Collect all unique authors from the squashed commits and identify which are co-authors (anyone other than the
-  committer of the squash commit). Use `git log --format='%aN <%aE>' "$merge_base..HEAD" | sort -u` to get the list,
-  then exclude the current user (`git config user.name` / `git config user.email`). Each remaining author becomes a
-  `Co-authored-by` trailer
-
-You are not writing a changelog of every commit. You are deriving one accurate commit message for the final net change.
-
-### 5) Rewrite the Branch into a Single Staged Diff
-
-Record `original_head` immediately before mutation. Soft-reset to the merge-base; this keeps the branch's net changes
-staged while removing the intermediate commits from history. Until the replacement commit succeeds, any failure must
-restore `HEAD` and the index with `git reset --soft "$original_head"`. Because preflight requires a clean tree, that
-rollback returns the branch to its exact pre-squash commit and staged state without touching working-tree files.
-
-```bash
-original_head="$(git rev-parse HEAD)"
-git reset --soft "$merge_base"
-if git diff --cached --quiet; then
-  git reset --soft "$original_head"
-  exit 1
-fi
-```
-
-### 6) Build the Commit Message from Commits + Net Diff
-
-Use `--subject` when provided. Otherwise, generate a conventional-commit subject by semantically analyzing:
-
-- all commits in `"$merge_base..HEAD"`
-- the staged net diff after the soft reset
-- targeted hunks from `git diff --cached` when the summary is ambiguous
-
-Infer the commit type from the surviving change, not from the fact that a squash happened:
-
-- New functionality -> `feat`
-- Bug fix -> `fix`
-- Refactor without behavior change -> `refactor`
-- Docs only -> `docs`
-- Tests only -> `test`
-- Build or tooling -> `build`
-- CI workflow -> `ci`
-- Dependency updates -> `chore(deps)`
-- Formatting only -> `style`
-- Performance -> `perf`
-- AI agent/config updates -> `ai`
-- General maintenance -> `chore`
-
-Do not default to `chore` unless the net change is actually maintenance work.
-
-Subject requirements:
-
-- Format: `type(scope): description` or `type: description`
-- Imperative mood, lowercase, no trailing period
-- Describe what changed in English, not that commits were squashed
-- Keep it specific; `feat(streaming): add batch cancel support` is acceptable, `chore: squash branch changes` is not
-- Keep it short enough for a normal Git subject line
-
-Body requirements:
-
-- Describe only net changes that still exist after the squash
-- Use 1-5 hyphen bullets for non-trivial changes
-- Summarize distinct behavior, API, data model, tooling, test, or documentation changes in natural language
-- Mention filenames or raw path lists only when a name is semantically necessary for clarity
-- Do not dump `shortstat`, `name-status`, or file inventories into the message
-- Skip the body entirely if the change is small and the subject fully captures it
-
-Validation requirements before committing:
-
-- If the message reads like a file listing, stats dump, or "squash net changes" meta-commentary, rewrite it
-- If multiple commits were squashed but only one net concern remains, write one focused message for that concern
-- If several distinct net concerns remain, reflect them as concise bullets in the body
-- Make sure every bullet is supported by the staged diff
-
-Helpful commands:
-
-```bash
-git log --reverse --format='%H%x09%s' "$merge_base..HEAD"
-git diff --cached --stat
-git diff --cached
-```
-
-If co-authors were collected in step 4, append a blank line followed by one `Co-authored-by: Name <email>` trailer per
-co-author at the end of the message. Do not add trailers for the current user.
-
-Write the final message to a temporary file and commit with `git commit -F`.
-
-### 7) Report the Result
-
-After the commit succeeds:
-
-- Report how many commits were squashed
-- Report which default ref was used
-- Report the new commit hash and subject
-- If the branch already exists on remote, remind the user to force-push with lease
-
-Lead the success receipt with `### ✅ Squashed — <old count> commits → 1`. Keep the next action plain and exact:
-`git push --force-with-lease`. Do not run it unless the user explicitly requested the push.
+Lead with `### ✅ Squashed — <old count> commits → 1`. Keep preflight facts, hashes, commands, errors, and rollback
+wording plain and exact.

@@ -48,6 +48,8 @@ class SessionTests(unittest.TestCase):
             self.assertEqual(segmented["segment"], 1)
             self.assertEqual(segmented["direction"], "higher")
             self.assertEqual(segmented["best"], 10)
+            self.assertEqual(segmented["budgets"]["runs"]["used"], 5)
+            self.assertFalse(segmented["budgets"]["cost"]["exhausted"])
 
     def test_malformed_jsonl_and_compatibility_wrappers(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

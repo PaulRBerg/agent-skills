@@ -106,6 +106,8 @@ class FinalizerTests(unittest.TestCase):
         self.assertIsNone(by_range[">=1 <2"]["satisfied"])
         self.assertEqual(by_range["workspace:^1.2.3"]["suggestedRange"], "workspace:^2.0.0")
         self.assertFalse(finalizer.satisfies("2.0.0-beta.1", "^2.0.0"))
+        cascaded = finalizer.finalize(payload, ["a=2.0.0", "b=2.0.1"])
+        self.assertEqual(cascaded["versions"]["b"]["planned"], "2.0.1")
 
     def test_cycles_are_reported_without_failing(self) -> None:
         payload = discovery()
@@ -139,6 +141,7 @@ class ChangelogTests(unittest.TestCase):
         errors = validator.validate(broken, "2.0.0", "2026-07-22", "v2.0.0")
         self.assertTrue(any("repeat" in error or "order" in error for error in errors))
         self.assertTrue(validator.validate(text, "2.0.0", "2026-07-22", "release-2.0.0"))
+        self.assertTrue(validator.validate(text.replace("[2.0.0]", "2.0.0", 1), "2.0.0", "2026-07-22", None))
 
 
 if __name__ == "__main__":

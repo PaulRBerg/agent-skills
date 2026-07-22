@@ -36,34 +36,12 @@ transitive resolution.
 
 ## Update Bun Catalogs
 
-After applying all updates (Step 5), check the **root** `package.json` for Bun workspace catalogs. Bun monorepos can
-centralize dependency versions using `catalog` and `catalogs` fields inside the `workspaces` object:
+When the root `package.json` contains `workspaces.catalog` or `workspaces.catalogs`, use
+`scripts/update-bun-catalogs.py` with the saved Taze plan and agent-accepted include set. Preview before manifest
+writes; after the Taze write, rerun the same command with `--write` before regenerating the lockfile.
 
-```json
-{
-  "workspaces": {
-    "packages": ["packages/*"],
-    "catalog": {
-      "react": "^19.0.0"
-    },
-    "catalogs": {
-      "testing": {
-        "jest": "^30.0.0"
-      }
-    }
-  }
-}
-```
-
-Workspace packages reference these with `"react": "catalog:"` (default catalog) or `"jest": "catalog:testing"` (named
-catalog).
-
-For each package that was updated in Step 5:
-
-1. Check if it appears in `workspaces.catalog` — if so, update the version there
-2. Check each named catalog in `workspaces.catalogs` — if the package appears, update the version there
-
-Preserve the existing range prefix (`^`, `~`, or none) from the catalog entry. For example, if the catalog has
-`"react": "^19.0.0"` and taze bumped react to `19.1.0`, update the catalog to `"react": "^19.1.0"`.
+The helper owns default/named catalog discovery, multiple occurrences, prefix preservation, stale-plan validation, and
+atomic replacement. The agent owns which upgrades are accepted and whether a major migration is compatible. Do not
+manually reproduce the catalog transition or weaken a helper failure.
 
 Use `Edit` to apply the version changes directly to the root `package.json`.
