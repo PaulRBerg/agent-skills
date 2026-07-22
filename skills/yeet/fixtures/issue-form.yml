@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a synthetic bug
+title: "[BUG] "
+labels:
+  - bug
+type: Bug
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: State what broke.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: shell
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+      multiple: false
+    validations:
+      required: true
+  - type: dropdown
+    id: affected-surfaces
+    attributes:
+      label: Affected surfaces
+      options:
+        - CLI
+        - Extension
+      multiple: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Attestations
+      options:
+        - label: I searched for duplicates
+          required: true
+        - label: I can provide more details
