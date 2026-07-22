@@ -13,17 +13,21 @@ Publish and propagate only the catalog skills changed in the current chat, or in
 
 ### 1. Resolve the Skill Sets
 
-Run in one of two modes, chosen by how the user invoked this skill:
+Run in one of three modes, chosen by how the user invoked this skill:
 
-- **Chat mode** (default): use the chat transcript as the source of ownership and Git state as supporting evidence.
-  Inspect session-modified paths under `skills/<name>/`.
+- **Chat mode** (default when the working tree has session-modified paths): use the chat transcript as the source of
+  ownership and Git state as supporting evidence. Inspect session-modified paths under `skills/<name>/`.
+- **Unpushed-commits mode** (default when the working tree is clean and the user did not name commits): use the commits
+  on the current branch that are ahead of its upstream (`git log @{upstream}..HEAD`) as the source of ownership, in
+  place of the transcript, via `git show --stat` per commit. If the branch has no upstream configured or is not ahead of
+  it, fall back to chat mode.
 - **Commit-range mode**: the user names commits instead of relying on this chat's own edits — a date ("today"), a range,
   specific SHAs, or similar. Resolve the range with Git (e.g. `git log --since/--until`, explicit SHAs) and use
   `git show --stat` per commit as the source of ownership in place of the transcript. Confirm every resolved commit is
   reachable from the current branch; if some are and some aren't, stop and report the mismatch rather than guessing
   which the user meant.
 
-In either mode, inspect the resolved paths under `skills/<name>/` and classify every attributable skill as introduced,
+In every mode, inspect the resolved paths under `skills/<name>/` and classify every attributable skill as introduced,
 modified, or deleted.
 
 - Ignore changes outside `skills/`, including internal skills and documentation.
@@ -51,9 +55,9 @@ $commit --push
 Do not add `--all`. Wait for both the commit and push to succeed. On failure, stop without changing global skill
 installations.
 
-In commit-range mode the resolved commits are usually already committed, sometimes already pushed. Skip creating a new
-commit when the working tree is clean; still push if the branch is ahead of its upstream. If matching uncommitted
-changes exist locally, commit them as in chat mode before pushing.
+In commit-range mode and unpushed-commits mode the resolved commits are usually already committed, sometimes already
+pushed. Skip creating a new commit when the working tree is clean; still push if the branch is ahead of its upstream. If
+matching uncommitted changes exist locally, commit them as in chat mode before pushing.
 
 ### 3. Propagate Only the Recorded Skills
 
