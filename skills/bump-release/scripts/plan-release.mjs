@@ -66,6 +66,7 @@ if (options.version && selectedTargets.length > 1) {
 }
 
 const output = {
+  schemaVersion: 2,
   cwd,
   repoRoot,
   mode: isMonorepo ? "monorepo" : "single-package",
@@ -81,17 +82,14 @@ const output = {
   dependencyEdges: dependencyEdges(packageRecords),
   previousTags: Object.fromEntries(packageRecords.map((pkg) => [pkg.id, previousTag(pkg, isMonorepo, releaseTags)])),
   changedFiles: {},
-  includedFiles: {},
-  excludedFiles: {},
+  changeHints: { authoritative: false, byPackage: {} },
 };
 
 for (const pkg of packageRecords) {
   const tag = output.previousTags[pkg.id]?.tag ?? null;
   const changed = changedFiles(repoRoot, pkg, tag);
-  const classified = classifyFiles(pkg, changed);
   output.changedFiles[pkg.id] = changed;
-  output.includedFiles[pkg.id] = classified.included;
-  output.excludedFiles[pkg.id] = classified.excluded;
+  output.changeHints.byPackage[pkg.id] = changed.map((file) => ({ path: file, hint: fileHint(pkg, file) }));
 }
 
 console.log(`${JSON.stringify(output, null, 2)}\n`);
@@ -445,54 +443,28 @@ function changedFiles(root, pkg, tag) {
     .sort();
 }
 
-function classifyFiles(pkg, files) {
-  const included = [];
-  const excluded = [];
-
-  for (const file of files) {
-    const packageRel = pkg.dir === "." ? file : slash(path.relative(pkg.dir, file));
-    const filesMatch = pkg.files ? matchesFilesField(packageRel, pkg.files) || packageRel === "package.json" : true;
-    const production = pkg.files ? filesMatch : isProductionFile(file, packageRel);
-    const entry = { path: file, reason: production ? "included" : exclusionReason(file, packageRel) };
-    (production ? included : excluded).push(entry);
-  }
-
-  return { included, excluded };
-}
-
-function matchesFilesField(packageRel, filesField) {
-  const rel = packageRel.replace(/^\.\//, "");
-  return filesField.some((entry) => {
-    const normalized = normalizeGlob(entry).replace(/\/$/, "");
-    if (!hasGlob(normalized)) return rel === normalized || rel.startsWith(`${normalized}/`);
-    return matchGlob(rel, normalized);
-  });
-}
-
-function isProductionFile(repoRel, packageRel) {
+function fileHint(pkg, repoRel) {
   const rel = slash(repoRel);
-  const local = slash(packageRel);
-  const base = path.basename(local);
-
-  if (/^(\.github|\.gitlab|\.circleci|\.husky)\//.test(rel)) return false;
-  if (/(^|\/)(__tests__|tests?|fixtures?|mocks?)\//i.test(local)) return false;
-  if (/\.(test|spec|bench|fixture)\.[cm]?[jt]sx?$/i.test(base)) return false;
-  if (/^(eslint|prettier|biome|vitest|jest|commitlint|lint-staged|lefthook|husky)\.config\./.test(base)) return false;
-  if (/^(\.eslintrc|\.prettierrc|\.lintstagedrc|\.npmrc|\.node-version|\.nvmrc)$/.test(base)) return false;
-  if (/^(justfile|Makefile|Dockerfile)$/.test(base)) return false;
-  if (/^(pnpm-lock\.yaml|bun\.lockb?|package-lock\.json|yarn\.lock)$/.test(base)) return false;
-  return true;
-}
-
-function exclusionReason(repoRel, packageRel) {
-  const rel = slash(repoRel);
+  const packageRel = pkg.dir === "." ? repoRel : slash(path.relative(pkg.dir, repoRel));
   const local = slash(packageRel);
   const base = path.basename(local);
   if (/^(\.github|\.gitlab|\.circleci|\.husky)\//.test(rel)) return "ci";
   if (/(^|\/)(__tests__|tests?|fixtures?|mocks?)\//i.test(local) || /\.(test|spec|bench|fixture)\.[cm]?[jt]sx?$/i.test(base)) {
     return "test";
   }
-  return "tooling";
+  if (/^(eslint|prettier|biome|vitest|jest|commitlint|lint-staged|lefthook|husky)\.config\./.test(base)) return "tooling";
+  if (/^(\.eslintrc|\.prettierrc|\.lintstagedrc|\.npmrc|\.node-version|\.nvmrc)$/.test(base)) return "tooling";
+  if (/^(justfile|Makefile|Dockerfile)$/.test(base)) return "tooling";
+  if (/^(pnpm-lock\.yaml|bun\.lockb?|package-lock\.json|yarn\.lock)$/.test(base)) return "tooling";
+  if (pkg.files) {
+    const filesMatch = pkg.files.some((entry) => {
+      const normalized = normalizeGlob(entry).replace(/\/$/, "");
+      if (!hasGlob(normalized)) return local === normalized || local.startsWith(`${normalized}/`);
+      return matchGlob(local, normalized);
+    });
+    if (!filesMatch && local !== "package.json") return "outside-package-files";
+  }
+  return "runtime-or-docs";
 }
 
 function readWorkingTree(root) {

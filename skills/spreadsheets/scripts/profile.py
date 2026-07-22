@@ -5,7 +5,7 @@
 """Profile a delimited spreadsheet file and print JSON or Markdown.
 
 Read-only. Uses peek.py for structure, qsv for fast column statistics when
-available, and a local scan for spreadsheet formula-injection risks.
+available, and a local scan for cells with spreadsheet formula prefixes.
 
 Usage:
   uv run scripts/profile.py data.tsv
@@ -136,7 +136,7 @@ def parse_number(value: str) -> int | float | str | None:
         return value
 
 
-def scan_formula_injection(
+def scan_formula_prefix_cells(
     file: Path,
     delimiter: str,
     encoding: str,
@@ -174,30 +174,6 @@ def header_quality(header: list[str]) -> dict[str, Any]:
     return {"duplicates": duplicate_headers, "unsafe_house_headers": unsafe, "empty_header_positions": empty}
 
 
-def recommendations(report: dict[str, Any]) -> list[str]:
-    recs: list[str] = []
-    peek_report = report.get("peek", {})
-    if peek_report.get("issues"):
-        recs.append("Fix structural issues before transforming or aggregating.")
-    if not report["tools"]["qsv"]["available"]:
-        recs.append("Install qsv for faster validation, profiling, frequency, and Excel export workflows.")
-    if not report["tools"]["duckdb"]["available"]:
-        recs.append("Install DuckDB for SQL joins, pivots, and exact DECIMAL aggregations.")
-    formula_count = report.get("formula_injection", {}).get("count", 0)
-    if formula_count:
-        recs.append("Escape external cells starting with =, +, or @ before writing to CSV/XLSX.")
-    high_cardinality = [
-        col["field"]
-        for col in report.get("stats", {}).get("columns", [])
-        if isinstance(col.get("uniqueness_ratio"), (float, int)) and col["uniqueness_ratio"] >= 0.95
-    ]
-    if high_cardinality:
-        recs.append("Treat high-uniqueness columns as identifiers; avoid full frequency tables on them.")
-    if not recs:
-        recs.append("File is structurally clean; proceed with qsv for simple operations or DuckDB for SQL.")
-    return recs
-
-
 def profile_delimited(args: argparse.Namespace) -> dict[str, Any]:
     peek_report, _should_fail = peek.inspect_path(
         args.file,
@@ -209,6 +185,7 @@ def profile_delimited(args: argparse.Namespace) -> dict[str, Any]:
     )
     delimiter = peek_report["delimiter"]
     report: dict[str, Any] = {
+        "schema_version": 2,
         "file": str(args.file),
         "kind": "delimited",
         "tools": {"qsv": tool_version("qsv"), "duckdb": tool_version("duckdb")},
@@ -216,7 +193,7 @@ def profile_delimited(args: argparse.Namespace) -> dict[str, Any]:
         "header_quality": header_quality(peek_report["header"]),
         "stats": collect_stats(args.file, delimiter),
         "frequency": collect_frequency(args.file, delimiter, args.top, args.redact_samples),
-        "formula_injection": scan_formula_injection(
+        "formula_prefix_cells": scan_formula_prefix_cells(
             args.file,
             delimiter,
             peek_report["encoding"],
@@ -224,8 +201,8 @@ def profile_delimited(args: argparse.Namespace) -> dict[str, Any]:
             args.redact_samples,
         ),
     }
-    report["recommendations"] = recommendations(report)
-    report["status"] = "issues_found" if peek_report["issues"] or report["formula_injection"]["count"] else "ok"
+    formula_issue = args.external_data and report["formula_prefix_cells"]["count"] > 0
+    report["status"] = "issues_found" if peek_report["issues"] or formula_issue else "ok"
     return report
 
 
@@ -249,17 +226,12 @@ def profile_workbook(args: argparse.Namespace) -> dict[str, Any]:
                 "stderr": result.get("stderr", "").strip(),
             }
     return {
+        "schema_version": 2,
         "file": str(args.file),
         "kind": "workbook",
         "status": "ok" if metadata.get("ok") else "needs_manual_workflow",
         "tools": {"qsv": tool_version("qsv"), "duckdb": tool_version("duckdb")},
         "metadata": metadata,
-        "recommendations": [
-            "Use qsv excel for fast values-only export or sheet metadata.",
-            "Use DuckDB read_xlsx(all_varchar=true) for SQL over .xlsx values.",
-            "Use openpyxl only for editing existing workbook structure or formulas.",
-            "Run recalc.py after writing formulas and treat non-success as a failed delivery.",
-        ],
     }
 
 
@@ -283,8 +255,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.extend(f"- `{item['code']}`: {item['message']}" for item in peek_report["issues"])
         else:
             lines.append("- None")
-        if report["formula_injection"]["count"]:
-            lines.append(f"- `formula_injection`: {report['formula_injection']['count']} risky cells")
+        if report["formula_prefix_cells"]["count"]:
+            lines.append(f"- `formula_prefix_cells`: {report['formula_prefix_cells']['count']} cells")
         lines.append("")
         lines.append("## Columns")
         lines.append(markdown_table_row(["field", "type", "nulls", "cardinality", "unique"]))
@@ -310,9 +282,6 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(f"- Sheets: {payload.get('sheet_count', payload.get('number_of_sheets', 'unknown'))}")
         else:
             lines.append(f"- Metadata unavailable: {metadata.get('stderr') or metadata.get('error') or 'qsv missing'}")
-    lines.append("")
-    lines.append("## Recommendations")
-    lines.extend(f"- {item}" for item in report["recommendations"])
     return "\n".join(lines) + "\n"
 
 
@@ -323,6 +292,11 @@ def main() -> None:
     parser.add_argument("--top", type=int, default=5, help="top values per column for qsv frequency")
     parser.add_argument("--house", action="store_true", help="also enforce authored TSV house conventions")
     parser.add_argument("--redact-samples", action="store_true", help="redact sample and frequency values")
+    parser.add_argument(
+        "--external-data",
+        action="store_true",
+        help="treat formula-prefix cells as external-data safety issues",
+    )
     parser.add_argument("--markdown", action="store_true", help="print Markdown instead of JSON")
     parser.add_argument("--engine", choices=("auto", "python"), default="auto", help="peek.py engine")
     args = parser.parse_args()

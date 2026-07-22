@@ -66,10 +66,27 @@ def test_profile(tmp: Path) -> None:
     _, payload = run_json(
         [sys.executable, str(PROFILE), str(risky), "--redact-samples", "--top", "2"]
     )
-    assert payload["status"] == "issues_found"
-    assert payload["formula_injection"]["count"] == 2
-    assert payload["formula_injection"]["first"][0]["value"] == "<redacted>"
+    assert payload["schema_version"] == 2
+    assert payload["status"] == "ok"
+    assert payload["formula_prefix_cells"]["count"] == 2
+    assert payload["formula_prefix_cells"]["first"][0]["value"] == "<redacted>"
+    assert "recommendations" not in payload
     assert payload["stats"]["available"] in (True, False)
+
+    _, external = run_json([sys.executable, str(PROFILE), str(risky), "--external-data"])
+    assert external["status"] == "issues_found"
+
+    high_cardinality = tmp / "high-cardinality.tsv"
+    high_cardinality.write_text("value\nfirst\nsecond\n", encoding="utf-8")
+    _, cardinality = run_json([sys.executable, str(PROFILE), str(high_cardinality)])
+    assert "recommendations" not in cardinality
+
+    workbook = tmp / "metadata.xlsx"
+    wb = Workbook()
+    wb.save(workbook)
+    _, workbook_profile = run_json([sys.executable, str(PROFILE), str(workbook)])
+    assert workbook_profile["schema_version"] == 2
+    assert "recommendations" not in workbook_profile
 
 
 def test_recalc(tmp: Path) -> None:
