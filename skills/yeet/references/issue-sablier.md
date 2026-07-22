@@ -50,8 +50,9 @@ Default template:
 </details>
 ```
 
-Use task lists only for genuinely trackable work and tables only for repeated comparable fields. See
-`writing.md > Link Formatting` for links. Omit "Files Affected" if no files are specified.
+Use task lists only for genuinely trackable work and tables only for repeated comparable fields. Order items per
+`writing.md > List Ordering`. See `writing.md > Link Formatting` for links. Omit "Files Affected" if no files are
+specified.
 
 ## Create the Issue
 

@@ -62,3 +62,9 @@ on his behalf, and never mention Twitter, training data, or this skill in any ge
 
 Use Markdown links in ordinary prose. For repository files, link the repo-relative path to the appropriate GitHub blob
 or permalink; prefer commit permalinks when citing stable lines. Omit a files section when it adds no useful context.
+
+## List Ordering
+
+Order items alphabetically within each section or header by default — task lists, bullet lists, and other repeated items
+alike. Deviate only for a clear reason (priority, chronological sequence, dependency order) and let the section's own
+logic carry that reason; don't call out the deviation in the generated text.
