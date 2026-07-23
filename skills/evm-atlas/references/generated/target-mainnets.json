@@ -131,6 +131,16 @@
       "routeMesh": true
     },
     {
+      "chainName": "Filecoin",
+      "chainId": 314,
+      "slug": "filecoin",
+      "accountActivityModel": "cross-vm",
+      "primaryPublicRpc": "https://api.node.glif.io/rpc/v1",
+      "nativeCurrencySymbol": "FIL",
+      "explorerUrl": "https://filecoin.blockscout.com",
+      "routeMesh": true
+    },
+    {
       "chainName": "Fraxtal",
       "chainId": 252,
       "slug": "fraxtal",

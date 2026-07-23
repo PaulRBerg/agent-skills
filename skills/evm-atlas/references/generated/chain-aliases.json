@@ -76,6 +76,26 @@
       "chainId": 250
     },
     {
+      "alias": "fevm",
+      "chainName": "Filecoin",
+      "chainId": 314
+    },
+    {
+      "alias": "filecoin evm",
+      "chainName": "Filecoin",
+      "chainId": 314
+    },
+    {
+      "alias": "fvm",
+      "chainName": "Filecoin",
+      "chainId": 314
+    },
+    {
+      "alias": "Filecoin Mainnet",
+      "chainName": "Filecoin",
+      "chainId": 314
+    },
+    {
       "alias": "frax",
       "chainName": "Fraxtal",
       "chainId": 252

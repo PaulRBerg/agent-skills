@@ -55,6 +55,7 @@ Route these target chains to Blockscout when available, then to the `primaryPubl
 | Chiliz          | `88888`   | Not returned by the live chainlist                                             |
 | Core Dao        | `1116`    | Not returned by the live chainlist                                             |
 | Fantom          | `250`     | Not returned by the live chainlist                                             |
+| Filecoin        | `314`     | Not returned by the live chainlist                                             |
 | IoTeX           | `4689`    | Not returned by the live chainlist                                             |
 | Lightlink       | `1890`    | Not returned by the live chainlist                                             |
 | Mode            | `34443`   | Not returned by the live chainlist                                             |

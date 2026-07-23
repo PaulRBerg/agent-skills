@@ -114,6 +114,13 @@
       ]
     },
     {
+      "chainName": "Filecoin",
+      "chainId": 314,
+      "fallbackPublicRpcs": [
+        "https://314.rpc.thirdweb.com"
+      ]
+    },
+    {
       "chainName": "Fraxtal",
       "chainId": 252,
       "fallbackPublicRpcs": [

@@ -170,6 +170,18 @@
         "instanceUrl": "https://ftmscout.com/"
       }
     },
+    "filecoin": {
+      "primaryPublicRpc": "https://api.node.glif.io/rpc/v1",
+      "fallbackPublicRpcs": ["https://314.rpc.thirdweb.com"],
+      "routeMesh": true,
+      "etherscan": { "support": "unsupported" },
+      "blockscout": {
+        "status": "observed",
+        "hostedBy": "blockscout",
+        "instanceUrl": "https://filecoin.blockscout.com/"
+      },
+      "chainscoutNamePattern": "Filecoin|Filecoin Virtual Machine|FVM"
+    },
     "fraxtal": {
       "primaryPublicRpc": "https://rpc.frax.com",
       "fallbackPublicRpcs": [

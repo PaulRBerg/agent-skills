@@ -52,6 +52,7 @@ Observed on 2026-07-08. Presence here does not override the canonical explorer/R
 | Celo            | `42220`    | CELO   | blockscout | https://celo.blockscout.com/                     |                                                   |
 | Ethereum        | `1`        | ETH    | blockscout | https://eth.blockscout.com/                      |                                                   |
 | Fantom          | `250`      | FTM    | self       | https://ftmscout.com/                            |                                                   |
+| Filecoin        | `314`      | FIL    | blockscout | https://filecoin.blockscout.com/                 |                                                   |
 | Gnosis          | `100`      | xDAI   | blockscout | https://gnosis.blockscout.com/                   |                                                   |
 | HyperEVM        | `999`      | HYPE   | self       | https://www.hyperscan.com/                       | Chainscout marks `isTestnet=true`                 |
 | Lightlink       | `1890`     | ETH    | blockscout | https://phoenix.lightlink.io/                    |                                                   |
