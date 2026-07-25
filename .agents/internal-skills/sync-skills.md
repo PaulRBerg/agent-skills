@@ -66,8 +66,11 @@ identical, adjusted only for the agent noun and runtime:
 Treat these as out of scope unless the request explicitly names them:
 
 - Launch mechanics: `run-codex-handoff.sh` and its artifacts vs Agent-tool calls.
-- Codex-only content: model/effort/timeout selection tables, progress streams, Monitor guidance, sentinel handling, and
-  Codex command conventions.
+- Codex-only content: effort and timeout selection, progress streams, Monitor guidance, sentinel handling, and Codex
+  command conventions.
+- Each skill's model selection table and its rules about escalating or re-running a failed agent on another model. Both
+  skills have a selection table, but they are intentionally different — Codex tiers model, effort, and timeout together,
+  while Claude selects only between two model aliases — so never normalize them to each other.
 - Status reporting: codex-handoff's dashboard system vs claude-handoff's concise prose summary.
 - Frontmatter and `references/`/`scripts/` contents.
 

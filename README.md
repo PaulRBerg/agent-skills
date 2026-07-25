@@ -23,7 +23,7 @@ bunx skills add PaulRBerg/agent-skills
 | autoresearch              | Autonomous experiment loop                                 |
 | bump-deps                 | Node.js dependency updates via taze                        |
 | bump-release              | Release workflow with changelog, tagging                   |
-| claude-handoff            | Delegate approved Claude plans to Sonnet subagents         |
+| claude-handoff            | Delegate approved Claude plans to Sonnet or Opus subagents |
 | cli-cast                  | Foundry cast CLI guidance                                  |
 | cli-gh                    | GitHub CLI operations                                      |
 | cli-just                  | Just command runner guidance                               |
