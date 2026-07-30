@@ -37,8 +37,11 @@ boundary.
    read `references/workflows/blockscan-balances.md` first.
 2. For a specific transaction hash — resolving which target chain it belongs to, or its status, parties, value, fee, or
    timestamp — read `references/workflows/blockscan-tx-lookup.md` first, whether or not the chain is already known. For
-   DEX interpretation, then acquire the exact receipt and logs through `references/workflows/provider-routing.md` before
-   loading the DEX workflow or a protocol reference.
+   an OP Mainnet target known or suspected to predate the final regenesis, then read
+   `references/explorers/optimism-pre-regenesis.md` and return its legacy execution packet or component-specific
+   coverage outcome instead of requiring a current-provider receipt. Otherwise, for DEX interpretation, acquire the
+   exact receipt and logs through `references/workflows/provider-routing.md` before loading the DEX workflow or a
+   protocol reference.
 3. For an address-wide historical-activity or prb-finance bootstrap sweep, read `references/workflows/address-sweeps.md`
    and use its deterministic plan/evaluate helper. For current holdings, use
    `references/workflows/blockscan-balances.md` first and provider routing for gaps.
