@@ -51,6 +51,46 @@ def discovery(*, beta: bool = False) -> dict:
 
 
 class PlannerTests(unittest.TestCase):
+    def test_pnpm_config_only_file_is_single_package_but_package_globs_are_monorepo(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            git(repo, "init", "-q", "-b", "main")
+            git(repo, "config", "user.name", "Test")
+            git(repo, "config", "user.email", "test@example.com")
+            (repo / "package.json").write_text('{"name":"demo","version":"1.0.0"}\n')
+            (repo / "pnpm-workspace.yaml").write_text("minimumReleaseAge: 1440\n")
+            git(repo, "add", "package.json", "pnpm-workspace.yaml")
+            git(repo, "commit", "-qm", "initial")
+
+            result = subprocess.run(
+                ["node", str(PLANNER), "--cwd", str(repo), "--package", "."],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["mode"], "single-package")
+            self.assertEqual([package["id"] for package in payload["packages"]], ["demo"])
+            self.assertEqual([target["id"] for target in payload["targets"]], ["demo"])
+
+            package_dir = repo / "packages" / "app"
+            package_dir.mkdir(parents=True)
+            (package_dir / "package.json").write_text('{"name":"app","version":"1.0.0"}\n')
+            (repo / "pnpm-workspace.yaml").write_text("packages:\n  - packages/*\n")
+            git(repo, "add", "package.json", "pnpm-workspace.yaml", "packages/app/package.json")
+            git(repo, "commit", "-qm", "add workspace package")
+
+            result = subprocess.run(
+                ["node", str(PLANNER), "--cwd", str(repo)],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["mode"], "monorepo")
+            self.assertEqual([package["id"] for package in payload["packages"]], ["packages/app"])
+            self.assertTrue(payload["needsSelection"])
+
     def test_changed_files_are_complete_and_hints_are_not_authoritative(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)

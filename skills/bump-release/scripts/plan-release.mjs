@@ -47,7 +47,7 @@ if (!fs.existsSync(rootPackagePath)) {
 const rootPackage = readJson(rootPackagePath, argErrors);
 const hasPnpmWorkspace = fs.existsSync(path.join(repoRoot, "pnpm-workspace.yaml"));
 const workspacePatterns = workspaceGlobs(repoRoot, rootPackage);
-const isMonorepo = workspacePatterns.length > 0 || hasPnpmWorkspace;
+const isMonorepo = workspacePatterns.length > 0;
 const packageRecords = isMonorepo
   ? discoverWorkspacePackages(repoRoot, workspacePatterns, argErrors, { preferPnpm: hasPnpmWorkspace })
   : [readPackage(repoRoot, repoRoot, argErrors)].filter(Boolean);
