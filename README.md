@@ -34,7 +34,7 @@ bunx skills add PaulRBerg/agent-skills
 | commit                    | Git commit with conventional commits                       |
 | create-skill              | Bootstrap a new agent skill                                |
 | effect-ts                 | Effect-TS patterns and guidance                            |
-| evm-atlas                 | EVM chain/account lookup + cross-chain data routing        |
+| evm-atlas                 | EVM lookup + DEX transaction/order interpretation          |
 | find-tool                 | Find and compare current developer tools                   |
 | frontend-design           | Distinctive, subject-specific frontend design              |
 | fresh-eyes-sweep          | Meticulous whole-repository audit and verified fixes       |
