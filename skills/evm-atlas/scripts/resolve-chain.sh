@@ -79,6 +79,22 @@ expected_pattern=$(target_name_pattern "$chain_id") || {
   exit 2
 }
 
+unsafe_reason() {
+  case "$1" in
+    250) printf '%s\n' 'Chainscout still lists self-hosted FTMScout at https://ftmscout.com/, but as checked 2026-07-31 its frontend returns HTTP 200 while /api/v2/* data routes return HTTP 500; do not use it for evidence' ;;
+    2020) printf '%s\n' 'Chainscout returns a different network for `2020`; app.roninchain.com blocks scripted access, so verify through chrome-devtools/Chromium instead of curl or WebFetch' ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if reason=$(unsafe_reason "$chain_id"); then
+  echo "Error: chain_id=$chain_id is marked unsafe in the evm-atlas overlay." >&2
+  echo "Reason: $reason" >&2
+  exit 1
+fi
+
 resp=$(curl -fsS "https://chains.blockscout.com/api/chains/$chain_id" 2>/dev/null) || {
   echo "Error: Chainscout request failed for chain_id=$chain_id" >&2
   exit 1

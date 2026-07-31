@@ -160,6 +160,9 @@ function validateOverlay(data, registryChains) {
       assertString(row.blockscout.hostedBy, `${chain.slug}.blockscout.hostedBy`);
       assertString(row.blockscout.instanceUrl, `${chain.slug}.blockscout.instanceUrl`);
     }
+    if (row.blockscout.status === "unsafe") {
+      assertString(row.blockscout.notes, `${chain.slug}.blockscout.notes`);
+    }
     if (row.chainscoutNamePattern !== undefined) {
       assertString(row.chainscoutNamePattern, `${chain.slug}.chainscoutNamePattern`);
     }
@@ -379,7 +382,7 @@ function blockscoutChainsMarkdown(registryChains, data) {
     "",
     "## Target Chains Absent or Unsafe in Chainscout",
     "",
-    "Use Etherscan or the public RPC/explorer in `references/generated/target-mainnets.json` for these.",
+    "Use Etherscan, a documented exceptional-history route, or the public RPC/explorer in `references/generated/target-mainnets.json` for these.",
     "",
     markdownTable(["Chain", "`chain_id`", "Notes"], absentOrUnsafe.map((chain) => [
       chain.name,
@@ -399,6 +402,12 @@ function resolveChainScript(registryChains, data) {
     const pattern = data.chains[chain.slug].chainscoutNamePattern ?? chain.name;
     return `    ${chain.chainId}) printf '%s\\n' '${singleQuote(pattern)}' ;;`;
   });
+  const unsafeCases = registryChains
+    .filter((chain) => data.chains[chain.slug].blockscout.status === "unsafe")
+    .map((chain) => {
+      const notes = data.chains[chain.slug].blockscout.notes;
+      return `    ${chain.chainId}) printf '%s\\n' '${singleQuote(notes)}' ;;`;
+    });
 
   return [
     "#!/bin/bash",
@@ -444,6 +453,21 @@ function resolveChainScript(registryChains, data) {
     '  echo "Ask the user to file a feature request in https://github.com/PaulRBerg/agent-skills" >&2',
     "  exit 2",
     "}",
+    "",
+    "unsafe_reason() {",
+    '  case "$1" in',
+    ...unsafeCases,
+    "    *)",
+    "      return 1",
+    "      ;;",
+    "  esac",
+    "}",
+    "",
+    'if reason=$(unsafe_reason "$chain_id"); then',
+    '  echo "Error: chain_id=$chain_id is marked unsafe in the evm-atlas overlay." >&2',
+    '  echo "Reason: $reason" >&2',
+    "  exit 1",
+    "fi",
     "",
     'resp=$(curl -fsS "https://chains.blockscout.com/api/chains/$chain_id" 2>/dev/null) || {',
     '  echo "Error: Chainscout request failed for chain_id=$chain_id" >&2',

@@ -87,5 +87,9 @@ than `curl` or `WebFetch`, the same way `references/workflows/blockscan-balances
 
 ## Exceptional History
 
+For Fantom Opera (`250`) account history, do not use the unsafe FTMScout route returned by Chainscout. Read
+`references/explorers/fantom-opera.md` and preserve its partial-index boundary: GraphQL rows can provide positive
+evidence, but empty account lists cannot establish historical inactivity.
+
 For OP Mainnet data before `2021-11-11`, read `references/explorers/optimism-pre-regenesis.md` before interpreting
 provider or RPC results.

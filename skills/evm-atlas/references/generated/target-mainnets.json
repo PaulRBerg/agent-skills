@@ -127,7 +127,7 @@
       "accountActivityModel": "ethereum-eoa",
       "primaryPublicRpc": "https://rpc.fantom.network",
       "nativeCurrencySymbol": "FTM",
-      "explorerUrl": "https://ftmscan.com",
+      "explorerUrl": "https://explorer.fantom.network",
       "routeMesh": true
     },
     {
