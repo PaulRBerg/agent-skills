@@ -43,6 +43,34 @@ request if it changes either cap.
 Do not combine `--browser` with another signer flag. Capture the transaction hash, then verify it with `cast receipt`
 before reporting success.
 
+## Timing
+
+Wallet approval is an unbounded human-interaction step, not network latency: the wait is for a person to notice and
+click a prompt, which can exceed a typical command timeout. Run the broadcast command with a generous timeout, or in the
+background, so the process outlives the approval wait. A short synchronous timeout risks killing the process after the
+wallet has already broadcast but before `cast` prints the hash back — the transaction still lands on-chain, but the
+operator loses the hash and cannot immediately confirm it.
+
+Add `--async` to every browser-signed broadcast, not only as a fallback: it prints the transaction hash as soon as
+signing and broadcast succeed and exits without also waiting for a receipt, shrinking the window in which a timeout can
+outrace the printed output. Poll for the receipt separately afterward.
+
+## Recovering From a Killed or Timed-Out Process
+
+If the process is killed or times out before printing a hash, its exit status alone does not prove nothing was broadcast
+— the wallet may have submitted the transaction via its own configured RPC provider, independent of the `--rpc-url`
+passed to `cast`, and mempool visibility lags and varies across providers (especially behind a load-balanced RPC
+aggregator). Do not treat a single provider's pending-transaction count or a single `cast tx` miss as proof of
+non-broadcast. Before concluding nothing was sent:
+
+- Retry the raw `eth_getTransactionByHash` lookup a few times over 30-60 seconds to allow mempool propagation, rather
+  than accepting one immediate miss as final.
+- Ask the user to check their wallet's own pending-activity view — the wallet knows definitively whether it submitted
+  the transaction, independent of any RPC endpoint the agent queries.
+
+Only report the outcome as resolved (confirmed or genuinely never sent) once one of these gives a positive or a stable,
+repeated negative result.
+
 ## Message Signing
 
 Present the exact plain-message bytes or decoded EIP-712 domain and payload before approval. After approval:

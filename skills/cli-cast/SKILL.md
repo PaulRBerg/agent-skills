@@ -95,7 +95,10 @@ After broadcast, capture the transaction hash and verify the receipt on the revi
 used, and the explorer link under `### ✅ Transaction confirmed` for a successful receipt or
 `### ↩ Transaction reverted` for a mined failure. For an ambiguous outcome, lead with
 `### ⛔ Broadcast unresolved — do not retry` and state the evidence still needed. Do not retry a failed or uncertain
-broadcast without first checking whether the transaction exists.
+broadcast without first checking whether the transaction exists — for browser-wallet signing specifically, read
+[references/browser-signing.md](references/browser-signing.md)'s Timing and Recovering sections before concluding
+nothing was sent: a killed or timed-out process does not prove non-broadcast, since wallet approval is an unbounded
+human wait and the wallet may broadcast via its own RPC provider.
 
 ## Stop Conditions
 
