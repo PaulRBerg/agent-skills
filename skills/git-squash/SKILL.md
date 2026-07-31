@@ -9,6 +9,9 @@ description: "Squash a feature branch into one commit via soft reset to the merg
 
 # Git Squash
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Squash the current feature branch into one commit representing its net change relative to the resolved default branch.
 
 ## Arguments

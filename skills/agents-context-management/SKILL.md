@@ -10,6 +10,9 @@ description: "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.m
 
 # Agents Context Management
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Create or polish repo-local context as one coherent system: human-facing README.md files, agent-facing AGENTS.md files
 with companion CLAUDE.md symlinks, and existing project-installed skills under `.agents/skills`.
 

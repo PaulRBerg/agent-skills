@@ -117,8 +117,11 @@ include only ones the commit actually closes.
   pre-commit hook activity unless a command failed.
 - If failed: show error + suggest fix. If `git commit` itself fails on an index.lock error, wait a moment and retry;
   never delete the lock file.
-- **Pre-commit hook failure:** retry automatically with `git commit --no-verify` only when the hook output identifies
-  the failing check/path and the staged diff plus session scope conclusively show it is unrelated pre-existing work. A
+- **Pre-commit hook failure:** a lint-staged `✖ Failed to get staged files!` or a bare
+  `"lint-staged" exited with code 1` with no named failing check is index contention from a concurrent agent, not a hook
+  failure — wait a moment and retry the same commit, exactly as with `index.lock`, without applying the bypass evidence
+  bar to it. Otherwise: retry automatically with `git commit --no-verify` only when the hook output identifies the
+  failing check/path and the staged diff plus session scope conclusively show it is unrelated pre-existing work. A
   generic failure, repo-wide check, or uncertain ownership is not enough evidence — with parallel agents, the common
   cause of an unrelated repo-wide hook failure is another agent's in-flight work, but the same evidence bar applies.
   Never bypass a failure caused by or plausibly affected by the staged changes; fix it or surface the error. When
@@ -131,6 +134,10 @@ include only ones the commit actually closes.
   a genuine signer error at the signing step, never speculatively, and never edit repo/global git config
   (`commit.gpgsign`, `gpg.format`, etc.) — the bypass is per-commit only. Disclose with one line:
   `Commit created unsigned — signer unavailable ("<short error>")`.
+  - **Session memo:** once a genuine signer error has triggered the fallback in this session, treat the signer as
+    unavailable for the rest of it: later commits may append `--no-gpg-sign` on the first attempt instead of re-failing.
+    Still per-commit only — never touch git config. Replace the per-commit disclosure with a single line in the
+    session's final receipt: `N commits created unsigned — signer unavailable ("<short error>")`.
 
 ### 5) Push (if `--push`)
 

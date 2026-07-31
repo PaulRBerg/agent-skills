@@ -10,6 +10,9 @@ description:
 
 # Large File Refactor
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Use LOC thresholds to discover candidates, then decide whether a split is justified by cohesion, coupling, ownership,
 and change risk. Test files use a relaxed 2000 LOC discovery threshold.
 

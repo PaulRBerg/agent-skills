@@ -11,6 +11,9 @@ description:
 
 # Fresh Eyes Sweep
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Inspect the requested Git scope for evidenced mistakes, fix every safe issue, and continue until every mapped file is
 accounted for and a full pass finds nothing new. A verified no-op is valid only after that coverage.
 
@@ -50,7 +53,10 @@ reimplement ledger arithmetic.
 
 1. Require Git and read applicable repository instructions.
 2. Initialize the ledger for the requested scope. The agent may additionally inspect shared configuration and
-   instructions needed to understand that scope; do not silently widen the ledger.
+   instructions needed to understand that scope; do not silently widen the ledger. If `init` maps more than roughly
+   2,000 files and the user gave no `[paths]`, stop and ask for a partition or explicit confirmation before inspecting
+   anything; recommend per-directory slices run as separate sweeps, because unscoped whole-repo sweeps of that size do
+   not finish.
 3. Classify generated, vendored, minified, binary, and bulk-data artifacts. Validate them through their generator,
    schema, or invariants when line-by-line review is inappropriate, then mark them with the agent's reason.
 4. Inspect recent history and diffs, especially the newest changes, to find affected callers, dependencies, tests,
@@ -58,8 +64,27 @@ reimplement ledger arithmetic.
 5. Discover build, test, lint, typecheck, format, and codegen checks.
 6. Preserve every pre-existing edit recorded by the ledger. Do not revert, absorb, commit, or report it as a finding.
 
-After mapping, report `### 🔎 Sweep mapped — <files> files · <slices> slices`. Slice count is an agent organization
-choice; file count comes from the ledger.
+After mapping, report `### 🔎 Sweep mapped — <files> files · <slices> slices · ledger <scratch.json>`. Slice count is an
+agent organization choice; file count comes from the ledger.
+
+The ledger outlives the session. A later session resumes the same sweep by pointing at the same ledger path instead of
+re-running `init`: `pending` defines the frontier, and already-accounted paths are not reinspected. Carry the ledger
+path into every progress update, and name it again when reporting an incomplete sweep, so the user can hand it to the
+next session.
+
+## Subagents
+
+- Reviewers are read-only and default to model `sonnet`; agents that apply fixes default to model `opus`. Never spawn a
+  subagent that implicitly inherits the session model — always set it explicitly.
+- Announce the planned fan-out in one line before launching: agent count and the model of each group.
+- Cap concurrent reviewers at 4 unless the user raises it.
+- Record each spawned task ID in the ledger reason field for the slice it covers, so a later stop request resolves
+  against real IDs instead of guesses.
+- Subagents and workers never commit. The coordinating session commits settled slices serially as checkpoint commits, so
+  only one process touches the Git index.
+- Treat a lint-staged `Failed to get staged files!` or a bare `"lint-staged" exited with code 1` with no named failing
+  check as Git index contention of the same class as `index.lock`, not a hook failure: wait a moment and retry the
+  commit instead of bypassing or debugging the hook.
 
 ## Inspect and Fix
 
@@ -84,8 +109,9 @@ completion.
 Lead with
 `### ✅ Sweep ledger complete — <accounted>/<mapped> files accounted (<inspected> inspected, <excluded> excluded)` only
 when helper `complete` is true; otherwise use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
-counts, then include fixed artifacts, verification, unresolved findings, and residual risk only when non-empty. Do not
-expose the scratch ledger, pre-existing changes, or private/bulk data.
+counts, then include fixed artifacts, verification, unresolved findings, and residual risk only when non-empty. On
+`### ⛔ Sweep incomplete`, name the ledger path so the next session can resume from `pending`. Do not expose the scratch
+ledger's contents, pre-existing changes, or private/bulk data.
 
 Completion requires every mapped path accounted for, every finding fixed and verified or reported with evidence, and
 every relevant check passing or its failure attributed.

@@ -47,6 +47,9 @@ For a selected Markdown template, fetch it live and populate its existing struct
 smallest useful `Problem`, `Solution`, and optional affected-files structure. Do not use `gh issue create --template`
 with an automated body.
 
+For checklist-style issues, mirror the user's stated structure literally: a single list unless the user requested
+sections, preserving their stated ordering and casing. Never introduce unasked groupings such as Completed/Planned.
+
 ## Labels, Type, and Title
 
 Use cached permission: `ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` may apply labels; `READ` may not. Apply live

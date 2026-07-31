@@ -10,6 +10,9 @@ description: "Cut a release: bump versions, write changelogs, commit, tag."
 
 # Bump Release
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Release one package or several packages with version bumps, changelog entries, commits, and tags. Supports
 single-package repositories, workspace monorepos, stable releases, beta releases, and dry runs.
 

@@ -5,7 +5,13 @@ Bases:
 - Unified PRO: `https://api.blockscout.com/{chain_id}/api/v2/...` (key required)
 - Etherscan-V2 alias: `https://api.blockscout.com/v2/api?chain_id={id}&module=...&action=...` (key required;
   `{status,message,result}` shape)
-- Per-instance: `https://{instance}/api/v2/...` (no key) and `https://{instance}/api?module=...` (no key)
+- Per-instance: `https://{instance}/api/v2/...` and `https://{instance}/api?module=...` (keyless traffic is
+  rate-limited; see below)
+
+Keyless Blockscout was sunset in July 2026. Hosted `*.blockscout.com` instance subdomains enforce keyless rate limits
+and return `429` under sweep-shaped traffic, so the keyed `https://api.blockscout.com/{chain_id}` gateway is the correct
+route — and the correct fallback after a `429` — for every Blockscout-hosted chain. Reserve per-instance hosts for
+self-hosted or third-party instances the gateway does not serve.
 
 ## Native REST v2 — Endpoint Catalog
 
@@ -71,7 +77,9 @@ Default **20 credits** per call. Exceptions:
 | **Standard** | $49/mo  | 100M / month | 15 rps                           |
 | **Pro**      | $199/mo | 500M / month | 30 rps                           |
 
-Public per-instance hosts (no key) are not credit-metered but limited to **3 rps / 300 per minute** per IP.
+Public per-instance hosts are not credit-metered but throttle keyless traffic to **3 rps / 300 per minute** per IP,
+including hosted `*.blockscout.com` subdomains; exceeding it returns `429`. Switch to the keyed gateway rather than
+backing off repeatedly.
 
 ## Response Headers (PRO host)
 

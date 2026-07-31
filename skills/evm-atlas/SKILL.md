@@ -30,6 +30,14 @@ boundary.
   orders, or assign semantics to arbitrary Uniswap v4 hooks.
 - Do not default to Ethereum. Infer from explicit chain context and unambiguous chain-specific tokens; ask when
   ambiguous.
+- Never echo, interpolate, or log API-key values (`ETHERSCAN_API_KEY`, `BLOCKSCOUT_API_KEY`, RPC keys). Check presence
+  value-free with `[ -n "$ETHERSCAN_API_KEY" ] && echo set || echo unset`; never put `${VAR:-...}` or `${VAR:+...}`
+  expansions in printed output.
+- Keyless Blockscout is sunset (July 2026) and hosted `*.blockscout.com` instance subdomains also rate-limit keyless
+  traffic, so route every Blockscout-hosted chain through the keyed `https://api.blockscout.com/{chain_id}` gateway. See
+  `references/explorers/blockscout-endpoints.md`.
+- An unreachable or erroring indexer is a coverage gap, never evidence of zero activity. Confirm in Chromium before
+  recording an endpoint as down or blocked, and state the verification method in results.
 
 ## Routing
 

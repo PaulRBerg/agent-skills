@@ -10,6 +10,9 @@ description: Archive checked TODO.md tasks into `.ai/todos/TODO_UNTIL_YYYY_MM_DD
 
 # TODO Archive
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 `TODO.md` and `.ai/` are conventionally git-ignored, so they are untracked and `git diff` shows nothing for them.
 Inspect changes against the filesystem, not git.
 

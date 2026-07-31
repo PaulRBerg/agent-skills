@@ -9,6 +9,9 @@ description:
 
 # Agents Introspection
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Determine whether prior Codex and Claude Code work in the current project establishes a recurrence risk for the user's
 task, then recommend the smallest durable intervention justified by the evidence.
 

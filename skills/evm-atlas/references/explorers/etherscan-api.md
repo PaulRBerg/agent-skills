@@ -28,7 +28,9 @@ if [ -z "$ETHERSCAN_API_KEY" ]; then
 fi
 ```
 
-If the environment variable is missing, inform the user and halt execution.
+If the environment variable is missing, inform the user and halt execution. Never print the key itself: presence checks
+must stay value-free, so do not echo `$ETHERSCAN_API_KEY` or use `${ETHERSCAN_API_KEY:+...}` /
+`${ETHERSCAN_API_KEY:-...}` expansions in any command whose output reaches the transcript.
 
 ### Plan Detection
 

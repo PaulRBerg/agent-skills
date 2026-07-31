@@ -9,6 +9,9 @@ description: Autonomous overnight codebase improvement with bounded runtime, evi
 
 # Night Shift
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Improve a codebase autonomously within a fixed deadline, keeping only safe changes supported by concrete evidence.
 
 A valid run ends with verified improvements or a verified no-op. Never invoke an ask-user mechanism or end a user-facing

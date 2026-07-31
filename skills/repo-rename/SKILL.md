@@ -10,6 +10,9 @@ description:
 
 # Repo Rename
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set before applying a repository rename.
 
 ## Scope

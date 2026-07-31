@@ -8,6 +8,9 @@ description: Refactor naming and repository structure exhaustively while preserv
 
 # Naming Refactor
 
+If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
+do not invoke this skill again through a skill tool.
+
 Make every name in the current repository communicate one coherent domain model, regardless of refactor cost.
 
 ## Contract

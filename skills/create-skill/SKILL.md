@@ -232,11 +232,18 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 
 ### 6. Verify
 
+- Patch tooling creates files at mode 0644. Before the first verification run, `chmod 755` every executable under
+  `scripts/` and `tests/` (a scaffolded test failing its first run with `Permission denied (os error 13)` is this
+  cause).
 - `test -f "<scope>/.agents/skills/<name>/SKILL.md"`
 - `test -f "<scope>/.agents/skills/<name>/agents/openai.yaml"`
 - `readlink "<scope>/.claude/skills/<name>"` resolves to the source directory.
+- `test -x` every `scripts/*` and `tests/*` executable so a missed `chmod` fails loudly instead of surfacing later as a
+  permission error.
 - Finish with `### 🧩 Skill created: <name>`, a tree of created paths, and `### ✅ Verified` with the exact checks. Link
   both absolute source and symlink paths.
+- Offer to commit the new skill. When the host project's standing instructions require prompt commits, commit without
+  further prompting.
 
 ## Notes
 
