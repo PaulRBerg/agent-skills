@@ -49,6 +49,11 @@ Do not batch calls whose result depends on the original `msg.sender`.
 Resolve and validate chain ID, sender, target, function signature, arguments, calldata, native value, nonce, and fee
 assumptions without signing. Do not request or load key material during preparation.
 
+For an Ethereum mainnet transaction, read [references/ethereum-gas.md](references/ethereum-gas.md), fetch a fresh Rabby
+`slow` quote, and bind its EIP-1559 fee pair to the transaction before simulation. Apply this policy to every signer;
+never let a browser wallet, keystore, hardware wallet, or private-key flow silently select Normal or Fast. Do not reuse
+Ethereum fee values on another chain.
+
 ### Simulate
 
 Simulate the exact prepared call from the intended sender and value, then estimate gas. Use a fork or project simulation
@@ -62,6 +67,8 @@ Before any signature or broadcast, present one concrete review containing:
 - chain name and ID, RPC source, and latest block used;
 - sender, target, function, decoded arguments, calldata, and native value;
 - nonce, gas estimate/limit, fee assumptions, and maximum native-token cost;
+- for Ethereum mainnet, the Rabby oracle URL, `slow` tier, quote time, estimated inclusion time, max fee per gas, and
+  max priority fee per gas;
 - expected approvals, transfers, or other state changes;
 - simulation command and outcome;
 - selected signer and the exact signing/broadcast command with secrets redacted.
@@ -78,6 +85,11 @@ only when the user explicitly opts in or no safer method is available; never ask
 
 `cast send` signs and broadcasts in one command. Run it only after the review approval. Signing a message or typed data
 also requires a review of the exact payload, domain, chain binding, and intended use before approval.
+
+Every Ethereum mainnet transaction command must use the approved Rabby Slow values explicitly as `--gas-price` and
+`--priority-gas-price`, regardless of signer. Before broadcast, recheck that the approved max fee is not below the
+latest base fee. If the quote must change, simulate again and present a revised review; never upgrade to Normal or Fast
+as a fallback. These requirements do not apply to message or typed-data signatures because they consume no gas.
 
 After broadcast, capture the transaction hash and verify the receipt on the reviewed chain. Report status, block, gas
 used, and the explorer link under `### ✅ Transaction confirmed` for a successful receipt or

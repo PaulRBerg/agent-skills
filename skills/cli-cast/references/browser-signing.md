@@ -30,8 +30,15 @@ Run the exact reviewed command, for example:
 cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
   --rpc-url "$RPC_URL" \
   --from "$OWNER" \
+  --gas-price "$RABBY_SLOW_MAX_FEE_WEI" \
+  --priority-gas-price "$RABBY_SLOW_PRIORITY_FEE_WEI" \
   --browser
 ```
+
+The fee flags are mandatory for Ethereum mainnet and must contain the approved quote from `ethereum-gas.md`. If Rabby
+offers its own tier selector, never choose Normal or Fast. Leave Slow selected when Rabby recognizes the quote; if it
+labels the exact pair as custom or site-suggested, the reviewed numeric caps remain authoritative. Reject the wallet
+request if it changes either cap.
 
 Do not combine `--browser` with another signer flag. Capture the transaction hash, then verify it with `cast receipt`
 before reporting success.
