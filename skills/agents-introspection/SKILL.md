@@ -1,6 +1,6 @@
 ---
 argument-hint: <task>
-disable-model-invocation: true
+disable-model-invocation: false
 name: agents-introspection
 user-invocable: true
 description:
