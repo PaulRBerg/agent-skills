@@ -1,5 +1,5 @@
 ---
-argument-hint: "[paths]"
+argument-hint: "[paths] [--max-runtime DURATION]"
 compatibility: Requires Git and local command and edit access.
 disable-model-invocation: true
 name: fresh-eyes-sweep
@@ -16,6 +16,12 @@ do not invoke this skill again through a skill tool.
 
 Inspect the requested Git scope for evidenced mistakes, fix every safe issue, and continue until every mapped file is
 accounted for and a full pass finds nothing new. A verified no-op is valid only after that coverage.
+
+`--max-runtime DURATION` is optional: it is a positive integer followed by `m` or `h`, such as `45m` or `3h`. Reject an
+invalid duration, unknown option, or ambiguous positional input. When a deadline is supplied, calculate it before
+auditing and reserve the final 15% for aggregate validation and reporting, clamped to 5–30 minutes and never exceeding
+the total runtime. At that window, settle in-flight slices and do not start new fixes; report an incomplete sweep with
+its ledger rather than overrunning the deadline.
 
 ## Ledger Interface
 
@@ -51,7 +57,8 @@ reimplement ledger arithmetic.
 
 ## Setup
 
-1. Require Git and read applicable repository instructions.
+1. Require Git and read applicable repository instructions. Record the worktree root, starting commit, starting status,
+   resolved scope, and any deadline and validation window.
 2. Initialize the ledger for the requested scope. The agent may additionally inspect shared configuration and
    instructions needed to understand that scope; do not silently widen the ledger. If `init` maps more than roughly
    2,000 files and the user gave no `[paths]`, stop and ask for a partition or explicit confirmation before inspecting
@@ -62,7 +69,10 @@ reimplement ledger arithmetic.
 4. Inspect recent history and diffs, especially the newest changes, to find affected callers, dependencies, tests,
    configuration, and docs. Recency sets order, never coverage.
 5. Discover build, test, lint, typecheck, format, and codegen checks.
-6. Preserve every pre-existing edit recorded by the ledger. Do not revert, absorb, commit, or report it as a finding.
+6. Establish a baseline for every safe, relevant check before the first fix. If it is red, prioritize reproducible
+   failures before discretionary work; defer failures that need an unclear or prohibited action while continuing with
+   independently verifiable work.
+7. Preserve every pre-existing edit recorded by the ledger. Do not revert, absorb, commit, or report it as a finding.
 
 After mapping, report `### 🔎 Sweep mapped — <files> files · <slices> slices · ledger <scratch.json>`. Slice count is an
 agent organization choice; file count comes from the ledger.
@@ -80,6 +90,10 @@ next session.
 - Cap concurrent reviewers at 4 unless the user raises it.
 - Record each spawned task ID in the ledger reason field for the slice it covers, so a later stop request resolves
   against real IDs instead of guesses.
+- Give writing agents stable IDs, dependency waves, exact non-overlapping write scopes, repository constraints, and
+  required completion evidence. Assign shared manifests, lockfiles, exports, and integration files to one sequential
+  owner.
+- Reconcile every wave before starting dependents. Use a fresh-context verifier after each nontrivial wave.
 - Subagents and workers never commit. The coordinating session commits settled slices serially as checkpoint commits, so
   only one process touches the Git index.
 - Treat a lint-staged `Failed to get staged files!` or a bare `"lint-staged" exited with code 1` with no named failing
@@ -89,13 +103,26 @@ next session.
 ## Inspect and Fix
 
 Work through coherent slices so implementation, callers, tests, configuration, and documentation stay visible together.
-Trace important control, data, and error paths end to end. Hunt for concrete bugs, omissions, invalid assumptions,
-unhandled edges, security/reliability failures, inconsistencies, duplication, dead code, stale docs, and needless
-complexity. Style preferences and unverified hunches are not findings.
+Trace important control, data, concurrency, and error paths end to end. Hunt for concrete bugs, omissions, invalid
+assumptions, unhandled edges, security/reliability failures, inconsistencies, duplication, dead code, stale docs, and
+needless complexity. Also inspect evidenced problems in performance, dependencies, data formats and extensions,
+configuration, observability, accessibility, agent context, naming, and directory structure. Style preferences and
+unverified hunches are not findings.
 
 Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available; add a
 focused regression test when useful. Mark `reported` when a safe fix would alter a public contract, intent is ambiguous,
 or verification is unavailable. Do not add speculative features, broad refactors, or cosmetic churn.
+
+Treat source files over 1000 lines and test files over 2000 lines as discovery candidates only. Split a file only when
+cohesion, coupling, change risk, or testability establishes a better seam; line count alone is not evidence. Apply
+dependency or framework updates, data-format or extension changes, renames, and reorganizations only when all affected
+consumers are controlled, the migration is atomic, compatibility is demonstrable, and repository checks can prove it. Do
+not retain a performance change without a recorded baseline metric and repeatable benchmark.
+
+If an experiment fails its evidence bar, revert only that experiment's attributable edits; never use repository-wide
+clean, checkout, or reset commands. After each nontrivial change wave, run `$code-polish` over that wave's exact changed
+file union when available. Otherwise apply the same fixed-scope contract inline: simplify only where comprehension or
+defect risk measurably improves, review by severity, fix evidenced defects, and rerun the narrowest proving checks.
 
 On long runs, post updates only after coherent slices settle, using the ledger summary's exact bar and counts. The bar
 means path accounting, not depth of inspection.
@@ -103,15 +130,19 @@ means path accounting, not depth of inspection.
 ## Verify and Report
 
 Run the narrowest check proving each fix, then aggregate checks scoped to changed files. Reinspect affected paths and
-repeat until a pass finds no new evidenced issue. Audit coverage, fixes, and checks against tool output before claiming
+repeat until a pass finds no new evidenced issue. During a supplied deadline's validation window, reconcile owned edits
+and run the aggregate format, lint, type, test, build, and invariant checks justified by the final changed-file union.
+Compare final results with the recorded baseline. Audit coverage, fixes, and checks against tool output before claiming
 completion.
 
 Lead with
 `### ✅ Sweep ledger complete — <accounted>/<mapped> files accounted (<inspected> inspected, <excluded> excluded)` only
 when helper `complete` is true; otherwise use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
-counts, then include fixed artifacts, verification, unresolved findings, and residual risk only when non-empty. On
-`### ⛔ Sweep incomplete`, name the ledger path so the next session can resume from `pending`. Do not expose the scratch
-ledger's contents, pre-existing changes, or private/bulk data.
+counts. Include a compact `Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results.
+When non-empty, also include reverted experiments with the failed evidence, unresolved findings with their evidence,
+risk, and required decision, and residual risk with its next proving check. On `### ⛔ Sweep incomplete`, name the
+ledger path so the next session can resume from `pending`. Do not expose the scratch ledger's contents, pre-existing
+changes, or private/bulk data.
 
 Completion requires every mapped path accounted for, every finding fixed and verified or reported with evidence, and
 every relevant check passing or its failure attributed.
