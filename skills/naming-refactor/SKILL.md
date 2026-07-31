@@ -22,6 +22,9 @@ Make every name in the current repository communicate one coherent domain model,
   can prove the fix. Keep bug fixes in a distinct change wave and report them separately.
 - Preserve pre-existing work. Local edits, file moves, directory restructuring, and non-destructive validation are
   authorized. Do not commit, push, publish, or write externally unless the user or repository instructions require it.
+- Require an exclusive implementation window. Complete codebase analysis and the refactor plan first, then obtain the
+  user's explicit confirmation that no other coding agent is running or will perform parallel work in the repository
+  through implementation and verification. The initial invocation does not grant that confirmation.
 - A verified no-op is valid only after exhaustive coverage. Do not rename a clear, conventional name merely to create
   churn, but do not retain a weak name to minimize diff size.
 
@@ -94,10 +97,20 @@ reference inspection before choosing a name. Never use blind global replacement 
 Completion of this phase requires every non-excluded path to be retained with a reasoned naming model, assigned to a
 validated rename group, or marked blocked with concrete evidence.
 
+## Confirm Exclusive Execution
+
+After completing the codebase analysis and rename map, present the evidence-backed refactor plan, including its rename
+groups, dependency waves, contract boundaries, risks, and proving checks. Then ask the user to confirm that no other
+coding agent is running or will perform parallel work in the repository until implementation and verification finish.
+
+Stop and wait for an explicit affirmative response before editing files, moving paths, or otherwise implementing the
+plan. Do not infer exclusivity from a stable worktree, the absence of visible processes, or the user's initial request.
+If the user cannot confirm exclusivity, deliver the analysis and plan without implementing the refactor.
+
 ## Execute in Verified Waves
 
-Apply rename groups in coherent dependency waves. Parallelize independent read-only analysis when useful, but serialize
-overlapping edits and shared manifests, exports, schemas, and entrypoints.
+After the user confirms exclusive execution, apply rename groups in coherent dependency waves. Do not delegate work to
+another coding agent or continue if another agent begins parallel work before verification finishes.
 
 - Prefer language-server, compiler, or AST-aware rename support for symbols. Use exact text replacement only after
   proving each occurrence has the same meaning.
