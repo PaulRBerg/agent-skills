@@ -18,6 +18,7 @@ npx skills add PaulRBerg/agent-skills#shelved
 | diagnosing-bugs    | Loop-first bug diagnosis and regression tests |
 | diagram-monochrome | Monochrome technical schematic diagrams       |
 | loop-skill         | Repeat a skill until stable or an exact count |
+| night-shift        | Autonomous overnight codebase improvement     |
 | oracle-codex       | Codex oracle for planning                     |
 | vitest             | Vitest v4 testing guidance                    |
 | work               | End-to-end task implementation                |
