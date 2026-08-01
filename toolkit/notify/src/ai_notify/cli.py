@@ -246,29 +246,50 @@ def link_claude(path: Path, force: bool, dry_run: bool):
     help="Path to Codex CLI config.toml",
 )
 @click.option("--profile", help="Codex profile name (e.g. quiet)")
-def link_codex(path: Path, profile: str | None):
+@click.option("--force", is_flag=True, help="Replace a different existing notify command")
+def link_codex(path: Path, profile: str | None, force: bool):
     """Update Codex CLI notify command to use ai-notify."""
     try:
         from ai_notify.codex_config import set_codex_notify
 
-        update = set_codex_notify(path, ["ai-notify", "codex"], profile=profile)
+        update = set_codex_notify(
+            path,
+            ["ai-notify", "codex"],
+            profile=profile,
+            force=force,
+        )
         target = f"profile '{profile}'" if profile else "root config"
+        if update.conflict and not force:
+            click.echo(
+                click.style(f"Refusing to replace a different {target} notify command.", fg="red")
+            )
+            click.echo(f"Existing notify: {update.previous_notify!r}")
+            click.echo("Re-run with --force to replace it.")
+            raise click.exceptions.Exit(1)
+
         if update.changed:
             click.echo(f"Updated {target} notify in {path_with_tilde(update.path)}")
+            if update.previous_notify is not None:
+                click.echo(f"Replaced previous notify: {update.previous_notify!r}")
         else:
             click.echo(f"{target} notify already set in {path_with_tilde(update.path)}")
+    except click.exceptions.Exit:
+        raise
     except Exception as e:
-        logger.error(f"Codex config update failed: {e}")
-        sys.exit(1)
+        raise click.ClickException(f"Codex config update failed: {e}") from e
 
 
 @cli.command()
-def check():
+@click.option("--profile", help="Inspect a Codex profile overlay")
+def check(profile: str | None):
     """Check Claude Code hooks and Codex CLI notify integration."""
     from ai_notify.integrations import inspect_claude_hooks, inspect_codex_notify
 
+    try:
+        codex_report = inspect_codex_notify(Path.home() / ".codex", profile=profile)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'--profile'") from exc
     claude_report = inspect_claude_hooks(Path.home() / ".claude", Path.cwd())
-    codex_report = inspect_codex_notify(Path.home() / ".codex")
 
     click.echo("\nIntegration status:")
 
@@ -304,9 +325,14 @@ def check():
     else:
         codex_status = click.style("MISSING", fg="red")
 
-    click.echo(f"Codex CLI notify: {codex_status}")
+    codex_label = f"Codex CLI notify (profile '{profile}')" if profile else "Codex CLI notify"
+    click.echo(f"{codex_label}: {codex_status}")
+    if codex_report.paths:
+        click.echo("  Active configs:")
+        for path in codex_report.paths:
+            click.echo(f"    - {path_with_tilde(path)}")
     if codex_report.path:
-        click.echo(f"  Config: {path_with_tilde(codex_report.path)}")
+        click.echo(f"  Effective notify source: {path_with_tilde(codex_report.path)}")
     if codex_report.notify is not None:
         click.echo(f"  notify: {codex_report.notify}")
     if codex_report.error:

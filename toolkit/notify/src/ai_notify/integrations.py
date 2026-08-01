@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import json
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 from ai_notify.claude_hooks import HOOK_SPECS, iter_hook_commands
+from ai_notify.codex_config import resolve_codex_config_path
 
 
 # Map of Claude Code event name -> ai-notify event subcommand, derived from the
@@ -38,6 +39,8 @@ class CodexNotifyReport:
     path: Path | None
     notify: Any
     error: str | None
+    profile: str | None = None
+    paths: list[Path] = field(default_factory=list)
 
 
 def inspect_claude_hooks(config_root: Path, project_root: Path) -> ClaudeHooksReport:
@@ -95,33 +98,78 @@ def inspect_claude_hooks(config_root: Path, project_root: Path) -> ClaudeHooksRe
     )
 
 
-def inspect_codex_notify(config_root: Path) -> CodexNotifyReport:
+def inspect_codex_notify(config_root: Path, profile: str | None = None) -> CodexNotifyReport:
     """
-    Inspect Codex CLI notify setting in the root config.
+    Inspect Codex CLI notify using base-plus-profile overlay semantics.
     """
-    config_path = config_root / "config.toml"
-    if not config_path.exists():
-        return CodexNotifyReport(status="missing", path=None, notify=None, error=None)
+    base_path = config_root / "config.toml"
+    profile_path = resolve_codex_config_path(base_path, profile)
+    layer_paths = [base_path] if profile is None else [base_path, profile_path]
+    loaded_paths: list[Path] = []
+    notify: Any = None
+    notify_found = False
+    notify_path: Path | None = None
 
-    try:
-        with open(config_path, "rb") as f:
-            data = tomllib.load(f)
-    except Exception as exc:  # noqa: BLE001
+    if profile is not None and not profile_path.exists():
         return CodexNotifyReport(
             status="error",
-            path=config_path,
+            path=profile_path,
             notify=None,
-            error=str(exc),
+            error=f"Profile config not found: {profile_path}",
+            profile=profile,
+            paths=[base_path] if base_path.exists() else [],
         )
 
-    notify = data.get("notify")
-    if not notify:
-        return CodexNotifyReport(status="missing", path=config_path, notify=None, error=None)
+    for path in layer_paths:
+        if not path.exists():
+            continue
+        loaded_paths.append(path)
+        try:
+            with open(path, "rb") as file:
+                data = tomllib.load(file)
+        except Exception as exc:  # noqa: BLE001
+            return CodexNotifyReport(
+                status="error",
+                path=path,
+                notify=None,
+                error=str(exc),
+                profile=profile,
+                paths=loaded_paths,
+            )
+
+        if "notify" in data:
+            notify = data["notify"]
+            notify_found = True
+            notify_path = path
+
+    if not notify_found:
+        return CodexNotifyReport(
+            status="missing",
+            path=loaded_paths[-1] if loaded_paths else None,
+            notify=None,
+            error=None,
+            profile=profile,
+            paths=loaded_paths,
+        )
 
     if _notify_uses_ai_notify(notify):
-        return CodexNotifyReport(status="ok", path=config_path, notify=notify, error=None)
+        return CodexNotifyReport(
+            status="ok",
+            path=notify_path,
+            notify=notify,
+            error=None,
+            profile=profile,
+            paths=loaded_paths,
+        )
 
-    return CodexNotifyReport(status="partial", path=config_path, notify=notify, error=None)
+    return CodexNotifyReport(
+        status="partial",
+        path=notify_path,
+        notify=notify,
+        error=None,
+        profile=profile,
+        paths=loaded_paths,
+    )
 
 
 def _extract_hook_commands(hooks: Any) -> dict[str, list[str]]:

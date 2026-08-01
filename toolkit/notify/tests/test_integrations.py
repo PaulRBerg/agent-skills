@@ -2,8 +2,10 @@
 
 import json
 
+import pytest
+
 from ai_notify.claude_hooks import HOOK_SPECS
-from ai_notify.integrations import inspect_claude_hooks
+from ai_notify.integrations import inspect_claude_hooks, inspect_codex_notify
 
 
 def _hooks_for(specs):
@@ -53,3 +55,51 @@ def test_claude_hooks_ignore_unsupported_global_locations(tmp_path):
     assert report.paths == []
     assert report.missing_events == [spec.event for spec in HOOK_SPECS]
     assert report.ignored_paths == [standalone_path, global_local_path]
+
+
+def test_codex_profile_inherits_base_notify(tmp_path):
+    config_root = tmp_path / ".codex"
+    config_root.mkdir()
+    base_path = config_root / "config.toml"
+    profile_path = config_root / "review.config.toml"
+    base_path.write_text('notify = ["ai-notify", "codex"]\n')
+    profile_path.write_text('model = "gpt-5.6"\n')
+
+    report = inspect_codex_notify(config_root, profile="review")
+
+    assert report.status == "ok"
+    assert report.notify == ["ai-notify", "codex"]
+    assert report.path == base_path
+    assert report.paths == [base_path, profile_path]
+
+
+def test_codex_profile_notify_overrides_base(tmp_path):
+    config_root = tmp_path / ".codex"
+    config_root.mkdir()
+    base_path = config_root / "config.toml"
+    profile_path = config_root / "review.config.toml"
+    base_path.write_text('notify = ["ai-notify", "codex"]\n')
+    profile_path.write_text('notify = ["different"]\n')
+
+    report = inspect_codex_notify(config_root, profile="review")
+
+    assert report.status == "partial"
+    assert report.notify == ["different"]
+    assert report.path == profile_path
+
+
+def test_codex_missing_profile_is_an_error(tmp_path):
+    config_root = tmp_path / ".codex"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text('notify = ["ai-notify", "codex"]\n')
+
+    report = inspect_codex_notify(config_root, profile="missing")
+
+    assert report.status == "error"
+    assert report.path == config_root / "missing.config.toml"
+    assert "Profile config not found" in (report.error or "")
+
+
+def test_codex_check_validates_profile_name(tmp_path):
+    with pytest.raises(ValueError, match="letters, numbers"):
+        inspect_codex_notify(tmp_path, profile="bad.profile")

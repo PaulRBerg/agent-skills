@@ -16,6 +16,7 @@ from ai_notify.claude_hooks import ClaudeHooksUpdate
 from ai_notify.config import Config
 from ai_notify.codex_config import CodexNotifyUpdate
 from ai_notify.database import SessionTracker
+from ai_notify.integrations import ClaudeHooksReport, CodexNotifyReport
 
 
 class TestCLICommands:
@@ -110,7 +111,9 @@ class TestCLICommands:
             result = runner.invoke(cli.cli, ["link", "codex", "--path", str(config_path)])
 
         assert result.exit_code == 0
-        mock_set.assert_called_once_with(config_path, ["ai-notify", "codex"], profile=None)
+        mock_set.assert_called_once_with(
+            config_path, ["ai-notify", "codex"], profile=None, force=False
+        )
         assert "Updated root config notify" in result.output
 
     def test_link_codex_no_change(self, runner, tmp_path):
@@ -129,8 +132,80 @@ class TestCLICommands:
             )
 
         assert result.exit_code == 0
-        mock_set.assert_called_once_with(config_path, ["ai-notify", "codex"], profile="quiet")
+        mock_set.assert_called_once_with(
+            config_path, ["ai-notify", "codex"], profile="quiet", force=False
+        )
         assert "profile 'quiet' notify already set" in result.output
+
+    def test_link_codex_refuses_conflict(self, runner, tmp_path):
+        config_path = tmp_path / "config.toml"
+        with patch("ai_notify.codex_config.set_codex_notify") as mock_set:
+            mock_set.return_value = CodexNotifyUpdate(
+                path=config_path,
+                changed=False,
+                profile=None,
+                conflict=True,
+                previous_notify=["other-notify"],
+            )
+
+            result = runner.invoke(cli.cli, ["link", "codex", "--path", str(config_path)])
+
+        assert result.exit_code == 1
+        assert "Refusing to replace" in result.output
+        assert "['other-notify']" in result.output
+        assert "--force" in result.output
+
+    def test_link_codex_force_reports_replaced_command(self, runner, tmp_path):
+        config_path = tmp_path / "config.toml"
+        with patch("ai_notify.codex_config.set_codex_notify") as mock_set:
+            mock_set.return_value = CodexNotifyUpdate(
+                path=config_path,
+                changed=True,
+                profile=None,
+                conflict=True,
+                previous_notify=["other-notify"],
+            )
+
+            result = runner.invoke(
+                cli.cli,
+                ["link", "codex", "--path", str(config_path), "--force"],
+            )
+
+        assert result.exit_code == 0
+        mock_set.assert_called_once_with(
+            config_path, ["ai-notify", "codex"], profile=None, force=True
+        )
+        assert "Replaced previous notify: ['other-notify']" in result.output
+
+    @patch("ai_notify.integrations.inspect_codex_notify")
+    @patch("ai_notify.integrations.inspect_claude_hooks")
+    def test_check_passes_profile_and_reports_layers(
+        self, mock_claude, mock_codex, runner, tmp_path
+    ):
+        base_path = tmp_path / "config.toml"
+        profile_path = tmp_path / "review.config.toml"
+        mock_claude.return_value = ClaudeHooksReport(
+            status="ok",
+            paths=[],
+            missing_events=[],
+            errors={},
+            ignored_paths=[],
+        )
+        mock_codex.return_value = CodexNotifyReport(
+            status="ok",
+            path=base_path,
+            notify=["ai-notify", "codex"],
+            error=None,
+            profile="review",
+            paths=[base_path, profile_path],
+        )
+
+        result = runner.invoke(cli.cli, ["check", "--profile", "review"])
+
+        assert result.exit_code == 0
+        mock_codex.assert_called_once_with(Path.home() / ".codex", profile="review")
+        assert "Codex CLI notify (profile 'review'): OK" in result.output
+        assert str(profile_path) in result.output
 
     def test_link_claude_installs_hooks(self, runner, tmp_path):
         """Test link claude installs hooks and reports skips."""
