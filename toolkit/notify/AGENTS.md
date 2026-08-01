@@ -8,6 +8,8 @@ runs on Ubuntu with Python 3.13.
 
 - Bootstrap the Python 3.12+ environment with `uv sync --extra dev --locked`.
 - Run the checkout directly with `uv run ai-notify ...`; use `just install-cli` only when testing the global install.
+- After editing CLI code, proactively run `just install-cli` to refresh the globally installed `ai-notify` so it
+  reflects the change.
 - Prefer the `justfile`: `just test [pytest args]` runs pytest, while `just fc` runs Prettier, Ruff, and Pyright.
 - Use `just prettier-check`, `just ruff-check`, or `just pyright-check` when a focused check is sufficient.
 - `just fw` rewrites every matching Python, Markdown, and JSON file. Use focused formatter commands for surgical
