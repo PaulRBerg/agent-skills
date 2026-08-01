@@ -84,17 +84,28 @@ Run before discovery or writes:
 cwd="$(pwd -P)"
 case "$cwd" in
   /) printf 'abort: refusing to run at the filesystem root\n' >&2; exit 1 ;;
-  "$HOME/.agents"|"$HOME/.agents/"*|"$HOME/.claude"|"$HOME/.claude/"*)
-    printf 'abort: refusing to run under ~/.agents or ~/.claude\n' >&2; exit 1 ;;
 esac
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   printf 'abort: not inside a git repository\n' >&2; exit 1; }
+managed_skill_root=
 case "$repo_root" in
   /|"$HOME") printf 'abort: unsupported repo root: %s\n' "$repo_root" >&2; exit 1 ;;
-  "$HOME/.agents"|"$HOME/.agents/"*|"$HOME/.claude"|"$HOME/.claude/"*)
-    printf 'abort: repo root is under ~/.agents or ~/.claude\n' >&2; exit 1 ;;
+  "$HOME/.agents"|"$HOME/.codex"|"$HOME/.claude") managed_skill_root="$repo_root/skills" ;;
+  "$HOME/.agents/"*|"$HOME/.codex/"*|"$HOME/.claude/"*)
+    printf 'abort: repo root is nested under an agent configuration repository: %s\n' "$repo_root" >&2; exit 1 ;;
 esac
+if [ -n "$managed_skill_root" ]; then
+  case "$cwd" in
+    "$managed_skill_root"|"$managed_skill_root/"*)
+      printf 'abort: installed skills must be edited in their source catalog: %s\n' "$cwd" >&2; exit 1 ;;
+  esac
+fi
 ```
+
+When `managed_skill_root` is set, allow README.md, AGENTS.md, and CLAUDE.md work elsewhere in that repository, but
+exclude the entire installed `skills/` tree from every workflow. Apply the exclusion before discovery, canonicalization,
+or symlink traversal. If `path`, `skill-name`, or an explicit target would enter that tree, make no writes there and
+report that the skill must be edited in its source catalog. `--force` does not override this boundary.
 
 Snapshot `git status --short` before broad edits. Preserve unrelated pre-existing changes and re-check expected paths
 after generators or broad commands.
