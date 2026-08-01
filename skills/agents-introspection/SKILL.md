@@ -4,22 +4,13 @@ disable-model-invocation: false
 name: agents-introspection
 user-invocable: true
 description:
-  Report live Codex/Claude Code sessions or retrospect on local transcripts and propose durable fixes (AGENTS.md,
-  skills).
+  Retrospect on a task against local Codex/Claude Code transcripts; propose durable fixes (AGENTS.md, skills).
 ---
 
 # Agents Introspection
 
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
-
-Choose the route from the user's intent:
-
-- For sessions that are running, executing, working, blocked, or waiting now, read `references/live-sessions.md` and use
-  the live inventory. Do not run the transcript miner or inspect transcript recency for a live-status request.
-- For historical task analysis, recurrence risk, or durable prevention, use the retrospective workflow below.
-
-## Retrospective Workflow
 
 Determine whether prior Codex and Claude Code work in the current project establishes a recurrence risk for the user's
 task, then recommend the smallest durable intervention justified by the evidence.
