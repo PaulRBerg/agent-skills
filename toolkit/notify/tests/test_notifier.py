@@ -57,6 +57,7 @@ class TestMacNotifier:
         assert "Test" in cmd
         assert "-message" in cmd
         assert "Subtitle" in cmd
+        assert "-ignoreDnD" in cmd
         assert "-activate" in cmd
         assert "-sound" in cmd
         assert "-contentImage" in cmd

@@ -107,6 +107,7 @@ class MacNotifier:
                 title,
                 "-message",
                 full_message,
+                "-ignoreDnD",
                 "-activate",
                 runtime_config.notification.app_bundle,
                 "-sound",
