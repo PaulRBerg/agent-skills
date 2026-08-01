@@ -12,6 +12,30 @@ from loguru import logger
 
 from ai_notify.config import Config, get_runtime_config
 
+TASK_EXCERPT_LENGTH = 100
+DETAIL_EXCERPT_LENGTH = 180
+
+
+def _truncate_text(value: str, limit: int) -> str:
+    """Normalize whitespace and bound notification text."""
+    normalized = " ".join(value.split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 3].rstrip() + "..."
+
+
+def _format_context_message(task: str, detail_label: str, detail: str) -> str:
+    """Build a compact task/detail notification body."""
+    lines: list[str] = []
+    task_excerpt = _truncate_text(task, TASK_EXCERPT_LENGTH)
+    detail_excerpt = _truncate_text(detail, DETAIL_EXCERPT_LENGTH)
+
+    if task_excerpt:
+        lines.append(f"Task: {task_excerpt}")
+    if detail_excerpt:
+        lines.append(f"{detail_label}: {detail_excerpt}")
+    return "\n".join(lines)
+
 
 class MacNotifier:
     """Sends desktop notifications using terminal-notifier (macOS only)."""
@@ -96,9 +120,6 @@ class MacNotifier:
             return False
 
         try:
-            # Build notification message
-            full_message = f"{subtitle}\n{message}" if message else subtitle
-
             # Get runtime config for notification settings
             runtime_config = get_runtime_config()
 
@@ -107,14 +128,22 @@ class MacNotifier:
                 "terminal-notifier",
                 "-title",
                 title,
-                "-message",
-                full_message,
-                "-ignoreDnD",
-                "-activate",
-                runtime_config.notification.app_bundle,
-                "-sound",
-                runtime_config.notification.sound,
             ]
+            if message:
+                cmd.extend(["-subtitle", subtitle, "-message", message])
+            else:
+                # terminal-notifier requires a message; retain the existing
+                # two-argument behavior without duplicating the subtitle.
+                cmd.extend(["-message", subtitle])
+            cmd.extend(
+                [
+                    "-ignoreDnD",
+                    "-activate",
+                    runtime_config.notification.app_bundle,
+                    "-sound",
+                    runtime_config.notification.sound,
+                ]
+            )
 
             # Add icon as content image if available (contentImage instead of appIcon due to macOS API restrictions)
             icon_path = self._get_icon_path()
@@ -141,98 +170,83 @@ class MacNotifier:
             self._available = False
             return False
 
-    def notify_job_done(
+    def notify_completion(
         self,
         project_name: str,
-        job_number: int,
-        duration_str: str,
+        *,
+        agent: str,
+        task: str,
+        result: str,
+        duration_str: Optional[str] = None,
     ) -> bool:
-        """
-        Send job completion notification.
+        """Send a contextual turn-completion notification."""
+        subtitle = f"{agent} completed"
+        if duration_str:
+            subtitle += f" in {duration_str}"
 
-        Args:
-            project_name: Project name (from cwd)
-            job_number: Job sequence number
-            duration_str: Human-readable duration (e.g., "53s", "6m53s")
+        message = _format_context_message(task, "Result", result)
+        if not message:
+            message = "Result: Turn completed."
 
-        Returns:
-            True if notification was sent successfully
-        """
-        subtitle = f"Prompt #{job_number} completed in {duration_str}"
         return self.send_notification(
-            title=project_name,
+            title=project_name or agent,
             subtitle=subtitle,
+            message=message,
         )
 
     def notify_permission_request(
         self,
         project_name: str,
-        message: str = "Claude is waiting for permission",
-        job_number: Optional[int] = None,
+        *,
+        task: str,
+        request: str,
     ) -> bool:
-        """
-        Send permission request notification.
-
-        Args:
-            project_name: Project name (from cwd)
-            message: Permission request message
-            job_number: Optional job number for this prompt
-
-        Returns:
-            True if notification was sent successfully
-        """
-        # Build subtitle with job number if available
-        if job_number is not None:
-            subtitle = f"Prompt #{job_number} needs approval"
-        else:
-            subtitle = "Approval needed"
-
+        """Send a contextual permission-request notification."""
         return self.send_notification(
-            title=project_name,
-            subtitle=subtitle,
-            message=message,
+            title=project_name or "Claude Code",
+            subtitle="Claude needs approval",
+            message=_format_context_message(
+                task,
+                "Request",
+                request or "Permission requested",
+            ),
         )
 
     def notify_job_failed(
         self,
         project_name: str,
-        message: str,
-        job_number: Optional[int] = None,
+        *,
+        task: str,
+        error: str,
+        duration_str: Optional[str] = None,
     ) -> bool:
-        """Send a failed-turn notification, with a job number when one was tracked."""
-        subtitle = f"Prompt #{job_number} failed" if job_number is not None else "Response failed"
+        """Send a contextual failed-turn notification."""
+        subtitle = "Claude failed"
+        if duration_str:
+            subtitle += f" after {duration_str}"
+
         return self.send_notification(
-            title=project_name,
+            title=project_name or "Claude Code",
             subtitle=subtitle,
-            message=message,
+            message=_format_context_message(task, "Error", error),
         )
 
     def notify_question(
         self,
         project_name: str,
-        message: str = "Claude is asking a question",
-        job_number: Optional[int] = None,
+        *,
+        task: str,
+        question: str,
     ) -> bool:
-        """
-        Send question notification.
-
-        Args:
-            project_name: Project name (from cwd)
-            message: Question text
-            job_number: Optional job number for this prompt
-
-        Returns:
-            True if notification was sent successfully
-        """
-        if job_number is not None:
-            subtitle = f"Prompt #{job_number} has a question"
-        else:
-            subtitle = "Question for you"
-
+        """Send a contextual question notification."""
         return self.send_notification(
-            title=project_name,
-            subtitle=subtitle,
-            message=message,
+            title=project_name or "Claude Code",
+            subtitle="Claude needs input",
+            message=_format_context_message(
+                task,
+                "Question",
+                question or "Claude is asking a question",
+            ),
         )
 
     @staticmethod

@@ -7,8 +7,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ai_notify.config_loader import AINotifyConfig, NotificationConfig, NotificationMode
+from ai_notify.events.ask_user_question import handle_ask_user_question
 from ai_notify.events.notification import handle_notification
-from ai_notify.events.permission_request import handle_permission
+from ai_notify.events.permission_request import _permission_request, handle_permission
 from ai_notify.events.stop import handle_stop
 from ai_notify.events.stop_failure import _failure_message, handle_stop_failure
 
@@ -51,7 +52,7 @@ class TestPermissionToolName:
     ):
         """Current payloads put the tool name at top-level tool_name, not tool_input.name."""
         tracker = MagicMock()
-        tracker.get_active_job_number.return_value = 7
+        tracker.get_active_prompt.return_value = "Choose a framework"
         mock_tracker_cls.return_value = tracker
 
         notifier = MagicMock()
@@ -62,13 +63,69 @@ class TestPermissionToolName:
             {
                 "session_id": "s1",
                 "cwd": "/tmp/p",
-                "tool_name": "AskUserQuestion",
-                "tool_input": {},
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "npm install",
+                    "description": "Install dependencies",
+                },
             }
         )
 
         notifier.notify_permission_request.assert_called_once_with(
-            "proj", "Tool: AskUserQuestion", 7
+            "proj",
+            task="Choose a framework",
+            request="Bash — npm install",
+        )
+
+    @pytest.mark.parametrize(
+        ("tool_name", "tool_input", "expected"),
+        [
+            ("Write", {"file_path": "/tmp/result.txt"}, "Write — /tmp/result.txt"),
+            ("WebFetch", {"url": "https://example.com"}, "WebFetch — https://example.com"),
+            ("", {"name": "CustomTool", "description": "Run it"}, "CustomTool — Run it"),
+            ("Bash", {}, "Bash"),
+            (None, None, "Permission requested"),
+        ],
+    )
+    def test_permission_request_context_fallbacks(self, tool_name, tool_input, expected):
+        assert _permission_request(tool_name, tool_input) == expected
+
+
+class TestAskUserQuestion:
+    @patch("ai_notify.events.ask_user_question.MacNotifier")
+    @patch("ai_notify.events.ask_user_question.SessionTracker")
+    @patch(
+        "ai_notify.events.ask_user_question.should_send_permission_notification",
+        return_value=True,
+    )
+    @patch("ai_notify.events.ask_user_question.get_runtime_config")
+    def test_includes_active_task_and_remaining_question_count(
+        self, mock_config, mock_send, mock_tracker_cls, mock_notifier_cls
+    ):
+        tracker = MagicMock()
+        tracker.get_active_prompt.return_value = "Plan the frontend"
+        mock_tracker_cls.return_value = tracker
+        notifier = MagicMock()
+        notifier.get_project_name.return_value = "project"
+        mock_notifier_cls.return_value = notifier
+
+        handle_ask_user_question(
+            {
+                "session_id": "s1",
+                "cwd": "/tmp/project",
+                "tool_input": {
+                    "questions": [
+                        {"question": "Which framework?"},
+                        {"question": "Which test runner?"},
+                    ]
+                },
+            }
+        )
+
+        notifier.notify_question.assert_called_once_with(
+            "project",
+            task="Plan the frontend",
+            question="Which framework? (+1 more)",
         )
 
 
@@ -101,6 +158,39 @@ class TestStopPendingWork:
 
         tracker.mark_stopped.assert_called_once_with("s1")
 
+    @patch("ai_notify.events.stop.MacNotifier")
+    @patch("ai_notify.events.stop.get_runtime_config")
+    @patch("ai_notify.events.stop.SessionTracker")
+    def test_completion_includes_prompt_and_final_response(
+        self, mock_tracker_cls, mock_config, mock_notifier_cls
+    ):
+        tracker = MagicMock()
+        tracker.get_job_info.return_value = (3, 65, "Fix authentication")
+        mock_tracker_cls.return_value = tracker
+        config = AINotifyConfig()
+        config.notification.threshold_seconds = 0
+        config.cleanup.auto_cleanup_enabled = False
+        mock_config.return_value = config
+        notifier = MagicMock()
+        notifier.get_project_name.return_value = "project"
+        mock_notifier_cls.return_value = notifier
+
+        handle_stop(
+            {
+                "session_id": "s1",
+                "cwd": "/tmp/project",
+                "last_assistant_message": "Fixed authentication and added tests.",
+            }
+        )
+
+        notifier.notify_completion.assert_called_once_with(
+            "project",
+            agent="Claude",
+            task="Fix authentication",
+            result="Fixed authentication and added tests.",
+            duration_str="1m5s",
+        )
+
 
 class TestStopFailure:
     @patch("ai_notify.events.stop_failure.MacNotifier")
@@ -117,7 +207,8 @@ class TestStopFailure:
             )
         )
         tracker = MagicMock()
-        tracker.get_active_job_number.return_value = 4
+        tracker.get_active_prompt.return_value = "/skip fix authentication"
+        tracker.get_job_info.return_value = (4, 75, "/skip fix authentication")
         mock_tracker_cls.return_value = tracker
         notifier = MagicMock()
         notifier.get_project_name.return_value = "project"
@@ -133,7 +224,10 @@ class TestStopFailure:
 
         tracker.mark_stopped.assert_called_once_with("s1")
         notifier.notify_job_failed.assert_called_once_with(
-            "project", "API Error: rate limit reached", 4
+            "project",
+            task="/skip fix authentication",
+            error="API Error: rate limit reached",
+            duration_str="1m15s",
         )
 
     @pytest.mark.parametrize("mode", [NotificationMode.PERMISSION_ONLY, NotificationMode.DISABLED])
@@ -145,7 +239,8 @@ class TestStopFailure:
     ):
         mock_config.return_value = AINotifyConfig(notification=NotificationConfig(mode=mode))
         tracker = MagicMock()
-        tracker.get_active_job_number.return_value = 2
+        tracker.get_active_prompt.return_value = "Build the app"
+        tracker.get_job_info.return_value = (2, 3, "Build the app")
         mock_tracker_cls.return_value = tracker
 
         handle_stop_failure({"session_id": "s1", "error": "server_error"})
@@ -161,7 +256,7 @@ class TestStopFailure:
     ):
         mock_config.return_value = AINotifyConfig()
         tracker = MagicMock()
-        tracker.get_active_job_number.return_value = None
+        tracker.get_active_prompt.return_value = None
         mock_tracker_cls.return_value = tracker
         notifier = MagicMock()
         notifier.get_project_name.return_value = ""
@@ -170,8 +265,12 @@ class TestStopFailure:
         handle_stop_failure({"session_id": "untracked", "error_details": "Service unavailable"})
 
         notifier.notify_job_failed.assert_called_once_with(
-            "Claude Code", "Service unavailable", None
+            "Claude Code",
+            task="",
+            error="Service unavailable",
+            duration_str=None,
         )
+        tracker.get_job_info.assert_not_called()
 
     @pytest.mark.parametrize(
         ("payload", "expected"),
@@ -184,9 +283,8 @@ class TestStopFailure:
     def test_failure_message_fallbacks(self, payload, expected):
         assert _failure_message(payload) == expected
 
-    def test_failure_message_is_normalized_and_capped(self):
+    def test_failure_message_is_normalized(self):
         message = _failure_message({"last_assistant_message": "word \n" * 100})
 
         assert "\n" not in message
-        assert len(message) == 320
-        assert message.endswith("...")
+        assert message == " ".join(["word"] * 100)

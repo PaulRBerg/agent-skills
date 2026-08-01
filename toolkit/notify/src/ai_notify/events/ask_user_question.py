@@ -32,27 +32,44 @@ def handle_ask_user_question(data: dict) -> None:
     if not should_send_permission_notification(runtime_config):
         return
 
-    # Look up job number for this session
-    job_number = None
+    # Look up the current task for context.
+    task = ""
     if session_id:
         tracker = SessionTracker()
-        job_number = tracker.get_active_job_number(session_id)
+        task = tracker.get_active_prompt(session_id) or ""
 
-    # Extract question text from tool_input.questions[0].question
-    message = "Claude is asking a question"
-    if isinstance(tool_input, dict):
-        questions = tool_input.get("questions", [])
-        if questions and isinstance(questions[0], dict):
-            question_text = questions[0].get("question", message)
-            # Truncate long questions at ~80 chars
-            if len(question_text) > 80:
-                message = question_text[:77] + "..."
-            else:
-                message = question_text
+    question = _question_text(tool_input)
 
     # Send notification
     notifier = MacNotifier()
     project_name = notifier.get_project_name(cwd)
-    notifier.notify_question(project_name, message, job_number)
+    notifier.notify_question(
+        project_name,
+        task=task,
+        question=question,
+    )
 
-    logger.info(f"Question notification sent: {message} (job #{job_number})")
+    logger.info(f"Question notification sent: {question}")
+
+
+def _question_text(tool_input: object) -> str:
+    """Return the first valid question and note any remaining questions."""
+    if not isinstance(tool_input, dict):
+        return "Claude is asking a question"
+
+    raw_questions = tool_input.get("questions")
+    if not isinstance(raw_questions, list):
+        return "Claude is asking a question"
+
+    questions: list[str] = []
+    for item in raw_questions:
+        if not isinstance(item, dict):
+            continue
+        question = item.get("question")
+        if isinstance(question, str) and question.strip():
+            questions.append(question.strip())
+    if not questions:
+        return "Claude is asking a question"
+
+    suffix = f" (+{len(questions) - 1} more)" if len(questions) > 1 else ""
+    return questions[0] + suffix

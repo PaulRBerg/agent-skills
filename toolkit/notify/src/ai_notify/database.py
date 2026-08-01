@@ -15,6 +15,7 @@ from ai_notify.config import (
     DB_SCHEMA,
     EXPORT_DIR,
     SQL_GET_ACTIVE_JOB_NUMBER,
+    SQL_GET_ACTIVE_PROMPT,
     SQL_GET_JOB_INFO,
     SQL_INSERT_PROMPT,
     SQL_UPDATE_STOPPED,
@@ -184,6 +185,19 @@ class SessionTracker:
                 return None
         except sqlite3.Error as e:
             logger.error(f"Failed to get active job number: {e}")
+            return None
+
+    def get_active_prompt(self, session_id: str) -> Optional[str]:
+        """Get the prompt for the most recent active turn."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.execute(SQL_GET_ACTIVE_PROMPT, (session_id,))
+                result = cursor.fetchone()
+                if result and isinstance(result[0], str):
+                    return result[0]
+                return None
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get active prompt: {e}")
             return None
 
     def export_to_json(self, output_path: Path, days: Optional[int] = None) -> int:

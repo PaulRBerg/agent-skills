@@ -2,6 +2,8 @@
 PermissionRequest event handler.
 """
 
+from typing import Any
+
 from loguru import logger
 
 from ai_notify.config import get_runtime_config
@@ -9,13 +11,23 @@ from ai_notify.database import SessionTracker
 from ai_notify.helpers.filters import should_send_permission_notification
 from ai_notify.notifier import MacNotifier
 
+PERMISSION_DETAIL_KEYS = (
+    "command",
+    "file_path",
+    "notebook_path",
+    "path",
+    "url",
+    "query",
+    "description",
+)
+
 
 def handle_permission(data: dict) -> None:
     """
     Handle PermissionRequest event.
 
     Sends a notification for permission requests with details about the
-    requested tool or command and the job number if available.
+    current task and requested tool action.
 
     Args:
         data: Event data containing session_id, cwd, tool_name, and tool_input
@@ -34,33 +46,44 @@ def handle_permission(data: dict) -> None:
     if not should_send_permission_notification(runtime_config):
         return
 
-    # Look up job number for this session
-    job_number = None
+    # Look up the current task for context.
+    task = ""
     if session_id:
         tracker = SessionTracker()
-        job_number = tracker.get_active_job_number(session_id)
+        task = tracker.get_active_prompt(session_id) or ""
 
-    # Extract command/description and (for legacy payloads) the nested tool name
-    command = ""
-    description = ""
-    if isinstance(tool_input, dict):
-        command = tool_input.get("command", "")
-        description = tool_input.get("description", "")
-        tool_name = tool_name or tool_input.get("name", "")
-
-    # Build notification message
-    if command:
-        message = f"Command: {command}"
-    elif tool_name:
-        message = f"Tool: {tool_name}"
-    elif description:
-        message = description
-    else:
-        message = "Permission requested"
+    request = _permission_request(tool_name, tool_input)
 
     # Send notification
     notifier = MacNotifier()
     project_name = notifier.get_project_name(cwd)
-    notifier.notify_permission_request(project_name, message, job_number)
+    notifier.notify_permission_request(
+        project_name,
+        task=task,
+        request=request,
+    )
 
-    logger.info(f"Permission request notification sent: {message} (job #{job_number})")
+    logger.info(f"Permission request notification sent: {request}")
+
+
+def _permission_request(tool_name: Any, tool_input: Any) -> str:
+    """Return the most actionable permission context for later truncation."""
+    normalized_tool = tool_name.strip() if isinstance(tool_name, str) else ""
+    detail = ""
+
+    if isinstance(tool_input, dict):
+        nested_name = tool_input.get("name")
+        if not normalized_tool and isinstance(nested_name, str):
+            normalized_tool = nested_name.strip()
+
+        for key in PERMISSION_DETAIL_KEYS:
+            value = tool_input.get(key)
+            if isinstance(value, str) and value.strip():
+                detail = value.strip()
+                break
+
+    if normalized_tool and detail:
+        return f"{normalized_tool} — {detail}"
+    if normalized_tool:
+        return normalized_tool
+    return detail or "Permission requested"

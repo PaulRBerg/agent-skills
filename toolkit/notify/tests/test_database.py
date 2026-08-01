@@ -110,6 +110,20 @@ class TestSessionTracker:
         job_number = tracker.get_active_job_number("non-existent")
         assert job_number is None
 
+    def test_get_active_prompt(self, temp_config):
+        tracker = SessionTracker(temp_config)
+        tracker.track_prompt("session-1", "first prompt", "/Users/test/project")
+        tracker.track_prompt("session-1", "latest prompt", "/Users/test/project")
+
+        assert tracker.get_active_prompt("session-1") == "latest prompt"
+
+        tracker.mark_stopped("session-1")
+        assert tracker.get_active_prompt("session-1") == "first prompt"
+
+        tracker.mark_stopped("session-1")
+        assert tracker.get_active_prompt("session-1") is None
+        assert tracker.get_active_prompt("non-existent") is None
+
 
 class TestDataCleanup:
     """Test data cleanup functionality."""

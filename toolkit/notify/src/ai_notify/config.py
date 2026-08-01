@@ -61,7 +61,7 @@ WHERE id = (
     SELECT id FROM sessions
     WHERE session_id = ?
       AND stopped_at IS NULL
-    ORDER BY created_at DESC
+    ORDER BY id DESC
     LIMIT 1
 )
 """
@@ -73,7 +73,7 @@ WHERE id = (
     SELECT id FROM sessions
     WHERE session_id = ?
       AND stopped_at IS NULL
-    ORDER BY created_at DESC
+    ORDER BY id DESC
     LIMIT 1
 )
 """
@@ -83,12 +83,21 @@ SELECT job_number, duration_seconds, prompt
 FROM sessions
 WHERE session_id = ?
   AND stopped_at IS NOT NULL
-ORDER BY created_at DESC
+ORDER BY id DESC
 LIMIT 1
 """
 
 SQL_GET_ACTIVE_JOB_NUMBER = """--sql
 SELECT job_number
+FROM sessions
+WHERE session_id = ?
+  AND stopped_at IS NULL
+ORDER BY id DESC
+LIMIT 1
+"""
+
+SQL_GET_ACTIVE_PROMPT = """--sql
+SELECT prompt
 FROM sessions
 WHERE session_id = ?
   AND stopped_at IS NULL

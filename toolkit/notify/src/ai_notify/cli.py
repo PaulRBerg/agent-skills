@@ -142,8 +142,12 @@ def test():
         click.echo("Sending test notification...")
 
         notifier = MacNotifier()
-        notifier.notify_job_done(
-            project_name="ai-notify-test", job_number=99, duration_str="1m 23s"
+        notifier.notify_completion(
+            "ai-notify-test",
+            agent="Claude",
+            task="Improve notification messages",
+            result="Notification content is clearer and more useful.",
+            duration_str="1m23s",
         )
 
         click.echo(click.style("✓ Test notification sent successfully", fg="green"))

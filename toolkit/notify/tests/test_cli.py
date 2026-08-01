@@ -72,8 +72,13 @@ class TestCLICommands:
 
             result = runner.invoke(cli.cli, ["test"])
 
-            # Should call notify_job_done
-            assert mock_instance.notify_job_done.called
+            mock_instance.notify_completion.assert_called_once_with(
+                "ai-notify-test",
+                agent="Claude",
+                task="Improve notification messages",
+                result="Notification content is clearer and more useful.",
+                duration_str="1m23s",
+            )
             assert result.exit_code == 0
             assert "Test notification sent" in result.output
 

@@ -37,16 +37,14 @@ def handle_codex_notify(payload: dict[str, Any]) -> None:
 
     cwd = payload.get("cwd") or os.getcwd()
     project_name = MacNotifier.get_project_name(str(cwd))
-
-    message = _extract_assistant_message(payload) or prompt
-    if message:
-        message = _truncate_message(message, 320)
+    result = _extract_assistant_message(payload)
 
     notifier = MacNotifier(icon_name="codex")
-    notifier.send_notification(
-        title=project_name,
-        subtitle="Codex turn complete",
-        message=message,
+    notifier.notify_completion(
+        project_name,
+        agent="Codex",
+        task=prompt,
+        result=result,
     )
 
 
@@ -121,15 +119,6 @@ def _extract_message_text(message: Any) -> str:
         return " ".join(parts).strip()
 
     return ""
-
-
-def _truncate_message(message: str, limit: int) -> str:
-    normalized = " ".join(message.split())
-    if len(normalized) <= limit:
-        return normalized
-    if limit <= 3:
-        return normalized[:limit]
-    return normalized[: limit - 3] + "..."
 
 
 def _first_value(payload: dict[str, Any], keys: Iterable[str]) -> Optional[Any]:

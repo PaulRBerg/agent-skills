@@ -29,6 +29,9 @@ def handle_stop(data: dict) -> None:
     # Extract required fields
     session_id = data.get("session_id", "")
     cwd = data.get("cwd", "")
+    last_assistant_message = data.get("last_assistant_message", "")
+    if not isinstance(last_assistant_message, str):
+        last_assistant_message = ""
 
     if not session_id:
         raise ValueError("Missing session_id in input")
@@ -55,7 +58,13 @@ def handle_stop(data: dict) -> None:
             project_name = notifier.get_project_name(cwd)
             duration_str = format_duration(duration_seconds)
 
-            notifier.notify_job_done(project_name, job_number, duration_str)
+            notifier.notify_completion(
+                project_name,
+                agent="Claude",
+                task=prompt or "",
+                result=last_assistant_message,
+                duration_str=duration_str,
+            )
             logger.info(f"Job #{job_number} completed in {duration_str}")
     else:
         logger.warning(f"No job info found for session {session_id}")

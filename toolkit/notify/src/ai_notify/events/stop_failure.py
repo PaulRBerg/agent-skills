@@ -8,8 +8,8 @@ from ai_notify.config import get_runtime_config
 from ai_notify.database import SessionTracker
 from ai_notify.helpers.filters import should_send_failure_notification
 from ai_notify.notifier import MacNotifier
+from ai_notify.utils import format_duration
 
-MAX_FAILURE_MESSAGE_LENGTH = 320
 DEFAULT_FAILURE_MESSAGE = "Claude Code API error"
 
 
@@ -22,8 +22,13 @@ def handle_stop_failure(data: dict[str, Any]) -> None:
         raise ValueError("Missing session_id in input")
 
     tracker = SessionTracker()
-    job_number = tracker.get_active_job_number(session_id)
+    prompt = tracker.get_active_prompt(session_id)
     tracker.mark_stopped(session_id)
+
+    job_number = None
+    duration_seconds = None
+    if prompt is not None:
+        job_number, duration_seconds, _ = tracker.get_job_info(session_id)
 
     runtime_config = get_runtime_config()
     if should_send_failure_notification(runtime_config):
@@ -31,8 +36,11 @@ def handle_stop_failure(data: dict[str, Any]) -> None:
         project_name = notifier.get_project_name(cwd) or "Claude Code"
         notifier.notify_job_failed(
             project_name,
-            _failure_message(data),
-            job_number,
+            task=prompt or "",
+            error=_failure_message(data),
+            duration_str=(
+                format_duration(duration_seconds) if duration_seconds is not None else None
+            ),
         )
 
     if job_number is None:
@@ -42,13 +50,13 @@ def handle_stop_failure(data: dict[str, Any]) -> None:
 
 
 def _failure_message(data: dict[str, Any]) -> str:
-    """Return the best documented StopFailure error text, normalized and bounded."""
+    """Return the best documented StopFailure error text, normalized."""
     candidates = (
         data.get("last_assistant_message"),
         data.get("error_details"),
         data.get("error"),
     )
-    message = next(
+    return next(
         (
             normalized
             for value in candidates
@@ -56,7 +64,3 @@ def _failure_message(data: dict[str, Any]) -> str:
         ),
         DEFAULT_FAILURE_MESSAGE,
     )
-
-    if len(message) <= MAX_FAILURE_MESSAGE_LENGTH:
-        return message
-    return message[: MAX_FAILURE_MESSAGE_LENGTH - 3].rstrip() + "..."

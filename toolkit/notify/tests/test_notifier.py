@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_notify.notifier import MacNotifier
+from ai_notify.notifier import (
+    DETAIL_EXCERPT_LENGTH,
+    TASK_EXCERPT_LENGTH,
+    MacNotifier,
+    _format_context_message,
+)
 
 
 class TestMacNotifier:
@@ -57,6 +62,7 @@ class TestMacNotifier:
         assert "Test" in cmd
         assert "-message" in cmd
         assert "Subtitle" in cmd
+        assert "-subtitle" not in cmd
         assert "-ignoreDnD" in cmd
         assert "-activate" in cmd
         assert "-sound" in cmd
@@ -74,12 +80,10 @@ class TestMacNotifier:
         result = notifier.send_notification("Test", "Subtitle", "Body message")
         assert result is True
 
-        # Verify message includes both subtitle and body
+        # Verify native subtitle and message fields remain distinct.
         cmd = mock_run.call_args[0][0]
-        message_idx = cmd.index("-message") + 1
-        message = cmd[message_idx]
-        assert "Subtitle" in message
-        assert "Body message" in message
+        assert cmd[cmd.index("-subtitle") + 1] == "Subtitle"
+        assert cmd[cmd.index("-message") + 1] == "Body message"
 
     def test_send_notification_without_icon(self, notifier, mocker):
         notifier._available = True
@@ -195,47 +199,98 @@ class TestMacNotifier:
         icon_path = notifier._get_icon_path()
         assert icon_path is None
 
-    def test_notify_permission_request_with_job_number(self, notifier, mocker):
-        """Test permission notification with job number."""
-        notifier._available = True
+    def test_notify_completion_includes_task_result_and_duration(self, notifier, mocker):
+        mock_send = mocker.patch.object(notifier, "send_notification", return_value=True)
 
-        mock_run = mocker.patch("ai_notify.notifier.subprocess.run")
-        mock_run.return_value.returncode = 0
-
-        # Mock icon path
-        mocker.patch.object(notifier, "_get_icon_path", return_value=None)
-
-        result = notifier.notify_permission_request(
-            "test-project", "Command: npm install", job_number=3
+        result = notifier.notify_completion(
+            "test-project",
+            agent="Claude",
+            task="Fix the bug",
+            result="Fixed the bug and added tests.",
+            duration_str="1m23s",
         )
+
         assert result is True
+        mock_send.assert_called_once_with(
+            title="test-project",
+            subtitle="Claude completed in 1m23s",
+            message="Task: Fix the bug\nResult: Fixed the bug and added tests.",
+        )
+        assert "Prompt #" not in mock_send.call_args.kwargs["message"]
 
-        # Verify command includes job number in subtitle
-        cmd = mock_run.call_args[0][0]
-        message_idx = cmd.index("-message") + 1
-        message = cmd[message_idx]
-        assert "Prompt #3 needs approval" in message
-        assert "Command: npm install" in message
+    def test_notify_completion_falls_back_without_context(self, notifier, mocker):
+        mock_send = mocker.patch.object(notifier, "send_notification", return_value=True)
 
-    def test_notify_permission_request_without_job_number(self, notifier, mocker):
-        """Test permission notification without job number."""
-        notifier._available = True
+        notifier.notify_completion("", agent="Codex", task="", result="")
 
-        mock_run = mocker.patch("ai_notify.notifier.subprocess.run")
-        mock_run.return_value.returncode = 0
+        mock_send.assert_called_once_with(
+            title="Codex",
+            subtitle="Codex completed",
+            message="Result: Turn completed.",
+        )
 
-        # Mock icon path
-        mocker.patch.object(notifier, "_get_icon_path", return_value=None)
+    def test_notify_job_failed_includes_task_error_and_duration(self, notifier, mocker):
+        mock_send = mocker.patch.object(notifier, "send_notification", return_value=True)
 
-        result = notifier.notify_permission_request("test-project", "Command: npm install")
-        assert result is True
+        notifier.notify_job_failed(
+            "test-project",
+            task="Deploy the app",
+            error="Rate limit reached",
+            duration_str="45s",
+        )
 
-        # Verify command uses default subtitle
-        cmd = mock_run.call_args[0][0]
-        message_idx = cmd.index("-message") + 1
-        message = cmd[message_idx]
-        assert "Approval needed" in message
-        assert "Command: npm install" in message
+        mock_send.assert_called_once_with(
+            title="test-project",
+            subtitle="Claude failed after 45s",
+            message="Task: Deploy the app\nError: Rate limit reached",
+        )
+
+    def test_notify_permission_request_includes_task_and_request(self, notifier, mocker):
+        mock_send = mocker.patch.object(notifier, "send_notification", return_value=True)
+
+        notifier.notify_permission_request(
+            "test-project",
+            task="Install dependencies",
+            request="Bash — npm install",
+        )
+
+        mock_send.assert_called_once_with(
+            title="test-project",
+            subtitle="Claude needs approval",
+            message="Task: Install dependencies\nRequest: Bash — npm install",
+        )
+
+    def test_notify_question_includes_task_and_question(self, notifier, mocker):
+        mock_send = mocker.patch.object(notifier, "send_notification", return_value=True)
+
+        notifier.notify_question(
+            "test-project",
+            task="Plan the frontend",
+            question="Which framework? (+1 more)",
+        )
+
+        mock_send.assert_called_once_with(
+            title="test-project",
+            subtitle="Claude needs input",
+            message="Task: Plan the frontend\nQuestion: Which framework? (+1 more)",
+        )
+
+    def test_context_message_normalizes_and_truncates_each_excerpt(self):
+        message = _format_context_message(
+            "task \n" * 40,
+            "Result",
+            "detail \t" * 60,
+        )
+        task_line, detail_line = message.splitlines()
+        task_excerpt = task_line.removeprefix("Task: ")
+        detail_excerpt = detail_line.removeprefix("Result: ")
+
+        assert len(task_excerpt) == TASK_EXCERPT_LENGTH
+        assert len(detail_excerpt) == DETAIL_EXCERPT_LENGTH
+        assert task_excerpt.endswith("...")
+        assert detail_excerpt.endswith("...")
+        assert "\n" not in task_excerpt
+        assert "\t" not in detail_excerpt
 
 
 if __name__ == "__main__":
