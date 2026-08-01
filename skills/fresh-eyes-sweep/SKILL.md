@@ -66,13 +66,18 @@ reimplement ledger arithmetic.
    not finish.
 3. Classify generated, vendored, minified, binary, and bulk-data artifacts. Validate them through their generator,
    schema, or invariants when line-by-line review is inappropriate, then mark them with the agent's reason.
-4. Inspect recent history and diffs, especially the newest changes, to find affected callers, dependencies, tests,
-   configuration, and docs. Recency sets order, never coverage.
-5. Discover build, test, lint, typecheck, format, and codegen checks.
-6. Establish a baseline for every safe, relevant check before the first fix. If it is red, prioritize reproducible
+4. Build a compact system map: executable entry points, workspace or package dependency directions, public interfaces,
+   generators and derived artifacts, external and persisted-data seams, and the owner of each material invariant. Trace
+   the highest-risk workflows end to end before choosing slices.
+5. Inspect recent history and diffs, especially the newest changes, to find affected callers, dependencies, tests,
+   configuration, and docs. Rank slices and fixes by evidenced impact: correctness, data loss, and security or privacy
+   first; then reliability, maintainability, measured performance, and developer experience. Treat recency as one
+   prioritization signal, never as a substitute for coverage.
+6. Discover build, test, lint, typecheck, format, and codegen checks.
+7. Establish a baseline for every safe, relevant check before the first fix. If it is red, prioritize reproducible
    failures before discretionary work; defer failures that need an unclear or prohibited action while continuing with
    independently verifiable work.
-7. Preserve every pre-existing edit recorded by the ledger. Do not revert, absorb, commit, or report it as a finding.
+8. Preserve every pre-existing edit recorded by the ledger. Do not revert, absorb, commit, or report it as a finding.
 
 After mapping, report `### 🔎 Sweep mapped — <files> files · <slices> slices · ledger <scratch.json>`. Slice count is an
 agent organization choice; file count comes from the ledger.
@@ -110,15 +115,27 @@ needless complexity. Also inspect evidenced problems in performance, dependencie
 configuration, observability, accessibility, agent context, naming, and directory structure. Style preferences and
 unverified hunches are not findings.
 
+At applicable external and persisted-data seams, inspect validation; domain precision and units; deterministic ordering
+and deduplication; idempotency and repeat-run behavior; atomicity and interruption safety; retry and pagination
+completeness; bounded concurrency, cancellation, and resource cleanup; and secret, log, path, temporary-file, and
+command safety.
+
 Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available; add a
 focused regression test when useful. Mark `reported` when a safe fix would alter a public contract, intent is ambiguous,
 or verification is unavailable. Do not add speculative features, broad refactors, or cosmetic churn.
 
 Treat source files over 1000 lines and test files over 2000 lines as discovery candidates only. Split a file only when
-cohesion, coupling, change risk, or testability establishes a better seam; line count alone is not evidence. Apply
-dependency or framework updates, data-format or extension changes, renames, and reorganizations only when all affected
-consumers are controlled, the migration is atomic, compatibility is demonstrable, and repository checks can prove it. Do
-not retain a performance change without a recorded baseline metric and repeatable benchmark.
+cohesion, coupling, change risk, or testability establishes a better seam; line count alone is not evidence. When a
+confirmed structural issue requires interface or seam redesign, use `$codebase-design` when available. Centralize the
+invariant in its owning module, apply the deletion test to pass-through modules, introduce a seam only where behavior
+actually varies, and keep callers and tests on the resulting interface.
+
+Before changing an interface, persisted format, exported name, or path, enumerate and migrate every producer, consumer,
+schema, fixture, generator, export or manifest, script or recipe, check, configuration reference, and document. Search
+for the old identifier afterward and account for every intentional remainder. Apply dependency or framework updates,
+data-format or extension changes, renames, and reorganizations only when the migration is atomic, compatibility is
+demonstrable, and repository checks can prove it. Do not retain a performance change without a recorded baseline metric
+and repeatable benchmark.
 
 If an experiment fails its evidence bar, revert only that experiment's attributable edits; never use repository-wide
 clean, checkout, or reset commands. After each nontrivial change wave, run `$code-polish` over that wave's exact changed
