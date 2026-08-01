@@ -4,6 +4,11 @@
 callback. Keep the notification integration macOS-specific while keeping pure logic and tests platform-independent; CI
 runs on Ubuntu with Python 3.13.
 
+## Upstream Documentation
+
+- OpenAI Codex CLI `notify` callback: <https://learn.chatgpt.com/docs/config-file/config-advanced#notifications>
+- Claude Code hook configuration and event schemas: <https://code.claude.com/docs/en/hooks>
+
 ## Development Workflow
 
 - Bootstrap the Python 3.12+ environment with `uv sync --extra dev --locked`.
