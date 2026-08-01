@@ -1,109 +1,40 @@
 # Context
 
-Desktop notification system for Claude Code and Codex CLI with intelligent session tracking. macOS only — notifications
-go through `terminal-notifier`.
-
-## Layout
-
-`src/ai_notify/` is the package; `tests/` holds per-feature `test_*.py` files. Non-obvious structure:
-
-- `events/` — one handler module per event, including `codex.py`.
-- `helpers/` — `cleanup.py`, `filters.py`.
-- `claude_hooks.py` / `codex_config.py` / `integrations.py` — back `link claude`, `link codex`, and `check`.
+`ai-notify` is a macOS Python CLI that sends `terminal-notifier` alerts for Claude Code hooks and Codex CLI's `notify`
+callback. Keep the notification integration macOS-specific while keeping pure logic and tests platform-independent; CI
+runs on Ubuntu with Python 3.13.
 
 ## Development Workflow
 
-### Setup
+- Bootstrap the Python 3.12+ environment with `uv sync --extra dev --locked`.
+- Run the checkout directly with `uv run ai-notify ...`; use `just install-cli` only when testing the global install.
+- Prefer the `justfile`: `just test [pytest args]` runs pytest, while `just fc` runs Prettier, Ruff, and Pyright.
+- Use `just prettier-check`, `just ruff-check`, or `just pyright-check` when a focused check is sufficient.
+- `just fw` rewrites every matching Python, Markdown, and JSON file. Use focused formatter commands for surgical
+  changes.
 
-```bash
-uv sync           # Install dependencies into the project venv
-just install-cli  # Install the `ai-notify` CLI globally (alias: ic)
-```
+## Architecture and Invariants
 
-### Running
+- Claude Code commands under `ai-notify event` read hook JSON from stdin. The `ai-notify codex` callback accepts Codex's
+  JSON as its final argument or via `--stdin`; it does not create a tracked SQLite session.
+- `claude_hooks.HOOK_SPECS` is the source of truth for installed Claude hooks. `integrations.py` derives its required
+  event set from that list so `link claude` and `check` stay aligned.
+- Preserve unrelated settings and hooks when changing integration writers. `link codex` must continue to refuse a
+  different root `notify` value unless forced; profile names resolve to sibling `<profile>.config.toml` files.
+- Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. Runtime configuration is cached for
+  the life of the process.
+- Claude `Stop` defers completion while `background_tasks` or `session_crons` are present. `StopFailure` alerts only in
+  `all` mode and bypasses duration and prompt filters. Codex payloads lack duration, so Codex filtering applies only
+  notification mode and prompt-prefix exclusions.
+- SQLite uses WAL mode with `synchronous=NORMAL`; session data is intentionally transient rather than strictly durable.
 
-The CLI is available via the `ai-notify` command after installation:
+## Testing
 
-```bash
-ai-notify --help
-ai-notify config show
-ai-notify test
-ai-notify event user-prompt-submit  # Event handlers
-```
-
-### Testing
-
-```bash
-just test  # Run pytest
-```
-
-### Quality
-
-```bash
-just fc    # Run all checks (full-check)
-just fw    # Auto-fix all issues (full-write)
-```
-
-### Contributing
-
-Run `just fc` and `just test` before pushing or opening a PR; `just test` wraps `uv run pytest`.
-
-## Key Components
-
-### CLI Structure
-
-The CLI uses Click with command groups:
-
-- **Top-level commands**: `test`, `cleanup`, `check`
-- **`codex` group**: notify handler (run via `ai-notify codex`)
-- **`link` group**: `claude`, `codex`
-- **`config` group**: `show`, `edit`, `reset`
-- **`event` group**: `user-prompt-submit`, `stop`, `notification`, `permission-request`, `ask-user-question` (Claude
-  Code hooks only)
-
-### Event Handlers
-
-Event handlers are CLI subcommands that read JSON from stdin (Claude Code hook format). Codex CLI notify payloads are
-handled by the `ai-notify codex` command.
-
-- `ai-notify event user-prompt-submit`: Tracks new prompts
-- `ai-notify event stop`: Marks sessions complete, sends notifications
-- `ai-notify event notification`: Suppresses waiting notifications
-- `ai-notify event permission-request`: Sends permission request notifications
-- `ai-notify event ask-user-question`: Notifies when Claude asks a question (PreToolUse/AskUserQuestion)
-
-### Configuration
-
-- **YAML-based**: `~/.config/ai-notify/config.yaml`
-- **Pydantic validation**: Type-safe config models
-- **Defaults**: Sensible defaults if config doesn't exist
-
-### Database
-
-- **SQLite**: Session tracking with auto-incrementing job numbers
-- **Schema**: sessions table with triggers for job numbering
-- **Export**: JSON export functionality for backups
-
-### Notifications
-
-- **terminal-notifier**: macOS-native notification system via subprocess
-- **Smart filtering**: Only notifies if duration >= threshold
-- **Project names**: Extracts project name from cwd
-- **Rich features**: Custom Claude icon, configurable sounds, click-to-focus activation
-- **Platform check**: Explicit macOS requirement with helpful error messages
-
-## Guidelines
-
-### Code Style
-
-- Use type hints
-- Document functions with docstrings
-- Follow ruff formatting rules
-- Keep line length to 100 characters
-
-### Testing
-
-- Unit tests for individual components
-- Integration tests for workflows
-- Use `pytest` fixtures for temporary configs
-- Mock external dependencies (subprocess.run for terminal-notifier calls)
+- Keep feature tests in the corresponding `tests/test_*.py` module and use `just test <path-or-node-id>` for targeted
+  verification.
+- Isolate configuration and database paths with temporary directories; tests must not write to the user's actual XDG
+  configuration directory.
+- Mock the macOS platform check, `terminal-notifier` discovery, and subprocess calls. Linux CI must not require the real
+  notifier.
+- For hook or Codex configuration changes, cover idempotence, preservation of unrelated configuration, and conflict
+  behavior.

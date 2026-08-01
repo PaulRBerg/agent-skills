@@ -1,7 +1,7 @@
 # ai-notify
 
-Desktop notification system for Claude Code and Codex CLI that tracks session activity and sends macOS notifications for
-key events.
+Desktop notification system for Claude Code and Codex CLI that tracks Claude Code session activity and sends macOS
+notifications for key events.
 
 ![ai-notify notification demo](demo.png)
 
@@ -31,9 +31,9 @@ To update, `git pull` and re-run the install command.
 
 ## Features
 
-- **Smart Notifications**: Only notifies for jobs exceeding a configurable duration threshold (default: 10s)
+- **Smart Notifications**: Filters Claude Code completion alerts by a configurable duration threshold (default: 10s)
 - **Prompt Filtering**: Exclude specific prompt patterns (e.g., slash commands like `/commit`) from notifications
-- **Session Tracking**: SQLite database tracks prompts, durations, and job numbers
+- **Session Tracking**: SQLite database tracks Claude Code prompts, durations, and job numbers
 - **Auto-cleanup**: Automatic data cleanup with optional export before deletion
 - **Event Handlers**: CLI subcommands for Claude Code hooks and Codex CLI notify integration
 - **Configuration**: YAML-based configuration with sensible defaults
@@ -51,7 +51,8 @@ Inspired by [CCNotify](https://github.com/dazuiba/CCNotify) with key improvement
 
 ## Configuration
 
-ai-notify uses YAML configuration stored at `~/.config/ai-notify/config.yaml`.
+ai-notify uses YAML configuration stored under `$XDG_CONFIG_HOME/ai-notify`, defaulting to
+`~/.config/ai-notify/config.yaml` when `XDG_CONFIG_HOME` is unset.
 
 ### View current configuration
 
@@ -266,7 +267,7 @@ ai-notify check --profile review
    - Calculates the duration
    - Checks if duration >= threshold
    - Checks if prompt starts with any excluded pattern
-   - Sends notification only if both checks pass (by default, whether the job took longer than >10 seconds)
+   - Sends a notification only if both checks pass (by default, when the job took at least 10 seconds)
    - Optionally runs auto-cleanup (every 24 hours)
 3. **StopFailure**: When an API error ends the turn, marks the prompt stopped and sends the documented error text in
    `all` mode, even for short or excluded prompts. If the prompt was not tracked, sends a generic failure notification.
@@ -278,7 +279,9 @@ ai-notify check --profile review
 For Codex CLI, ai-notify runs on the `agent-turn-complete` notify event and sends a completion notification with the
 latest assistant message as context.
 
-## File Structure
+## Runtime Files
+
+When `XDG_CONFIG_HOME` is unset, ai-notify uses these default locations:
 
 ```
 ~/.config/ai-notify/
@@ -293,6 +296,10 @@ latest assistant message as context.
 - [Claude Code](https://code.claude.com/docs/en/overview)
 - [Claude Code hooks](https://code.claude.com/docs/en/hooks)
 - [Codex CLI advanced configuration](https://developers.openai.com/codex/config-advanced)
+
+## Contributing
+
+See [AGENTS.md](AGENTS.md) for the development workflow and repository-specific constraints.
 
 ## License
 
