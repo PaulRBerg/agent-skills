@@ -96,9 +96,10 @@ next session.
 - Reconcile every wave before starting dependents. Use a fresh-context verifier after each nontrivial wave.
 - Subagents and workers never commit. The coordinating session commits settled slices serially as checkpoint commits, so
   only one process touches the Git index.
-- Treat a lint-staged `Failed to get staged files!` or a bare `"lint-staged" exited with code 1` with no named failing
-  check as Git index contention of the same class as `index.lock`, not a hook failure: wait a moment and retry the
-  commit instead of bypassing or debugging the hook.
+- A lint-staged `Failed to get staged files!` or bare `"lint-staged" exited with code 1` is not enough to diagnose index
+  contention. Retry as contention only when the same output explicitly names an index lock; otherwise inspect the hook
+  output or lint-staged debug trace before deciding whether to fix, report, or apply `$commit`'s unrelated-hook bypass
+  rule.
 
 ## Inspect and Fix
 

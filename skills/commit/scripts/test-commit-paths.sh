@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+helper=$script_dir/commit-paths.sh
+test_root=$(mktemp -d "${TMPDIR:-/tmp}/commit-paths-tests.XXXXXX")
+
+cleanup() {
+  rm -rf "$test_root"
+}
+trap cleanup EXIT
+
+fail() {
+  printf 'FAIL: %s\n' "$*" >&2
+  exit 1
+}
+
+assert_equal() {
+  _expected=$1
+  _actual=$2
+  _label=$3
+  if [ "$_actual" != "$_expected" ]; then
+    printf 'FAIL: %s\nexpected:\n%s\nactual:\n%s\n' "$_label" "$_expected" "$_actual" >&2
+    exit 1
+  fi
+}
+
+assert_contains_line() {
+  _haystack=$1
+  _needle=$2
+  _label=$3
+  printf '%s\n' "$_haystack" | grep -Fqx -- "$_needle" || fail "$_label: missing $_needle"
+}
+
+init_fixture() {
+  _repo=$1
+  mkdir -p "$_repo"
+  git -C "$_repo" init --quiet
+  git -C "$_repo" config user.name 'Commit Paths Test'
+  git -C "$_repo" config user.email 'commit-paths@example.com'
+  git -C "$_repo" config commit.gpgsign false
+  git -C "$_repo" config core.hooksPath .git/hooks
+}
+
+commit_fixture() {
+  _repo=$1
+  _message=$2
+  git -C "$_repo" add -A
+  git -C "$_repo" commit --quiet -m "$_message"
+}
+
+test_content_and_shared_index() {
+  _repo=$test_root/content
+  init_fixture "$_repo"
+
+  printf 'base\n' > "$_repo/modified.txt"
+  printf 'delete me\n' > "$_repo/deleted.txt"
+  printf 'base\n' > "$_repo/unrelated.txt"
+  commit_fixture "$_repo" base
+
+  printf 'modified\n' > "$_repo/modified.txt"
+  rm "$_repo/deleted.txt"
+  printf 'added and staged\n' > "$_repo/added.txt"
+  git -C "$_repo" add -- added.txt
+  printf 'untracked\n' > "$_repo/untracked.txt"
+  printf 'base\nstaged elsewhere\n' > "$_repo/unrelated.txt"
+  git -C "$_repo" add -- unrelated.txt
+
+  _unrelated_oid=$(git -C "$_repo" rev-parse :unrelated.txt)
+  _index_before=$(git hash-object "$_repo/.git/index")
+  _preview=$(
+    cd "$_repo"
+    bash "$helper" preview --diff summary -- modified.txt added.txt deleted.txt untracked.txt
+  )
+  _index_after=$(git hash-object "$_repo/.git/index")
+
+  assert_equal "$_index_before" "$_index_after" 'preview changed the shared index'
+  assert_contains_line "$_preview" '## commit paths' 'preview output'
+  for _path in modified.txt added.txt deleted.txt untracked.txt; do
+    assert_contains_line "$_preview" "$_path" 'resolved commit paths'
+  done
+
+  if _inherited_output=$(
+    cd "$_repo"
+    GIT_INDEX_FILE="$_repo/.git/index" bash "$helper" preview -- modified.txt 2>&1
+  ); then
+    fail 'inherited GIT_INDEX_FILE was accepted'
+  fi
+  printf '%s\n' "$_inherited_output" | grep -Fq 'GIT_INDEX_FILE is already set' ||
+    fail 'inherited index rejection lacked a diagnostic'
+
+  (
+    cd "$_repo"
+    bash "$helper" commit -m 'Commit intended files' -- modified.txt added.txt deleted.txt untracked.txt
+  ) >/dev/null
+
+  _committed_paths=$(git -C "$_repo" diff-tree --no-commit-id --name-only -r HEAD | LC_ALL=C sort)
+  assert_equal $'added.txt\ndeleted.txt\nmodified.txt\nuntracked.txt' "$_committed_paths" 'committed path set'
+  assert_equal 'modified' "$(git -C "$_repo" show HEAD:modified.txt)" 'modified file content'
+  assert_equal 'added and staged' "$(git -C "$_repo" show HEAD:added.txt)" 'added file content'
+  assert_equal 'untracked' "$(git -C "$_repo" show HEAD:untracked.txt)" 'untracked file content'
+  if git -C "$_repo" cat-file -e HEAD:deleted.txt 2>/dev/null; then
+    fail 'deleted path remains in commit'
+  fi
+
+  assert_equal "$_unrelated_oid" "$(git -C "$_repo" rev-parse :unrelated.txt)" 'unrelated staged blob changed'
+  assert_equal 'unrelated.txt' "$(git -C "$_repo" diff --cached --name-only)" 'unrelated stage was not preserved alone'
+  assert_equal '' "$(git -C "$_repo" diff --name-only)" 'worktree differs from reconciled shared index'
+}
+
+test_case_only_renames() {
+  _repo=$test_root/case-renames
+  init_fixture "$_repo"
+  git -C "$_repo" config core.ignorecase true
+
+  printf 'file\n' > "$_repo/case-file.txt"
+  mkdir -p "$_repo/case-dir"
+  printf 'nested\n' > "$_repo/case-dir/nested.txt"
+  commit_fixture "$_repo" base
+
+  mv "$_repo/case-file.txt" "$_repo/case-file.tmp"
+  mv "$_repo/case-file.tmp" "$_repo/Case-File.txt"
+  mv "$_repo/case-dir" "$_repo/case-dir.tmp"
+  mv "$_repo/case-dir.tmp" "$_repo/Case-Dir"
+
+  _preview=$(
+    cd "$_repo"
+    bash "$helper" preview --diff summary -- \
+      case-file.txt Case-File.txt case-dir Case-Dir
+  )
+  for _path in case-file.txt Case-File.txt case-dir/nested.txt Case-Dir/nested.txt; do
+    assert_contains_line "$_preview" "$_path" 'case-only resolved paths'
+  done
+
+  (
+    cd "$_repo"
+    bash "$helper" commit -m 'Rename paths by case' -- \
+      case-file.txt Case-File.txt case-dir/nested.txt Case-Dir/nested.txt
+  ) >/dev/null
+
+  _tree=$(git -C "$_repo" ls-tree -r --name-only HEAD | LC_ALL=C sort)
+  assert_equal $'Case-Dir/nested.txt\nCase-File.txt' "$_tree" 'case-only commit tree spelling'
+  assert_equal '' "$(git -C "$_repo" status --short)" 'case-only rename left repository dirty'
+}
+
+test_formatter_hook() {
+  _repo=$test_root/formatter
+  init_fixture "$_repo"
+
+  printf 'base\n' > "$_repo/intended.txt"
+  printf 'base\n' > "$_repo/unrelated.txt"
+  commit_fixture "$_repo" base
+
+  cat > "$_repo/.git/hooks/pre-commit" <<'EOF'
+#!/bin/sh
+set -eu
+case "${GIT_INDEX_FILE:-}" in
+  '' | *.lock)
+    printf 'hook did not receive a non-.lock alternate index\n' >&2
+    exit 1
+    ;;
+esac
+printf '%s\n' "$GIT_INDEX_FILE" > "$HOOK_INDEX_LOG"
+printf 'formatted\n' > intended.txt
+git add -- intended.txt
+EOF
+  chmod +x "$_repo/.git/hooks/pre-commit"
+
+  printf 'needs formatting\n' > "$_repo/intended.txt"
+  printf 'base\nstaged elsewhere\n' > "$_repo/unrelated.txt"
+  git -C "$_repo" add -- unrelated.txt
+  _unrelated_oid=$(git -C "$_repo" rev-parse :unrelated.txt)
+  _hook_index_log=$test_root/hook-index.log
+
+  (
+    cd "$_repo"
+    HOOK_INDEX_LOG=$_hook_index_log bash "$helper" commit -m 'Format intended file' -- intended.txt
+  ) >/dev/null
+
+  _hook_index=$(cat "$_hook_index_log")
+  case "$_hook_index" in
+    *.lock) fail 'formatter hook received a .lock index path' ;;
+  esac
+  assert_equal 'formatted' "$(git -C "$_repo" show HEAD:intended.txt)" 'formatter result was not committed'
+  assert_equal "$_unrelated_oid" "$(git -C "$_repo" rev-parse :unrelated.txt)" 'formatter changed unrelated stage'
+  assert_equal 'unrelated.txt' "$(git -C "$_repo" diff --cached --name-only)" 'formatter consumed unrelated stage'
+}
+
+test_hook_failure_and_lock_ownership() {
+  _repo=$test_root/failures
+  init_fixture "$_repo"
+  printf 'base\n' > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  printf 'changed\n' > "$_repo/intended.txt"
+
+  cat > "$_repo/.git/hooks/pre-commit" <<'EOF'
+#!/bin/sh
+printf 'intentional hook failure\n' >&2
+exit 1
+EOF
+  chmod +x "$_repo/.git/hooks/pre-commit"
+
+  _head_before=$(git -C "$_repo" rev-parse HEAD)
+  _index_before=$(git hash-object "$_repo/.git/index")
+  if _failure_output=$(
+    cd "$_repo"
+    bash "$helper" commit -m 'Must fail' -- intended.txt 2>&1
+  ); then
+    fail 'hook failure unexpectedly created a commit'
+  fi
+  assert_contains_line "$_failure_output" 'intentional hook failure' 'hook failure output'
+  assert_equal "$_head_before" "$(git -C "$_repo" rev-parse HEAD)" 'hook failure changed HEAD'
+  assert_equal "$_index_before" "$(git hash-object "$_repo/.git/index")" 'hook failure changed shared index'
+  [ ! -e "$_repo/.git/index.lock" ] || fail 'hook failure left helper-owned index lock'
+
+  rm "$_repo/.git/hooks/pre-commit"
+  printf 'other owner\n' > "$_repo/.git/index.lock"
+  if _lock_output=$(
+    cd "$_repo"
+    bash "$helper" commit -m 'Must remain blocked' -- intended.txt 2>&1
+  ); then
+    fail 'existing index lock did not block commit'
+  fi
+  printf '%s\n' "$_lock_output" | grep -Fq 'default Git index remains locked' ||
+    fail 'existing lock failure lacked explicit lock evidence'
+  assert_equal 'other owner' "$(cat "$_repo/.git/index.lock")" 'helper replaced or deleted pre-existing lock'
+  assert_equal "$_head_before" "$(git -C "$_repo" rev-parse HEAD)" 'lock refusal changed HEAD'
+}
+
+test_content_and_shared_index
+test_case_only_renames
+test_formatter_hook
+test_hook_failure_and_lock_ownership
+
+printf 'commit-paths tests passed\n'

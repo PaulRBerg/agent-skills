@@ -1,1 +1,23 @@
-just pre-commit
+#!/usr/bin/env sh
+set -e
+
+staged=$(git diff --cached --name-only)
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+# lint-staged can only preserve partially staged files by rewriting Git or
+# worktree state. Shared worktrees require whole-file staging instead.
+partially_staged=$(
+  printf '%s\n' "$staged" | while IFS= read -r file; do
+    if ! git diff --quiet -- "$file"; then
+      printf '%s\n' "$file"
+    fi
+  done
+)
+if [ -n "$partially_staged" ]; then
+  printf 'error: partially staged files are unsafe in the shared worktree:\n%s\n' "$partially_staged" >&2
+  exit 1
+fi
+
+bun run lint-staged

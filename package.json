@@ -3,11 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint-staged": "nlx lint-staged",
-    "prepare": "nlx husky",
+    "lint-staged": "lint-staged --concurrent false --no-stash --no-hide-partially-staged",
+    "prepare": "husky",
     "pre-commit": "just pre-commit"
   },
   "devDependencies": {
+    "husky": "9.1.7",
+    "lint-staged": "17.3.0",
     "prettier": "3.9.4"
   },
   "lint-staged": {

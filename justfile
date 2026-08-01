@@ -11,6 +11,7 @@ prettier := "bunx --no-install prettier"
 prettier_globs := "\"**/*.md\""
 evm_atlas_generator := "scripts/generate-evm-atlas.mjs"
 skill_invocation_script := "scripts/sync-invocation-policy.mjs"
+commit_paths_test := "skills/commit/scripts/test-commit-paths.sh"
 
 # ---------------------------------------------------------------------------- #
 #                                 ENTRYPOINTS                                  #
@@ -28,7 +29,7 @@ alias d := default
 # Install Husky git hooks for this checkout
 [group("setup")]
 @hooks-install:
-    nlx husky
+    bun run prepare
 alias hi := hooks-install
 
 # Install local developer dependencies
@@ -66,7 +67,12 @@ alias pw := prettier-write
 # Run staged-file checks
 [group("checks")]
 @pre-commit:
-    nlx lint-staged
+    sh .husky/pre-commit
+
+# Exercise isolated-index atomic commits and shared-index reconciliation
+[group("checks")]
+@commit-paths-test:
+    bash {{ commit_paths_test }}
 
 # Regenerate evm-atlas references from crypto-registry's canonical chain JSON + atlas overlays
 [group("checks")]

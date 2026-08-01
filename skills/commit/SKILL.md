@@ -48,11 +48,9 @@ bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--d
 Use `--diff summary` by default. Use `--diff full` only when the intent is ambiguous.
 
 The helper performs Git preflight checks, rejects empty change sets, and prints the message format, branch, name-status,
-shortstat, and optional full diff. It is safe to run alongside other agents committing in the same working tree: `--all`
-and `--staged` stage or read the index directly (index-trusting by design); the default mode never stages, unstages, or
-otherwise touches the index — it marks new session files with `git add -N` (intent-to-add, no content staged) so diffs
-can see them, then diffs the session paths against `HEAD` in the working tree. If it fails, stop with its error and a
-concise suggested fix.
+shortstat, and optional full diff. `--all` and `--staged` stage or read the shared index directly (index-trusting by
+design). Default mode delegates to `commit-paths.sh preview`, which builds a temporary index from `HEAD` and never
+changes the shared index. If preparation fails, stop with its error and a concise suggested fix.
 
 - If `--all`:
   - Include all tracked, untracked, modified, deleted, and already staged changes — this also sweeps in any other
@@ -63,10 +61,9 @@ concise suggested fix.
 - Otherwise (atomic commits):
   - Session-modified files = files edited in this session
   - Pass every session-modified path after `--`
-  - The helper never stages, unstages, or touches paths another agent has staged; it prints a `## commit pathspec` list
-    of the resolved session paths to commit with in step 4
-  - **Renames**: pass both the old and new path of a renamed file as session paths, so the pathspec commit in step 4
-    captures both sides
+  - The helper prints the exact old and new file paths under `## commit paths`; pass that list to the commit helper in
+    step 4
+  - **Renames**: pass both the old and new name as session paths, including for case-only file or directory renames
 - **Unrelated changes**: session-modified files may contain pre-existing uncommitted changes (hunks not from this
   session). Include the entire file—partial staging is impractical. Never revert, discard, or `git checkout` unrelated
   changes.
@@ -103,10 +100,18 @@ include only ones the commit actually closes.
 
 ### 4) Commit
 
-- Default mode (no `--all`/`--staged`): commit with an explicit pathspec —
-  `git commit -m "subject" [-m "body"] -- <paths from the "## commit pathspec" section>`. A pathspec commit builds the
-  commit from `HEAD` plus the working-tree content of exactly those paths, so concurrent staging by other agents cannot
-  leak into the commit.
+- Default mode (no `--all`/`--staged`): run the helper from the target repository cwd:
+
+  ```bash
+  bash "<skill-dir>/scripts/commit-paths.sh" commit -m "subject" [-m "body"] -- \
+    <paths from the "## commit paths" section>
+  ```
+
+  The helper rejects an inherited `GIT_INDEX_FILE`, waits only on an explicit default-index lock, and holds that lock
+  through the commit. It builds the commit from locked `HEAD` in a separate index whose name does not end in `.lock`, so
+  normal hooks and signing run without exposing formatter staging to the shared index. After success, it updates only
+  the committed path entries in the locked shared index; unrelated staging remains intact.
+
 - `--all` / `--staged`: commit the prepared index as-is with `git commit -m "subject"` (add `-m "body"` only if body is
   non-empty).
 - Output exactly: commit hash, subject, and `N files changed` summary. In `--all` mode, if the committed set plausibly
@@ -115,17 +120,16 @@ include only ones the commit actually closes.
   headings, trees, or labels.
 - Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or
   pre-commit hook activity unless a command failed.
-- If failed: show error + suggest fix. If `git commit` itself fails on an index.lock error, wait a moment and retry;
-  never delete the lock file.
-- **Pre-commit hook failure:** a lint-staged `✖ Failed to get staged files!` or a bare
-  `"lint-staged" exited with code 1` with no named failing check is index contention from a concurrent agent, not a hook
-  failure — wait a moment and retry the same commit, exactly as with `index.lock`, without applying the bypass evidence
-  bar to it. Otherwise: retry automatically with `git commit --no-verify` only when the hook output identifies the
-  failing check/path and the staged diff plus session scope conclusively show it is unrelated pre-existing work. A
-  generic failure, repo-wide check, or uncertain ownership is not enough evidence — with parallel agents, the common
-  cause of an unrelated repo-wide hook failure is another agent's in-flight work, but the same evidence bar applies.
-  Never bypass a failure caused by or plausibly affected by the staged changes; fix it or surface the error. When
-  bypassing, keep the existing one-line disclosure that the unrelated hook failure was skipped.
+- If the helper reports that the default index remains locked, wait and retry the same helper command; never delete the
+  lock. If it reports that a commit was created but shared-index reconciliation failed, stop and report that commit ID;
+  never retry the commit.
+- **Pre-commit hook failure:** `Failed to get staged files!` and a bare `"lint-staged" exited with code 1` do not by
+  themselves prove contention. Retry as contention only when the same output explicitly names an index lock or the
+  helper reports its lock refusal. Otherwise inspect the named hook output or lint-staged debug trace. Retry with
+  `--no-verify` only when that evidence plus the prepared diff conclusively shows an unrelated pre-existing failure. A
+  generic failure, repo-wide check, or uncertain ownership is not enough. Never bypass a failure caused by or plausibly
+  affected by the intended paths; fix it or surface it. When bypassing, keep the existing one-line disclosure that the
+  unrelated hook failure was skipped.
 - **Signing failure (signer unreachable):** if `git commit` fails _after_ the pre-commit/commit-msg hooks already
   passed, with an error naming the configured signer rather than the content or a hook (e.g. `1Password`,
   `failed to fill whole buffer`, `ssh-agent`, `gpg failed to sign the data`, `no such identity`) — retry once, same
@@ -133,7 +137,8 @@ include only ones the commit actually closes.
   when unattended, and the user has authorized landing unsigned commits in that case rather than blocking. Only retry on
   a genuine signer error at the signing step, never speculatively, and never edit repo/global git config
   (`commit.gpgsign`, `gpg.format`, etc.) — the bypass is per-commit only. Disclose with one line:
-  `Commit created unsigned — signer unavailable ("<short error>")`.
+  `Commit created unsigned — signer unavailable ("<short error>")`. In default mode, append `--no-gpg-sign` to the
+  `commit-paths.sh commit` command; keep direct Git flags for `--all` and `--staged`.
   - **Session memo:** once a genuine signer error has triggered the fallback in this session, treat the signer as
     unavailable for the rest of it: later commits may append `--no-gpg-sign` on the first attempt instead of re-failing.
     Still per-commit only — never touch git config. Replace the per-commit disclosure with a single line in the

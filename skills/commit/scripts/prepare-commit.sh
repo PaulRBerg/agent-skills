@@ -11,37 +11,10 @@ die() {
   exit 1
 }
 
-add_unique_path() {
-  _candidate=$1
-  shift
-  for _existing in "$@"; do
-    if [ "$_existing" = "$_candidate" ]; then
-      return 1
-    fi
-  done
-  return 0
-}
-
 physical_dir() {
   _dir=$1
   [ -d "$_dir" ] || return 1
   (cd "$_dir" 2>/dev/null && pwd -P)
-}
-
-collect_path_output() {
-  while IFS= read -r -d '' _path; do
-    if add_unique_path "$_path" ${session_git_paths[@]+"${session_git_paths[@]}"}; then
-      session_git_paths[${#session_git_paths[@]}]=$_path
-    fi
-  done
-}
-
-collect_untracked_intent_paths() {
-  while IFS= read -r -d '' _path; do
-    if add_unique_path "$_path" ${untracked_intent_paths[@]+"${untracked_intent_paths[@]}"}; then
-      untracked_intent_paths[${#untracked_intent_paths[@]}]=$_path
-    fi
-  done < <(git ls-files --others --exclude-standard -z -- "$@")
 }
 
 # Runs a git command that takes the index lock, retrying if another agent is
@@ -109,8 +82,7 @@ staged=false
 force_natural=false
 diff_mode=summary
 session_paths=()
-session_git_paths=()
-untracked_intent_paths=()
+preview_output=
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -197,26 +169,10 @@ elif [ "$staged" = true ]; then
   : # commit the current index as-is; the empty-index guard below applies
 else
   [ "${#session_paths[@]}" -gt 0 ] || die 'No files modified in this session'
-
-  # Untracked session paths need an intent-to-add entry so pathspec diffs and
-  # the eventual `git commit -- <paths>` can see them; tracked paths need
-  # nothing here. Never `git add` their content — that would stage it into
-  # the shared index for other agents to see before the commit is made.
-  collect_untracked_intent_paths "${session_paths[@]}"
-  if [ "${#untracked_intent_paths[@]}" -gt 0 ]; then
-    run_with_lock_retry git add -N -- "${untracked_intent_paths[@]}" || die 'failed to intent-to-add untracked session paths'
-  fi
-
-  if git diff HEAD --quiet --no-ext-diff --no-textconv -- "${session_paths[@]}"; then
-    die 'No files modified in this session'
-  fi
-
-  # --no-renames: a collapsed "R100 old new" name-only entry would report only
-  # the new path, silently dropping the old path from the commit pathspec and
-  # leaving a rename half-staged (see the rename caveat in SKILL.md).
-  collect_path_output < <(git diff HEAD --no-renames --name-only -z --no-ext-diff --no-textconv -- "${session_paths[@]}") || exit 1
-
-  [ "${#session_git_paths[@]}" -gt 0 ] || die 'No files modified in this session'
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P) || die 'cannot resolve commit helper directory'
+  preview_output=$(
+    bash "$script_dir/commit-paths.sh" preview --diff "$diff_mode" -- "${session_paths[@]}"
+  ) || exit 1
 fi
 
 if [ "$all" = true ] || [ "$staged" = true ]; then
@@ -244,20 +200,5 @@ if [ "$all" = true ] || [ "$staged" = true ]; then
     git diff --cached --no-ext-diff --no-textconv -- || die 'failed to print staged diff'
   fi
 else
-  printf '## staged name-status\n'
-  git diff HEAD --name-status --no-ext-diff --no-textconv -- "${session_git_paths[@]}" || die 'failed to print name-status'
-  printf '\n'
-
-  printf '## shortstat\n'
-  git diff HEAD --shortstat --no-ext-diff --no-textconv -- "${session_git_paths[@]}" || die 'failed to print shortstat'
-
-  if [ "$diff_mode" = full ]; then
-    printf '\n## staged diff\n'
-    git diff HEAD --no-ext-diff --no-textconv -- "${session_git_paths[@]}" || die 'failed to print diff'
-  fi
-
-  printf '\n## commit pathspec\n'
-  for _commit_path in "${session_git_paths[@]}"; do
-    printf '%s\n' "$_commit_path"
-  done
+  printf '%s\n' "$preview_output"
 fi
