@@ -13,6 +13,9 @@
 
 ### Changed
 
+- Make Claude and Codex notifications project-first, with native agent/status subtitles and bounded task plus
+  result/error/action context instead of prompt sequence numbers
+- Select the latest active SQLite turn deterministically when prompts share the same timestamp
 - Defer Claude completion while `background_tasks` or `session_crons` remain pending
 - Aggregate Claude hooks across supported user, project, and project-local settings files while reporting ignored legacy
   global locations

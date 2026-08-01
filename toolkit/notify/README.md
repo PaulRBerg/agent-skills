@@ -37,7 +37,7 @@ To update, `git pull` and re-run the install command.
 - **Auto-cleanup**: Automatic data cleanup with optional export before deletion
 - **Event Handlers**: CLI subcommands for Claude Code hooks and Codex CLI notify integration
 - **Configuration**: YAML-based configuration with sensible defaults
-- **Rich Notifications**: Custom Claude icon, configurable sounds, and click-to-focus terminal support
+- **Context-rich Notifications**: Project, agent status, task, and result/action excerpts with custom agent icons
 
 ### Comparison with CCNotify
 
@@ -267,17 +267,23 @@ ai-notify check --profile review
    - Calculates the duration
    - Checks if duration >= threshold
    - Checks if prompt starts with any excluded pattern
-   - Sends a notification only if both checks pass (by default, when the job took at least 10 seconds)
+   - Sends the task and Claude's final response when both checks pass (by default, when the job took at least 10
+     seconds)
    - Optionally runs auto-cleanup (every 24 hours)
-3. **StopFailure**: When an API error ends the turn, marks the prompt stopped and sends the documented error text in
-   `all` mode, even for short or excluded prompts. If the prompt was not tracked, sends a generic failure notification.
+3. **StopFailure**: When an API error ends the turn, marks the prompt stopped and sends the task, duration, and
+   documented error text in `all` mode, even for short or excluded prompts. If the prompt was not tracked, sends a
+   generic failure notification.
 4. **Notification**: Detects "waiting for input" notifications (via the `idle_prompt` notification type, with a keyword
    fallback) and suppresses them — the Stop handler sends the job-completion notification
-5. **PermissionRequest**: Sends an immediate notification when Claude requests permission to run a tool
-6. **PreToolUse / AskUserQuestion**: Sends a notification when Claude asks you a question
+5. **PermissionRequest**: Sends the current task and the command, path, URL, query, or description that needs approval
+6. **PreToolUse / AskUserQuestion**: Sends the current task, first question, and count of any remaining questions
 
-For Codex CLI, ai-notify runs on the `agent-turn-complete` notify event and sends a completion notification with the
-latest assistant message as context.
+Notifications use the project as the title and the agent state as the subtitle. Prompt sequence numbers remain in the
+transient session database but are not displayed. Task excerpts are capped at 100 characters and result, error, request,
+and question excerpts at 180 characters.
+
+For Codex CLI, ai-notify runs on the `agent-turn-complete` notify event and sends the latest user message and assistant
+message using the same layout. Codex payloads do not provide turn duration.
 
 ## Runtime Files
 
