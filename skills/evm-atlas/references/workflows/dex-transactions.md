@@ -6,11 +6,15 @@ cancellations. It is evidence-only: do not quote, construct, sign, submit, or ad
 
 ## Resolve Before Interpretation
 
-1. Resolve every EVM chain against `references/generated/target-mainnets.json`. Stop on a non-target chain.
-2. For a transaction hash, read `references/workflows/blockscan-tx-lookup.md` first. After resolving the chain, use
-   `references/workflows/provider-routing.md` for the raw transaction, receipt, logs, and decoded input.
-3. Require an exact receipt before describing an on-chain result. A failed or pending receipt cannot prove a completed
-   trade, liquidity change, claim, migration, wrap, refund, or cancellation.
+1. For a transaction hash with a named chain, resolve it against `references/generated/target-mainnets.json`, then use
+   `references/workflows/provider-routing.md` directly for the raw transaction, receipt, logs, and decoded input. Stop
+   on a non-target chain.
+2. When the chain is unknown, use `references/workflows/blockscan-tx-lookup.md` once to resolve it, then continue
+   through `references/workflows/provider-routing.md`. Apply the OP Mainnet pre-regenesis exception in `SKILL.md` before
+   requiring a current-provider receipt.
+3. Require exact provider evidence before describing an on-chain result. Except for the documented OP Mainnet legacy
+   route, this means the exact receipt. A failed or pending receipt cannot prove a completed trade, liquidity change,
+   claim, migration, wrap, refund, or cancellation.
 4. For address history, use the resolved chain's provider route to identify candidate transactions, then inspect each
    candidate's receipt. A transaction-list label or method name is not enough.
 5. For an off-chain order identifier, load only the relevant protocol reference, resolve its candidate fill,
