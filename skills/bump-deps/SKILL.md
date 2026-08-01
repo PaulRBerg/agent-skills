@@ -43,26 +43,37 @@ batch.
    The preview is read-only. Missing catalog entries, conflicting plan rows, unsupported versions, or a catalog value
    that no longer matches the plan fail before writes. The helper does not select upgrades.
 
-5. Write all selected Taze updates in one command:
+5. Before the first manifest or lockfile write, discover and run the repository's standard validation suite against the
+   existing dependency state. Prefer its advertised aggregate check; otherwise run every exposed dependency-resolution,
+   build, test, typecheck, lint, formatting-check, codegen-check, and repository-invariant command. Use frozen or
+   non-writing modes where available, and record the exact commands for the post-bump rerun. Command failures,
+   dependency or peer-resolution conflicts, and actionable warnings that signal incompatibility or unsafe behavior block
+   the bump; informational notices such as unavoidable deprecations do not. If the baseline has any blocking issue, stop
+   with `### ⛔ Dependency bump blocked — baseline failed`, show the exact commands and diagnostics, and ask the user to
+   resolve the pre-existing issues. Do not modify manifests, lockfiles, source, or configuration.
+
+6. Write all selected Taze updates in one command:
 
    ```sh
    bash <skill-dir>/scripts/run-taze.sh --write --include package-a,package-b
    ```
 
-6. For Bun catalogs, rerun `update-bun-catalogs.py` with the same plan and include set plus `--write`. It atomically
+7. For Bun catalogs, rerun `update-bun-catalogs.py` with the same plan and include set plus `--write`. It atomically
    updates every matching default/named catalog occurrence and preserves each existing `^`, `~`, or empty prefix. Then
    run `ni` so the repository's package manager updates its lockfile.
 
-7. Inspect the manifest and lockfile diff. Run the narrowest package-manager or repository checks that exercise updated
-   dependencies, with extra attention to approved major migrations. Also run whatever lint command the repository
-   exposes (package script, task runner recipe, or equivalent) — dependency bumps can introduce new lint violations even
-   when tests and the build stay green (e.g. an updated linter or plugin adding rules, or a typing change surfacing
-   stricter checks).
+8. Inspect the manifest and lockfile diff. Rerun the exact baseline commands, plus the narrowest checks that exercise
+   the updated dependencies and any required migrations. Treat every newly introduced error, type issue, check failure
+   (including tests, builds, lint, formatting, codegen, and repository invariants), dependency or peer-resolution
+   conflict, and actionable compatibility or safety warning as caused by the bump unless evidence shows otherwise.
 
-8. Fix newly flagged lint errors, but judge each one before changing code: a bump can introduce a rule the user may not
-   want enabled at all, not just a violation to fix. If a new error's fix is unclear, or fixing it would fight the
-   rule's intent rather than follow it, stop with `### ⚠️ Dependency lint decision required`. Show the rule, affected
-   locations, likely effects, and the explicit `fix`, `suppress`, or `disable` choices in one table instead of guessing.
+9. Fix every issue caused by the bump, including required source or configuration migrations, while preserving intended
+   behavior. Do not suppress diagnostics, weaken validation, or change expected behavior merely to make checks pass.
+   After each fix, rerun the affected check, then rerun the complete recorded suite until it passes. If no clear safe
+   fix exists within the task's authority, stop with `### ⚠️ Dependency regression decision required`. Present all such
+   issues in one table with the evidence, affected locations, fix and revert options, and likely effects. Do not report
+   completion until the user chooses, the fix is applied or the offending update is reverted, the lockfile is
+   regenerated, and the complete suite passes.
 
 ## User-Facing Output
 
@@ -75,9 +86,10 @@ Use the plan's exact `apply`, `review-major`, `review`, and `skip-fixed` values 
 Assign stable IDs to rows needing a choice so the user can answer once. Use `### 🔎 Dry run — no files written` for a
 preview and `### ✅ No selected updates` for a no-op.
 
-Finish applied work with `### 🏁 Dependencies updated`, a tree of changed manifests/lockfiles, `### 🧪 Verification`,
-and `### ⚠️ Remaining review` only when non-empty. Keep helper JSON, package/version strings, commands, and diagnostics
-exact and undecorated.
+Finish applied work with `### 🏁 Dependencies updated`, a tree of changed manifests/lockfiles, and
+`### 🧪 Verification`. Use `### ⚠️ Remaining review` only for non-blocking informational matters, never for an
+unresolved issue caused by the bump. Keep helper JSON, package/version strings, commands, and diagnostics exact and
+undecorated.
 
 ## Invariants
 
@@ -88,5 +100,6 @@ exact and undecorated.
 - Do not infer compatibility from SemVer alone when repository evidence, peer ranges, or release notes indicate
   otherwise.
 
-Completion requires a reviewed plan, one manifest write for the selected set, a regenerated lockfile, and validation
-evidence; dry-run completion requires the structured plan and zero writes.
+Completion requires a clean pre-write baseline, a reviewed plan, the retained selected updates, a regenerated lockfile,
+a passing rerun of the recorded suite and dependency-specific checks, and no unresolved issue caused by the bump.
+Dry-run completion requires the structured plan and zero writes.
