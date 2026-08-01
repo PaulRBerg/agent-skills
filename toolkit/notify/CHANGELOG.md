@@ -8,6 +8,16 @@
 - Codex CLI config updater (`ai-notify link codex`)
 - Claude Code hook installer (`ai-notify link claude`)
 - Documentation updates for Codex CLI support
+- Claude Code `StopFailure` hook and `ai-notify event stop-failure` handler
+- Codex profile-aware integration checks (`ai-notify check --profile NAME`)
+
+### Changed
+
+- Defer Claude completion while `background_tasks` or `session_crons` remain pending
+- Aggregate Claude hooks across supported user, project, and project-local settings files while reporting ignored legacy
+  global locations
+- Resolve Codex profiles to sibling `<name>.config.toml` files with base-plus-profile overlay semantics
+- Preserve Codex TOML formatting and refuse a different existing `notify` command unless `--force` is supplied
 
 ## [1.0.0] - 2025-01-22
 

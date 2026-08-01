@@ -45,7 +45,7 @@ Inspired by [CCNotify](https://github.com/dazuiba/CCNotify) with key improvement
 
 - **Independent CLI** — installable via `uv tool install`, not a script symlink
 - **Fully configurable** — YAML config with `ai-notify config` commands
-- **More events** — adds `PermissionRequest` and an AskUserQuestion notifier (5 hooks vs 3)
+- **More events** — adds `PermissionRequest`, `StopFailure`, and an AskUserQuestion notifier (6 hooks vs 3)
 - **Smart filtering** — configurable duration threshold and prompt exclusion patterns
 - **Notification modes** — all/permission_only/disabled
 
@@ -149,6 +149,9 @@ ai-notify event user-prompt-submit < event_data.json
 # Handle stop event (sends notifications)
 ai-notify event stop < event_data.json
 
+# Handle API failure event (sends failure notifications)
+ai-notify event stop-failure < event_data.json
+
 # Handle notification event
 ai-notify event notification < event_data.json
 
@@ -172,8 +175,7 @@ ai-notify link claude
 
 This merges the hooks into `~/.claude/settings.json` without touching your other settings. Use `--path` to target a
 project or local settings file, `--dry-run` to preview, and `--force` to replace a conflicting entry. For more
-information about Claude Code hooks, see the
-[official documentation](https://docs.claude.com/en/docs/claude-code/hooks).
+information about Claude Code hooks, see the [official documentation](https://code.claude.com/docs/en/hooks).
 
 The resulting `hooks` section uses Claude Code's nested schema (each event maps to a list of matcher groups):
 
@@ -182,6 +184,7 @@ The resulting `hooks` section uses Claude Code's nested schema (each event maps 
   "hooks": {
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "ai-notify event user-prompt-submit" }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "ai-notify event stop" }] }],
+    "StopFailure": [{ "hooks": [{ "type": "command", "command": "ai-notify event stop-failure" }] }],
     "Notification": [{ "hooks": [{ "type": "command", "command": "ai-notify event notification" }] }],
     "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "ai-notify event permission-request" }] }],
     "PreToolUse": [
@@ -194,8 +197,14 @@ The resulting `hooks` section uses Claude Code's nested schema (each event maps 
 }
 ```
 
-> **Upgrading:** older versions wrote `~/.claude/hooks/hooks.json`, which Claude Code no longer reads. Re-run
-> `ai-notify link claude` to install into `settings.json`, then delete the stale file.
+> **Upgrading:** Claude Code does not read standalone `~/.claude/hooks/hooks.json` or global
+> `~/.claude/settings.local.json` files. Re-run `ai-notify link claude` to install into `~/.claude/settings.json`, then
+> remove stale hook configuration from those ignored locations. `ai-notify check` reports them when present.
+
+Claude Code fires `StopFailure` instead of `Stop` when an API error ends a turn. ai-notify marks the tracked prompt
+failed and, in `all` mode, alerts immediately without applying the duration threshold or prompt exclusions. Normal
+`Stop` events do not complete the tracked prompt while the payload lists background tasks or session crons. A user
+interrupt fires neither `Stop` nor `StopFailure`, so it cannot produce a completion notification.
 
 ## Codex CLI Integration
 
@@ -210,6 +219,25 @@ You can also set this automatically:
 ```bash
 ai-notify link codex
 ```
+
+An existing different root `notify` command is left unchanged and causes a nonzero exit. Review the reported previous
+value, then replace it explicitly if intended:
+
+```bash
+ai-notify link codex --force
+```
+
+Codex profiles are separate files next to the base config, not `[profiles.<name>]` tables. To configure
+`~/.codex/review.config.toml`:
+
+```bash
+ai-notify link codex --profile review
+```
+
+Profile names may contain letters, numbers, hyphens, and underscores. The profile file overlays the base
+`~/.codex/config.toml`, so it only needs a `notify` value when it should override the base. See the official
+[profile](https://developers.openai.com/codex/config-advanced#profiles) and
+[notification](https://developers.openai.com/codex/config-advanced#notifications) documentation.
 
 Codex appends the JSON payload as the final CLI argument, so the effective command looks like:
 
@@ -226,21 +254,26 @@ Use the built-in checker to see whether Claude Code hooks and Codex notify are c
 
 ```bash
 ai-notify check
+
+# Check the effective base + profile configuration
+ai-notify check --profile review
 ```
 
 ## How It Works
 
 1. **UserPromptSubmit**: When you submit a prompt to Claude Code, ai-notify tracks it in the database
-2. **Stop**: When Claude finishes (or you stop it), ai-notify:
+2. **Stop**: When Claude finishes with no pending background tasks or session crons, ai-notify:
    - Calculates the duration
    - Checks if duration >= threshold
    - Checks if prompt starts with any excluded pattern
    - Sends notification only if both checks pass (by default, whether the job took longer than >10 seconds)
    - Optionally runs auto-cleanup (every 24 hours)
-3. **Notification**: Detects "waiting for input" notifications (via the `idle_prompt` notification type, with a keyword
+3. **StopFailure**: When an API error ends the turn, marks the prompt stopped and sends the documented error text in
+   `all` mode, even for short or excluded prompts. If the prompt was not tracked, sends a generic failure notification.
+4. **Notification**: Detects "waiting for input" notifications (via the `idle_prompt` notification type, with a keyword
    fallback) and suppresses them — the Stop handler sends the job-completion notification
-4. **PermissionRequest**: Sends an immediate notification when Claude requests permission to run a tool
-5. **PreToolUse / AskUserQuestion**: Sends a notification when Claude asks you a question
+5. **PermissionRequest**: Sends an immediate notification when Claude requests permission to run a tool
+6. **PreToolUse / AskUserQuestion**: Sends a notification when Claude asks you a question
 
 For Codex CLI, ai-notify runs on the `agent-turn-complete` notify event and sends a completion notification with the
 latest assistant message as context.
@@ -258,8 +291,8 @@ latest assistant message as context.
 ## Documentation
 
 - [Claude Code](https://code.claude.com/docs/en/overview)
-- [Hooks](https://docs.claude.com/en/docs/claude-code/hooks)
-- [Codex CLI configuration](https://developers.openai.com/codex/local-config)
+- [Claude Code hooks](https://code.claude.com/docs/en/hooks)
+- [Codex CLI advanced configuration](https://developers.openai.com/codex/config-advanced)
 
 ## License
 
