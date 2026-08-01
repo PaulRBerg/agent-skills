@@ -52,6 +52,7 @@ def test_matcherless_events_omit_matcher(tmp_path):
 
     data = json.loads(path.read_text())
     assert "matcher" not in data["hooks"]["Stop"][0]
+    assert "matcher" not in data["hooks"]["StopFailure"][0]
     assert "matcher" not in data["hooks"]["UserPromptSubmit"][0]
 
 

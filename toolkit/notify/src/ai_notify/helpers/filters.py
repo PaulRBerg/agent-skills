@@ -83,6 +83,11 @@ def should_send_permission_notification(config: AINotifyConfig) -> bool:
     return config.notification.mode != NotificationMode.DISABLED
 
 
+def should_send_failure_notification(config: AINotifyConfig) -> bool:
+    """Return whether Claude API failures should produce a notification."""
+    return config.notification.mode == NotificationMode.ALL
+
+
 def should_send_codex_notification(prompt: str, config: AINotifyConfig) -> bool:
     """
     Determine whether to send a Codex CLI notification.

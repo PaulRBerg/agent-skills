@@ -280,14 +280,20 @@ def check():
         claude_status = click.style("MISSING", fg="red")
 
     click.echo(f"Claude Code hooks: {claude_status}")
-    if claude_report.path:
-        click.echo(f"  Config: {path_with_tilde(claude_report.path)}")
+    if claude_report.paths:
+        click.echo("  Contributing configs:")
+        for path in claude_report.paths:
+            click.echo(f"    - {path_with_tilde(path)}")
     if claude_report.missing_events:
         click.echo(f"  Missing events: {', '.join(claude_report.missing_events)}")
     if claude_report.errors:
         click.echo("  Errors:")
         for path, error in claude_report.errors.items():
             click.echo(f"    - {path_with_tilde(path)}: {error}")
+    if claude_report.ignored_paths:
+        click.echo("  Ignored stale configs (Claude Code does not load these locations):")
+        for path in claude_report.ignored_paths:
+            click.echo(f"    - {path_with_tilde(path)}")
 
     if codex_report.status == "ok":
         codex_status = click.style("OK", fg="green")
@@ -424,6 +430,23 @@ def event_stop():
 
     except Exception as e:
         logger.error(f"Stop handler failed: {e}")
+        sys.exit(1)
+
+
+@event.command("stop-failure")
+def event_stop_failure():
+    """Handle StopFailure event."""
+    try:
+        from ai_notify.events.stop_failure import handle_stop_failure
+        from ai_notify.utils import read_stdin_json, validate_input
+
+        data = read_stdin_json()
+        validate_input(data)
+        handle_stop_failure(data)
+        sys.exit(0)
+
+    except Exception as e:
+        logger.error(f"StopFailure handler failed: {e}")
         sys.exit(1)
 
 

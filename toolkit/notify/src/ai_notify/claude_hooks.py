@@ -25,12 +25,13 @@ class HookSpec:
 
 
 # Single source of truth for the hooks ai-notify installs into Claude Code.
-# UserPromptSubmit/Stop ignore matchers (Claude Code drops them); Notification and
-# PermissionRequest use no matcher so they fire for every notification/request; the
-# AskUserQuestion notifier is a PreToolUse hook scoped to the AskUserQuestion tool.
+# UserPromptSubmit/Stop ignore matchers (Claude Code drops them); StopFailure,
+# Notification, and PermissionRequest use no matcher so they fire for every event;
+# the AskUserQuestion notifier is a PreToolUse hook scoped to that tool.
 HOOK_SPECS: list[HookSpec] = [
     HookSpec("UserPromptSubmit", "ai-notify event user-prompt-submit"),
     HookSpec("Stop", "ai-notify event stop"),
+    HookSpec("StopFailure", "ai-notify event stop-failure"),
     HookSpec("Notification", "ai-notify event notification"),
     HookSpec("PermissionRequest", "ai-notify event permission-request"),
     HookSpec("PreToolUse", "ai-notify event ask-user-question", matcher="AskUserQuestion"),

@@ -164,6 +164,16 @@ class TestCLICommands:
         assert result.exit_code == 0
         assert mock_handler.called
 
+    def test_stop_failure_cli_invokes_handler(self, runner):
+        """Test StopFailure hook command invocation."""
+        payload = '{"session_id": "s1", "error": "rate_limit"}'
+
+        with patch("ai_notify.events.stop_failure.handle_stop_failure") as mock_handler:
+            result = runner.invoke(cli.cli, ["event", "stop-failure"], input=payload)
+
+        assert result.exit_code == 0
+        mock_handler.assert_called_once_with({"session_id": "s1", "error": "rate_limit"})
+
 
 class TestAutoCleanup:
     """Test auto-cleanup functionality."""

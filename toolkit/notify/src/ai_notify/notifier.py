@@ -190,6 +190,20 @@ class MacNotifier:
             message=message,
         )
 
+    def notify_job_failed(
+        self,
+        project_name: str,
+        message: str,
+        job_number: Optional[int] = None,
+    ) -> bool:
+        """Send a failed-turn notification, with a job number when one was tracked."""
+        subtitle = f"Prompt #{job_number} failed" if job_number is not None else "Response failed"
+        return self.send_notification(
+            title=project_name,
+            subtitle=subtitle,
+            message=message,
+        )
+
     def notify_question(
         self,
         project_name: str,

@@ -7,6 +7,7 @@ from ai_notify.events.codex import handle_codex_notify
 from ai_notify.events.notification import handle_notification
 from ai_notify.events.permission_request import handle_permission
 from ai_notify.events.stop import handle_stop
+from ai_notify.events.stop_failure import handle_stop_failure
 from ai_notify.events.user_prompt_submit import handle_user_prompt
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "handle_notification",
     "handle_permission",
     "handle_stop",
+    "handle_stop_failure",
     "handle_user_prompt",
 ]

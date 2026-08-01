@@ -33,6 +33,12 @@ def handle_stop(data: dict) -> None:
     if not session_id:
         raise ValueError("Missing session_id in input")
 
+    # Claude can emit Stop while background work is expected to resume the session.
+    # Older payloads omit these fields, which preserves the legacy completion behavior.
+    if data.get("background_tasks") or data.get("session_crons"):
+        logger.debug(f"Deferring completion for session {session_id}: work is still pending")
+        return
+
     # Mark session as stopped
     tracker = SessionTracker()
     tracker.mark_stopped(session_id)

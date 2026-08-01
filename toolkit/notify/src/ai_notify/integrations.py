@@ -21,9 +21,15 @@ CLAUDE_REQUIRED_EVENTS = {spec.event: spec.command.split("event ", 1)[1] for spe
 @dataclass
 class ClaudeHooksReport:
     status: str
-    path: Path | None
+    paths: list[Path]
     missing_events: list[str]
     errors: dict[Path, str]
+    ignored_paths: list[Path]
+
+    @property
+    def path(self) -> Path | None:
+        """Return the first contributing path for compatibility with older callers."""
+        return self.paths[0] if self.paths else None
 
 
 @dataclass
@@ -36,20 +42,27 @@ class CodexNotifyReport:
 
 def inspect_claude_hooks(config_root: Path, project_root: Path) -> ClaudeHooksReport:
     """
-    Inspect Claude Code hook configuration for ai-notify commands.
+    Inspect the aggregate Claude Code hook configuration for ai-notify commands.
     """
-    candidate_paths = [
-        config_root / "hooks" / "hooks.json",
+    active_paths = [
         config_root / "settings.json",
-        config_root / "settings.local.json",
         project_root / ".claude" / "settings.json",
         project_root / ".claude" / "settings.local.json",
     ]
+    ignored_paths = [
+        path
+        for path in (
+            config_root / "hooks" / "hooks.json",
+            config_root / "settings.local.json",
+        )
+        if path.exists()
+    ]
 
     errors: dict[Path, str] = {}
-    best_report: ClaudeHooksReport | None = None
+    commands_by_event: dict[str, list[str]] = {}
+    contributing_paths: list[Path] = []
 
-    for path in candidate_paths:
+    for path in active_paths:
         if not path.exists():
             continue
 
@@ -61,30 +74,24 @@ def inspect_claude_hooks(config_root: Path, project_root: Path) -> ClaudeHooksRe
             continue
 
         hooks = data.get("hooks") if isinstance(data, dict) else None
-        commands_by_event = _extract_hook_commands(hooks)
-        missing_events = _find_missing_events(commands_by_event)
+        path_commands = _extract_hook_commands(hooks)
+        for event, commands in path_commands.items():
+            commands_by_event.setdefault(event, []).extend(commands)
 
-        if not missing_events:
-            return ClaudeHooksReport(status="ok", path=path, missing_events=[], errors=errors)
+        if any(
+            _has_ai_notify_event_command(path_commands.get(event, []), subcommand)
+            for event, subcommand in CLAUDE_REQUIRED_EVENTS.items()
+        ):
+            contributing_paths.append(path)
 
-        report = ClaudeHooksReport(
-            status="partial",  # the `not missing_events` (fully configured) case returned "ok" above
-            path=path,
-            missing_events=missing_events,
-            errors=errors,
-        )
-
-        if best_report is None or _report_score(report) > _report_score(best_report):
-            best_report = report
-
-    if best_report is not None:
-        return best_report
-
+    missing_events = _find_missing_events(commands_by_event)
+    status = "ok" if not missing_events else "partial" if contributing_paths else "missing"
     return ClaudeHooksReport(
-        status="missing",
-        path=None,
-        missing_events=list(CLAUDE_REQUIRED_EVENTS),
+        status=status,
+        paths=contributing_paths,
+        missing_events=missing_events,
         errors=errors,
+        ignored_paths=ignored_paths,
     )
 
 
@@ -152,13 +159,3 @@ def _notify_uses_ai_notify(notify: Any) -> bool:
         has_codex = any("codex" in item for item in as_strings)
         return has_ai_notify and has_codex
     return False
-
-
-def _report_score(report: ClaudeHooksReport) -> int:
-    if report.status == "ok":
-        return 3
-    if report.status == "partial":
-        return 2
-    if report.status == "missing":
-        return 1
-    return 0
