@@ -279,9 +279,16 @@ def has_task(node: Node, archive: bool) -> bool:
 
 def render(node: Node, archive: bool) -> str:
     if node.kind == "root":
+        if not archive:
+            return "".join(render(child, archive) for child in node.children)
         return "".join(render(child, archive) for child in node.children if has_task(child, archive))
 
     if node.kind == "heading":
+        if not archive:
+            children = "".join(
+                render_child(child, archive, parent_is_rendered=True) for child in node.children
+            )
+            return node.line + children if children.strip() else ""
         if not has_task(node, archive):
             return ""
         return node.line + "".join(render_child(child, archive, parent_is_rendered=True) for child in node.children)

@@ -64,10 +64,11 @@ Inspect changes against the filesystem, not git.
 ## Helper Behavior
 
 `scripts/archive_todo.py` reads only `<root>/TODO.md`, writes archived tasks to
-`<root>/.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, and rewrites `<root>/TODO.md` with the remaining tasks (a minimal `# TODO`
-stub if everything was archived). With `--hint`, it restricts archiving to the matched heading's subtree and exits
-non-zero listing available headings when nothing matches. It rolls a same-day re-run over to a timestamped
-`TODO_UNTIL_YYYY_MM_DD_HHMM.md` sibling instead of clobbering the earlier archive, unless `--force` is passed.
+`<root>/.ai/todos/TODO_UNTIL_YYYY_MM_DD.md`, and rewrites `<root>/TODO.md` with the remaining tasks. It preserves
+task-free sections and prose verbatim (a minimal `# TODO` stub only if everything was archived). With `--hint`, it
+restricts archiving to the matched heading's subtree and exits non-zero listing available headings when nothing matches.
+It rolls a same-day re-run over to a timestamped `TODO_UNTIL_YYYY_MM_DD_HHMM.md` sibling instead of clobbering the
+earlier archive, unless `--force` is passed.
 
 ## Completion
 
