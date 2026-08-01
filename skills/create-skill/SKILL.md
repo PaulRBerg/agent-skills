@@ -1,10 +1,10 @@
 ---
-argument-hint: <skill-name> [--global]
+argument-hint: <skill-name>
 disable-model-invocation: false
 name: create-skill
 user-invocable: true
 description:
-  Use to create/scaffold/init a new agent skill in `.agents/skills` by default or `~/.agents/skills` with `--global`.
+  Use to create/scaffold/init a new agent skill under `.agents/skills` in the working directory where invoked.
 ---
 
 # Create Skill
@@ -31,20 +31,18 @@ orchestration-heavy skill because their recommendations may evolve.
 ## Arguments
 
 - **skill-name** (required): kebab-case name (e.g., `my-skill`). Stop if missing or invalid.
-- `--global` (optional): install under `~` instead of the current repo.
+
+Reject `--global`, explicit destination paths, and other scope overrides. The invocation working directory is the only
+supported scope.
 
 ## Resolved Paths
 
-| Mode            | Skill source               | Claude Code symlink       |
-| --------------- | -------------------------- | ------------------------- |
-| local (default) | `.agents/skills/<name>/`   | `.claude/skills/<name>`   |
-| `--global`      | `~/.agents/skills/<name>/` | `~/.claude/skills/<name>` |
+Set `<scope>` to the working directory where the skill was invoked. Create the source at
+`<scope>/.agents/skills/<name>/` and the Claude Code symlink at `<scope>/.claude/skills/<name>`. Do not redirect the
+scope to the repository root when invoked from a nested project or workspace. Never create or modify a skill under
+`~/.agents`, `~/.claude`, `~/.codex`, or another global installation directory.
 
-For local mode, `<scope>` is the chosen project directory. It may be the repository root or a nested project/workspace
-directory under a larger repo; a local `.agents/skills/` below the repo root is valid when that is the intended project
-scope.
-
-The symlink target is always the relative path `../../.agents/skills/<name>` so it resolves correctly in both scopes.
+The symlink target is always the relative path `../../.agents/skills/<name>`.
 
 ## Skill Layout
 
@@ -162,8 +160,7 @@ guess — the spec evolves.
 ### 2. Validate
 
 - Reject names that are not kebab-case or collide with an existing skill at the resolved path.
-- Accept local scopes nested under a larger repo; do not force the skill into the repo root when the task targets a
-  nested project directory.
+- Confirm `<scope>` is the invocation working directory and is not a home-level or global skill directory.
 - Stop if `<scope>/.agents/skills/<name>/` or `<scope>/.claude/skills/<name>` already exists.
 
 ### 3. Define the Contract and Layout
