@@ -83,9 +83,10 @@ narrower check.
 
 - When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo,
   modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
-- Changes here are not live until installed into every target declared by the skill. After editing installable catalog
-  skills, recommend the `publish-skills` internal skill and offer to run `@publish-skills`; do not run it unprompted
-  because it commits, pushes, and changes global installations. Use `just sync` only as a rough fallback when surgical,
+- Changes here are not live until installed into every target declared by the skill. At the end of a successfully
+  completed user task that edits installable catalog skills, run the `publish-skills` internal skill on the user's
+  behalf. If the task was super complex or the working tree has ongoing dirty changes, recommend `@publish-skills`
+  instead. The agent must make the complexity assessment. Use `just sync` only as a rough fallback when surgical,
   transcript-scoped propagation is unavailable.
 - When an installable catalog skill is added or removed, update the skills table in `README.md`.
 - Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under
