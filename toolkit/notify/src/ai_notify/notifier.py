@@ -16,20 +16,22 @@ from ai_notify.config import Config, get_runtime_config
 class MacNotifier:
     """Sends desktop notifications using terminal-notifier (macOS only)."""
 
-    def __init__(self, config: Optional[Config] = None):
+    def __init__(self, config: Optional[Config] = None, icon_name: str = "claude"):
         """
         Initialize notifier.
 
         Args:
             config: Configuration instance (creates default if None)
+            icon_name: Bundled notification icon name
         """
         self.config = config or Config()
+        self._icon_name = icon_name
         self._available: Optional[bool] = None
         self._icon_path: Optional[Path] = None
 
     def _get_icon_path(self) -> Optional[Path]:
         """
-        Get path to bundled Claude icon.
+        Get path to the configured bundled notification icon.
 
         Returns:
             Path to icon file, or None if not found
@@ -37,12 +39,12 @@ class MacNotifier:
         if self._icon_path is not None:
             return self._icon_path
 
-        icon_path = Path(__file__).parent / "assets" / "claude-icon.png"
+        icon_path = Path(__file__).parent / "assets" / f"{self._icon_name}-icon.png"
         if icon_path.exists():
             self._icon_path = icon_path
             return icon_path
 
-        logger.warning(f"Claude icon not found at {icon_path}")
+        logger.warning(f"Notification icon not found at {icon_path}")
         return None
 
     def check_available(self) -> bool:

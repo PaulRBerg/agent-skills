@@ -23,6 +23,7 @@ def test_codex_notify_sends_notification(mocker):
 
     handle_codex_notify(payload)
 
+    mock_notifier.assert_called_once_with(icon_name="codex")
     assert notifier_instance.send_notification.called
     args = notifier_instance.send_notification.call_args.kwargs
     assert args["title"] == "project"

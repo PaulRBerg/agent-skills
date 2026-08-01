@@ -42,7 +42,7 @@ def handle_codex_notify(payload: dict[str, Any]) -> None:
     if message:
         message = _truncate_message(message, 320)
 
-    notifier = MacNotifier()
+    notifier = MacNotifier(icon_name="codex")
     notifier.send_notification(
         title=project_name,
         subtitle="Codex turn complete",

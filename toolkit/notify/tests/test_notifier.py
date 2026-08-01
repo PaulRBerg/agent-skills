@@ -181,6 +181,13 @@ class TestMacNotifier:
         assert icon_path is not None
         assert "claude-icon.png" in str(icon_path)
 
+    def test_get_codex_icon_path_exists(self):
+        icon_path = MacNotifier(icon_name="codex")._get_icon_path()
+
+        assert icon_path is not None
+        assert icon_path.name == "codex-icon.png"
+        assert icon_path.is_file()
+
     def test_get_icon_path_missing(self, notifier, mocker):
         # Mock icon file missing
         mocker.patch("pathlib.Path.exists", return_value=False)
