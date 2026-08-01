@@ -20,4 +20,28 @@ if [ -n "$partially_staged" ]; then
   exit 1
 fi
 
-bun run lint-staged
+attempt=1
+while :; do
+  if lint_staged_output=$(bun run lint-staged 2>&1); then
+    printf '%s\n' "$lint_staged_output"
+    exit 0
+  else
+    lint_staged_rc=$?
+  fi
+
+  case "$lint_staged_output" in
+    *'Failed to get staged files'*) ;;
+    *)
+      printf '%s\n' "$lint_staged_output"
+      exit "$lint_staged_rc"
+      ;;
+  esac
+
+  if [ "$attempt" -ge 3 ]; then
+    printf '%s\n' "$lint_staged_output"
+    exit "$lint_staged_rc"
+  fi
+
+  sleep "$attempt"
+  attempt=$((attempt + 1))
+done
