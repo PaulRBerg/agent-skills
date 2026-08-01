@@ -98,6 +98,17 @@ include only ones the commit actually closes.
 - Multiple issues: one `Closes #N` per line in the body/trailer
 - Merge with transcript-scanned issues; de-duplicate
 
+**Agent-Session attribution** — run once, independent of the diff:
+
+```bash
+~/.codex/hooks/AgentSessionStatus/agent_session_status.py identity
+```
+
+When the script exists and this exits `0`, parse `client=<claude|codex> session=<id>` from stdout and append an
+`Agent-Session: <client>/<id>` trailer alongside any `Closes #N` trailers. When the script is missing or `identity`
+exits nonzero, skip silently — the catalog skill must keep working on machines without it. This makes committed changes
+attributable to an agent session (`git log` shows which session authored what).
+
 ### 4) Commit
 
 - Default mode (no `--all`/`--staged`): run the helper from the target repository cwd:
