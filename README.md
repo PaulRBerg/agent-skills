@@ -18,7 +18,7 @@ bunx skills add PaulRBerg/agent-skills
 | Skill                     | Description                                                |
 | ------------------------- | ---------------------------------------------------------- |
 | agents-context-management | Create or polish README.md, AGENTS.md, and existing skills |
-| agents-introspection      | Retrospect on Codex/Claude Code transcript history         |
+| agents-introspection      | Report live sessions or retrospect on agent history        |
 | audit-stale-comments      | Verify stale comments in JavaScript, TypeScript, and Go    |
 | autoresearch              | Autonomous experiment loop                                 |
 | bump-deps                 | Node.js dependency updates via taze                        |

@@ -33,7 +33,7 @@ directory instead of searching installed copies.
 
 ## Preferred Helper
 
-Run one active-session pass with 3–6 task keywords:
+Run one unarchived-session pass with 3–6 task keywords:
 
 ```sh
 uv run "$transcript_miner" \
@@ -69,7 +69,7 @@ reading a body.
 
 Codex uses `CODEX_HOME`, defaulting to `~/.codex`:
 
-- Active transcripts: `sessions/`
+- Unarchived transcripts: `sessions/`
 - Archived transcripts: `archived_sessions/`
 - Recent-session index: `session_index.jsonl`
 
@@ -82,8 +82,8 @@ Use this only when the helper is missing or fails. Preserve the same project and
 
 1. For Claude Code, compute the encoded directory from the exact absolute project path and inspect newest JSONL files
    there.
-2. For Codex, search active transcript metadata for the exact absolute project path. Search archives only after the
-   active pass is insufficient.
+2. For Codex, search unarchived transcript metadata for the exact absolute project path. Search archives only after the
+   unarchived pass is insufficient.
 3. If exact matching is suspiciously empty, use the repository basename only to identify candidates, then reject every
    candidate whose metadata or cwd does not resolve to an explicitly allowed project.
 4. Filter candidates with the task keywords before opening bodies. Inspect at most five unless evidence conflicts or the
