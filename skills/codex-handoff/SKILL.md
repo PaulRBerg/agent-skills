@@ -248,6 +248,14 @@ heading and agent rows must show the failure rather than imply success.
   carry verification evidence matching its assignment. Pass relevant results to dependent agents.
 - On `blocked`, timeout, or nonzero runner exit, let already-started independent agents finish, but do not start agents
   that depend on the failure. Continue only work proven independent. Do not silently take over implementation.
+- Triage a `handoff.failed` sentinel with reason `error` before treating it as a plan failure. When the stderr artifact
+  shows a transport, stream, or API failure (`stream disconnected`, `Transport error`, `network error`,
+  `error decoding response body`) and the forensics show no Codex-reported task failure, the infrastructure died, not
+  the plan. Inspect the agent's write scope for partial edits (`git status`, `git diff`), then relaunch that one agent
+  once with a fresh budget and a prompt that names the partially edited files and says to verify and continue rather
+  than redo. The relaunch is a retry of the same agent, not a new agent against the five-agent limit. A second
+  infrastructure failure for the same agent is a blocker: stop and report. `blocked` results and timeouts are never
+  infrastructure failures.
 - After every required agent completes, deduplicate the union of reported `changed_files` and confirm the combined
   verification evidence proves the approved plan.
 - When the plan marked polish as required, invoke `$code-polish` once with exactly that union and its default
