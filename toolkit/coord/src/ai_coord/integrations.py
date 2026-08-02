@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -132,6 +133,16 @@ def hook_specs(client: str) -> tuple[HookSpec, ...]:
     raise ValueError(f"unsupported client: {client}")
 
 
+def default_hook_path(client: str) -> Path:
+    if client == "codex":
+        root = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+        return root.expanduser() / "hooks.json"
+    if client == "claude":
+        root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+        return root.expanduser() / "settings.json"
+    raise ValueError(f"unsupported client: {client}")
+
+
 def iter_commands(value: Any) -> Iterator[str]:
     if isinstance(value, dict):
         command = value.get("command")
@@ -204,6 +215,21 @@ def _spec_present(value: Any, spec: HookSpec) -> bool:
             continue
         if spec.matcher is None and group.get("matcher") not in (None, "", "*"):
             continue
-        if spec.command in {command.strip() for command in iter_commands(group.get("hooks"))}:
+        handlers = group.get("hooks")
+        if not isinstance(handlers, list):
+            continue
+        for handler in handlers:
+            if not isinstance(handler, dict) or handler.get("type") != "command":
+                continue
+            command = handler.get("command")
+            if not isinstance(command, str) or command.strip() != spec.command:
+                continue
+            if spec.timeout is not None and handler.get("timeout") != spec.timeout:
+                continue
+            if (
+                spec.additional_context_limit is not None
+                and handler.get("additionalContextLimit") != spec.additional_context_limit
+            ):
+                continue
             return True
     return False

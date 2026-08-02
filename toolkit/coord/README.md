@@ -25,6 +25,7 @@ ai-coord check
 
 `link` merges owned hooks into `~/.codex/hooks.json` and `~/.claude/settings.json`. It preserves unrelated settings and
 hook commands. Use `--dry-run` to preview or `--path` when linking one client to a non-default settings file.
+`CODEX_HOME` and `CLAUDE_CONFIG_DIR` override the corresponding default configuration roots.
 
 Codex requires interactive review whenever an exact hook definition changes. Open `/hooks` after linking and approve the
 `ai-coord hook codex` definition.
@@ -39,8 +40,8 @@ ai-coord start 'regenerate 2025 tax year' \
   'accounting/reports/2025'
 ```
 
-Scopes are repository-relative prefixes. `.` covers the worktree. Globs and paths outside the repository are rejected so
-overlap checks stay exact.
+Scopes are repository-relative prefixes. `.` covers the worktree. Globs, non-printable paths, normalized scopes over 120
+characters, and paths outside the repository are rejected so overlap checks stay exact.
 
 `start` emits one tab-separated result:
 
@@ -108,9 +109,9 @@ ai-coord migrate legacy --dry-run
 ai-coord migrate legacy
 ```
 
-The importer reads the former `~/.codex/.tmp/agent-session-status` registry, claims, messages, and notes. Imports are
-content-hash idempotent. Literal claims retain their state; legacy glob claims become conservative queued blockers until
-released or expired. The importer never removes its source.
+The importer reads the former `$CODEX_HOME/.tmp/agent-session-status` registry, claims, messages, and notes (defaulting
+to `~/.codex`). Imports are content-hash idempotent. Literal claims retain their state; legacy glob claims become
+conservative queued blockers until released or expired. The importer never removes its source.
 
 ## Storage and privacy
 

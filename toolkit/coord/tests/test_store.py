@@ -32,6 +32,29 @@ def test_store_prunes_expired_messages(tmp_path: Path) -> None:
     assert store.inbox(recipient) == []
 
 
+def test_store_honors_explicit_epoch_timestamps(tmp_path: Path) -> None:
+    store = Store(tmp_path / "state.db")
+    sender = Identity("codex", "sender")
+    recipient = Identity("claude", "recipient")
+    store.upsert_session(
+        sender,
+        cwd="/tmp",
+        repo_root=None,
+        state="working",
+        source="test",
+        started_at=0,
+        current=0,
+    )
+    store.send_message(sender, [recipient], "epoch", None, current=0)
+    store.prune(current=0)
+
+    session = store.session(sender)
+    assert session is not None
+    assert session["started_at"] == 0
+    assert session["last_seen"] == 0
+    assert store.inbox(recipient)[0]["created_at"] == 0
+
+
 def test_store_initialization_is_concurrency_safe(tmp_path: Path) -> None:
     path = tmp_path / "state.db"
     gate = Barrier(8)

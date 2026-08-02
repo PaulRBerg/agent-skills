@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
+import math
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from ai_coord.integrations import default_hook_path, inspect_hooks
 from ai_coord.store import Store
 from ai_coord.util import git_root, now_ts
 
@@ -22,14 +23,6 @@ CLAUDE_LIVE_STATES = {
     "idle": "idle",
 }
 CLAUDE_TERMINAL_STATES = {"completed", "done", "failed", "stopped"}
-CODEX_EVENTS = {
-    "SessionStart",
-    "UserPromptSubmit",
-    "Stop",
-    "SessionEnd",
-    "SubagentStart",
-    "SubagentStop",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,24 +74,21 @@ class HostInventory:
     def _codex_report(self, store: Store) -> ProviderReport:
         if shutil.which("codex") is None:
             return ProviderReport("codex", True, "hook-ledger", enabled=False)
-        codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
-        path = codex_home / "hooks.json"
-        try:
-            data = json.loads(path.read_text())
-        except FileNotFoundError:
-            return ProviderReport("codex", False, "hook-ledger", error=f"missing {path}")
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
-            return ProviderReport("codex", False, "hook-ledger", error=str(error))
-        missing = _missing_hook_events(data, CODEX_EVENTS, "ai-coord hook codex")
+        hooks = inspect_hooks("codex", default_hook_path("codex"))
         errors = [
             row
             for row in store.hook_health()
             if row["client"] == "codex" and row["last_error_code"]
         ]
-        if missing:
-            return ProviderReport(
-                "codex", False, "hook-ledger", error=f"missing hooks: {', '.join(sorted(missing))}"
-            )
+        if not hooks.ok:
+            details: list[str] = []
+            if hooks.error:
+                details.append(hooks.error)
+            if hooks.missing:
+                details.append(f"missing or invalid hooks: {', '.join(sorted(hooks.missing))}")
+            if hooks.legacy_commands:
+                details.append("legacy hooks remain")
+            return ProviderReport("codex", False, "hook-ledger", error="; ".join(details))
         if errors:
             return ProviderReport(
                 "codex",
@@ -109,11 +99,12 @@ class HostInventory:
         return ProviderReport("codex", True, "hook-ledger")
 
     def _collect_claude(self) -> tuple[ProviderReport, list[dict[str, Any]]]:
-        if shutil.which("claude") is None:
+        executable = shutil.which("claude")
+        if executable is None:
             return ProviderReport("claude", True, "claude-agents-json", enabled=False), []
         try:
             result = subprocess.run(
-                ["claude", "agents", "--json"],
+                [executable, "agents", "--json"],
                 capture_output=True,
                 check=False,
                 text=True,
@@ -202,31 +193,12 @@ def _timestamp(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value / 1000 if value > 10_000_000_000 else value)
+        timestamp = float(value / 1000 if value > 10_000_000_000 else value)
+        return timestamp if math.isfinite(timestamp) else None
     if isinstance(value, str) and value:
         try:
-            return datetime.fromisoformat(value).timestamp()
-        except ValueError:
+            timestamp = datetime.fromisoformat(value).timestamp()
+            return timestamp if math.isfinite(timestamp) else None
+        except (OSError, OverflowError, ValueError):
             return None
     return None
-
-
-def _missing_hook_events(data: Any, events: set[str], command: str) -> set[str]:
-    hooks = data.get("hooks") if isinstance(data, dict) else None
-    if not isinstance(hooks, dict):
-        return set(events)
-    return {event for event in events if command not in _commands(hooks.get(event))}
-
-
-def _commands(value: Any) -> set[str]:
-    found: set[str] = set()
-    if isinstance(value, dict):
-        command = value.get("command")
-        if isinstance(command, str):
-            found.add(command.strip())
-        for nested in value.values():
-            found.update(_commands(nested))
-    elif isinstance(value, list):
-        for nested in value:
-            found.update(_commands(nested))
-    return found

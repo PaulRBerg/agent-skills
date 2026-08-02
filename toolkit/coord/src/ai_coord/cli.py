@@ -11,7 +11,7 @@ import click
 
 from ai_coord import __version__
 from ai_coord.coordinator import Coordinator, snapshot_json
-from ai_coord.integrations import inspect_hooks, link_hooks
+from ai_coord.integrations import default_hook_path, inspect_hooks, link_hooks
 from ai_coord.migration import migrate_legacy
 from ai_coord.store import Store
 from ai_coord.util import age_label
@@ -208,15 +208,11 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
     if client == "all" and path is not None:
         _fail(ValueError("--path is available only when linking one client"), 64)
     clients = ("codex", "claude") if client == "all" else (client,)
-    defaults = {
-        "codex": Path.home() / ".codex" / "hooks.json",
-        "claude": Path.home() / ".claude" / "settings.json",
-    }
     try:
         for selected in clients:
             result = link_hooks(
                 selected,
-                path or defaults[selected],
+                path or default_hook_path(selected),
                 dry_run=dry_run,
                 force=force,
             )
@@ -251,10 +247,7 @@ def check(as_json: bool) -> None:
                 "schema_version": 1,
             }
         )
-        paths = {
-            "codex": Path.home() / ".codex" / "hooks.json",
-            "claude": Path.home() / ".claude" / "settings.json",
-        }
+        paths = {selected: default_hook_path(selected) for selected in ("codex", "claude")}
         for selected, path in paths.items():
             report = inspect_hooks(selected, path)
             reports.append({"component": f"hooks:{selected}", **asdict(report)})
@@ -296,7 +289,7 @@ def migrate() -> None:
 @click.option(
     "--source",
     type=click.Path(path_type=Path),
-    default=Path.home() / ".codex" / ".tmp" / "agent-session-status",
+    default=default_hook_path("codex").parent / ".tmp" / "agent-session-status",
     show_default=True,
 )
 @click.option("--dry-run", is_flag=True, help="Count valid records without writing")

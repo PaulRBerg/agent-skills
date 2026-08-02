@@ -199,7 +199,7 @@ class Store:
             self.connection.commit()
 
     def prune(self, current: float | None = None) -> None:
-        timestamp = current or now_ts()
+        timestamp = now_ts() if current is None else current
         with self.transaction() as connection:
             connection.execute(
                 "DELETE FROM messages WHERE created_at < ?", (timestamp - MESSAGE_TTL,)
@@ -239,7 +239,7 @@ class Store:
         started_at: float | None = None,
         current: float | None = None,
     ) -> None:
-        timestamp = current or now_ts()
+        timestamp = now_ts() if current is None else current
         with self.transaction() as connection:
             connection.execute(
                 """
@@ -269,7 +269,7 @@ class Store:
                     waiting_for,
                     pid,
                     source,
-                    started_at or timestamp,
+                    timestamp if started_at is None else started_at,
                     timestamp,
                 ),
             )
@@ -513,7 +513,7 @@ class Store:
         repo_root: str | None,
         current: float | None = None,
     ) -> list[str]:
-        timestamp = current or now_ts()
+        timestamp = now_ts() if current is None else current
         with self.transaction() as connection:
             return [
                 self.add_message(connection, sender, recipient, text, repo_root, timestamp)

@@ -141,3 +141,17 @@ def test_malformed_hook_is_fail_open_and_records_health(tmp_path: Path) -> None:
     assert coordinator.ingest_hook("codex", {"hook_event_name": "Stop"}) == "{}"
     health = store.hook_health()
     assert health[0]["last_error_code"] == "ValueError"
+
+
+def test_unknown_hook_event_does_not_create_immortal_session(tmp_path: Path) -> None:
+    store = Store(tmp_path / "state.db")
+    coordinator = Coordinator(store, StaticInventory())
+
+    assert (
+        coordinator.ingest_hook(
+            "codex", {"session_id": "phantom", "hook_event_name": "UnexpectedEvent"}
+        )
+        == ""
+    )
+    assert store.session(Identity("codex", "phantom")) is None
+    assert store.hook_health() == []

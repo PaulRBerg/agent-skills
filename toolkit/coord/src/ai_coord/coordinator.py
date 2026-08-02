@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_coord.identity import Identity, from_environment, process_ancestors
+from ai_coord.integrations import hook_specs
 from ai_coord.providers import HostInventory, Inventory
 from ai_coord.store import Store
 from ai_coord.util import (
@@ -489,9 +491,13 @@ class Coordinator:
         """Apply a host lifecycle payload and return safe stdout."""
         event = payload.get("hook_event_name")
         event_name = event if isinstance(event, str) else "unknown"
+        supported_event = False
         try:
             if client not in {"codex", "claude"}:
                 raise ValueError("unsupported client")
+            supported_event = event_name in {spec.event for spec in hook_specs(client)}
+            if not supported_event:
+                raise ValueError("unsupported hook event")
             session_id = payload.get("session_id")
             if not isinstance(session_id, str) or not session_id:
                 raise ValueError("missing session id")
@@ -536,10 +542,9 @@ class Coordinator:
                 return "{}"
             return ""
         except Exception as error:  # noqa: BLE001 - hook mode is deliberately fail-open
-            try:
-                self.store.hook_error(client, event_name, error.__class__.__name__)
-            except Exception:  # noqa: BLE001, S110
-                pass
+            if supported_event:
+                with contextlib.suppress(Exception):
+                    self.store.hook_error(client, event_name, error.__class__.__name__)
             if client == "codex" and event_name in {"Stop", "SubagentStop"}:
                 return "{}"
             return ""

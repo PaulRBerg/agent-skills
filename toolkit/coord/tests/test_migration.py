@@ -126,3 +126,48 @@ def test_migration_dry_run_and_legacy_glob_blocker(
     monkeypatch.setenv("AI_COORD_SESSION_ID", "new-session")
     outcome = Coordinator(store, StaticInventory()).start("new work", ("docs",), cwd=git_repo)
     assert outcome.kind == "BLOCKED"
+
+
+def test_migration_rejects_unknown_client(tmp_path: Path, git_repo: Path) -> None:
+    source = tmp_path / "legacy"
+    _write(
+        source / "claims" / "claim.json",
+        {
+            "session_id": "legacy",
+            "client": "unknown",
+            "cwd": str(git_repo),
+            "repo_root": str(git_repo),
+            "label": "invalid",
+            "paths": ["src"],
+            "created_at": "2026-08-02T10:00:00Z",
+        },
+    )
+    store = Store(tmp_path / "state.db")
+
+    report = migrate_legacy(store, source)
+
+    assert report.invalid == 1
+    assert report.imported == 0
+    assert store.claims() == []
+
+
+def test_migration_rejects_non_finite_timestamp(tmp_path: Path, git_repo: Path) -> None:
+    source = tmp_path / "legacy"
+    _write(
+        source / "claims" / "claim.json",
+        {
+            "session_id": "legacy",
+            "client": "codex",
+            "cwd": str(git_repo),
+            "repo_root": str(git_repo),
+            "label": "invalid",
+            "paths": ["src"],
+            "created_at": float("nan"),
+        },
+    )
+    store = Store(tmp_path / "state.db")
+
+    report = migrate_legacy(store, source)
+
+    assert report.invalid == 1
+    assert store.claims() == []

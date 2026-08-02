@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_coord.integrations import inspect_hooks, link_hooks
+from ai_coord.integrations import default_hook_path, inspect_hooks, link_hooks
 
 
 def test_codex_link_preserves_unrelated_and_replaces_legacy(tmp_path: Path) -> None:
@@ -81,3 +81,29 @@ def test_link_dry_run_and_force(tmp_path: Path) -> None:
     preview = link_hooks("claude", path, force=True, dry_run=True)
     assert preview.changed
     assert path.read_text() == '{"hooks": "bad"}\n'
+
+
+def test_hook_check_requires_full_handler_contract(tmp_path: Path) -> None:
+    path = tmp_path / "hooks.json"
+    link_hooks("codex", path)
+    data = json.loads(path.read_text())
+    data["hooks"]["Stop"][0]["hooks"][0]["timeout"] = 1
+    data["hooks"]["UserPromptSubmit"][0]["hooks"][0].pop("additionalContextLimit")
+    path.write_text(json.dumps(data))
+
+    result = inspect_hooks("codex", path)
+
+    assert not result.ok
+    assert result.missing == ("UserPromptSubmit", "Stop")
+
+
+def test_default_hook_paths_honor_client_config_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    claude_home = tmp_path / "claude"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
+
+    assert default_hook_path("codex") == codex_home / "hooks.json"
+    assert default_hook_path("claude") == claude_home / "settings.json"

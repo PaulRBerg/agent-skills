@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -120,7 +121,7 @@ def _import_session(store: Store, row: dict[str, Any], dry_run: bool) -> int:
 
 
 def _import_claim(store: Store, row: dict[str, Any], dry_run: bool) -> int:
-    client = _string(row, "client")
+    client = _client(row, "client")
     session_id = _string(row, "session_id")
     label = sanitize(_string(row, "label"), 80)
     cwd = _string(row, "cwd")
@@ -137,7 +138,8 @@ def _import_claim(store: Store, row: dict[str, Any], dry_run: bool) -> int:
         if any(any(char in value for char in "*?[]") for value in paths)
         else ("active" if paths else "intent")
     )
-    timestamp = _timestamp(row.get("created_at")) or now_ts()
+    parsed_timestamp = _timestamp(row.get("created_at"))
+    timestamp = now_ts() if parsed_timestamp is None else parsed_timestamp
     if not dry_run:
         identity = Identity(client, session_id)
         if store.session(identity) is None:
@@ -194,14 +196,14 @@ def _import_notes(store: Store, row: dict[str, Any], dry_run: bool) -> int:
                 entry.get("client") if isinstance(entry.get("client"), str) else None,
                 entry.get("session_id") if isinstance(entry.get("session_id"), str) else None,
                 sanitize(text, 240),
-                created_at or now_ts(),
+                now_ts() if created_at is None else created_at,
             ),
         )
     return imported
 
 
 def _import_inbox(store: Store, row: dict[str, Any], dry_run: bool) -> int:
-    client = _string(row, "client")
+    client = _client(row, "client")
     session_id = _string(row, "session_id")
     entries = row.get("messages")
     if not isinstance(entries, list):
@@ -211,7 +213,9 @@ def _import_inbox(store: Store, row: dict[str, Any], dry_run: bool) -> int:
         if not isinstance(entry, dict):
             continue
         required = ("id", "from_client", "from_session_id", "text", "created_at")
-        if any(not isinstance(entry.get(key), str) or not entry[key] for key in required):
+        if any(not isinstance(entry.get(key), str) or not entry[key] for key in required) or entry[
+            "from_client"
+        ] not in {"codex", "claude"}:
             continue
         imported += 1
         if dry_run:
@@ -244,14 +248,24 @@ def _string(row: dict[str, Any], key: str) -> str:
     return value
 
 
+def _client(row: dict[str, Any], key: str) -> str:
+    value = _string(row, key)
+    if value not in {"codex", "claude"}:
+        raise ValueError(f"invalid {key}")
+    return value
+
+
 def _timestamp(value: Any, *, required: bool = True) -> float | None:
+    timestamp: float | None = None
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
-    if isinstance(value, str) and value:
+        timestamp = float(value)
+    elif isinstance(value, str) and value:
         try:
-            return datetime.fromisoformat(value).timestamp()
-        except ValueError:
+            timestamp = datetime.fromisoformat(value).timestamp()
+        except (OSError, OverflowError, ValueError):
             pass
+    if timestamp is not None and math.isfinite(timestamp):
+        return timestamp
     if required:
         raise ValueError("invalid timestamp")
     return None
