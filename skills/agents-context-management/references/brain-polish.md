@@ -1,15 +1,16 @@
 # Polish Workflow
 
-Update existing context for factual accuracy, useful placement, and lower noise. Do not create README.md, AGENTS.md, or
-skills, and do not broadly restyle accurate user-authored content.
+Update existing context for factual accuracy, useful placement, and lower noise. Do not create README.md, AGENTS.md,
+context docs, or skills, and do not broadly restyle accurate user-authored content.
 
 Success means each changed claim is verified against the repository, each instruction lives at the narrowest useful
 scope, and no unrelated content or user work is disturbed.
 
 ## Discover and Inspect
 
-Select existing README.md and AGENTS.md files, sibling CLAUDE.md entries, and any in-scope project-installed
-`.agents/skills/<name>/SKILL.md` files. Apply `path`, `--root-only`, and `skill-name` filters before reading deeply.
+Select existing README.md and AGENTS.md files, sibling CLAUDE.md entries, in-scope context docs, and any in-scope
+project-installed `.agents/skills/<name>/SKILL.md` files. Apply `path`, `--root-only`, and `target` filters before
+reading deeply.
 
 Use the nearest manifests, task runners, lock files, lint and CI configuration, generated-file notices, and relevant
 source files to verify claims. Check paths, commands, scripts, recipes, environment variables, ownership rules, default
@@ -70,6 +71,20 @@ Before writing, require `test -L "$dir/CLAUDE.md" || test ! -e "$dir/CLAUDE.md"`
 target; leave it untouched and report the conflict.
 
 After changing placement or symlinks, rediscover affected targets and confirm no local constraint was orphaned.
+
+## Context Doc Decisions
+
+Polish selected context docs — conventions, command catalogs, data-format rules, workflow runbooks, and similar
+reference material — wherever they live and whatever they are named:
+
+- Verify commands, paths, flags, formats, environment variables, versions, and rules against the repository with the
+  same rigor as AGENTS.md.
+- Preserve each doc's audience, depth, structure, and voice; a deep reference stays a deep reference. Do not compress it
+  to AGENTS.md terseness or inline it into AGENTS.md.
+- Fix broken links between context docs, README.md, AGENTS.md, and skills. Do not move or rename docs.
+- Recommend relocating guidance only when it is clearly misplaced, such as stable repo-wide rules living solely in a
+  deep doc nothing links to; perform the move only with explicit confirmation.
+- Report an obsolete doc whose central subject no longer exists as a deletion candidate; never delete or hollow it out.
 
 ## Project Skill Decisions
 

@@ -1,11 +1,12 @@
 ---
 argument-hint:
-  <polish|create> [path] [skill-name ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run]
-  [--force]
+  <polish|create> [path] [target ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run] [--force]
 disable-model-invocation: true
 name: agents-context-management
 user-invocable: true
-description: "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.md, and installed project skills."
+description:
+  "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.md, installed project skills, and other Markdown
+  context docs."
 ---
 
 # Agents Context Management
@@ -14,7 +15,9 @@ If these instructions are already present in the conversation from a slash or do
 do not invoke this skill again through a skill tool.
 
 Create or polish repo-local context as one coherent system: human-facing README.md files, agent-facing AGENTS.md files
-with companion CLAUDE.md symlinks, and existing project-installed skills under `.agents/skills`.
+with companion CLAUDE.md symlinks, existing project-installed skills under `.agents/skills`, and context docs — any
+other Markdown files, under any name or directory, whose content is durable guidance for agents or humans, such as
+conventions, command catalogs, data-format rules, workflow runbooks, and reference material.
 
 Success means every selected target is grounded in repository evidence, respects its audience and scope, and passes the
 narrowest repository-defined validation. Stop after reporting completed or planned changes, validation, and any
@@ -53,19 +56,20 @@ If the intent is unclear, select `polish` in `--dry-run` mode and report the sma
 
 - Explicit create, update, polish, repair, fix, or equivalent intent authorizes in-scope local writes. Inspection-only
   intent and `--dry-run` do not.
-- Require explicit confirmation before deleting README.md, AGENTS.md, or CLAUDE.md entries. `--force` authorizes
-  documented overwrites, not deletions.
+- Require explicit confirmation before deleting README.md, AGENTS.md, CLAUDE.md, or context-doc targets. `--force`
+  authorizes documented overwrites, not deletions.
 - Treat a broad write request as authorization for the requested scope. Otherwise, preview a change set larger than a
   handful of files and stop before writing.
 - Do not expand from documentation work into source changes, skill creation, or external writes.
 
 ## Arguments
 
-- `path`: Optional repo-relative subtree. Restrict documentation, package-root, and project-skill discovery to that
-  subtree.
-- `skill-name ...`: Optional filters for existing `.agents/skills/<name>/` targets during `polish`.
-- `--root-only`: Select only root README.md, AGENTS.md, and CLAUDE.md targets. Exclude project skills unless explicitly
-  selected by `skill-name`.
+- `path`: Optional repo-relative subtree. Restrict documentation, package-root, project-skill, and context-doc discovery
+  to that subtree.
+- `target ...`: Optional filters during `polish`: existing `.agents/skills/<name>/` skill names, or repo-relative
+  Markdown paths selecting specific context docs.
+- `--root-only`: Select only root README.md, AGENTS.md, and CLAUDE.md targets. Exclude project skills and context docs
+  unless explicitly selected by `target`.
 - `--dry-run`: Report planned writes and concise diffs without changing files.
 - `--preserve`: During `polish`, keep accurate user-authored prose and structure; fix only drift and obvious noise.
 - `--minimal`: Produce the smallest context that still meets the completion bar.
@@ -104,7 +108,7 @@ fi
 
 When `managed_skill_root` is set, allow README.md, AGENTS.md, and CLAUDE.md work elsewhere in that repository, but
 exclude the entire installed `skills/` tree from every workflow. Apply the exclusion before discovery, canonicalization,
-or symlink traversal. If `path`, `skill-name`, or an explicit target would enter that tree, make no writes there and
+or symlink traversal. If `path`, a `target`, or an explicit request would enter that tree, make no writes there and
 report that the skill must be edited in its source catalog. `--force` does not override this boundary.
 
 Snapshot `git status --short` before broad edits. Preserve unrelated pre-existing changes and re-check expected paths
@@ -120,6 +124,12 @@ README.md, AGENTS.md, CLAUDE.md, and project-skill behavior; do not repeat or br
 Use git-aware discovery, canonicalize every candidate beneath `repo_root`, and exclude VCS, dependency, environment, and
 build outputs. Deliberately include ignored `.agents/skills/*/SKILL.md` only when project skills are selected. Prefer
 `fd`, fall back once on suspiciously narrow results, and synthesize independent repository evidence before writing.
+
+Discover context docs by following Markdown links from README.md, AGENTS.md, CLAUDE.md, and SKILL.md files, then by
+scanning remaining tracked Markdown whose content qualifies. Classify by content, never by file name or location.
+Exclude changelogs, licenses, legal and policy notices, generated or vendored documentation, and prose that is product
+content rather than guidance. When classification is uncertain, leave the file out of scope and report it as a
+candidate.
 
 ## Completion and Report
 

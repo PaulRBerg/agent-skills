@@ -15,44 +15,44 @@ bunx skills add PaulRBerg/agent-skills
 
 ## Skills
 
-| Skill                     | Description                                                |
-| ------------------------- | ---------------------------------------------------------- |
-| agents-context-management | Create or polish README.md, AGENTS.md, and existing skills |
-| agents-introspection      | Retrospect on Codex/Claude Code transcript history         |
-| agents-status             | Report active Codex and Claude Code sessions in this repo  |
-| audit-stale-comments      | Verify stale comments in JavaScript, TypeScript, and Go    |
-| autoresearch              | Autonomous experiment loop                                 |
-| bump-deps                 | Node.js dependency updates via taze                        |
-| bump-release              | Release workflow with changelog, tagging                   |
-| claude-handoff            | Delegate approved Claude plans to Sonnet or Opus subagents |
-| cli-cast                  | Foundry cast CLI guidance                                  |
-| cli-gh                    | GitHub CLI operations                                      |
-| cli-just                  | Just command runner guidance                               |
-| codex-handoff             | Delegate approved Claude plans to Codex implementation     |
-| code-polish               | Simplify and/or risk-profiled review with autofix          |
-| coingecko-cli             | CoinGecko CLI for prices and market data                   |
-| coingecko-open-page       | Open CoinGecko historical data page in Chromium            |
-| commit                    | Git commit with conventional commits                       |
-| create-skill              | Bootstrap a new agent skill                                |
-| effect-ts                 | Effect-TS patterns and guidance                            |
-| evm-atlas                 | EVM lookup + DEX transaction/order interpretation          |
-| find-tool                 | Find and compare current developer tools                   |
-| frontend-design           | Distinctive, subject-specific frontend design              |
-| fresh-eyes-sweep          | Meticulous whole-repository audit and verified fixes       |
-| git-squash                | Squash PR branch with semantic commit message              |
-| grill-me                  | Relentlessly stress-test plans and designs                 |
-| html-debrief              | Interactive HTML task debriefs                             |
-| html-playground           | Interactive single-file HTML playgrounds                   |
-| large-file-refactor       | Large source-file report and Serena split plans            |
-| naming-refactor           | Exhaustive behavior-preserving repository naming refactor  |
-| repo-rename               | Rename GitHub repo, folder, and agent thread references    |
-| skill-doctor              | Audit Agent Skills catalogs and installed skill roots      |
-| skill-map                 | Find skill dependencies and references across machine      |
-| spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                |
-| tailwind-css              | Tailwind CSS v4 styling guidance                           |
-| todo-archive              | Archive checked TODO.md tasks into .ai/todos               |
-| vitest                    | Vitest test writing and debugging                          |
-| yeet                      | GitHub contribution workflows                              |
+| Skill                     | Description                                                              |
+| ------------------------- | ------------------------------------------------------------------------ |
+| agents-context-management | Create or polish README.md, AGENTS.md, context docs, and existing skills |
+| agents-introspection      | Retrospect on Codex/Claude Code transcript history                       |
+| agents-status             | Report active Codex and Claude Code sessions in this repo                |
+| audit-stale-comments      | Verify stale comments in JavaScript, TypeScript, and Go                  |
+| autoresearch              | Autonomous experiment loop                                               |
+| bump-deps                 | Node.js dependency updates via taze                                      |
+| bump-release              | Release workflow with changelog, tagging                                 |
+| claude-handoff            | Delegate approved Claude plans to Sonnet or Opus subagents               |
+| cli-cast                  | Foundry cast CLI guidance                                                |
+| cli-gh                    | GitHub CLI operations                                                    |
+| cli-just                  | Just command runner guidance                                             |
+| codex-handoff             | Delegate approved Claude plans to Codex implementation                   |
+| code-polish               | Simplify and/or risk-profiled review with autofix                        |
+| coingecko-cli             | CoinGecko CLI for prices and market data                                 |
+| coingecko-open-page       | Open CoinGecko historical data page in Chromium                          |
+| commit                    | Git commit with conventional commits                                     |
+| create-skill              | Bootstrap a new agent skill                                              |
+| effect-ts                 | Effect-TS patterns and guidance                                          |
+| evm-atlas                 | EVM lookup + DEX transaction/order interpretation                        |
+| find-tool                 | Find and compare current developer tools                                 |
+| frontend-design           | Distinctive, subject-specific frontend design                            |
+| fresh-eyes-sweep          | Meticulous whole-repository audit and verified fixes                     |
+| git-squash                | Squash PR branch with semantic commit message                            |
+| grill-me                  | Relentlessly stress-test plans and designs                               |
+| html-debrief              | Interactive HTML task debriefs                                           |
+| html-playground           | Interactive single-file HTML playgrounds                                 |
+| large-file-refactor       | Large source-file report and Serena split plans                          |
+| naming-refactor           | Exhaustive behavior-preserving repository naming refactor                |
+| repo-rename               | Rename GitHub repo, folder, and agent thread references                  |
+| skill-doctor              | Audit Agent Skills catalogs and installed skill roots                    |
+| skill-map                 | Find skill dependencies and references across machine                    |
+| spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                              |
+| tailwind-css              | Tailwind CSS v4 styling guidance                                         |
+| todo-archive              | Archive checked TODO.md tasks into .ai/todos                             |
+| vitest                    | Vitest test writing and debugging                                        |
+| yeet                      | GitHub contribution workflows                                            |
 
 ## Forked Skills
 

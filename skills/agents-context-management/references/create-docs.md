@@ -1,7 +1,7 @@
 # Create Docs Workflow
 
 Create missing README.md and AGENTS.md context from repository evidence. Regenerate existing targets only with `--force`
-or an equally explicit overwrite instruction. Never create skills.
+or an equally explicit overwrite instruction. Create other context docs only on explicit request. Never create skills.
 
 Success means each selected package root has the requested human and agent context, every created AGENTS.md has a safe
 companion CLAUDE.md symlink where possible, and generated claims pass repository-defined validation.
@@ -77,6 +77,13 @@ For each created AGENTS.md, create a sibling compatibility symlink:
 
 Write only when CLAUDE.md is missing or already a symlink. A regular CLAUDE.md blocks only that symlink target; leave it
 untouched and report the conflict.
+
+## Create Context Docs on Request
+
+Create a Markdown context doc outside the default set — a conventions file, command catalog, data-format reference, or
+workflow runbook — only when the user explicitly names its path and purpose. Ground its content in repository evidence
+like any other target, keep it scoped to that purpose, and link it from the nearest AGENTS.md or README.md when that
+improves discoverability. Do not scan for missing context docs; at most report a recommendation without writing it.
 
 ## Handle CONTRIBUTING.md
 
