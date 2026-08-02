@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from ai_coord.util import (
+    MAX_SCOPE_CHARS,
+    age_label,
     first_heading,
     git_dirty_paths,
     normalize_scopes,
@@ -44,6 +46,14 @@ def test_normalize_scopes_rejects_globs_and_escapes(git_repo: Path, tmp_path: Pa
         normalize_scopes((str(tmp_path / "outside"),), git_repo, git_repo)
 
 
+def test_normalize_scopes_preserves_spaces_and_rejects_unsafe_lengths(git_repo: Path) -> None:
+    assert normalize_scopes(("src/two  spaces.py",), git_repo, git_repo) == ("src/two  spaces.py",)
+    with pytest.raises(ValueError, match=f"exceeds {MAX_SCOPE_CHARS}"):
+        normalize_scopes(("x" * (MAX_SCOPE_CHARS + 1),), git_repo, git_repo)
+    with pytest.raises(ValueError, match="non-printable"):
+        normalize_scopes(("src/line\nbreak.py",), git_repo, git_repo)
+
+
 def test_git_dirty_paths_includes_renames_and_untracked(git_repo: Path) -> None:
     (git_repo / "src" / "app.py").rename(git_repo / "src" / "main.py")
     (git_repo / "src" / "new.py").write_text("value = 1\n")
@@ -58,3 +68,7 @@ def test_git_dirty_paths_includes_renames_and_untracked(git_repo: Path) -> None:
 def test_first_heading_ignores_body() -> None:
     assert first_heading("preface\n# Implement queue\nsecret body") == "Implement queue"
     assert first_heading("## No H1") is None
+
+
+def test_age_label_honors_epoch_reference() -> None:
+    assert age_label(0, current=0) == "0s"

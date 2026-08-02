@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import os
 import sqlite3
+import time
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,112 @@ CODEX_IDLE_TTL = 4 * 60 * 60
 MESSAGE_TTL = 48 * 60 * 60
 NOTE_TTL = 7 * 24 * 60 * 60
 MAX_INBOX_MESSAGES = 50
+
+_SCHEMA_STATEMENTS = (
+    """
+    CREATE TABLE sessions (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        cwd TEXT NOT NULL,
+        repo_root TEXT,
+        state TEXT NOT NULL,
+        name TEXT,
+        label TEXT,
+        waiting_for TEXT,
+        pid INTEGER,
+        source TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        last_seen REAL NOT NULL,
+        PRIMARY KEY (client, session_id)
+    )
+    """,
+    """
+    CREATE TABLE claims (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        repo_root TEXT NOT NULL,
+        label TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('intent', 'queued', 'active')),
+        blocked_reason TEXT,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        UNIQUE (client, session_id)
+    )
+    """,
+    """
+    CREATE TABLE claim_paths (
+        claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        PRIMARY KEY (claim_id, path)
+    )
+    """,
+    """
+    CREATE TABLE messages (
+        id TEXT PRIMARY KEY,
+        sender_client TEXT NOT NULL,
+        sender_session_id TEXT NOT NULL,
+        recipient_client TEXT NOT NULL,
+        recipient_session_id TEXT NOT NULL,
+        repo_root TEXT,
+        text TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        acknowledged_at REAL
+    )
+    """,
+    """
+    CREATE INDEX messages_recipient_idx
+        ON messages(recipient_client, recipient_session_id, created_at)
+    """,
+    """
+    CREATE TABLE notes (
+        id TEXT PRIMARY KEY,
+        repo_root TEXT NOT NULL,
+        author_client TEXT,
+        author_session_id TEXT,
+        text TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        resolved_at REAL
+    )
+    """,
+    "CREATE INDEX notes_repo_idx ON notes(repo_root, created_at)",
+    """
+    CREATE TABLE delegates (
+        parent_client TEXT NOT NULL,
+        parent_session_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        agent_type TEXT,
+        state TEXT NOT NULL,
+        last_seen REAL NOT NULL,
+        PRIMARY KEY (parent_client, parent_session_id, agent_id)
+    )
+    """,
+    """
+    CREATE TABLE hook_health (
+        client TEXT NOT NULL,
+        event TEXT NOT NULL,
+        last_error_code TEXT,
+        last_error_at REAL,
+        last_success_at REAL,
+        PRIMARY KEY (client, event)
+    )
+    """,
+    """
+    CREATE TABLE imports (
+        source_path TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        imported_at REAL NOT NULL,
+        PRIMARY KEY (source_path, content_hash)
+    )
+    """,
+    """
+    CREATE TABLE metadata (
+        key TEXT PRIMARY KEY,
+        value INTEGER NOT NULL
+    )
+    """,
+    "INSERT INTO metadata(key, value) VALUES ('generation', 0)",
+)
 
 
 class Store:
@@ -38,8 +145,9 @@ class Store:
             os.umask(previous_umask)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
+        self.connection.execute("PRAGMA busy_timeout = 250")
+        self._enable_wal()
         self.connection.execute("PRAGMA busy_timeout = 5000")
-        self.connection.execute("PRAGMA journal_mode = WAL")
         self.connection.execute("PRAGMA synchronous = NORMAL")
         self._migrate()
         self.path.chmod(0o600)
@@ -47,103 +155,37 @@ class Store:
     def close(self) -> None:
         self.connection.close()
 
+    def _enable_wal(self) -> None:
+        deadline = time.monotonic() + 2
+        while True:
+            try:
+                mode = str(self.connection.execute("PRAGMA journal_mode = WAL").fetchone()[0])
+                if mode.lower() != "wal":
+                    raise RuntimeError(f"could not enable SQLite WAL mode: {mode}")
+                return
+            except sqlite3.OperationalError as error:
+                if "locked" not in str(error).lower() or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
+
     def _migrate(self) -> None:
         current = int(self.connection.execute("PRAGMA user_version").fetchone()[0])
         if current > SCHEMA_VERSION:
             raise RuntimeError(
                 f"state schema {current} is newer than supported schema {SCHEMA_VERSION}"
             )
-        if current == 0:
-            self.connection.executescript(
-                """
-                BEGIN IMMEDIATE;
-                CREATE TABLE sessions (
-                    client TEXT NOT NULL,
-                    session_id TEXT NOT NULL,
-                    cwd TEXT NOT NULL,
-                    repo_root TEXT,
-                    state TEXT NOT NULL,
-                    name TEXT,
-                    label TEXT,
-                    waiting_for TEXT,
-                    pid INTEGER,
-                    source TEXT NOT NULL,
-                    started_at REAL NOT NULL,
-                    last_seen REAL NOT NULL,
-                    PRIMARY KEY (client, session_id)
-                );
-                CREATE TABLE claims (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client TEXT NOT NULL,
-                    session_id TEXT NOT NULL,
-                    repo_root TEXT NOT NULL,
-                    label TEXT NOT NULL,
-                    state TEXT NOT NULL CHECK (state IN ('intent', 'queued', 'active')),
-                    blocked_reason TEXT,
-                    created_at REAL NOT NULL,
-                    updated_at REAL NOT NULL,
-                    UNIQUE (client, session_id)
-                );
-                CREATE TABLE claim_paths (
-                    claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
-                    path TEXT NOT NULL,
-                    PRIMARY KEY (claim_id, path)
-                );
-                CREATE TABLE messages (
-                    id TEXT PRIMARY KEY,
-                    sender_client TEXT NOT NULL,
-                    sender_session_id TEXT NOT NULL,
-                    recipient_client TEXT NOT NULL,
-                    recipient_session_id TEXT NOT NULL,
-                    repo_root TEXT,
-                    text TEXT NOT NULL,
-                    created_at REAL NOT NULL,
-                    acknowledged_at REAL
-                );
-                CREATE INDEX messages_recipient_idx
-                    ON messages(recipient_client, recipient_session_id, created_at);
-                CREATE TABLE notes (
-                    id TEXT PRIMARY KEY,
-                    repo_root TEXT NOT NULL,
-                    author_client TEXT,
-                    author_session_id TEXT,
-                    text TEXT NOT NULL,
-                    created_at REAL NOT NULL,
-                    resolved_at REAL
-                );
-                CREATE INDEX notes_repo_idx ON notes(repo_root, created_at);
-                CREATE TABLE delegates (
-                    parent_client TEXT NOT NULL,
-                    parent_session_id TEXT NOT NULL,
-                    agent_id TEXT NOT NULL,
-                    agent_type TEXT,
-                    state TEXT NOT NULL,
-                    last_seen REAL NOT NULL,
-                    PRIMARY KEY (parent_client, parent_session_id, agent_id)
-                );
-                CREATE TABLE hook_health (
-                    client TEXT NOT NULL,
-                    event TEXT NOT NULL,
-                    last_error_code TEXT,
-                    last_error_at REAL,
-                    last_success_at REAL,
-                    PRIMARY KEY (client, event)
-                );
-                CREATE TABLE imports (
-                    source_path TEXT NOT NULL,
-                    content_hash TEXT NOT NULL,
-                    imported_at REAL NOT NULL,
-                    PRIMARY KEY (source_path, content_hash)
-                );
-                CREATE TABLE metadata (
-                    key TEXT PRIMARY KEY,
-                    value INTEGER NOT NULL
-                );
-                INSERT INTO metadata(key, value) VALUES ('generation', 0);
-                PRAGMA user_version = 1;
-                COMMIT;
-                """
-            )
+        if current != 0:
+            return
+        with self.transaction() as connection:
+            current = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if current > SCHEMA_VERSION:
+                raise RuntimeError(
+                    f"state schema {current} is newer than supported schema {SCHEMA_VERSION}"
+                )
+            if current == 0:
+                for statement in _SCHEMA_STATEMENTS:
+                    connection.execute(statement)
+                connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     @contextlib.contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:

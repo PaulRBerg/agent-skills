@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ai_coord.coordinator import Coordinator
+from ai_coord.identity import Identity
 from ai_coord.providers import StaticInventory
 from ai_coord.store import Store
 
@@ -44,6 +46,30 @@ def test_start_intent_and_idempotent_active(
     changed = coordinator.start("plan work", ("docs",), cwd=git_repo)
     assert changed.kind == "ACTIVE"
     assert changed.code == 3
+
+
+def test_claim_cannot_move_between_repositories(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    other_repo = tmp_path / "other-repo"
+    other_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=other_repo, check=True, capture_output=True)
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+    assert coordinator.start("first", ("src",), cwd=git_repo).kind == "READY"
+
+    moved = coordinator.start("second", (), cwd=other_repo)
+
+    assert moved.kind == "ACTIVE"
+    identity = coordinator.identity()
+    assert identity is not None
+    claim = coordinator.store.claim(identity)
+    session = coordinator.store.session(identity)
+    assert claim is not None
+    assert session is not None
+    assert claim["repo_root"] == str(git_repo)
+    assert claim["paths"] == ("src",)
+    assert session["repo_root"] == str(git_repo)
 
 
 def test_incomplete_coverage_and_unowned_dirt_fail_closed(
@@ -93,6 +119,29 @@ def test_blocked_claim_messages_holder_and_promotes_after_done(
     claim = coordinator.store.claim(identity)
     assert claim is not None
     assert claim["state"] == "active"
+
+
+def test_wait_uses_claim_repository_when_session_cwd_changes(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "holder")
+    assert coordinator.start("holder", ("src",), cwd=git_repo).kind == "READY"
+
+    _set_identity(monkeypatch, "waiter")
+    assert coordinator.start("waiter", ("src",), cwd=git_repo).kind == "BLOCKED"
+    coordinator.store.upsert_session(
+        Identity("codex", "waiter"),
+        cwd=str(tmp_path),
+        repo_root=None,
+        state="working",
+        source="hook",
+    )
+
+    _set_identity(monkeypatch, "holder")
+    coordinator.done()
+    _set_identity(monkeypatch, "waiter")
+    assert coordinator.wait(timeout_seconds=2, poll_seconds=0.01).kind == "READY"
 
 
 def test_earlier_overlapping_waiter_reserves_scope(

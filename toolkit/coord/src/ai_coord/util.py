@@ -68,9 +68,10 @@ def normalize_scopes(scopes: tuple[str, ...], cwd: Path, root: Path) -> tuple[st
         except (OSError, RuntimeError, ValueError) as error:
             raise ValueError(f"scope is outside repository: {raw_scope}") from error
         value = relative.as_posix().removeprefix("./").rstrip("/") or "."
-        value = sanitize(value, MAX_SCOPE_CHARS)
-        if not value:
-            raise ValueError(f"invalid literal scope: {raw_scope!r}")
+        if not all(char.isprintable() for char in value):
+            raise ValueError(f"scope contains non-printable characters: {raw_scope!r}")
+        if len(value) > MAX_SCOPE_CHARS:
+            raise ValueError(f"scope exceeds {MAX_SCOPE_CHARS} characters: {raw_scope!r}")
         if value not in normalized:
             normalized.append(value)
     return tuple(normalized)
@@ -137,7 +138,8 @@ def relevant_dirty(scopes: tuple[str, ...], dirty_paths: tuple[str, ...]) -> tup
 
 
 def age_label(timestamp: float, current: float | None = None) -> str:
-    seconds = max(0, int((current or now_ts()) - timestamp))
+    reference = now_ts() if current is None else current
+    seconds = max(0, int(reference - timestamp))
     if seconds < 60:
         return f"{seconds}s"
     if seconds < 3600:

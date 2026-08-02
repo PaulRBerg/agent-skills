@@ -110,8 +110,15 @@ class Coordinator:
         if not clean_label:
             raise ValueError("label must contain printable text")
         paths = normalize_scopes(raw_paths, working_dir, root)
-        self._ensure_session(identity, working_dir, root)
         existing = self.store.claim(identity)
+        if existing and existing["repo_root"] != str(root):
+            return Outcome(
+                "ACTIVE",
+                3,
+                "run ai-coord done before changing repository",
+                tuple(existing["paths"]),
+            )
+        self._ensure_session(identity, working_dir, root)
 
         if not paths:
             return self._save_intent(identity, root, clean_label, existing)
@@ -241,8 +248,9 @@ class Coordinator:
             return Outcome("READY", 0, paths=tuple(claim["paths"]))
         if claim["state"] == "intent":
             raise RuntimeError("intent-only work has no exclusive scope to wait for")
-        if self.store.inbox(identity, pending_only=True):
-            return Outcome("MESSAGE", 3, str(len(self.store.inbox(identity, pending_only=True))))
+        pending = self.store.inbox(identity, pending_only=True)
+        if pending:
+            return Outcome("MESSAGE", 3, str(len(pending)))
 
         started = time.monotonic()
         note_baseline = now_ts()
@@ -250,10 +258,10 @@ class Coordinator:
             current_claim = self.store.claim(identity)
             if current_claim is None:
                 return Outcome("RELEASED", 3)
-            session = self.store.session(identity)
-            cwd = Path(str(session["cwd"])) if session else Path.cwd()
             promoted = self.start(
-                str(current_claim["label"]), tuple(current_claim["paths"]), cwd=cwd
+                str(current_claim["label"]),
+                tuple(current_claim["paths"]),
+                cwd=Path(str(current_claim["repo_root"])),
             )
             if promoted.code == 0:
                 return promoted
