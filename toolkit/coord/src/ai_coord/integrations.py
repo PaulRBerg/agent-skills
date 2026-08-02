@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import json
 import os
+import stat
+import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -103,8 +105,7 @@ def link_hooks(
 
     changed = data != original
     if changed and not dry_run:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2) + "\n")
+        _write_config(path, data)
     return LinkResult(path, changed, tuple(added), removed)
 
 
@@ -153,6 +154,27 @@ def iter_commands(value: Any) -> Iterator[str]:
     elif isinstance(value, list):
         for nested in value:
             yield from iter_commands(nested)
+
+
+def _write_config(path: Path, data: dict[str, Any]) -> None:
+    target = path.resolve(strict=False) if path.is_symlink() else path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o600
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=target.parent,
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            file.write(json.dumps(data, indent=2) + "\n")
+            file.flush()
+            os.fsync(file.fileno())
+        temporary.chmod(mode)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _group(spec: HookSpec) -> dict[str, Any]:

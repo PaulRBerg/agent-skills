@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -107,3 +109,35 @@ def test_default_hook_paths_honor_client_config_roots(
 
     assert default_hook_path("codex") == codex_home / "hooks.json"
     assert default_hook_path("claude") == claude_home / "settings.json"
+
+
+def test_link_write_is_atomic_and_preserves_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "hooks.json"
+    original = '{"description": "keep"}\n'
+    path.write_text(original)
+    path.chmod(0o640)
+
+    def fail_replace(_source: os.PathLike[str], _target: os.PathLike[str]) -> None:
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        link_hooks("codex", path)
+
+    assert path.read_text() == original
+    assert stat.S_IMODE(path.stat().st_mode) == 0o640
+    assert list(tmp_path.glob(".hooks.json.*.tmp")) == []
+
+
+def test_link_updates_symlink_target_without_replacing_link(tmp_path: Path) -> None:
+    target = tmp_path / "tracked-hooks.json"
+    target.write_text("{}\n")
+    path = tmp_path / "hooks.json"
+    path.symlink_to(target)
+
+    link_hooks("codex", path)
+
+    assert path.is_symlink()
+    assert inspect_hooks("codex", target).ok
