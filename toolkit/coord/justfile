@@ -8,9 +8,10 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 #                                   COMMANDS                                   #
 # ---------------------------------------------------------------------------- #
 
-# Install CLI globally
+# Install CLI globally and link host hooks
 @install-cli:
     uv tool install --force .
+    ai-coord link all
 alias ic := install-cli
 
 # Run tests with pytest
