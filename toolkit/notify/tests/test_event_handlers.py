@@ -12,6 +12,33 @@ from ai_notify.events.notification import handle_notification
 from ai_notify.events.permission_request import _permission_request, handle_permission
 from ai_notify.events.stop import handle_stop
 from ai_notify.events.stop_failure import _failure_message, handle_stop_failure
+from ai_notify.events.user_prompt_submit import handle_user_prompt
+
+
+class TestUserPromptSubmit:
+    @pytest.mark.parametrize(
+        "prompt",
+        [
+            "<task-notification>\n<task-id>task-1</task-id>\n</task-notification>",
+            "<subagent_notification>completed</subagent_notification>",
+            "<task-notifi\x1b]11;rgb:2f4f/3403/3f33\x1b\\cation>completed</task-notification>",
+        ],
+    )
+    @patch("ai_notify.events.user_prompt_submit.SessionTracker")
+    def test_ignores_internal_agent_notifications(self, mock_tracker_cls, prompt):
+        handle_user_prompt({"session_id": "s1", "cwd": "/tmp/project", "prompt": prompt})
+
+        mock_tracker_cls.assert_not_called()
+
+    @patch("ai_notify.events.user_prompt_submit.SessionTracker")
+    def test_tracks_user_prompt_that_mentions_internal_tag(self, mock_tracker_cls):
+        tracker = MagicMock()
+        mock_tracker_cls.return_value = tracker
+        prompt = "Fix notifications that include <task-notification> XML."
+
+        handle_user_prompt({"session_id": "s1", "cwd": "/tmp/project", "prompt": prompt})
+
+        tracker.track_prompt.assert_called_once_with("s1", prompt, "/tmp/project")
 
 
 class TestNotificationWaitingDetection:
