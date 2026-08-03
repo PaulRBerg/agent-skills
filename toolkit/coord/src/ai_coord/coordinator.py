@@ -778,7 +778,6 @@ class Coordinator:
 
     def _ensure_session(self, identity: Identity, cwd: Path, root: Path) -> None:
         existing = self.store.session(identity)
-        parent = process_reference(os.getppid())
         if existing and existing.get("pid"):
             parent = ProcessReference(
                 int(existing["pid"]),
@@ -788,6 +787,8 @@ class Coordinator:
                     else None
                 ),
             )
+        else:
+            parent = process_reference(os.getppid())
         self.store.upsert_session(
             identity,
             cwd=str(cwd),
