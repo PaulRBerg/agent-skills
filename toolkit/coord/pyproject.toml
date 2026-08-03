@@ -17,6 +17,7 @@ version = "0.1.0"
 
 [project.optional-dependencies]
 dev = [
+    "hypothesis>=6.165.0",
     "pyright>=1.1",
     "pytest>=8.0",
     "ruff>=0.8",

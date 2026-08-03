@@ -6,13 +6,19 @@ import stat
 from pathlib import Path
 
 import pytest
+from hypothesis import HealthCheck, example, given, settings
+from hypothesis import strategies as st
 
 from ai_coord.integrations import (
+    _read_config,
+    _strip_jsonc,
     default_hook_path,
     default_link_path,
     inspect_hooks,
     link_hooks,
 )
+
+JSON_SCALARS = st.none() | st.booleans() | st.integers() | st.text()
 
 
 def test_codex_link_preserves_unrelated_and_replaces_legacy(tmp_path: Path) -> None:
@@ -138,6 +144,53 @@ def test_claude_link_supports_modular_jsonc_source(tmp_path: Path) -> None:
     assert "https://example.com/path//literal" in text
     assert "clipboard-hook" in text
     assert not link_hooks("claude", path).changed
+
+
+@settings(
+    max_examples=25,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(value=JSON_SCALARS, items=st.lists(JSON_SCALARS, min_size=1, max_size=5))
+def test_jsonc_parser_preserves_literals_and_accepts_comments_and_trailing_commas(
+    tmp_path: Path, value: object, items: list[object]
+) -> None:
+    rendered_items = ",\n".join(f"    {json.dumps(item)}" for item in items)
+    text = f"""{{
+  // line comment
+  "value": {json.dumps(value)},
+  "literal": "https://example.test/a//b/*c*/",
+  "items": [
+{rendered_items},
+  ],
+  /* preserve
+     newlines */
+}}
+"""
+    path = tmp_path / "generated.jsonc"
+    path.write_text(text)
+
+    assert _read_config(path) == {
+        "value": value,
+        "literal": "https://example.test/a//b/*c*/",
+        "items": items,
+    }
+    assert _strip_jsonc(text).count("\n") == text.count("\n")
+
+
+@settings(max_examples=100)
+@example(value={"accepted-before-fix": True}, suffix="")
+@given(
+    value=JSON_SCALARS,
+    suffix=st.text().filter(lambda value: "*/" not in value),
+)
+def test_jsonc_parser_rejects_unterminated_trailing_block_comments(
+    value: object, suffix: str
+) -> None:
+    text = f"{json.dumps(value)}\n/*{suffix}"
+
+    with pytest.raises(json.JSONDecodeError):
+        _strip_jsonc(text)
 
 
 def test_link_preserves_existing_handler_order(tmp_path: Path) -> None:

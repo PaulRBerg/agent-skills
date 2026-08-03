@@ -222,12 +222,15 @@ def _strip_jsonc(text: str) -> str:
                 index += 1
             continue
         if character == "/" and next_character == "*":
+            comment_start = index
             index += 2
             while index + 1 < len(text) and text[index : index + 2] != "*/":
                 if text[index] in "\r\n":
                     without_comments.append(text[index])
                 index += 1
-            index = min(index + 2, len(text))
+            if index + 1 >= len(text):
+                raise json.JSONDecodeError("Unterminated block comment", text, comment_start)
+            index += 2
             continue
         without_comments.append(character)
         index += 1

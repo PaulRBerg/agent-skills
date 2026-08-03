@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reject unterminated JSONC block comments instead of silently accepting a valid prefix.
 - Fingerprint agent processes with PID and creation time, and upgrade the internal ledger to schema v3 without changing
   the public status JSON schema.
 - Poll the SQLite generation counter for push-driven waits, with a slow full-refresh fallback.
