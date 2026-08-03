@@ -198,6 +198,29 @@ def hook(client: str) -> None:
         click.echo(output)
 
 
+@cli.command(hidden=True)
+@click.argument("client", type=click.Choice(["claude"]))
+def waker(client: str) -> None:
+    """Wake a Claude session when its queued coordination state changes."""
+    try:
+        payload = json.load(sys.stdin)
+        if not isinstance(payload, dict):
+            raise TypeError("waker input must be an object")
+        outcome = _coordinator().waker(client, payload)
+        if outcome is None:
+            return
+        click.echo(
+            f"ai-coord: {outcome.kind} — re-run 'ai-coord start <label> <paths>' "
+            "to confirm ownership before editing.",
+            err=True,
+        )
+        raise click.exceptions.Exit(2)
+    except click.exceptions.Exit:
+        raise
+    except Exception:  # noqa: BLE001 - waker hooks must fail open
+        return
+
+
 @cli.command()
 @click.argument("client", type=click.Choice(["codex", "claude", "all"]))
 @click.option("--path", type=click.Path(path_type=Path), help="Override one client's config path")

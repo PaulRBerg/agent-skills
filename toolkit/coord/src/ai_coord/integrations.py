@@ -20,6 +20,9 @@ class HookSpec:
     matcher: str | None = None
     timeout: int | None = None
     additional_context_limit: int | None = None
+    if_filter: str | None = None
+    async_: bool | None = None
+    async_rewake: bool | None = None
 
 
 CODEX_HOOK_SPECS = (
@@ -34,6 +37,7 @@ CODEX_HOOK_SPECS = (
     HookSpec("SessionEnd", "ai-coord hook codex", timeout=3),
     HookSpec("SubagentStart", "ai-coord hook codex", timeout=5),
     HookSpec("SubagentStop", "ai-coord hook codex", timeout=5),
+    HookSpec("PostToolUse", "ai-coord hook codex", timeout=5),
 )
 CLAUDE_HOOK_SPECS = (
     HookSpec("SessionStart", "ai-coord hook claude", timeout=5),
@@ -43,6 +47,16 @@ CLAUDE_HOOK_SPECS = (
     HookSpec("SubagentStart", "ai-coord hook claude", timeout=5),
     HookSpec("SubagentStop", "ai-coord hook claude", timeout=5),
     HookSpec("PostToolUse", "ai-coord hook claude", matcher="ExitPlanMode", timeout=5),
+    HookSpec("PostToolBatch", "ai-coord hook claude", timeout=5),
+    HookSpec(
+        "PostToolUse",
+        "ai-coord waker claude",
+        matcher="Bash",
+        timeout=3600,
+        if_filter="Bash(ai-coord start*)",
+        async_=True,
+        async_rewake=True,
+    ),
 )
 
 
@@ -186,6 +200,12 @@ def _group(spec: HookSpec) -> dict[str, Any]:
         handler["timeout"] = spec.timeout
     if spec.additional_context_limit is not None:
         handler["additionalContextLimit"] = spec.additional_context_limit
+    if spec.if_filter is not None:
+        handler["if"] = spec.if_filter
+    if spec.async_ is not None:
+        handler["async"] = spec.async_
+    if spec.async_rewake is not None:
+        handler["asyncRewake"] = spec.async_rewake
     group["hooks"] = [handler]
     return group
 
@@ -207,7 +227,10 @@ def _remove_owned_commands(hooks: dict[str, Any], client: str) -> int:
                     if _is_legacy(command, client):
                         removed_legacy += 1
                         continue
-                    if command.strip() == f"ai-coord hook {client}":
+                    if command.strip() in {
+                        f"ai-coord hook {client}",
+                        f"ai-coord waker {client}",
+                    }:
                         continue
                 handlers.append(handler)
             if handlers:
@@ -251,6 +274,15 @@ def _spec_present(value: Any, spec: HookSpec) -> bool:
             if (
                 spec.additional_context_limit is not None
                 and handler.get("additionalContextLimit") != spec.additional_context_limit
+            ):
+                continue
+            if spec.if_filter is not None and handler.get("if") != spec.if_filter:
+                continue
+            if spec.async_ is not None and handler.get("async") is not spec.async_:
+                continue
+            if (
+                spec.async_rewake is not None
+                and handler.get("asyncRewake") is not spec.async_rewake
             ):
                 continue
             return True

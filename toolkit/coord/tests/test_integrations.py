@@ -73,6 +73,39 @@ def test_claude_link_removes_plan_claim_only(tmp_path: Path) -> None:
     assert "add_plan_frontmatter.py" in path.read_text()
     assert "plan_claim.py" not in path.read_text()
     assert inspect_hooks("claude", path).ok
+    assert not link_hooks("claude", path).changed
+
+
+def test_claude_link_wires_nudge_and_async_rewake_contract(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+
+    link_hooks("claude", path)
+
+    hooks = json.loads(path.read_text())["hooks"]
+    assert hooks["PostToolBatch"] == [
+        {"hooks": [{"type": "command", "command": "ai-coord hook claude", "timeout": 5}]}
+    ]
+    waker = next(
+        group
+        for group in hooks["PostToolUse"]
+        if group["hooks"][0]["command"] == "ai-coord waker claude"
+    )
+    assert waker == {
+        "matcher": "Bash",
+        "hooks": [
+            {
+                "type": "command",
+                "command": "ai-coord waker claude",
+                "timeout": 3600,
+                "if": "Bash(ai-coord start*)",
+                "async": True,
+                "asyncRewake": True,
+            }
+        ],
+    }
+    waker["hooks"][0]["asyncRewake"] = False
+    path.write_text(json.dumps({"hooks": hooks}))
+    assert not inspect_hooks("claude", path).ok
 
 
 def test_link_dry_run_and_force(tmp_path: Path) -> None:

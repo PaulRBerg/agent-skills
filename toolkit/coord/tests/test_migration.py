@@ -97,7 +97,7 @@ def test_migrate_legacy_records_idempotently(tmp_path: Path, git_repo: Path) -> 
     assert second.skipped == 4
 
 
-def test_migration_dry_run_and_legacy_glob_blocker(
+def test_migration_dry_run_and_legacy_glob_does_not_block_literal_claims(
     tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = tmp_path / "legacy"
@@ -125,7 +125,7 @@ def test_migration_dry_run_and_legacy_glob_blocker(
     monkeypatch.setenv("AI_COORD_CLIENT", "codex")
     monkeypatch.setenv("AI_COORD_SESSION_ID", "new-session")
     outcome = Coordinator(store, StaticInventory()).start("new work", ("docs",), cwd=git_repo)
-    assert outcome.kind == "BLOCKED"
+    assert outcome.kind == "READY"
 
 
 def test_migration_rejects_unknown_client(tmp_path: Path, git_repo: Path) -> None:

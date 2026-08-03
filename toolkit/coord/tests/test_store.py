@@ -1,12 +1,65 @@
 from __future__ import annotations
 
+import sqlite3
 import stat
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
 
 from ai_coord.identity import Identity
-from ai_coord.store import CODEX_ORPHAN_GRACE, MAX_INBOX_MESSAGES, MESSAGE_TTL, Store
+from ai_coord.store import (
+    CODEX_ORPHAN_GRACE,
+    MAX_INBOX_MESSAGES,
+    MESSAGE_TTL,
+    SCHEMA_VERSION,
+    Store,
+)
+
+
+def test_new_store_uses_schema_v2(tmp_path: Path) -> None:
+    store = Store(tmp_path / "state.db")
+
+    version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
+    columns = {
+        str(row["name"])
+        for row in store.connection.execute("PRAGMA table_info(messages)").fetchall()
+    }
+
+    assert version == SCHEMA_VERSION == 2
+    assert "notified_at" in columns
+
+
+def test_store_migrates_schema_v1_to_v2(tmp_path: Path) -> None:
+    path = tmp_path / "state.db"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        """
+        CREATE TABLE messages (
+            id TEXT PRIMARY KEY,
+            sender_client TEXT NOT NULL,
+            sender_session_id TEXT NOT NULL,
+            recipient_client TEXT NOT NULL,
+            recipient_session_id TEXT NOT NULL,
+            repo_root TEXT,
+            text TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            acknowledged_at REAL
+        )
+        """
+    )
+    connection.execute("PRAGMA user_version = 1")
+    connection.commit()
+    connection.close()
+
+    store = Store(path)
+
+    version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
+    columns = {
+        str(row["name"])
+        for row in store.connection.execute("PRAGMA table_info(messages)").fetchall()
+    }
+    assert version == 2
+    assert "notified_at" in columns
 
 
 def test_store_permissions_and_message_cap(tmp_path: Path) -> None:

@@ -14,7 +14,7 @@ from typing import Any
 from ai_coord.identity import Identity
 from ai_coord.util import new_id, now_ts, private_state_dir, sanitize
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 CODEX_IDLE_TTL = 4 * 60 * 60
 CODEX_ORPHAN_GRACE = 30 * 60
 MESSAGE_TTL = 48 * 60 * 60
@@ -70,7 +70,8 @@ _SCHEMA_STATEMENTS = (
         repo_root TEXT,
         text TEXT NOT NULL,
         created_at REAL NOT NULL,
-        acknowledged_at REAL
+        acknowledged_at REAL,
+        notified_at REAL
     )
     """,
     """
@@ -175,7 +176,7 @@ class Store:
             raise RuntimeError(
                 f"state schema {current} is newer than supported schema {SCHEMA_VERSION}"
             )
-        if current != 0:
+        if current == SCHEMA_VERSION:
             return
         with self.transaction() as connection:
             current = int(connection.execute("PRAGMA user_version").fetchone()[0])
@@ -187,6 +188,9 @@ class Store:
                 for statement in _SCHEMA_STATEMENTS:
                     connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            elif current == 1:
+                connection.execute("ALTER TABLE messages ADD COLUMN notified_at REAL")
+                connection.execute("PRAGMA user_version = 2")
 
     @contextlib.contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -548,6 +552,20 @@ class Store:
             (identity.client, identity.session_id),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def mark_unnotified(self, identity: Identity) -> int:
+        """Mark unread messages as notified without waking coordination waiters."""
+        with self.transaction() as connection:
+            rows = connection.execute(
+                """
+                UPDATE messages SET notified_at = ?
+                WHERE recipient_client = ? AND recipient_session_id = ?
+                  AND acknowledged_at IS NULL AND notified_at IS NULL
+                RETURNING id
+                """,
+                (now_ts(), identity.client, identity.session_id),
+            ).fetchall()
+            return len(rows)
 
     def acknowledge(self, identity: Identity, message_id: str | None = None) -> int:
         timestamp = now_ts()

@@ -61,11 +61,19 @@ ai-coord wait        # waits up to 300 seconds
 ai-coord wait -t 60  # explicit timeout, capped at one hour
 ```
 
-Only `READY` authorizes editing. A new message or repository note wakes `wait` with exit 3 so the caller can inspect it
-and re-arm. `done` idempotently releases active, queued, or intent-only work.
+Only `READY` authorizes editing. `wait` checks the SQLite generation counter each second and performs full inventory,
+Git, and arbitration refreshes only when coordination state changes or every 20 seconds as a fallback. A new message or
+repository note wakes `wait` with exit 3 so the caller can inspect it and re-arm. `done` idempotently releases active,
+queued, or intent-only work and directly notifies overlapping queued holders that their claim may now be ready.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. A newly blocked claim
 also sends a bounded system message to its current holders.
+
+In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its claim is
+promoted, a message or note arrives, the claim is released, coverage becomes unknown, or the waker times out. The wake
+reminder always requires re-running `start` before editing. Repeated `start` calls may launch multiple independent
+wakers for the same session; each exits on the first terminal outcome. Codex sessions use `ai-coord wait` in the
+foreground.
 
 ## Inventory and communication
 
@@ -92,10 +100,12 @@ Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
 
 ## Hooks and health
 
-Both clients invoke one stable command: `ai-coord hook codex` or `ai-coord hook claude`. Prompt hooks update lifecycle
-state and return only a capped presence count. Stop and session-end hooks update or release the corresponding session;
-subagent hooks add read-only parent/child topology. Claude's `ExitPlanMode` hook records only the approved plan's first
-H1 as a pathless intent label.
+Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Prompt hooks update lifecycle state
+and return only a capped presence count. Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook inject a
+counts-only reminder once when unread peer messages arrive; peer text remains available only through `ai-coord inbox`.
+Stop and session-end hooks update or release the corresponding session; subagent hooks add read-only parent/child
+topology. Claude's `ExitPlanMode` hook records only the approved plan's first H1 as a pathless intent label, while its
+filtered `ai-coord waker claude` hook handles blocked starts in the background.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.

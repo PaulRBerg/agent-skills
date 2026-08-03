@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pytest
 
+import ai_coord.coordinator as coordinator_module
 from ai_coord.coordinator import Coordinator
 from ai_coord.identity import Identity
 from ai_coord.providers import InventoryResult, StaticInventory
@@ -22,6 +24,31 @@ class _PruningInventory:
     def refresh(self, store: Store) -> InventoryResult:
         store.prune(self.current, dead_codex_pids=self.dead_codex_pids)
         return StaticInventory().refresh(store)
+
+
+class _CountingInventory:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def refresh(self, store: Store) -> InventoryResult:
+        self.calls += 1
+        return StaticInventory().refresh(store)
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self.current = 0.0
+        self.on_sleep: Callable[[], None] | None = None
+
+    def monotonic(self) -> float:
+        return self.current
+
+    def sleep(self, seconds: float) -> None:
+        self.current += seconds
+        if self.on_sleep is not None:
+            callback = self.on_sleep
+            self.on_sleep = None
+            callback()
 
 
 def _coordinator(db_path: Path, complete: bool = True) -> Coordinator:
@@ -122,6 +149,8 @@ def test_blocked_claim_messages_holder_and_promotes_after_done(
     assert coordinator.done().kind == "DONE"
 
     _set_identity(monkeypatch, "waiter-session")
+    assert coordinator.wait(timeout_seconds=2, poll_seconds=0.01).kind == "MESSAGE"
+    assert coordinator.acknowledge(None) == 1
     promoted = coordinator.wait(timeout_seconds=2, poll_seconds=0.01)
     assert promoted.kind == "READY"
     identity = coordinator.identity()
@@ -187,7 +216,113 @@ def test_wait_uses_claim_repository_when_session_cwd_changes(
     _set_identity(monkeypatch, "holder")
     coordinator.done()
     _set_identity(monkeypatch, "waiter")
+    assert coordinator.acknowledge(None) == 1
     assert coordinator.wait(timeout_seconds=2, poll_seconds=0.01).kind == "READY"
+
+
+def test_wait_runs_full_arbitration_only_on_slow_fallback_ticks(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = _CountingInventory()
+    coordinator = Coordinator(Store(tmp_path / "state.db"), inventory)
+    _set_identity(monkeypatch, "holder")
+    assert coordinator.start("holder", ("src",), cwd=git_repo).kind == "READY"
+    _set_identity(monkeypatch, "waiter")
+    assert coordinator.start("waiter", ("src/app.py",), cwd=git_repo).kind == "BLOCKED"
+    inventory.calls = 0
+    clock = _FakeClock()
+    monkeypatch.setattr(coordinator_module.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(coordinator_module.time, "sleep", clock.sleep)
+
+    outcome = coordinator.wait(timeout_seconds=40, poll_seconds=1)
+
+    assert outcome.kind == "TIMEOUT"
+    assert inventory.calls == 3
+
+
+def test_wait_rechecks_immediately_when_generation_changes(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "state.db"
+    inventory = _CountingInventory()
+    coordinator = Coordinator(Store(path), inventory)
+    other_store = Store(path)
+    _set_identity(monkeypatch, "holder")
+    assert coordinator.start("holder", ("src",), cwd=git_repo).kind == "READY"
+    _set_identity(monkeypatch, "waiter")
+    assert coordinator.start("waiter", ("src/app.py",), cwd=git_repo).kind == "BLOCKED"
+    inventory.calls = 0
+    clock = _FakeClock()
+
+    def send_wake_message() -> None:
+        other_store.send_message(
+            Identity("codex", "sender"),
+            [Identity("codex", "waiter")],
+            "wake now",
+            str(git_repo),
+        )
+
+    clock.on_sleep = send_wake_message
+    monkeypatch.setattr(coordinator_module.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(coordinator_module.time, "sleep", clock.sleep)
+
+    outcome = coordinator.wait(timeout_seconds=40, poll_seconds=1)
+
+    assert (outcome.kind, outcome.detail) == ("MESSAGE", "1")
+    assert inventory.calls == 2
+    assert clock.current == 1
+
+
+def test_done_notifies_only_overlapping_nonlegacy_waiters(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "holder")
+    assert coordinator.start("holder", ("src",), cwd=git_repo).kind == "READY"
+    _set_identity(monkeypatch, "overlap-waiter")
+    assert coordinator.start("overlap", ("src/app.py",), cwd=git_repo).kind == "BLOCKED"
+    _set_identity(monkeypatch, "docs-holder")
+    assert coordinator.start("docs holder", ("docs",), cwd=git_repo).kind == "READY"
+    _set_identity(monkeypatch, "docs-waiter")
+    assert coordinator.start("docs waiter", ("docs/readme.md",), cwd=git_repo).kind == "BLOCKED"
+    legacy = Identity("claude", "legacy-waiter")
+    coordinator.store.upsert_session(
+        legacy,
+        cwd=str(git_repo),
+        repo_root=str(git_repo),
+        state="waiting",
+        source="test",
+    )
+    with coordinator.store.transaction() as connection:
+        coordinator.store.save_claim(
+            connection,
+            legacy,
+            repo_root=str(git_repo),
+            label="legacy",
+            state="queued",
+            paths=(),
+            blocked_reason="legacy-pattern",
+            created_at=0,
+            updated_at=0,
+        )
+
+    _set_identity(monkeypatch, "holder")
+    assert coordinator.done().detail == "released"
+
+    overlap_messages = coordinator.store.inbox(Identity("codex", "overlap-waiter"))
+    assert [message["text"] for message in overlap_messages] == [
+        "released 'holder' — your queued claim may now be READY"
+    ]
+    assert coordinator.store.inbox(Identity("codex", "docs-waiter")) == []
+    assert coordinator.store.inbox(legacy) == []
+    assert coordinator.done().detail == "already clear"
+    assert len(coordinator.store.inbox(Identity("codex", "overlap-waiter"))) == 1
 
 
 def test_earlier_overlapping_waiter_reserves_scope(
@@ -228,6 +363,50 @@ def test_messages_notes_status_and_trailer(
     assert snapshot.notes[0]["id"] == note_id
     assert coordinator.resolve_note(note_id, cwd=git_repo)
     assert coordinator.trailer() == "Agent-Session: claude/target-session"
+
+
+def test_machine_notes_and_repo_scoped_delegates(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    other_repo = tmp_path / "other-repo"
+    other_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=other_repo, check=True, capture_output=True)
+    coordinator = _coordinator(tmp_path / "state.db")
+    first = Identity("codex", "first-parent")
+    second = Identity("claude", "second-parent")
+    for identity, root in ((first, git_repo), (second, other_repo)):
+        coordinator.store.upsert_session(
+            identity,
+            cwd=str(root),
+            repo_root=str(root),
+            state="working",
+            source="test",
+        )
+    coordinator.store.update_delegate(first, "first-child", "explorer", "active")
+    coordinator.store.update_delegate(second, "second-child", "explorer", "active")
+    first_note = coordinator.store.add_note(first, str(git_repo), "first note")
+    second_note = coordinator.store.add_note(second, str(other_repo), "second note")
+    _set_identity(monkeypatch, first.session_id)
+
+    repo_snapshot = coordinator.snapshot(cwd=git_repo)
+    machine_snapshot = coordinator.snapshot(machine_wide=True, cwd=git_repo)
+
+    assert [note["id"] for note in repo_snapshot.notes] == [first_note]
+    assert [delegate["agent_id"] for delegate in repo_snapshot.delegates] == ["first-child"]
+    assert {note["id"] for note in machine_snapshot.notes} == {first_note, second_note}
+    assert {note["repo_root"] for note in machine_snapshot.notes} == {
+        str(git_repo),
+        str(other_repo),
+    }
+    assert {delegate["agent_id"] for delegate in machine_snapshot.delegates} == {
+        "first-child",
+        "second-child",
+    }
+    rendered = coordinator.render_status(machine_snapshot)
+    assert f"{git_repo}  {first_note}" in rendered
+    assert f"{other_repo}  {second_note}" in rendered
 
 
 def test_simultaneous_overlapping_claims_have_one_winner(tmp_path: Path, git_repo: Path) -> None:
