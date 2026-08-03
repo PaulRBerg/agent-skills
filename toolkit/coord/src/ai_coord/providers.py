@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ai_coord.integrations import default_hook_path, inspect_hooks
-from ai_coord.store import Store
+from ai_coord.store import CODEX_ORPHAN_GRACE, Store
 from ai_coord.util import git_root, now_ts
 
 CLAUDE_LIVE_STATES = {
@@ -56,11 +57,11 @@ class Inventory(Protocol):
 
 
 class HostInventory:
-    """Observe configured host clients and reconcile Claude's live inventory."""
+    """Observe configured host clients and reconcile their live inventory."""
 
     def refresh(self, store: Store) -> InventoryResult:
         current = now_ts()
-        store.prune(current)
+        store.prune(current, dead_codex_pids=_dead_codex_pids(store, current))
         codex = self._codex_report(store)
         claude, rows = self._collect_claude()
         if claude.ok and claude.enabled:
@@ -141,6 +142,33 @@ class StaticInventory:
             ProviderReport("claude", self.complete, "static"),
         )
         return InventoryResult(self.complete, reports)
+
+
+def _dead_codex_pids(store: Store, current: float) -> tuple[int, ...]:
+    cutoff = current - CODEX_ORPHAN_GRACE
+    dead: set[int] = set()
+    for row in store.sessions():
+        pid = row.get("pid")
+        if (
+            row["client"] != "codex"
+            or not isinstance(pid, int)
+            or pid <= 0
+            or float(row["last_seen"]) >= cutoff
+        ):
+            continue
+        if not _process_exists(pid):
+            dead.add(pid)
+    return tuple(sorted(dead))
+
+
+def _process_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
 
 
 def normalize_claude_sessions(payload: Any) -> tuple[list[dict[str, Any]], int]:

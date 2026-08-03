@@ -10,8 +10,18 @@ import pytest
 
 from ai_coord.coordinator import Coordinator
 from ai_coord.identity import Identity
-from ai_coord.providers import StaticInventory
-from ai_coord.store import Store
+from ai_coord.providers import InventoryResult, StaticInventory
+from ai_coord.store import CODEX_ORPHAN_GRACE, Store
+
+
+class _PruningInventory:
+    def __init__(self, current: float, dead_codex_pids: tuple[int, ...]) -> None:
+        self.current = current
+        self.dead_codex_pids = dead_codex_pids
+
+    def refresh(self, store: Store) -> InventoryResult:
+        store.prune(self.current, dead_codex_pids=self.dead_codex_pids)
+        return StaticInventory().refresh(store)
 
 
 def _coordinator(db_path: Path, complete: bool = True) -> Coordinator:
@@ -119,6 +129,42 @@ def test_blocked_claim_messages_holder_and_promotes_after_done(
     claim = coordinator.store.claim(identity)
     assert claim is not None
     assert claim["state"] == "active"
+
+
+@pytest.mark.parametrize("dirty", [False, True])
+def test_wait_rechecks_dirt_after_orphaned_holder_is_pruned(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    dirty: bool,
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    holder = Identity("codex", "holder-session")
+    _set_identity(monkeypatch, holder.session_id)
+    assert coordinator.start("holder", ("src",), cwd=git_repo).kind == "READY"
+
+    _set_identity(monkeypatch, "waiter-session")
+    assert coordinator.start("waiter", ("src/app.py",), cwd=git_repo).kind == "BLOCKED"
+    coordinator.store.upsert_session(
+        holder,
+        cwd=str(git_repo),
+        repo_root=str(git_repo),
+        state="working",
+        source="hook",
+        pid=101,
+        current=0,
+    )
+    if dirty:
+        (git_repo / "src" / "app.py").write_text("changed = True\n")
+    coordinator.inventory = _PruningInventory(CODEX_ORPHAN_GRACE + 1, (101,))
+
+    outcome = coordinator.wait(timeout_seconds=1, poll_seconds=0.01)
+
+    assert coordinator.store.session(holder) is None
+    if dirty:
+        assert (outcome.kind, outcome.detail) == ("UNKNOWN", "dirty:src/app.py")
+    else:
+        assert outcome.kind == "READY"
 
 
 def test_wait_uses_claim_repository_when_session_cwd_changes(

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reclaim claims from stale Codex sessions after their recorded process exits.
 - Allow literal in-repository symlink scopes without dereferencing their targets.
 - Preserve literal scope identity and prevent claims from moving across repositories.
 - Make concurrent first-run database initialization safe.

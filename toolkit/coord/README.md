@@ -122,8 +122,9 @@ mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions.
 The ledger stores bounded session metadata, labels, literal scopes, messages, and notes. It never stores prompt bodies,
 plan bodies beyond a sanitized H1, assistant output, transcript contents, or arbitrary hook payloads.
 
-Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days; idle Codex sessions expire
-after four hours.
+Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. Codex sessions whose
+recorded process is confirmed gone expire after a 30-minute grace period; other idle Codex sessions expire after four
+hours.
 
 ## Development
 

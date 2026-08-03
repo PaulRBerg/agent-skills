@@ -16,6 +16,7 @@ from ai_coord.util import new_id, now_ts, private_state_dir, sanitize
 
 SCHEMA_VERSION = 1
 CODEX_IDLE_TTL = 4 * 60 * 60
+CODEX_ORPHAN_GRACE = 30 * 60
 MESSAGE_TTL = 48 * 60 * 60
 NOTE_TTL = 7 * 24 * 60 * 60
 MAX_INBOX_MESSAGES = 50
@@ -198,23 +199,39 @@ class Store:
         else:
             self.connection.commit()
 
-    def prune(self, current: float | None = None) -> None:
+    def prune(
+        self,
+        current: float | None = None,
+        dead_codex_pids: Sequence[int] = (),
+    ) -> None:
         timestamp = now_ts() if current is None else current
+        dead_pids = tuple(dict.fromkeys(pid for pid in dead_codex_pids if pid > 0))
+        stale_conditions = ["(state = 'idle' AND last_seen < ?)"]
+        stale_parameters: list[float | int] = [timestamp - CODEX_IDLE_TTL]
+        if dead_pids:
+            placeholders = ",".join("?" for _ in dead_pids)
+            stale_conditions.append(f"(last_seen < ? AND pid IN ({placeholders}))")
+            stale_parameters.append(timestamp - CODEX_ORPHAN_GRACE)
+            stale_parameters.extend(dead_pids)
         with self.transaction() as connection:
             connection.execute(
                 "DELETE FROM messages WHERE created_at < ?", (timestamp - MESSAGE_TTL,)
             )
             connection.execute("DELETE FROM notes WHERE created_at < ?", (timestamp - NOTE_TTL,))
             stale = connection.execute(
-                """
+                f"""
                 SELECT client, session_id FROM sessions
-                WHERE client = 'codex' AND state = 'idle' AND last_seen < ?
+                WHERE client = 'codex' AND ({" OR ".join(stale_conditions)})
                 """,
-                (timestamp - CODEX_IDLE_TTL,),
+                tuple(stale_parameters),
             ).fetchall()
             for row in stale:
                 connection.execute(
                     "DELETE FROM claims WHERE client = ? AND session_id = ?",
+                    (row["client"], row["session_id"]),
+                )
+                connection.execute(
+                    "DELETE FROM delegates WHERE parent_client = ? AND parent_session_id = ?",
                     (row["client"], row["session_id"]),
                 )
                 connection.execute(
