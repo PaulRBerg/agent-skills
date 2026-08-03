@@ -40,6 +40,9 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 - Make each plan instruct its implementing agent to move only that plan to Trash after all of its work is complete and
   every required validation passes. The plan must remain in place when work or required validation is incomplete or
   unsuccessful.
+- Make each plan include an `Execution status` section initialized with no recorded implementation attempt. If work
+  stops before successful completion, the plan must instruct the implementing agent to replace that status with a
+  concise handback instead of appending an attempt history, then retain the plan.
 - Treat the complete plan set and clipboard delivery as one operation: a failed preflight, write, validation, or
   clipboard copy must leave no partial plan set.
 
@@ -87,6 +90,18 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
    - targeted validation, acceptance scenarios, and any rollout or compatibility requirements;
    - assumptions already resolved from evidence or explicit user decisions.
 
+   Immediately before `Handoff cleanup`, include this `Execution status` section:
+
+   ```md
+   ## Execution status
+
+   Current status: No implementation attempt has been recorded.
+
+   If work stops before successful completion, replace the current status—not append an attempt history—with a concise
+   record of completed work, remaining work, validation commands and outcomes, the blocker, and the next concrete
+   action.
+   ```
+
    End every plan with a `Handoff cleanup` section that identifies only that plan by its exact canonical absolute path.
    Instruct the implementing agent to run `/usr/bin/trash '<canonical-plan-path>'` only after every success criterion is
    satisfied and every required validation passes, then verify the original path no longer exists. Instruct it to keep
@@ -106,10 +121,12 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 
 7. Re-read every plan and verify that the complete set exists, every path remains ignored, every filename is valid and
    unique, owner mappings and related-plan references agree, and each plan contains enough scoped evidence and
-   validation for implementation without the old chat. Verify that every `Handoff cleanup` section names its own exact
-   canonical absolute path, gates Trash on completed work and successful required validation, preserves the plan for
-   incomplete or unsuccessful work, and prohibits removing the directory or other handoffs. On failure, remove only
-   artifacts created by this run so no partial plan set remains.
+   validation for implementation without the old chat. Verify that every `Execution status` section immediately precedes
+   `Handoff cleanup`, uses the exact initial status, and requires replacement rather than appended history with
+   completed work, remaining work, validation outcomes, the blocker, and the next action. Verify that every
+   `Handoff cleanup` section names its own exact canonical absolute path, gates Trash on completed work and successful
+   required validation, preserves the plan for incomplete or unsuccessful work, and prohibits removing the directory or
+   other handoffs. On failure, remove only artifacts created by this run so no partial plan set remains.
 8. Produce exactly one shell-safe command per plan for the active shell using this exact shape and that plan's canonical
    owner root:
 
