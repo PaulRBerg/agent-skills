@@ -53,7 +53,7 @@ CLAUDE_HOOK_SPECS = (
         "ai-coord waker claude",
         matcher="Bash",
         timeout=3600,
-        if_filter="Bash(ai-coord start*)",
+        if_filter="Bash(ai-coord start *)",
         async_=True,
         async_rewake=True,
     ),

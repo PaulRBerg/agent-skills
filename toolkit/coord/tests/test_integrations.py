@@ -102,7 +102,7 @@ def test_claude_link_wires_nudge_and_async_rewake_contract(tmp_path: Path) -> No
                 "type": "command",
                 "command": "ai-coord waker claude",
                 "timeout": 3600,
-                "if": "Bash(ai-coord start*)",
+                "if": "Bash(ai-coord start *)",
                 "async": True,
                 "asyncRewake": True,
             }
