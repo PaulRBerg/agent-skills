@@ -86,11 +86,15 @@ narrower check.
 
 - When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo,
   modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
-- Changes here are not live until installed into every target declared by the skill. At the end of a successfully
-  completed user task that edits installable catalog skills, run the `publish-skills` internal skill on the user's
-  behalf. If the task was super complex or the working tree has ongoing dirty changes, recommend `@publish-skills`
-  instead. The agent must make the complexity assessment. Use `just sync` only as a rough fallback when surgical,
-  transcript-scoped propagation is unavailable.
+- Changes here are not live until installed into every target declared by the skill. By default, `publish-skills`
+  publishes every catalog-skill change since the most recent successfully published source change or commit, including
+  changes from other agents; the current transcript is not the publication boundary.
+- At the end of a successfully completed user task that edits installable catalog skills, run the `publish-skills`
+  internal skill on the user's behalf. First inspect `ai-coord status --json`: if another agent has a queued claim that
+  overlaps the current session's active claim, do not run this step. Commit and release the claim promptly; the promoted
+  follow-on agent will publish the accumulated changes automatically. Otherwise, if the task was super complex or the
+  working tree has ongoing dirty changes, recommend `@publish-skills` instead. The agent must make the complexity
+  assessment. Use `just sync` only as a rough fallback when surgical, range-scoped propagation is unavailable.
 - When an installable catalog skill is added or removed, update the skills table in `README.md`.
 - Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under
   `skills/`. Do not add them to `README.md`, do not create `agents/openai.yaml`, and do not treat them as installable

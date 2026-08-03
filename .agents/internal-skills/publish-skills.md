@@ -1,26 +1,28 @@
 ---
 name: publish-skills
 description:
-  Commit and push catalog skills changed in the current chat or a user-specified commit range, surgically propagate only
-  those global installations, then commit and push the affected global skill paths.
+  Commit and push catalog skills changed since the last successful publication or in a user-specified commit range,
+  surgically propagate only those global installations, then commit and push the affected global skill paths.
 ---
 
 # Publish Skills
 
-Publish and propagate only the catalog skills changed in the current chat, or in a commit range the user specifies.
+Publish and propagate every catalog skill changed since the last successfully published source commit, or in a commit
+range the user specifies.
 
 ## Workflow
 
 ### 1. Resolve the Skill Sets
 
-Run in one of three modes, chosen by how the user invoked this skill:
+Run in one of two modes, chosen by how the user invoked this skill:
 
-- **Chat mode** (default when the working tree has session-modified paths): use the chat transcript as the source of
-  ownership and Git state as supporting evidence. Inspect session-modified paths under `skills/<name>/`.
-- **Unpushed-commits mode** (default when the working tree is clean and the user did not name commits): use the commits
-  on the current branch that are ahead of its upstream (`git log @{upstream}..HEAD`) as the source of ownership, in
-  place of the transcript, via `git show --stat` per commit. If the branch has no upstream configured or is not ahead of
-  it, fall back to chat mode.
+- **Accumulated-changes mode** (default): establish the most recent source commit whose catalog-skill changes were
+  successfully published, then inspect every subsequent commit through `HEAD` plus attributable uncommitted paths under
+  `skills/<name>/`. Include changes from every agent; use the current transcript and coordination state only to
+  attribute safe uncommitted paths, never as the publication boundary. Establish the last-published boundary from Git
+  history and the current declared-target installations, not merely from whether a source commit was pushed. If the
+  boundary cannot be established uniquely, stop and request an explicit commit range rather than falling back to the
+  current chat.
 - **Commit-range mode**: the user names commits instead of relying on this chat's own edits — a date ("today"), a range,
   specific SHAs, or similar. Resolve the range with Git (e.g. `git log --since/--until`, explicit SHAs) and use
   `git show --stat` per commit as the source of ownership in place of the transcript. Confirm every resolved commit is
@@ -55,9 +57,9 @@ $commit --push
 Do not add `--all`. Wait for both the commit and push to succeed. On failure, stop without changing global skill
 installations.
 
-In commit-range mode and unpushed-commits mode the resolved commits are usually already committed, sometimes already
+In accumulated-changes mode and commit-range mode the resolved commits are usually already committed, sometimes already
 pushed. Skip creating a new commit when the working tree is clean; still push if the branch is ahead of its upstream. If
-matching uncommitted changes exist locally, commit them as in chat mode before pushing.
+attributable uncommitted changes exist locally, commit them before pushing without sweeping in another agent's work.
 
 ### 3. Propagate Only the Recorded Skills
 
