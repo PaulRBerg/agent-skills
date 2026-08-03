@@ -16,7 +16,7 @@ from ai_coord.store import (
 )
 
 
-def test_new_store_uses_schema_v3(tmp_path: Path) -> None:
+def test_new_store_uses_schema_v4(tmp_path: Path) -> None:
     store = Store(tmp_path / "state.db")
 
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
@@ -29,9 +29,19 @@ def test_new_store_uses_schema_v3(tmp_path: Path) -> None:
         for row in store.connection.execute("PRAGMA table_info(sessions)").fetchall()
     }
 
-    assert version == SCHEMA_VERSION == 3
+    assert version == SCHEMA_VERSION == 4
     assert "notified_at" in message_columns
     assert "process_started_at" in session_columns
+    assert {
+        "claim_baselines",
+        "dirt_observations",
+        "residual_owners",
+    } <= {
+        str(row["name"])
+        for row in store.connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
 
 
 def _downgrade_fixture(path: Path, version: int) -> None:
@@ -63,7 +73,7 @@ def _downgrade_fixture(path: Path, version: int) -> None:
     connection.close()
 
 
-def test_store_migrates_schema_v1_to_v3(tmp_path: Path) -> None:
+def test_store_migrates_schema_v1_to_v4(tmp_path: Path) -> None:
     path = tmp_path / "state.db"
     _downgrade_fixture(path, 1)
 
@@ -76,7 +86,7 @@ def test_store_migrates_schema_v1_to_v3(tmp_path: Path) -> None:
     }
     session = store.session(Identity("codex", "preserved"))
     inbox = store.inbox(Identity("codex", "preserved"))
-    assert version == 3
+    assert version == 4
     assert "notified_at" in message_columns
     assert session is not None
     assert session["pid"] == 42
@@ -88,7 +98,7 @@ def test_store_migrates_schema_v1_to_v3(tmp_path: Path) -> None:
     ]
 
 
-def test_store_migrates_schema_v2_to_v3(tmp_path: Path) -> None:
+def test_store_migrates_schema_v2_to_v4(tmp_path: Path) -> None:
     path = tmp_path / "state.db"
     _downgrade_fixture(path, 2)
 
@@ -97,11 +107,46 @@ def test_store_migrates_schema_v2_to_v3(tmp_path: Path) -> None:
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
     session = store.session(Identity("codex", "preserved"))
     inbox = store.inbox(Identity("codex", "preserved"))
-    assert version == 3
+    assert version == 4
     assert session is not None
     assert session["pid"] == 42
     assert session["process_started_at"] is None
     assert [row["text"] for row in inbox] == ["preserved text"]
+
+
+def test_store_migrates_schema_v3_to_v4(tmp_path: Path) -> None:
+    path = tmp_path / "state.db"
+    Store(path).close()
+    connection = sqlite3.connect(path)
+    connection.execute("DROP TABLE residual_owners")
+    connection.execute("DROP TABLE dirt_observations")
+    connection.execute("DROP TABLE claim_baselines")
+    connection.execute("PRAGMA user_version = 3")
+    connection.commit()
+    connection.close()
+
+    store = Store(path)
+
+    version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
+    tables = {
+        str(row["name"])
+        for row in store.connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    observation_columns = {
+        str(row["name"])
+        for row in store.connection.execute("PRAGMA table_info(dirt_observations)").fetchall()
+    }
+    residual_columns = {
+        str(row["name"])
+        for row in store.connection.execute("PRAGMA table_info(residual_owners)").fetchall()
+    }
+
+    assert version == SCHEMA_VERSION == 4
+    assert {"claim_baselines", "dirt_observations", "residual_owners"} <= tables
+    assert {"repo_root", "path", "blob_hash", "first_seen", "last_seen"} <= observation_columns
+    assert {"repo_root", "path", "client", "session_id", "released_at"} <= residual_columns
 
 
 def test_store_permissions_and_message_cap(tmp_path: Path) -> None:

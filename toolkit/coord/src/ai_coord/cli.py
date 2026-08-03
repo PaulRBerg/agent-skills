@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -14,14 +16,49 @@ from ai_coord.coordinator import Coordinator, snapshot_json
 from ai_coord.integrations import default_hook_path, default_link_path, inspect_hooks, link_hooks
 from ai_coord.migration import migrate_legacy
 from ai_coord.store import SCHEMA_VERSION, Store
-from ai_coord.util import age_label
+from ai_coord.util import age_label, private_state_dir
+
+_NEWER_SCHEMA_ERROR = re.compile(r"^state schema (\d+) is newer than supported schema \d+$")
 
 
 def _coordinator() -> Coordinator:
     return Coordinator(Store())
 
 
+def _reexec_argv(error: Exception, state_dir: Path | None = None) -> list[str] | None:
+    """Return a compatible runner command for a newer state schema, if available."""
+    if os.environ.get("AI_COORD_REEXEC") or not isinstance(error, RuntimeError):
+        return None
+    match = _NEWER_SCHEMA_ERROR.fullmatch(str(error))
+    if match is None:
+        return None
+    try:
+        runner = json.loads(((state_dir or private_state_dir()) / "runner.json").read_text())
+        schema = runner["schema"]
+        argv = runner["argv"]
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+    if (
+        not isinstance(schema, int)
+        or isinstance(schema, bool)
+        or schema < int(match.group(1))
+        or not isinstance(argv, list)
+        or not argv
+        or not all(isinstance(argument, str) for argument in argv)
+    ):
+        return None
+    executable = Path(argv[0])
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        return None
+    return argv
+
+
 def _fail(error: Exception, code: int = 1) -> None:
+    runner_argv = _reexec_argv(error)
+    if runner_argv is not None:
+        environment = os.environ.copy()
+        environment["AI_COORD_REEXEC"] = "1"
+        os.execve(runner_argv[0], [*runner_argv, *sys.argv[1:]], environment)
     click.echo(f"error: {error}", err=True)
     raise click.exceptions.Exit(code)
 
@@ -78,6 +115,16 @@ def done() -> None:
     try:
         outcome = _coordinator().done()
         click.echo(outcome.line())
+    except Exception as error:  # noqa: BLE001
+        _fail(error)
+
+
+@cli.command()
+def baseline() -> None:
+    """Print Git blob baselines for the caller's active claim."""
+    try:
+        for row in _coordinator().baselines():
+            click.echo(f"{row['path']}\t{row['oid']}")
     except Exception as error:  # noqa: BLE001
         _fail(error)
 

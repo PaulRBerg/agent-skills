@@ -8,9 +8,11 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
+import ai_coord.cli as cli_module
 import ai_coord.coordinator as coordinator_module
-from ai_coord.coordinator import Coordinator
+from ai_coord.coordinator import DIRT_HOLD_SECONDS, Coordinator
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import InventoryResult, StaticInventory
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
@@ -172,10 +174,21 @@ def test_incomplete_coverage_and_unowned_dirt_fail_closed(
 
     (git_repo / "src" / "app.py").write_text("changed = True\n")
     dirty = _coordinator(tmp_path / "dirty.db")
+    current = 100.0
+    monkeypatch.setattr(coordinator_module, "now_ts", lambda: current)
     outcome = dirty.start("work", ("src",), cwd=git_repo)
     assert outcome.kind == "UNKNOWN"
     assert outcome.code == 2
-    assert outcome.detail == "dirty:src/app.py"
+    assert outcome.detail == "dirty-settling:src/app.py"
+
+    current += DIRT_HOLD_SECONDS
+    settled = dirty.start("work", ("src",), cwd=git_repo)
+
+    assert (settled.kind, settled.code, settled.detail) == (
+        "READY",
+        0,
+        "stale-dirt:src/app.py",
+    )
 
 
 def test_blocked_claim_messages_holder_and_promotes_after_done(
@@ -231,15 +244,182 @@ def test_wait_rechecks_dirt_after_orphaned_holder_is_pruned(
     )
     if dirty:
         (git_repo / "src" / "app.py").write_text("changed = True\n")
+        current = 0.0
+        monkeypatch.setattr(coordinator_module, "now_ts", lambda: current)
+        coordinator.snapshot(cwd=git_repo)
+        current += DIRT_HOLD_SECONDS
     coordinator.inventory = _PruningInventory(CODEX_ORPHAN_GRACE + 1, (holder,))
 
     outcome = coordinator.wait(timeout_seconds=1, poll_seconds=0.01)
 
     assert coordinator.store.session(holder) is None
     if dirty:
-        assert (outcome.kind, outcome.detail) == ("UNKNOWN", "dirty:src/app.py")
+        assert (outcome.kind, outcome.detail) == ("READY", "stale-dirt:src/app.py")
     else:
         assert outcome.kind == "READY"
+
+
+def test_benign_dirt_is_ready_immediately(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / ".ai-coord.toml").write_text('[dirt]\nbenign = ["src"]\n')
+    (git_repo / "src" / "app.py").write_text("changed = True\n")
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+
+    outcome = coordinator.start("work", ("src",), cwd=git_repo)
+
+    assert (outcome.kind, outcome.code, outcome.detail) == (
+        "READY",
+        0,
+        "stale-dirt:src/app.py",
+    )
+
+
+def test_malformed_benign_config_is_empty(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / ".ai-coord.toml").write_text("[dirt\nbenign = [\n")
+    (git_repo / "src" / "app.py").write_text("changed = True\n")
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+
+    outcome = coordinator.start("work", ("src",), cwd=git_repo)
+
+    assert (outcome.kind, outcome.code, outcome.detail) == (
+        "UNKNOWN",
+        2,
+        "dirty-settling:src/app.py",
+    )
+
+
+def test_residual_owner_restarts_ready_with_dirt(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "owner")
+    assert coordinator.start("first", ("src",), cwd=git_repo).kind == "READY"
+    (git_repo / "src" / "app.py").write_text("changed = True\n")
+    assert coordinator.done().kind == "DONE"
+
+    restarted = coordinator.start("second", ("src",), cwd=git_repo)
+
+    assert (restarted.kind, restarted.code, restarted.detail) == (
+        "READY",
+        0,
+        "stale-dirt:src/app.py",
+    )
+
+
+def test_other_session_waits_for_residual_dirt_to_turn_stale(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = 0.0
+    monkeypatch.setattr(coordinator_module, "now_ts", lambda: current)
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "owner")
+    assert coordinator.start("owner", ("src",), cwd=git_repo).kind == "READY"
+    (git_repo / "src" / "app.py").write_text("changed = True\n")
+    coordinator.done()
+
+    _set_identity(monkeypatch, "other")
+    fresh = coordinator.start("other", ("src",), cwd=git_repo)
+    current += DIRT_HOLD_SECONDS
+    stale = coordinator.start("other", ("src",), cwd=git_repo)
+
+    assert fresh.detail == "dirty-settling:src/app.py"
+    assert (stale.kind, stale.detail) == ("READY", "stale-dirt:src/app.py")
+
+
+def test_dirt_hash_change_resets_first_seen(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = 0.0
+    monkeypatch.setattr(coordinator_module, "now_ts", lambda: current)
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+    app = git_repo / "src" / "app.py"
+    app.write_text("first change\n")
+    assert coordinator.start("work", ("src",), cwd=git_repo).kind == "UNKNOWN"
+
+    current = DIRT_HOLD_SECONDS - 1
+    app.write_text("second change\n")
+    changed = coordinator.start("work", ("src",), cwd=git_repo)
+    current = DIRT_HOLD_SECONDS + 1
+    still_fresh = coordinator.start("work", ("src",), cwd=git_repo)
+    observations = coordinator.store.dirt_observations(str(git_repo))
+
+    assert changed.detail == "dirty-settling:src/app.py"
+    assert still_fresh.detail == "dirty-settling:src/app.py"
+    assert observations[0]["first_seen"] == DIRT_HOLD_SECONDS - 1
+
+
+def test_status_prunes_clean_dirt_observations(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+    app = git_repo / "src" / "app.py"
+    app.write_text("changed = True\n")
+    coordinator.start("work", ("src",), cwd=git_repo)
+    assert [row["path"] for row in coordinator.store.dirt_observations(str(git_repo))] == [
+        "src/app.py"
+    ]
+
+    app.write_text("print('ok')\n")
+    coordinator.snapshot(cwd=git_repo)
+
+    assert coordinator.store.dirt_observations(str(git_repo)) == []
+
+
+def test_dirty_wait_self_promotes_after_hold(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = _FakeClock()
+    monkeypatch.setattr(coordinator_module.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(coordinator_module.time, "sleep", clock.sleep)
+    monkeypatch.setattr(coordinator_module, "now_ts", clock.monotonic)
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+    (git_repo / "src" / "app.py").write_text("changed = True\n")
+    assert coordinator.start("work", ("src",), cwd=git_repo).kind == "UNKNOWN"
+
+    outcome = coordinator.wait(timeout_seconds=DIRT_HOLD_SECONDS + 1, poll_seconds=1)
+
+    assert (outcome.kind, outcome.code, outcome.detail) == (
+        "READY",
+        0,
+        "stale-dirt:src/app.py",
+    )
+    # Sub-second drift is expected: patching the global time module also routes
+    # subprocess wait backoff sleeps through the fake clock.
+    assert DIRT_HOLD_SECONDS <= clock.current < DIRT_HOLD_SECONDS + 1
+
+
+def test_advisory_dirt_captures_baseline_and_cli_prints_it(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / ".ai-coord.toml").write_text('[dirt]\nbenign = ["src"]\n')
+    (git_repo / "src" / "app.py").write_text("changed = True\n")
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+
+    started = coordinator.start("work", ("src",), cwd=git_repo)
+    expected = subprocess.run(
+        ["git", "hash-object", "--", "src/app.py"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)
+
+    result = CliRunner().invoke(cli_module.cli, ["baseline"])
+
+    assert (started.kind, started.detail) == ("READY", "stale-dirt:src/app.py")
+    assert coordinator.baselines() == [{"path": "src/app.py", "oid": expected}]
+    assert result.exit_code == 0
+    assert result.output == f"src/app.py\t{expected}\n"
 
 
 def test_wait_uses_claim_repository_when_session_cwd_changes(

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import os
 import sqlite3
+import sys
+import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -14,7 +17,7 @@ from typing import Any
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.util import new_id, now_ts, private_state_dir, sanitize
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 CODEX_IDLE_TTL = 4 * 60 * 60
 CODEX_ORPHAN_GRACE = 30 * 60
 MESSAGE_TTL = 48 * 60 * 60
@@ -59,6 +62,36 @@ _SCHEMA_STATEMENTS = (
         claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
         path TEXT NOT NULL,
         PRIMARY KEY (claim_id, path)
+    )
+    """,
+    """
+    CREATE TABLE claim_baselines (
+        claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        oid TEXT NOT NULL,
+        PRIMARY KEY (claim_id, path)
+    )
+    """,
+    """
+    CREATE TABLE dirt_observations (
+        repo_root TEXT NOT NULL,
+        path TEXT NOT NULL,
+        blob_hash TEXT NOT NULL,
+        first_seen REAL NOT NULL,
+        last_seen REAL NOT NULL,
+        PRIMARY KEY (repo_root, path)
+    )
+    """,
+    """
+    CREATE TABLE residual_owners (
+        repo_root TEXT NOT NULL,
+        path TEXT NOT NULL,
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        released_at REAL NOT NULL,
+        PRIMARY KEY (repo_root, path),
+        FOREIGN KEY (repo_root, path)
+            REFERENCES dirt_observations(repo_root, path) ON DELETE CASCADE
     )
     """,
     """
@@ -154,6 +187,7 @@ class Store:
         self.connection.execute("PRAGMA synchronous = NORMAL")
         self._migrate()
         self.path.chmod(0o600)
+        self._write_runner()
 
     def close(self) -> None:
         self.connection.close()
@@ -196,6 +230,81 @@ class Store:
             if current == 2:
                 connection.execute("ALTER TABLE sessions ADD COLUMN process_started_at REAL")
                 connection.execute("PRAGMA user_version = 3")
+                current = 3
+            if current == 3:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS claim_baselines (
+                        claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+                        path TEXT NOT NULL,
+                        oid TEXT NOT NULL,
+                        PRIMARY KEY (claim_id, path)
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS dirt_observations (
+                        repo_root TEXT NOT NULL,
+                        path TEXT NOT NULL,
+                        blob_hash TEXT NOT NULL,
+                        first_seen REAL NOT NULL,
+                        last_seen REAL NOT NULL,
+                        PRIMARY KEY (repo_root, path)
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS residual_owners (
+                        repo_root TEXT NOT NULL,
+                        path TEXT NOT NULL,
+                        client TEXT NOT NULL,
+                        session_id TEXT NOT NULL,
+                        released_at REAL NOT NULL,
+                        PRIMARY KEY (repo_root, path),
+                        FOREIGN KEY (repo_root, path)
+                            REFERENCES dirt_observations(repo_root, path) ON DELETE CASCADE
+                    )
+                    """
+                )
+                connection.execute("PRAGMA user_version = 4")
+
+    def _write_runner(self) -> None:
+        runner_path = self.path.parent / "runner.json"
+        desired = {
+            "schema": SCHEMA_VERSION,
+            "argv": [str(Path(sys.executable).resolve()), "-m", "ai_coord"],
+        }
+        try:
+            existing = json.loads(runner_path.read_text())
+            if existing == desired:
+                return
+            existing_schema = existing.get("schema") if isinstance(existing, dict) else 0
+            if not isinstance(existing_schema, int) or isinstance(existing_schema, bool):
+                existing_schema = 0
+            if SCHEMA_VERSION < existing_schema:
+                return
+        except (OSError, ValueError, TypeError):
+            pass
+
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                dir=runner_path.parent,
+                prefix=".runner.",
+                suffix=".tmp",
+                encoding="utf-8",
+                delete=False,
+            ) as temporary:
+                temporary.write(json.dumps(desired))
+                temporary_path = Path(temporary.name)
+            temporary_path.replace(runner_path)
+        except Exception:  # noqa: BLE001 - runner metadata is best effort
+            if temporary_path is not None:
+                with contextlib.suppress(OSError):
+                    temporary_path.unlink()
 
     @contextlib.contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -525,6 +634,135 @@ class Store:
             )
             self._bump_generation(connection)
             return cursor.rowcount > 0
+
+    def observe_dirt(
+        self,
+        repo_root: str,
+        blob_hashes: dict[str, str],
+        *,
+        current: float | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        timestamp = now_ts() if current is None else current
+        with self.transaction() as connection:
+            if blob_hashes:
+                placeholders = ",".join("?" for _ in blob_hashes)
+                connection.execute(
+                    f"""
+                    DELETE FROM dirt_observations
+                    WHERE repo_root = ? AND path NOT IN ({placeholders})
+                    """,
+                    (repo_root, *blob_hashes),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM dirt_observations WHERE repo_root = ?", (repo_root,)
+                )
+            connection.executemany(
+                """
+                INSERT INTO dirt_observations(
+                    repo_root, path, blob_hash, first_seen, last_seen
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(repo_root, path) DO UPDATE SET
+                    blob_hash = excluded.blob_hash,
+                    first_seen = CASE
+                        WHEN dirt_observations.blob_hash = excluded.blob_hash
+                        THEN dirt_observations.first_seen
+                        ELSE excluded.first_seen
+                    END,
+                    last_seen = excluded.last_seen
+                """,
+                [
+                    (repo_root, path, blob_hash, timestamp, timestamp)
+                    for path, blob_hash in blob_hashes.items()
+                ],
+            )
+            rows = connection.execute(
+                """
+                SELECT * FROM dirt_observations
+                WHERE repo_root = ? ORDER BY path
+                """,
+                (repo_root,),
+            ).fetchall()
+        return {str(row["path"]): dict(row) for row in rows}
+
+    def dirt_observations(self, repo_root: str) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM dirt_observations
+            WHERE repo_root = ? ORDER BY path
+            """,
+            (repo_root,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def residual_owners(self, repo_root: str) -> dict[str, dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM residual_owners
+            WHERE repo_root = ? ORDER BY path
+            """,
+            (repo_root,),
+        ).fetchall()
+        return {str(row["path"]): dict(row) for row in rows}
+
+    def record_residual_owners(
+        self,
+        repo_root: str,
+        paths: tuple[str, ...],
+        identity: Identity,
+        *,
+        current: float | None = None,
+    ) -> None:
+        if not paths:
+            return
+        timestamp = now_ts() if current is None else current
+        with self.transaction() as connection:
+            connection.executemany(
+                """
+                INSERT INTO residual_owners(
+                    repo_root, path, client, session_id, released_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(repo_root, path) DO UPDATE SET
+                    client = excluded.client,
+                    session_id = excluded.session_id,
+                    released_at = excluded.released_at
+                """,
+                [
+                    (repo_root, path, identity.client, identity.session_id, timestamp)
+                    for path in paths
+                ],
+            )
+
+    def replace_baselines(self, identity: Identity, baselines: dict[str, str]) -> None:
+        with self.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT id FROM claims
+                WHERE client = ? AND session_id = ? AND state = 'active'
+                """,
+                (identity.client, identity.session_id),
+            ).fetchone()
+            if row is None:
+                return
+            claim_id = int(row["id"])
+            connection.execute("DELETE FROM claim_baselines WHERE claim_id = ?", (claim_id,))
+            connection.executemany(
+                "INSERT INTO claim_baselines(claim_id, path, oid) VALUES (?, ?, ?)",
+                [(claim_id, path, oid) for path, oid in baselines.items()],
+            )
+
+    def baselines(self, identity: Identity) -> list[dict[str, str]]:
+        rows = self.connection.execute(
+            """
+            SELECT claim_baselines.path, claim_baselines.oid
+            FROM claim_baselines
+            JOIN claims ON claims.id = claim_baselines.claim_id
+            WHERE claims.client = ? AND claims.session_id = ? AND claims.state = 'active'
+            ORDER BY claim_baselines.path
+            """,
+            (identity.client, identity.session_id),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def add_message(
         self,

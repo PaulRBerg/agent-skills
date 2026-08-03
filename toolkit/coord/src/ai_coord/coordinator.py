@@ -25,9 +25,12 @@ from ai_coord.util import (
     MAX_LABEL_CHARS,
     MAX_MESSAGE_CHARS,
     MAX_PRESENCE_CHARS,
+    UNHASHABLE_BLOB_HASH,
     age_label,
     any_overlap,
+    benign_dirt_scopes,
     first_heading,
+    git_blob_hash,
     git_dirty_paths,
     git_root,
     normalize_scopes,
@@ -39,6 +42,7 @@ from ai_coord.util import (
 )
 
 FULL_REFRESH_SECONDS = 20
+DIRT_HOLD_SECONDS = 90
 WAKER_TIMEOUT_SECONDS = 3480
 WAKER_POLL_SECONDS = 1.0
 INBOX_NUDGE = (
@@ -153,9 +157,12 @@ class Coordinator:
                 return Outcome("READY", 0, paths=paths)
             return Outcome("ACTIVE", 3, "run ai-coord done before changing scope", existing_paths)
 
-        inventory = self.inventory.refresh(self.store)
-        dirty = relevant_dirty(paths, git_dirty_paths(root))
         timestamp = now_ts()
+        inventory = self.inventory.refresh(self.store)
+        all_dirty, observations = self._observe_git_dirt(root, current=timestamp)
+        dirty = relevant_dirty(paths, all_dirty)
+        benign_scopes = benign_dirt_scopes(root)
+        residual_owners = self.store.residual_owners(str(root))
         created_at = float(existing["created_at"]) if existing else timestamp
 
         with self.store.transaction() as connection:
@@ -177,13 +184,21 @@ class Coordinator:
                 and any_overlap(paths, tuple(claim["paths"]))
             ]
             unattributed_dirty = self._unattributed_dirty(dirty, claims)
+            fresh_dirty, advisory_dirty = self._partition_dirty(
+                unattributed_dirty,
+                observations,
+                residual_owners,
+                benign_scopes,
+                identity,
+                timestamp,
+            )
 
             if not inventory.complete:
                 state, reason = "queued", "coverage"
                 outcome = Outcome("UNKNOWN", 2, "coverage")
-            elif unattributed_dirty:
+            elif fresh_dirty:
                 state, reason = "queued", "dirty"
-                outcome = Outcome("UNKNOWN", 2, f"dirty:{','.join(unattributed_dirty)}")
+                outcome = Outcome("UNKNOWN", 2, f"dirty-settling:{','.join(fresh_dirty)}")
             elif active_blockers or earlier_waiters:
                 state, reason = "queued", "overlap"
                 blockers = active_blockers or earlier_waiters
@@ -200,7 +215,8 @@ class Coordinator:
                 outcome = Outcome("BLOCKED", 3, ",".join(holders), tuple(overlaps), holders)
             else:
                 state, reason = "active", None
-                outcome = Outcome("READY", 0, paths=paths)
+                detail = f"stale-dirt:{','.join(advisory_dirty)}" if advisory_dirty else ""
+                outcome = Outcome("READY", 0, detail, paths)
 
             previous_reason = existing.get("blocked_reason") if existing else None
             self.store.save_claim(
@@ -229,6 +245,13 @@ class Coordinator:
                         str(root),
                         timestamp,
                     )
+        if outcome.kind == "READY" and advisory_dirty:
+            baselines = {
+                path: oid
+                for path in advisory_dirty
+                if (oid := git_blob_hash(root, path, write=True)) != UNHASHABLE_BLOB_HASH
+            }
+            self.store.replace_baselines(identity, baselines)
         return outcome
 
     def _save_intent(
@@ -304,7 +327,12 @@ class Coordinator:
                 last_generation is None
                 or generation != last_generation
                 or last_full_check is None
-                or current_time - last_full_check >= FULL_REFRESH_SECONDS
+                or current_time - last_full_check
+                >= (
+                    WAKER_POLL_SECONDS
+                    if current_claim.get("blocked_reason") == "dirty"
+                    else FULL_REFRESH_SECONDS
+                )
             ):
                 promoted = self._start(
                     identity,
@@ -314,7 +342,9 @@ class Coordinator:
                 )
                 last_full_check = time.monotonic()
                 last_generation = self.store.generation()
-                if promoted.code in {0, 2}:
+                if promoted.code == 0 or (
+                    promoted.code == 2 and not promoted.detail.startswith("dirty-settling:")
+                ):
                     return promoted
             pending = self.store.inbox(identity, pending_only=True)
             if pending:
@@ -360,6 +390,13 @@ class Coordinator:
         claim = self.store.claim(identity)
         waiters: list[Identity] = []
         if claim and claim["state"] == "active" and claim["paths"]:
+            root = Path(str(claim["repo_root"]))
+            try:
+                dirty, _ = self._observe_git_dirt(root)
+            except RuntimeError:
+                dirty = ()
+            residual = relevant_dirty(tuple(claim["paths"]), dirty)
+            self.store.record_residual_owners(str(root), residual, identity)
             waiters = [
                 Identity(str(candidate["client"]), str(candidate["session_id"]))
                 for candidate in self.store.claims(str(claim["repo_root"]))
@@ -377,6 +414,14 @@ class Coordinator:
             )
         return Outcome("DONE", 0, "released" if removed else "already clear")
 
+    def baselines(self) -> list[dict[str, str]]:
+        identity = self.identity()
+        assert identity is not None
+        claim = self.store.claim(identity)
+        if claim is None or claim["state"] != "active":
+            return []
+        return self.store.baselines(identity)
+
     def snapshot(self, machine_wide: bool = False, cwd: Path | None = None) -> StatusSnapshot:
         inventory = self.inventory.refresh(self.store)
         identity = self.identity(required=False)
@@ -384,6 +429,16 @@ class Coordinator:
         root = git_root(working_dir)
         all_sessions = self.store.sessions()
         all_claims = self.store.claims()
+        observation_roots = {root} if root is not None else set()
+        if machine_wide:
+            observation_roots.update(
+                Path(str(row["repo_root"]))
+                for row in [*all_sessions, *all_claims]
+                if row.get("repo_root")
+            )
+        for observation_root in observation_roots:
+            with contextlib.suppress(RuntimeError):
+                self._observe_git_dirt(observation_root)
         claim_by_key = {
             (str(claim["client"]), str(claim["session_id"])): claim for claim in all_claims
         }
@@ -801,6 +856,39 @@ class Coordinator:
             process_started_at=parent.started_at,
             started_at=float(existing["started_at"]) if existing else None,
         )
+
+    def _observe_git_dirt(
+        self, root: Path, *, current: float | None = None
+    ) -> tuple[tuple[str, ...], dict[str, dict[str, Any]]]:
+        dirty = git_dirty_paths(root)
+        blob_hashes = {path: git_blob_hash(root, path) for path in dirty}
+        observations = self.store.observe_dirt(
+            str(root), blob_hashes, current=now_ts() if current is None else current
+        )
+        return dirty, observations
+
+    @staticmethod
+    def _partition_dirty(
+        dirty: tuple[str, ...],
+        observations: dict[str, dict[str, Any]],
+        residual_owners: dict[str, dict[str, Any]],
+        benign_scopes: tuple[str, ...],
+        identity: Identity,
+        current: float,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        fresh: list[str] = []
+        advisory: list[str] = []
+        for path in dirty:
+            residual = residual_owners.get(path)
+            benign = any(paths_overlap(path, scope) for scope in benign_scopes)
+            residual_own = residual is not None and (
+                residual["client"],
+                residual["session_id"],
+            ) == (identity.client, identity.session_id)
+            observation = observations[path]
+            stale = current - float(observation["first_seen"]) >= DIRT_HOLD_SECONDS
+            (advisory if benign or residual_own or stale else fresh).append(path)
+        return tuple(fresh), tuple(advisory)
 
     @staticmethod
     def _same_identity(claim: dict[str, Any], identity: Identity) -> bool:

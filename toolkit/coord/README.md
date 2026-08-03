@@ -11,7 +11,8 @@ ai-coord done
 ```
 
 The coordinator is cooperative rather than an OS lock. It uses a private local SQLite ledger and fails closed when it
-cannot establish complete provider coverage or ownership of relevant dirty files.
+cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
+proceed with a stale-dirt advisory and a captured baseline.
 
 ## Installation
 
@@ -49,14 +50,14 @@ characters, and paths outside the repository are rejected so overlap checks stay
 
 `start` emits one tab-separated result:
 
-| Result             | Exit | Meaning                                                           |
-| ------------------ | ---: | ----------------------------------------------------------------- |
-| `READY`            |    0 | The claim is active; editing may begin.                           |
-| `INTENT`           |    0 | A pathless, non-exclusive label was recorded.                     |
-| `BLOCKED`          |    3 | The work is queued behind an active or earlier overlapping claim. |
-| `UNKNOWN coverage` |    2 | Provider coverage is incomplete; work was not granted.            |
-| `UNKNOWN dirty:…`  |    2 | Relevant dirty files have no attributable live owner.             |
-| `ACTIVE`           |    3 | This session already owns a different scope; release it first.    |
+| Result                     | Exit | Meaning                                                           |
+| -------------------------- | ---: | ----------------------------------------------------------------- |
+| `READY`                    |    0 | The claim is active; editing may begin.                           |
+| `INTENT`                   |    0 | A pathless, non-exclusive label was recorded.                     |
+| `BLOCKED`                  |    3 | The work is queued behind an active or earlier overlapping claim. |
+| `UNKNOWN coverage`         |    2 | Provider coverage is incomplete; work was not granted.            |
+| `UNKNOWN dirty-settling:…` |    2 | Relevant unattributed dirt is settling; wait and retry.           |
+| `ACTIVE`                   |    3 | This session already owns a different scope; release it first.    |
 
 Blocked work retains its paths and queue position. Waiting therefore needs no repeated session or path arguments:
 
@@ -78,6 +79,20 @@ promoted, a message or note arrives, the claim is released, coverage becomes unk
 reminder always requires re-running `start` before editing. Repeated `start` calls may launch multiple independent
 wakers for the same session; each exits on the first terminal outcome. Codex sessions use `ai-coord wait` in the
 foreground.
+
+When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks byte-for-byte. Run `ai-coord baseline` to
+print their blob OIDs and pass affected paths to the commit skill's baseline exclusion. A session that finishes with
+uncommitted dirt retains residual ownership and can reclaim it immediately.
+
+Repositories may list harness churn in a tracked `.ai-coord.toml`:
+
+```toml
+[dirt]
+benign = ["config.toml"]
+```
+
+Benign prefixes never hold. The CLI writes `runner.json` in the state directory; an older CLI encountering a newer state
+schema re-execs the newer runner automatically.
 
 ## Inventory and communication
 
