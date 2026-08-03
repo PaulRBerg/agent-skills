@@ -50,6 +50,7 @@ bunx skills add PaulRBerg/agent-skills
 | skill-map                 | Find skill dependencies and references across machine                    |
 | spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                              |
 | tailwind-css              | Tailwind CSS v4 styling guidance                                         |
+| task-handoff              | Create partial-task plans for fresh interactive Codex sessions           |
 | todo-archive              | Archive checked TODO.md tasks into .ai/todos                             |
 | vitest                    | Vitest test writing and debugging                                        |
 | yeet                      | GitHub contribution workflows                                            |
