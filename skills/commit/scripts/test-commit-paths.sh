@@ -30,7 +30,7 @@ assert_contains_line() {
   _haystack=$1
   _needle=$2
   _label=$3
-  printf '%s\n' "$_haystack" | grep -Fqx -- "$_needle" || fail "$_label: missing $_needle"
+  printf '%s\n' "$_haystack" | rg -F -x -q -- "$_needle" || fail "$_label: missing $_needle"
 }
 
 init_fixture() {
@@ -48,6 +48,18 @@ commit_fixture() {
   _message=$2
   git -C "$_repo" add -A
   git -C "$_repo" commit --quiet -m "$_message"
+}
+
+advance_head_with_content() {
+  _repo=$1
+  _content=$2
+  _message=$3
+  _old_head=$(git -C "$_repo" rev-parse HEAD)
+  _blob=$(printf '%s' "$_content" | git -C "$_repo" hash-object -w --stdin)
+  _tree=$(printf '100644 blob %s\tintended.txt\n' "$_blob" | git -C "$_repo" mktree)
+  _commit=$(printf '%s\n' "$_message" | git -C "$_repo" commit-tree "$_tree" -p "$_old_head")
+  git -C "$_repo" update-ref HEAD "$_commit" "$_old_head"
+  printf '%s\n' "$_commit"
 }
 
 test_content_and_shared_index() {
@@ -87,7 +99,7 @@ test_content_and_shared_index() {
   ); then
     fail 'inherited GIT_INDEX_FILE was accepted'
   fi
-  printf '%s\n' "$_inherited_output" | grep -Fq 'GIT_INDEX_FILE is already set' ||
+  printf '%s\n' "$_inherited_output" | rg -F -q 'GIT_INDEX_FILE is already set' ||
     fail 'inherited index rejection lacked a diagnostic'
 
   (
@@ -222,15 +234,159 @@ EOF
   ); then
     fail 'existing index lock did not block commit'
   fi
-  printf '%s\n' "$_lock_output" | grep -Fq 'default Git index remains locked' ||
+  printf '%s\n' "$_lock_output" | rg -F -q 'default Git index remains locked' ||
     fail 'existing lock failure lacked explicit lock evidence'
   assert_equal 'other owner' "$(cat "$_repo/.git/index.lock")" 'helper replaced or deleted pre-existing lock'
   assert_equal "$_head_before" "$(git -C "$_repo" rev-parse HEAD)" 'lock refusal changed HEAD'
+}
+
+test_baseline_exclusion() {
+  _repo=$test_root/baseline-exclusion
+  init_fixture "$_repo"
+  _base_content=$'line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06\nline 07\nline 08\nline 09\nline 10\nline 11 original\nline 12\nline 13\nline 14\n'
+  _baseline_content=$'line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06\nline 07\nline 08\nline 09\nline 10\nline 11 original\nline 12\nline 13\nline 14\n'
+  _worktree_content=$'line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06\nline 07\nline 08\nline 09\nline 10\nline 11 agent\nline 12\nline 13\nline 14\n'
+  _committed_content=$'line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06\nline 07\nline 08\nline 09\nline 10\nline 11 agent\nline 12\nline 13\nline 14'
+
+  printf '%s' "$_base_content" > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  printf '%s' "$_baseline_content" > "$_repo/intended.txt"
+  _baseline_oid=$(git -C "$_repo" hash-object -w intended.txt)
+  printf '%s' "$_worktree_content" > "$_repo/intended.txt"
+
+  (
+    cd "$_repo"
+    bash "$helper" commit -m 'Commit only agent change' \
+      --exclude-baseline "intended.txt=$_baseline_oid" -- intended.txt
+  ) >/dev/null
+
+  assert_equal "$_committed_content" "$(git -C "$_repo" show HEAD:intended.txt)" \
+    'baseline exclusion committed stray content'
+  assert_equal "${_worktree_content%$'\n'}" "$(cat "$_repo/intended.txt")" \
+    'baseline exclusion changed the worktree'
+  assert_equal ' M intended.txt' "$(git -C "$_repo" status --short)" \
+    'stray baseline hunk did not remain uncommitted'
+  assert_equal '' "$(git -C "$_repo" diff --cached --name-only)" \
+    'baseline exclusion left staged changes'
+}
+
+test_baseline_with_non_overlapping_head_movement() {
+  _repo=$test_root/baseline-head-movement
+  init_fixture "$_repo"
+  _base_content=$'line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\nline 11 original\nline 12\nline 13\nline 14\n'
+  _baseline_content=$'line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\nline 11 original\nline 12\nline 13\nline 14\n'
+  _worktree_content=$'line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\nline 11 agent\nline 12\nline 13\nline 14\n'
+  _moved_content=$'line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06 moved HEAD\nline 07\nline 08\nline 09\nline 10\nline 11 original\nline 12\nline 13\nline 14\n'
+  _committed_content=$'line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06 moved HEAD\nline 07\nline 08\nline 09\nline 10\nline 11 agent\nline 12\nline 13\nline 14'
+
+  printf '%s' "$_base_content" > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  printf '%s' "$_baseline_content" > "$_repo/intended.txt"
+  _baseline_oid=$(git -C "$_repo" hash-object -w intended.txt)
+  printf '%s' "$_worktree_content" > "$_repo/intended.txt"
+  _moved_head=$(advance_head_with_content "$_repo" "$_moved_content" 'Move HEAD elsewhere')
+
+  (
+    cd "$_repo"
+    bash "$helper" commit -m 'Apply agent change to moved HEAD' \
+      --exclude-baseline "intended.txt=$_baseline_oid" -- intended.txt
+  ) >/dev/null
+
+  assert_equal "$_moved_head" "$(git -C "$_repo" rev-parse HEAD^)" \
+    'baseline commit did not retain moved HEAD as its parent'
+  assert_equal "$_committed_content" "$(git -C "$_repo" show HEAD:intended.txt)" \
+    'non-overlapping HEAD movement was not preserved'
+  assert_equal "${_worktree_content%$'\n'}" "$(cat "$_repo/intended.txt")" \
+    'non-overlapping HEAD movement changed the worktree'
+}
+
+test_baseline_conflicting_head_movement() {
+  _repo=$test_root/baseline-conflict
+  init_fixture "$_repo"
+  _base_content=$'line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\n'
+  _baseline_content=$'line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\n'
+  _worktree_content=$'line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06 agent\nline 07\nline 08\nline 09\nline 10\n'
+  _moved_content=$'line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06 moved HEAD\nline 07\nline 08\nline 09\nline 10\n'
+
+  printf '%s' "$_base_content" > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  printf '%s' "$_baseline_content" > "$_repo/intended.txt"
+  _baseline_oid=$(git -C "$_repo" hash-object -w intended.txt)
+  printf '%s' "$_worktree_content" > "$_repo/intended.txt"
+  _moved_head=$(advance_head_with_content "$_repo" "$_moved_content" 'Move HEAD into conflict')
+  _status_before=$(git -C "$_repo" status --short)
+  _index_before=$(git hash-object "$_repo/.git/index")
+
+  if _conflict_output=$(
+    cd "$_repo"
+    bash "$helper" commit -m 'Must conflict' \
+      --exclude-baseline "intended.txt=$_baseline_oid" -- intended.txt 2>&1
+  ); then
+    fail 'conflicting HEAD movement unexpectedly created a commit'
+  fi
+  printf '%s\n' "$_conflict_output" |
+    rg -F -q 'baseline changes do not apply cleanly to HEAD for path: intended.txt' ||
+    fail 'baseline conflict lacked a path-specific diagnostic'
+  assert_equal "$_moved_head" "$(git -C "$_repo" rev-parse HEAD)" \
+    'baseline conflict changed HEAD'
+  assert_equal "$_index_before" "$(git hash-object "$_repo/.git/index")" \
+    'baseline conflict changed the shared index'
+  assert_equal "${_worktree_content%$'\n'}" "$(cat "$_repo/intended.txt")" \
+    'baseline conflict changed the worktree'
+  assert_equal "$_status_before" "$(git -C "$_repo" status --short)" \
+    'baseline conflict changed repository status'
+  [ ! -e "$_repo/.git/index.lock" ] || fail 'baseline conflict left helper-owned index lock'
+}
+
+test_invalid_baseline_arguments() {
+  _repo=$test_root/baseline-invalid
+  init_fixture "$_repo"
+  printf 'base\n' > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  printf 'agent\n' > "$_repo/intended.txt"
+  _valid_oid=$(git -C "$_repo" rev-parse HEAD:intended.txt)
+  _head_before=$(git -C "$_repo" rev-parse HEAD)
+  _status_before=$(git -C "$_repo" status --short)
+  _index_before=$(git hash-object "$_repo/.git/index")
+
+  if _invalid_oid_output=$(
+    cd "$_repo"
+    bash "$helper" commit -m 'Must reject invalid OID' \
+      --exclude-baseline 'intended.txt=not-an-oid' -- intended.txt 2>&1
+  ); then
+    fail 'invalid baseline OID was accepted'
+  fi
+  printf '%s\n' "$_invalid_oid_output" |
+    rg -F -q 'invalid baseline blob OID for path intended.txt: not-an-oid' ||
+    fail 'invalid baseline OID lacked a path-specific diagnostic'
+
+  if _invalid_path_output=$(
+    cd "$_repo"
+    bash "$helper" commit -m 'Must reject unintended path' \
+      --exclude-baseline "other.txt=$_valid_oid" -- intended.txt 2>&1
+  ); then
+    fail 'baseline path outside the intended set was accepted'
+  fi
+  printf '%s\n' "$_invalid_path_output" |
+    rg -F -q 'baseline path is not among intended paths: other.txt' ||
+    fail 'unintended baseline path lacked a diagnostic'
+
+  assert_equal "$_head_before" "$(git -C "$_repo" rev-parse HEAD)" \
+    'invalid baseline arguments changed HEAD'
+  assert_equal "$_index_before" "$(git hash-object "$_repo/.git/index")" \
+    'invalid baseline arguments changed the shared index'
+  assert_equal "$_status_before" "$(git -C "$_repo" status --short)" \
+    'invalid baseline arguments changed repository status'
+  [ ! -e "$_repo/.git/index.lock" ] || fail 'invalid baseline arguments created an index lock'
 }
 
 test_content_and_shared_index
 test_case_only_renames
 test_formatter_hook
 test_hook_failure_and_lock_ownership
+test_baseline_exclusion
+test_baseline_with_non_overlapping_head_movement
+test_baseline_conflicting_head_movement
+test_invalid_baseline_arguments
 
 printf 'commit-paths tests passed\n'

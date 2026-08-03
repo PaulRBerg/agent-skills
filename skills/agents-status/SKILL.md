@@ -47,8 +47,10 @@ including an empty partial result — as unknown, never “no active sessions.�
 ## Coordination surface
 
 Use `ai-coord start '<label>' '<path>'...` to acquire or queue literal repository-relative scopes. Only `READY` permits
-editing; `BLOCKED` is queued and `UNKNOWN` means coverage or dirty-file ownership is insufficient. `ai-coord wait`
-blocks on queued work, and `ai-coord done` releases active, queued, or intent-only work.
+editing; `READY` may carry a `stale-dirt:<paths>` advisory, which means preserve those pre-existing hunks.
+`UNKNOWN dirty-settling:...` is a short self-resolving hold (at most ~90 seconds); `UNKNOWN coverage` remains incomplete
+coverage. `BLOCKED` is queued. `ai-coord wait` blocks on queued work, and `ai-coord done` releases active, queued, or
+intent-only work.
 
 Send `ai-coord msg <target> '<text>'` to a unique session-ID prefix (at least four characters), label/name substring, or
 the `repo` broadcast target. Read recipient-only messages with `ai-coord inbox`, or acknowledge them with

@@ -6,7 +6,8 @@ usage() {
   cat >&2 <<'EOF'
 Usage:
   bash <skill-dir>/scripts/commit-paths.sh preview [--diff summary|full] -- <session_paths...>
-  bash <skill-dir>/scripts/commit-paths.sh commit [-m <message>]... [--no-verify] [--no-gpg-sign] -- <resolved_paths...>
+  bash <skill-dir>/scripts/commit-paths.sh commit [-m <message>]... [--no-verify] [--no-gpg-sign] \
+    [--exclude-baseline <path>=<oid>]... -- <resolved_paths...>
 EOF
 }
 
@@ -48,6 +49,12 @@ cleanup() {
   fi
   if [ -n "$index_info" ]; then
     rm -f "$index_info"
+  fi
+  if [ -n "$baseline_index" ]; then
+    rm -f "$baseline_index" "$baseline_index.lock"
+  fi
+  if [ -n "$baseline_patch" ]; then
+    rm -f "$baseline_patch"
   fi
   if [ -n "$temp_dir" ]; then
     rmdir "$temp_dir" 2>/dev/null || :
@@ -157,6 +164,118 @@ make_alternate_index() {
   GIT_INDEX_FILE=$alternate_index git read-tree "$base_commit" || die 'cannot initialize isolated Git index'
 }
 
+validate_baseline_exclusions() {
+  _baseline_number=0
+  while [ "$_baseline_number" -lt "${#baseline_specs[@]}" ]; do
+    _baseline_spec=${baseline_specs[$_baseline_number]}
+    _baseline_path=${_baseline_spec%=*}
+    _baseline_oid=${_baseline_spec##*=}
+    _baseline_path=$(normalize_path "$_baseline_path") || exit 1
+
+    _is_intended=false
+    for _input_path in "${input_paths[@]}"; do
+      if [ "$_input_path" = "$_baseline_path" ]; then
+        _is_intended=true
+        break
+      fi
+    done
+    [ "$_is_intended" = true ] ||
+      die "baseline path is not among intended paths: $_baseline_path"
+
+    for _existing_path in ${baseline_paths[@]+"${baseline_paths[@]}"}; do
+      [ "$_existing_path" != "$_baseline_path" ] ||
+        die "duplicate baseline path: $_baseline_path"
+    done
+
+    case "$_baseline_oid" in
+      '' | *[!0-9a-fA-F]*)
+        die "invalid baseline blob OID for path $_baseline_path: $_baseline_oid"
+        ;;
+    esac
+    _baseline_type=$(git cat-file -t "$_baseline_oid" 2>/dev/null) ||
+      die "invalid baseline blob OID for path $_baseline_path: $_baseline_oid"
+    [ "$_baseline_type" = blob ] ||
+      die "baseline OID is not a blob for path $_baseline_path: $_baseline_oid"
+    _baseline_oid=$(git rev-parse --verify "$_baseline_oid^{blob}" 2>/dev/null) ||
+      die "cannot resolve baseline blob OID for path $_baseline_path: $_baseline_oid"
+
+    baseline_paths[${#baseline_paths[@]}]=$_baseline_path
+    baseline_oids[${#baseline_oids[@]}]=$_baseline_oid
+    _baseline_number=$((_baseline_number + 1))
+  done
+}
+
+baseline_mode() {
+  _baseline_mode_path=$1
+  _baseline_tree_entry=$(git ls-tree "$base_commit" -- ":(literal)$_baseline_mode_path") ||
+    die "cannot inspect HEAD for baseline path: $_baseline_mode_path"
+
+  if [ -n "$_baseline_tree_entry" ]; then
+    _baseline_tree_tail=${_baseline_tree_entry#* }
+    _baseline_tree_type=${_baseline_tree_tail%% *}
+    [ "$_baseline_tree_type" = blob ] ||
+      die "baseline path is not a file in HEAD: $_baseline_mode_path"
+    printf '%s\n' "${_baseline_tree_entry%% *}"
+  elif [ -L "$_baseline_mode_path" ]; then
+    printf '120000\n'
+  elif [ -f "$_baseline_mode_path" ]; then
+    if [ -x "$_baseline_mode_path" ]; then
+      printf '100755\n'
+    else
+      printf '100644\n'
+    fi
+  else
+    die "baseline path is not a file in HEAD or the worktree: $_baseline_mode_path"
+  fi
+}
+
+reset_isolated_path_to_head() {
+  _reset_path=$1
+  GIT_INDEX_FILE=$alternate_index git update-index --force-remove -- "$_reset_path" ||
+    die "cannot reset isolated Git index for baseline path: $_reset_path"
+  : > "$index_info" || die 'cannot prepare baseline index update'
+  git ls-tree -r -z "$base_commit" -- ":(literal)$_reset_path" > "$index_info" ||
+    die "cannot read HEAD entry for baseline path: $_reset_path"
+  GIT_INDEX_FILE=$alternate_index git update-index -z --index-info < "$index_info" ||
+    die "cannot restore HEAD entry for baseline path: $_reset_path"
+}
+
+apply_baseline_exclusions() {
+  [ "${#baseline_paths[@]}" -gt 0 ] || return 0
+
+  baseline_index=$temp_dir/baseline-index
+  baseline_patch=$temp_dir/baseline.patch
+  GIT_INDEX_FILE=$baseline_index git read-tree "$base_commit" ||
+    die 'cannot initialize baseline Git index'
+
+  _baseline_number=0
+  while [ "$_baseline_number" -lt "${#baseline_paths[@]}" ]; do
+    _baseline_path=${baseline_paths[$_baseline_number]}
+    _baseline_oid=${baseline_oids[$_baseline_number]}
+    _baseline_mode=$(baseline_mode "$_baseline_path") || exit 1
+
+    GIT_INDEX_FILE=$baseline_index git update-index --add --cacheinfo \
+      "$_baseline_mode" "$_baseline_oid" "$_baseline_path" ||
+      die "cannot prepare baseline blob for path: $_baseline_path"
+    if ! GIT_INDEX_FILE=$baseline_index git diff --binary --no-ext-diff --no-textconv \
+      -- ":(literal)$_baseline_path" > "$baseline_patch"; then
+      die "cannot diff baseline blob against the worktree for path: $_baseline_path"
+    fi
+
+    reset_isolated_path_to_head "$_baseline_path"
+    if [ -s "$baseline_patch" ]; then
+      if ! GIT_INDEX_FILE=$alternate_index git apply --cached --check --whitespace=nowarn \
+        "$baseline_patch"; then
+        die "baseline changes do not apply cleanly to HEAD for path: $_baseline_path"
+      fi
+      GIT_INDEX_FILE=$alternate_index git apply --cached --whitespace=nowarn "$baseline_patch" ||
+        die "cannot apply baseline changes to HEAD for path: $_baseline_path"
+    fi
+
+    _baseline_number=$((_baseline_number + 1))
+  done
+}
+
 build_isolated_index() {
   collect_head_paths
   collect_worktree_paths
@@ -174,6 +293,8 @@ build_isolated_index() {
     GIT_INDEX_FILE=$alternate_index git add -- "${worktree_paths[@]}" ||
       die 'cannot add working-tree paths to isolated Git index'
   fi
+
+  apply_baseline_exclusions
 
   while IFS= read -r -d '' _resolved_path; do
     append_unique_resolved_path "$_resolved_path"
@@ -264,6 +385,9 @@ shift
 
 diff_mode=summary
 commit_args=()
+baseline_specs=()
+baseline_paths=()
+baseline_oids=()
 input_paths=()
 head_paths=()
 worktree_paths=()
@@ -273,6 +397,8 @@ base_commit=
 temp_dir=
 alternate_index=
 index_info=
+baseline_index=
+baseline_patch=
 shared_index=
 shared_index_lock=
 shared_lock_owned=false
@@ -323,6 +449,28 @@ case "$command_name" in
           commit_args[${#commit_args[@]}]=$1
           shift
           ;;
+        --exclude-baseline)
+          [ "$#" -ge 2 ] || {
+            usage
+            die '--exclude-baseline requires <path>=<oid>'
+          }
+          _baseline_spec=$2
+          case "$_baseline_spec" in
+            *=*) ;;
+            *)
+              usage
+              die '--exclude-baseline requires <path>=<oid>'
+              ;;
+          esac
+          _baseline_path=${_baseline_spec%=*}
+          _baseline_oid=${_baseline_spec##*=}
+          [ -n "$_baseline_path" ] && [ -n "$_baseline_oid" ] || {
+            usage
+            die '--exclude-baseline requires non-empty <path>=<oid>'
+          }
+          baseline_specs[${#baseline_specs[@]}]=$_baseline_spec
+          shift 2
+          ;;
         --)
           shift
           break
@@ -352,6 +500,8 @@ while [ "$#" -gt 0 ]; do
   input_paths[${#input_paths[@]}]=$_normalized_path
   shift
 done
+
+validate_baseline_exclusions
 
 if [ "$command_name" = commit ]; then
   _git_index_path=$(git rev-parse --git-path index 2>/dev/null) || die 'cannot resolve default Git index'
