@@ -1,7 +1,7 @@
 # Design Playground Template
 
 Use this template when the playground is about visual design decisions: components, layouts, spacing, color, typography,
-animation, responsive behavior.
+animation, or responsive behavior when explicitly requested.
 
 ## Layout
 
@@ -23,14 +23,14 @@ animation, responsive behavior.
 
 ## Control types by decision
 
-| Decision               | Control                              | Example                          |
-| ---------------------- | ------------------------------------ | -------------------------------- |
-| Sizes, spacing, radius | Slider                               | border-radius 0–24px             |
-| On/off features        | Toggle                               | show border, hover effect        |
-| Choosing from a set    | Dropdown                             | font-family, easing curve        |
-| Colors                 | Hue + saturation + lightness sliders | shadow color, accent             |
-| Layout structure       | Clickable cards                      | sidebar-left / top-nav / no-nav  |
-| Responsive behavior    | Viewport-width slider                | watch grid reflow at breakpoints |
+| Decision               | Control                              | Example                         |
+| ---------------------- | ------------------------------------ | ------------------------------- |
+| Sizes, spacing, radius | Slider                               | border-radius 0–24px            |
+| On/off features        | Toggle                               | show border, hover effect       |
+| Choosing from a set    | Dropdown                             | font-family, easing curve       |
+| Colors                 | Hue + saturation + lightness sliders | shadow color, accent            |
+| Layout structure       | Clickable cards                      | sidebar-left / top-nav / no-nav |
+| Desktop layout         | Width or density slider              | compare a fixed desktop canvas  |
 
 ## Preview rendering
 
