@@ -1,7 +1,7 @@
 ---
 argument-hint: "[task-to-handoff]"
 compatibility:
-  Requires Git, local file-write access, and macOS pbcopy/pbpaste. The generated launch command requires an
+  Requires Git, local file-write access, and macOS pbcopy, pbpaste, and trash. The generated launch command requires an
   authenticated Codex CLI.
 disable-model-invocation: true
 name: task-handoff
@@ -37,6 +37,9 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 - Ask about an unresolved choice only when it materially changes scope, safety, implementation, or verification.
 - If the requested task is already complete, report the evidence and finish as a no-op without creating a handoff.
 - Write only new plans under each plan owner's `.ai/task-handoffs/`. Never overwrite or update an existing handoff.
+- Make each plan instruct its implementing agent to move only that plan to Trash after all of its work is complete and
+  every required validation passes. The plan must remain in place when work or required validation is incomplete or
+  unsuccessful.
 - Treat the complete plan set and clipboard delivery as one operation: a failed preflight, write, validation, or
   clipboard copy must leave no partial plan set.
 
@@ -66,7 +69,7 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 
    - Reconfirm that every involved root and every plan owner is a canonical Git worktree root.
    - Reconfirm that every prospective target is new, has a valid unique filename, and belongs to its assigned owner.
-   - Confirm `/usr/bin/pbcopy` and `/usr/bin/pbpaste` are executable.
+   - Confirm `/usr/bin/pbcopy`, `/usr/bin/pbpaste`, and `/usr/bin/trash` are executable.
    - From each owner, verify its prospective repository-relative path is ignored:
 
          git -C '<canonical-owner-root>' check-ignore -q -- ".ai/task-handoffs/<PLAN_NAME>.md"
@@ -84,6 +87,12 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
    - targeted validation, acceptance scenarios, and any rollout or compatibility requirements;
    - assumptions already resolved from evidence or explicit user decisions.
 
+   End every plan with a `Handoff cleanup` section that identifies only that plan by its exact canonical absolute path.
+   Instruct the implementing agent to run `/usr/bin/trash '<canonical-plan-path>'` only after every success criterion is
+   satisfied and every required validation passes, then verify the original path no longer exists. Instruct it to keep
+   the plan when work remains, implementation or validation fails, or required validation is skipped, and never trash
+   the `.ai/task-handoffs/` directory or any other handoff.
+
    For every plan that spans repositories or coordinates with repository-specific plans, also include:
 
    - every canonical repository root, its role, and its exact expected write scope;
@@ -97,8 +106,10 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 
 7. Re-read every plan and verify that the complete set exists, every path remains ignored, every filename is valid and
    unique, owner mappings and related-plan references agree, and each plan contains enough scoped evidence and
-   validation for implementation without the old chat. On failure, remove only artifacts created by this run so no
-   partial plan set remains.
+   validation for implementation without the old chat. Verify that every `Handoff cleanup` section names its own exact
+   canonical absolute path, gates Trash on completed work and successful required validation, preserves the plan for
+   incomplete or unsuccessful work, and prohibits removing the directory or other handoffs. On failure, remove only
+   artifacts created by this run so no partial plan set remains.
 8. Produce exactly one shell-safe command per plan for the active shell using this exact shape and that plan's canonical
    owner root:
 
