@@ -87,7 +87,19 @@ tag. It does not judge importance, wording, or semantic category.
     - monorepo commit: `docs: release <package> <version>`;
     - single-package tag: follow observed `v<version>` or bare-semver facts;
     - monorepo tag: follow observed package tag facts, defaulting to `<package-dir>@<version>`.
-12. Do not push. Recommend the exact `git push origin --tags` command after success.
+12. Do not push. After success, recommend an exact `git push origin <tag>...` command containing only the tags created
+    by this execution; do not use `--tags`.
+13. Before the final report, inspect `.github/workflows/` for an active workflow that creates or publishes GitHub
+    releases from pushed tags. A filename such as `release.yml` is a hint, not proof. Use `$cli-gh` read-only to check
+    whether the repository has an established history of maintained GitHub releases. If it does, offer to create a
+    GitHub release for each new tag, pending the user's approval, according to these rules:
+    - One tag and release CI exists: do not offer manual release creation; the tag push should trigger CI.
+    - One tag and no release CI exists: offer to create the release with `$cli-gh`.
+    - Multiple tags will be pushed together: offer to create one release per tag with `$cli-gh` even when release CI
+      exists, because the multi-tag push is not expected to trigger that automation reliably.
+
+    Never create a GitHub release without the user's approval. If release history cannot be verified, report it as
+    unknown and do not offer the write.
 
 ## Safety and Completion
 
@@ -97,7 +109,8 @@ stable package set is known, and do not infer a tag convention when discovery re
 
 Dry-run completion requires a discovery-backed, agent-reviewed action preview with zero writes. Release completion
 requires validated manifests and stable changelogs, formatting, one commit and annotated tag per package in dependency
-order, and a report of created commits/tags and agent-decided skips.
+order, and a report of created commits/tags, agent-decided skips, the exact tag-push command, and any applicable GitHub
+release proposal.
 
 Use `### ⛔ Release stopped — working tree is not clean`, `### ⚠️ Confirm release plan`,
 `### 🔎 Release preview — no files, commits, or tags written`, or `### 🏁 Release complete` as applicable. Keep helper
