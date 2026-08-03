@@ -140,6 +140,40 @@ def test_claude_link_supports_modular_jsonc_source(tmp_path: Path) -> None:
     assert not link_hooks("claude", path).changed
 
 
+def test_link_preserves_existing_handler_order(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "UserPromptSubmit": [
+                        {"hooks": [{"type": "command", "command": "clipboard-hook"}]},
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "ai-coord hook claude",
+                                    "timeout": 5,
+                                }
+                            ]
+                        },
+                        {"hooks": [{"type": "command", "command": "notify-hook"}]},
+                    ]
+                }
+            }
+        )
+    )
+
+    link_hooks("claude", path)
+
+    groups = json.loads(path.read_text())["hooks"]["UserPromptSubmit"]
+    assert [group["hooks"][0]["command"] for group in groups] == [
+        "clipboard-hook",
+        "ai-coord hook claude",
+        "notify-hook",
+    ]
+
+
 def test_link_dry_run_and_force(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text('{"hooks": "bad"}\n')

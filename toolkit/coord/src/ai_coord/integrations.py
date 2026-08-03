@@ -102,9 +102,12 @@ def link_hooks(
         hooks = {}
         data["hooks"] = hooks
 
-    removed = _remove_owned_commands(hooks, client)
+    removed = _remove_stale_owned_commands(hooks, client, specs)
     added: list[str] = []
     for spec in specs:
+        if _spec_present(hooks.get(spec.event), spec):
+            added.append(spec.event)
+            continue
         groups = hooks.get(spec.event)
         if groups is None:
             groups = []
@@ -321,8 +324,11 @@ def _group(spec: HookSpec) -> dict[str, Any]:
     return group
 
 
-def _remove_owned_commands(hooks: dict[str, Any], client: str) -> int:
+def _remove_stale_owned_commands(
+    hooks: dict[str, Any], client: str, specs: tuple[HookSpec, ...]
+) -> int:
     removed_legacy = 0
+    preserved: set[HookSpec] = set()
     for event, groups in list(hooks.items()):
         if not isinstance(groups, list):
             continue
@@ -342,7 +348,17 @@ def _remove_owned_commands(hooks: dict[str, Any], client: str) -> int:
                         f"ai-coord hook {client}",
                         f"ai-coord waker {client}",
                     }:
-                        continue
+                        matching = next(
+                            (
+                                spec
+                                for spec in specs
+                                if spec.event == event and _handler_matches(group, handler, spec)
+                            ),
+                            None,
+                        )
+                        if matching is None or matching in preserved:
+                            continue
+                        preserved.add(matching)
                 handlers.append(handler)
             if handlers:
                 updated = dict(group)
@@ -367,34 +383,34 @@ def _spec_present(value: Any, spec: HookSpec) -> bool:
     for group in value:
         if not isinstance(group, dict):
             continue
-        if spec.matcher is not None and group.get("matcher") != spec.matcher:
-            continue
-        if spec.matcher is None and group.get("matcher") not in (None, "", "*"):
-            continue
         handlers = group.get("hooks")
         if not isinstance(handlers, list):
             continue
         for handler in handlers:
-            if not isinstance(handler, dict) or handler.get("type") != "command":
-                continue
-            command = handler.get("command")
-            if not isinstance(command, str) or command.strip() != spec.command:
-                continue
-            if spec.timeout is not None and handler.get("timeout") != spec.timeout:
-                continue
-            if (
-                spec.additional_context_limit is not None
-                and handler.get("additionalContextLimit") != spec.additional_context_limit
-            ):
-                continue
-            if spec.if_filter is not None and handler.get("if") != spec.if_filter:
-                continue
-            if spec.async_ is not None and handler.get("async") is not spec.async_:
-                continue
-            if (
-                spec.async_rewake is not None
-                and handler.get("asyncRewake") is not spec.async_rewake
-            ):
-                continue
-            return True
+            if isinstance(handler, dict) and _handler_matches(group, handler, spec):
+                return True
     return False
+
+
+def _handler_matches(group: dict[str, Any], handler: dict[str, Any], spec: HookSpec) -> bool:
+    if spec.matcher is not None and group.get("matcher") != spec.matcher:
+        return False
+    if spec.matcher is None and group.get("matcher") not in (None, "", "*"):
+        return False
+    if handler.get("type") != "command":
+        return False
+    command = handler.get("command")
+    if not isinstance(command, str) or command.strip() != spec.command:
+        return False
+    if spec.timeout is not None and handler.get("timeout") != spec.timeout:
+        return False
+    if (
+        spec.additional_context_limit is not None
+        and handler.get("additionalContextLimit") != spec.additional_context_limit
+    ):
+        return False
+    if spec.if_filter is not None and handler.get("if") != spec.if_filter:
+        return False
+    if spec.async_ is not None and handler.get("async") is not spec.async_:
+        return False
+    return spec.async_rewake is None or handler.get("asyncRewake") is spec.async_rewake
