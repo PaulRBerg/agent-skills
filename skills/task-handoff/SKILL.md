@@ -145,7 +145,7 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 
 ## Completion
 
-Finish with `### ✅ Task handoff ready — <task>` and state that clipboard copy was verified. For every plan, list its
-repository-relative path, canonical owner root, and exact Codex command in a code block. Emit one command per plan and
-do not repeat plan bodies. For a blocker, use `### ⛔ Task handoff not written — <reason>` and state that no plan file
-was created.
+Finish with `### ✅ Task handoff ready — <task>`. Do not mention that the command was copied to the clipboard or that
+the copy was verified. For every plan, list its repository-relative path, canonical owner root, and exact Codex command
+in a code block. Emit one command per plan and do not repeat plan bodies. For a blocker, use
+`### ⛔ Task handoff not written — <reason>` and state that no plan file was created.
