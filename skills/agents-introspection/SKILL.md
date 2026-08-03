@@ -61,6 +61,11 @@ miner/tool output; do not narrate routine transcript reads.
 
 ## Evidence Contract
 
+Evaluate historical behavior against the AGENTS.md and skill instructions available to that session when recoverable. Do
+not infer that an agent ignored or misapplied a rule solely because the current source tree or installed copies under
+`~/.agents/skills` or `~/.claude/skills` contain it. If the transcript does not establish the historical version or
+availability, mark it unknown and qualify the attribution.
+
 For each relevant session, record only concise, auditable observations about:
 
 - ignored or misread AGENTS.md or skill instructions;
