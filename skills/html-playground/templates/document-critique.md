@@ -54,7 +54,7 @@ const suggestions = [
     lineRef: "Line 3",
     targetText: "description: Creates interactive...",
     suggestion: "The description is too long. Consider shortening.",
-    category: "clarity",  // clarity, completeness, performance, accessibility, ux
+    category: "clarity",  // clarity, completeness, performance, ux
     status: "pending",    // pending, approved, rejected
     userComment: ""
   },
@@ -163,7 +163,7 @@ When building a critique playground for a specific document:
 2. Analyze and generate suggestions with:
    - Specific line references
    - Clear, actionable suggestion text
-   - Category tags (clarity, completeness, performance, accessibility, ux)
+   - Category tags (clarity, completeness, performance, ux)
 3. Embed both the document content and suggestions array in the HTML
 
 ## Example use cases

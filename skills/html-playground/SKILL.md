@@ -43,8 +43,7 @@ Use these when product context does not indicate otherwise:
 - No Apply button: relevant changes render immediately.
 - The prompt is actionable without seeing the playground and is not a raw state dump.
 - Copy has visible transient feedback and a usable fallback when the Clipboard API fails.
-- Standardize copy microcopy as `Copy prompt`, then `Copied`; on failure use `Copy failed — select the prompt below` in
-  an `aria-live="polite"` region.
+- Standardize copy microcopy as `Copy prompt`, then `Copied`; on failure show `Copy failed — select the prompt below`.
 - Presets update controls, preview, and prompt consistently.
 - Do not add controls that do not affect either the preview or the generated prompt.
 

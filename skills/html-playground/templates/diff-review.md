@@ -188,7 +188,7 @@ body.dark .diff-line.deletion {
 ## Interactive features
 
 - **Hover hint:** Show "Click to comment" tooltip on line hover
-- **Comment indicator:** Visible `Commented · <count>` badge with a matching accessible name
+- **Comment indicator:** Visible `Commented · <count>` badge
 - **Toast notification:** "Copied to clipboard!" feedback on copy
 - **Edit existing:** Allow editing previously saved comments
 
