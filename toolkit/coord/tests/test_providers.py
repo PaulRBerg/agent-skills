@@ -132,12 +132,13 @@ class _Process:
         return self.started_at
 
 
-def test_process_liveness_rejects_missing_reused_and_zombie_processes(
+def test_process_liveness_rejects_missing_reused_zombie_and_dead_processes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     processes = {
         102: _Process(102, started_at=2.0),
         103: _Process(103, status=psutil.STATUS_ZOMBIE),
+        104: _Process(104, status=psutil.STATUS_DEAD),
     }
 
     def process(pid: int) -> _Process:
@@ -150,6 +151,7 @@ def test_process_liveness_rejects_missing_reused_and_zombie_processes(
     assert not providers._process_exists(ProcessReference(101, 1.0))
     assert not providers._process_exists(ProcessReference(102, 1.0))
     assert not providers._process_exists(ProcessReference(103, 1.0))
+    assert not providers._process_exists(ProcessReference(104, 1.0))
 
 
 def test_process_liveness_is_conservative_when_details_are_unavailable(
@@ -200,6 +202,15 @@ def test_normalize_claude_sessions_reports_dropped_unknown_and_process_fingerpri
     assert [row["state"] for row in rows] == ["working", "unknown"]
     assert rows[0]["pid"] == 42
     assert rows[0]["process_started_at"] == 42.5
+
+
+def test_normalize_claude_sessions_drops_unusable_working_directory() -> None:
+    rows, dropped = normalize_claude_sessions(
+        [{"id": "invalid-cwd", "cwd": "bad\0path", "state": "working", "startedAt": 1}]
+    )
+
+    assert rows == []
+    assert dropped == 1
 
 
 @settings(

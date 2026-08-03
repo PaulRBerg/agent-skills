@@ -171,7 +171,7 @@ def _dead_codex_sessions(store: Store, current: float) -> tuple[Identity, ...]:
 def _process_exists(reference: ProcessReference) -> bool:
     try:
         process = psutil.Process(reference.pid)
-        if process.status() == psutil.STATUS_ZOMBIE:
+        if process.status() in {psutil.STATUS_DEAD, psutil.STATUS_ZOMBIE}:
             return False
         if reference.started_at is not None:
             return process.create_time() == reference.started_at
@@ -207,13 +207,17 @@ def normalize_claude_sessions(payload: Any) -> tuple[list[dict[str, Any]], int]:
         if started_at is None:
             dropped += 1
             continue
+        try:
+            root = git_root(Path(cwd))
+        except ValueError:
+            dropped += 1
+            continue
         pid = raw.get("pid")
         if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
             pid = None
         process_started_at = process_reference(pid).started_at if pid is not None else None
         name = raw.get("name") if isinstance(raw.get("name"), str) else None
         waiting = raw.get("waitingFor") if isinstance(raw.get("waitingFor"), str) else None
-        root = git_root(Path(cwd))
         rows.append(
             {
                 "session_id": session_id,
