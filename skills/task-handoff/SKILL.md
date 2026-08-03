@@ -1,7 +1,8 @@
 ---
 argument-hint: "[task-to-handoff]"
 compatibility:
-  Requires Git and local file-write access. The generated launch command requires an authenticated Codex CLI.
+  Requires Git, local file-write access, and macOS pbcopy/pbpaste. The generated launch command requires an
+  authenticated Codex CLI.
 disable-model-invocation: true
 name: task-handoff
 user-invocable: true
@@ -36,7 +37,8 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 - Ask about an unresolved choice only when it materially changes scope, safety, implementation, or verification.
 - If the requested task is already complete, report the evidence and finish as a no-op without creating a handoff.
 - Write only new plans under each plan owner's `.ai/task-handoffs/`. Never overwrite or update an existing handoff.
-- Treat the complete plan set as one operation: a failed preflight or write must leave no partial plan set.
+- Treat the complete plan set and clipboard delivery as one operation: a failed preflight, write, validation, or
+  clipboard copy must leave no partial plan set.
 
 ## Workflow
 
@@ -64,6 +66,7 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
 
    - Reconfirm that every involved root and every plan owner is a canonical Git worktree root.
    - Reconfirm that every prospective target is new, has a valid unique filename, and belongs to its assigned owner.
+   - Confirm `/usr/bin/pbcopy` and `/usr/bin/pbpaste` are executable.
    - From each owner, verify its prospective repository-relative path is ignored:
 
          git -C '<canonical-owner-root>' check-ignore -q -- ".ai/task-handoffs/<PLAN_NAME>.md"
@@ -105,8 +108,16 @@ set, or plan placement is materially ambiguous, ask for the missing decision and
    `--add-dir`, `exec`, model, reasoning-effort, approval, sandbox, profile, search, or display flags. Quote the
    repository path and prompt without exposing them to shell interpolation.
 
+9. Build the clipboard payload from the exact command strings that will appear in the completion report, preserving plan
+   order. For one plan, the payload is exactly its command. For multiple plans, separate commands with one newline. Do
+   not include code fences or a trailing newline. Copy the payload to the macOS clipboard with `/usr/bin/pbcopy` without
+   executing any generated command. Read it back with `/usr/bin/pbpaste` and verify the bytes match exactly. If the copy
+   or verification fails, remove only plans and now-empty directories created by this run, then report that no plan set
+   was written.
+
 ## Completion
 
-Finish with `### ✅ Task handoff ready — <task>`. For every plan, list its repository-relative path, canonical owner
-root, and exact Codex command in a code block. Emit one command per plan and do not repeat plan bodies. For a blocker,
-use `### ⛔ Task handoff not written — <reason>` and state that no plan file was created.
+Finish with `### ✅ Task handoff ready — <task>` and state that clipboard copy was verified. For every plan, list its
+repository-relative path, canonical owner root, and exact Codex command in a code block. Emit one command per plan and
+do not repeat plan bodies. For a blocker, use `### ⛔ Task handoff not written — <reason>` and state that no plan file
+was created.
