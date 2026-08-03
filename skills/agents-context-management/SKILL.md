@@ -38,6 +38,14 @@ before complex, long-running, multi-tool, or orchestration-heavy context work be
   deliberately; ground progress claims in tool evidence; and make long-run verification and scaffolding explicit when
   needed.
 
+## Choose the representation
+
+- Preserve goals, decision rules, authority, exceptions, and semantic success criteria as prose.
+- When existing scripts, recipes, schemas, or configuration already enforce mechanics, document only routing, inputs,
+  side effects, outputs, failure signals, and completion evidence.
+- Documentation-only authority does not permit creating or changing helpers or schemas. When none exists, retain
+  accurate prose and report the extraction opportunity instead of deleting guidance or expanding scope.
+
 ## Choose a Workflow
 
 Choose exactly one workflow and read only its reference.

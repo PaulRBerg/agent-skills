@@ -163,25 +163,24 @@ guess — the spec evolves.
 - Confirm `<scope>` is the invocation working directory and is not a home-level or global skill directory.
 - Stop if `<scope>/.agents/skills/<name>/` or `<scope>/.claude/skills/<name>` already exists.
 
-### 3. Define the Contract and Layout
+### 3. Read the Authoring Guide and Define the Contract and Layout
 
-Before writing anything, define the observable outcome, invariants, preferred defaults, authority, routing, stop
-conditions, and completion evidence. Then decide what belongs where:
+Read [references/writing-great-skills.md](references/writing-great-skills.md) before choosing the contract or layout. It
+defines the predictability levers and the prose-versus-code-or-schema decision.
+
+Then define the observable outcome, invariants, preferred defaults, authority, routing, stop conditions, and completion
+evidence. Decide what belongs where:
 
 - Will the workflow invoke helper code? → Prefer `scripts/<name>.ts` run with `bun run`; use `scripts/<name>.py` through
   `uv run` when Python is a better fit.
-- Schemas, long examples, variant guides, domain knowledge? → `references/<topic>.md`
+- Machine-consumed schema with a real validator? → Bundle both and document the validation route.
+- Reference-only schema documentation, long examples, variant guides, or domain knowledge? → `references/<topic>.md`
 - Templates or files the skill writes into the user's output? → `assets/`
 - None of the above? → ship just `SKILL.md`.
 
 Sketch the directory tree first, then create only the subdirectories the layout actually needs.
 
 ### 4. Create the Skill
-
-Before writing the frontmatter `description` or any body prose, read
-[references/writing-great-skills.md](references/writing-great-skills.md) — the predictability levers that shape every
-wording choice: invocation loads, one-trigger-per-branch descriptions, leading words, completion criteria, and the
-no-op/pruning tests.
 
 ```bash
 mkdir -p "<scope>/.agents/skills/<name>/agents"

@@ -108,6 +108,22 @@ is done. Two properties make it a lever:
 
 The strongest criteria are both checkable and exhaustive.
 
+## Choose prose, code, or schema
+
+Use prose for intent, authority, contextual routing, evidence judgment, exceptions, and semantic completion criteria.
+Use code for bounded deterministic computation, parsing, exact formatting or quoting, repeated validation, aggregation,
+and recovery behavior. Use a schema when correctness is a closed structural shape—required fields, types, enums, and
+relationships—and pair it with an actual validator; keep meaning and permissions in prose.
+
+Prefer one deep helper with a small interface over scripts that mirror individual prose steps. Keep the caller-visible
+invariant in prose while code enforces it; do not duplicate the implementation algorithm. Describe the hybrid handoff:
+prose selects and judges, code performs the bounded mechanical stage, and a compact result returns control to prose.
+
+A script saves tokens only when its interface is documented, normal runs do not read its source, and stdout is compact.
+Measure correctness, total tokens, retries, and maintenance on representative tasks. Keep a reliable one-shot operation
+in prose or existing tools; extraction is justified by determinism, repetition, exactness, or nontrivial failure
+handling—not line count alone.
+
 ## Leading words
 
 A **leading word** is a compact concept already living in the model's pretraining that the agent thinks with while
