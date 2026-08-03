@@ -29,9 +29,13 @@ LITERAL_PATHS = st.lists(PATH_SEGMENTS, min_size=1, max_size=5).map("/".join)
 @example(text=" a\n b\x00c ", limit=6)
 @example(text="abcdefgh", limit=5)
 @given(text=st.text(), limit=st.integers(min_value=1, max_value=240))
-def test_sanitize_collapses_printable_text_idempotently_within_limit(text: str, limit: int) -> None:
+def test_sanitize_matches_bounded_printable_text_model(text: str, limit: int) -> None:
     result = sanitize(text, limit)
+    printable = "".join(character if character.isprintable() else " " for character in text)
+    collapsed = " ".join(printable.split())
+    expected = collapsed[: limit - 1].rstrip() + "…" if len(collapsed) > limit else collapsed
 
+    assert result == expected
     assert len(result) <= limit
     assert all(character.isprintable() for character in result)
     assert result == " ".join(result.split())
@@ -42,7 +46,11 @@ def test_sanitize_collapses_printable_text_idempotently_within_limit(text: str, 
 @example(left=".", right="src/app.py")
 @given(left=LITERAL_PATHS | st.just("."), right=LITERAL_PATHS | st.just("."))
 def test_literal_scope_overlap_is_symmetric(left: str, right: str) -> None:
-    assert paths_overlap(left, right) == paths_overlap(right, left)
+    overlap = paths_overlap(left, right)
+
+    assert overlap == paths_overlap(right, left)
+    if left == "." or right == ".":
+        assert overlap
 
 
 @settings(max_examples=100)

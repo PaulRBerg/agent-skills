@@ -36,7 +36,7 @@ def _claude_record(draw: st.DrawFn) -> tuple[dict[str, object], dict[str, object
         )
         return raw, None, 1
     if kind == "terminal":
-        raw["state"] = draw(st.sampled_from(tuple(providers.CLAUDE_TERMINAL_STATES)))
+        raw["state"] = draw(st.sampled_from(tuple(sorted(providers.CLAUDE_TERMINAL_STATES))))
         return raw, None, 0
     state = draw(st.sampled_from((*providers.CLAUDE_LIVE_STATES, "novel")))
     raw["state"] = state
@@ -46,8 +46,14 @@ def _claude_record(draw: st.DrawFn) -> tuple[dict[str, object], dict[str, object
         {
             "session_id": session_id,
             "cwd": cwd,
+            "repo_root": cwd,
             "state": providers.CLAUDE_LIVE_STATES.get(state, "unknown"),
+            "name": None,
+            "waiting_for": None,
             "pid": normalized_pid,
+            "process_started_at": (
+                float(normalized_pid) + 0.5 if normalized_pid is not None else None
+            ),
             "started_at": float(timestamp),
         },
         0,
@@ -234,10 +240,4 @@ def test_normalize_claude_sessions_matches_generated_record_model(
     rows, dropped = normalize_claude_sessions(payload)
 
     assert dropped == sum(invalid for _, _, invalid in records)
-    assert len(rows) == len(expected_rows)
-    for row, expected in zip(rows, expected_rows, strict=True):
-        assert {key: row[key] for key in expected} == expected
-        expected_pid = expected["pid"]
-        assert row["process_started_at"] == (
-            float(expected_pid) + 0.5 if isinstance(expected_pid, int) else None
-        )
+    assert rows == expected_rows

@@ -276,6 +276,7 @@ def test_unknown_hook_event_does_not_create_immortal_session(tmp_path: Path) -> 
 def test_arbitrary_hook_payloads_fail_open_without_leaking_private_fields(
     tmp_path: Path,
     git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
     client: str,
     event: object,
     session: object,
@@ -283,6 +284,7 @@ def test_arbitrary_hook_payloads_fail_open_without_leaking_private_fields(
     extras: dict[str, object],
 ) -> None:
     case = _isolated_hook_case(tmp_path)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(case / "claude"))
     store = Store(case / "state.db")
     coordinator = Coordinator(store, StaticInventory())
     payload = {

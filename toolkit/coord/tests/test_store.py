@@ -48,6 +48,17 @@ def _downgrade_fixture(path: Path, version: int) -> None:
         ) VALUES ('codex', 'preserved', '/repo', '/repo', 'working', 42, 'fixture', 10, 20)
         """
     )
+    connection.execute(
+        """
+        INSERT INTO messages(
+            id, sender_client, sender_session_id, recipient_client,
+            recipient_session_id, repo_root, text, created_at
+        ) VALUES (
+            'preserved-message', 'claude', 'sender', 'codex',
+            'preserved', '/repo', 'preserved text', 15
+        )
+        """
+    )
     connection.commit()
     connection.close()
 
@@ -64,6 +75,7 @@ def test_store_migrates_schema_v1_to_v3(tmp_path: Path) -> None:
         for row in store.connection.execute("PRAGMA table_info(messages)").fetchall()
     }
     session = store.session(Identity("codex", "preserved"))
+    inbox = store.inbox(Identity("codex", "preserved"))
     assert version == 3
     assert "notified_at" in message_columns
     assert session is not None
@@ -71,6 +83,9 @@ def test_store_migrates_schema_v1_to_v3(tmp_path: Path) -> None:
     assert session["process_started_at"] is None
     assert session["started_at"] == 10
     assert session["last_seen"] == 20
+    assert [(row["text"], row["created_at"], row["notified_at"]) for row in inbox] == [
+        ("preserved text", 15, None)
+    ]
 
 
 def test_store_migrates_schema_v2_to_v3(tmp_path: Path) -> None:
@@ -81,10 +96,12 @@ def test_store_migrates_schema_v2_to_v3(tmp_path: Path) -> None:
 
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
     session = store.session(Identity("codex", "preserved"))
+    inbox = store.inbox(Identity("codex", "preserved"))
     assert version == 3
     assert session is not None
     assert session["pid"] == 42
     assert session["process_started_at"] is None
+    assert [row["text"] for row in inbox] == ["preserved text"]
 
 
 def test_store_permissions_and_message_cap(tmp_path: Path) -> None:
