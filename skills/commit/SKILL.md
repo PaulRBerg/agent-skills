@@ -101,13 +101,13 @@ include only ones the commit actually closes.
 **Agent-Session attribution** — run once, independent of the diff:
 
 ```bash
-~/.codex/hooks/AgentSessionStatus/agent_session_status.py identity
+ai-coord trailer
 ```
 
-When the script exists and this exits `0`, parse `client=<claude|codex> session=<id>` from stdout and append an
-`Agent-Session: <client>/<id>` trailer alongside any `Closes #N` trailers. When the script is missing or `identity`
-exits nonzero, skip silently — the catalog skill must keep working on machines without it. This makes committed changes
-attributable to an agent session (`git log` shows which session authored what).
+When the CLI exists and this exits `0`, append its `Agent-Session: <client>/<id>` output alongside any `Closes #N`
+trailers. When the CLI is missing or the command exits nonzero, skip silently — the catalog skill must keep working on
+machines without it. This makes committed changes attributable to an agent session (`git log` shows which session
+authored what).
 
 ### 4) Commit
 
