@@ -83,7 +83,7 @@ def test_waker_cli_is_silent_unless_a_queued_claim_wakes(
     monkeypatch.setenv("AI_COORD_CLIENT", "claude")
     monkeypatch.setenv("AI_COORD_SESSION_ID", "active-session")
     assert coordinator.start("active", ("docs",), cwd=git_repo).kind == "READY"
-    payload = {"hook_event_name": "PostToolUse", "session_id": "active-session"}
+    payload = {"hook_event_name": "PostToolUseFailure", "session_id": "active-session"}
     inactive = runner.invoke(cli_module.cli, ["waker", "claude"], input=json.dumps(payload))
     assert inactive.exit_code == 0
     assert inactive.output == ""

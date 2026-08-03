@@ -49,7 +49,7 @@ CLAUDE_HOOK_SPECS = (
     HookSpec("PostToolUse", "ai-coord hook claude", matcher="ExitPlanMode", timeout=5),
     HookSpec("PostToolBatch", "ai-coord hook claude", timeout=5),
     HookSpec(
-        "PostToolUse",
+        "PostToolUseFailure",
         "ai-coord waker claude",
         matcher="Bash",
         timeout=3600,

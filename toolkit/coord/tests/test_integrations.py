@@ -92,7 +92,7 @@ def test_claude_link_wires_nudge_and_async_rewake_contract(tmp_path: Path) -> No
     ]
     waker = next(
         group
-        for group in hooks["PostToolUse"]
+        for group in hooks["PostToolUseFailure"]
         if group["hooks"][0]["command"] == "ai-coord waker claude"
     )
     assert waker == {

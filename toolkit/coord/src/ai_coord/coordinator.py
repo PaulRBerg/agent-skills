@@ -324,7 +324,7 @@ class Coordinator:
     def waker(self, client: str, payload: dict[str, Any]) -> Outcome | None:
         """Wait on a queued Claude claim for an asyncRewake hook."""
         event = payload.get("hook_event_name")
-        if client != "claude" or event != "PostToolUse":
+        if client != "claude" or event != "PostToolUseFailure":
             return None
         try:
             session_id = payload.get("session_id")
