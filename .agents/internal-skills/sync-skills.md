@@ -45,15 +45,22 @@ Files:
 - `skills/codex-handoff/SKILL.md`
 - `skills/claude-handoff/SKILL.md`
 
-Both skills plan in Claude Code Plan mode and delegate implementation to subagents; only the agent runtime differs
-(Codex CLI runner vs Claude Code Agent tool). Treat these shared blocks as in scope and keep them semantically
+Both skills delegate pre-plan research and approved implementation from Claude Code Plan mode; only the agent runtime
+differs (Codex CLI runner vs Claude Code Agent tool). Treat these shared blocks as in scope and keep them semantically
 identical, adjusted only for the agent noun and runtime:
 
-- Contract bullets: the Plan-mode gate, Claude's ownership of planning and orchestration, the no-redesign rule for
-  agents, the smallest-effective-team and five-agent limits, and Claude's implementation work being limited to
-  orchestration, integrity checks, failure handling, and the conditional polish pass.
+- Contract bullets: the Plan-mode gate, Claude's ownership of decisions, the final plan, and orchestration; the
+  no-redesign rule for implementation agents; the smallest-effective-team and five-implementation-agent limits; and
+  Claude's implementation work being limited to orchestration, integrity checks, failure handling, and the conditional
+  polish pass.
+- Pre-plan research delegation: trigger it for uncertain scope, multiple or unfamiliar subsystems, or materially slower
+  serial evidence gathering; keep zero research agents as the default; let Claude alone decide whether it runs without
+  asking the user; require research agents to stay read-only, gather evidence, and return findings rather than decisions
+  or plans; limit the separate research budget to three agents (`R1` through `R3`); feed findings into the final plan;
+  and include the optional plan `Research:` traceability line.
 - Strategy selection guidance: sequential vs parallel vs hybrid criteria, disjoint-write-scope requirement, wave
-  semantics, the slowest-agent note, and the whole-handoff five-agent limit with stable IDs and dependencies.
+  semantics, the slowest-agent note, and the whole-handoff five-implementation-agent limit with stable IDs and
+  dependencies.
 - The single-validation-owner rule: aggregate checks run once; every other agent runs only the narrowest checks proving
   its own edits; aggregate-check failures confined to files outside every agent's scope are attributed to unrelated
   concurrent work, not treated as blockers.
@@ -66,6 +73,8 @@ identical, adjusted only for the agent noun and runtime:
 Treat these as out of scope unless the request explicitly names them:
 
 - Launch mechanics: `run-codex-handoff.sh` and its artifacts vs Agent-tool calls.
+- Research mechanics: codex-handoff's `--read-only` runner, per-agent artifacts, and research result schema vs
+  claude-handoff's Explore subagent type and native result flow.
 - Codex-only content: effort and timeout selection, progress streams, Monitor guidance, sentinel handling, and Codex
   command conventions.
 - Each skill's model selection table and its rules about escalating or re-running a failed agent on another model. Both
