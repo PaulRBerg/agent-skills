@@ -65,8 +65,10 @@ identical, adjusted only for the agent noun and runtime:
   its own edits; aggregate-check failures confined to files outside every agent's scope are attributed to unrelated
   concurrent work, not treated as blockers.
 - The `$code-polish` trigger list, including "file count alone is not a trigger".
+- Before-launch session-claim guidance: the orchestrator holds only pathless intent over delegated write scopes, and the
+  delegated agents treat the orchestrating session's presence as authorization for their assigned work.
 - Platform-agnostic agent prompt requirements: outcome plus brief, exact write scope and dirty-work boundaries,
-  validation assignment, authority boundary, stopping rule, and reporting requirement.
+  validation assignment, authority boundary, delegation context, stopping rule, and reporting requirement.
 - Completion rules: success verification, dependent gating on failure, changed-files union dedupe, polish invocation and
   skip conditions, and cross-repository `$commit` behavior.
 

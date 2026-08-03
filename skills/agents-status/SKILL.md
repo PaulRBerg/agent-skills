@@ -21,8 +21,8 @@ Do not inspect transcripts or call providers separately. If the CLI is missing, 
 <https://github.com/PaulRBerg/ai-coord>.
 
 Interpret exit `0` as complete coverage and `2` as usable partial coverage. A provider can remain `ok` while `Coverage`
-carries `[N dropped]` for malformed or unknown records; that is still incomplete coverage. On exit `64`, correct the
-invocation and retry once.
+carries `[N dropped]` for malformed or unknown records; that is still incomplete coverage. On exit `1`, report the CLI
+error and stop; do not retry.
 
 `ai-coord` applies the default Git-worktree scope, groups unlabeled rows, and summarizes sessions in other directories.
 Report its returned rows and notes without re-filtering them. Name unavailable providers. Treat incomplete coverage —
