@@ -84,7 +84,7 @@ def link_hooks(
     specs = hook_specs(client)
     if path.exists():
         try:
-            data = json.loads(path.read_text())
+            data = _read_config(path)
         except (OSError, UnicodeError, json.JSONDecodeError) as error:
             raise ValueError(f"could not parse {path}: {error}") from error
     else:
@@ -125,7 +125,7 @@ def link_hooks(
 
 def inspect_hooks(client: str, path: Path) -> HooksCheck:
     try:
-        data = json.loads(path.read_text())
+        data = _read_config(path)
     except FileNotFoundError:
         return HooksCheck(client, path, False, tuple(spec.event for spec in hook_specs(client)), ())
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
@@ -158,6 +158,16 @@ def default_hook_path(client: str) -> Path:
     raise ValueError(f"unsupported client: {client}")
 
 
+def default_link_path(client: str) -> Path:
+    """Return the authoritative config source that link should update."""
+    runtime_path = default_hook_path(client)
+    if client == "claude":
+        modular_source = runtime_path.parent / "settings" / "hooks.jsonc"
+        if modular_source.exists():
+            return modular_source
+    return runtime_path
+
+
 def iter_commands(value: Any) -> Iterator[str]:
     if isinstance(value, dict):
         command = value.get("command")
@@ -170,10 +180,97 @@ def iter_commands(value: Any) -> Iterator[str]:
             yield from iter_commands(nested)
 
 
+def _read_config(path: Path) -> Any:
+    text = path.read_text()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        if path.suffix.lower() != ".jsonc":
+            raise
+        return json.loads(_strip_jsonc(text))
+
+
+def _strip_jsonc(text: str) -> str:
+    without_comments: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        character = text[index]
+        if in_string:
+            without_comments.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            index += 1
+            continue
+        if character == '"':
+            in_string = True
+            without_comments.append(character)
+            index += 1
+            continue
+        next_character = text[index + 1] if index + 1 < len(text) else ""
+        if character == "/" and next_character == "/":
+            index += 2
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        if character == "/" and next_character == "*":
+            index += 2
+            while index + 1 < len(text) and text[index : index + 2] != "*/":
+                if text[index] in "\r\n":
+                    without_comments.append(text[index])
+                index += 1
+            index = min(index + 2, len(text))
+            continue
+        without_comments.append(character)
+        index += 1
+
+    uncommented = "".join(without_comments)
+    without_trailing_commas: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(uncommented):
+        character = uncommented[index]
+        if in_string:
+            without_trailing_commas.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            index += 1
+            continue
+        if character == '"':
+            in_string = True
+            without_trailing_commas.append(character)
+            index += 1
+            continue
+        if character == ",":
+            lookahead = index + 1
+            while lookahead < len(uncommented) and uncommented[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(uncommented) and uncommented[lookahead] in "}]":
+                index += 1
+                continue
+        without_trailing_commas.append(character)
+        index += 1
+    return "".join(without_trailing_commas)
+
+
 def _write_config(path: Path, data: dict[str, Any]) -> None:
     target = path.resolve(strict=False) if path.is_symlink() else path
     target.parent.mkdir(parents=True, exist_ok=True)
     mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o600
+    comments = _object_header_comments(target.read_text()) if target.exists() else ()
+    rendered = json.dumps(data, indent=2).splitlines()
+    if target.suffix.lower() == ".jsonc" and comments and rendered[0] == "{":
+        rendered[1:1] = comments
     descriptor, temporary_name = tempfile.mkstemp(
         dir=target.parent,
         prefix=f".{target.name}.",
@@ -182,13 +279,27 @@ def _write_config(path: Path, data: dict[str, Any]) -> None:
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-            file.write(json.dumps(data, indent=2) + "\n")
+            file.write("\n".join(rendered) + "\n")
             file.flush()
             os.fsync(file.fileno())
         temporary.chmod(mode)
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _object_header_comments(text: str) -> tuple[str, ...]:
+    lines = text.splitlines()
+    opening = next((index for index, line in enumerate(lines) if line.strip()), None)
+    if opening is None or lines[opening].strip() != "{":
+        return ()
+    comments: list[str] = []
+    for line in lines[opening + 1 :]:
+        if line.lstrip().startswith("//"):
+            comments.append(line)
+            continue
+        break
+    return tuple(comments)
 
 
 def _group(spec: HookSpec) -> dict[str, Any]:

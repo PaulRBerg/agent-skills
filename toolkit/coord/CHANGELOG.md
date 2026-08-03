@@ -5,6 +5,7 @@
 - Poll the SQLite generation counter for push-driven waits, with a slow full-refresh fallback.
 - Add counts-only mid-turn inbox nudges for Codex and Claude Code.
 - Wake blocked Claude Code sessions asynchronously and notify overlapping waiters on release.
+- Update modular Claude hook sources instead of overwriting generated settings output.
 - Upgrade the ledger one way to schema v2 to deduplicate inbox nudges.
 - Scope delegates and machine-wide notes correctly, and ignore invalid legacy-pattern claims in FIFO arbitration.
 - Reclaim claims from stale Codex sessions after their recorded process exits.

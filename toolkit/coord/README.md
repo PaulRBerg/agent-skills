@@ -27,6 +27,10 @@ ai-coord check
 hook commands. Use `--dry-run` to preview or `--path` when linking one client to a non-default settings file.
 `CODEX_HOME` and `CLAUDE_CONFIG_DIR` override the corresponding default configuration roots.
 
+When a Claude configuration uses the modular source `~/.claude/settings/hooks.jsonc`, `link` updates that file instead
+of the generated `settings.json`. Run the configuration repository's normal settings merge afterward so Claude Code
+receives the regenerated output.
+
 Codex requires interactive review whenever an exact hook definition changes. Open `/hooks` after linking and approve the
 `ai-coord hook codex` definition.
 

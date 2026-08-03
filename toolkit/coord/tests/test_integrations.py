@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_coord.integrations import default_hook_path, inspect_hooks, link_hooks
+from ai_coord.integrations import (
+    default_hook_path,
+    default_link_path,
+    inspect_hooks,
+    link_hooks,
+)
 
 
 def test_codex_link_preserves_unrelated_and_replaces_legacy(tmp_path: Path) -> None:
@@ -108,6 +113,33 @@ def test_claude_link_wires_nudge_and_async_rewake_contract(tmp_path: Path) -> No
     assert not inspect_hooks("claude", path).ok
 
 
+def test_claude_link_supports_modular_jsonc_source(tmp_path: Path) -> None:
+    path = tmp_path / "hooks.jsonc"
+    path.write_text(
+        """{
+  // Keep this source-file guidance.
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "description": "keep https://example.com/path//literal",
+  "hooks": {
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "clipboard-hook"}]},
+    ],
+  },
+}
+"""
+    )
+
+    result = link_hooks("claude", path)
+
+    assert result.changed
+    assert inspect_hooks("claude", path).ok
+    text = path.read_text()
+    assert "// Keep this source-file guidance." in text
+    assert "https://example.com/path//literal" in text
+    assert "clipboard-hook" in text
+    assert not link_hooks("claude", path).changed
+
+
 def test_link_dry_run_and_force(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text('{"hooks": "bad"}\n')
@@ -142,6 +174,13 @@ def test_default_hook_paths_honor_client_config_roots(
 
     assert default_hook_path("codex") == codex_home / "hooks.json"
     assert default_hook_path("claude") == claude_home / "settings.json"
+    assert default_link_path("codex") == codex_home / "hooks.json"
+    assert default_link_path("claude") == claude_home / "settings.json"
+
+    modular_source = claude_home / "settings" / "hooks.jsonc"
+    modular_source.parent.mkdir(parents=True)
+    modular_source.write_text("{}\n")
+    assert default_link_path("claude") == modular_source
 
 
 def test_link_write_is_atomic_and_preserves_mode(

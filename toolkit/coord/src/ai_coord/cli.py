@@ -11,9 +11,9 @@ import click
 
 from ai_coord import __version__
 from ai_coord.coordinator import Coordinator, snapshot_json
-from ai_coord.integrations import default_hook_path, inspect_hooks, link_hooks
+from ai_coord.integrations import default_hook_path, default_link_path, inspect_hooks, link_hooks
 from ai_coord.migration import migrate_legacy
-from ai_coord.store import Store
+from ai_coord.store import SCHEMA_VERSION, Store
 from ai_coord.util import age_label
 
 
@@ -235,7 +235,7 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
         for selected in clients:
             result = link_hooks(
                 selected,
-                path or default_hook_path(selected),
+                path or default_link_path(selected),
                 dry_run=dry_run,
                 force=force,
             )
@@ -267,7 +267,7 @@ def check(as_json: bool) -> None:
                 "component": "state",
                 "status": "ok",
                 "path": str(store.path),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
         paths = {selected: default_hook_path(selected) for selected in ("codex", "claude")}
