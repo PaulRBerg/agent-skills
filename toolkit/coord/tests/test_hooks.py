@@ -5,13 +5,21 @@ from pathlib import Path
 
 import pytest
 
+import ai_coord.coordinator as coordinator_module
 from ai_coord.coordinator import Coordinator
-from ai_coord.identity import Identity
+from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import StaticInventory
 from ai_coord.store import Store
 
 
-def test_codex_hook_lifecycle_and_delegate(tmp_path: Path, git_repo: Path) -> None:
+def test_codex_hook_lifecycle_and_delegate(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        coordinator_module,
+        "process_reference",
+        lambda pid: ProcessReference(pid, 123.5),
+    )
     store = Store(tmp_path / "state.db")
     coordinator = Coordinator(store, StaticInventory())
     base = {"session_id": "codex-1", "cwd": str(git_repo), "turn_id": "turn-1"}
@@ -23,6 +31,7 @@ def test_codex_hook_lifecycle_and_delegate(tmp_path: Path, git_repo: Path) -> No
     session = store.session(Identity("codex", "codex-1"))
     assert session is not None
     assert session["state"] == "working"
+    assert session["process_started_at"] == 123.5
 
     assert coordinator.ingest_hook("codex", {**base, "hook_event_name": "Stop"}) == "{}"
     session = store.session(Identity("codex", "codex-1"))

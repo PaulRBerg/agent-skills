@@ -11,10 +11,10 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
-from ai_coord.identity import Identity
+from ai_coord.identity import Identity, ProcessReference
 from ai_coord.util import new_id, now_ts, private_state_dir, sanitize
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 CODEX_IDLE_TTL = 4 * 60 * 60
 CODEX_ORPHAN_GRACE = 30 * 60
 MESSAGE_TTL = 48 * 60 * 60
@@ -33,6 +33,7 @@ _SCHEMA_STATEMENTS = (
         label TEXT,
         waiting_for TEXT,
         pid INTEGER,
+        process_started_at REAL,
         source TEXT NOT NULL,
         started_at REAL NOT NULL,
         last_seen REAL NOT NULL,
@@ -188,9 +189,13 @@ class Store:
                 for statement in _SCHEMA_STATEMENTS:
                     connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-            elif current == 1:
+            if current == 1:
                 connection.execute("ALTER TABLE messages ADD COLUMN notified_at REAL")
                 connection.execute("PRAGMA user_version = 2")
+                current = 2
+            if current == 2:
+                connection.execute("ALTER TABLE sessions ADD COLUMN process_started_at REAL")
+                connection.execute("PRAGMA user_version = 3")
 
     @contextlib.contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -206,43 +211,52 @@ class Store:
     def prune(
         self,
         current: float | None = None,
-        dead_codex_pids: Sequence[int] = (),
+        dead_codex_sessions: Sequence[Identity] = (),
     ) -> None:
         timestamp = now_ts() if current is None else current
-        dead_pids = tuple(dict.fromkeys(pid for pid in dead_codex_pids if pid > 0))
-        stale_conditions = ["(state = 'idle' AND last_seen < ?)"]
-        stale_parameters: list[float | int] = [timestamp - CODEX_IDLE_TTL]
-        if dead_pids:
-            placeholders = ",".join("?" for _ in dead_pids)
-            stale_conditions.append(f"(last_seen < ? AND pid IN ({placeholders}))")
-            stale_parameters.append(timestamp - CODEX_ORPHAN_GRACE)
-            stale_parameters.extend(dead_pids)
+        dead_keys = {
+            (identity.client, identity.session_id)
+            for identity in dead_codex_sessions
+            if identity.client == "codex"
+        }
         with self.transaction() as connection:
             connection.execute(
                 "DELETE FROM messages WHERE created_at < ?", (timestamp - MESSAGE_TTL,)
             )
             connection.execute("DELETE FROM notes WHERE created_at < ?", (timestamp - NOTE_TTL,))
             stale = connection.execute(
-                f"""
+                """
                 SELECT client, session_id FROM sessions
-                WHERE client = 'codex' AND ({" OR ".join(stale_conditions)})
+                WHERE client = 'codex' AND state = 'idle' AND last_seen < ?
                 """,
-                tuple(stale_parameters),
+                (timestamp - CODEX_IDLE_TTL,),
             ).fetchall()
-            for row in stale:
+            stale_keys = {(str(row["client"]), str(row["session_id"])) for row in stale} | dead_keys
+            removed = False
+            for client, session_id in stale_keys:
+                session = connection.execute(
+                    """
+                    SELECT 1 FROM sessions
+                    WHERE client = ? AND session_id = ? AND last_seen < ?
+                    """,
+                    (client, session_id, timestamp - CODEX_ORPHAN_GRACE),
+                ).fetchone()
+                if (client, session_id) in dead_keys and session is None:
+                    continue
                 connection.execute(
                     "DELETE FROM claims WHERE client = ? AND session_id = ?",
-                    (row["client"], row["session_id"]),
+                    (client, session_id),
                 )
                 connection.execute(
                     "DELETE FROM delegates WHERE parent_client = ? AND parent_session_id = ?",
-                    (row["client"], row["session_id"]),
+                    (client, session_id),
                 )
                 connection.execute(
                     "DELETE FROM sessions WHERE client = ? AND session_id = ?",
-                    (row["client"], row["session_id"]),
+                    (client, session_id),
                 )
-            if stale:
+                removed = True
+            if removed:
                 self._bump_generation(connection)
 
     def upsert_session(
@@ -257,6 +271,7 @@ class Store:
         label: str | None = None,
         waiting_for: str | None = None,
         pid: int | None = None,
+        process_started_at: float | None = None,
         started_at: float | None = None,
         current: float | None = None,
     ) -> None:
@@ -266,8 +281,8 @@ class Store:
                 """
                 INSERT INTO sessions(
                     client, session_id, cwd, repo_root, state, name, label, waiting_for,
-                    pid, source, started_at, last_seen
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    pid, process_started_at, source, started_at, last_seen
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(client, session_id) DO UPDATE SET
                     cwd = excluded.cwd,
                     repo_root = excluded.repo_root,
@@ -275,7 +290,13 @@ class Store:
                     name = COALESCE(excluded.name, sessions.name),
                     label = COALESCE(excluded.label, sessions.label),
                     waiting_for = excluded.waiting_for,
-                    pid = COALESCE(excluded.pid, sessions.pid),
+                    pid = CASE
+                        WHEN excluded.pid IS NULL THEN sessions.pid ELSE excluded.pid
+                    END,
+                    process_started_at = CASE
+                        WHEN excluded.pid IS NULL THEN sessions.process_started_at
+                        ELSE excluded.process_started_at
+                    END,
                     source = excluded.source,
                     last_seen = excluded.last_seen
                 """,
@@ -289,6 +310,7 @@ class Store:
                     label,
                     waiting_for,
                     pid,
+                    process_started_at,
                     source,
                     timestamp if started_at is None else started_at,
                     timestamp,
@@ -329,8 +351,8 @@ class Store:
                     """
                     INSERT INTO sessions(
                         client, session_id, cwd, repo_root, state, name, label, waiting_for,
-                        pid, source, started_at, last_seen
-                    ) VALUES ('claude', ?, ?, ?, ?, ?, NULL, ?, ?, 'observer', ?, ?)
+                        pid, process_started_at, source, started_at, last_seen
+                    ) VALUES ('claude', ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'observer', ?, ?)
                     ON CONFLICT(client, session_id) DO UPDATE SET
                         cwd = excluded.cwd,
                         repo_root = excluded.repo_root,
@@ -338,6 +360,7 @@ class Store:
                         name = excluded.name,
                         waiting_for = excluded.waiting_for,
                         pid = excluded.pid,
+                        process_started_at = excluded.process_started_at,
                         source = excluded.source,
                         last_seen = excluded.last_seen
                     """,
@@ -349,6 +372,7 @@ class Store:
                         row.get("name"),
                         row.get("waiting_for"),
                         row.get("pid"),
+                        row.get("process_started_at"),
                         row.get("started_at", current),
                         current,
                     ),
@@ -382,14 +406,31 @@ class Store:
         ).fetchone()
         return dict(row) if row else None
 
-    def identities_for_pids(self, pids: Sequence[int]) -> list[Identity]:
-        if not pids:
+    def identities_for_processes(self, references: Sequence[ProcessReference]) -> list[Identity]:
+        if not references:
             return []
-        placeholders = ",".join("?" for _ in pids)
-        rows = self.connection.execute(
-            f"SELECT client, session_id FROM sessions WHERE pid IN ({placeholders})",
-            tuple(pids),
-        ).fetchall()
+        exact = tuple(
+            (reference.pid, reference.started_at)
+            for reference in references
+            if reference.started_at is not None
+        )
+        rows: list[sqlite3.Row] = []
+        if exact:
+            predicate = " OR ".join("(pid = ? AND process_started_at = ?)" for _ in exact)
+            rows = self.connection.execute(
+                f"SELECT client, session_id FROM sessions WHERE {predicate}",
+                tuple(value for reference in exact for value in reference),
+            ).fetchall()
+        if not rows:
+            pids = tuple(dict.fromkeys(reference.pid for reference in references))
+            placeholders = ",".join("?" for _ in pids)
+            rows = self.connection.execute(
+                f"""
+                SELECT client, session_id FROM sessions
+                WHERE process_started_at IS NULL AND pid IN ({placeholders})
+                """,
+                pids,
+            ).fetchall()
         return [Identity(str(row["client"]), str(row["session_id"])) for row in rows]
 
     def claim(self, identity: Identity) -> dict[str, Any] | None:

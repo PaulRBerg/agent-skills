@@ -11,18 +11,18 @@ import pytest
 
 import ai_coord.coordinator as coordinator_module
 from ai_coord.coordinator import Coordinator
-from ai_coord.identity import Identity
+from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import InventoryResult, StaticInventory
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
 
 
 class _PruningInventory:
-    def __init__(self, current: float, dead_codex_pids: tuple[int, ...]) -> None:
+    def __init__(self, current: float, dead_codex_sessions: tuple[Identity, ...]) -> None:
         self.current = current
-        self.dead_codex_pids = dead_codex_pids
+        self.dead_codex_sessions = dead_codex_sessions
 
     def refresh(self, store: Store) -> InventoryResult:
-        store.prune(self.current, dead_codex_pids=self.dead_codex_pids)
+        store.prune(self.current, dead_codex_sessions=self.dead_codex_sessions)
         return StaticInventory().refresh(store)
 
 
@@ -69,6 +69,52 @@ def _start_worker(
         time.sleep(0.005)
     outcome = _coordinator(Path(db_path)).start(label, (scope,), cwd=Path(repo))
     return outcome.kind, outcome.code
+
+
+def test_direct_environment_identity_precedes_process_ancestry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "direct")
+    monkeypatch.setattr(
+        coordinator_module,
+        "process_ancestors",
+        lambda: pytest.fail("ancestry should not be inspected"),
+    )
+
+    assert coordinator.identity() == Identity("codex", "direct")
+
+
+def test_ancestry_identity_prefers_an_exact_fingerprint_over_legacy_pid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    for key in (
+        "AI_COORD_CLIENT",
+        "AI_COORD_SESSION_ID",
+        "CODEX_THREAD_ID",
+        "CLAUDE_CODE_SESSION_ID",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    legacy = Identity("codex", "legacy")
+    exact = Identity("codex", "exact")
+    for identity, started_at in ((legacy, None), (exact, 10.0)):
+        coordinator.store.upsert_session(
+            identity,
+            cwd="/repo",
+            repo_root="/repo",
+            state="working",
+            source="test",
+            pid=42,
+            process_started_at=started_at,
+        )
+    monkeypatch.setattr(
+        coordinator_module,
+        "process_ancestors",
+        lambda: (ProcessReference(42, 10.0),),
+    )
+
+    assert coordinator.identity() == exact
 
 
 def test_start_intent_and_idempotent_active(
@@ -185,7 +231,7 @@ def test_wait_rechecks_dirt_after_orphaned_holder_is_pruned(
     )
     if dirty:
         (git_repo / "src" / "app.py").write_text("changed = True\n")
-    coordinator.inventory = _PruningInventory(CODEX_ORPHAN_GRACE + 1, (101,))
+    coordinator.inventory = _PruningInventory(CODEX_ORPHAN_GRACE + 1, (holder,))
 
     outcome = coordinator.wait(timeout_seconds=1, poll_seconds=0.01)
 
@@ -376,13 +422,17 @@ def test_machine_notes_and_repo_scoped_delegates(
     coordinator = _coordinator(tmp_path / "state.db")
     first = Identity("codex", "first-parent")
     second = Identity("claude", "second-parent")
-    for identity, root in ((first, git_repo), (second, other_repo)):
+    for process_started_at, (identity, root) in enumerate(
+        ((first, git_repo), (second, other_repo)), start=1
+    ):
         coordinator.store.upsert_session(
             identity,
             cwd=str(root),
             repo_root=str(root),
             state="working",
             source="test",
+            pid=100 + process_started_at,
+            process_started_at=float(process_started_at),
         )
     coordinator.store.update_delegate(first, "first-child", "explorer", "active")
     coordinator.store.update_delegate(second, "second-child", "explorer", "active")
@@ -404,6 +454,8 @@ def test_machine_notes_and_repo_scoped_delegates(
         "first-child",
         "second-child",
     }
+    assert all("process_started_at" not in session for session in machine_snapshot.sessions)
+    assert machine_snapshot.schema_version == 1
     rendered = coordinator.render_status(machine_snapshot)
     assert f"{git_repo}  {first_note}" in rendered
     assert f"{other_repo}  {second_note}" in rendered

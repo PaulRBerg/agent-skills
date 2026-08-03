@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
 
-from ai_coord.identity import Identity
+from ai_coord.identity import Identity, ProcessReference
 from ai_coord.store import (
     CODEX_ORPHAN_GRACE,
     MAX_INBOX_MESSAGES,
@@ -16,50 +16,75 @@ from ai_coord.store import (
 )
 
 
-def test_new_store_uses_schema_v2(tmp_path: Path) -> None:
+def test_new_store_uses_schema_v3(tmp_path: Path) -> None:
     store = Store(tmp_path / "state.db")
 
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
-    columns = {
+    message_columns = {
         str(row["name"])
         for row in store.connection.execute("PRAGMA table_info(messages)").fetchall()
     }
+    session_columns = {
+        str(row["name"])
+        for row in store.connection.execute("PRAGMA table_info(sessions)").fetchall()
+    }
 
-    assert version == SCHEMA_VERSION == 2
-    assert "notified_at" in columns
+    assert version == SCHEMA_VERSION == 3
+    assert "notified_at" in message_columns
+    assert "process_started_at" in session_columns
 
 
-def test_store_migrates_schema_v1_to_v2(tmp_path: Path) -> None:
-    path = tmp_path / "state.db"
+def _downgrade_fixture(path: Path, version: int) -> None:
+    Store(path).close()
     connection = sqlite3.connect(path)
+    connection.execute("ALTER TABLE sessions DROP COLUMN process_started_at")
+    if version == 1:
+        connection.execute("ALTER TABLE messages DROP COLUMN notified_at")
+    connection.execute(f"PRAGMA user_version = {version}")
     connection.execute(
         """
-        CREATE TABLE messages (
-            id TEXT PRIMARY KEY,
-            sender_client TEXT NOT NULL,
-            sender_session_id TEXT NOT NULL,
-            recipient_client TEXT NOT NULL,
-            recipient_session_id TEXT NOT NULL,
-            repo_root TEXT,
-            text TEXT NOT NULL,
-            created_at REAL NOT NULL,
-            acknowledged_at REAL
-        )
+        INSERT INTO sessions(
+            client, session_id, cwd, repo_root, state, pid, source, started_at, last_seen
+        ) VALUES ('codex', 'preserved', '/repo', '/repo', 'working', 42, 'fixture', 10, 20)
         """
     )
-    connection.execute("PRAGMA user_version = 1")
     connection.commit()
     connection.close()
+
+
+def test_store_migrates_schema_v1_to_v3(tmp_path: Path) -> None:
+    path = tmp_path / "state.db"
+    _downgrade_fixture(path, 1)
 
     store = Store(path)
 
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
-    columns = {
+    message_columns = {
         str(row["name"])
         for row in store.connection.execute("PRAGMA table_info(messages)").fetchall()
     }
-    assert version == 2
-    assert "notified_at" in columns
+    session = store.session(Identity("codex", "preserved"))
+    assert version == 3
+    assert "notified_at" in message_columns
+    assert session is not None
+    assert session["pid"] == 42
+    assert session["process_started_at"] is None
+    assert session["started_at"] == 10
+    assert session["last_seen"] == 20
+
+
+def test_store_migrates_schema_v2_to_v3(tmp_path: Path) -> None:
+    path = tmp_path / "state.db"
+    _downgrade_fixture(path, 2)
+
+    store = Store(path)
+
+    version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
+    session = store.session(Identity("codex", "preserved"))
+    assert version == 3
+    assert session is not None
+    assert session["pid"] == 42
+    assert session["process_started_at"] is None
 
 
 def test_store_permissions_and_message_cap(tmp_path: Path) -> None:
@@ -121,7 +146,7 @@ def test_store_prunes_confirmed_orphans_after_grace(tmp_path: Path) -> None:
 
     store.prune(
         current=CODEX_ORPHAN_GRACE + 1,
-        dead_codex_pids=(101, 102),
+        dead_codex_sessions=(orphan, recent),
     )
 
     assert store.session(orphan) is None
@@ -130,6 +155,116 @@ def test_store_prunes_confirmed_orphans_after_grace(tmp_path: Path) -> None:
     assert store.session(recent) is not None
     assert store.session(unconfirmed) is not None
     assert store.generation() == generation + 1
+
+
+def test_store_prunes_only_the_exact_dead_session_when_pids_are_reused(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path / "state.db")
+    dead = Identity("codex", "dead")
+    live = Identity("codex", "live")
+    for identity, process_started_at in ((dead, 1.0), (live, 2.0)):
+        store.upsert_session(
+            identity,
+            cwd="/repo",
+            repo_root="/repo",
+            state="working",
+            source="test",
+            pid=101,
+            process_started_at=process_started_at,
+            current=0,
+        )
+
+    store.prune(
+        current=CODEX_ORPHAN_GRACE + 1,
+        dead_codex_sessions=(dead,),
+    )
+
+    assert store.session(dead) is None
+    assert store.session(live) is not None
+
+
+def test_process_identity_prefers_exact_fingerprints_then_legacy_pids(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path / "state.db")
+    legacy = Identity("codex", "legacy")
+    exact = Identity("codex", "exact")
+    store.upsert_session(
+        legacy,
+        cwd="/repo",
+        repo_root="/repo",
+        state="working",
+        source="test",
+        pid=42,
+    )
+    store.upsert_session(
+        exact,
+        cwd="/repo",
+        repo_root="/repo",
+        state="working",
+        source="test",
+        pid=42,
+        process_started_at=10.0,
+    )
+
+    assert store.identities_for_processes((ProcessReference(42, 10.0),)) == [exact]
+    assert store.identities_for_processes((ProcessReference(42, 11.0),)) == [legacy]
+    assert store.identities_for_processes((ProcessReference(42, None),)) == [legacy]
+
+
+def test_session_process_reference_is_replaced_as_an_atomic_pair(tmp_path: Path) -> None:
+    store = Store(tmp_path / "state.db")
+    identity = Identity("codex", "session")
+    store.upsert_session(
+        identity,
+        cwd="/repo",
+        repo_root="/repo",
+        state="working",
+        source="test",
+        pid=41,
+        process_started_at=1.0,
+    )
+    store.upsert_session(
+        identity,
+        cwd="/repo",
+        repo_root="/repo",
+        state="working",
+        source="hook",
+        pid=42,
+        process_started_at=2.0,
+    )
+    store.upsert_session(
+        identity,
+        cwd="/repo",
+        repo_root="/repo",
+        state="working",
+        source="cli",
+    )
+
+    session = store.session(identity)
+    assert session is not None
+    assert (session["pid"], session["process_started_at"]) == (42, 2.0)
+
+
+def test_claude_inventory_replaces_pid_and_creation_time_as_an_atomic_pair(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path / "state.db")
+    identity = Identity("claude", "session")
+    base = {
+        "session_id": identity.session_id,
+        "cwd": "/repo",
+        "repo_root": "/repo",
+        "state": "working",
+        "started_at": 1.0,
+    }
+    store.replace_claude_sessions([{**base, "pid": 41, "process_started_at": 1.0}], current=2.0)
+    store.replace_claude_sessions([{**base, "pid": 42, "process_started_at": None}], current=3.0)
+
+    session = store.session(identity)
+    assert session is not None
+    assert (session["pid"], session["process_started_at"]) == (42, None)
 
 
 def test_store_honors_explicit_epoch_timestamps(tmp_path: Path) -> None:

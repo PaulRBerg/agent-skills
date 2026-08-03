@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fingerprint agent processes with PID and creation time, and upgrade the internal ledger to schema v3 without changing
+  the public status JSON schema.
 - Poll the SQLite generation counter for push-driven waits, with a slow full-refresh fallback.
 - Add counts-only mid-turn inbox nudges for Codex and Claude Code.
 - Wake blocked Claude Code sessions asynchronously and notify overlapping waiters on release.

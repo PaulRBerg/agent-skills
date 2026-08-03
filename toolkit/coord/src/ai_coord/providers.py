@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -12,6 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+import psutil
+
+from ai_coord.identity import Identity, ProcessReference, process_reference
 from ai_coord.integrations import default_hook_path, inspect_hooks
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
 from ai_coord.util import git_root, now_ts
@@ -61,7 +63,7 @@ class HostInventory:
 
     def refresh(self, store: Store) -> InventoryResult:
         current = now_ts()
-        store.prune(current, dead_codex_pids=_dead_codex_pids(store, current))
+        store.prune(current, dead_codex_sessions=_dead_codex_sessions(store, current))
         codex = self._codex_report(store)
         claude, rows = self._collect_claude()
         if claude.ok and claude.enabled:
@@ -144,9 +146,9 @@ class StaticInventory:
         return InventoryResult(self.complete, reports)
 
 
-def _dead_codex_pids(store: Store, current: float) -> tuple[int, ...]:
+def _dead_codex_sessions(store: Store, current: float) -> tuple[Identity, ...]:
     cutoff = current - CODEX_ORPHAN_GRACE
-    dead: set[int] = set()
+    dead: list[Identity] = []
     for row in store.sessions():
         pid = row.get("pid")
         if (
@@ -156,17 +158,26 @@ def _dead_codex_pids(store: Store, current: float) -> tuple[int, ...]:
             or float(row["last_seen"]) >= cutoff
         ):
             continue
-        if not _process_exists(pid):
-            dead.add(pid)
-    return tuple(sorted(dead))
+        started_at = row.get("process_started_at")
+        reference = ProcessReference(
+            pid,
+            float(started_at) if isinstance(started_at, (int, float)) else None,
+        )
+        if not _process_exists(reference):
+            dead.append(Identity("codex", str(row["session_id"])))
+    return tuple(dead)
 
 
-def _process_exists(pid: int) -> bool:
+def _process_exists(reference: ProcessReference) -> bool:
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+        process = psutil.Process(reference.pid)
+        if process.status() == psutil.STATUS_ZOMBIE:
+            return False
+        if reference.started_at is not None:
+            return process.create_time() == reference.started_at
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
         return False
-    except OSError:
+    except (psutil.Error, OSError):
         return True
     return True
 
@@ -199,6 +210,7 @@ def normalize_claude_sessions(payload: Any) -> tuple[list[dict[str, Any]], int]:
         pid = raw.get("pid")
         if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
             pid = None
+        process_started_at = process_reference(pid).started_at if pid is not None else None
         name = raw.get("name") if isinstance(raw.get("name"), str) else None
         waiting = raw.get("waitingFor") if isinstance(raw.get("waitingFor"), str) else None
         root = git_root(Path(cwd))
@@ -211,6 +223,7 @@ def normalize_claude_sessions(payload: Any) -> tuple[list[dict[str, Any]], int]:
                 "name": name,
                 "waiting_for": waiting,
                 "pid": pid,
+                "process_started_at": process_started_at,
                 "started_at": started_at,
             }
         )

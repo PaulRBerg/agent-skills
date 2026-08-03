@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-import subprocess
-import time
 from dataclasses import dataclass
+
+import psutil
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +16,12 @@ class Identity:
     @property
     def key(self) -> str:
         return f"{self.client}/{self.session_id}"
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessReference:
+    pid: int
+    started_at: float | None
 
 
 def from_environment() -> Identity | None:
@@ -34,31 +40,34 @@ def from_environment() -> Identity | None:
     return None
 
 
-def process_ancestors(
-    start_pid: int | None = None, timeout_seconds: float = 1.5
-) -> tuple[int, ...]:
-    """Return a bounded process ancestry chain."""
+def process_reference(pid: int) -> ProcessReference:
+    """Return the strongest available reference for one process."""
+    try:
+        started_at = psutil.Process(pid).create_time()
+    except (psutil.Error, OSError, ValueError):
+        started_at = None
+    return ProcessReference(pid, started_at)
+
+
+def process_ancestors(start_pid: int | None = None) -> tuple[ProcessReference, ...]:
+    """Return the starting parent and at most 15 of its ancestors."""
     pid = start_pid or os.getppid()
-    visited: set[int] = set()
-    chain: list[int] = []
-    deadline = time.monotonic() + timeout_seconds
-    for _ in range(16):
-        if pid <= 1 or pid in visited or time.monotonic() >= deadline:
-            break
-        visited.add(pid)
-        chain.append(pid)
+    if pid <= 1:
+        return ()
+    try:
+        process = psutil.Process(pid)
+    except (psutil.Error, ValueError):
+        return ()
+    try:
+        ancestors = process.parents()[:15]
+    except (psutil.Error, OSError):
+        ancestors = []
+    chain = (process, *ancestors)
+    references: list[ProcessReference] = []
+    for candidate in chain:
         try:
-            result = subprocess.run(
-                ["ps", "-o", "ppid=", "-p", str(pid)],
-                capture_output=True,
-                check=False,
-                text=True,
-                timeout=max(0.05, deadline - time.monotonic()),
-            )
-        except (OSError, subprocess.SubprocessError):
-            break
-        try:
-            pid = int(result.stdout.strip())
-        except ValueError:
-            break
-    return tuple(chain)
+            started_at = candidate.create_time()
+        except (psutil.Error, OSError):
+            started_at = None
+        references.append(ProcessReference(candidate.pid, started_at))
+    return tuple(references)

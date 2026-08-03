@@ -11,7 +11,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ai_coord.identity import Identity, from_environment, process_ancestors
+from ai_coord.identity import (
+    Identity,
+    ProcessReference,
+    from_environment,
+    process_ancestors,
+    process_reference,
+)
 from ai_coord.integrations import hook_specs
 from ai_coord.providers import HostInventory, Inventory
 from ai_coord.store import Store
@@ -101,7 +107,7 @@ class Coordinator:
         direct = from_environment()
         if direct:
             return direct
-        candidates = self.store.identities_for_pids(process_ancestors())
+        candidates = self.store.identities_for_processes(process_ancestors())
         unique = {(candidate.client, candidate.session_id): candidate for candidate in candidates}
         if len(unique) == 1:
             return next(iter(unique.values()))
@@ -386,6 +392,7 @@ class Coordinator:
         for session in all_sessions:
             claim = claim_by_key.get((str(session["client"]), str(session["session_id"])))
             row = dict(session)
+            row.pop("process_started_at", None)
             if claim:
                 row["claim_state"] = claim["state"]
                 row["label"] = claim["label"]
@@ -658,13 +665,15 @@ class Coordinator:
                 self._ingest_claude_plan(identity, payload, root)
             else:
                 state = "idle" if event_name in {"SessionStart", "Stop"} else "working"
+                parent = process_reference(os.getppid())
                 self.store.upsert_session(
                     identity,
                     cwd=str(cwd),
                     repo_root=str(root) if root else None,
                     state=state,
                     source="hook",
-                    pid=os.getppid(),
+                    pid=parent.pid,
+                    process_started_at=parent.started_at,
                 )
             self.store.hook_success(client, event_name)
             if event_name == "UserPromptSubmit":
@@ -711,12 +720,15 @@ class Coordinator:
             return
         session = self.store.session(identity)
         if session is None:
+            parent = process_reference(os.getppid())
             self.store.upsert_session(
                 identity,
                 cwd=str(root),
                 repo_root=str(root),
                 state="working",
                 source="hook",
+                pid=parent.pid,
+                process_started_at=parent.started_at,
             )
         self._save_intent(identity, root, label, self.store.claim(identity))
 
@@ -766,6 +778,16 @@ class Coordinator:
 
     def _ensure_session(self, identity: Identity, cwd: Path, root: Path) -> None:
         existing = self.store.session(identity)
+        parent = process_reference(os.getppid())
+        if existing and existing.get("pid"):
+            parent = ProcessReference(
+                int(existing["pid"]),
+                (
+                    float(existing["process_started_at"])
+                    if existing.get("process_started_at") is not None
+                    else None
+                ),
+            )
         self.store.upsert_session(
             identity,
             cwd=str(cwd),
@@ -774,7 +796,8 @@ class Coordinator:
             source=str(existing["source"]) if existing else "cli",
             name=str(existing["name"]) if existing and existing.get("name") else None,
             label=str(existing["label"]) if existing and existing.get("label") else None,
-            pid=int(existing["pid"]) if existing and existing.get("pid") else os.getppid(),
+            pid=parent.pid,
+            process_started_at=parent.started_at,
             started_at=float(existing["started_at"]) if existing else None,
         )
 

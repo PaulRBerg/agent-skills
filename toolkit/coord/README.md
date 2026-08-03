@@ -131,13 +131,16 @@ conservative queued blockers until released or expired. The importer never remov
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
-mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions.
+mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v3;
+opening an older ledger upgrades it one way, while the public `status --json` schema remains v1.
 
 The ledger stores bounded session metadata, labels, literal scopes, messages, and notes. It never stores prompt bodies,
 plan bodies beyond a sanitized H1, assistant output, transcript contents, or arbitrary hook payloads.
 
-Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. Codex sessions whose
-recorded process is confirmed gone expire after a 30-minute grace period; other idle Codex sessions expire after four
+Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. Session processes are
+identified by PID and creation time when available, so PID reuse cannot attach ancestry or orphan cleanup to a newer
+process. Codex sessions whose exact recorded process is confirmed gone expire after a 30-minute grace period; records
+migrated without creation times retain conservative PID-only matching. Other idle Codex sessions expire after four
 hours.
 
 ## Development
