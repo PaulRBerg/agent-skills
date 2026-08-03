@@ -23,6 +23,15 @@ alias t := test
 #                                    CHECKS                                    #
 # ---------------------------------------------------------------------------- #
 
+# Run all local checks and tests
+[group("checks")]
+@check:
+    just _run-with-status full-check
+    just _run-with-status test
+    echo ""
+    echo -e '{{ GREEN }}All local checks passed!{{ NORMAL }}'
+alias c := check
+
 # Run all code checks
 [group("checks")]
 @full-check:

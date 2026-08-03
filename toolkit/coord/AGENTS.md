@@ -12,7 +12,9 @@ SQLite ledger. The CLI is advisory coordination infrastructure, not a security b
 
 - Bootstrap with `uv sync --extra dev --locked`.
 - Run the checkout with `uv run ai-coord ...`; use `just install-cli` only for the global-install acceptance test.
-- Prefer `just test [pytest args]`; run `just fc` before committing.
+- Prefer `just test [pytest args]` while iterating on tests.
+- Run `just check` after each coherent edit batch and again immediately before committing; it is the sole supported
+  local macOS validation gate.
 - Use focused Ruff/Prettier commands for surgical formatting. `just fw` rewrites the entire project.
 
 ## Architecture and Invariants

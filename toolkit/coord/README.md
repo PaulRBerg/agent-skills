@@ -144,9 +144,8 @@ hours.
 
 ```sh
 uv sync --extra dev --locked
-just test
-just full-check
+just check
 just install-cli
 ```
 
-CI runs the same checks and tests on Ubuntu with Python 3.13.
+Validation runs locally on macOS. `just check` runs formatting, linting, type checks, and the full test suite.
