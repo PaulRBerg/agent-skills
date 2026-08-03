@@ -149,7 +149,7 @@ class Coordinator:
             return self._save_intent(identity, root, clean_label, existing)
         if existing and existing["state"] == "active":
             existing_paths = tuple(existing["paths"])
-            if existing["repo_root"] == str(root) and existing_paths == paths:
+            if existing["repo_root"] == str(root) and set(existing_paths) == set(paths):
                 return Outcome("READY", 0, paths=paths)
             return Outcome("ACTIVE", 3, "run ai-coord done before changing scope", existing_paths)
 

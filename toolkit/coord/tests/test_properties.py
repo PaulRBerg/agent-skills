@@ -99,8 +99,8 @@ class CoordinatorStateMachine(RuleBasedStateMachine):
         assert outcome.kind == ("READY" if expected == "active" else "BLOCKED")
         self.model[session] = _Claim(expected, tuple(sorted(paths)), self.clock)
 
-    @rule(session=SESSIONS)
-    def retry(self, session: str) -> None:
+    @rule(session=SESSIONS, reverse_paths=st.booleans())
+    def retry(self, session: str, reverse_paths: bool) -> None:
         claim = self.model.get(session)
         if claim is None:
             return
@@ -110,9 +110,10 @@ class CoordinatorStateMachine(RuleBasedStateMachine):
             if claim.state == "active"
             else self.expected_state(session, claim.paths, claim.created_at)
         )
+        retry_paths = claim.paths[::-1] if reverse_paths else claim.paths
 
         with self.identity(session):
-            outcome = self.coordinator.start(f"claim {session}", claim.paths, cwd=self.repo)
+            outcome = self.coordinator.start(f"claim {session}", retry_paths, cwd=self.repo)
 
         assert outcome.kind == ("READY" if expected == "active" else "BLOCKED")
         self.model[session] = _Claim(expected, claim.paths, claim.created_at)

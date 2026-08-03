@@ -123,9 +123,9 @@ def test_start_intent_and_idempotent_active(
     coordinator = _coordinator(tmp_path / "state.db")
     _set_identity(monkeypatch, "session-a")
     assert coordinator.start("plan work", (), cwd=git_repo).kind == "INTENT"
-    ready = coordinator.start("plan work", ("src",), cwd=git_repo)
-    assert (ready.kind, ready.code, ready.paths) == ("READY", 0, ("src",))
-    assert coordinator.start("plan work", ("src",), cwd=git_repo).kind == "READY"
+    ready = coordinator.start("plan work", ("src", "docs"), cwd=git_repo)
+    assert (ready.kind, ready.code, ready.paths) == ("READY", 0, ("src", "docs"))
+    assert coordinator.start("plan work", ("docs", "src"), cwd=git_repo).kind == "READY"
     changed = coordinator.start("plan work", ("docs",), cwd=git_repo)
     assert changed.kind == "ACTIVE"
     assert changed.code == 3
