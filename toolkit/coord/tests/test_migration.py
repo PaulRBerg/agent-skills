@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
+from hypothesis import HealthCheck, example, given, settings
+from hypothesis import strategies as st
 
 from ai_coord.coordinator import Coordinator
 from ai_coord.identity import Identity
@@ -15,6 +17,12 @@ from ai_coord.store import Store
 def _write(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload))
+
+
+def _isolated_case(tmp_path: Path) -> Path:
+    path = tmp_path / f"case-{sum(1 for _ in tmp_path.iterdir())}"
+    path.mkdir()
+    return path
 
 
 def test_migrate_legacy_records_idempotently(tmp_path: Path, git_repo: Path) -> None:
@@ -128,13 +136,30 @@ def test_migration_dry_run_and_legacy_glob_does_not_block_literal_claims(
     assert outcome.kind == "READY"
 
 
-def test_migration_rejects_unknown_client(tmp_path: Path, git_repo: Path) -> None:
-    source = tmp_path / "legacy"
+@settings(
+    max_examples=25,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@example(client="unknown")
+@given(
+    client=st.one_of(
+        st.none(),
+        st.booleans(),
+        st.integers(),
+        st.text().filter(lambda value: value not in {"codex", "claude"}),
+    )
+)
+def test_migration_rejects_invalid_generated_clients(
+    tmp_path: Path, git_repo: Path, client: object
+) -> None:
+    case = _isolated_case(tmp_path)
+    source = case / "legacy"
     _write(
         source / "claims" / "claim.json",
         {
             "session_id": "legacy",
-            "client": "unknown",
+            "client": client,
             "cwd": str(git_repo),
             "repo_root": str(git_repo),
             "label": "invalid",
@@ -142,7 +167,7 @@ def test_migration_rejects_unknown_client(tmp_path: Path, git_repo: Path) -> Non
             "created_at": "2026-08-02T10:00:00Z",
         },
     )
-    store = Store(tmp_path / "state.db")
+    store = Store(case / "state.db")
 
     report = migrate_legacy(store, source)
 
@@ -151,8 +176,22 @@ def test_migration_rejects_unknown_client(tmp_path: Path, git_repo: Path) -> Non
     assert store.claims() == []
 
 
-def test_migration_rejects_non_finite_timestamp(tmp_path: Path, git_repo: Path) -> None:
-    source = tmp_path / "legacy"
+@settings(
+    max_examples=25,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@example(timestamp=float("nan"))
+@given(
+    timestamp=st.sampled_from(
+        (None, True, False, float("nan"), float("inf"), float("-inf"), "", "invalid")
+    )
+)
+def test_migration_rejects_invalid_generated_timestamps(
+    tmp_path: Path, git_repo: Path, timestamp: object
+) -> None:
+    case = _isolated_case(tmp_path)
+    source = case / "legacy"
     _write(
         source / "claims" / "claim.json",
         {
@@ -162,10 +201,10 @@ def test_migration_rejects_non_finite_timestamp(tmp_path: Path, git_repo: Path) 
             "repo_root": str(git_repo),
             "label": "invalid",
             "paths": ["src"],
-            "created_at": float("nan"),
+            "created_at": timestamp,
         },
     )
-    store = Store(tmp_path / "state.db")
+    store = Store(case / "state.db")
 
     report = migrate_legacy(store, source)
 

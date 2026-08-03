@@ -4,11 +4,54 @@ from pathlib import Path
 
 import psutil
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from ai_coord import providers
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import HostInventory, ProviderReport, normalize_claude_sessions
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
+
+
+@st.composite
+def _claude_record(draw: st.DrawFn) -> tuple[dict[str, object], dict[str, object] | None, int]:
+    kind = draw(st.sampled_from(("live", "terminal", "invalid-state", "invalid-timestamp")))
+    session_id = draw(st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=12))
+    cwd = draw(st.sampled_from(("/tmp", "/repo", "/workspace/project")))
+    timestamp = draw(st.integers(min_value=-1_000_000, max_value=10_000_000_000))
+    pid = draw(st.one_of(st.none(), st.booleans(), st.integers(min_value=-5, max_value=100)))
+    raw: dict[str, object] = {
+        "id": session_id,
+        "cwd": cwd,
+        "startedAt": timestamp,
+        "pid": pid,
+    }
+    if kind == "invalid-state":
+        raw["state"] = draw(st.one_of(st.none(), st.booleans(), st.integers()))
+        return raw, None, 1
+    if kind == "invalid-timestamp":
+        raw["state"] = "working"
+        raw["startedAt"] = draw(
+            st.sampled_from((None, True, float("nan"), float("inf"), "", "not-a-time"))
+        )
+        return raw, None, 1
+    if kind == "terminal":
+        raw["state"] = draw(st.sampled_from(tuple(providers.CLAUDE_TERMINAL_STATES)))
+        return raw, None, 0
+    state = draw(st.sampled_from((*providers.CLAUDE_LIVE_STATES, "novel")))
+    raw["state"] = state
+    normalized_pid = pid if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0 else None
+    return (
+        raw,
+        {
+            "session_id": session_id,
+            "cwd": cwd,
+            "state": providers.CLAUDE_LIVE_STATES.get(state, "unknown"),
+            "pid": normalized_pid,
+            "started_at": float(timestamp),
+        },
+        0,
+    )
 
 
 def test_host_inventory_reconciles_only_stale_dead_codex_sessions(
@@ -157,3 +200,33 @@ def test_normalize_claude_sessions_reports_dropped_unknown_and_process_fingerpri
     assert [row["state"] for row in rows] == ["working", "unknown"]
     assert rows[0]["pid"] == 42
     assert rows[0]["process_started_at"] == 42.5
+
+
+@settings(
+    max_examples=100,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(records=st.lists(_claude_record(), max_size=10))
+def test_normalize_claude_sessions_matches_generated_record_model(
+    monkeypatch: pytest.MonkeyPatch,
+    records: list[tuple[dict[str, object], dict[str, object] | None, int]],
+) -> None:
+    monkeypatch.setattr(providers, "git_root", lambda path: path)
+    monkeypatch.setattr(
+        providers,
+        "process_reference",
+        lambda pid: ProcessReference(pid, float(pid) + 0.5),
+    )
+    payload = [raw for raw, _, _ in records]
+    expected_rows = [expected for _, expected, _ in records if expected is not None]
+
+    rows, dropped = normalize_claude_sessions(payload)
+
+    assert dropped == sum(invalid for _, _, invalid in records)
+    assert len(rows) == len(expected_rows)
+    for row, expected in zip(rows, expected_rows, strict=True):
+        assert {key: row[key] for key in expected} == expected
+        expected_pid = expected["pid"]
+        assert row["process_started_at"] == (
+            float(expected_pid) + 0.5 if isinstance(expected_pid, int) else None
+        )

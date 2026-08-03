@@ -21,6 +21,21 @@ from ai_coord.integrations import (
 JSON_SCALARS = st.none() | st.booleans() | st.integers() | st.text()
 
 
+@st.composite
+def _handler_order_case(draw: st.DrawFn) -> tuple[list[str], int]:
+    commands = draw(
+        st.lists(
+            st.text(alphabet="abcdefghijklmnopqrstuvwxyz-", min_size=1, max_size=16).map(
+                lambda command: f"custom-{command}"
+            ),
+            unique=True,
+            max_size=8,
+        )
+    )
+    position = draw(st.integers(min_value=0, max_value=len(commands)))
+    return commands, position
+
+
 def test_codex_link_preserves_unrelated_and_replaces_legacy(tmp_path: Path) -> None:
     path = tmp_path / "hooks.json"
     path.write_text(
@@ -193,24 +208,35 @@ def test_jsonc_parser_rejects_unterminated_trailing_block_comments(
         _strip_jsonc(text)
 
 
-def test_link_preserves_existing_handler_order(tmp_path: Path) -> None:
+@settings(
+    max_examples=25,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@example(case=(["clipboard-hook", "notify-hook"], 1))
+@given(case=_handler_order_case())
+def test_link_preserves_generated_existing_handler_order(
+    tmp_path: Path, case: tuple[list[str], int]
+) -> None:
+    commands, position = case
+    expected = list(commands)
+    expected.insert(position, "ai-coord hook claude")
     path = tmp_path / "settings.json"
     path.write_text(
         json.dumps(
             {
                 "hooks": {
                     "UserPromptSubmit": [
-                        {"hooks": [{"type": "command", "command": "clipboard-hook"}]},
                         {
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": "ai-coord hook claude",
-                                    "timeout": 5,
+                                    "command": command,
+                                    **({"timeout": 5} if command == "ai-coord hook claude" else {}),
                                 }
                             ]
-                        },
-                        {"hooks": [{"type": "command", "command": "notify-hook"}]},
+                        }
+                        for command in expected
                     ]
                 }
             }
@@ -220,11 +246,7 @@ def test_link_preserves_existing_handler_order(tmp_path: Path) -> None:
     link_hooks("claude", path)
 
     groups = json.loads(path.read_text())["hooks"]["UserPromptSubmit"]
-    assert [group["hooks"][0]["command"] for group in groups] == [
-        "clipboard-hook",
-        "ai-coord hook claude",
-        "notify-hook",
-    ]
+    assert [group["hooks"][0]["command"] for group in groups] == expected
 
 
 def test_link_dry_run_and_force(tmp_path: Path) -> None:

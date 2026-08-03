@@ -4,12 +4,43 @@ import json
 from pathlib import Path
 
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 import ai_coord.coordinator as coordinator_module
 from ai_coord.coordinator import Coordinator
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import StaticInventory
 from ai_coord.store import Store
+
+HOOK_EVENTS = tuple(
+    sorted(
+        {
+            "SessionStart",
+            "UserPromptSubmit",
+            "Stop",
+            "SessionEnd",
+            "SubagentStart",
+            "SubagentStop",
+            "PostToolUse",
+            "PostToolBatch",
+            "PostToolUseFailure",
+        }
+    )
+)
+JSON_VALUES = st.recursive(
+    st.none() | st.booleans() | st.integers() | st.floats() | st.text(max_size=30),
+    lambda children: (
+        st.lists(children, max_size=5) | st.dictionaries(st.text(max_size=20), children, max_size=5)
+    ),
+    max_leaves=15,
+)
+
+
+def _isolated_hook_case(tmp_path: Path) -> Path:
+    path = tmp_path / f"hook-case-{sum(1 for _ in tmp_path.iterdir())}"
+    path.mkdir()
+    return path
 
 
 def test_codex_hook_lifecycle_and_delegate(
@@ -215,3 +246,64 @@ def test_unknown_hook_event_does_not_create_immortal_session(tmp_path: Path) -> 
     )
     assert store.session(Identity("codex", "phantom")) is None
     assert store.hook_health() == []
+
+
+@settings(
+    max_examples=30,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(
+    client=st.sampled_from(("codex", "claude", "unsupported")),
+    event=st.one_of(
+        st.sampled_from(HOOK_EVENTS),
+        st.text(alphabet="abcdefghijklmnopqrstuvwxyz", max_size=20),
+        st.integers(),
+        st.none(),
+    ),
+    session=st.one_of(
+        st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=16).map(
+            lambda value: f"session-{value}"
+        ),
+        st.none(),
+        st.integers(),
+    ),
+    secret=st.text(alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ", min_size=1, max_size=20).map(
+        lambda value: f"PRIVATE-{value}"
+    ),
+    extras=st.dictionaries(st.text(max_size=20), JSON_VALUES, max_size=10),
+)
+def test_arbitrary_hook_payloads_fail_open_without_leaking_private_fields(
+    tmp_path: Path,
+    git_repo: Path,
+    client: str,
+    event: object,
+    session: object,
+    secret: str,
+    extras: dict[str, object],
+) -> None:
+    case = _isolated_hook_case(tmp_path)
+    store = Store(case / "state.db")
+    coordinator = Coordinator(store, StaticInventory())
+    payload = {
+        **extras,
+        "hook_event_name": event,
+        "session_id": session,
+        "cwd": str(git_repo),
+        "agent_id": "agent-generated",
+        "prompt": secret,
+        "tool_response": secret,
+        "private": {"secret": secret},
+    }
+
+    output = coordinator.ingest_hook(client, payload)
+
+    persisted = (
+        store.sessions(),
+        store.claims(),
+        store.delegates(),
+        store.hook_health(),
+    )
+    assert output in {"", "{}"}
+    assert secret not in output
+    assert secret not in str(persisted)

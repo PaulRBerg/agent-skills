@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 from ai_coord.util import (
     MAX_SCOPE_CHARS,
@@ -15,24 +17,59 @@ from ai_coord.util import (
     sanitize,
 )
 
-
-def test_sanitize_collapses_and_caps() -> None:
-    assert sanitize(" a\n b\x00c ", 6) == "a b c"
-    assert sanitize("abcdefgh", 5) == "abcd…"
-
-
-@pytest.mark.parametrize(
-    ("left", "right", "expected"),
-    [
-        (".", "src/app.py", True),
-        ("src", "src/app.py", True),
-        ("src/app.py", "src/app.py", True),
-        ("src/a", "src/ab", False),
-        ("src", "docs", False),
-    ],
+PATH_SEGMENTS = st.text(
+    alphabet=st.characters(whitelist_categories=("Ll", "Lu", "Nd"), whitelist_characters="_-"),
+    min_size=1,
+    max_size=12,
 )
-def test_literal_scope_overlap(left: str, right: str, expected: bool) -> None:
-    assert paths_overlap(left, right) is expected
+LITERAL_PATHS = st.lists(PATH_SEGMENTS, min_size=1, max_size=5).map("/".join)
+
+
+@settings(max_examples=100)
+@example(text=" a\n b\x00c ", limit=6)
+@example(text="abcdefgh", limit=5)
+@given(text=st.text(), limit=st.integers(min_value=1, max_value=240))
+def test_sanitize_collapses_printable_text_idempotently_within_limit(text: str, limit: int) -> None:
+    result = sanitize(text, limit)
+
+    assert len(result) <= limit
+    assert all(character.isprintable() for character in result)
+    assert result == " ".join(result.split())
+    assert sanitize(result, limit) == result
+
+
+@settings(max_examples=100)
+@example(left=".", right="src/app.py")
+@given(left=LITERAL_PATHS | st.just("."), right=LITERAL_PATHS | st.just("."))
+def test_literal_scope_overlap_is_symmetric(left: str, right: str) -> None:
+    assert paths_overlap(left, right) == paths_overlap(right, left)
+
+
+@settings(max_examples=100)
+@given(path=LITERAL_PATHS | st.just("."))
+def test_literal_scope_overlap_is_reflexive(path: str) -> None:
+    assert paths_overlap(path, path)
+
+
+@settings(max_examples=100)
+@example(ancestor="src", descendants=["app.py"])
+@given(ancestor=LITERAL_PATHS, descendants=st.lists(PATH_SEGMENTS, min_size=1, max_size=4))
+def test_literal_scope_overlap_recognizes_ancestry(ancestor: str, descendants: list[str]) -> None:
+    descendant = "/".join((ancestor, *descendants))
+
+    assert paths_overlap(ancestor, descendant)
+
+
+@settings(max_examples=100)
+@example(parent="src", segment="a", extension="b")
+@given(parent=LITERAL_PATHS, segment=PATH_SEGMENTS, extension=PATH_SEGMENTS)
+def test_literal_scope_overlap_respects_segment_boundaries(
+    parent: str, segment: str, extension: str
+) -> None:
+    left = f"{parent}/{segment}"
+    right = f"{parent}/{segment}{extension}"
+
+    assert not paths_overlap(left, right)
 
 
 def test_normalize_scopes_rejects_globs_and_escapes(git_repo: Path, tmp_path: Path) -> None:
