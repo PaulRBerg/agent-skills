@@ -40,10 +40,42 @@ def test_normalize_scopes_rejects_globs_and_escapes(git_repo: Path, tmp_path: Pa
         "src",
         "src/app.py",
     )
+    assert normalize_scopes(("src/..",), git_repo, git_repo) == (".",)
     with pytest.raises(ValueError, match="literal scope"):
         normalize_scopes(("src/**",), git_repo, git_repo)
     with pytest.raises(ValueError, match="outside repository"):
         normalize_scopes((str(tmp_path / "outside"),), git_repo, git_repo)
+    with pytest.raises(ValueError, match="outside repository"):
+        normalize_scopes(("..",), git_repo, git_repo)
+
+
+def test_normalize_scopes_preserves_literal_leaf_symlinks(git_repo: Path, tmp_path: Path) -> None:
+    outside_target = tmp_path / "outside.py"
+    outside_target.write_text("value = 1\n")
+    outbound_link = git_repo / "src" / "outbound_link.py"
+    outbound_link.symlink_to(outside_target)
+    internal_link = git_repo / "src" / "internal_link.py"
+    internal_link.symlink_to(git_repo / "src" / "app.py")
+
+    assert normalize_scopes(
+        ("src/outbound_link.py", "src/internal_link.py"), git_repo, git_repo
+    ) == ("src/outbound_link.py", "src/internal_link.py")
+
+
+def test_normalize_scopes_rejects_external_leaf_and_symlinked_ancestor(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    incoming_link = tmp_path / "incoming_link.py"
+    incoming_link.symlink_to(git_repo / "src" / "app.py")
+    outside_dir = tmp_path / "outside-dir"
+    outside_dir.mkdir()
+    outbound_dir = git_repo / "src" / "outbound-dir"
+    outbound_dir.symlink_to(outside_dir, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="outside repository"):
+        normalize_scopes((str(incoming_link),), git_repo, git_repo)
+    with pytest.raises(ValueError, match="outside repository"):
+        normalize_scopes(("src/outbound-dir/child.py",), git_repo, git_repo)
 
 
 def test_normalize_scopes_preserves_spaces_and_rejects_unsafe_lengths(git_repo: Path) -> None:

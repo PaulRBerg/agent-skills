@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Allow literal in-repository symlink scopes without dereferencing their targets.
 - Preserve literal scope identity and prevent claims from moving across repositories.
 - Make concurrent first-run database initialization safe.
 - Honor client configuration roots and validate complete hook definitions.

@@ -64,7 +64,12 @@ def normalize_scopes(scopes: tuple[str, ...], cwd: Path, root: Path) -> tuple[st
         if not candidate.is_absolute():
             candidate = cwd / candidate
         try:
-            relative = candidate.resolve(strict=False).relative_to(resolved_root)
+            resolved_candidate = (
+                candidate.parent.resolve(strict=False) / candidate.name
+                if candidate.is_symlink()
+                else candidate.resolve(strict=False)
+            )
+            relative = resolved_candidate.relative_to(resolved_root)
         except (OSError, RuntimeError, ValueError) as error:
             raise ValueError(f"scope is outside repository: {raw_scope}") from error
         value = relative.as_posix().removeprefix("./").rstrip("/") or "."
