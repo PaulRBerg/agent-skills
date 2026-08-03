@@ -1,5 +1,5 @@
 ---
-argument-hint: <task-to-handoff>
+argument-hint: "[task-to-handoff]"
 compatibility:
   Requires Git and local file-write access. The generated launch command requires an authenticated Codex CLI.
 disable-model-invocation: true
@@ -21,10 +21,11 @@ plans only; do not implement them or launch Codex.
 
 ## Input
 
-Use `$ARGUMENTS` as the task to hand off. Treat it as a scope selector: retain only relevant conversation context and
-repository evidence. Infer repositories and plan placement from the prompt and relevant conversation; do not expose
-repository-selection flags. If the task, repository set, or plan placement is materially ambiguous, ask for the missing
-decision and stop without writing any files.
+Use `$ARGUMENTS` as the task to hand off when present. When the user supplies no task argument, infer the next
+unfinished step or partial task from the last assistant response and the existing chat transcript. Treat the selected
+task as a scope selector: retain only relevant conversation context and repository evidence. Infer repositories and plan
+placement from the prompt and relevant conversation; do not expose repository-selection flags. If the task, repository
+set, or plan placement is materially ambiguous, ask for the missing decision and stop without writing any files.
 
 ## Contract
 
