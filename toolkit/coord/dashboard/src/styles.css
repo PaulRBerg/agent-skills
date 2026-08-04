@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  --color-canvas-base: oklch(0.965 0.004 95);
+  --color-surface-base: oklch(0.99 0.002 95);
+  --color-surface-muted-base: oklch(0.945 0.006 95);
+  --color-ink-base: oklch(0.22 0.012 255);
+  --color-ink-secondary-base: oklch(0.38 0.012 255);
+  --color-muted-base: oklch(0.52 0.01 255);
+  --color-line-base: oklch(0.82 0.008 255);
+  --color-line-muted-base: oklch(0.89 0.006 255);
+  --color-line-strong-base: oklch(0.68 0.012 255);
+  --color-accent-base: oklch(0.48 0.12 230);
+  --color-positive-base: oklch(0.55 0.13 155);
+  --color-warning-base: oklch(0.65 0.13 75);
+  --color-warning-ink-base: oklch(0.38 0.09 65);
+  --color-warning-subtle-base: oklch(0.95 0.035 85);
+  --color-danger-base: oklch(0.53 0.18 25);
+  --color-danger-subtle-base: oklch(0.95 0.025 25);
+  --color-codex-base: oklch(0.46 0.12 225);
+  --color-codex-line-base: oklch(0.74 0.08 225);
+  --color-codex-subtle-base: oklch(0.94 0.025 225);
+  --color-claude-base: oklch(0.5 0.14 48);
+  --color-claude-line-base: oklch(0.76 0.09 55);
+  --color-claude-subtle-base: oklch(0.95 0.03 60);
+  --color-active-ink-base: oklch(0.4 0.12 155);
+  --color-active-line-base: oklch(0.72 0.09 155);
+  --color-active-subtle-base: oklch(0.94 0.025 155);
+  --color-queued-ink-base: oklch(0.42 0.11 75);
+  --color-queued-line-base: oklch(0.75 0.09 80);
+  --color-queued-subtle-base: oklch(0.95 0.03 85);
+  --color-intent-ink-base: oklch(0.43 0.1 260);
+  --color-intent-line-base: oklch(0.74 0.08 260);
+  --color-intent-subtle-base: oklch(0.94 0.025 260);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas-base: oklch(0.16 0.008 255);
+    --color-surface-base: oklch(0.2 0.009 255);
+    --color-surface-muted-base: oklch(0.235 0.011 255);
+    --color-ink-base: oklch(0.91 0.008 255);
+    --color-ink-secondary-base: oklch(0.78 0.01 255);
+    --color-muted-base: oklch(0.64 0.012 255);
+    --color-line-base: oklch(0.36 0.012 255);
+    --color-line-muted-base: oklch(0.29 0.01 255);
+    --color-line-strong-base: oklch(0.48 0.014 255);
+    --color-accent-base: oklch(0.72 0.12 225);
+    --color-positive-base: oklch(0.7 0.14 155);
+    --color-warning-base: oklch(0.76 0.13 80);
+    --color-warning-ink-base: oklch(0.86 0.1 82);
+    --color-warning-subtle-base: oklch(0.27 0.04 75);
+    --color-danger-base: oklch(0.72 0.16 25);
+    --color-danger-subtle-base: oklch(0.27 0.04 25);
+    --color-codex-base: oklch(0.74 0.11 225);
+    --color-codex-line-base: oklch(0.48 0.08 225);
+    --color-codex-subtle-base: oklch(0.27 0.04 225);
+    --color-claude-base: oklch(0.75 0.13 55);
+    --color-claude-line-base: oklch(0.5 0.09 55);
+    --color-claude-subtle-base: oklch(0.28 0.045 55);
+    --color-active-ink-base: oklch(0.76 0.12 155);
+    --color-active-line-base: oklch(0.46 0.08 155);
+    --color-active-subtle-base: oklch(0.27 0.035 155);
+    --color-queued-ink-base: oklch(0.8 0.12 80);
+    --color-queued-line-base: oklch(0.5 0.08 80);
+    --color-queued-subtle-base: oklch(0.28 0.04 80);
+    --color-intent-ink-base: oklch(0.76 0.1 260);
+    --color-intent-line-base: oklch(0.48 0.07 260);
+    --color-intent-subtle-base: oklch(0.27 0.035 260);
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--color-canvas-base);
+  --color-surface: var(--color-surface-base);
+  --color-surface-muted: var(--color-surface-muted-base);
+  --color-ink: var(--color-ink-base);
+  --color-ink-secondary: var(--color-ink-secondary-base);
+  --color-muted: var(--color-muted-base);
+  --color-line: var(--color-line-base);
+  --color-line-muted: var(--color-line-muted-base);
+  --color-line-strong: var(--color-line-strong-base);
+  --color-accent: var(--color-accent-base);
+  --color-positive: var(--color-positive-base);
+  --color-warning: var(--color-warning-base);
+  --color-warning-ink: var(--color-warning-ink-base);
+  --color-warning-subtle: var(--color-warning-subtle-base);
+  --color-danger: var(--color-danger-base);
+  --color-danger-subtle: var(--color-danger-subtle-base);
+  --color-codex: var(--color-codex-base);
+  --color-codex-line: var(--color-codex-line-base);
+  --color-codex-subtle: var(--color-codex-subtle-base);
+  --color-claude: var(--color-claude-base);
+  --color-claude-line: var(--color-claude-line-base);
+  --color-claude-subtle: var(--color-claude-subtle-base);
+  --color-active-ink: var(--color-active-ink-base);
+  --color-active-line: var(--color-active-line-base);
+  --color-active-subtle: var(--color-active-subtle-base);
+  --color-queued-ink: var(--color-queued-ink-base);
+  --color-queued-line: var(--color-queued-line-base);
+  --color-queued-subtle: var(--color-queued-subtle-base);
+  --color-intent-ink: var(--color-intent-ink-base);
+  --color-intent-line: var(--color-intent-line-base);
+  --color-intent-subtle: var(--color-intent-subtle-base);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+}
+
+html {
+  background: var(--color-canvas-base);
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-canvas-base);
+  color: var(--color-ink-base);
+  text-rendering: optimizeLegibility;
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--color-codex-line-base);
+  color: var(--color-ink-base);
+}
+
+@keyframes liveness-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0
+      color-mix(in oklab, var(--color-positive-base) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+@keyframes snapshot-flash {
+  from {
+    outline-color: color-mix(
+      in oklab,
+      var(--color-accent-base) 45%,
+      transparent
+    );
+  }
+  to {
+    outline-color: transparent;
+  }
+}
+
+.liveness-fresh {
+  animation: liveness-pulse 2.2s ease-out infinite;
+}
+
+.snapshot-flash {
+  outline: 1px solid transparent;
+  animation: snapshot-flash 900ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liveness-fresh,
+  .snapshot-flash {
+    animation: none;
+  }
+
+  * {
+    scroll-behavior: auto !important;
+  }
+}
