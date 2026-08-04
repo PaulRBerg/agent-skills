@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _SCHEMA_STATEMENTS = (
     """
@@ -140,6 +140,18 @@ _SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE provider_cache (
+        context_key TEXT NOT NULL,
+        client TEXT NOT NULL CHECK (client IN ('codex', 'claude')),
+        refreshed_at REAL NOT NULL,
+        ok INTEGER NOT NULL CHECK (ok IN (0, 1)),
+        source TEXT NOT NULL,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        dropped INTEGER NOT NULL CHECK (dropped >= 0),
+        PRIMARY KEY (context_key, client)
+    )
+    """,
+    """
     CREATE TABLE metadata (
         key TEXT PRIMARY KEY,
         value INTEGER NOT NULL
@@ -227,6 +239,23 @@ def migrate(connection: sqlite3.Connection) -> None:
         if current == 5:
             connection.execute("ALTER TABLE sessions ADD COLUMN permission_mode TEXT")
             connection.execute("PRAGMA user_version = 6")
+            current = 6
+        if current == 6:
+            connection.execute(
+                """
+                CREATE TABLE provider_cache (
+                    context_key TEXT NOT NULL,
+                    client TEXT NOT NULL CHECK (client IN ('codex', 'claude')),
+                    refreshed_at REAL NOT NULL,
+                    ok INTEGER NOT NULL CHECK (ok IN (0, 1)),
+                    source TEXT NOT NULL,
+                    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+                    dropped INTEGER NOT NULL CHECK (dropped >= 0),
+                    PRIMARY KEY (context_key, client)
+                )
+                """
+            )
+            connection.execute("PRAGMA user_version = 7")
     except BaseException:
         connection.rollback()
         raise

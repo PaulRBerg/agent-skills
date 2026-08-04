@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +28,8 @@ CLAUDE_LIVE_STATES = {
     "idle": "idle",
 }
 CLAUDE_TERMINAL_STATES = {"completed", "done", "failed", "stopped"}
+INVENTORY_CACHE_SECONDS = 2.0
+_PROVIDER_CLIENTS = ("codex", "claude")
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,27 +59,45 @@ class InventoryResult:
 
 
 class Inventory(Protocol):
-    def refresh(self, store: Store) -> InventoryResult: ...
+    def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult: ...
 
 
 class HostInventory:
     """Observe configured host clients and reconcile their live inventory."""
 
-    def refresh(self, store: Store) -> InventoryResult:
+    def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
         current = now_ts()
+        executables = {client: shutil.which(client) for client in _PROVIDER_CLIENTS}
+        context_key = _cache_context(executables)
         store.prune(current, dead_codex_sessions=_dead_codex_sessions(store, current))
-        codex = self._codex_report(store)
-        claude, rows = self._collect_claude()
+        if (
+            allow_cached
+            and (cached := _cached_inventory(store, context_key, current=current)) is not None
+        ):
+            return cached
+
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="ai-coord-claude") as executor:
+            claude_future = executor.submit(self._collect_claude, executables["claude"])
+            codex = self._codex_report(store, executables["codex"])
+            claude, rows = claude_future.result()
         if claude.ok and claude.enabled:
             store.replace_claude_sessions(rows, current)
         reports = (codex, claude)
         complete = all(
             (not report.enabled) or (report.ok and report.dropped == 0) for report in reports
         )
+        if complete:
+            store.replace_provider_cache(
+                context_key,
+                [report.as_dict() for report in reports],
+                current,
+            )
+        else:
+            store.clear_provider_cache()
         return InventoryResult(complete=complete, providers=reports)
 
-    def _codex_report(self, store: Store) -> ProviderReport:
-        if shutil.which("codex") is None:
+    def _codex_report(self, store: Store, executable: str | None) -> ProviderReport:
+        if executable is None:
             return ProviderReport("codex", True, "hook-ledger", enabled=False)
         hooks = inspect_hooks("codex", default_hook_path("codex"))
         errors = [
@@ -105,8 +127,9 @@ class HostInventory:
             return ProviderReport("codex", False, "hook-ledger", error=f"hook trust: {detail}")
         return ProviderReport("codex", True, "hook-ledger")
 
-    def _collect_claude(self) -> tuple[ProviderReport, list[dict[str, Any]]]:
-        executable = shutil.which("claude")
+    def _collect_claude(
+        self, executable: str | None
+    ) -> tuple[ProviderReport, list[dict[str, Any]]]:
         if executable is None:
             return ProviderReport("claude", True, "claude-agents-json", enabled=False), []
         try:
@@ -141,13 +164,48 @@ class StaticInventory:
 
     complete: bool = True
 
-    def refresh(self, store: Store) -> InventoryResult:
-        del store
+    def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
+        del store, allow_cached
         reports = (
             ProviderReport("codex", self.complete, "static"),
             ProviderReport("claude", self.complete, "static"),
         )
         return InventoryResult(self.complete, reports)
+
+
+def _cache_context(executables: dict[str, str | None]) -> str:
+    context = {
+        "codex_executable": executables["codex"],
+        "codex_home": str(default_hook_path("codex").parent.resolve(strict=False)),
+        "claude_executable": executables["claude"],
+        "claude_config_dir": str(default_hook_path("claude").parent.resolve(strict=False)),
+    }
+    encoded = json.dumps(context, separators=(",", ":"), sort_keys=True).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _cached_inventory(store: Store, context_key: str, *, current: float) -> InventoryResult | None:
+    rows = store.provider_cache(context_key)
+    by_client = {str(row["client"]): row for row in rows}
+    if set(by_client) != set(_PROVIDER_CLIENTS):
+        return None
+    refreshed_at = {float(row["refreshed_at"]) for row in rows}
+    if len(refreshed_at) != 1:
+        return None
+    age = current - refreshed_at.pop()
+    if age < 0 or age >= INVENTORY_CACHE_SECONDS:
+        return None
+    reports = tuple(
+        ProviderReport(
+            client,
+            bool(by_client[client]["ok"]),
+            str(by_client[client]["source"]),
+            enabled=bool(by_client[client]["enabled"]),
+            dropped=int(by_client[client]["dropped"]),
+        )
+        for client in _PROVIDER_CLIENTS
+    )
+    return InventoryResult(complete=True, providers=reports)
 
 
 def _dead_codex_sessions(store: Store, current: float) -> tuple[Identity, ...]:

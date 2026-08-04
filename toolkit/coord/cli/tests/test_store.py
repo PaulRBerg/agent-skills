@@ -18,7 +18,7 @@ from ai_coord.store import (
 )
 
 
-def test_new_store_uses_schema_v6(tmp_path: Path) -> None:
+def test_new_store_uses_schema_v7(tmp_path: Path) -> None:
     store = Store(tmp_path / "state.db")
 
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
@@ -31,7 +31,7 @@ def test_new_store_uses_schema_v6(tmp_path: Path) -> None:
         for row in store.connection.execute("PRAGMA table_info(sessions)").fetchall()
     }
 
-    assert version == SCHEMA_VERSION == 6
+    assert version == SCHEMA_VERSION == 7
     assert "notified_at" in message_columns
     assert {"sender_callsign", "recipient_callsign"} <= message_columns
     assert "process_started_at" in session_columns
@@ -40,6 +40,7 @@ def test_new_store_uses_schema_v6(tmp_path: Path) -> None:
     assert {
         "claim_baselines",
         "dirt_observations",
+        "provider_cache",
         "residual_owners",
     } <= {
         str(row["name"])
@@ -52,7 +53,9 @@ def test_new_store_uses_schema_v6(tmp_path: Path) -> None:
 def _downgrade_fixture(path: Path, version: int) -> None:
     Store(path).close()
     connection = sqlite3.connect(path)
-    connection.execute("ALTER TABLE sessions DROP COLUMN permission_mode")
+    connection.execute("DROP TABLE provider_cache")
+    if version < 6:
+        connection.execute("ALTER TABLE sessions DROP COLUMN permission_mode")
     if version < 5:
         connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
         connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
@@ -84,8 +87,8 @@ def _downgrade_fixture(path: Path, version: int) -> None:
     connection.close()
 
 
-@pytest.mark.parametrize("version", [1, 2, 4, 5])
-def test_store_migrates_older_schemas_to_v6(tmp_path: Path, version: int) -> None:
+@pytest.mark.parametrize("version", [1, 2, 4, 5, 6])
+def test_store_migrates_older_schemas_to_v7(tmp_path: Path, version: int) -> None:
     path = tmp_path / "state.db"
     _downgrade_fixture(path, version)
 
@@ -98,7 +101,7 @@ def test_store_migrates_older_schemas_to_v6(tmp_path: Path, version: int) -> Non
     }
     session = store.session(Identity("codex", "preserved"))
     inbox = store.inbox(Identity("codex", "preserved"))
-    assert migrated == 6
+    assert migrated == 7
     assert {"notified_at", "sender_callsign", "recipient_callsign"} <= message_columns
     assert session is not None
     assert session["callsign"] is None
@@ -114,13 +117,14 @@ def test_store_migrates_older_schemas_to_v6(tmp_path: Path, version: int) -> Non
     assert inbox[0]["recipient_callsign"] is None
 
 
-def test_store_migrates_schema_v3_to_v6(tmp_path: Path) -> None:
+def test_store_migrates_schema_v3_to_v7(tmp_path: Path) -> None:
     path = tmp_path / "state.db"
     Store(path).close()
     connection = sqlite3.connect(path)
     connection.execute("DROP TABLE residual_owners")
     connection.execute("DROP TABLE dirt_observations")
     connection.execute("DROP TABLE claim_baselines")
+    connection.execute("DROP TABLE provider_cache")
     connection.execute("ALTER TABLE sessions DROP COLUMN permission_mode")
     connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
     connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
@@ -147,8 +151,8 @@ def test_store_migrates_schema_v3_to_v6(tmp_path: Path) -> None:
         for row in store.connection.execute("PRAGMA table_info(residual_owners)").fetchall()
     }
 
-    assert version == SCHEMA_VERSION == 6
-    assert {"claim_baselines", "dirt_observations", "residual_owners"} <= tables
+    assert version == SCHEMA_VERSION == 7
+    assert {"claim_baselines", "dirt_observations", "provider_cache", "residual_owners"} <= tables
     assert {"repo_root", "path", "blob_hash", "first_seen", "last_seen"} <= observation_columns
     assert {"repo_root", "path", "client", "session_id", "released_at"} <= residual_columns
 
@@ -177,6 +181,7 @@ def test_store_migrates_schema_v4_data_with_null_callsigns(tmp_path: Path) -> No
     original.send_message(sender, [recipient], "preserved", "/repo", current=12)
     original.close()
     connection = sqlite3.connect(path)
+    connection.execute("DROP TABLE provider_cache")
     connection.execute("ALTER TABLE sessions DROP COLUMN permission_mode")
     connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
     connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")

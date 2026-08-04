@@ -365,6 +365,49 @@ class Store:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def provider_cache(self, context_key: str) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM provider_cache
+            WHERE context_key = ?
+            ORDER BY client
+            """,
+            (context_key,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def replace_provider_cache(
+        self,
+        context_key: str,
+        reports: Sequence[dict[str, Any]],
+        refreshed_at: float,
+    ) -> None:
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM provider_cache")
+            connection.executemany(
+                """
+                INSERT INTO provider_cache(
+                    context_key, client, refreshed_at, ok, source, enabled, dropped
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    (
+                        context_key,
+                        report["client"],
+                        refreshed_at,
+                        report["ok"],
+                        report["source"],
+                        report["enabled"],
+                        report["dropped"],
+                    )
+                    for report in reports
+                ),
+            )
+
+    def clear_provider_cache(self) -> None:
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM provider_cache")
+
     def session(self, identity: Identity) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT * FROM sessions WHERE client = ? AND session_id = ?",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event, get_ident
 
 import psutil
 import pytest
@@ -10,7 +11,12 @@ from hypothesis import strategies as st
 from ai_coord import providers
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.integrations import HookCheck, HooksCheck
-from ai_coord.providers import HostInventory, ProviderReport, normalize_claude_sessions
+from ai_coord.providers import (
+    INVENTORY_CACHE_SECONDS,
+    HostInventory,
+    ProviderReport,
+    normalize_claude_sessions,
+)
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
 
 
@@ -91,11 +97,13 @@ def test_host_inventory_reconciles_only_stale_dead_codex_sessions(
         checked.append(reference)
         return reference.pid != 101
 
-    def codex_report(_inventory: HostInventory, _store: Store) -> ProviderReport:
+    def codex_report(
+        _inventory: HostInventory, _store: Store, _executable: str | None
+    ) -> ProviderReport:
         return ProviderReport("codex", True, "test")
 
     def collect_claude(
-        _inventory: HostInventory,
+        _inventory: HostInventory, _executable: str | None
     ) -> tuple[ProviderReport, list[dict[str, object]]]:
         return ProviderReport("claude", True, "test", enabled=False), []
 
@@ -110,6 +118,154 @@ def test_host_inventory_reconciles_only_stale_dead_codex_sessions(
     assert store.session(stale_live) is not None
     assert store.session(recent_dead) is not None
     assert store.session(claude) is not None
+
+
+def test_host_inventory_reuses_complete_cache_across_store_instances(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "state.db"
+    current = 100.0
+    calls: list[str] = []
+
+    monkeypatch.setattr(providers, "now_ts", lambda: current)
+    monkeypatch.setattr(providers.shutil, "which", lambda client: f"/bin/{client}")
+
+    def codex_report(
+        _inventory: HostInventory, _store: Store, _executable: str | None
+    ) -> ProviderReport:
+        calls.append("codex")
+        return ProviderReport("codex", True, "test-codex")
+
+    def collect_claude(
+        _inventory: HostInventory, _executable: str | None
+    ) -> tuple[ProviderReport, list[dict[str, object]]]:
+        calls.append("claude")
+        return ProviderReport("claude", True, "test-claude"), []
+
+    monkeypatch.setattr(HostInventory, "_codex_report", codex_report)
+    monkeypatch.setattr(HostInventory, "_collect_claude", collect_claude)
+    first_store = Store(path)
+    first = HostInventory().refresh(first_store, allow_cached=True)
+    first_store.close()
+
+    current += INVENTORY_CACHE_SECONDS / 2
+    second = HostInventory().refresh(Store(path), allow_cached=True)
+
+    assert calls.count("codex") == calls.count("claude") == 1
+    assert second == first
+    assert [report.source for report in second.providers] == ["test-codex", "test-claude"]
+
+
+@pytest.mark.parametrize(
+    ("second_time", "change_context"),
+    ((99.0, False), (100.0 + INVENTORY_CACHE_SECONDS, False), (101.0, True)),
+)
+def test_host_inventory_reprobes_expired_backward_or_other_context_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    second_time: float,
+    change_context: bool,
+) -> None:
+    current = 100.0
+    calls = 0
+
+    monkeypatch.setattr(providers, "now_ts", lambda: current)
+    monkeypatch.setattr(providers.shutil, "which", lambda client: f"/bin/{client}")
+
+    def codex_report(
+        _inventory: HostInventory, _store: Store, _executable: str | None
+    ) -> ProviderReport:
+        nonlocal calls
+        calls += 1
+        return ProviderReport("codex", True, "test")
+
+    def collect_claude(
+        _inventory: HostInventory, _executable: str | None
+    ) -> tuple[ProviderReport, list[dict[str, object]]]:
+        return ProviderReport("claude", True, "test", enabled=False), []
+
+    monkeypatch.setattr(HostInventory, "_codex_report", codex_report)
+    monkeypatch.setattr(HostInventory, "_collect_claude", collect_claude)
+    store = Store(tmp_path / "state.db")
+    HostInventory().refresh(store, allow_cached=True)
+
+    current = second_time
+    if change_context:
+        monkeypatch.setenv("CODEX_HOME", str(tmp_path / "other-codex"))
+    HostInventory().refresh(store, allow_cached=True)
+
+    assert calls == 2
+
+
+def test_host_inventory_clears_complete_cache_after_fresh_degradation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = Store(tmp_path / "state.db")
+    degraded = False
+    monkeypatch.setattr(providers, "now_ts", lambda: 100.0)
+    monkeypatch.setattr(providers.shutil, "which", lambda client: f"/bin/{client}")
+
+    def codex_report(
+        _inventory: HostInventory, _store: Store, _executable: str | None
+    ) -> ProviderReport:
+        return ProviderReport(
+            "codex",
+            not degraded,
+            "test",
+            error="untrusted" if degraded else None,
+        )
+
+    def collect_claude(
+        _inventory: HostInventory, _executable: str | None
+    ) -> tuple[ProviderReport, list[dict[str, object]]]:
+        return ProviderReport("claude", True, "test", enabled=False), []
+
+    monkeypatch.setattr(HostInventory, "_codex_report", codex_report)
+    monkeypatch.setattr(HostInventory, "_collect_claude", collect_claude)
+    assert HostInventory().refresh(store, allow_cached=False).complete
+    assert store.connection.execute("SELECT COUNT(*) FROM provider_cache").fetchone()[0] == 2
+
+    degraded = True
+    assert not HostInventory().refresh(store, allow_cached=False).complete
+
+    assert store.connection.execute("SELECT COUNT(*) FROM provider_cache").fetchone()[0] == 0
+
+
+def test_host_inventory_overlaps_probes_and_reconciles_on_calling_thread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = Store(tmp_path / "state.db")
+    calling_thread = get_ident()
+    claude_started = Event()
+    reconciliation_threads: list[int] = []
+    original_replace = store.replace_claude_sessions
+
+    monkeypatch.setattr(providers.shutil, "which", lambda client: f"/bin/{client}")
+
+    def codex_report(
+        _inventory: HostInventory, _store: Store, _executable: str | None
+    ) -> ProviderReport:
+        assert get_ident() == calling_thread
+        assert claude_started.wait(timeout=1)
+        return ProviderReport("codex", True, "test")
+
+    def collect_claude(
+        _inventory: HostInventory, _executable: str | None
+    ) -> tuple[ProviderReport, list[dict[str, object]]]:
+        assert get_ident() != calling_thread
+        claude_started.set()
+        return ProviderReport("claude", True, "test"), []
+
+    def replace(rows: list[dict[str, object]], current: float) -> None:
+        reconciliation_threads.append(get_ident())
+        original_replace(rows, current)
+
+    monkeypatch.setattr(HostInventory, "_codex_report", codex_report)
+    monkeypatch.setattr(HostInventory, "_collect_claude", collect_claude)
+    monkeypatch.setattr(store, "replace_claude_sessions", replace)
+
+    assert HostInventory().refresh(store).complete
+    assert reconciliation_threads == [calling_thread]
 
 
 def test_codex_provider_reports_trusted_hook_inventory(
@@ -136,7 +292,7 @@ def test_codex_provider_reports_trusted_hook_inventory(
 
     monkeypatch.setattr(providers, "inspect_codex_hook_trust", inspect_trust)
 
-    report = HostInventory()._codex_report(store)
+    report = HostInventory()._codex_report(store, "/bin/codex")
 
     assert report == ProviderReport("codex", True, "hook-ledger")
     assert inspected_paths == [hook_path]
@@ -162,7 +318,7 @@ def test_codex_provider_preserves_hook_file_failures(
         lambda _path: pytest.fail("hook trust inspection should not run for invalid hook files"),
     )
 
-    report = HostInventory()._codex_report(store)
+    report = HostInventory()._codex_report(store, "/bin/codex")
 
     assert not report.ok
     assert report.error == "invalid hook configuration; missing or invalid hooks: SessionStart"
@@ -200,7 +356,7 @@ def test_codex_provider_fails_closed_when_hook_trust_is_degraded_or_unverifiable
         lambda path: HookCheck(False, path, trust_error, {}),
     )
 
-    report = HostInventory()._codex_report(store)
+    report = HostInventory()._codex_report(store, "/bin/codex")
 
     assert not report.ok
     assert report.error == f"hook trust: {expected}"
@@ -225,7 +381,7 @@ def test_codex_provider_preserves_hook_health_failures(
         lambda _path: pytest.fail("hook trust inspection should not run for unhealthy hooks"),
     )
 
-    report = HostInventory()._codex_report(store)
+    report = HostInventory()._codex_report(store, "/bin/codex")
 
     assert not report.ok
     assert report.error == "last hook error: hook_error"
@@ -243,7 +399,7 @@ def test_codex_provider_remains_disabled_without_codex(
         lambda _path: pytest.fail("hook trust inspection should not run without Codex"),
     )
 
-    assert HostInventory()._codex_report(store) == ProviderReport(
+    assert HostInventory()._codex_report(store, None) == ProviderReport(
         "codex", True, "hook-ledger", enabled=False
     )
 
