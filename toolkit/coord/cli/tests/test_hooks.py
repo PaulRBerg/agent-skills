@@ -98,6 +98,86 @@ def test_codex_hook_lifecycle_and_delegate(
     assert store.session(Identity("codex", "codex-1")) is None
 
 
+@pytest.mark.parametrize(
+    ("client", "event_name", "extras"),
+    (
+        ("codex", "SessionStart", {}),
+        ("codex", "UserPromptSubmit", {}),
+        ("codex", "Stop", {}),
+        ("codex", "SubagentStart", {"agent_id": "child"}),
+        ("codex", "SubagentStop", {"agent_id": "child"}),
+        ("codex", "PostToolUse", {}),
+        ("claude", "SessionStart", {}),
+        ("claude", "UserPromptSubmit", {}),
+        ("claude", "Stop", {}),
+        ("claude", "SubagentStart", {"agent_id": "child"}),
+        ("claude", "SubagentStop", {"agent_id": "child"}),
+        ("claude", "PostToolUse", {}),
+        ("claude", "PostToolBatch", {}),
+    ),
+)
+def test_permission_mode_is_ingested_on_supported_lifecycle_events(
+    tmp_path: Path,
+    git_repo: Path,
+    client: str,
+    event_name: str,
+    extras: dict[str, str],
+) -> None:
+    store = Store(tmp_path / f"{client}-{event_name}.db")
+    coordinator = Coordinator(store, StaticInventory())
+    identity = Identity(client, "mode-session")
+
+    coordinator.ingest_hook(
+        client,
+        {
+            "session_id": identity.session_id,
+            "cwd": str(git_repo),
+            "hook_event_name": event_name,
+            "permission_mode": "plan",
+            **extras,
+        },
+    )
+
+    session = store.session(identity)
+    assert session is not None
+    assert session["permission_mode"] == "plan"
+
+
+@pytest.mark.parametrize("client", ("codex", "claude"))
+def test_permission_mode_absence_preserves_and_unknown_value_clears(
+    tmp_path: Path,
+    git_repo: Path,
+    client: str,
+) -> None:
+    store = Store(tmp_path / f"{client}.db")
+    coordinator = Coordinator(store, StaticInventory())
+    identity = Identity(client, "mode-session")
+    base = {"session_id": identity.session_id, "cwd": str(git_repo)}
+    coordinator.ingest_hook(
+        client,
+        {**base, "hook_event_name": "SessionStart", "permission_mode": "dontAsk"},
+    )
+
+    coordinator.ingest_hook(client, {**base, "hook_event_name": "UserPromptSubmit"})
+    session = store.session(identity)
+    assert session is not None
+    assert session["permission_mode"] == "dontAsk"
+
+    private_value = "PRIVATE-not-a-mode"
+    coordinator.ingest_hook(
+        client,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "permission_mode": private_value,
+        },
+    )
+    session = store.session(identity)
+    assert session is not None
+    assert session["permission_mode"] is None
+    assert private_value not in str(store.sessions())
+
+
 def test_presence_contains_counts_not_message_text(tmp_path: Path, git_repo: Path) -> None:
     store = Store(tmp_path / "state.db")
     coordinator = Coordinator(store, StaticInventory())

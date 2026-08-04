@@ -39,6 +39,42 @@ def test_cli_start_status_done(
     assert done.output == "DONE\treleased\n"
 
 
+def test_cli_status_labels_planning_sessions_and_delegate_counts(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coordinator = Coordinator(Store(tmp_path / "state.db"), StaticInventory())
+    identity = Identity("codex", "planning-session")
+    monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)
+    monkeypatch.setenv("AI_COORD_CLIENT", identity.client)
+    monkeypatch.setenv("AI_COORD_SESSION_ID", identity.session_id)
+    monkeypatch.chdir(git_repo)
+    coordinator.ingest_hook(
+        identity.client,
+        {
+            "session_id": identity.session_id,
+            "cwd": str(git_repo),
+            "hook_event_name": "SessionStart",
+            "permission_mode": "plan",
+        },
+    )
+    coordinator.store.update_delegate(identity, "child-1", "explorer", "active")
+    runner = CliRunner()
+
+    human = runner.invoke(cli_module.cli, ["status"])
+
+    assert human.exit_code == 0
+    assert "planning delegates=1" in human.output
+
+    machine = runner.invoke(cli_module.cli, ["status", "--json"])
+    payload = json.loads(machine.output)
+    assert machine.exit_code == 0
+    assert payload["schema_version"] == 1
+    assert payload["sessions"][0]["permission_mode"] == "plan"
+    assert payload["sessions"][0]["delegate_count"] == 1
+
+
 def test_cli_usage_and_trailer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     coordinator = Coordinator(Store(tmp_path / "state.db"), StaticInventory())
     monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)

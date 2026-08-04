@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA_STATEMENTS = (
     """
@@ -18,6 +18,7 @@ _SCHEMA_STATEMENTS = (
         name TEXT,
         label TEXT,
         waiting_for TEXT,
+        permission_mode TEXT,
         pid INTEGER,
         process_started_at REAL,
         source TEXT NOT NULL,
@@ -222,6 +223,10 @@ def migrate(connection: sqlite3.Connection) -> None:
             connection.execute("ALTER TABLE messages ADD COLUMN sender_callsign TEXT")
             connection.execute("ALTER TABLE messages ADD COLUMN recipient_callsign TEXT")
             connection.execute("PRAGMA user_version = 5")
+            current = 5
+        if current == 5:
+            connection.execute("ALTER TABLE sessions ADD COLUMN permission_mode TEXT")
+            connection.execute("PRAGMA user_version = 6")
     except BaseException:
         connection.rollback()
         raise

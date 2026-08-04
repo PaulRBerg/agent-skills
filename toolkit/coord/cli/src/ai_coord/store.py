@@ -193,15 +193,28 @@ class Store:
         process_started_at: float | None = None,
         started_at: float | None = None,
         current: float | None = None,
+        permission_mode: str | None = None,
+        update_permission_mode: bool = False,
     ) -> None:
         timestamp = now_ts() if current is None else current
         with self.transaction() as connection:
+            previous_permission_mode: str | None = None
+            if update_permission_mode:
+                previous = connection.execute(
+                    """
+                    SELECT permission_mode FROM sessions
+                    WHERE client = ? AND session_id = ?
+                    """,
+                    (identity.client, identity.session_id),
+                ).fetchone()
+                if previous is not None:
+                    previous_permission_mode = previous["permission_mode"]
             connection.execute(
                 """
                 INSERT INTO sessions(
                     client, session_id, cwd, repo_root, state, name, label, waiting_for,
-                    pid, process_started_at, source, started_at, last_seen
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    permission_mode, pid, process_started_at, source, started_at, last_seen
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(client, session_id) DO UPDATE SET
                     cwd = excluded.cwd,
                     repo_root = excluded.repo_root,
@@ -209,6 +222,9 @@ class Store:
                     name = COALESCE(excluded.name, sessions.name),
                     label = COALESCE(excluded.label, sessions.label),
                     waiting_for = excluded.waiting_for,
+                    permission_mode = CASE
+                        WHEN ? THEN excluded.permission_mode ELSE sessions.permission_mode
+                    END,
                     pid = CASE
                         WHEN excluded.pid IS NULL THEN sessions.pid ELSE excluded.pid
                     END,
@@ -228,13 +244,17 @@ class Store:
                     name,
                     label,
                     waiting_for,
+                    permission_mode,
                     pid,
                     process_started_at,
                     source,
                     timestamp if started_at is None else started_at,
                     timestamp,
+                    update_permission_mode,
                 ),
             )
+            if update_permission_mode and previous_permission_mode != permission_mode:
+                self._bump_generation(connection)
 
     def set_session_label(self, identity: Identity, label: str | None) -> None:
         with self.transaction() as connection:

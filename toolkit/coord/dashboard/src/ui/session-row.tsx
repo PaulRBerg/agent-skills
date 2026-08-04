@@ -114,6 +114,11 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
           <div className="flex min-w-0 items-center gap-2">
             <LivenessDot lastSeen={session.last_seen} now={now} />
             <span className={clientBadge({ client })}>{session.client}</span>
+            {session.permission_mode === "plan" ? (
+              <span className="inline-flex border border-warning bg-warning-subtle px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold uppercase tracking-wide text-warning-ink">
+                planning
+              </span>
+            ) : null}
             <AnimatedValue
               className="min-w-0 flex-1 overflow-hidden text-sm font-semibold"
               value={label}

@@ -89,6 +89,9 @@ reminder always requires re-running `start` before editing. Repeated `start` cal
 wakers for the same session; each exits on the first terminal outcome. Codex sessions use `ai-coord wait` in the
 foreground.
 
+Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
+planning presence from active implementation work.
+
 When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks byte-for-byte. Run `ai-coord baseline` to
 print their blob OIDs and pass affected paths to the commit skill's baseline exclusion. A session that finishes with
 uncommitted dirt retains residual ownership and can reclaim it immediately.
@@ -146,6 +149,13 @@ intent label, while its filtered `ai-coord waker claude` hook handles blocked st
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
 
+### Subagents
+
+Both hosts fire `SubagentStart` and `SubagentStop` with the parent `session_id`. `ai-coord` records delegates under that
+parent; it never creates child sessions or claims, and child tool calls refresh the parent session. Coordination is
+therefore session-scoped: the parent's claim covers all delegated work. Subagents must never run lifecycle commands
+(`start`, `wait`, or `done`) themselves because their inherited identity would make those commands act as the parent.
+
 ## Legacy migration
 
 Install and test the new CLI before switching hooks:
@@ -163,7 +173,7 @@ conservative queued blockers until released or expired. The importer never remov
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
-mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v5;
+mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v6;
 opening an older ledger upgrades it one way, while the public `status --json` schema remains v1.
 
 The ledger stores bounded session metadata, callsigns, labels, literal scopes, messages, and notes. It never stores

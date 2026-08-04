@@ -68,6 +68,10 @@ function validateSession(value: unknown, path: string): void {
   nullableString(row.name, `${path}.name`);
   nullableString(row.label, `${path}.label`);
   nullableString(row.waiting_for, `${path}.waiting_for`);
+  if (row.permission_mode !== undefined)
+    nullableString(row.permission_mode, `${path}.permission_mode`);
+  if (row.delegate_count !== undefined)
+    integer(row.delegate_count, `${path}.delegate_count`);
   if (row.pid !== null) integer(row.pid, `${path}.pid`);
   string(row.source, `${path}.source`);
   number(row.started_at, `${path}.started_at`);

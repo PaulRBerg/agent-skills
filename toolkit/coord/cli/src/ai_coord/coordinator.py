@@ -55,6 +55,7 @@ CALLSIGN_NUDGE = (
     "ai-coord: Choose a short funny name containing an emoji, then run ai-coord name '<callsign>'."
 )
 _NUDGE_EVENTS = frozenset({("claude", "PostToolBatch"), ("codex", "PostToolUse")})
+_PERMISSION_MODES = frozenset({"default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,12 +466,20 @@ class Coordinator:
         claim_by_key = {
             (str(claim["client"]), str(claim["session_id"])): claim for claim in all_claims
         }
+        all_delegates = self.store.delegates()
+        delegate_counts: dict[tuple[str, str], int] = {}
+        for delegate in all_delegates:
+            key = (str(delegate["parent_client"]), str(delegate["parent_session_id"]))
+            delegate_counts[key] = delegate_counts.get(key, 0) + 1
         enriched: list[dict[str, Any]] = []
         outside: list[dict[str, Any]] = []
         for session in all_sessions:
-            claim = claim_by_key.get((str(session["client"]), str(session["session_id"])))
+            session_key = (str(session["client"]), str(session["session_id"]))
+            claim = claim_by_key.get(session_key)
             row = dict(session)
             row.pop("process_started_at", None)
+            if delegate_count := delegate_counts.get(session_key):
+                row["delegate_count"] = delegate_count
             if claim:
                 row["claim_state"] = claim["state"]
                 row["label"] = claim["label"]
@@ -492,7 +501,6 @@ class Coordinator:
             notes = [note for note_root in known_roots for note in self.store.notes(note_root)]
         else:
             notes = self.store.notes(str(root)) if root else []
-        all_delegates = self.store.delegates()
         if machine_wide:
             delegates = all_delegates
         else:
@@ -532,7 +540,13 @@ class Coordinator:
         anonymous: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
         named: list[dict[str, Any]] = []
         for row in snapshot.sessions:
-            if row.get("callsign") or row.get("name") or row.get("label"):
+            if (
+                row.get("callsign")
+                or row.get("name")
+                or row.get("label")
+                or row.get("permission_mode") == "plan"
+                or row.get("delegate_count")
+            ):
                 named.append(row)
             else:
                 key = (str(row["client"]), str(row["state"]), str(row["cwd"]))
@@ -576,6 +590,10 @@ class Coordinator:
 
     def _session_line(self, row: dict[str, Any]) -> str:
         detail: list[str] = []
+        if row.get("permission_mode") == "plan":
+            detail.append("planning")
+        if row.get("delegate_count"):
+            detail.append(f"delegates={row['delegate_count']}")
         if row.get("waiting_for"):
             detail.append(f"waiting={row['waiting_for']}")
         if row.get("paths"):
@@ -708,19 +726,6 @@ class Coordinator:
             if not isinstance(session_id, str) or not session_id:
                 raise ValueError("missing session id")
             identity = Identity(client, session_id)
-            if (client, event_name) in _NUDGE_EVENTS:
-                count = self.store.mark_unnotified(identity)
-                self.store.hook_success(client, event_name)
-                if count == 0:
-                    return ""
-                return json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": event_name,
-                            "additionalContext": INBOX_NUDGE.format(count=count),
-                        }
-                    }
-                )
             cwd_value = payload.get("cwd")
             cwd = (
                 Path(cwd_value).resolve()
@@ -728,22 +733,10 @@ class Coordinator:
                 else Path.cwd()
             )
             root = git_root(cwd)
+            permission_mode_present, permission_mode = self._permission_mode(payload)
 
             if event_name == "SessionEnd":
                 self.store.end_session(identity)
-            elif event_name in {"SubagentStart", "SubagentStop"}:
-                agent_id = payload.get("agent_id")
-                if not isinstance(agent_id, str) or not agent_id:
-                    raise ValueError("missing subagent id")
-                agent_type = payload.get("agent_type")
-                self.store.update_delegate(
-                    identity,
-                    agent_id,
-                    agent_type if isinstance(agent_type, str) else None,
-                    "active" if event_name == "SubagentStart" else "ended",
-                )
-            elif event_name == "PostToolUse" and client == "claude":
-                self._ingest_claude_plan(identity, payload, root)
             else:
                 state = "idle" if event_name in {"SessionStart", "Stop"} else "working"
                 parent = process_reference(os.getppid())
@@ -755,7 +748,35 @@ class Coordinator:
                     source="hook",
                     pid=parent.pid,
                     process_started_at=parent.started_at,
+                    permission_mode=permission_mode,
+                    update_permission_mode=permission_mode_present,
                 )
+                if (client, event_name) in _NUDGE_EVENTS:
+                    count = self.store.mark_unnotified(identity)
+                    self.store.hook_success(client, event_name)
+                    if count == 0:
+                        return ""
+                    return json.dumps(
+                        {
+                            "hookSpecificOutput": {
+                                "hookEventName": event_name,
+                                "additionalContext": INBOX_NUDGE.format(count=count),
+                            }
+                        }
+                    )
+                if event_name in {"SubagentStart", "SubagentStop"}:
+                    agent_id = payload.get("agent_id")
+                    if not isinstance(agent_id, str) or not agent_id:
+                        raise ValueError("missing subagent id")
+                    agent_type = payload.get("agent_type")
+                    self.store.update_delegate(
+                        identity,
+                        agent_id,
+                        agent_type if isinstance(agent_type, str) else None,
+                        "active" if event_name == "SubagentStart" else "ended",
+                    )
+                elif event_name == "PostToolUse" and client == "claude":
+                    self._ingest_claude_plan(identity, payload, root)
             self.store.hook_success(client, event_name)
             if event_name in {"SessionStart", "UserPromptSubmit"}:
                 return self._hook_context(
@@ -774,6 +795,13 @@ class Coordinator:
     def _noop_stdout(client: str, event_name: str) -> str:
         """Return the no-op stdout a host expects: Codex Stop hooks require a JSON object."""
         return "{}" if client == "codex" and event_name in {"Stop", "SubagentStop"} else ""
+
+    @staticmethod
+    def _permission_mode(payload: dict[str, Any]) -> tuple[bool, str | None]:
+        if "permission_mode" not in payload:
+            return False, None
+        value = payload.get("permission_mode")
+        return True, value if isinstance(value, str) and value in _PERMISSION_MODES else None
 
     def _ingest_claude_plan(
         self, identity: Identity, payload: dict[str, Any], root: Path | None
