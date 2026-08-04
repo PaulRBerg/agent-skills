@@ -51,7 +51,7 @@ def process_reference(pid: int) -> ProcessReference:
 
 def process_ancestors(start_pid: int | None = None) -> tuple[ProcessReference, ...]:
     """Return the starting parent and at most 15 of its ancestors."""
-    pid = start_pid or os.getppid()
+    pid = os.getppid() if start_pid is None else start_pid
     if pid <= 1:
         return ()
     try:
