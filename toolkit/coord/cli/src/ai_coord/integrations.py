@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import stat
 import subprocess
@@ -101,6 +102,12 @@ class _CodexVersionConflict(CodexTrustError):
 
 
 _CODEX_TIMEOUT_SECONDS = 10
+_CODEX_MINIMUM_VERSION = (0, 146, 0)
+_CODEX_MINIMUM_VERSION_TEXT = ".".join(str(part) for part in _CODEX_MINIMUM_VERSION)
+_CODEX_VERSION_PATTERN = re.compile(
+    r"^codex-cli (?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
+    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+)
 _CODEX_EVENT_NAMES = {
     "SessionStart": "sessionStart",
     "UserPromptSubmit": "userPromptSubmit",
@@ -190,6 +197,7 @@ def trust_codex_hooks(
     hooks_path = _active_codex_hook_path(path)
     if dry_run:
         return "skipped"
+    _require_codex_minimum_version()
 
     last_conflict: _CodexVersionConflict | None = None
     for attempt in range(3):
@@ -237,6 +245,7 @@ def inspect_codex_hook_trust(path: Path | None = None) -> HookCheck:
     """Read Codex's trust state for exactly the hooks this integration owns."""
     try:
         hooks_path = _active_codex_hook_path(path)
+        _require_codex_minimum_version()
         with _CodexAppServer() as server:
             hooks = _owned_codex_hooks(server.request("hooks/list", {}), hooks_path)
         details: dict[str, object] = {
@@ -265,6 +274,35 @@ def _active_codex_hook_path(path: Path | None) -> Path:
     if selected != active:
         raise ValueError(f"Codex hooks path must be the active source: {active}")
     return active
+
+
+def _require_codex_minimum_version() -> None:
+    try:
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            check=False,
+            encoding="utf-8",
+            timeout=_CODEX_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise CodexTrustError(f"could not determine Codex version: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        raise CodexTrustError(f"could not determine Codex version: {detail}")
+
+    output = result.stdout.strip()
+    match = _CODEX_VERSION_PATTERN.fullmatch(output)
+    if match is None:
+        raise CodexTrustError("could not parse `codex --version` output")
+    version = tuple(int(match[name]) for name in ("major", "minor", "patch"))
+    if version < _CODEX_MINIMUM_VERSION or (
+        version == _CODEX_MINIMUM_VERSION and match["prerelease"] is not None
+    ):
+        raise CodexTrustError(
+            f"Codex hook trust requires codex-cli >= {_CODEX_MINIMUM_VERSION_TEXT}; "
+            f"found {output.removeprefix('codex-cli ')}"
+        )
 
 
 def _owned_codex_hooks(response: object, hooks_path: Path) -> dict[str, dict[str, Any]]:
@@ -371,7 +409,7 @@ def _validate_config_write(response: object, expected_path: str) -> None:
 
 
 class _CodexAppServer:
-    """Minimal, phase-bounded JSONL JSON-RPC client for Codex 0.146.0."""
+    """Minimal JSONL client for compatible Codex 0.146.0+ app-server schemas."""
 
     def __init__(self) -> None:
         self._process: subprocess.Popen[str] | None = None

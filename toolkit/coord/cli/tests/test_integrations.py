@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,11 @@ from ai_coord.integrations import (
 from ai_coord.jsonc import JsoncDocument
 
 JSON_SCALARS = st.none() | st.booleans() | st.integers() | st.text()
+
+
+@pytest.fixture
+def supported_codex_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(integrations_module, "_require_codex_minimum_version", lambda: None)
 
 
 def _codex_hook(
@@ -84,9 +90,83 @@ def _handler_order_case(draw: st.DrawFn) -> tuple[list[str], int]:
     return commands, position
 
 
+@pytest.mark.parametrize(
+    "output",
+    (
+        "codex-cli 0.146.0\n",
+        "codex-cli 0.146.0+build.1\n",
+        "codex-cli 0.147.0-alpha.1\n",
+        "codex-cli 1.0.0\n",
+    ),
+)
+def test_codex_minimum_version_accepts_compatible_later_versions(
+    monkeypatch: pytest.MonkeyPatch, output: str
+) -> None:
+    monkeypatch.setattr(
+        integrations_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, output, ""),
+    )
+
+    integrations_module._require_codex_minimum_version()
+
+
+@pytest.mark.parametrize(
+    "output",
+    ("codex-cli 0.145.9\n", "codex-cli 0.146.0-alpha.1\n"),
+)
+def test_codex_minimum_version_rejects_older_and_boundary_prerelease_versions(
+    monkeypatch: pytest.MonkeyPatch, output: str
+) -> None:
+    monkeypatch.setattr(
+        integrations_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, output, ""),
+    )
+
+    with pytest.raises(CodexTrustError, match=r"requires codex-cli >= 0\.146\.0"):
+        integrations_module._require_codex_minimum_version()
+
+
+@pytest.mark.parametrize("output", ("", "codex 0.146.0", "codex-cli latest"))
+def test_codex_minimum_version_rejects_malformed_output(
+    monkeypatch: pytest.MonkeyPatch, output: str
+) -> None:
+    monkeypatch.setattr(
+        integrations_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, output, ""),
+    )
+
+    with pytest.raises(CodexTrustError, match="could not parse"):
+        integrations_module._require_codex_minimum_version()
+
+
+def test_codex_trust_rejects_unsupported_version_before_starting_app_server(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    monkeypatch.setattr(
+        integrations_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, "codex-cli 0.145.9\n", ""),
+    )
+    monkeypatch.setattr(
+        integrations_module,
+        "_CodexAppServer",
+        lambda: pytest.fail("unsupported Codex must be rejected before app-server startup"),
+    )
+
+    with pytest.raises(CodexTrustError, match=r"requires codex-cli >= 0\.146\.0"):
+        trust_codex_hooks()
+
+
 @pytest.mark.parametrize("initial_trust", ("untrusted", "modified"))
 def test_codex_trust_batches_only_exact_owned_hooks(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, initial_trust: str
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    initial_trust: str,
+    supported_codex_version: None,
 ) -> None:
     codex_home = tmp_path / "codex"
     hooks_path = codex_home / "hooks.json"
@@ -197,7 +277,7 @@ def test_codex_config_write_response_is_strict(response: object) -> None:
 
 
 def test_codex_trust_is_noop_when_exact_hooks_are_trusted(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, supported_codex_version: None
 ) -> None:
     codex_home = tmp_path / "codex"
     hooks_path = codex_home / "hooks.json"
@@ -231,7 +311,7 @@ def test_codex_trust_rejects_non_active_hook_path(
 
 
 def test_codex_trust_retries_only_config_version_conflict(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, supported_codex_version: None
 ) -> None:
     codex_home = tmp_path / "codex"
     hooks_path = codex_home / "hooks.json"
@@ -294,7 +374,7 @@ def test_codex_trust_retries_only_config_version_conflict(
 
 
 def test_codex_trust_stops_after_three_fresh_config_version_conflicts(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, supported_codex_version: None
 ) -> None:
     codex_home = tmp_path / "codex"
     hooks_path = codex_home / "hooks.json"
@@ -348,7 +428,7 @@ def test_codex_trust_stops_after_three_fresh_config_version_conflicts(
 
 
 def test_codex_trust_failed_fresh_verification_is_not_retried(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, supported_codex_version: None
 ) -> None:
     codex_home = tmp_path / "codex"
     hooks_path = codex_home / "hooks.json"
@@ -396,7 +476,7 @@ def test_codex_trust_failed_fresh_verification_is_not_retried(
 
 
 def test_codex_trust_inspection_fails_closed_for_missing_exact_hook(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, supported_codex_version: None
 ) -> None:
     codex_home = tmp_path / "codex"
     hooks_path = codex_home / "hooks.json"

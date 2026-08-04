@@ -25,7 +25,9 @@ proceed with a stale-dirt advisory and a captured baseline.
 
 ## Installation
 
-Requirements: Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requirements: Python 3.12+ and [uv](https://docs.astral.sh/uv/). Automatic Codex hook trust requires Codex CLI 0.146.0
+or newer; compatible later versions are accepted only when the required app-server protocol and trust semantics still
+validate.
 
 ```sh
 uv tool install 'git+https://github.com/PaulRBerg/ai-coord.git'
