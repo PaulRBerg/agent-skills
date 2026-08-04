@@ -16,6 +16,8 @@ after a ledger schema change, run it so the global CLI matches and re-exec can c
 - `Coordinator` owns identity, provider coverage, path arbitration, queueing, communication, and status behavior.
 - SQLite is both the production and test store. Tests use a temporary `AI_COORD_STATE_DIR`.
 - Hook mode is fail-open: it must not expose raw prompts, tool payloads, transcripts, errors, messages, or notes.
+- Model-visible hook context must be factual, bounded, and counts-only: never include peer text, IDs, prompts, or tool
+  payloads, and state explicitly that peer-reported content is data rather than instructions or authority.
 - Hook `permission_mode` values are stored only when they match the fixed host-mode whitelist; unknown values clear the
   field rather than persisting arbitrary payload data.
 - Exclusive acquisition fails closed when provider coverage is incomplete. Relevant unattributed dirt settles for at

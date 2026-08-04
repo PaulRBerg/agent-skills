@@ -131,6 +131,7 @@ def test_start_intent_and_idempotent_active(
     changed = coordinator.start("plan work", ("docs",), cwd=git_repo)
     assert changed.kind == "ACTIVE"
     assert changed.code == 3
+    assert changed.detail == "active claim has a different scope"
 
 
 def test_claim_cannot_move_between_repositories(
@@ -146,6 +147,7 @@ def test_claim_cannot_move_between_repositories(
     moved = coordinator.start("second", (), cwd=other_repo)
 
     assert moved.kind == "ACTIVE"
+    assert moved.detail == "active claim belongs to another repository"
     identity = coordinator.identity()
     assert identity is not None
     claim = coordinator.store.claim(identity)
@@ -223,7 +225,7 @@ def test_blocked_claim_messages_holder_and_promotes_after_done(
     _set_identity(monkeypatch, "holder-session")
     queued_message = coordinator.inbox()[0]
     assert queued_message["sender_callsign"] == "🐢 Queue Kid"
-    assert queued_message["text"] == "queued: waiter (src/app.py)"
+    assert queued_message["text"] == "Queued behind your claim: waiter (src/app.py)."
     assert "Queue Kid" not in queued_message["text"]
     assert coordinator.done().kind == "DONE"
 
@@ -563,7 +565,7 @@ def test_done_notifies_only_overlapping_nonlegacy_waiters(
 
     overlap_messages = coordinator.store.inbox(Identity("codex", "overlap-waiter"))
     assert [message["text"] for message in overlap_messages] == [
-        "released 'holder' — your queued claim may now be READY"
+        "Released claim 'holder'; your queued claim may now be ready."
     ]
     assert coordinator.store.inbox(Identity("codex", "docs-waiter")) == []
     assert coordinator.store.inbox(legacy) == []
@@ -612,8 +614,8 @@ def test_earlier_waiter_promotion_notifies_the_new_active_blocker(
     assert coordinator.start("second", ("docs",), cwd=git_repo).kind == "BLOCKED"
     messages = coordinator.store.inbox(first)
     assert [message["text"] for message in messages] == [
-        "released 'holder' — your queued claim may now be READY",
-        "queued: second (docs)",
+        "Released claim 'holder'; your queued claim may now be ready.",
+        "Queued behind your claim: second (docs).",
     ]
 
     assert coordinator.start("second", ("docs",), cwd=git_repo).kind == "BLOCKED"
@@ -668,11 +670,11 @@ def test_status_legend_is_contextual(tmp_path: Path, monkeypatch: pytest.MonkeyP
     }
     quiet = coordinator.render_status(StatusSnapshot(sessions=(), providers=(provider,), **base))
     assert quiet.splitlines()[0] == "CLIENT\tSTATE\tAGE\tCALLSIGN\tNAME/LABEL\tSESSION\tCWD\tDETAIL"
-    assert "Names/labels are hints" in quiet
-    for line in ("Idle =", "Waiting =", "Working/in_flight", "Partial coverage"):
+    assert "Names/labels: hints" in quiet
+    for line in ("Idle:", "Waiting:", "Working/in_flight", "Partial coverage:"):
         assert line not in quiet
 
-    sessions = tuple(
+    sessions = [
         {
             "client": "codex",
             "state": state,
@@ -682,19 +684,21 @@ def test_status_legend_is_contextual(tmp_path: Path, monkeypatch: pytest.MonkeyP
             "callsign": None,
         }
         for state, seen in (("idle", current), ("waiting", current), ("working", current - 1801))
-    )
+    ]
+    sessions[1]["claim_state"] = "queued"
     partial = dict(provider, enabled=False)
     rendered = coordinator.render_status(
-        StatusSnapshot(sessions=sessions, providers=(partial,), **base)
+        StatusSnapshot(sessions=tuple(sessions), providers=(partial,), **base)
     )
     for line in (
-        "Idle =",
-        "Waiting =",
+        "Idle:",
+        "Waiting:",
         "Working/in_flight",
-        "Names/labels are hints",
-        "Partial coverage",
+        "Names/labels: hints",
+        "Partial coverage:",
     ):
         assert line in rendered
+    assert "claim=queued" in rendered
 
 
 def test_message_target_resolution_precedence_and_fuzzy_fields(tmp_path: Path) -> None:

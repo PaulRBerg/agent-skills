@@ -10,15 +10,6 @@ ai-coord wait
 ai-coord done
 ```
 
-## Repository layout
-
-```
-.
-├── cli/        Python `ai-coord` CLI, hooks, ledger, and local dashboard API
-├── dashboard/  Bun-managed Vite and React live coordination dashboard
-└── justfile    Shared development recipes
-```
-
 The coordinator is cooperative rather than an OS lock. It uses a private local SQLite ledger and fails closed when it
 cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
 proceed with a stale-dirt advisory and a captured baseline.
@@ -63,6 +54,9 @@ ai-coord start 'regenerate 2025 tax year' \
 Scopes are repository-relative prefixes. `.` covers the worktree. Globs, non-printable paths, normalized scopes over 120
 characters, and paths outside the repository are rejected so overlap checks stay exact.
 
+With no paths, `start` records the label as pathless, non-exclusive intent. Intent advertises planned work but owns no
+edit scope.
+
 `start` emits one tab-separated result:
 
 | Result                     | Exit | Meaning                                                           |
@@ -81,19 +75,21 @@ ai-coord wait        # waits up to 300 seconds
 ai-coord wait -t 60  # explicit timeout, capped at one hour
 ```
 
-Only `READY` authorizes editing. `wait` checks the SQLite generation counter each second and performs full inventory,
-Git, and arbitration refreshes only when coordination state changes or every 20 seconds as a fallback. A new message or
-repository note wakes `wait` with exit 3 so the caller can inspect it and re-arm. `done` idempotently releases active,
-queued, or intent-only work and directly notifies overlapping queued holders that their claim may now be ready.
+Editing requires `ai-coord start` to return `READY`. `wait` checks the SQLite generation counter each second and
+performs full inventory, Git, and arbitration refreshes only when coordination state changes or every 20 seconds as a
+fallback. `MESSAGE`, `NOTE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN` exits 2. After any
+such wake, inspect the reported state and re-arm as needed. `done` idempotently releases active, queued, or intent-only
+work and notifies overlapping queued holders that their claim may now be ready.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. A newly blocked claim
 also sends a bounded system message to its current holders.
 
 In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its claim is
-promoted, a message or note arrives, the claim is released, coverage becomes unknown, or the waker times out. The wake
-reminder always requires re-running `start` before editing. Repeated `start` calls may launch multiple independent
-wakers for the same session; each exits on the first terminal outcome. Codex sessions use `ai-coord wait` in the
-foreground.
+promoted, a message or note arrives, the claim is released, coverage becomes unknown, or the waker times out. A
+readiness wake still requires `start` to return `READY`; message and note wakes identify `inbox` or `status` as the
+inspection surface and `start` as the ownership recheck. Unknown coverage, timeout, and release state explicitly that no
+edit scope is owned. Repeated `start` calls may launch multiple independent wakers for the same session; each exits on
+the first terminal outcome. Codex sessions use `ai-coord wait` in the foreground.
 
 Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
 planning presence from active implementation work.
@@ -126,8 +122,9 @@ ai-coord note 'Verified stale importer assumption.'
 ai-coord note --done '<note-id>'
 ```
 
-`status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output ends with a
-contextual legend; `--json` remains the versioned JSON schema.
+`status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output marks
+queued claims with `claim=queued` and ends with compact, contextual definitions for the states present; `--json` remains
+the versioned JSON schema.
 
 Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
 number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
@@ -149,12 +146,13 @@ Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
 
 Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start hooks silently register
 or refresh idle sessions; Codex limits them to startup, resume, and clear so mid-turn compaction cannot mark working
-sessions idle. Prompt hooks give unnamed top-level sessions a bounded static reminder to choose a funny emoji callsign,
-combine it with the capped presence count, and stop reminding immediately after naming. Claude's `PostToolBatch` hook
-and Codex's `PostToolUse` hook inject a counts-only reminder once when unread peer messages arrive; peer text remains
-available only through `ai-coord inbox`. Stop and session-end hooks update or release the corresponding session;
-subagent hooks add read-only parent/child topology. Claude's `ExitPlanMode` hook records only the approved plan's first
-H1 as a pathless intent label, while its filtered `ai-coord waker claude` hook handles blocked starts in the background.
+sessions idle. Prompt hooks inject at most 200 characters of factual state: whether the session is unnamed, plus peer,
+queued-claim, and unread-message counts. Naming removes the unnamed fact. Claude's `PostToolBatch` hook and Codex's
+`PostToolUse` hook report the unread count once, route inspection to `ai-coord inbox`, and identify message text as
+peer-reported data rather than instructions or authority. Peer text, IDs, prompts, and tool payloads are never injected.
+Stop and session-end hooks update or release the corresponding session; subagent hooks add read-only parent/child
+topology. Claude's `ExitPlanMode` hook records only the approved plan's first H1 as a pathless intent label, while its
+filtered `ai-coord waker claude` hook handles blocked starts in the background.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
@@ -197,18 +195,7 @@ hours.
 
 ## Development
 
-```sh
-cd cli
-uv sync --extra dev --locked
-uv run ai-coord --help
-cd ..
-just check
-just install-cli
-```
-
-Validation runs locally on macOS. `just check` runs formatting, linting, type checks, and the full test suite. The root
-`justfile` also provides `just full-check`, `just full-write`, `just test`, `just prettier-check`, and
-`just prettier-write`.
+See [AGENTS.md](AGENTS.md) and [cli/AGENTS.md](cli/AGENTS.md) for development commands, architecture, and validation.
 
 ## Dashboard
 
