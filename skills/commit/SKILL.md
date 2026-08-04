@@ -16,6 +16,9 @@ when explicitly requested or authorized by standing instructions.
 
 ## Workflow
 
+Do not run extra Git inspection commands (`git status`, `git log`, or `git diff`) around the helpers; helper output is
+the complete evidence for composing the message and receipt.
+
 ### 1) Parse arguments
 
 Arguments: `$ARGUMENTS`
@@ -72,15 +75,8 @@ changes the shared index. If preparation fails, stop with its error and a concis
 
 Read the helper output and produce the commit message in a single pass.
 
-**Message format** — use the `## message format` value from the helper output.
-
-- If `conventional`: read [references/conventional-prefix-format.md](references/conventional-prefix-format.md).
-- If `natural`: read [references/natural-language-format.md](references/natural-language-format.md).
-
-Read only the selected format reference before composing the message.
-
-**Unrelated hunks** — ignore pre-existing changes when determining type/scope/description. Without a baseline exclusion,
-unrelated changes in the same file are included in the commit scope but should not influence the message.
+**Message format** — use the `## message format` value from the helper output. Its `## message format rules` section
+contains the complete selected rules; compose the message from those rules.
 
 **Issue linking** — scan the chat transcript for GitHub issue references (e.g. `#123`, `owner/repo#123`, issue URLs)
 that the current changes resolve. For each match, append a `Closes #N` trailer. Skip issues merely mentioned in passing;
@@ -98,16 +94,8 @@ include only ones the commit actually closes.
 - Multiple issues: one `Closes #N` per line in the body/trailer
 - Merge with transcript-scanned issues; de-duplicate
 
-**Agent-Session attribution** — run once, independent of the diff:
-
-```bash
-ai-coord trailer
-```
-
-When the CLI exists and this exits `0`, append its `Agent-Session: <client>/<id>` output alongside any `Closes #N`
-trailers. When the CLI is missing or the command exits nonzero, skip silently — the catalog skill must keep working on
-machines without it. This makes committed changes attributable to an agent session (`git log` shows which session
-authored what).
+**Agent-Session attribution** — when the helper output includes an optional `## trailer` section, append its line as a
+trailer alongside any `Closes #N` trailers.
 
 ### 4) Commit
 
@@ -137,49 +125,24 @@ authored what).
   headings, trees, or labels.
 - Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or
   pre-commit hook activity unless the push workflow requires the user to reconcile a behind branch or a command failed.
-- If the helper reports that the default index remains locked, wait and retry the same helper command; never delete the
-  lock. If it reports that a commit was created but shared-index reconciliation failed, stop and report that commit ID;
-  never retry the commit.
-- **Pre-commit hook failure:** `Failed to get staged files!` and a bare `"lint-staged" exited with code 1` do not by
-  themselves prove contention. Retry as contention only when the same output explicitly names an index lock or the
-  helper reports its lock refusal. Otherwise inspect the named hook output or lint-staged debug trace. Retry with
-  `--no-verify` only when that evidence plus the prepared diff conclusively shows an unrelated pre-existing failure. A
-  generic failure, repo-wide check, or uncertain ownership is not enough. Never bypass a failure caused by or plausibly
-  affected by the intended paths; fix it or surface it. When bypassing, keep the existing one-line disclosure that the
-  unrelated hook failure was skipped.
-- **Signing failure (signer unreachable):** if `git commit` fails _after_ the pre-commit/commit-msg hooks already
-  passed, with an error naming the configured signer rather than the content or a hook (e.g. `1Password`,
-  `failed to fill whole buffer`, `ssh-agent`, `gpg failed to sign the data`, `no such identity`) — retry once, same
-  command, with `--no-gpg-sign` appended. Interactive/hardware signers (1Password, YubiKey, etc.) can be unreachable
-  when unattended, and the user has authorized landing unsigned commits in that case rather than blocking. Only retry on
-  a genuine signer error at the signing step, never speculatively, and never edit repo/global git config
-  (`commit.gpgsign`, `gpg.format`, etc.) — the bypass is per-commit only. Disclose with one line:
-  `Commit created unsigned — signer unavailable ("<short error>")`. In default mode, append `--no-gpg-sign` to the
-  `commit-paths.sh commit` command; keep direct Git flags for `--all` and `--staged`.
-  - **Session memo:** once a genuine signer error has triggered the fallback in this session, treat the signer as
-    unavailable for the rest of it: later commits may append `--no-gpg-sign` on the first attempt instead of re-failing.
-    Still per-commit only — never touch git config. Replace the per-commit disclosure with a single line in the
-    session's final receipt: `N commits created unsigned — signer unavailable ("<short error>")`.
+- Never delete index locks; wait and retry the same command. Never retry a commit after the helper reports a created
+  commit with failed shared-index reconciliation; stop and report the commit ID. On any pre-commit hook or signing
+  failure, read [references/failure-recovery.md](references/failure-recovery.md) before deciding on a bypass; bypasses
+  always require their one-line disclosure.
 
 ### 5) Push when requested or authorized
 
 Run this step when `--push` was supplied or standing instructions authorize automatic pushing for the current
 repository. Otherwise stop after the commit receipt.
 
-- Run `git fetch`, then verify the current branch has no commits to pull before pushing:
-  - With an upstream, inspect `git rev-list --left-right --count HEAD...@{upstream}`. If the upstream-only count is
-    nonzero, do not push or reconcile; report that the branch is behind and leave it for the user.
-  - Without an upstream, resolve the current branch and check for a matching `refs/remotes/origin/<branch>` after the
-    fetch. If it exists, apply the same comparison and behind-branch stop. Otherwise treat it as a new remote branch.
-- With an upstream, run `git push`. Without one, run `git push -u origin HEAD`.
-- On a non-fast-forward rejection, run `git fetch` and repeat the comparison once. Retry the push once only if the
-  branch is still not behind. Never pull, rebase, merge, or use autostash to reconcile a push race in a shared tree.
-- For any other failure, show the error and suggest the narrowest fix, such as configuring an upstream or repairing
-  authentication.
+In default mode, append `--push` to the `commit-paths.sh commit` invocation. In `--all` / `--staged` modes, run
+`bash "<skill-dir>/scripts/commit-paths.sh" push` after the direct `git commit`. Report the helper's one-line outcome;
+when it reports `behind <n> — push skipped`, explicitly state that the push was skipped for user reconciliation.
 
 ## Completion
 
 Completion evidence is the created commit hash, subject, and changed-file count. When the push workflow applies, also
-require the successful remote update unless the branch is behind; in that case, completion requires explicitly reporting
-that the push was skipped for user reconciliation. A hook bypass is complete only with the one-line unrelated-failure
-disclosure; a signing bypass is complete only with the one-line unsigned-commit disclosure.
+require the push helper's successful outcome line unless the branch is behind; in that case, completion requires its
+`behind <n> — push skipped` outcome and explicitly reporting that the push was skipped for user reconciliation. A hook
+bypass is complete only with the one-line unrelated-failure disclosure; a signing bypass is complete only with the
+one-line unsigned-commit disclosure.

@@ -7,7 +7,8 @@ usage() {
 Usage:
   bash <skill-dir>/scripts/commit-paths.sh preview [--diff summary|full] -- <session_paths...>
   bash <skill-dir>/scripts/commit-paths.sh commit [-m <message>]... [--no-verify] [--no-gpg-sign] \
-    [--exclude-baseline <path>=<oid>]... -- <resolved_paths...>
+    [--push] [--exclude-baseline <path>=<oid>]... -- <resolved_paths...>
+  bash <skill-dir>/scripts/commit-paths.sh push
 EOF
 }
 
@@ -355,6 +356,124 @@ reject_inherited_index() {
   fi
 }
 
+fetch_for_push() {
+  push_git_output=$(git fetch 2>&1)
+  push_git_rc=$?
+  if [ "$push_git_rc" -ne 0 ]; then
+    [ -z "$push_git_output" ] || printf '%s\n' "$push_git_output" >&2
+    return "$push_git_rc"
+  fi
+}
+
+check_push_behind() {
+  push_compare_ref=
+  if [ "$push_has_upstream" = true ]; then
+    push_compare_ref='@{upstream}'
+  elif git show-ref --verify --quiet "refs/remotes/origin/$push_branch"; then
+    push_compare_ref=refs/remotes/origin/$push_branch
+  fi
+
+  push_behind=0
+  [ -n "$push_compare_ref" ] || return 0
+
+  push_counts=$(git rev-list --left-right --count "HEAD...$push_compare_ref" 2>&1)
+  push_git_rc=$?
+  if [ "$push_git_rc" -ne 0 ]; then
+    [ -z "$push_counts" ] || printf '%s\n' "$push_counts" >&2
+    return "$push_git_rc"
+  fi
+
+  read -r push_ahead push_behind <<EOF
+$push_counts
+EOF
+  case "$push_behind" in
+    '' | *[!0-9]*)
+      printf 'error: cannot parse upstream comparison: %s\n' "$push_counts" >&2
+      return 1
+      ;;
+  esac
+}
+
+attempt_push() {
+  if [ "$push_has_upstream" = true ]; then
+    push_git_output=$(git push 2>&1)
+  else
+    push_git_output=$(git push -u origin HEAD 2>&1)
+  fi
+  push_git_rc=$?
+  return "$push_git_rc"
+}
+
+push_current_branch() {
+  push_repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    printf 'error: not inside a Git work tree\n' >&2
+    return 1
+  }
+  cd "$push_repo_root" || {
+    printf 'error: cannot enter Git repository root\n' >&2
+    return 1
+  }
+
+  push_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || {
+    printf 'error: detached HEAD; cannot push without a current branch\n' >&2
+    return 1
+  }
+
+  fetch_for_push || return $?
+
+  push_has_upstream=false
+  if git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+    push_has_upstream=true
+  fi
+
+  push_new_branch=false
+  if [ "$push_has_upstream" = false ] &&
+    ! git show-ref --verify --quiet "refs/remotes/origin/$push_branch"; then
+    push_new_branch=true
+  fi
+
+  check_push_behind || return $?
+  if [ "$push_behind" -ne 0 ]; then
+    printf 'behind %s — push skipped\n' "$push_behind"
+    return 0
+  fi
+
+  if attempt_push; then
+    if [ "$push_new_branch" = true ]; then
+      printf 'pushed-new %s\n' "$push_branch"
+    else
+      printf 'pushed %s\n' "$push_branch"
+    fi
+    return 0
+  fi
+
+  case "$push_git_output" in
+    *non-fast-forward* | *'(fetch first)'*) ;;
+    *)
+      [ -z "$push_git_output" ] || printf '%s\n' "$push_git_output" >&2
+      return "$push_git_rc"
+      ;;
+  esac
+
+  fetch_for_push || return $?
+  check_push_behind || return $?
+  if [ "$push_behind" -ne 0 ]; then
+    printf 'behind %s — push skipped\n' "$push_behind"
+    return 0
+  fi
+
+  if ! attempt_push; then
+    [ -z "$push_git_output" ] || printf '%s\n' "$push_git_output" >&2
+    return "$push_git_rc"
+  fi
+
+  if [ "$push_new_branch" = true ]; then
+    printf 'pushed-new %s\n' "$push_branch"
+  else
+    printf 'pushed %s\n' "$push_branch"
+  fi
+}
+
 preflight_repository() {
   _inside_work_tree=$(git rev-parse --is-inside-work-tree 2>/dev/null) || die 'not inside a Git work tree'
   [ "$_inside_work_tree" = true ] || die 'not inside a Git work tree'
@@ -392,6 +511,7 @@ input_paths=()
 head_paths=()
 worktree_paths=()
 resolved_paths=()
+push_after_commit=false
 repo_root=
 base_commit=
 temp_dir=
@@ -449,6 +569,10 @@ case "$command_name" in
           commit_args[${#commit_args[@]}]=$1
           shift
           ;;
+        --push)
+          push_after_commit=true
+          shift
+          ;;
         --exclude-baseline)
           [ "$#" -ge 2 ] || {
             usage
@@ -482,11 +606,22 @@ case "$command_name" in
       esac
     done
     ;;
+  push)
+    [ "$#" -eq 0 ] || {
+      usage
+      die 'push takes no arguments'
+    }
+    ;;
   *)
     usage
     die "unknown command: $command_name"
     ;;
 esac
+
+if [ "$command_name" = push ]; then
+  push_current_branch
+  exit $?
+fi
 
 reject_inherited_index
 preflight_repository
@@ -550,4 +685,11 @@ if ! reconcile_shared_index "$created_commit"; then
     "$created_commit" >&2
   printf 'error: the shared index was left unchanged; do not retry this commit\n' >&2
   exit 1
+fi
+
+if [ "$push_after_commit" = true ]; then
+  if ! push_current_branch; then
+    printf 'error: commit %s was created and reconciled, but push failed\n' "$created_commit" >&2
+    exit 1
+  fi
 fi

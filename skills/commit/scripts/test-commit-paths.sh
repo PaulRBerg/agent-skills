@@ -380,6 +380,135 @@ test_invalid_baseline_arguments() {
   [ ! -e "$_repo/.git/index.lock" ] || fail 'invalid baseline arguments created an index lock'
 }
 
+test_push_with_upstream() {
+  _repo=$test_root/push-upstream
+  _remote=$test_root/push-upstream.git
+  init_fixture "$_repo"
+  git init --bare --quiet "$_remote"
+
+  printf 'base\n' > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  git -C "$_repo" branch -M main
+  git -C "$_repo" remote add origin "file://$_remote"
+  git -C "$_repo" push --quiet -u origin HEAD
+
+  printf 'pushed\n' > "$_repo/intended.txt"
+  _push_output=$(
+    cd "$_repo"
+    bash "$helper" commit -m 'Push intended file' --push -- intended.txt 2>&1
+  )
+  _last_line=${_push_output##*$'\n'}
+
+  assert_equal 'pushed main' "$_last_line" 'commit push outcome'
+  assert_equal "$(git -C "$_repo" rev-parse HEAD)" \
+    "$(git --git-dir="$_remote" rev-parse refs/heads/main)" 'upstream push did not update remote'
+}
+
+test_push_new_remote_branch() {
+  _repo=$test_root/push-new
+  _remote=$test_root/push-new.git
+  init_fixture "$_repo"
+  git init --bare --quiet "$_remote"
+
+  printf 'base\n' > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  git -C "$_repo" branch -M feature-new
+  git -C "$_repo" remote add origin "file://$_remote"
+
+  _push_output=$(
+    cd "$_repo"
+    bash "$helper" push 2>&1
+  )
+
+  assert_equal 'pushed-new feature-new' "$_push_output" 'new remote branch push outcome'
+  assert_equal 'origin/feature-new' \
+    "$(git -C "$_repo" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')" \
+    'new remote branch upstream'
+  assert_equal "$(git -C "$_repo" rev-parse HEAD)" \
+    "$(git --git-dir="$_remote" rev-parse refs/heads/feature-new)" \
+    'new remote branch push did not update remote'
+}
+
+test_push_behind_branch_skip() {
+  _behind_repo=$test_root/push-behind
+  _remote=$test_root/push-behind.git
+  _updater=$test_root/push-behind-updater
+  init_fixture "$_behind_repo"
+  git init --bare --quiet "$_remote"
+
+  printf 'base\n' > "$_behind_repo/intended.txt"
+  commit_fixture "$_behind_repo" base
+  git -C "$_behind_repo" branch -M main
+  git -C "$_behind_repo" remote add origin "file://$_remote"
+  git -C "$_behind_repo" push --quiet -u origin HEAD
+
+  git clone --quiet --branch main "file://$_remote" "$_updater"
+  git -C "$_updater" config user.name 'Commit Paths Test'
+  git -C "$_updater" config user.email 'commit-paths@example.com'
+  git -C "$_updater" config commit.gpgsign false
+  printf 'remote\n' > "$_updater/remote.txt"
+  commit_fixture "$_updater" remote
+  git -C "$_updater" push --quiet
+  _remote_head=$(git --git-dir="$_remote" rev-parse refs/heads/main)
+
+  _push_output=$(
+    cd "$_behind_repo"
+    bash "$helper" push 2>&1
+  )
+
+  assert_equal 'behind 1 — push skipped' "$_push_output" 'behind branch push outcome'
+  assert_equal "$_remote_head" "$(git --git-dir="$_remote" rev-parse refs/heads/main)" \
+    'behind branch push changed remote'
+}
+
+test_non_fast_forward_retry_once() {
+  _repo=$test_root/push-retry
+  _remote=$test_root/push-retry.git
+  _shim_dir=$test_root/push-retry-shim
+  _push_attempt_log=$test_root/push-attempts.log
+  _push_reject_marker=$test_root/push-rejected-once
+  _real_git=$(command -v git)
+  init_fixture "$_repo"
+  git init --bare --quiet "$_remote"
+
+  printf 'base\n' > "$_repo/intended.txt"
+  commit_fixture "$_repo" base
+  git -C "$_repo" branch -M main
+  git -C "$_repo" remote add origin "file://$_remote"
+  git -C "$_repo" push --quiet -u origin HEAD
+  printf 'retry\n' > "$_repo/intended.txt"
+  commit_fixture "$_repo" retry
+
+  mkdir -p "$_shim_dir"
+  cat > "$_shim_dir/git" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = push ]; then
+  printf 'push\n' >> "$PUSH_ATTEMPT_LOG"
+  if [ ! -e "$PUSH_REJECT_MARKER" ]; then
+    : > "$PUSH_REJECT_MARKER"
+    printf ' ! [rejected] main -> main (non-fast-forward)\n' >&2
+    printf 'error: failed to push some refs\n' >&2
+    exit 1
+  fi
+fi
+exec "$REAL_GIT" "$@"
+EOF
+  chmod +x "$_shim_dir/git"
+
+  _push_output=$(
+    cd "$_repo"
+    PATH="$_shim_dir:$PATH" REAL_GIT="$_real_git" \
+      PUSH_ATTEMPT_LOG="$_push_attempt_log" PUSH_REJECT_MARKER="$_push_reject_marker" \
+      bash "$helper" push 2>&1
+  )
+
+  assert_equal 'pushed main' "$_push_output" 'non-fast-forward retry outcome'
+  assert_equal $'push\npush' "$(cat "$_push_attempt_log")" 'non-fast-forward push attempt count'
+  assert_equal "$(git -C "$_repo" rev-parse HEAD)" \
+    "$(git --git-dir="$_remote" rev-parse refs/heads/main)" \
+    'non-fast-forward retry did not update remote'
+}
+
 test_content_and_shared_index
 test_case_only_renames
 test_formatter_hook
@@ -388,5 +517,9 @@ test_baseline_exclusion
 test_baseline_with_non_overlapping_head_movement
 test_baseline_conflicting_head_movement
 test_invalid_baseline_arguments
+test_push_with_upstream
+test_push_new_remote_branch
+test_push_behind_branch_skip
+test_non_fast_forward_retry_once
 
 printf 'commit-paths tests passed\n'
