@@ -45,6 +45,7 @@ bunx skills add PaulRBerg/agent-skills
 | html-playground           | Interactive single-file HTML playgrounds                                 |
 | large-file-refactor       | Large source-file report and Serena split plans                          |
 | naming-refactor           | Exhaustive behavior-preserving repository naming refactor                |
+| repo-harmonization        | Audit and align multiple interdependent repositories                     |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references                  |
 | skill-doctor              | Audit Agent Skills catalogs and installed skill roots                    |
 | skill-map                 | Find skill dependencies and references across machine                    |
