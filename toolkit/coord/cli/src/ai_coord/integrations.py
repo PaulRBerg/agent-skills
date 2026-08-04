@@ -191,7 +191,7 @@ def trust_codex_hooks(
     if dry_run:
         return "skipped"
 
-    last_error: CodexTrustError | None = None
+    last_conflict: _CodexVersionConflict | None = None
     for attempt in range(3):
         try:
             with _CodexAppServer() as server:
@@ -225,14 +225,12 @@ def trust_codex_hooks(
                 for key, expected_hash in expected_hashes.items()
             ):
                 return "updated"
-            last_error = CodexTrustError("Codex did not verify the submitted hook trust state")
-        except CodexTrustError as error:
-            if not isinstance(error, _CodexVersionConflict):
-                raise
-            last_error = error
+            raise CodexTrustError("Codex did not verify the submitted hook trust state")
+        except _CodexVersionConflict as error:
+            last_conflict = error
         if attempt == 2:
             break
-    raise last_error or CodexTrustError("Codex hook trust did not converge")
+    raise last_conflict or CodexTrustError("Codex hook trust did not converge")
 
 
 def inspect_codex_hook_trust(path: Path | None = None) -> HookCheck:
@@ -385,8 +383,8 @@ class _CodexAppServer:
                 ["codex", "app-server", "--stdio"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+                stderr=subprocess.DEVNULL,
+                encoding="utf-8",
                 bufsize=1,
             )
         except OSError as error:
@@ -431,13 +429,17 @@ class _CodexAppServer:
         self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
         deadline = time.monotonic() + _CODEX_TIMEOUT_SECONDS
         while True:
-            response = self._read_response(max(0, deadline - time.monotonic()))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CodexTrustError("Codex app-server response timed out")
+            response = self._read_response(remaining)
             if response.get("id") != request_id:
                 continue
             if "error" in response:
                 error = response["error"]
                 if (
-                    isinstance(error, dict)
+                    method == "config/batchWrite"
+                    and isinstance(error, dict)
                     and error.get("code") == -32600
                     and isinstance(error.get("data"), dict)
                     and error["data"].get("config_write_error_code") == "configVersionConflict"

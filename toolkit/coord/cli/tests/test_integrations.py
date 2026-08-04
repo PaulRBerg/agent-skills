@@ -347,6 +347,54 @@ def test_codex_trust_stops_after_three_fresh_config_version_conflicts(
     )
 
 
+def test_codex_trust_failed_fresh_verification_is_not_retried(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_home = tmp_path / "codex"
+    hooks_path = codex_home / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    responses = iter(
+        [
+            _hooks_response(hooks_path),
+            {
+                "layers": [
+                    {
+                        "name": {"type": "user", "file": str(codex_home / "config.toml")},
+                        "version": "v1",
+                    }
+                ]
+            },
+            {
+                "filePath": str(codex_home / "config.toml"),
+                "status": "ok",
+                "version": "v2",
+            },
+            _hooks_response(hooks_path, trust="modified"),
+        ]
+    )
+    servers: list[object] = []
+
+    class FakeServer:
+        def __init__(self) -> None:
+            servers.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def request(self, _method: str, _params: dict[str, object]) -> object:
+            return next(responses)
+
+    monkeypatch.setattr(integrations_module, "_CodexAppServer", FakeServer)
+
+    with pytest.raises(CodexTrustError, match="did not verify"):
+        trust_codex_hooks()
+
+    assert len(servers) == 2
+
+
 def test_codex_trust_inspection_fails_closed_for_missing_exact_hook(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -389,7 +437,12 @@ def test_codex_app_server_rejects_timeout_and_malformed_json(
         def kill(self) -> None:
             return None
 
-    monkeypatch.setattr(integrations_module.subprocess, "Popen", lambda *_, **__: FakeProcess())
+    def popen(*_: object, **kwargs: object) -> FakeProcess:
+        assert kwargs["stderr"] is integrations_module.subprocess.DEVNULL
+        assert kwargs["encoding"] == "utf-8"
+        return FakeProcess()
+
+    monkeypatch.setattr(integrations_module.subprocess, "Popen", popen)
     monkeypatch.setattr(integrations_module.select, "select", lambda *_: ([_[0][0]], [], []))
     with pytest.raises(CodexTrustError, match="malformed JSON"):
         integrations_module._CodexAppServer().__enter__()
@@ -397,6 +450,54 @@ def test_codex_app_server_rejects_timeout_and_malformed_json(
     monkeypatch.setattr(integrations_module.select, "select", lambda *_: ([], [], []))
     with pytest.raises(CodexTrustError, match="timed out"):
         integrations_module._CodexAppServer().__enter__()
+
+
+def test_codex_app_server_does_not_read_past_response_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = integrations_module._CodexAppServer()
+
+    class FakeProcess:
+        stdin = io.StringIO()
+
+    server._process = FakeProcess()  # type: ignore[assignment]
+    timestamps = iter((0.0, float(integrations_module._CODEX_TIMEOUT_SECONDS)))
+    monkeypatch.setattr(integrations_module.time, "monotonic", timestamps.__next__)
+    monkeypatch.setattr(
+        server,
+        "_read_response",
+        lambda _timeout: pytest.fail("expired requests must not consume queued messages"),
+    )
+
+    with pytest.raises(CodexTrustError, match="timed out"):
+        server.request("hooks/list", {})
+
+
+def test_codex_app_server_retries_version_conflicts_only_for_config_writes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = integrations_module._CodexAppServer()
+
+    class FakeProcess:
+        stdin = io.StringIO()
+
+    server._process = FakeProcess()  # type: ignore[assignment]
+    error = {
+        "code": -32600,
+        "data": {"config_write_error_code": "configVersionConflict"},
+    }
+    monkeypatch.setattr(
+        server,
+        "_read_response",
+        lambda _timeout: {"id": server._next_id - 1, "error": error},
+    )
+
+    with pytest.raises(CodexTrustError) as hooks_error:
+        server.request("hooks/list", {})
+    assert not isinstance(hooks_error.value, integrations_module._CodexVersionConflict)
+
+    with pytest.raises(integrations_module._CodexVersionConflict):
+        server.request("config/batchWrite", {})
 
 
 @pytest.mark.skipif(
