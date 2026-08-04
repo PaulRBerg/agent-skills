@@ -11,8 +11,8 @@ description:
 
 # Git Commit
 
-Create atomic commits by staging the right files, analyzing the staged diff, composing a commit message, and optionally
-pushing.
+Create atomic commits by staging the right files, analyzing the staged diff, composing a commit message, and pushing
+when explicitly requested or authorized by standing instructions.
 
 ## Workflow
 
@@ -24,7 +24,7 @@ Arguments: `$ARGUMENTS`
   - `--all` commit all changes
   - `--staged` commit exactly the current index; do not auto-stage or unstage (conflicts with `--all`)
   - `--natural` force Natural Language Format
-  - `--push` push after commit
+  - `--push` explicitly request a push after commit; otherwise push only when standing instructions authorize it
   - `--close <issue_numbers>` append `Closes #N` trailers for listed issues (comma/space-separated)
 - Value arguments:
   - Conventional Prefix Format: type keyword overrides inferred type
@@ -136,7 +136,7 @@ authored what).
   accidental sweep of another agent's work. Nothing else. This exact receipt is intentionally plain: do not add emoji,
   headings, trees, or labels.
 - Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or
-  pre-commit hook activity unless a command failed.
+  pre-commit hook activity unless the push workflow requires the user to reconcile a behind branch or a command failed.
 - If the helper reports that the default index remains locked, wait and retry the same helper command; never delete the
   lock. If it reports that a commit was created but shared-index reconciliation failed, stop and report that commit ID;
   never retry the commit.
@@ -161,17 +161,25 @@ authored what).
     Still per-commit only — never touch git config. Replace the per-commit disclosure with a single line in the
     session's final receipt: `N commits created unsigned — signer unavailable ("<short error>")`.
 
-### 5) Push (if `--push`)
+### 5) Push when requested or authorized
 
-- If upstream exists: `git push`
-- If no upstream: `git push -u origin HEAD`
-- If rejected as non-fast-forward: retry `git push` once (push races between agents are routine). If still rejected, run
-  `git pull --rebase` only when `git status --porcelain` is clean; otherwise stop and report. Never use `--autostash` in
-  a shared tree — it can stash another agent's uncommitted work and conflict on pop.
-- If failed for another reason: show error + suggest fix (set upstream, check auth)
+Run this step when `--push` was supplied or standing instructions authorize automatic pushing for the current
+repository. Otherwise stop after the commit receipt.
+
+- Run `git fetch`, then verify the current branch has no commits to pull before pushing:
+  - With an upstream, inspect `git rev-list --left-right --count HEAD...@{upstream}`. If the upstream-only count is
+    nonzero, do not push or reconcile; report that the branch is behind and leave it for the user.
+  - Without an upstream, resolve the current branch and check for a matching `refs/remotes/origin/<branch>` after the
+    fetch. If it exists, apply the same comparison and behind-branch stop. Otherwise treat it as a new remote branch.
+- With an upstream, run `git push`. Without one, run `git push -u origin HEAD`.
+- On a non-fast-forward rejection, run `git fetch` and repeat the comparison once. Retry the push once only if the
+  branch is still not behind. Never pull, rebase, merge, or use autostash to reconcile a push race in a shared tree.
+- For any other failure, show the error and suggest the narrowest fix, such as configuring an upstream or repairing
+  authentication.
 
 ## Completion
 
-Completion evidence is the created commit hash, subject, and changed-file count; with `--push`, also require the
-successful remote update. A hook bypass is complete only with the one-line unrelated-failure disclosure; a signing
-bypass is complete only with the one-line unsigned-commit disclosure.
+Completion evidence is the created commit hash, subject, and changed-file count. When the push workflow applies, also
+require the successful remote update unless the branch is behind; in that case, completion requires explicitly reporting
+that the push was skipped for user reconciliation. A hook bypass is complete only with the one-line unrelated-failure
+disclosure; a signing bypass is complete only with the one-line unsigned-commit disclosure.
