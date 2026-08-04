@@ -8,10 +8,11 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 import ai_coord.coordinator as coordinator_module
-from ai_coord.coordinator import Coordinator
+from ai_coord.coordinator import CALLSIGN_NUDGE, Coordinator
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import StaticInventory
 from ai_coord.store import Store
+from ai_coord.util import MAX_PRESENCE_CHARS
 
 HOOK_EVENTS = tuple(
     sorted(
@@ -58,7 +59,7 @@ def test_codex_hook_lifecycle_and_delegate(
     output = coordinator.ingest_hook(
         "codex", {**base, "hook_event_name": "UserPromptSubmit", "prompt": "do not persist"}
     )
-    assert output == ""
+    assert output == CALLSIGN_NUDGE
     session = store.session(Identity("codex", "codex-1"))
     assert session is not None
     assert session["state"] == "working"
@@ -124,9 +125,43 @@ def test_presence_contains_counts_not_message_text(tmp_path: Path, git_repo: Pat
     )
     assert "1 peer(s)" in output
     assert "1 message(s)" in output
+    assert CALLSIGN_NUDGE in output
+    assert len(output) <= MAX_PRESENCE_CHARS
     assert "private payload" not in output
     assert "secret prompt" not in output
     assert all("secret prompt" not in str(row) for row in store.sessions())
+
+
+@pytest.mark.parametrize("client", ("codex", "claude"))
+def test_unnamed_lifecycle_hooks_repeat_nudge_until_named(
+    tmp_path: Path,
+    git_repo: Path,
+    client: str,
+) -> None:
+    store = Store(tmp_path / f"{client}.db")
+    coordinator = Coordinator(store, StaticInventory())
+    identity = Identity(client, "top-level")
+    base = {"session_id": identity.session_id, "cwd": str(git_repo)}
+
+    assert (
+        coordinator.ingest_hook(client, {**base, "hook_event_name": "SessionStart"})
+        == CALLSIGN_NUDGE
+    )
+    assert (
+        coordinator.ingest_hook(
+            client, {**base, "hook_event_name": "UserPromptSubmit", "prompt": "private"}
+        )
+        == CALLSIGN_NUDGE
+    )
+    store.set_session_callsign(identity, "🦆 Quack Stack")
+
+    assert coordinator.ingest_hook(client, {**base, "hook_event_name": "SessionStart"}) == ""
+    assert (
+        coordinator.ingest_hook(
+            client, {**base, "hook_event_name": "UserPromptSubmit", "prompt": "private"}
+        )
+        == ""
+    )
 
 
 @pytest.mark.parametrize(
@@ -331,6 +366,6 @@ def test_arbitrary_hook_payloads_fail_open_without_leaking_private_fields(
         store.delegates(),
         store.hook_health(),
     )
-    assert output in {"", "{}"}
+    assert output in {"", "{}", CALLSIGN_NUDGE}
     assert secret not in output
     assert secret not in str(persisted)

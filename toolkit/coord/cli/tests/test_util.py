@@ -9,10 +9,13 @@ from hypothesis import strategies as st
 
 import ai_coord.util as util_module
 from ai_coord.util import (
+    MAX_CALLSIGN_CODEPOINTS,
     MAX_SCOPE_CHARS,
     age_label,
+    callsign_key,
     first_heading,
     git_dirty_paths,
+    normalize_callsign,
     normalize_scopes,
     paths_overlap,
     relevant_dirty,
@@ -42,6 +45,34 @@ def test_sanitize_matches_bounded_printable_text_model(text: str, limit: int) ->
     assert all(character.isprintable() for character in result)
     assert result == " ".join(result.split())
     assert sanitize(result, limit) == result
+
+
+def test_normalize_callsign_preserves_compound_emoji_and_normalizes_text() -> None:
+    callsign = normalize_callsign("  👩‍💻\nCafe\u0301   Captain  ")
+
+    assert callsign == "👩‍💻 Café Captain"
+    assert "\u200d" in callsign
+    assert callsign_key("✈️  NIGHT Owl") == callsign_key("✈ night owl")
+
+
+@pytest.mark.parametrize(
+    ("callsign", "message"),
+    (
+        ("plain text", "emoji"),
+        ("😀", "letter or number"),
+        ("😀" + "a" * MAX_CALLSIGN_CODEPOINTS, "40 Unicode code points"),
+        ("😀 pilot\x00", "control"),
+    ),
+)
+def test_normalize_callsign_rejects_invalid_values(callsign: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        normalize_callsign(callsign)
+
+
+def test_normalize_callsign_accepts_emoji_ranges_and_exact_limit() -> None:
+    assert normalize_callsign("🇷🇴 Rover") == "🇷🇴 Rover"
+    assert normalize_callsign("⚙️ Gearbox") == "⚙️ Gearbox"
+    assert normalize_callsign("😀" + "a" * (MAX_CALLSIGN_CODEPOINTS - 1))
 
 
 @settings(max_examples=100)

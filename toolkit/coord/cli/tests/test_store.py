@@ -18,7 +18,7 @@ from ai_coord.store import (
 )
 
 
-def test_new_store_uses_schema_v4(tmp_path: Path) -> None:
+def test_new_store_uses_schema_v5(tmp_path: Path) -> None:
     store = Store(tmp_path / "state.db")
 
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
@@ -31,9 +31,11 @@ def test_new_store_uses_schema_v4(tmp_path: Path) -> None:
         for row in store.connection.execute("PRAGMA table_info(sessions)").fetchall()
     }
 
-    assert version == SCHEMA_VERSION == 4
+    assert version == SCHEMA_VERSION == 5
     assert "notified_at" in message_columns
+    assert {"sender_callsign", "recipient_callsign"} <= message_columns
     assert "process_started_at" in session_columns
+    assert "callsign" in session_columns
     assert {
         "claim_baselines",
         "dirt_observations",
@@ -49,6 +51,9 @@ def test_new_store_uses_schema_v4(tmp_path: Path) -> None:
 def _downgrade_fixture(path: Path, version: int) -> None:
     Store(path).close()
     connection = sqlite3.connect(path)
+    connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
+    connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
+    connection.execute("ALTER TABLE messages DROP COLUMN recipient_callsign")
     connection.execute("ALTER TABLE sessions DROP COLUMN process_started_at")
     if version == 1:
         connection.execute("ALTER TABLE messages DROP COLUMN notified_at")
@@ -76,7 +81,7 @@ def _downgrade_fixture(path: Path, version: int) -> None:
 
 
 @pytest.mark.parametrize("version", [1, 2])
-def test_store_migrates_older_schemas_to_v4(tmp_path: Path, version: int) -> None:
+def test_store_migrates_older_schemas_to_v5(tmp_path: Path, version: int) -> None:
     path = tmp_path / "state.db"
     _downgrade_fixture(path, version)
 
@@ -89,9 +94,10 @@ def test_store_migrates_older_schemas_to_v4(tmp_path: Path, version: int) -> Non
     }
     session = store.session(Identity("codex", "preserved"))
     inbox = store.inbox(Identity("codex", "preserved"))
-    assert migrated == 4
-    assert "notified_at" in message_columns
+    assert migrated == 5
+    assert {"notified_at", "sender_callsign", "recipient_callsign"} <= message_columns
     assert session is not None
+    assert session["callsign"] is None
     assert session["pid"] == 42
     assert session["process_started_at"] is None
     assert session["started_at"] == 10
@@ -99,15 +105,20 @@ def test_store_migrates_older_schemas_to_v4(tmp_path: Path, version: int) -> Non
     assert [(row["text"], row["created_at"], row["notified_at"]) for row in inbox] == [
         ("preserved text", 15, None)
     ]
+    assert inbox[0]["sender_callsign"] is None
+    assert inbox[0]["recipient_callsign"] is None
 
 
-def test_store_migrates_schema_v3_to_v4(tmp_path: Path) -> None:
+def test_store_migrates_schema_v3_to_v5(tmp_path: Path) -> None:
     path = tmp_path / "state.db"
     Store(path).close()
     connection = sqlite3.connect(path)
     connection.execute("DROP TABLE residual_owners")
     connection.execute("DROP TABLE dirt_observations")
     connection.execute("DROP TABLE claim_baselines")
+    connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
+    connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
+    connection.execute("ALTER TABLE messages DROP COLUMN recipient_callsign")
     connection.execute("PRAGMA user_version = 3")
     connection.commit()
     connection.close()
@@ -130,10 +141,138 @@ def test_store_migrates_schema_v3_to_v4(tmp_path: Path) -> None:
         for row in store.connection.execute("PRAGMA table_info(residual_owners)").fetchall()
     }
 
-    assert version == SCHEMA_VERSION == 4
+    assert version == SCHEMA_VERSION == 5
     assert {"claim_baselines", "dirt_observations", "residual_owners"} <= tables
     assert {"repo_root", "path", "blob_hash", "first_seen", "last_seen"} <= observation_columns
     assert {"repo_root", "path", "client", "session_id", "released_at"} <= residual_columns
+
+
+def test_store_migrates_schema_v4_data_with_null_callsigns(tmp_path: Path) -> None:
+    path = tmp_path / "state.db"
+    original = Store(path)
+    sender = Identity("codex", "preserved-sender")
+    recipient = Identity("claude", "preserved-recipient")
+    original.upsert_session(
+        sender,
+        cwd="/repo",
+        repo_root="/repo",
+        state="working",
+        source="fixture",
+        current=10,
+    )
+    original.upsert_session(
+        recipient,
+        cwd="/repo",
+        repo_root="/repo",
+        state="idle",
+        source="fixture",
+        current=11,
+    )
+    original.send_message(sender, [recipient], "preserved", "/repo", current=12)
+    original.close()
+    connection = sqlite3.connect(path)
+    connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
+    connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
+    connection.execute("ALTER TABLE messages DROP COLUMN recipient_callsign")
+    connection.execute("PRAGMA user_version = 4")
+    connection.commit()
+    connection.close()
+
+    migrated = Store(path)
+
+    assert migrated.session(sender)["callsign"] is None  # type: ignore[index]
+    message = migrated.inbox(recipient)[0]
+    assert (message["text"], message["sender_callsign"], message["recipient_callsign"]) == (
+        "preserved",
+        None,
+        None,
+    )
+
+
+def test_callsigns_are_unique_machine_wide_and_idempotent(tmp_path: Path) -> None:
+    store = Store(tmp_path / "state.db")
+    first = Identity("codex", "first")
+    second = Identity("claude", "second")
+    for identity in (first, second):
+        store.upsert_session(
+            identity,
+            cwd="/repo",
+            repo_root="/repo",
+            state="working",
+            source="test",
+        )
+
+    store.set_session_callsign(first, "✈️ Night Owl")
+    generation = store.generation()
+    store.set_session_callsign(first, "✈️ Night Owl")
+    assert store.generation() == generation
+    with pytest.raises(ValueError, match="already in use"):
+        store.set_session_callsign(second, "✈ night owl")
+
+    store.set_session_callsign(first, "🌙 Lunar One")
+    store.set_session_callsign(second, "✈ night owl")
+    assert store.session(second)["callsign"] == "✈ night owl"  # type: ignore[index]
+
+
+def test_message_callsigns_are_snapshotted_across_rename_and_exit(tmp_path: Path) -> None:
+    store = Store(tmp_path / "state.db")
+    sender = Identity("codex", "sender")
+    recipient = Identity("claude", "recipient")
+    for identity in (sender, recipient):
+        store.upsert_session(
+            identity,
+            cwd="/repo",
+            repo_root="/repo",
+            state="working",
+            source="test",
+        )
+    store.set_session_callsign(sender, "🦊 Fox One")
+    store.set_session_callsign(recipient, "🐙 Octo Two")
+    store.send_message(sender, [recipient], "before", "/repo", current=1)
+    store.set_session_callsign(sender, "🦝 Raccoon One")
+    store.set_session_callsign(recipient, "🦑 Squid Two")
+    store.send_message(sender, [recipient], "after", "/repo", current=2)
+    store.end_session(sender)
+    store.end_session(recipient)
+
+    messages = store.inbox(recipient)
+
+    assert [
+        (row["text"], row["sender_callsign"], row["recipient_callsign"]) for row in messages
+    ] == [
+        ("before", "🦊 Fox One", "🐙 Octo Two"),
+        ("after", "🦝 Raccoon One", "🦑 Squid Two"),
+    ]
+
+
+def test_concurrent_callsign_claims_have_one_winner(tmp_path: Path) -> None:
+    path = tmp_path / "state.db"
+    Store(path).close()
+    gate = Barrier(2)
+
+    def claim_callsign(index: int) -> bool:
+        store = Store(path)
+        identity = Identity("codex", f"session-{index}")
+        store.upsert_session(
+            identity,
+            cwd=f"/repo-{index}",
+            repo_root=f"/repo-{index}",
+            state="working",
+            source="test",
+        )
+        gate.wait()
+        try:
+            store.set_session_callsign(identity, "🤖 Shared Bot")
+        except ValueError:
+            return False
+        finally:
+            store.close()
+        return True
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(claim_callsign, range(2)))
+
+    assert sorted(results) == [False, True]
 
 
 def test_store_permissions_and_message_cap(tmp_path: Path) -> None:

@@ -8,14 +8,18 @@ import secrets
 import subprocess
 import time
 import tomllib
+import unicodedata
 from pathlib import Path
 
+MAX_CALLSIGN_CODEPOINTS = 40
 MAX_LABEL_CHARS = 80
 MAX_MESSAGE_CHARS = 240
 MAX_PRESENCE_CHARS = 200
 MAX_SCOPE_CHARS = 120
 _GLOB_CHARS = frozenset("*?[]")
 UNHASHABLE_BLOB_HASH = "<deleted-or-unhashable>"
+_EMOJI_VARIATION_SELECTORS = frozenset(("\ufe0e", "\ufe0f"))
+_ZERO_WIDTH_JOINER = "\u200d"
 
 
 def now_ts() -> float:
@@ -30,6 +34,44 @@ def sanitize(text: str, limit: int) -> str:
     if len(collapsed) > limit:
         return collapsed[: limit - 1].rstrip() + "…"
     return collapsed
+
+
+def callsign_key(text: str) -> str:
+    """Return the machine-wide comparison key for a callsign or target."""
+    folded = unicodedata.normalize("NFC", " ".join(text.split())).casefold()
+    normalized = unicodedata.normalize("NFC", folded)
+    return "".join(char for char in normalized if char not in _EMOJI_VARIATION_SELECTORS)
+
+
+def normalize_callsign(text: str) -> str:
+    """Normalize and validate one emoji-bearing session callsign."""
+    normalized = unicodedata.normalize("NFC", text)
+    if any(
+        not char.isprintable()
+        and not char.isspace()
+        and char != _ZERO_WIDTH_JOINER
+        and char not in _EMOJI_VARIATION_SELECTORS
+        for char in normalized
+    ):
+        raise ValueError("callsign contains unsupported control characters")
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        raise ValueError("callsign must contain text")
+    if len(normalized) > MAX_CALLSIGN_CODEPOINTS:
+        raise ValueError(f"callsign exceeds {MAX_CALLSIGN_CODEPOINTS} Unicode code points")
+    if not any(unicodedata.category(char)[0] in {"L", "N"} for char in normalized):
+        raise ValueError("callsign must contain at least one letter or number")
+    if not any(_is_emoji_code_point(ord(char)) for char in normalized):
+        raise ValueError("callsign must contain at least one emoji")
+    return normalized
+
+
+def _is_emoji_code_point(code_point: int) -> bool:
+    return (
+        0x1F000 <= code_point <= 0x1FAFF
+        or 0x2600 <= code_point <= 0x26FF
+        or 0x2700 <= code_point <= 0x27BF
+    )
 
 
 def new_id() -> str:

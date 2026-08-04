@@ -210,14 +210,21 @@ def test_blocked_claim_messages_holder_and_promotes_after_done(
     coordinator = _coordinator(tmp_path / "state.db")
     _set_identity(monkeypatch, "holder-session")
     assert coordinator.start("holder", ("src",), cwd=git_repo).kind == "READY"
+    assert coordinator.name("🧱 Brick Boss", cwd=git_repo) == "🧱 Brick Boss"
 
     _set_identity(monkeypatch, "waiter-session")
+    coordinator.name("🐢 Queue Kid", cwd=git_repo)
     blocked = coordinator.start("waiter", ("src/app.py",), cwd=git_repo)
     assert blocked.kind == "BLOCKED"
     assert blocked.code == 3
+    assert blocked.detail == "🧱 Brick Boss"
+    assert blocked.holders == ("🧱 Brick Boss",)
 
     _set_identity(monkeypatch, "holder-session")
-    assert len(coordinator.inbox()) == 1
+    queued_message = coordinator.inbox()[0]
+    assert queued_message["sender_callsign"] == "🐢 Queue Kid"
+    assert queued_message["text"] == "queued: waiter (src/app.py)"
+    assert "Queue Kid" not in queued_message["text"]
     assert coordinator.done().kind == "DONE"
 
     _set_identity(monkeypatch, "waiter-session")
@@ -606,7 +613,7 @@ def test_earlier_waiter_promotion_notifies_the_new_active_blocker(
     messages = coordinator.store.inbox(first)
     assert [message["text"] for message in messages] == [
         "released 'holder' — your queued claim may now be READY",
-        "queued codex/second-w: second (docs)",
+        "queued: second (docs)",
     ]
 
     assert coordinator.start("second", ("docs",), cwd=git_repo).kind == "BLOCKED"
@@ -621,6 +628,7 @@ def test_messages_notes_status_and_trailer(
     coordinator.start("sender", (), cwd=git_repo)
     _set_identity(monkeypatch, "target-session", client="claude")
     coordinator.start("target", (), cwd=git_repo)
+    coordinator.name("👩‍💻 Baroness Byte", cwd=git_repo)
     _set_identity(monkeypatch, "decoy-session")
     coordinator.start("target-session label", (), cwd=git_repo)
     _set_identity(monkeypatch, "sender-session")
@@ -634,9 +642,97 @@ def test_messages_notes_status_and_trailer(
     note_id = coordinator.add_note("verified stale behavior", cwd=git_repo)
     snapshot = coordinator.snapshot(cwd=git_repo)
     assert snapshot.complete
+    target_session = next(row for row in snapshot.sessions if row["session_id"] == "target-session")
+    assert target_session["callsign"] == "👩‍💻 Baroness Byte"
+    rendered = coordinator.render_status(snapshot)
+    assert rendered.startswith("CLIENT\tSTATE\tAGE\tCALLSIGN\tNAME/LABEL")
+    assert "👩‍💻 Baroness Byte\ttarget\ttarget-session" in rendered
     assert snapshot.notes[0]["id"] == note_id
     assert coordinator.resolve_note(note_id, cwd=git_repo)
     assert coordinator.trailer() == "Agent-Session: claude/target-session"
+
+
+def test_message_target_resolution_precedence_and_fuzzy_fields(tmp_path: Path) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    sender = Identity("codex", "sender")
+    sessions = [
+        {
+            "client": "codex",
+            "session_id": "🎯 exact",
+            "callsign": None,
+            "label": None,
+            "name": None,
+        },
+        {
+            "client": "claude",
+            "session_id": "exact-callsign",
+            "callsign": "🎯 EXACT",
+            "label": None,
+            "name": None,
+        },
+        {
+            "client": "codex",
+            "session_id": "named-session",
+            "callsign": "🤖 ABCD",
+            "label": None,
+            "name": None,
+        },
+        {
+            "client": "claude",
+            "session_id": "🤖 abcd-prefix",
+            "callsign": None,
+            "label": None,
+            "name": None,
+        },
+        {
+            "client": "codex",
+            "session_id": "prefix-session",
+            "callsign": None,
+            "label": None,
+            "name": None,
+        },
+        {
+            "client": "claude",
+            "session_id": "label-session",
+            "callsign": None,
+            "label": "prefix work",
+            "name": None,
+        },
+        {
+            "client": "claude",
+            "session_id": "fuzzy-session",
+            "callsign": "👩‍💻 Baroness Byte",
+            "label": "compiler work",
+            "name": "provider alias",
+        },
+    ]
+
+    def resolve(target: str) -> list[Identity]:
+        return coordinator._resolve_targets(target, sessions, None, sender)
+
+    assert resolve("🎯 exact") == [Identity("codex", "🎯 exact")]
+    assert resolve("🤖 abcd") == [Identity("codex", "named-session")]
+    assert resolve("prefix") == [Identity("codex", "prefix-session")]
+    assert resolve("baroness") == [Identity("claude", "fuzzy-session")]
+    assert resolve("compiler") == [Identity("claude", "fuzzy-session")]
+    assert resolve("provider alias") == [Identity("claude", "fuzzy-session")]
+
+
+def test_message_target_exact_callsign_ignores_presentation_and_case(tmp_path: Path) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    sessions = [
+        {
+            "client": "claude",
+            "session_id": "target",
+            "callsign": "✈️ Night Owl",
+            "label": None,
+            "name": None,
+        }
+    ]
+
+    assert coordinator._resolve_targets(
+        "✈ night owl", sessions, None, Identity("codex", "sender")
+    ) == [Identity("claude", "target")]
 
 
 def test_machine_notes_and_repo_scoped_delegates(

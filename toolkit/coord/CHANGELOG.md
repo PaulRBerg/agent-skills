@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add optional emoji callsigns with machine-wide uniqueness, historical message endpoint snapshots, callsign targeting,
+  lifecycle nudges, CLI status, and dashboard display support while retaining immutable session-ID fallbacks.
 - Add bounded property and state-machine coverage for coordination, hooks, migration, integrations, and pure helpers.
 - Reject unterminated JSONC block comments instead of silently accepting a valid prefix.
 - Fingerprint agent processes with PID and creation time, and upgrade the internal ledger to schema v3 without changing

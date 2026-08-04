@@ -16,7 +16,7 @@ from typing import Any
 
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.schema import SCHEMA_VERSION, migrate
-from ai_coord.util import new_id, now_ts, private_state_dir, sanitize
+from ai_coord.util import callsign_key, new_id, now_ts, private_state_dir, sanitize
 
 CODEX_IDLE_TTL = 4 * 60 * 60
 CODEX_ORPHAN_GRACE = 30 * 60
@@ -242,6 +242,33 @@ class Store:
                 "UPDATE sessions SET label = ? WHERE client = ? AND session_id = ?",
                 (label, identity.client, identity.session_id),
             )
+
+    def set_session_callsign(self, identity: Identity, callsign: str) -> None:
+        """Set a machine-wide unique callsign for one registered session."""
+        desired_key = callsign_key(callsign)
+        with self.transaction() as connection:
+            current = connection.execute(
+                "SELECT callsign FROM sessions WHERE client = ? AND session_id = ?",
+                (identity.client, identity.session_id),
+            ).fetchone()
+            if current is None:
+                raise RuntimeError("session is not registered")
+            if current["callsign"] == callsign:
+                return
+            candidates = connection.execute(
+                """
+                SELECT callsign FROM sessions
+                WHERE callsign IS NOT NULL AND NOT (client = ? AND session_id = ?)
+                """,
+                (identity.client, identity.session_id),
+            ).fetchall()
+            if any(callsign_key(str(row["callsign"])) == desired_key for row in candidates):
+                raise ValueError("callsign is already in use")
+            connection.execute(
+                "UPDATE sessions SET callsign = ? WHERE client = ? AND session_id = ?",
+                (callsign, identity.client, identity.session_id),
+            )
+            self._bump_generation(connection)
 
     def end_session(self, identity: Identity) -> None:
         with self.transaction() as connection:
@@ -584,19 +611,29 @@ class Store:
         current: float,
     ) -> str:
         message_id = new_id()
+        sender_row = connection.execute(
+            "SELECT callsign FROM sessions WHERE client = ? AND session_id = ?",
+            (sender.client, sender.session_id),
+        ).fetchone()
+        recipient_row = connection.execute(
+            "SELECT callsign FROM sessions WHERE client = ? AND session_id = ?",
+            (recipient.client, recipient.session_id),
+        ).fetchone()
         connection.execute(
             """
             INSERT INTO messages(
-                id, sender_client, sender_session_id, recipient_client,
-                recipient_session_id, repo_root, text, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                id, sender_client, sender_session_id, sender_callsign, recipient_client,
+                recipient_session_id, recipient_callsign, repo_root, text, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 message_id,
                 sender.client,
                 sender.session_id,
+                sender_row["callsign"] if sender_row else None,
                 recipient.client,
                 recipient.session_id,
+                recipient_row["callsign"] if recipient_row else None,
                 repo_root,
                 text,
                 current,
@@ -647,8 +684,9 @@ class Store:
         rows = self.connection.execute(
             """
             SELECT
-                id, sender_client, sender_session_id, recipient_client, recipient_session_id,
-                repo_root, text, created_at, acknowledged_at
+                id, sender_client, sender_session_id, sender_callsign, recipient_client,
+                recipient_session_id, recipient_callsign, repo_root, text, created_at,
+                acknowledged_at
             FROM messages
             ORDER BY created_at, id
             """

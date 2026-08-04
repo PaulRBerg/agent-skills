@@ -72,6 +72,18 @@ def cli() -> None:
 
 
 @cli.command()
+@click.argument("callsign")
+def name(callsign: str) -> None:
+    """Register or rename this session's emoji-bearing callsign."""
+    try:
+        click.echo(f"NAMED\t{_coordinator().name(callsign)}")
+    except ValueError as error:
+        _fail(error, 64)
+    except Exception as error:  # noqa: BLE001
+        _fail(error)
+
+
+@cli.command()
 @click.argument("label")
 @click.argument("paths", nargs=-1)
 def start(label: str, paths: tuple[str, ...]) -> None:
@@ -204,7 +216,8 @@ def inbox(message_id: str | None, ack_all: bool) -> None:
                     (
                         str(row["id"]),
                         age_label(float(row["created_at"])),
-                        f"{row['sender_client']}/{str(row['sender_session_id'])[:8]}",
+                        str(row.get("sender_callsign") or "")
+                        or f"{row['sender_client']}/{str(row['sender_session_id'])[:8]}",
                         str(row["text"]),
                     )
                 )

@@ -109,6 +109,7 @@ schema re-execs the newer runner automatically.
 ai-coord status              # current Git worktree
 ai-coord status --all        # machine-wide
 ai-coord status --json       # versioned JSON schema
+ai-coord name '👩‍💻 Baroness Byte'
 ai-coord msg '019fbf24' 'Changes are committed; your path is clear.'
 ai-coord inbox
 ai-coord inbox --ack '<message-id>'
@@ -116,9 +117,15 @@ ai-coord note 'Verified stale importer assumption.'
 ai-coord note --done '<note-id>'
 ```
 
-Message targets accept an exact `client/session`, an exact session ID, a unique ID prefix of at least four characters,
-or a unique label/name substring. `repo` expands to the currently live peers in the Git worktree. Messages are private
-to their recipients; notes are durable, repo-scoped findings visible to future sessions.
+Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
+number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
+uniqueness, and equivalent emoji presentation. Naming is optional: immutable session IDs remain the identity and
+fallback everywhere.
+
+Message targets resolve an exact `client/session` or session ID first, then an exact callsign, a unique ID prefix of at
+least four characters, or a unique callsign/label/provider-name substring. `repo` expands to the currently live peers in
+the Git worktree. Messages are private to their recipients and snapshot both endpoint callsigns when sent, so later
+renames do not rewrite history; notes are durable, repo-scoped findings visible to future sessions.
 
 `ai-coord trailer` prints the current Git attribution line:
 
@@ -128,12 +135,13 @@ Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
 
 ## Hooks and health
 
-Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Prompt hooks update lifecycle state
-and return only a capped presence count. Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook inject a
-counts-only reminder once when unread peer messages arrive; peer text remains available only through `ai-coord inbox`.
-Stop and session-end hooks update or release the corresponding session; subagent hooks add read-only parent/child
-topology. Claude's `ExitPlanMode` hook records only the approved plan's first H1 as a pathless intent label, while its
-filtered `ai-coord waker claude` hook handles blocked starts in the background.
+Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start and prompt hooks give
+unnamed top-level sessions a bounded static reminder to choose a funny emoji callsign; prompt hooks combine it with the
+capped presence count and stop reminding immediately after naming. Claude's `PostToolBatch` hook and Codex's
+`PostToolUse` hook inject a counts-only reminder once when unread peer messages arrive; peer text remains available only
+through `ai-coord inbox`. Stop and session-end hooks update or release the corresponding session; subagent hooks add
+read-only parent/child topology. Claude's `ExitPlanMode` hook records only the approved plan's first H1 as a pathless
+intent label, while its filtered `ai-coord waker claude` hook handles blocked starts in the background.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
@@ -155,11 +163,11 @@ conservative queued blockers until released or expired. The importer never remov
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
-mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v4;
+mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v5;
 opening an older ledger upgrades it one way, while the public `status --json` schema remains v1.
 
-The ledger stores bounded session metadata, labels, literal scopes, messages, and notes. It never stores prompt bodies,
-plan bodies beyond a sanitized H1, assistant output, transcript contents, or arbitrary hook payloads.
+The ledger stores bounded session metadata, callsigns, labels, literal scopes, messages, and notes. It never stores
+prompt bodies, plan bodies beyond a sanitized H1, assistant output, transcript contents, or arbitrary hook payloads.
 
 Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. Session processes are
 identified by PID and creation time when available, so PID reuse cannot attach ancestry or orphan cleanup to a newer

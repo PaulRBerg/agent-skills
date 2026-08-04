@@ -53,6 +53,64 @@ def test_cli_usage_and_trailer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "provide note text" in note.output
 
 
+def test_cli_name_validation_uniqueness_and_inbox_snapshot(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coordinator = Coordinator(Store(tmp_path / "state.db"), StaticInventory())
+    monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)
+    monkeypatch.chdir(git_repo)
+    runner = CliRunner()
+    monkeypatch.setenv("AI_COORD_CLIENT", "codex")
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "sender-session")
+
+    named = runner.invoke(cli_module.cli, ["name", "  🦊   Fox One  "])
+    assert named.exit_code == 0
+    assert named.output == "NAMED\t🦊 Fox One\n"
+    generation = coordinator.store.generation()
+    repeated = runner.invoke(cli_module.cli, ["name", "🦊 Fox One"])
+    assert repeated.exit_code == 0
+    assert coordinator.store.generation() == generation
+    invalid = runner.invoke(cli_module.cli, ["name", "no emoji"])
+    assert invalid.exit_code == 64
+    assert invalid.output == "error: callsign must contain at least one emoji\n"
+
+    monkeypatch.setenv("AI_COORD_CLIENT", "claude")
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "recipient-session")
+    assert runner.invoke(cli_module.cli, ["name", "🐙 Octo Two"]).exit_code == 0
+    duplicate = runner.invoke(cli_module.cli, ["name", "🦊 fox one"])
+    assert duplicate.exit_code == 64
+    assert duplicate.output == "error: callsign is already in use\n"
+
+    monkeypatch.setenv("AI_COORD_CLIENT", "codex")
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "sender-session")
+    sent = runner.invoke(cli_module.cli, ["msg", "🐙 Octo Two", "snapshot me"])
+    assert sent.exit_code == 0
+    assert runner.invoke(cli_module.cli, ["name", "🦝 New Fox"]).exit_code == 0
+    monkeypatch.setenv("AI_COORD_CLIENT", "claude")
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "recipient-session")
+
+    inbox = runner.invoke(cli_module.cli, ["inbox"])
+
+    assert inbox.exit_code == 0
+    assert "\t🦊 Fox One\tsnapshot me\n" in inbox.output
+    assert "New Fox" not in inbox.output
+
+
+def test_cli_name_requires_git_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    coordinator = Coordinator(Store(tmp_path / "state.db"), StaticInventory())
+    monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)
+    monkeypatch.setenv("AI_COORD_CLIENT", "codex")
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "session")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(cli_module.cli, ["name", "🧭 Lost One"])
+
+    assert result.exit_code == 1
+    assert result.output == "error: name requires a Git worktree\n"
+
+
 def test_hook_cli_is_fail_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_COORD_STATE_DIR", str(tmp_path / "state"))
     runner = CliRunner()
