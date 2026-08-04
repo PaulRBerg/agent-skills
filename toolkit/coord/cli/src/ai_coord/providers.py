@@ -14,7 +14,7 @@ from typing import Any, Protocol
 import psutil
 
 from ai_coord.identity import Identity, ProcessReference, process_reference
-from ai_coord.integrations import default_hook_path, inspect_hooks
+from ai_coord.integrations import default_hook_path, inspect_codex_hook_trust, inspect_hooks
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
 from ai_coord.util import git_root, now_ts
 
@@ -99,6 +99,10 @@ class HostInventory:
                 "hook-ledger",
                 error=f"last hook error: {errors[-1]['last_error_code']}",
             )
+        trust = inspect_codex_hook_trust(hooks.path)
+        if not trust.ok:
+            detail = trust.error or "app-server hook trust could not be verified"
+            return ProviderReport("codex", False, "hook-ledger", error=f"hook trust: {detail}")
         return ProviderReport("codex", True, "hook-ledger")
 
     def _collect_claude(self) -> tuple[ProviderReport, list[dict[str, Any]]]:

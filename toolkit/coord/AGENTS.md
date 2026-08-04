@@ -22,5 +22,9 @@ Keep modules below 1000 lines and test modules below 2000 lines.
 
 ## Upstream documentation
 
-- Codex hooks: <https://developers.openai.com/codex/config-advanced#hooks>
+- Codex hooks: <https://developers.openai.com/codex/hooks>
 - Claude Code hooks: <https://code.claude.com/docs/en/hooks>
+
+Codex hook, app-server, and hook-trust changes require `$agents-docs` and verification against the current official
+Codex hooks and app-server documentation before implementation. Never derive or persist hook hashes manually; obtain and
+verify them through the supported app-server protocol for the exact owned hook definitions.

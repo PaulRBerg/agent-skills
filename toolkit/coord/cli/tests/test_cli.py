@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -212,30 +213,123 @@ def test_waker_cli_is_silent_unless_a_queued_claim_wakes(
     )
 
 
-def test_link_cli_reports_dry_run_then_update_then_noop(tmp_path: Path) -> None:
-    path = tmp_path / "hooks.json"
+def test_link_cli_reports_dry_run_then_update_then_noop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "codex" / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(path.parent))
+    trust_calls: list[Path] = []
+
+    def trust_hook_path(trusted_path: Path) -> str:
+        trust_calls.append(trusted_path)
+        return "updated" if len(trust_calls) == 1 else "unchanged"
+
+    monkeypatch.setattr(cli_module, "trust_codex_hooks", trust_hook_path)
+    runner = CliRunner()
+    supplied_path = path.parent / "not-a-directory" / ".." / "hooks.json"
+
+    preview = runner.invoke(
+        cli_module.cli, ["link", "codex", "--path", str(supplied_path), "--dry-run"]
+    )
+    assert preview.exit_code == 0
+    assert preview.output == f"WOULD_UPDATE\tcodex\t{path}\tlegacy=0\ttrust=skipped\n"
+    assert not path.exists()
+    assert trust_calls == []
+
+    applied = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(supplied_path)])
+    assert applied.exit_code == 0
+    assert applied.output == f"UPDATED\tcodex\t{path}\tlegacy=0\ttrust=updated\n"
+
+    repeated = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(supplied_path)])
+    assert repeated.exit_code == 0
+    assert repeated.output == f"OK\tcodex\t{path}\tlegacy=0\ttrust=unchanged\n"
+    assert trust_calls == [path, path]
+
+    unverified = runner.invoke(
+        cli_module.cli, ["link", "codex", "--path", str(supplied_path), "--dry-run"]
+    )
+    assert unverified.exit_code == 0
+    assert unverified.output == f"WOULD_UPDATE\tcodex\t{path}\tlegacy=0\ttrust=skipped\n"
+    assert trust_calls == [path, path]
+
+
+def test_link_codex_path_must_resolve_to_active_hooks_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    invalid_path = tmp_path / "other" / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setattr(
+        cli_module,
+        "trust_codex_hooks",
+        lambda _path: pytest.fail("Codex trust must not run for a rejected path"),
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["link", "codex", "--path", str(invalid_path)])
+
+    assert result.exit_code == 64
+    assert result.output == (
+        f"error: --path for codex must be the active hooks file: {codex_home / 'hooks.json'}\n"
+    )
+    assert not invalid_path.exists()
+
+
+def test_link_claude_reports_skipped_trust(tmp_path: Path) -> None:
+    path = tmp_path / "claude" / "settings.json"
     runner = CliRunner()
 
-    preview = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(path), "--dry-run"])
-    assert preview.exit_code == 0
-    assert preview.output.startswith("WOULD_UPDATE\tcodex")
-    assert not path.exists()
-
-    applied = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(path)])
+    applied = runner.invoke(cli_module.cli, ["link", "claude", "--path", str(path)])
     assert applied.exit_code == 0
-    assert applied.output.startswith("UPDATED\tcodex")
+    assert applied.output == f"UPDATED\tclaude\t{path}\tlegacy=0\ttrust=skipped\n"
 
-    repeated = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(path)])
+    repeated = runner.invoke(cli_module.cli, ["link", "claude", "--path", str(path)])
     assert repeated.exit_code == 0
-    assert repeated.output.startswith("OK\tcodex")
+    assert repeated.output == f"OK\tclaude\t{path}\tlegacy=0\ttrust=skipped\n"
+
+
+def test_link_all_stops_before_claude_when_codex_trust_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    claude_home = tmp_path / "claude"
+    codex_hooks = codex_home / "hooks.json"
+    claude_settings = claude_home / "settings.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
+
+    def trust_failure(_path: Path) -> str:
+        raise RuntimeError("Codex app-server trust failed")
+
+    monkeypatch.setattr(cli_module, "trust_codex_hooks", trust_failure)
+
+    result = CliRunner().invoke(cli_module.cli, ["link", "all"])
+
+    assert result.exit_code == 1
+    assert result.output == "error: Codex app-server trust failed\n"
+    assert codex_hooks.exists()
+    assert not claude_settings.exists()
 
 
 def test_check_reports_hook_health_codes_and_exits_degraded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    @dataclass(frozen=True)
+    class TrustCheck:
+        ok: bool
+        path: Path
+        error: str | None
+        details: dict[str, str]
+
     hooks_path = tmp_path / "hooks.json"
     monkeypatch.setenv("AI_COORD_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setattr(cli_module, "default_hook_path", lambda _client: hooks_path)
+    monkeypatch.setattr(
+        cli_module,
+        "inspect_codex_hook_trust",
+        lambda _path: TrustCheck(
+            False, hooks_path, "owned hook is untrusted", {"reason": "untrusted"}
+        ),
+    )
     monkeypatch.setattr(
         cli_module, "Coordinator", lambda store: Coordinator(store, StaticInventory())
     )
@@ -248,6 +342,7 @@ def test_check_reports_hook_health_codes_and_exits_degraded(
 
     assert result.exit_code == 2
     assert "DEGRADED\thooks:codex" in result.output
+    assert "DEGRADED\thooks-trust:codex\towned hook is untrusted\n" in result.output
     assert "DEGRADED\thook-health\tcodex/Stop: boom\n" in result.output
 
     as_json = runner.invoke(cli_module.cli, ["check", "--json"])
@@ -259,3 +354,11 @@ def test_check_reports_hook_health_codes_and_exits_degraded(
     assert health["client"] == "codex"
     assert health["event"] == "Stop"
     assert health["last_error_code"] == "boom"
+    trust = next(
+        report
+        for report in json.loads(as_json.output)
+        if report["component"] == "hooks-trust:codex"
+    )
+    assert trust["ok"] is False
+    assert trust["error"] == "owned hook is untrusted"
+    assert trust["details"] == {"reason": "untrusted"}

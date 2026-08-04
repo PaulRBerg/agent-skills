@@ -34,15 +34,19 @@ ai-coord check
 ```
 
 `link` merges owned hooks into `~/.codex/hooks.json` and `~/.claude/settings.json`. It preserves unrelated settings and
-hook commands. Use `--dry-run` to preview or `--path` when linking one client to a non-default settings file.
-`CODEX_HOME` and `CLAUDE_CONFIG_DIR` override the corresponding default configuration roots.
+hook commands. Successful Codex links also automatically trust only the exact `ai-coord` hook definitions they own; they
+never use a broad trust bypass or manually derived hash. `--dry-run` is fully read-only, including no Codex app-server
+call, and reports `trust=skipped`. Codex `--path` accepts only the active `$CODEX_HOME/hooks.json`, which prevents an
+invocation from trusting hooks in another configuration; Claude `--path` can target one non-default settings file.
+Output retains its TSV columns and adds `trust=updated`, `trust=unchanged`, or `trust=skipped`. `CODEX_HOME` and
+`CLAUDE_CONFIG_DIR` override the corresponding default configuration roots.
 
 When a Claude configuration uses the modular source `~/.claude/settings/hooks.jsonc`, `link` updates that file instead
 of the generated `settings.json`. Run the configuration repository's normal settings merge afterward so Claude Code
 receives the regenerated output.
 
-Codex requires interactive review whenever an exact hook definition changes. Open `/hooks` after linking and approve the
-`ai-coord hook codex` definition.
+If Codex cannot inspect or update that narrow trust record, `link codex` fails. `link all` stops before linking Claude;
+the already-written Codex hook file is intentionally not rolled back.
 
 ## Coordination workflow
 

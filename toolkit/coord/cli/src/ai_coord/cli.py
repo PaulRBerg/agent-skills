@@ -6,7 +6,7 @@ import json
 import os
 import re
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import NoReturn
 
@@ -14,7 +14,14 @@ import click
 
 from ai_coord import __version__
 from ai_coord.coordinator import Coordinator, snapshot_json
-from ai_coord.integrations import default_hook_path, default_link_path, inspect_hooks, link_hooks
+from ai_coord.integrations import (
+    default_hook_path,
+    default_link_path,
+    inspect_codex_hook_trust,
+    inspect_hooks,
+    link_hooks,
+    trust_codex_hooks,
+)
 from ai_coord.migration import migrate_legacy
 from ai_coord.server import create_server
 from ai_coord.store import SCHEMA_VERSION, Store
@@ -314,6 +321,15 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
     """Install ai-coord lifecycle hooks while preserving unrelated hooks."""
     if client == "all" and path is not None:
         _fail(ValueError("--path is available only when linking one client"), 64)
+    if client == "codex" and path is not None:
+        expected_path = default_hook_path("codex").resolve(strict=False)
+        supplied_path = path.expanduser().resolve(strict=False)
+        if supplied_path != expected_path:
+            _fail(
+                ValueError(f"--path for codex must be the active hooks file: {expected_path}"),
+                64,
+            )
+        path = supplied_path
     clients = ("codex", "claude") if client == "all" else (client,)
     try:
         for selected in clients:
@@ -323,11 +339,18 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
                 dry_run=dry_run,
                 force=force,
             )
-            if not result.changed:
-                state = "OK"
+            if selected == "codex" and not dry_run:
+                result = replace(result, trust=trust_codex_hooks(result.path))
+            if dry_run and (result.changed or selected == "codex"):
+                state = "WOULD_UPDATE"
+            elif result.changed or result.trust == "updated":
+                state = "UPDATED"
             else:
-                state = "WOULD_UPDATE" if dry_run else "UPDATED"
-            click.echo(f"{state}\t{selected}\t{result.path}\tlegacy={result.removed_legacy}")
+                state = "OK"
+            click.echo(
+                f"{state}\t{selected}\t{result.path}\tlegacy={result.removed_legacy}"
+                f"\ttrust={result.trust}"
+            )
     except ValueError as error:
         _fail(error, 64)
     except Exception as error:  # noqa: BLE001
@@ -355,6 +378,9 @@ def check(as_json: bool) -> None:
             report = inspect_hooks(selected, default_hook_path(selected))
             reports.append({"component": f"hooks:{selected}", **asdict(report)})
             degraded = degraded or not report.ok
+        trust = inspect_codex_hook_trust(default_hook_path("codex"))
+        reports.append({"component": "hooks-trust:codex", **asdict(trust)})
+        degraded = degraded or not trust.ok
         snapshot = Coordinator(store).snapshot(machine_wide=True)
         reports.extend(
             {"component": f"provider:{provider['client']}", **provider}

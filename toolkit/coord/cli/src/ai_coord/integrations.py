@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import select
 import stat
+import subprocess
 import tempfile
+import time
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Self
 
 from ai_coord.jsonc import ArrayNode, JsoncDocument, ObjectNode
 
@@ -66,6 +69,7 @@ class LinkResult:
     path: Path
     changed: bool
     removed_legacy: int
+    trust: Literal["updated", "unchanged", "skipped"] = "skipped"
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +80,36 @@ class HooksCheck:
     missing: tuple[str, ...]
     legacy_commands: tuple[str, ...]
     error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class HookCheck:
+    """The app-server's read-only assessment of ai-coord's Codex hooks."""
+
+    ok: bool
+    path: Path
+    error: str | None = None
+    details: dict[str, object] = field(default_factory=dict)
+
+
+class CodexTrustError(RuntimeError):
+    """Codex could not prove or update the narrowly owned hook trust state."""
+
+
+class _CodexVersionConflict(CodexTrustError):
+    pass
+
+
+_CODEX_TIMEOUT_SECONDS = 10
+_CODEX_EVENT_NAMES = {
+    "SessionStart": "sessionStart",
+    "UserPromptSubmit": "userPromptSubmit",
+    "Stop": "stop",
+    "SessionEnd": "sessionEnd",
+    "SubagentStart": "subagentStart",
+    "SubagentStop": "subagentStop",
+    "PostToolUse": "postToolUse",
+}
 
 
 def link_hooks(
@@ -143,6 +177,307 @@ def inspect_hooks(client: str, path: Path) -> HooksCheck:
     )
     legacy = tuple(command for command in iter_commands(hooks) if _is_legacy(command, client))
     return HooksCheck(client, path, not missing and not legacy, missing, legacy)
+
+
+def trust_codex_hooks(
+    path: Path | None = None, *, dry_run: bool = False
+) -> Literal["updated", "unchanged", "skipped"]:
+    """Trust only the seven exact ai-coord hooks in the active Codex source.
+
+    The hooks file is written by :func:`link_hooks`; this operation only changes
+    Codex's user config through its compare-and-swap app-server API.
+    """
+    hooks_path = _active_codex_hook_path(path)
+    if dry_run:
+        return "skipped"
+
+    last_error: CodexTrustError | None = None
+    for attempt in range(3):
+        try:
+            with _CodexAppServer() as server:
+                hooks = _owned_codex_hooks(server.request("hooks/list", {}), hooks_path)
+                if all(hook["trustStatus"] == "trusted" for hook in hooks.values()):
+                    return "unchanged"
+                config = _user_config_layer(server.request("config/read", {"includeLayers": True}))
+                edits = [
+                    {
+                        "keyPath": _codex_trust_key_path(key),
+                        "value": hook["currentHash"],
+                        "mergeStrategy": "upsert",
+                    }
+                    for key, hook in hooks.items()
+                ]
+                write_result = server.request(
+                    "config/batchWrite",
+                    {
+                        "edits": edits,
+                        "expectedVersion": config["version"],
+                        "filePath": config["filePath"],
+                    },
+                )
+                _validate_config_write(write_result, config["filePath"])
+                expected_hashes = {key: hook["currentHash"] for key, hook in hooks.items()}
+            with _CodexAppServer() as server:
+                verified = _owned_codex_hooks(server.request("hooks/list", {}), hooks_path)
+            if all(
+                verified[key]["trustStatus"] == "trusted"
+                and verified[key]["currentHash"] == expected_hash
+                for key, expected_hash in expected_hashes.items()
+            ):
+                return "updated"
+            last_error = CodexTrustError("Codex did not verify the submitted hook trust state")
+        except CodexTrustError as error:
+            if not isinstance(error, _CodexVersionConflict):
+                raise
+            last_error = error
+        if attempt == 2:
+            break
+    raise last_error or CodexTrustError("Codex hook trust did not converge")
+
+
+def inspect_codex_hook_trust(path: Path | None = None) -> HookCheck:
+    """Read Codex's trust state for exactly the hooks this integration owns."""
+    try:
+        hooks_path = _active_codex_hook_path(path)
+        with _CodexAppServer() as server:
+            hooks = _owned_codex_hooks(server.request("hooks/list", {}), hooks_path)
+        details: dict[str, object] = {
+            "hooks": {
+                key: {"hash": hook["currentHash"], "trust": hook["trustStatus"]}
+                for key, hook in hooks.items()
+            }
+        }
+        untrusted = tuple(key for key, hook in hooks.items() if hook["trustStatus"] != "trusted")
+        if untrusted:
+            return HookCheck(
+                False,
+                hooks_path,
+                "owned Codex hooks are not trusted",
+                {**details, "untrusted": untrusted},
+            )
+        return HookCheck(True, hooks_path, details=details)
+    except (CodexTrustError, OSError, ValueError) as error:
+        requested = path if path is not None else default_hook_path("codex")
+        return HookCheck(False, requested, str(error))
+
+
+def _active_codex_hook_path(path: Path | None) -> Path:
+    active = default_hook_path("codex").expanduser().resolve(strict=False)
+    selected = (path or active).expanduser().resolve(strict=False)
+    if selected != active:
+        raise ValueError(f"Codex hooks path must be the active source: {active}")
+    return active
+
+
+def _owned_codex_hooks(response: object, hooks_path: Path) -> dict[str, dict[str, Any]]:
+    if not isinstance(response, dict) or not isinstance(response.get("data"), list):
+        raise CodexTrustError("malformed hooks/list response")
+    found: dict[str, dict[str, Any]] = {}
+    for entry in response["data"]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
+            raise CodexTrustError("malformed hooks/list entry")
+        if entry.get("errors"):
+            raise CodexTrustError("Codex reported hook loading errors")
+        for hook in entry["hooks"]:
+            if not isinstance(hook, dict):
+                raise CodexTrustError("malformed hook metadata")
+            matching = _matching_codex_spec(hook, hooks_path)
+            if matching is None:
+                continue
+            if matching.event in found:
+                raise CodexTrustError(f"duplicate owned Codex hook: {matching.event}")
+            found[matching.event] = hook
+    missing = [spec.event for spec in CODEX_HOOK_SPECS if spec.event not in found]
+    if missing:
+        raise CodexTrustError(f"missing exact Codex hooks: {', '.join(missing)}")
+    by_key = {hook["key"]: hook for hook in found.values()}
+    if len(by_key) != len(found):
+        raise CodexTrustError("duplicate Codex hook key")
+    return by_key
+
+
+def _matching_codex_spec(hook: dict[str, Any], hooks_path: Path) -> HookSpec | None:
+    source_path = hook.get("sourcePath")
+    if not isinstance(source_path, str):
+        return None
+    try:
+        is_active_source = Path(source_path).expanduser().resolve(strict=False) == hooks_path
+    except OSError:
+        return None
+    if not is_active_source:
+        return None
+    for spec in CODEX_HOOK_SPECS:
+        if (
+            hook.get("eventName") == _CODEX_EVENT_NAMES[spec.event]
+            and hook.get("enabled") is True
+            and hook.get("isManaged") is False
+            and hook.get("source") == "user"
+            and hook.get("handlerType") == "command"
+            and hook.get("command") == spec.command
+            and hook.get("matcher") == spec.matcher
+            and hook.get("timeoutSec") == spec.timeout
+            and hook.get("additionalContextLimit") == spec.additional_context_limit
+            and isinstance(hook.get("key"), str)
+            and bool(hook["key"])
+            and isinstance(hook.get("currentHash"), str)
+            and bool(hook["currentHash"])
+            and hook.get("trustStatus") in {"trusted", "untrusted", "modified"}
+        ):
+            return spec
+    return None
+
+
+def _user_config_layer(response: object) -> dict[str, str]:
+    if not isinstance(response, dict) or not isinstance(response.get("layers"), list):
+        raise CodexTrustError("malformed config/read response")
+    expected = (default_hook_path("codex").parent / "config.toml").resolve(strict=False)
+    for layer in response["layers"]:
+        if not isinstance(layer, dict) or not isinstance(layer.get("name"), dict):
+            continue
+        name = layer["name"]
+        file_path = name.get("file")
+        if (
+            name.get("type") == "user"
+            and isinstance(file_path, str)
+            and Path(file_path).expanduser().resolve(strict=False) == expected
+            and isinstance(layer.get("version"), str)
+            and layer["version"]
+        ):
+            return {"filePath": file_path, "version": layer["version"]}
+    raise CodexTrustError(f"missing active Codex user config layer: {expected}")
+
+
+def _codex_trust_key_path(key: str) -> str:
+    """Quote the server's opaque hook key as one TOML basic-string segment."""
+    return f"hooks.state.{json.dumps(key, ensure_ascii=False)}.trusted_hash"
+
+
+def _validate_config_write(response: object, expected_path: str) -> None:
+    if not isinstance(response, dict):
+        raise CodexTrustError("malformed config/batchWrite response")
+    file_path = response.get("filePath")
+    version = response.get("version")
+    try:
+        path_matches = isinstance(file_path, str) and Path(file_path).expanduser().resolve(
+            strict=False
+        ) == Path(expected_path).expanduser().resolve(strict=False)
+    except OSError:
+        path_matches = False
+    if (
+        not path_matches
+        or response.get("status") not in {"ok", "okOverridden"}
+        or not isinstance(version, str)
+        or not version
+    ):
+        raise CodexTrustError("malformed config/batchWrite response")
+
+
+class _CodexAppServer:
+    """Minimal, phase-bounded JSONL JSON-RPC client for Codex 0.146.0."""
+
+    def __init__(self) -> None:
+        self._process: subprocess.Popen[str] | None = None
+        self._next_id = 1
+
+    def __enter__(self) -> Self:
+        try:
+            self._process = subprocess.Popen(
+                ["codex", "app-server", "--stdio"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+        except OSError as error:
+            raise CodexTrustError(f"could not start Codex app-server: {error}") from error
+        try:
+            result = self.request(
+                "initialize",
+                {"clientInfo": {"name": "ai-coord", "version": "0"}},
+            )
+            if not isinstance(result, dict):
+                raise CodexTrustError("malformed initialize response")
+            self.notify("initialized", {})
+        except BaseException:
+            self.__exit__()
+            raise
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        if self._process is None:
+            return
+        if self._process.stdin is not None:
+            try:
+                self._process.stdin.close()
+            except OSError:
+                pass
+        try:
+            self._process.wait(timeout=_CODEX_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=_CODEX_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+                self._process.wait(timeout=_CODEX_TIMEOUT_SECONDS)
+
+    def notify(self, method: str, params: dict[str, object]) -> None:
+        self._write({"jsonrpc": "2.0", "method": method, "params": params})
+
+    def request(self, method: str, params: dict[str, object]) -> object:
+        request_id = self._next_id
+        self._next_id += 1
+        self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+        deadline = time.monotonic() + _CODEX_TIMEOUT_SECONDS
+        while True:
+            response = self._read_response(max(0, deadline - time.monotonic()))
+            if response.get("id") != request_id:
+                continue
+            if "error" in response:
+                error = response["error"]
+                if (
+                    isinstance(error, dict)
+                    and error.get("code") == -32600
+                    and isinstance(error.get("data"), dict)
+                    and error["data"].get("config_write_error_code") == "configVersionConflict"
+                ):
+                    raise _CodexVersionConflict("Codex config version conflict")
+                raise CodexTrustError(f"Codex {method} failed: {response['error']}")
+            if "result" not in response:
+                raise CodexTrustError(f"malformed {method} response")
+            return response["result"]
+
+    def _write(self, message: dict[str, object]) -> None:
+        if self._process is None or self._process.stdin is None:
+            raise CodexTrustError("Codex app-server stdin is unavailable")
+        try:
+            self._process.stdin.write(json.dumps(message) + "\n")
+            self._process.stdin.flush()
+        except OSError as error:
+            raise CodexTrustError(f"could not write Codex app-server request: {error}") from error
+
+    def _read_response(self, timeout: float = _CODEX_TIMEOUT_SECONDS) -> dict[str, object]:
+        if self._process is None or self._process.stdout is None:
+            raise CodexTrustError("Codex app-server stdout is unavailable")
+        ready, _, _ = select.select([self._process.stdout], [], [], timeout)
+        if not ready:
+            raise CodexTrustError("Codex app-server response timed out")
+        line = self._process.stdout.readline()
+        if not line:
+            raise CodexTrustError("Codex app-server closed stdout")
+        try:
+            response = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise CodexTrustError("Codex app-server emitted malformed JSON") from error
+        if not isinstance(response, dict):
+            raise CodexTrustError("Codex app-server emitted malformed JSON-RPC")
+        # Codex 0.146.0 omits the JSON-RPC version marker on its JSONL output.
+        if response.get("jsonrpc") not in (None, "2.0") or not (
+            "id" in response or "method" in response
+        ):
+            raise CodexTrustError("Codex app-server emitted malformed JSON-RPC")
+        return response
 
 
 def hook_specs(client: str) -> tuple[HookSpec, ...]:

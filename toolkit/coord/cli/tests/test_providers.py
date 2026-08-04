@@ -9,6 +9,7 @@ from hypothesis import strategies as st
 
 from ai_coord import providers
 from ai_coord.identity import Identity, ProcessReference
+from ai_coord.integrations import HookCheck, HooksCheck
 from ai_coord.providers import HostInventory, ProviderReport, normalize_claude_sessions
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
 
@@ -109,6 +110,142 @@ def test_host_inventory_reconciles_only_stale_dead_codex_sessions(
     assert store.session(stale_live) is not None
     assert store.session(recent_dead) is not None
     assert store.session(claude) is not None
+
+
+def test_codex_provider_reports_trusted_hook_inventory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook_path = tmp_path / "hooks.json"
+    store = Store(tmp_path / "state.db")
+    inspected_paths: list[Path] = []
+
+    monkeypatch.setattr(
+        providers.shutil,
+        "which",
+        lambda name: "/bin/codex" if name == "codex" else None,
+    )
+    monkeypatch.setattr(
+        providers,
+        "inspect_hooks",
+        lambda _client, _path: HooksCheck("codex", hook_path, True, (), ()),
+    )
+
+    def inspect_trust(path: Path) -> HookCheck:
+        inspected_paths.append(path)
+        return HookCheck(True, path, None, {})
+
+    monkeypatch.setattr(providers, "inspect_codex_hook_trust", inspect_trust)
+
+    report = HostInventory()._codex_report(store)
+
+    assert report == ProviderReport("codex", True, "hook-ledger")
+    assert inspected_paths == [hook_path]
+
+
+def test_codex_provider_preserves_hook_file_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook_path = tmp_path / "hooks.json"
+    store = Store(tmp_path / "state.db")
+
+    monkeypatch.setattr(providers.shutil, "which", lambda _name: "/bin/codex")
+    monkeypatch.setattr(
+        providers,
+        "inspect_hooks",
+        lambda _client, _path: HooksCheck(
+            "codex", hook_path, False, ("SessionStart",), (), "invalid hook configuration"
+        ),
+    )
+    monkeypatch.setattr(
+        providers,
+        "inspect_codex_hook_trust",
+        lambda _path: pytest.fail("hook trust inspection should not run for invalid hook files"),
+    )
+
+    report = HostInventory()._codex_report(store)
+
+    assert not report.ok
+    assert report.error == "invalid hook configuration; missing or invalid hooks: SessionStart"
+
+
+@pytest.mark.parametrize(
+    ("trust_error", "expected"),
+    (
+        (
+            "owned hook does not exactly match app-server configuration",
+            "owned hook does not exactly match app-server configuration",
+        ),
+        ("Codex app-server unavailable", "Codex app-server unavailable"),
+        (None, "app-server hook trust could not be verified"),
+    ),
+)
+def test_codex_provider_fails_closed_when_hook_trust_is_degraded_or_unverifiable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    trust_error: str | None,
+    expected: str,
+) -> None:
+    hook_path = tmp_path / "hooks.json"
+    store = Store(tmp_path / "state.db")
+
+    monkeypatch.setattr(providers.shutil, "which", lambda _name: "/bin/codex")
+    monkeypatch.setattr(
+        providers,
+        "inspect_hooks",
+        lambda _client, _path: HooksCheck("codex", hook_path, True, (), ()),
+    )
+    monkeypatch.setattr(
+        providers,
+        "inspect_codex_hook_trust",
+        lambda path: HookCheck(False, path, trust_error, {}),
+    )
+
+    report = HostInventory()._codex_report(store)
+
+    assert not report.ok
+    assert report.error == f"hook trust: {expected}"
+
+
+def test_codex_provider_preserves_hook_health_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook_path = tmp_path / "hooks.json"
+    store = Store(tmp_path / "state.db")
+    store.hook_error("codex", "SessionStart", "hook_error")
+
+    monkeypatch.setattr(providers.shutil, "which", lambda _name: "/bin/codex")
+    monkeypatch.setattr(
+        providers,
+        "inspect_hooks",
+        lambda _client, _path: HooksCheck("codex", hook_path, True, (), ()),
+    )
+    monkeypatch.setattr(
+        providers,
+        "inspect_codex_hook_trust",
+        lambda _path: pytest.fail("hook trust inspection should not run for unhealthy hooks"),
+    )
+
+    report = HostInventory()._codex_report(store)
+
+    assert not report.ok
+    assert report.error == "last hook error: hook_error"
+
+
+def test_codex_provider_remains_disabled_without_codex(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = Store(tmp_path / "state.db")
+
+    monkeypatch.setattr(providers.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        providers,
+        "inspect_codex_hook_trust",
+        lambda _path: pytest.fail("hook trust inspection should not run without Codex"),
+    )
+
+    assert HostInventory()._codex_report(store) == ProviderReport(
+        "codex", True, "hook-ledger", enabled=False
+    )
 
 
 class _Process:

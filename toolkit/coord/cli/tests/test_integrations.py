@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
 import os
+import shutil
 import stat
 from pathlib import Path
 
@@ -11,14 +13,60 @@ from hypothesis import strategies as st
 
 import ai_coord.integrations as integrations_module
 from ai_coord.integrations import (
+    CODEX_HOOK_SPECS,
+    CodexTrustError,
     default_hook_path,
     default_link_path,
+    inspect_codex_hook_trust,
     inspect_hooks,
     link_hooks,
+    trust_codex_hooks,
 )
 from ai_coord.jsonc import JsoncDocument
 
 JSON_SCALARS = st.none() | st.booleans() | st.integers() | st.text()
+
+
+def _codex_hook(
+    spec: integrations_module.HookSpec, source_path: Path, *, trust: str = "untrusted"
+) -> dict[str, object]:
+    event_names = {
+        "SessionStart": "sessionStart",
+        "UserPromptSubmit": "userPromptSubmit",
+        "Stop": "stop",
+        "SessionEnd": "sessionEnd",
+        "SubagentStart": "subagentStart",
+        "SubagentStop": "subagentStop",
+        "PostToolUse": "postToolUse",
+    }
+    return {
+        "key": f'key.{spec.event}."quoted"',
+        "currentHash": f"hash-{spec.event}",
+        "enabled": True,
+        "eventName": event_names[spec.event],
+        "handlerType": "command",
+        "isManaged": False,
+        "source": "user",
+        "sourcePath": str(source_path),
+        "command": spec.command,
+        "matcher": spec.matcher,
+        "timeoutSec": spec.timeout,
+        "additionalContextLimit": spec.additional_context_limit,
+        "trustStatus": trust,
+    }
+
+
+def _hooks_response(source_path: Path, *, trust: str = "untrusted") -> dict[str, object]:
+    return {
+        "data": [
+            {
+                "cwd": str(source_path.parent),
+                "errors": [],
+                "warnings": [],
+                "hooks": [_codex_hook(spec, source_path, trust=trust) for spec in CODEX_HOOK_SPECS],
+            }
+        ]
+    }
 
 
 @st.composite
@@ -34,6 +82,344 @@ def _handler_order_case(draw: st.DrawFn) -> tuple[list[str], int]:
     )
     position = draw(st.integers(min_value=0, max_value=len(commands)))
     return commands, position
+
+
+@pytest.mark.parametrize("initial_trust", ("untrusted", "modified"))
+def test_codex_trust_batches_only_exact_owned_hooks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, initial_trust: str
+) -> None:
+    codex_home = tmp_path / "codex"
+    hooks_path = codex_home / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    requests: list[tuple[str, dict[str, object]]] = []
+    responses = iter(
+        [
+            {"hooks/list": _hooks_response(hooks_path, trust=initial_trust)},
+            {
+                "config/read": {
+                    "layers": [
+                        {
+                            "name": {"type": "user", "file": str(codex_home / "config.toml")},
+                            "version": "v1",
+                        }
+                    ]
+                }
+            },
+            {
+                "config/batchWrite": {
+                    "filePath": str(codex_home / "config.toml"),
+                    "status": "ok",
+                    "version": "v2",
+                }
+            },
+            {"hooks/list": _hooks_response(hooks_path, trust="trusted")},
+        ]
+    )
+    servers: list[object] = []
+
+    class FakeServer:
+        def __init__(self) -> None:
+            servers.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def request(self, method: str, params: dict[str, object]) -> object:
+            requests.append((method, params))
+            response = next(responses)
+            return response[method]
+
+    monkeypatch.setattr(integrations_module, "_CodexAppServer", FakeServer)
+
+    assert trust_codex_hooks() == "updated"
+    batch = requests[2][1]
+    assert batch["expectedVersion"] == "v1"
+    assert batch["filePath"] == str(codex_home / "config.toml")
+    edits = batch["edits"]
+    assert isinstance(edits, list) and len(edits) == 7
+    assert all(edit["mergeStrategy"] == "upsert" for edit in edits if isinstance(edit, dict))
+    assert all('."key.' in edit["keyPath"] for edit in edits if isinstance(edit, dict))
+    assert len(servers) == 2
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("eventName", "sessionEnd"),
+        ("enabled", False),
+        ("isManaged", True),
+        ("source", "project"),
+        ("sourcePath", "/not-the-active-hooks-file"),
+        ("handlerType", "prompt"),
+        ("command", "ai-coord hook codex "),
+        ("matcher", "*"),
+        ("timeoutSec", 6),
+        ("additionalContextLimit", 0),
+        ("key", ""),
+        ("currentHash", ""),
+        ("trustStatus", "managed"),
+    ),
+)
+def test_codex_owned_hook_filter_rejects_near_matches(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    hooks_path = tmp_path / "hooks.json"
+    hook = _codex_hook(CODEX_HOOK_SPECS[0], hooks_path)
+    hook[field] = value
+
+    assert integrations_module._matching_codex_spec(hook, hooks_path) is None
+
+
+def test_codex_trust_key_path_quotes_the_opaque_key_as_one_toml_segment() -> None:
+    key = 'path.with.dot:"quote"\\slash\nline'
+
+    assert integrations_module._codex_trust_key_path(key) == (
+        r'hooks.state."path.with.dot:\"quote\"\\slash\nline".trusted_hash'
+    )
+
+
+@pytest.mark.parametrize(
+    "response",
+    (
+        None,
+        {},
+        {"filePath": "/wrong/config.toml", "status": "ok", "version": "v2"},
+        {"filePath": "/active/config.toml", "status": "unexpected", "version": "v2"},
+        {"filePath": "/active/config.toml", "status": "ok", "version": ""},
+    ),
+)
+def test_codex_config_write_response_is_strict(response: object) -> None:
+    with pytest.raises(CodexTrustError, match="malformed config/batchWrite response"):
+        integrations_module._validate_config_write(response, "/active/config.toml")
+
+
+def test_codex_trust_is_noop_when_exact_hooks_are_trusted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_home = tmp_path / "codex"
+    hooks_path = codex_home / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    methods: list[str] = []
+
+    class FakeServer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def request(self, method: str, _: dict[str, object]) -> object:
+            methods.append(method)
+            assert method == "hooks/list"
+            return _hooks_response(hooks_path, trust="trusted")
+
+    monkeypatch.setattr(integrations_module, "_CodexAppServer", FakeServer)
+    assert trust_codex_hooks() == "unchanged"
+    assert methods == ["hooks/list"]
+    assert trust_codex_hooks(dry_run=True) == "skipped"
+
+
+def test_codex_trust_rejects_non_active_hook_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    with pytest.raises(ValueError, match="active source"):
+        trust_codex_hooks(tmp_path / "other-hooks.json", dry_run=True)
+
+
+def test_codex_trust_retries_only_config_version_conflict(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_home = tmp_path / "codex"
+    hooks_path = codex_home / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    sequence = iter(
+        [
+            ("hooks/list", _hooks_response(hooks_path)),
+            (
+                "config/read",
+                {
+                    "layers": [
+                        {
+                            "name": {"type": "user", "file": str(codex_home / "config.toml")},
+                            "version": "v1",
+                        }
+                    ]
+                },
+            ),
+            ("config/batchWrite", integrations_module._CodexVersionConflict("conflict")),
+            ("hooks/list", _hooks_response(hooks_path)),
+            (
+                "config/read",
+                {
+                    "layers": [
+                        {
+                            "name": {"type": "user", "file": str(codex_home / "config.toml")},
+                            "version": "v2",
+                        }
+                    ]
+                },
+            ),
+            (
+                "config/batchWrite",
+                {
+                    "filePath": str(codex_home / "config.toml"),
+                    "status": "ok",
+                    "version": "v3",
+                },
+            ),
+            ("hooks/list", _hooks_response(hooks_path, trust="trusted")),
+        ]
+    )
+
+    class FakeServer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def request(self, method: str, _: dict[str, object]) -> object:
+            expected, result = next(sequence)
+            assert method == expected
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+    monkeypatch.setattr(integrations_module, "_CodexAppServer", FakeServer)
+    assert trust_codex_hooks() == "updated"
+
+
+def test_codex_trust_stops_after_three_fresh_config_version_conflicts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_home = tmp_path / "codex"
+    hooks_path = codex_home / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    instances: list[int] = []
+    submitted_hashes: list[set[object]] = []
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.attempt = len(instances) + 1
+            instances.append(self.attempt)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def request(self, method: str, params: dict[str, object]) -> object:
+            if method == "hooks/list":
+                response = _hooks_response(hooks_path)
+                for hook in response["data"][0]["hooks"]:  # type: ignore[index]
+                    hook["currentHash"] = f"attempt-{self.attempt}-{hook['eventName']}"
+                return response
+            if method == "config/read":
+                return {
+                    "layers": [
+                        {
+                            "name": {"type": "user", "file": str(codex_home / "config.toml")},
+                            "version": f"v{self.attempt}",
+                        }
+                    ]
+                }
+            assert method == "config/batchWrite"
+            edits = params["edits"]
+            assert isinstance(edits, list)
+            submitted_hashes.append({edit["value"] for edit in edits if isinstance(edit, dict)})
+            raise integrations_module._CodexVersionConflict("conflict")
+
+    monkeypatch.setattr(integrations_module, "_CodexAppServer", FakeServer)
+
+    with pytest.raises(CodexTrustError, match="conflict"):
+        trust_codex_hooks()
+
+    assert instances == [1, 2, 3]
+    assert len(submitted_hashes) == 3
+    assert all(
+        all(str(value).startswith(f"attempt-{attempt}-") for value in hashes)
+        for attempt, hashes in enumerate(submitted_hashes, start=1)
+    )
+
+
+def test_codex_trust_inspection_fails_closed_for_missing_exact_hook(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_home = tmp_path / "codex"
+    hooks_path = codex_home / "hooks.json"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    class FakeServer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def request(self, _: str, __: dict[str, object]) -> object:
+            response = _hooks_response(hooks_path, trust="trusted")
+            response["data"][0]["hooks"].pop()  # type: ignore[index]
+            return response
+
+    monkeypatch.setattr(integrations_module, "_CodexAppServer", FakeServer)
+    check = inspect_codex_hook_trust()
+    assert not check.ok
+    assert check.error is not None and "missing exact" in check.error
+
+
+def test_codex_app_server_rejects_timeout_and_malformed_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = io.StringIO()
+            self.stdout = io.StringIO("not-json\n")
+
+        def wait(self, timeout: int) -> None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def kill(self) -> None:
+            return None
+
+    monkeypatch.setattr(integrations_module.subprocess, "Popen", lambda *_, **__: FakeProcess())
+    monkeypatch.setattr(integrations_module.select, "select", lambda *_: ([_[0][0]], [], []))
+    with pytest.raises(CodexTrustError, match="malformed JSON"):
+        integrations_module._CodexAppServer().__enter__()
+
+    monkeypatch.setattr(integrations_module.select, "select", lambda *_: ([], [], []))
+    with pytest.raises(CodexTrustError, match="timed out"):
+        integrations_module._CodexAppServer().__enter__()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("AI_COORD_TEST_CODEX_HOOK_TRUST") or shutil.which("codex") is None,
+    reason="set AI_COORD_TEST_CODEX_HOOK_TRUST with Codex installed to exercise live hook trust",
+)
+def test_live_codex_trust_uses_isolated_home_and_preserves_unrelated_hook(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_home = tmp_path / "codex"
+    hooks_path = codex_home / "hooks.json"
+    codex_home.mkdir()
+    hooks_path.write_text(
+        json.dumps(
+            {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "unrelated-hook"}]}]}}
+        )
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    link_hooks("codex", hooks_path)
+    assert trust_codex_hooks() in {"updated", "unchanged"}
+    assert inspect_codex_hook_trust().ok
+    assert "unrelated-hook" in hooks_path.read_text()
 
 
 def test_codex_link_preserves_unrelated_and_replaces_legacy(tmp_path: Path) -> None:
