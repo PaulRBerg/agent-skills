@@ -20,9 +20,10 @@ import shutil
 import subprocess
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 
 DEFAULT_DIR_IGNORES = (
@@ -96,6 +97,23 @@ ALWAYS_IGNORED_HOME_PATHS = (
     "~/.local/state/skills",
 )
 
+BROAD_SCAN_CACHE_PATHS = (
+    "~/.cache",
+    "~/.npm",
+    "~/.rustup",
+    "~/.cargo/git",
+    "~/.cargo/registry",
+    "~/.bun/install/cache",
+    "~/.pnpm-store",
+    "~/.local/share/uv",
+    "~/.local/share/rustup",
+    "~/.local/share/cargo/git",
+    "~/.local/share/cargo/registry",
+    "~/.local/share/bun/install/cache",
+    "~/.local/share/pnpm/store",
+    "~/go/pkg/mod",
+)
+
 SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", re.DOTALL)
 NAME_FIELD_RE = re.compile(r"^name:\s*['\"]?([^'\"\n#]+?)['\"]?\s*(?:#.*)?$", re.MULTILINE)
@@ -144,6 +162,12 @@ def rg_base_args(root: Path, include_catalog_sources: bool) -> list[str]:
         if ignored_root.is_relative_to(root):
             relative = ignored_root.relative_to(root).as_posix()
             args.extend(["-g", f"!{relative}/**"])
+    for cache_root in broad_scan_cache_roots():
+        if cache_root == root:
+            continue
+        if cache_root.is_relative_to(root):
+            relative = cache_root.relative_to(root).as_posix()
+            args.extend(["-g", f"!{relative}/**"])
     if not include_catalog_sources:
         for catalog_root in catalog_source_roots():
             if root.is_relative_to(catalog_root):
@@ -176,6 +200,10 @@ def macos_protected_home_roots() -> list[Path]:
 
 def always_ignored_home_roots() -> list[Path]:
     return [Path(os.path.expanduser(path)).resolve() for path in ALWAYS_IGNORED_HOME_PATHS]
+
+
+def broad_scan_cache_roots() -> list[Path]:
+    return [Path(os.path.expanduser(path)).resolve() for path in BROAD_SCAN_CACHE_PATHS]
 
 
 def catalog_sources_enabled_for_path(path: Path, roots: list[Path], include_catalog_sources: bool) -> bool:
@@ -280,54 +308,101 @@ def build_known_pattern(names: list[str]) -> str | None:
     )
 
 
-def search_pattern(roots: list[Path], pattern: str, include_catalog_sources: bool) -> list[dict[str, Any]]:
-    matches = []
+def build_unresolved_pattern(names: set[str]) -> str | None:
+    kebab_names = sorted((name for name in names if "-" in name), key=len, reverse=True)
+    if not kebab_names:
+        return None
+    alt = "|".join(re.escape(name) for name in kebab_names)
+    return (
+        rf"(?<![\w./-])\$(?P<dollar>{alt})\b"
+        rf"|(?:^|[\s`'\"(])/(?P<slash>{alt})\b"
+    )
+
+
+def parse_rg_matches(stream: BinaryIO) -> Iterator[tuple[str, int, str]]:
+    """Parse `rg --null --line-number --only-matching` output without buffering it all."""
+    buffer = bytearray()
+    path: bytes | None = None
+
+    while chunk := stream.read(64 * 1024):
+        buffer.extend(chunk)
+        while True:
+            if path is None:
+                separator = buffer.find(b"\0")
+                if separator < 0:
+                    break
+                path = bytes(buffer[:separator])
+                del buffer[: separator + 1]
+
+            separator = buffer.find(b"\n")
+            if separator < 0:
+                break
+            payload = bytes(buffer[:separator])
+            del buffer[: separator + 1]
+
+            line_number, found, match = payload.partition(b":")
+            if not found or not line_number.isdigit():
+                fail("malformed ripgrep reference output")
+            yield os.fsdecode(path), int(line_number), match.decode("utf-8", errors="replace")
+            path = None
+
+    if path is not None or buffer:
+        fail("truncated ripgrep reference output")
+
+
+def search_pattern(roots: list[Path], pattern: str, include_catalog_sources: bool) -> Iterator[dict[str, Any]]:
     for root in roots:
         cmd = rg_base_args(root, include_catalog_sources) + [
-            "--json",
             "--line-number",
+            "--with-filename",
+            "--null",
+            "--only-matching",
             "--pcre2",
             "-e",
             pattern,
             ".",
         ]
-        result = run_rg(cmd, cwd=root)
-        if result.returncode not in (0, 1):
-            fail(f"rg reference search failed for {root}:\n{result.stderr.strip()}")
+        process = subprocess.Popen(cmd, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        assert process.stdout is not None
+        assert process.stderr is not None
+        try:
+            for relative_path, line_number, match in parse_rg_matches(process.stdout):
+                path = (root / relative_path).resolve()
+                if not path_is_scannable(path, roots, include_catalog_sources):
+                    continue
+                yield {
+                    "path": str(path),
+                    "line_number": line_number,
+                    "match": match,
+                }
+            stderr = process.stderr.read().decode("utf-8", errors="replace")
+            returncode = process.wait()
+        except BaseException:
+            process.terminate()
+            process.wait()
+            raise
+        finally:
+            process.stdout.close()
+            process.stderr.close()
 
-        for line in result.stdout.splitlines():
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if event.get("type") != "match":
-                continue
-            data = event.get("data", {})
-            relative_path = data.get("path", {}).get("text")
-            if not relative_path:
-                continue
-            path = (root / relative_path).resolve()
-            if not path_is_scannable(path, roots, include_catalog_sources):
-                continue
-            data["path"]["text"] = str(path)
-            matches.append(data)
-    return matches
+        if returncode not in (0, 1):
+            fail(f"rg reference search failed for {root}:\n{stderr.strip()}")
 
 
-def matched_names(text: str, known_names: set[str]) -> list[str]:
-    matches = []
-    for name in sorted(known_names, key=len, reverse=True):
-        escaped = re.escape(name)
-        checks = (
-            rf"(?<![\w.-])[$/]{escaped}\b",
-            rf"(?:^|[`\s'\"(]){escaped}\s+skill\b",
-            rf"(?:\.agents|\.claude|\.codex)?/skills/{escaped}\b",
-            rf"skills/{escaped}\b",
-            rf"\.\./{escaped}/SKILL\.md",
+def matched_names(text: str, pattern: re.Pattern[str]) -> list[str]:
+    names = set()
+    for match in pattern.finditer(text):
+        name = next(
+            (
+                match.group(group)
+                for group in ("direct", "prose", "path_name", "catalog_name", "sibling_name")
+                if match.group(group)
+            ),
+            None,
         )
-        if any(re.search(check, text) for check in checks):
-            matches.append(name)
-    return matches
+        if name:
+            names.add(name)
+    return sorted(names, key=len, reverse=True)
 
 
 def collect_edges(
@@ -339,16 +414,16 @@ def collect_edges(
     include_catalog_sources: bool,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     known_names = {skill.name for skill in skills}
-    pattern = build_known_pattern(list(known_names))
     edges: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
 
-    if pattern:
-        for data in search_pattern(roots, pattern, include_catalog_sources):
-            path = data["path"]["text"]
+    def scan_known_references(search_roots: list[Path], pattern: str) -> None:
+        compiled_pattern = re.compile(pattern)
+        for data in search_pattern(search_roots, pattern, include_catalog_sources):
+            path = data["path"]
             line_number = data["line_number"]
-            line_text = data.get("lines", {}).get("text", "").rstrip("\n")
-            targets = matched_names(line_text, known_names)
+            match_text = data["match"]
+            targets = matched_names(match_text, compiled_pattern)
             if not targets:
                 continue
             for target in targets:
@@ -366,30 +441,50 @@ def collect_edges(
                     "line": line_number,
                 }
                 if include_snippets:
-                    entry["snippet"] = line_text
+                    entry["snippet"] = match_text
                 edges.append(entry)
 
-    for data in search_pattern(roots, UNRESOLVED_TOKEN_RE.pattern, include_catalog_sources):
-        path = data["path"]["text"]
-        line_text = data.get("lines", {}).get("text", "").rstrip("\n")
-        line_number = data["line_number"]
-        for match in UNRESOLVED_TOKEN_RE.finditer(line_text):
-            name = match.group("dollar") or match.group("slash")
-            if name in known_names:
-                continue
-            if selected and name not in selected:
-                continue
-            source_skill = skill_for_file(path, skills)
-            entry = {
-                "type": "unresolved-like-reference",
-                "source": source_skill.name if source_skill else None,
-                "target": name,
-                "path": path,
-                "line": line_number,
-            }
-            if include_snippets:
-                entry["snippet"] = line_text
-            unresolved.append(entry)
+    all_known_pattern = build_known_pattern(list(known_names))
+    if not selected:
+        if all_known_pattern:
+            scan_known_references(roots, all_known_pattern)
+    else:
+        inbound_pattern = build_known_pattern(list(selected & known_names))
+        if inbound_pattern:
+            scan_known_references(roots, inbound_pattern)
+
+        outbound_roots = sorted(
+            {Path(skill.real_directory) for skill in skills if skill.name in selected},
+            key=str,
+        )
+        if outbound_roots and all_known_pattern:
+            scan_known_references(outbound_roots, all_known_pattern)
+
+    unresolved_pattern = (
+        UNRESOLVED_TOKEN_RE.pattern if not selected else build_unresolved_pattern(selected - known_names)
+    )
+    if unresolved_pattern:
+        for data in search_pattern(roots, unresolved_pattern, include_catalog_sources):
+            path = data["path"]
+            match_text = data["match"]
+            line_number = data["line_number"]
+            for match in UNRESOLVED_TOKEN_RE.finditer(match_text):
+                name = match.group("dollar") or match.group("slash")
+                if name in known_names:
+                    continue
+                if selected and name not in selected:
+                    continue
+                source_skill = skill_for_file(path, skills)
+                entry = {
+                    "type": "unresolved-like-reference",
+                    "source": source_skill.name if source_skill else None,
+                    "target": name,
+                    "path": path,
+                    "line": line_number,
+                }
+                if include_snippets:
+                    entry["snippet"] = match_text
+                unresolved.append(entry)
 
     unique_edges = unique_by(edges, ("type", "source", "target", "path", "line"))
     unique_unresolved = unique_by(unresolved, ("type", "source", "target", "path", "line"))
@@ -441,6 +536,7 @@ def skipped_summary() -> dict[str, list[str]]:
         "files": list(AGENT_STATE_FILE_GLOBS),
         "macos_protected_home_paths": list(MACOS_PROTECTED_HOME_PATHS),
         "always_ignored_home_paths": list(ALWAYS_IGNORED_HOME_PATHS),
+        "broad_scan_cache_paths": list(BROAD_SCAN_CACHE_PATHS),
         "catalog_sources": list(CATALOG_SOURCE_PATHS),
     }
 
@@ -547,6 +643,9 @@ def as_text(
             print(f"- {pattern}")
         print("\nAlways-ignored agent home paths during broad scans:")
         for pattern in skipped_summary()["always_ignored_home_paths"]:
+            print(f"- {pattern}")
+        print("\nIgnored dependency and package cache paths during broad scans:")
+        for pattern in skipped_summary()["broad_scan_cache_paths"]:
             print(f"- {pattern}")
 
 

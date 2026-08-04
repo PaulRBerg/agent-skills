@@ -11,6 +11,8 @@ directories before searching references.
   agent homes.
 - macOS protected home paths: `~/Library` and `~/.Trash`.
 - Agent home install/state roots during broad scans: `~/.agents`, `~/.claude`, `~/.codex`, and `~/.local/state/skills`.
+- Dependency and package caches during broad scans: XDG caches plus npm, Bun, pnpm, uv, Cargo, Rustup, and Go module
+  stores. Passing one of these paths explicitly still scans it.
 - Known local skill catalog source checkouts during broad scans: `~/projects/agent-skills`, `~/sablier/sablier-skills`,
   and `~/sablier/agent-skills`.
 
