@@ -56,6 +56,17 @@ def test_codex_hook_lifecycle_and_delegate(
     coordinator = Coordinator(store, StaticInventory())
     base = {"session_id": "codex-1", "cwd": str(git_repo), "turn_id": "turn-1"}
 
+    assert (
+        coordinator.ingest_hook(
+            "codex", {**base, "hook_event_name": "SessionStart", "source": "startup"}
+        )
+        == ""
+    )
+    session = store.session(Identity("codex", "codex-1"))
+    assert session is not None
+    assert session["state"] == "idle"
+    assert session["process_started_at"] == 123.5
+
     output = coordinator.ingest_hook(
         "codex", {**base, "hook_event_name": "UserPromptSubmit", "prompt": "do not persist"}
     )
@@ -213,7 +224,7 @@ def test_presence_contains_counts_not_message_text(tmp_path: Path, git_repo: Pat
 
 
 @pytest.mark.parametrize("client", ("codex", "claude"))
-def test_unnamed_lifecycle_hooks_repeat_nudge_until_named(
+def test_session_start_is_silent_and_prompt_hook_owns_callsign_nudge(
     tmp_path: Path,
     git_repo: Path,
     client: str,
@@ -223,10 +234,10 @@ def test_unnamed_lifecycle_hooks_repeat_nudge_until_named(
     identity = Identity(client, "top-level")
     base = {"session_id": identity.session_id, "cwd": str(git_repo)}
 
-    assert (
-        coordinator.ingest_hook(client, {**base, "hook_event_name": "SessionStart"})
-        == CALLSIGN_NUDGE
-    )
+    assert coordinator.ingest_hook(client, {**base, "hook_event_name": "SessionStart"}) == ""
+    session = store.session(identity)
+    assert session is not None
+    assert session["state"] == "idle"
     assert (
         coordinator.ingest_hook(
             client, {**base, "hook_event_name": "UserPromptSubmit", "prompt": "private"}

@@ -31,7 +31,12 @@ class HookSpec:
 
 
 CODEX_HOOK_SPECS = (
-    HookSpec("SessionStart", "ai-coord hook codex", timeout=5),
+    HookSpec(
+        "SessionStart",
+        "ai-coord hook codex",
+        matcher="startup|resume|clear",
+        timeout=5,
+    ),
     HookSpec(
         "UserPromptSubmit",
         "ai-coord hook codex",

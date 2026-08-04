@@ -639,6 +639,54 @@ def test_codex_link_preserves_unrelated_and_replaces_legacy(tmp_path: Path) -> N
     assert second.removed_legacy == 0
 
 
+def test_codex_link_scopes_session_start_and_replaces_unfiltered_handler(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "hooks.json"
+    path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "ai-coord hook codex",
+                                    "timeout": 5,
+                                }
+                            ]
+                        },
+                        {
+                            "matcher": "compact",
+                            "hooks": [{"type": "command", "command": "compact-hook"}],
+                        },
+                    ]
+                }
+            }
+        )
+    )
+
+    before = inspect_hooks("codex", path)
+    assert not before.ok
+    assert "SessionStart" in before.missing
+
+    result = link_hooks("codex", path)
+
+    assert result.changed
+    groups = json.loads(path.read_text())["hooks"]["SessionStart"]
+    owned = [group for group in groups if group["hooks"][0]["command"] == "ai-coord hook codex"]
+    assert owned == [
+        {
+            "matcher": "startup|resume|clear",
+            "hooks": [{"type": "command", "command": "ai-coord hook codex", "timeout": 5}],
+        }
+    ]
+    assert "compact-hook" in path.read_text()
+    assert inspect_hooks("codex", path).ok
+    assert not link_hooks("codex", path).changed
+
+
 def test_claude_link_removes_plan_claim_only(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text(

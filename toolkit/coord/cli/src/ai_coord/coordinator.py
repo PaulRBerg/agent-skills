@@ -818,12 +818,8 @@ class Coordinator:
                 elif event_name == "PostToolUse" and client == "claude":
                     self._ingest_claude_plan(identity, payload, root)
             self.store.hook_success(client, event_name)
-            if event_name in {"SessionStart", "UserPromptSubmit"}:
-                return self._hook_context(
-                    identity,
-                    root,
-                    include_presence=event_name == "UserPromptSubmit",
-                )
+            if event_name == "UserPromptSubmit":
+                return self._prompt_context(identity, root)
             return self._noop_stdout(client, event_name)
         except Exception as error:  # noqa: BLE001 - hook mode is deliberately fail-open
             if supported_event:
@@ -925,16 +921,10 @@ class Coordinator:
         value = f"ai-coord: {len(peers)} peer(s), {queued} queued, {pending} message(s) pending"
         return sanitize(value, MAX_PRESENCE_CHARS)
 
-    def _hook_context(
-        self,
-        identity: Identity,
-        root: Path | None,
-        *,
-        include_presence: bool,
-    ) -> str:
+    def _prompt_context(self, identity: Identity, root: Path | None) -> str:
         session = self.store.session(identity)
         parts = [] if session and session.get("callsign") else [CALLSIGN_NUDGE]
-        if include_presence and (presence := self._presence(identity, root)):
+        if presence := self._presence(identity, root):
             parts.append(presence)
         return sanitize(" ".join(parts), MAX_PRESENCE_CHARS)
 

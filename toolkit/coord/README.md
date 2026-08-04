@@ -147,13 +147,14 @@ Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
 
 ## Hooks and health
 
-Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start and prompt hooks give
-unnamed top-level sessions a bounded static reminder to choose a funny emoji callsign; prompt hooks combine it with the
-capped presence count and stop reminding immediately after naming. Claude's `PostToolBatch` hook and Codex's
-`PostToolUse` hook inject a counts-only reminder once when unread peer messages arrive; peer text remains available only
-through `ai-coord inbox`. Stop and session-end hooks update or release the corresponding session; subagent hooks add
-read-only parent/child topology. Claude's `ExitPlanMode` hook records only the approved plan's first H1 as a pathless
-intent label, while its filtered `ai-coord waker claude` hook handles blocked starts in the background.
+Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start hooks silently register
+or refresh idle sessions; Codex limits them to startup, resume, and clear so mid-turn compaction cannot mark working
+sessions idle. Prompt hooks give unnamed top-level sessions a bounded static reminder to choose a funny emoji callsign,
+combine it with the capped presence count, and stop reminding immediately after naming. Claude's `PostToolBatch` hook
+and Codex's `PostToolUse` hook inject a counts-only reminder once when unread peer messages arrive; peer text remains
+available only through `ai-coord inbox`. Stop and session-end hooks update or release the corresponding session;
+subagent hooks add read-only parent/child topology. Claude's `ExitPlanMode` hook records only the approved plan's first
+H1 as a pathless intent label, while its filtered `ai-coord waker claude` hook handles blocked starts in the background.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
