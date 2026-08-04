@@ -191,6 +191,19 @@ def test_incomplete_coverage_and_unowned_dirt_fail_closed(
     )
 
 
+def test_start_observes_replaced_dirty_path_without_raising(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "session-a")
+    monkeypatch.setattr(coordinator_module, "git_dirty_paths", lambda _root: ("bad\ufffd",))
+
+    outcome = coordinator.start("work", (".",), cwd=git_repo)
+
+    assert outcome.detail == "dirty-settling:bad\ufffd"
+    assert coordinator.store.dirt_observations(str(git_repo))[0]["path"] == "bad\ufffd"
+
+
 def test_blocked_claim_messages_holder_and_promotes_after_done(
     tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

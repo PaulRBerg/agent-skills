@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
+import ai_coord.util as util_module
 from ai_coord.util import (
     MAX_SCOPE_CHARS,
     age_label,
@@ -140,6 +142,18 @@ def test_git_dirty_paths_includes_renames_and_untracked(git_repo: Path) -> None:
     assert "src/new.py" in dirty
     assert set(relevant_dirty(("src",), dirty)) == set(dirty)
     assert relevant_dirty(("docs",), dirty) == ()
+
+
+def test_git_dirty_paths_replaces_invalid_utf8_bytes(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        util_module.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, b"?? bad\xff\0", b""),
+    )
+
+    assert git_dirty_paths(git_repo) == ("bad\ufffd",)
 
 
 def test_first_heading_ignores_body() -> None:

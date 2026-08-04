@@ -123,7 +123,7 @@ def git_dirty_paths(root: Path) -> tuple[str, ...]:
         index += 1
         if not entry:
             continue
-        decoded = entry.decode(errors="surrogateescape")
+        decoded = entry.decode(errors="replace")
         if len(decoded) < 4:
             continue
         status = decoded[:2]
@@ -131,7 +131,7 @@ def git_dirty_paths(root: Path) -> tuple[str, ...]:
         if path and path not in dirty:
             dirty.append(path)
         if ("R" in status or "C" in status) and index < len(parts):
-            other = parts[index].decode(errors="surrogateescape")
+            other = parts[index].decode(errors="replace")
             index += 1
             if other and other not in dirty:
                 dirty.append(other)
