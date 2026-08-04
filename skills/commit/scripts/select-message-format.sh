@@ -17,6 +17,8 @@ physical_dir() {
   (cd "$_dir" 2>/dev/null && pwd -P)
 }
 
+. "$(cd "$(dirname "$0")" && pwd -P)/natural-language-repos.sh"
+
 force_natural=false
 
 while [ "$#" -gt 0 ]; do
@@ -57,19 +59,6 @@ inside_work_tree=$(git rev-parse --is-inside-work-tree 2>/dev/null) || die 'not 
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || die 'cannot resolve git repository root'
 repo_root=$(physical_dir "$repo_root") || die 'cannot resolve git repository root'
-
-always_natural_language_repos=(
-  "$HOME/.agents"
-  "$HOME/.claude"
-  "$HOME/.codex"
-  "$HOME/.local/share/chezmoi"
-  "$HOME/projects/agent-skills"
-  "$HOME/projects/evm-sweeper"
-  "$HOME/projects/home-control"
-  "$HOME/projects/prb-chats"
-  "$HOME/projects/prb-finance"
-  "$HOME/work/mailops"
-)
 
 for natural_repo in "${always_natural_language_repos[@]}"; do
   natural_repo_root=$(physical_dir "$natural_repo") || continue

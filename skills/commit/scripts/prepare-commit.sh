@@ -17,6 +17,8 @@ physical_dir() {
   (cd "$_dir" 2>/dev/null && pwd -P)
 }
 
+. "$(cd "$(dirname "$0")" && pwd -P)/natural-language-repos.sh"
+
 # Runs a git command that takes the index lock, retrying if another agent is
 # mid-operation. Retries up to 5 attempts (4 retries) with a 1s pause between
 # attempts, but only when the failure is an index.lock contention; any other
@@ -53,20 +55,7 @@ resolve_message_format() {
   _repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || die 'cannot resolve git repository root'
   _repo_root=$(physical_dir "$_repo_root") || die 'cannot resolve git repository root'
 
-  _always_natural_language_repos=(
-    "$HOME/.agents"
-    "$HOME/.claude"
-    "$HOME/.codex"
-    "$HOME/.local/share/chezmoi"
-    "$HOME/projects/agent-skills"
-    "$HOME/projects/evm-sweeper"
-    "$HOME/projects/home-control"
-    "$HOME/projects/prb-chats"
-    "$HOME/projects/prb-finance"
-    "$HOME/work/mailops"
-  )
-
-  for _natural_repo in "${_always_natural_language_repos[@]}"; do
+  for _natural_repo in "${always_natural_language_repos[@]}"; do
     _natural_repo_root=$(physical_dir "$_natural_repo") || continue
     if [ "$_repo_root" = "$_natural_repo_root" ]; then
       printf 'natural\n'
