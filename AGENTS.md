@@ -80,6 +80,17 @@ If `prettier-check` fails, analyze the errors and fix only files you changed.
 invocation metadata checks, and skill-specific helper scripts as the verification surface unless a task introduces a
 narrower check.
 
+## Resource-Safe Search
+
+- Scope `fd`, `rg`, `grep`, and similar searches to the narrowest useful root. Exclude known dependency, build, cache,
+  generated, and state directories before broadening; plain bounded searches with these tools are appropriate.
+- Do not run per-result commands over unknown or high-cardinality sets with `fd -x`/`--exec`, `find -exec`, parallel or
+  unbounded `xargs`, or shell loops that launch one tool per path. Prefer native predicates or metadata output; preview
+  or sample cardinality, then use a bounded batch when downstream execution is necessary.
+- Stream and bound large search results instead of capturing arbitrary full lines, JSON events, or generated-file output
+  in memory or repeatedly rescanning it. Long-running helpers must propagate cancellation and terminate or clean up
+  child processes.
+
 ## Rules
 
 - When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo,
