@@ -6,8 +6,8 @@ name: agents-docs
 user-invocable: true
 description: >-
   Use for current official documentation about Codex, Codex CLI, or Claude Code behavior, configuration, prompting,
-  skills, permissions, tools, surfaces, capabilities, or troubleshooting; fetch the relevant official URL before
-  answering.
+  skills, permissions, tools, surfaces, capabilities, troubleshooting, hooks, app-server, or hook trust; fetch the
+  relevant official URL before answering.
 ---
 
 # Agents Docs
@@ -51,6 +51,17 @@ Follow redirects only within the matching official domain and cite the final pag
   the discrepancy and prefer the observed behavior for that installed environment.
 - If an exact term is absent, search obvious adjacent official concepts and state that the term itself is not
   documented.
+
+## Route Codex hook, app-server, and trust questions
+
+For Codex hooks, app-server, managed hooks, or hook-trust operations, first fetch the relevant official pages:
+
+- `https://developers.openai.com/codex/hooks`
+- `https://developers.openai.com/codex/app-server`
+
+Then read [the version-aware hooks reference](references/codex-hooks.md). Use its local protocol and config details only
+when the installed client is explicitly verified as the version named there. Keep official behavior and local
+observations distinct in the answer; do not turn a local implementation detail into a product guarantee.
 
 ## Bound failures
 
