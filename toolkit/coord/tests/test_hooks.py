@@ -226,6 +226,31 @@ def test_claude_plan_disk_fallback(
     assert claim["label"] == "Disk plan"
 
 
+def test_undecodable_plan_file_is_skipped_without_hook_error(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "claude"
+    plans = config / "plans"
+    plans.mkdir(parents=True)
+    (plans / "corrupt.md").write_bytes(b'---\nsession_id: "claude-disk"\n---\n# Plan \xff\xfe\n')
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))
+    store = Store(tmp_path / "state.db")
+    coordinator = Coordinator(store, StaticInventory())
+
+    output = coordinator.ingest_hook(
+        "claude",
+        {
+            "session_id": "claude-disk",
+            "cwd": str(git_repo),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "ExitPlanMode",
+        },
+    )
+
+    assert output == ""
+    assert [row["last_error_code"] for row in store.hook_health()] == [None]
+
+
 def test_malformed_hook_is_fail_open_and_records_health(tmp_path: Path) -> None:
     store = Store(tmp_path / "state.db")
     coordinator = Coordinator(store, StaticInventory())
