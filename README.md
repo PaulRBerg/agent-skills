@@ -28,7 +28,7 @@ bunx skills add PaulRBerg/agent-skills
 | cli-cast                  | Foundry cast CLI guidance                                                |
 | cli-gh                    | GitHub CLI operations                                                    |
 | cli-just                  | Just command runner guidance                                             |
-| codex-handoff             | Delegate approved Claude plans to Codex implementation                   |
+| codex-handoff             | Delegate approved plans to Codex agents from Claude Code or Codex CLI    |
 | code-polish               | Simplify and/or risk-profiled review with autofix                        |
 | coingecko-cli             | CoinGecko CLI for prices and market data                                 |
 | coingecko-open-page       | Open CoinGecko historical data page in Chromium                          |

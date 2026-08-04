@@ -43,21 +43,23 @@ Treat these as out of scope unless the request explicitly names them:
 Files:
 
 - `skills/codex-handoff/SKILL.md`
+- `skills/codex-handoff/references/claude-code-host.md`
+- `skills/codex-handoff/references/codex-cli-host.md`
 - `skills/claude-handoff/SKILL.md`
 
-Both skills delegate pre-plan research and approved implementation from Claude Code Plan mode; only the agent runtime
-differs (Codex CLI runner vs Claude Code Agent tool). Treat these shared blocks as in scope and keep them semantically
-identical, adjusted only for the agent noun and runtime:
+`codex-handoff/SKILL.md` is the platform-neutral contract for delegation from Claude Code or Codex CLI; its two host
+adapters specialize runtime mechanics. `claude-handoff` remains Claude Code only. Compare the platform-neutral blocks in
+both skill entrypoints and keep them semantically identical, adjusted only for the parent/agent noun and runtime:
 
-- Contract bullets: the Plan-mode gate, Claude's ownership of decisions, the final plan, and orchestration; the
+- Contract bullets: the Plan-mode gate; parent ownership of decisions, the final plan, and orchestration; the
   no-redesign rule for implementation agents; the smallest-effective-team and five-implementation-agent limits; and
-  Claude's implementation work being limited to orchestration, integrity checks, failure handling, and the conditional
+  parent implementation work being limited to orchestration, integrity checks, failure handling, and the conditional
   polish pass.
 - Pre-plan research delegation: trigger it for uncertain scope, multiple or unfamiliar subsystems, or materially slower
-  serial evidence gathering; keep zero research agents as the default; let Claude alone decide whether it runs without
-  asking the user; require research agents to stay read-only, gather evidence, and return findings rather than decisions
-  or plans; limit the separate research budget to three agents (`R1` through `R3`); feed findings into the final plan;
-  and include the optional plan `Research:` traceability line.
+  serial evidence gathering; keep zero research agents as the default; let the parent alone decide whether it runs
+  without asking the user; require research agents to stay read-only, gather evidence, and return findings rather than
+  decisions or plans; limit the separate research budget to three agents (`R1` through `R3`); feed findings into the
+  final plan; and include the optional plan `Research:` traceability line.
 - Strategy selection guidance: sequential vs parallel vs hybrid criteria, disjoint-write-scope requirement, wave
   semantics, the slowest-agent note, and the whole-handoff five-implementation-agent limit with stable IDs and
   dependencies.
@@ -65,8 +67,8 @@ identical, adjusted only for the agent noun and runtime:
   its own edits; aggregate-check failures confined to files outside every agent's scope are attributed to unrelated
   concurrent work, not treated as blockers.
 - The `$code-polish` trigger list, including "file count alone is not a trigger".
-- Before-launch session-claim guidance: the orchestrator holds only pathless intent over delegated write scopes, and the
-  delegated agents treat the orchestrating session's presence as authorization for their assigned work.
+- Before-launch session-claim guidance: delegated agents treat the orchestrating session's presence as authorization for
+  their assigned work. The exact claim owner is host-specific.
 - Platform-agnostic agent prompt requirements: outcome plus brief, exact write scope and dirty-work boundaries,
   validation assignment, authority boundary, delegation context, stopping rule, and reporting requirement.
 - The structured result-field contract: status, summary, changed files, verification with each command and outcome,
@@ -76,20 +78,26 @@ identical, adjusted only for the agent noun and runtime:
   edits, and a second infrastructure failure blocks. The continuation mechanics are platform-specific.
 - Completion rules: success verification, dependent gating on failure, changed-files union dedupe, polish invocation and
   skip conditions, and cross-repository `$commit` behavior.
+- Adapter integrity: each codex-handoff adapter implements the shared prompt, result, failure, and completion contracts
+  without weakening them, while the shared entrypoint loads exactly one adapter.
 
 Treat these as out of scope unless the request explicitly names them:
 
-- Launch mechanics: `run-codex-handoff.sh` and its artifacts vs Agent-tool calls.
-- Same-agent continuation mechanics: the Codex runner's `--resume` vs Claude Code's SendMessage tool.
-- Research mechanics: codex-handoff's `--read-only` runner, per-agent artifacts, and research result schema vs
-  claude-handoff's Explore subagent type and native result flow.
-- Codex-only content: effort and timeout selection, progress streams, Monitor guidance, sentinel handling, and Codex
-  command conventions.
+- Host selection and launch mechanics: the Claude adapter's runner and artifacts, the Codex adapter's native tools, and
+  claude-handoff's Agent-tool calls.
+- Same-agent continuation mechanics: the Claude adapter's runner resume, the Codex adapter's native follow-up, and
+  claude-handoff's SendMessage flow.
+- Research mechanics: the Claude adapter's read-only runner, per-agent artifacts, and result schema; the Codex adapter's
+  native read-only agents; and claude-handoff's Explore subagent type and native result flow.
+- Claude-adapter-only content: effort and timeout selection, progress streams, Monitor guidance, sentinel handling,
+  dangerous bypass behavior, and subprocess command conventions.
+- Codex-adapter-only content: harness concurrency limits, fresh-context spawning, native steering and waiting, inherited
+  sandbox and approval controls, and native progress rendering.
 - Each skill's model selection table and its rules about escalating or re-running a failed agent on another model. Both
-  skills have a selection table, but they are intentionally different — Codex tiers model, effort, and timeout together,
-  while Claude selects among three model aliases (`haiku`, `sonnet`, and `opus`) — so never normalize them to each
-  other.
-- Status reporting: codex-handoff's dashboard system vs claude-handoff's concise prose summary.
+  skills have selection tables, but they are intentionally different — the codex-handoff adapters choose GPT-5.6 model
+  and effort tiers, while Claude selects among three aliases (`haiku`, `sonnet`, and `opus`) — so never normalize them.
+- Status reporting: the Claude adapter's dashboard system versus both native hosts' concise progress and completion
+  reports.
 - Frontmatter and `references/`/`scripts/` contents.
 
 Verification is prose comparison of the in-scope blocks; there is no extractable helper data.
