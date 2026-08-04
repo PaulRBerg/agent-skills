@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -21,6 +22,22 @@ def test_store_writes_runner_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "schema": SCHEMA_VERSION,
         "argv": [str(Path(sys.executable).resolve()), "-m", "ai_coord"],
     }
+
+
+def test_newer_state_schema_raises_the_error_the_cli_matches(tmp_path: Path) -> None:
+    path = tmp_path / "state.db"
+    Store(path).close()
+    connection = sqlite3.connect(path)
+    connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(RuntimeError) as raised:
+        Store(path)
+
+    match = cli_module._NEWER_SCHEMA_ERROR.fullmatch(str(raised.value))
+    assert match is not None
+    assert match.group(1) == str(SCHEMA_VERSION + 1)
 
 
 def test_store_does_not_downgrade_runner_sidecar(

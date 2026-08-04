@@ -6,6 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
 
+import pytest
+
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.store import (
     CODEX_ORPHAN_GRACE,
@@ -73,20 +75,21 @@ def _downgrade_fixture(path: Path, version: int) -> None:
     connection.close()
 
 
-def test_store_migrates_schema_v1_to_v4(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", [1, 2])
+def test_store_migrates_older_schemas_to_v4(tmp_path: Path, version: int) -> None:
     path = tmp_path / "state.db"
-    _downgrade_fixture(path, 1)
+    _downgrade_fixture(path, version)
 
     store = Store(path)
 
-    version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
+    migrated = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
     message_columns = {
         str(row["name"])
         for row in store.connection.execute("PRAGMA table_info(messages)").fetchall()
     }
     session = store.session(Identity("codex", "preserved"))
     inbox = store.inbox(Identity("codex", "preserved"))
-    assert version == 4
+    assert migrated == 4
     assert "notified_at" in message_columns
     assert session is not None
     assert session["pid"] == 42
@@ -96,22 +99,6 @@ def test_store_migrates_schema_v1_to_v4(tmp_path: Path) -> None:
     assert [(row["text"], row["created_at"], row["notified_at"]) for row in inbox] == [
         ("preserved text", 15, None)
     ]
-
-
-def test_store_migrates_schema_v2_to_v4(tmp_path: Path) -> None:
-    path = tmp_path / "state.db"
-    _downgrade_fixture(path, 2)
-
-    store = Store(path)
-
-    version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
-    session = store.session(Identity("codex", "preserved"))
-    inbox = store.inbox(Identity("codex", "preserved"))
-    assert version == 4
-    assert session is not None
-    assert session["pid"] == 42
-    assert session["process_started_at"] is None
-    assert [row["text"] for row in inbox] == ["preserved text"]
 
 
 def test_store_migrates_schema_v3_to_v4(tmp_path: Path) -> None:

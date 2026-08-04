@@ -11,7 +11,7 @@ from typing import Any
 
 from ai_coord.identity import Identity
 from ai_coord.store import Store
-from ai_coord.util import git_root, now_ts, sanitize
+from ai_coord.util import MAX_LABEL_CHARS, MAX_MESSAGE_CHARS, git_root, now_ts, sanitize
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,9 +50,10 @@ def migrate_legacy(store: Store, source: Path, *, dry_run: bool = False) -> Migr
         "notes": 0,
     }
     paths = sorted(source.glob("*.json"))
-    paths += sorted((source / "claims").glob("*.json")) if (source / "claims").is_dir() else []
-    paths += sorted((source / "notes").glob("*.json")) if (source / "notes").is_dir() else []
-    paths += sorted((source / "inbox").glob("*.json")) if (source / "inbox").is_dir() else []
+    for subdirectory in ("claims", "notes", "inbox"):
+        directory = source / subdirectory
+        if directory.is_dir():
+            paths += sorted(directory.glob("*.json"))
     for path in paths:
         counts["scanned"] += 1
         try:
@@ -123,7 +124,7 @@ def _import_session(store: Store, row: dict[str, Any], dry_run: bool) -> int:
 def _import_claim(store: Store, row: dict[str, Any], dry_run: bool) -> int:
     client = _client(row, "client")
     session_id = _string(row, "session_id")
-    label = sanitize(_string(row, "label"), 80)
+    label = sanitize(_string(row, "label"), MAX_LABEL_CHARS)
     cwd = _string(row, "cwd")
     repo_root = row.get("repo_root")
     if not isinstance(repo_root, str) or not repo_root:
@@ -133,11 +134,12 @@ def _import_claim(store: Store, row: dict[str, Any], dry_run: bool) -> int:
     if not isinstance(raw_paths, list) or any(not isinstance(value, str) for value in raw_paths):
         raise ValueError("invalid claim paths")
     paths = tuple(value for value in raw_paths if value)
-    state = (
-        "queued"
-        if any(any(char in value for char in "*?[]") for value in paths)
-        else ("active" if paths else "intent")
-    )
+    if any(char in value for value in paths for char in "*?[]"):
+        state = "queued"
+    elif paths:
+        state = "active"
+    else:
+        state = "intent"
     parsed_timestamp = _timestamp(row.get("created_at"))
     timestamp = now_ts() if parsed_timestamp is None else parsed_timestamp
     if not dry_run:
@@ -173,6 +175,7 @@ def _import_notes(store: Store, row: dict[str, Any], dry_run: bool) -> int:
     if not isinstance(entries, list):
         raise TypeError("invalid notes")
     imported = 0
+    rows: list[tuple[Any, ...]] = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -184,21 +187,26 @@ def _import_notes(store: Store, row: dict[str, Any], dry_run: bool) -> int:
         imported += 1
         if dry_run:
             continue
-        store.connection.execute(
-            """
-            INSERT OR IGNORE INTO notes(
-                id, repo_root, author_client, author_session_id, text, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
+        rows.append(
             (
                 note_id,
                 repo_root,
                 entry.get("client") if isinstance(entry.get("client"), str) else None,
                 entry.get("session_id") if isinstance(entry.get("session_id"), str) else None,
-                sanitize(text, 240),
+                sanitize(text, MAX_MESSAGE_CHARS),
                 now_ts() if created_at is None else created_at,
-            ),
+            )
         )
+    if rows:
+        with store.transaction() as connection:
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO notes(
+                    id, repo_root, author_client, author_session_id, text, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
     return imported
 
 
@@ -208,25 +216,20 @@ def _import_inbox(store: Store, row: dict[str, Any], dry_run: bool) -> int:
     entries = row.get("messages")
     if not isinstance(entries, list):
         raise TypeError("invalid inbox")
+    required = ("id", "from_client", "from_session_id", "text", "created_at")
     imported = 0
+    rows: list[tuple[Any, ...]] = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        required = ("id", "from_client", "from_session_id", "text", "created_at")
-        if any(not isinstance(entry.get(key), str) or not entry[key] for key in required) or entry[
-            "from_client"
-        ] not in {"codex", "claude"}:
+        if any(not isinstance(entry.get(key), str) or not entry[key] for key in required):
+            continue
+        if entry["from_client"] not in {"codex", "claude"}:
             continue
         imported += 1
         if dry_run:
             continue
-        store.connection.execute(
-            """
-            INSERT OR IGNORE INTO messages(
-                id, sender_client, sender_session_id, recipient_client,
-                recipient_session_id, repo_root, text, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+        rows.append(
             (
                 entry["id"],
                 entry["from_client"],
@@ -234,10 +237,21 @@ def _import_inbox(store: Store, row: dict[str, Any], dry_run: bool) -> int:
                 client,
                 session_id,
                 entry.get("repo_root") if isinstance(entry.get("repo_root"), str) else None,
-                sanitize(entry["text"], 240),
+                sanitize(entry["text"], MAX_MESSAGE_CHARS),
                 _timestamp(entry["created_at"]),
-            ),
+            )
         )
+    if rows:
+        with store.transaction() as connection:
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO messages(
+                    id, sender_client, sender_session_id, recipient_client,
+                    recipient_session_id, repo_root, text, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
     return imported
 
 

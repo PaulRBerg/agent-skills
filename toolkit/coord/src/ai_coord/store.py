@@ -23,6 +23,7 @@ CODEX_ORPHAN_GRACE = 30 * 60
 MESSAGE_TTL = 48 * 60 * 60
 NOTE_TTL = 7 * 24 * 60 * 60
 MAX_INBOX_MESSAGES = 50
+MAX_ERROR_CODE_CHARS = 80
 
 _SCHEMA_STATEMENTS = (
     """
@@ -181,11 +182,17 @@ class Store:
             os.umask(previous_umask)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
+        # Keep SQLite's own wait short so _enable_wal's bounded retry loop arbitrates contention.
         self.connection.execute("PRAGMA busy_timeout = 250")
         self._enable_wal()
         self.connection.execute("PRAGMA busy_timeout = 5000")
         self.connection.execute("PRAGMA synchronous = NORMAL")
-        self._migrate()
+        try:
+            self._migrate()
+        except BaseException:
+            # Release the database so a caller re-execing a compatible runner starts clean.
+            self.connection.close()
+            raise
         self.path.chmod(0o600)
         self._write_runner()
 
@@ -223,6 +230,7 @@ class Store:
                 for statement in _SCHEMA_STATEMENTS:
                     connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+                current = SCHEMA_VERSION
             if current == 1:
                 connection.execute("ALTER TABLE messages ADD COLUMN notified_at REAL")
                 connection.execute("PRAGMA user_version = 2")
@@ -232,6 +240,7 @@ class Store:
                 connection.execute("PRAGMA user_version = 3")
                 current = 3
             if current == 3:
+                # Frozen v4 snapshot: never share this DDL with the evolving _SCHEMA_STATEMENTS.
                 connection.execute(
                     """
                     CREATE TABLE IF NOT EXISTS claim_baselines (
@@ -283,7 +292,7 @@ class Store:
             existing_schema = existing.get("schema") if isinstance(existing, dict) else 0
             if not isinstance(existing_schema, int) or isinstance(existing_schema, bool):
                 existing_schema = 0
-            if SCHEMA_VERSION < existing_schema:
+            if existing_schema > SCHEMA_VERSION:
                 return
         except (OSError, ValueError, TypeError):
             pass
@@ -343,14 +352,17 @@ class Store:
             stale_keys = {(str(row["client"]), str(row["session_id"])) for row in stale} | dead_keys
             removed = False
             for client, session_id in stale_keys:
-                session = connection.execute(
-                    """
-                    SELECT 1 FROM sessions
-                    WHERE client = ? AND session_id = ? AND last_seen < ?
-                    """,
-                    (client, session_id, timestamp - CODEX_ORPHAN_GRACE),
-                ).fetchone()
-                if (client, session_id) in dead_keys and session is None:
+                past_orphan_grace = (
+                    connection.execute(
+                        """
+                        SELECT 1 FROM sessions
+                        WHERE client = ? AND session_id = ? AND last_seen < ?
+                        """,
+                        (client, session_id, timestamp - CODEX_ORPHAN_GRACE),
+                    ).fetchone()
+                    is not None
+                )
+                if (client, session_id) in dead_keys and not past_orphan_grace:
                     continue
                 connection.execute(
                     "DELETE FROM claims WHERE client = ? AND session_id = ?",
@@ -651,7 +663,7 @@ class Store:
                     DELETE FROM dirt_observations
                     WHERE repo_root = ? AND path NOT IN ({placeholders})
                     """,
-                    (repo_root, *blob_hashes),
+                    (repo_root, *blob_hashes.keys()),
                 )
             else:
                 connection.execute(
@@ -971,7 +983,7 @@ class Store:
                     last_error_code = excluded.last_error_code,
                     last_error_at = excluded.last_error_at
                 """,
-                (client, event, sanitize(code, 80), now_ts()),
+                (client, event, sanitize(code, MAX_ERROR_CODE_CHARS), now_ts()),
             )
 
     def hook_health(self) -> list[dict[str, Any]]:
