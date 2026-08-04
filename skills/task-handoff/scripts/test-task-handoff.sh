@@ -104,7 +104,7 @@ make_repo() {
 write_draft() {
   _draft=$1
   _title=$2
-  printf '# %s\n\nObjective, implementation detail, and targeted validation are decision-complete.\n' \
+  printf '# %s\n\nObjective, task details, and targeted validation are decision-complete.\n' \
     "$_title" >"$_draft"
 }
 
@@ -160,10 +160,11 @@ repo_two_root=$(git -C "$repo_two" rev-parse --show-toplevel)
 
 # A single-repository run deduplicates a symlink alias and preserves quoting.
 single_task="fix Bob's parser"
+single_category=investigation
 single_prepare=$(run_helper prepare \
   --repo "$repo_one/subdirectory" \
   --repo "$repo_alias" \
-  --plan "$repo_alias" SINGLE_PLAN.md "$single_task")
+  --plan "$repo_alias" SINGLE_PLAN.md "$single_category" "$single_task")
 assert_equal 1 "$(printf '%s\n' "$single_prepare" | grep -c '^repo ')" 'symlink root deduplication'
 single_run=$(extract_run_dir "$single_prepare")
 write_draft "$single_run/plans/0001/draft.md" 'Single plan'
@@ -172,9 +173,9 @@ single_target=$repo_one_root/.ai/task-handoffs/SINGLE_PLAN.md
 assert_exists "$single_target" 'single plan publication'
 assert_absent "$single_run" 'successful finalize run cleanup'
 
-single_prompt="A previous agent worked on $single_task and produced an implementation plan under .ai/task-handoffs/SINGLE_PLAN.md. Implement it."
+single_prompt="A previous agent prepared a $single_category task handoff for $single_task under .ai/task-handoffs/SINGLE_PLAN.md. Read the handoff, then complete its requested $single_category task. Follow its stated outcome, boundaries, authority constraints, and validation requirements."
 single_command="codex -C $(shell_quote "$repo_one_root") $(shell_quote "$single_prompt")"
-single_prefix="plan relative=$(shell_quote '.ai/task-handoffs/SINGLE_PLAN.md') owner=$(shell_quote "$repo_one_root") command="
+single_prefix="plan relative=$(shell_quote '.ai/task-handoffs/SINGLE_PLAN.md') owner=$(shell_quote "$repo_one_root") category=$(shell_quote "$single_category") command="
 case $single_result in
   "$single_prefix"*) ;;
   *) fail 'single finalize record omitted its relative path or canonical owner' ;;
@@ -186,36 +187,56 @@ assert_equal "$single_command" "$(cat "$clipboard_file")" 'single clipboard byte
 [ "$(tail -c 1 "$clipboard_file" | od -An -tx1 | tr -d '[:space:]')" != 0a ] ||
   fail 'single clipboard payload has a trailing newline'
 
+assert_equal 1 "$(grep -Fxc '## Handoff category' "$single_target")" 'handoff category count'
+assert_equal 1 "$(grep -Fxc "Category: \`$single_category\`" "$single_target")" 'handoff category value'
 assert_equal 1 "$(grep -Fxc '## Execution status' "$single_target")" 'execution status count'
 assert_equal 1 "$(grep -Fxc '## Handoff cleanup' "$single_target")" 'handoff cleanup count'
 status_line=$(grep -nFx '## Execution status' "$single_target" | cut -d: -f1)
 cleanup_line=$(grep -nFx '## Handoff cleanup' "$single_target" | cut -d: -f1)
 [ "$status_line" -lt "$cleanup_line" ] || fail 'execution status does not precede handoff cleanup'
 between_headings=$(sed -n "${status_line},${cleanup_line}p" "$single_target")
-expected_between=$'## Execution status\n\nCurrent status: No implementation attempt has been recorded.\n\nIf work stops before successful completion, replace the current status—not append an attempt history—with a concise\nrecord of completed work, remaining work, validation commands and outcomes, the blocker, and the next concrete\naction.\n\n## Handoff cleanup'
+expected_between=$'## Execution status\n\nCurrent status: No task attempt has been recorded.\n\nIf work stops before successful completion, replace the current status—not append an attempt history—with a concise\nrecord of completed work, remaining work, validation commands and outcomes, the blocker, and the next concrete\naction.\n\n## Handoff cleanup'
 assert_equal "$expected_between" "$between_headings" 'exact execution status placement'
 single_quoted_target=$(shell_quote "$single_target")
 assert_file_contains "Run \`/usr/bin/trash $single_quoted_target\` only after" "$single_target" \
   'canonical cleanup command'
 
+# Version 1 runs remain finalizable with an implementation-category default.
+legacy_prepare=$(run_helper prepare --repo "$repo_one" --plan "$repo_one" LEGACY_RUN.md research 'legacy task')
+legacy_run=$(extract_run_dir "$legacy_prepare")
+legacy_marker=$legacy_run/.task-handoff-run
+legacy_marker_tail=$(sed -n '2,4p' "$legacy_marker")
+printf 'task-handoff-run-v1\n%s\n' "$legacy_marker_tail" >"$legacy_marker"
+rm "$legacy_run/plans/0001/category"
+write_draft "$legacy_run/plans/0001/draft.md" 'Legacy run'
+legacy_result=$(run_helper finalize "$legacy_run")
+legacy_prefix="plan relative=$(shell_quote '.ai/task-handoffs/LEGACY_RUN.md') owner=$(shell_quote "$repo_one_root") category=$(shell_quote implementation) command="
+case $legacy_result in
+  "$legacy_prefix"*) ;;
+  *) fail 'legacy run did not default to the implementation category' ;;
+esac
+
 # A multi-repository run preserves plan order and exact newline-delimited clipboard bytes.
 multi_prepare=$(run_helper prepare \
   --repo "$repo_one" \
   --repo "$repo_two" \
-  --plan "$repo_one" FIRST_WORK.md 'first task' \
-  --plan "$repo_two" SECOND_WORK.md 'second task')
+  --plan "$repo_one" FIRST_WORK.md research 'first task' \
+  --plan "$repo_two" SECOND_WORK.md audit 'second task')
 multi_run=$(extract_run_dir "$multi_prepare")
 write_draft "$multi_run/plans/0001/draft.md" 'First work'
 write_draft "$multi_run/plans/0002/draft.md" 'Second work'
 multi_result=$(run_helper finalize "$multi_run")
 first_line=$(printf '%s\n' "$multi_result" | sed -n '1p')
 second_line=$(printf '%s\n' "$multi_result" | sed -n '2p')
-first_prefix="plan relative=$(shell_quote '.ai/task-handoffs/FIRST_WORK.md') owner=$(shell_quote "$repo_one_root") command="
-second_prefix="plan relative=$(shell_quote '.ai/task-handoffs/SECOND_WORK.md') owner=$(shell_quote "$repo_two_root") command="
+first_prefix="plan relative=$(shell_quote '.ai/task-handoffs/FIRST_WORK.md') owner=$(shell_quote "$repo_one_root") category=$(shell_quote research) command="
+second_prefix="plan relative=$(shell_quote '.ai/task-handoffs/SECOND_WORK.md') owner=$(shell_quote "$repo_two_root") category=$(shell_quote audit) command="
 case $first_line in "$first_prefix"*) ;; *) fail 'first plan order or owner changed' ;; esac
 case $second_line in "$second_prefix"*) ;; *) fail 'second plan order or owner changed' ;; esac
 first_command=${first_line#"$first_prefix"}
 second_command=${second_line#"$second_prefix"}
+research_prompt='A previous agent prepared a research task handoff for first task under .ai/task-handoffs/FIRST_WORK.md. Read the handoff, then complete its requested research task. Follow its stated outcome, boundaries, authority constraints, and validation requirements.'
+assert_equal "codex -C $(shell_quote "$repo_one_root") $(shell_quote "$research_prompt")" "$first_command" \
+  'research exact command'
 expected_clipboard=$first_command$'\n'$second_command
 assert_equal "$expected_clipboard" "$(cat "$clipboard_file")" 'multi-command clipboard bytes'
 [ "$(tail -c 1 "$clipboard_file" | od -An -tx1 | tr -d '[:space:]')" != 0a ] ||
@@ -223,37 +244,39 @@ assert_equal "$expected_clipboard" "$(cat "$clipboard_file")" 'multi-command cli
 
 # Prepare rejects invalid topology and targets before creating temporary state.
 expect_failure 'invalid plan filename' run_helper prepare \
-  --repo "$repo_one" --plan "$repo_one" invalid.md 'invalid name'
+  --repo "$repo_one" --plan "$repo_one" invalid.md implementation 'invalid name'
 expect_failure 'duplicate plan filename' run_helper prepare \
   --repo "$repo_one" --repo "$repo_two" \
-  --plan "$repo_one" DUPLICATE.md 'first duplicate' \
-  --plan "$repo_two" DUPLICATE.md 'second duplicate'
+  --plan "$repo_one" DUPLICATE.md implementation 'first duplicate' \
+  --plan "$repo_two" DUPLICATE.md research 'second duplicate'
+expect_failure 'invalid task category' run_helper prepare \
+  --repo "$repo_one" --plan "$repo_one" INVALID_CATEGORY.md unclassified 'invalid category'
 nongit=$test_root/not-a-repository
 mkdir -p "$nongit"
 expect_failure 'plan owner is not a Git worktree' run_helper prepare \
-  --repo "$repo_one" --plan "$nongit" NON_GIT.md 'non-git owner'
+  --repo "$repo_one" --plan "$nongit" NON_GIT.md research 'non-git owner'
 expect_failure 'plan owner is not among the involved repositories' run_helper prepare \
-  --repo "$repo_one" --plan "$repo_two" WRONG_OWNER.md 'wrong owner'
+  --repo "$repo_one" --plan "$repo_two" WRONG_OWNER.md audit 'wrong owner'
 unignored_repo=$test_root/unignored-repo
 make_repo "$unignored_repo" false
 expect_failure 'plan target is not ignored' run_helper prepare \
-  --repo "$unignored_repo" --plan "$unignored_repo" UNIGNORED.md 'unignored target'
+  --repo "$unignored_repo" --plan "$unignored_repo" UNIGNORED.md operations 'unignored target'
 mkdir -p "$repo_two_root/.ai/task-handoffs"
 printf 'pre-existing\n' >"$repo_two_root/.ai/task-handoffs/EXISTING.md"
 expect_failure 'plan target already exists' run_helper prepare \
-  --repo "$repo_two" --plan "$repo_two" EXISTING.md 'existing target'
+  --repo "$repo_two" --plan "$repo_two" EXISTING.md operations 'existing target'
 assert_equal 'pre-existing' "$(cat "$repo_two_root/.ai/task-handoffs/EXISTING.md")" \
   'existing target changed during prepare'
 
 # Empty and reserved-heading drafts fail without publishing and remain cancellable.
-empty_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" EMPTY_DRAFT.md 'empty draft')
+empty_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" EMPTY_DRAFT.md research 'empty draft')
 empty_run=$(extract_run_dir "$empty_prepare")
 expect_failure 'plan draft is empty' run_helper finalize "$empty_run"
 assert_absent "$repo_two_root/.ai/task-handoffs/EMPTY_DRAFT.md" 'empty draft target'
 run_helper cancel "$empty_run" >/dev/null
 assert_absent "$empty_run" 'empty draft cancellation'
 
-reserved_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" RESERVED.md 'reserved heading')
+reserved_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" RESERVED.md audit 'reserved heading')
 reserved_run=$(extract_run_dir "$reserved_prepare")
 printf '# Body\n\n## Execution status\n' >"$reserved_run/plans/0001/draft.md"
 expect_failure 'reserved heading' run_helper finalize "$reserved_run"
@@ -261,7 +284,7 @@ assert_absent "$repo_two_root/.ai/task-handoffs/RESERVED.md" 'reserved draft tar
 run_helper cancel "$reserved_run" >/dev/null
 
 # Cancellation validates helper state and never touches a target that appeared later.
-cancel_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" CANCEL_SAFE.md 'cancel safely')
+cancel_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" CANCEL_SAFE.md implementation 'cancel safely')
 cancel_run=$(extract_run_dir "$cancel_prepare")
 cancel_target=$repo_two_root/.ai/task-handoffs/CANCEL_SAFE.md
 printf 'appeared after prepare\n' >"$cancel_target"
@@ -271,7 +294,7 @@ assert_equal 'appeared after prepare' "$(cat "$cancel_target")" 'cancel touched 
 expect_failure 'not a task-handoff run directory' run_helper cancel "$repo_two_root"
 
 # A target race is not overwritten or rolled back because the helper did not create it.
-race_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" RACE_TARGET.md 'race target')
+race_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" RACE_TARGET.md audit 'race target')
 race_run=$(extract_run_dir "$race_prepare")
 write_draft "$race_run/plans/0001/draft.md" 'Race target'
 TASK_HANDOFF_TEST_HOOK_MODE=race expect_failure 'appeared during publication' run_helper finalize "$race_run"
@@ -286,8 +309,8 @@ clipboard_root=$(git -C "$clipboard_repo" rev-parse --show-toplevel)
 printf 'keep me\n' >"$clipboard_root/PREEXISTING.txt"
 clipboard_prepare=$(run_helper prepare \
   --repo "$clipboard_repo" \
-  --plan "$clipboard_repo" CLIPBOARD_ONE.md 'clipboard one' \
-  --plan "$clipboard_repo" CLIPBOARD_TWO.md 'clipboard two')
+  --plan "$clipboard_repo" CLIPBOARD_ONE.md implementation 'clipboard one' \
+  --plan "$clipboard_repo" CLIPBOARD_TWO.md research 'clipboard two')
 clipboard_run=$(extract_run_dir "$clipboard_prepare")
 write_draft "$clipboard_run/plans/0001/draft.md" 'Clipboard one'
 write_draft "$clipboard_run/plans/0002/draft.md" 'Clipboard two'
@@ -306,8 +329,8 @@ mkdir -p "$term_root/.ai/task-handoffs"
 printf 'keep me too\n' >"$term_root/.ai/task-handoffs/KEEP.md"
 term_prepare=$(run_helper prepare \
   --repo "$term_repo" \
-  --plan "$term_repo" TERM_ONE.md 'term one' \
-  --plan "$term_repo" TERM_TWO.md 'term two')
+  --plan "$term_repo" TERM_ONE.md operations 'term one' \
+  --plan "$term_repo" TERM_TWO.md audit 'term two')
 term_run=$(extract_run_dir "$term_prepare")
 write_draft "$term_run/plans/0001/draft.md" 'Term one'
 write_draft "$term_run/plans/0002/draft.md" 'Term two'
@@ -322,7 +345,7 @@ assert_equal 'keep me too' "$(cat "$term_root/.ai/task-handoffs/KEEP.md")" 'term
 run_helper cancel "$term_run" >/dev/null
 
 # Readback mismatches use the same all-or-nothing rollback path.
-mismatch_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" MISMATCH.md 'mismatch')
+mismatch_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" MISMATCH.md implementation 'mismatch')
 mismatch_run=$(extract_run_dir "$mismatch_prepare")
 write_draft "$mismatch_run/plans/0001/draft.md" 'Mismatch'
 TASK_HANDOFF_TEST_CLIPBOARD_FAIL=mismatch expect_failure 'clipboard verification failed' \

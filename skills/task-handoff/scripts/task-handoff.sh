@@ -9,7 +9,7 @@ usage() {
 Usage:
   bash <skill-dir>/scripts/task-handoff.sh prepare \
     --repo <candidate-repository> [--repo <candidate-repository> ...] \
-    --plan <owner-candidate> <PLAN_NAME.md> <concise-task> [--plan ...]
+    --plan <owner-candidate> <HANDOFF_NAME.md> <task-category> <concise-task> [--plan ...]
   bash <skill-dir>/scripts/task-handoff.sh finalize <run-dir>
   bash <skill-dir>/scripts/task-handoff.sh cancel <run-dir>
 EOF
@@ -41,6 +41,13 @@ shell_quote() {
 
 valid_plan_filename() {
   printf '%s\n' "$1" | LC_ALL=C grep -Eq '^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*[.]md$'
+}
+
+valid_task_category() {
+  case $1 in
+    implementation | investigation | research | audit | operations) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 contains_value() {
@@ -130,6 +137,7 @@ validate_plan_metadata() {
   while [ "$_index" -lt "${#plan_owners[@]}" ]; do
     _owner=${plan_owners[$_index]}
     _filename=${plan_filenames[$_index]}
+    _category=${plan_categories[$_index]}
     _task=${plan_tasks[$_index]}
     _relative=${plan_relpaths[$_index]}
     _target=${plan_targets[$_index]}
@@ -139,6 +147,7 @@ validate_plan_metadata() {
     contains_value "$_filename" "${_seen_filenames[@]}" && die "duplicate plan filename: $_filename"
     _seen_filenames[${#_seen_filenames[@]}]=$_filename
 
+    valid_task_category "$_category" || die "invalid task category: $_category"
     [ -n "$_task" ] || die "concise task is empty for $_filename"
     has_line_break "$_task" && die "concise task must be one line for $_filename"
     [ "$_relative" = ".ai/task-handoffs/$_filename" ] || die "invalid relative target for $_filename"
@@ -171,6 +180,7 @@ preflight_plan_set() {
 repo_roots=()
 plan_owners=()
 plan_filenames=()
+plan_categories=()
 plan_tasks=()
 plan_relpaths=()
 plan_targets=()
@@ -195,6 +205,7 @@ prepare() {
   _raw_repos=()
   _raw_owners=()
   _raw_filenames=()
+  _raw_categories=()
   _raw_tasks=()
 
   while [ "$#" -gt 0 ]; do
@@ -205,11 +216,12 @@ prepare() {
         shift 2
         ;;
       --plan)
-        [ "$#" -ge 4 ] || usage_error '--plan requires an owner, filename, and concise task'
+        [ "$#" -ge 5 ] || usage_error '--plan requires an owner, filename, task category, and concise task'
         _raw_owners[${#_raw_owners[@]}]=$2
         _raw_filenames[${#_raw_filenames[@]}]=$3
-        _raw_tasks[${#_raw_tasks[@]}]=$4
-        shift 4
+        _raw_categories[${#_raw_categories[@]}]=$4
+        _raw_tasks[${#_raw_tasks[@]}]=$5
+        shift 5
         ;;
       -h | --help)
         usage
@@ -237,9 +249,11 @@ prepare() {
       die "plan owner is not among the involved repositories: ${_raw_owners[$_index]}"
 
     _filename=${_raw_filenames[$_index]}
+    _category=${_raw_categories[$_index]}
     _task=${_raw_tasks[$_index]}
     plan_owners[${#plan_owners[@]}]=$_owner
     plan_filenames[${#plan_filenames[@]}]=$_filename
+    plan_categories[${#plan_categories[@]}]=$_category
     plan_tasks[${#plan_tasks[@]}]=$_task
     plan_relpaths[${#plan_relpaths[@]}]=".ai/task-handoffs/$_filename"
     plan_targets[${#plan_targets[@]}]="$_owner/.ai/task-handoffs/$_filename"
@@ -257,7 +271,7 @@ prepare() {
   trap cleanup_failed_prepare EXIT
 
   mkdir "$prepare_run_dir/repos" "$prepare_run_dir/plans" || die 'cannot initialize temporary run state'
-  printf 'task-handoff-run-v1\n%s\n%s\n%s\n' \
+  printf 'task-handoff-run-v2\n%s\n%s\n%s\n' \
     "$prepare_run_dir" "${#repo_roots[@]}" "${#plan_owners[@]}" >"$prepare_run_dir/.task-handoff-run" ||
     die 'cannot write temporary run marker'
 
@@ -276,6 +290,7 @@ prepare() {
     mkdir "$_plan_dir" || die 'cannot create plan draft state'
     write_state_value "$_plan_dir/owner" "${plan_owners[$_index]}" || die 'cannot write plan owner state'
     write_state_value "$_plan_dir/filename" "${plan_filenames[$_index]}" || die 'cannot write plan filename state'
+    write_state_value "$_plan_dir/category" "${plan_categories[$_index]}" || die 'cannot write plan category state'
     write_state_value "$_plan_dir/task" "${plan_tasks[$_index]}" || die 'cannot write plan task state'
     write_state_value "$_plan_dir/relative" "${plan_relpaths[$_index]}" || die 'cannot write plan path state'
     write_state_value "$_plan_dir/target" "${plan_targets[$_index]}" || die 'cannot write plan target state'
@@ -293,10 +308,11 @@ prepare() {
   done
   _index=0
   while [ "$_index" -lt "${#plan_owners[@]}" ]; do
-    printf 'plan %s %s %s %s\n' \
+    printf 'plan %s %s %s %s %s\n' \
       "$(shell_quote "${plan_owners[$_index]}")" \
       "$(shell_quote "${plan_relpaths[$_index]}")" \
       "$(shell_quote "${plan_targets[$_index]}")" \
+      "$(shell_quote "${plan_categories[$_index]}")" \
       "$(shell_quote "${plan_drafts[$_index]}")"
     _index=$((_index + 1))
   done
@@ -323,7 +339,12 @@ validate_run_dir() {
   _marker=$_candidate_run_dir/.task-handoff-run
   [ -f "$_marker" ] && [ ! -L "$_marker" ] || die 'run marker is missing or invalid'
   [ "$(wc -l <"$_marker" | tr -d '[:space:]')" = 4 ] || die 'run marker has an invalid shape'
-  [ "$(sed -n '1p' "$_marker")" = task-handoff-run-v1 ] || die 'run marker version is invalid'
+  _marker_version=$(sed -n '1p' "$_marker")
+  case $_marker_version in
+    task-handoff-run-v1) _plan_state_entries=6 ;;
+    task-handoff-run-v2) _plan_state_entries=7 ;;
+    *) die 'run marker version is invalid' ;;
+  esac
   [ "$(sed -n '2p' "$_marker")" = "$_candidate_run_dir" ] || die 'run marker path does not match'
   _repo_count=$(sed -n '3p' "$_marker")
   _plan_count=$(sed -n '4p' "$_marker")
@@ -350,6 +371,7 @@ validate_run_dir() {
   repo_roots=()
   plan_owners=()
   plan_filenames=()
+  plan_categories=()
   plan_tasks=()
   plan_relpaths=()
   plan_targets=()
@@ -371,9 +393,15 @@ validate_run_dir() {
     printf -v _id '%04d' "$((_index + 1))"
     _plan_dir=$_candidate_run_dir/plans/$_id
     [ -d "$_plan_dir" ] && [ ! -L "$_plan_dir" ] || die "invalid plan state directory: $_plan_dir"
-    [ "$(entry_count "$_plan_dir")" = 6 ] || die "plan state contains unexpected entries: $_plan_dir"
+    [ "$(entry_count "$_plan_dir")" = "$_plan_state_entries" ] ||
+      die "plan state contains unexpected entries: $_plan_dir"
     _owner=$(read_state_value "$_plan_dir/owner") || die "invalid plan owner state: $_plan_dir"
     _filename=$(read_state_value "$_plan_dir/filename") || die "invalid plan filename state: $_plan_dir"
+    if [ "$_marker_version" = task-handoff-run-v1 ]; then
+      _category=implementation
+    else
+      _category=$(read_state_value "$_plan_dir/category") || die "invalid plan category state: $_plan_dir"
+    fi
     _task=$(read_state_value "$_plan_dir/task") || die "invalid plan task state: $_plan_dir"
     _relative=$(read_state_value "$_plan_dir/relative") || die "invalid plan path state: $_plan_dir"
     _target=$(read_state_value "$_plan_dir/target") || die "invalid plan target state: $_plan_dir"
@@ -382,6 +410,7 @@ validate_run_dir() {
 
     plan_owners[${#plan_owners[@]}]=$_owner
     plan_filenames[${#plan_filenames[@]}]=$_filename
+    plan_categories[${#plan_categories[@]}]=$_category
     plan_tasks[${#plan_tasks[@]}]=$_task
     plan_relpaths[${#plan_relpaths[@]}]=$_relative
     plan_targets[${#plan_targets[@]}]=$_target
@@ -456,7 +485,7 @@ remove_run_state() {
   _index=0
   while [ "$_index" -lt "${#plan_state_dirs[@]}" ]; do
     _plan_dir=${plan_state_dirs[$_index]}
-    rm -f "$_plan_dir/owner" "$_plan_dir/filename" "$_plan_dir/task" \
+    rm -f "$_plan_dir/owner" "$_plan_dir/filename" "$_plan_dir/category" "$_plan_dir/task" \
       "$_plan_dir/relative" "$_plan_dir/target" "$_plan_dir/draft.md" || return 1
     rmdir "$_plan_dir" || return 1
     _index=$((_index + 1))
@@ -482,7 +511,7 @@ validate_drafts() {
     _draft=${plan_drafts[$_index]}
     _filename=${plan_filenames[$_index]}
     LC_ALL=C grep -q '[^[:space:]]' "$_draft" || die "plan draft is empty: $_filename"
-    if grep -F -e '## Execution status' -e '## Handoff cleanup' "$_draft" >/dev/null; then
+    if grep -F -e '## Handoff category' -e '## Execution status' -e '## Handoff cleanup' "$_draft" >/dev/null; then
       die "plan draft contains a reserved heading: $_filename"
     fi
     _index=$((_index + 1))
@@ -506,12 +535,21 @@ ensure_target_directory() {
 write_footer() {
   _footer=$1
   _target=$2
+  _category=$3
   _quoted_target=$(shell_quote "$_target")
 
   cat >"$_footer" <<'EOF'
+## Handoff category
+
+EOF
+  printf '%s\n\n' "Category: \`$_category\`" >>"$_footer"
+  cat >>"$_footer" <<'EOF'
+This handoff is categorized above. Complete the requested task according to its stated outcome, boundaries, authority
+constraints, and validation requirements.
+
 ## Execution status
 
-Current status: No implementation attempt has been recorded.
+Current status: No task attempt has been recorded.
 
 If work stops before successful completion, replace the current status—not append an attempt history—with a concise
 record of completed work, remaining work, validation commands and outcomes, the blocker, and the next concrete
@@ -523,7 +561,7 @@ EOF
   printf '%s%s%s\n' 'Run `/usr/bin/trash ' "$_quoted_target" \
     '` only after every success criterion is satisfied and every required validation passes,' >>"$_footer"
   cat >>"$_footer" <<'EOF'
-then verify the original path no longer exists. Keep this plan when work remains, implementation or validation fails,
+then verify the original path no longer exists. Keep this handoff when work remains, the requested task or validation fails,
 or required validation is skipped. Never trash `.ai/task-handoffs/` or any other handoff.
 EOF
 }
@@ -531,9 +569,12 @@ EOF
 validate_complete_file() {
   _complete=$1
   _footer=$2
+  _category=$3
+  [ "$(grep -Fxc '## Handoff category' "$_complete")" = 1 ] || return 1
+  [ "$(grep -Fxc "Category: \`$_category\`" "$_complete")" = 1 ] || return 1
   [ "$(grep -Fxc '## Execution status' "$_complete")" = 1 ] || return 1
   [ "$(grep -Fxc '## Handoff cleanup' "$_complete")" = 1 ] || return 1
-  [ "$(grep -Fxc 'Current status: No implementation attempt has been recorded.' "$_complete")" = 1 ] || return 1
+  [ "$(grep -Fxc 'Current status: No task attempt has been recorded.' "$_complete")" = 1 ] || return 1
   _footer_bytes=$(wc -c <"$_footer" | tr -d '[:space:]')
   tail -c "$_footer_bytes" "$_complete" | cmp -s - "$_footer"
 }
@@ -543,6 +584,7 @@ build_staged_plans() {
   while [ "$_index" -lt "${#plan_drafts[@]}" ]; do
     _owner=${plan_owners[$_index]}
     _filename=${plan_filenames[$_index]}
+    _category=${plan_categories[$_index]}
     _target=${plan_targets[$_index]}
     _draft=${plan_drafts[$_index]}
     _target_dir=$_owner/.ai/task-handoffs
@@ -553,14 +595,14 @@ build_staged_plans() {
     printf -v _id '%04d' "$((_index + 1))"
     _footer=$run_dir/.footer.$_id
     run_temp_files[${#run_temp_files[@]}]=$_footer
-    write_footer "$_footer" "$_target" || die "cannot build plan footer: $_filename"
+    write_footer "$_footer" "$_target" "$_category" || die "cannot build plan footer: $_filename"
 
     cat "$_draft" >"$_stage" || die "cannot stage plan body: $_filename"
     _last_byte=$(tail -c 1 "$_draft" | od -An -tx1 | tr -d '[:space:]')
     [ "$_last_byte" = 0a ] || printf '\n' >>"$_stage" || die "cannot terminate plan body: $_filename"
     printf '\n' >>"$_stage" || die "cannot separate plan footer: $_filename"
     cat "$_footer" >>"$_stage" || die "cannot append plan footer: $_filename"
-    validate_complete_file "$_stage" "$_footer" || die "staged plan failed structural validation: $_filename"
+    validate_complete_file "$_stage" "$_footer" "$_category" || die "staged plan failed structural validation: $_filename"
 
     rm -f "$_footer" || die "cannot remove temporary footer: $_filename"
     run_temp_files[_index]=
@@ -605,7 +647,8 @@ build_commands() {
   commands=()
   _index=0
   while [ "$_index" -lt "${#plan_owners[@]}" ]; do
-    _prompt="A previous agent worked on ${plan_tasks[$_index]} and produced an implementation plan under ${plan_relpaths[$_index]}. Implement it."
+    _category=${plan_categories[$_index]}
+    _prompt="A previous agent prepared a ${_category} task handoff for ${plan_tasks[$_index]} under ${plan_relpaths[$_index]}. Read the handoff, then complete its requested ${_category} task. Follow its stated outcome, boundaries, authority constraints, and validation requirements."
     _command="codex -C $(shell_quote "${plan_owners[$_index]}") $(shell_quote "$_prompt")"
     commands[${#commands[@]}]=$_command
     _index=$((_index + 1))
@@ -659,9 +702,10 @@ finalize() {
 
   _index=0
   while [ "$_index" -lt "${#commands[@]}" ]; do
-    printf 'plan relative=%s owner=%s command=%s\n' \
+    printf 'plan relative=%s owner=%s category=%s command=%s\n' \
       "$(shell_quote "${plan_relpaths[$_index]}")" \
       "$(shell_quote "${plan_owners[$_index]}")" \
+      "$(shell_quote "${plan_categories[$_index]}")" \
       "${commands[$_index]}" || die 'cannot emit finalized plan record'
     _index=$((_index + 1))
   done
