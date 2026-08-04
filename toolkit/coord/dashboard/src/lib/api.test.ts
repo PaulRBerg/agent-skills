@@ -35,4 +35,30 @@ describe("parseSnapshot", () => {
     const extended = { ...sampleSnapshot, server_version: "0.3.0" };
     expect(parseSnapshot(extended)).toBe(extended);
   });
+
+  test("accepts older schema-v1 snapshots without callsign fields", () => {
+    const legacy = structuredClone(sampleSnapshot) as Record<string, unknown>;
+    for (const session of legacy.sessions as Array<Record<string, unknown>>) {
+      delete session.callsign;
+    }
+    for (const message of legacy.messages as Array<Record<string, unknown>>) {
+      delete message.sender_callsign;
+      delete message.recipient_callsign;
+    }
+
+    expect(parseSnapshot(legacy)).toBe(legacy);
+  });
+
+  test("validates additive callsign fields when present", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const messages = malformed.messages as Array<Record<string, unknown>>;
+    messages[0] = { ...messages[0], sender_callsign: 42 };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.messages[0].sender_callsign",
+    );
+  });
 });

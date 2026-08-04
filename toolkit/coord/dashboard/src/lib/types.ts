@@ -18,6 +18,7 @@ export interface Session extends SessionIdentity {
   cwd: string;
   repo_root: string | null;
   state: string;
+  callsign?: string | null;
   name: string | null;
   label: string | null;
   waiting_for: string | null;
@@ -63,8 +64,10 @@ export interface Message {
   id: string;
   sender_client: string;
   sender_session_id: string;
+  sender_callsign?: string | null;
   recipient_client: string;
   recipient_session_id: string;
+  recipient_callsign?: string | null;
   repo_root: string | null;
   text: string;
   created_at: number;

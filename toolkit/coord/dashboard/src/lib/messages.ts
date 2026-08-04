@@ -1,5 +1,5 @@
-import { shortSessionId } from "@/lib/format";
-import type { Message, Session } from "@/lib/types";
+import { messageEndpointName } from "@/lib/format";
+import type { Message } from "@/lib/types";
 
 export const MESSAGE_PREVIEW_LIMIT = 5;
 export const MESSAGE_PAGE_SIZE = 20;
@@ -19,18 +19,6 @@ export interface MessagePage {
   start: number;
   end: number;
   total: number;
-}
-
-export function messageParticipantLabel(
-  sessions: Session[],
-  client: string,
-  sessionId: string,
-): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.client === client && candidate.session_id === sessionId,
-  );
-  return session?.label ?? session?.name ?? shortSessionId(sessionId);
 }
 
 export function orderMessages(messages: Message[]): Message[] {
@@ -55,7 +43,6 @@ export function messageRepositories(messages: Message[]): string[] {
 
 export function filterMessages(
   messages: Message[],
-  sessions: Session[],
   filters: MessageFilters,
 ): Message[] {
   const query = filters.query.trim().toLowerCase();
@@ -69,14 +56,12 @@ export function filterMessages(
     }
     if (query.length === 0) return true;
 
-    const senderLabel = messageParticipantLabel(
-      sessions,
-      message.sender_client,
+    const senderLabel = messageEndpointName(
+      message.sender_callsign,
       message.sender_session_id,
     );
-    const recipientLabel = messageParticipantLabel(
-      sessions,
-      message.recipient_client,
+    const recipientLabel = messageEndpointName(
+      message.recipient_callsign,
       message.recipient_session_id,
     );
     const searchable = [

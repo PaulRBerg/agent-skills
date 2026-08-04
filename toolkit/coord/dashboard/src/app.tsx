@@ -89,11 +89,7 @@ export function App() {
                 </div>
 
                 <aside className="flex min-w-0 flex-col gap-8">
-                  <MessagesFeed
-                    messages={snapshot.messages}
-                    now={now}
-                    sessions={snapshot.sessions}
-                  />
+                  <MessagesFeed messages={snapshot.messages} now={now} />
                   <NotesPanel notes={snapshot.notes} now={now} />
                 </aside>
               </div>

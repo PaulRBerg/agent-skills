@@ -5,7 +5,7 @@ import {
   paginateMessages,
   previewMessages,
 } from "@/lib/messages";
-import type { Message, Session } from "@/lib/types";
+import type { Message } from "@/lib/types";
 
 function message(
   id: string,
@@ -25,23 +25,6 @@ function message(
     ...overrides,
   };
 }
-
-const sessions: Session[] = [
-  {
-    client: "codex",
-    session_id: "sender-session",
-    cwd: "/repo/alpha",
-    repo_root: "/repo/alpha",
-    state: "working",
-    name: null,
-    label: "dashboard-agent",
-    waiting_for: null,
-    pid: 1,
-    source: "hook",
-    started_at: 1,
-    last_seen: 2,
-  },
-];
 
 describe("previewMessages", () => {
   test("returns the five newest messages without mutating the snapshot order", () => {
@@ -83,7 +66,7 @@ describe("filterMessages", () => {
     ];
 
     expect(
-      filterMessages(messages, sessions, {
+      filterMessages(messages, {
         query: "deploy",
         repoRoot: "/repo/alpha",
         status: "unread",
@@ -91,18 +74,20 @@ describe("filterMessages", () => {
     ).toEqual(["unread-alpha"]);
   });
 
-  test("matches resolved labels and full session identifiers", () => {
-    const messages = [message("target", 1)];
+  test("matches immutable callsign snapshots and full session identifiers", () => {
+    const messages = [
+      message("target", 1, { sender_callsign: "🦊 Historical Fox" }),
+    ];
 
     expect(
-      filterMessages(messages, sessions, {
-        query: "dashboard-agent",
+      filterMessages(messages, {
+        query: "historical fox",
         repoRoot: null,
         status: "all",
       }),
     ).toHaveLength(1);
     expect(
-      filterMessages(messages, sessions, {
+      filterMessages(messages, {
         query: "recipient-session",
         repoRoot: null,
         status: "all",

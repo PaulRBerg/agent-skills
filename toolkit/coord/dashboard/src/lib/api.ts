@@ -63,6 +63,8 @@ function validateSession(value: unknown, path: string): void {
   string(row.cwd, `${path}.cwd`);
   nullableString(row.repo_root, `${path}.repo_root`);
   string(row.state, `${path}.state`);
+  if (row.callsign !== undefined)
+    nullableString(row.callsign, `${path}.callsign`);
   nullableString(row.name, `${path}.name`);
   nullableString(row.label, `${path}.label`);
   nullableString(row.waiting_for, `${path}.waiting_for`);
@@ -131,8 +133,12 @@ function validateMessage(value: unknown, path: string): void {
   string(row.id, `${path}.id`);
   string(row.sender_client, `${path}.sender_client`);
   string(row.sender_session_id, `${path}.sender_session_id`);
+  if (row.sender_callsign !== undefined)
+    nullableString(row.sender_callsign, `${path}.sender_callsign`);
   string(row.recipient_client, `${path}.recipient_client`);
   string(row.recipient_session_id, `${path}.recipient_session_id`);
+  if (row.recipient_callsign !== undefined)
+    nullableString(row.recipient_callsign, `${path}.recipient_callsign`);
   nullableString(row.repo_root, `${path}.repo_root`);
   string(row.text, `${path}.text`);
   number(row.created_at, `${path}.created_at`);

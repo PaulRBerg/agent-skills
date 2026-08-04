@@ -9,7 +9,7 @@ import {
   paginateMessages,
   type MessageStatusFilter,
 } from "@/lib/messages";
-import type { Message, Session } from "@/lib/types";
+import type { Message } from "@/lib/types";
 import { MessageRow } from "@/ui/message-row";
 
 const statusFilters: Array<{
@@ -24,13 +24,11 @@ const statusFilters: Array<{
 interface MessageHistoryDialogProps {
   messages: Message[];
   now: number;
-  sessions: Session[];
 }
 
 export function MessageHistoryDialog({
   messages,
   now,
-  sessions,
 }: MessageHistoryDialogProps) {
   const [query, setQuery] = useState("");
   const [repoRoot, setRepoRoot] = useState<string | null>(null);
@@ -39,8 +37,8 @@ export function MessageHistoryDialog({
   const resultsRef = useRef<HTMLDivElement>(null);
   const repositories = useMemo(() => messageRepositories(messages), [messages]);
   const filteredMessages = useMemo(
-    () => filterMessages(messages, sessions, { query, repoRoot, status }),
-    [messages, query, repoRoot, sessions, status],
+    () => filterMessages(messages, { query, repoRoot, status }),
+    [messages, query, repoRoot, status],
   );
   const messagePage = useMemo(
     () => paginateMessages(filteredMessages, page),
@@ -203,7 +201,6 @@ export function MessageHistoryDialog({
                         key={message.id}
                         message={message}
                         now={now}
-                        sessions={sessions}
                         showRepository
                       />
                     ))}

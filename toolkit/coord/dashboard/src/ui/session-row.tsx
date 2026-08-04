@@ -4,6 +4,7 @@ import { tv } from "tailwind-variants";
 import {
   formatRelativeTime,
   getLivenessTier,
+  sessionDisplayName,
   shortSessionId,
 } from "@/lib/format";
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
@@ -84,9 +85,11 @@ interface SessionRowProps {
 
 export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
   const { session, claim, delegates } = row;
-  const label =
-    session.label ?? session.name ?? shortSessionId(session.session_id);
-  const secondaryName = session.label && session.name ? session.name : null;
+  const label = sessionDisplayName(session);
+  const secondaryNames = [session.label, session.name].filter(
+    (value, index, values): value is string =>
+      value !== null && value !== label && values.indexOf(value) === index,
+  );
   const client =
     session.client === "codex" || session.client === "claude"
       ? session.client
@@ -122,9 +125,11 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
           </div>
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-4 font-mono text-[11px]/4 text-muted">
             <span>{shortSessionId(session.session_id)}</span>
-            {secondaryName ? (
-              <span className="truncate">{secondaryName}</span>
-            ) : null}
+            {secondaryNames.map((name) => (
+              <span className="truncate" key={name} title={name}>
+                {name}
+              </span>
+            ))}
             {session.cwd !== repoRoot ? (
               <span className="truncate" title={session.cwd}>
                 cwd {session.cwd}

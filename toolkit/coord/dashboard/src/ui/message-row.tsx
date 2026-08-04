@@ -1,16 +1,18 @@
 import { ArrowRight, Check } from "lucide-react";
 import { motion } from "motion/react";
-import { formatRelativeTime, shortenPath } from "@/lib/format";
-import { messageParticipantLabel } from "@/lib/messages";
+import {
+  formatRelativeTime,
+  messageEndpointName,
+  shortenPath,
+} from "@/lib/format";
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
-import type { Message, Session } from "@/lib/types";
+import type { Message } from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
 
 interface MessageRowProps {
   compact?: boolean;
   message: Message;
   now: number;
-  sessions: Session[];
   showRepository?: boolean;
 }
 
@@ -18,18 +20,15 @@ export function MessageRow({
   compact = false,
   message,
   now,
-  sessions,
   showRepository = false,
 }: MessageRowProps) {
   const acknowledged = message.acknowledged_at !== null;
-  const senderLabel = messageParticipantLabel(
-    sessions,
-    message.sender_client,
+  const senderLabel = messageEndpointName(
+    message.sender_callsign,
     message.sender_session_id,
   );
-  const recipientLabel = messageParticipantLabel(
-    sessions,
-    message.recipient_client,
+  const recipientLabel = messageEndpointName(
+    message.recipient_callsign,
     message.recipient_session_id,
   );
 

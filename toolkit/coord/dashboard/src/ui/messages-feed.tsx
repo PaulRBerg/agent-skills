@@ -1,18 +1,17 @@
 import { MessageSquareText } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { previewMessages } from "@/lib/messages";
-import type { Message, Session } from "@/lib/types";
+import type { Message } from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
 import { MessageHistoryDialog } from "@/ui/message-history-dialog";
 import { MessageRow } from "@/ui/message-row";
 
 interface MessagesFeedProps {
   messages: Message[];
-  sessions: Session[];
   now: number;
 }
 
-export function MessagesFeed({ messages, sessions, now }: MessagesFeedProps) {
+export function MessagesFeed({ messages, now }: MessagesFeedProps) {
   const preview = previewMessages(messages);
 
   return (
@@ -54,17 +53,12 @@ export function MessagesFeed({ messages, sessions, now }: MessagesFeedProps) {
                   key={message.id}
                   message={message}
                   now={now}
-                  sessions={sessions}
                 />
               ))}
             </AnimatePresence>
           </ol>
           <div className="border-l border-t border-line-muted">
-            <MessageHistoryDialog
-              messages={messages}
-              now={now}
-              sessions={sessions}
-            />
+            <MessageHistoryDialog messages={messages} now={now} />
           </div>
         </div>
       )}

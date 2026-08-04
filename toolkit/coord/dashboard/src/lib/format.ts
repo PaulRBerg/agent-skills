@@ -1,3 +1,5 @@
+import type { Session } from "@/lib/types";
+
 export type LivenessTier = "fresh" | "aging" | "stale";
 
 export function formatRelativeTime(
@@ -40,4 +42,22 @@ export function shortenPath(value: string): string {
 
 export function shortSessionId(sessionId: string): string {
   return sessionId.slice(0, 8);
+}
+
+export function sessionDisplayName(
+  session: Pick<Session, "callsign" | "label" | "name" | "session_id">,
+): string {
+  return (
+    session.callsign ??
+    session.label ??
+    session.name ??
+    shortSessionId(session.session_id)
+  );
+}
+
+export function messageEndpointName(
+  callsign: string | null | undefined,
+  sessionId: string,
+): string {
+  return callsign ?? shortSessionId(sessionId);
 }
