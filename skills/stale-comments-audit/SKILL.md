@@ -14,8 +14,8 @@ description:
 This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
-Audit source comments against the code they describe. Report only confirmed mismatches and noise; do not edit files
-unless the user separately asks for fixes.
+Audit source comments against the code they describe. Report only confirmed mismatches and noise; never edit files. When
+the user requests fixes, return the verified findings for a separate writable follow-up.
 
 ## Scope
 
@@ -99,8 +99,6 @@ Return:
 
 Omit empty category and not-reviewed sections. When no findings remain and every file was reviewed, lead with
 `### ✅ Clean — no confirmed stale, orphaned, misleading, or redundant comments`. If files were not reviewed, lead with
-`### ⚠️ Review incomplete — no confirmed findings in reviewed scope` instead. When fixes were requested and applied,
-lead with `### ✅ Comments fixed — <count>`, then add `### 📦 Changed` and `### 🧪 Verification`; do not collapse a
-write receipt into `Clean`. Keep classifier tokens, paths, line numbers, directives, and quoted comment text exact and
-undecorated. Completion requires the exact scope, analyzed-file count, confirmed findings with current lines and
-evidence, and any files that could not be reviewed.
+`### ⚠️ Review incomplete — no confirmed findings in reviewed scope` instead. Keep classifier tokens, paths, line
+numbers, directives, and quoted comment text exact and undecorated. Completion requires the exact scope, analyzed-file
+count, confirmed findings with current lines and evidence, and any files that could not be reviewed.
