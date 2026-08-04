@@ -4,6 +4,6 @@
   "reportUnusedImport": true,
   "reportUnusedVariable": true,
   "pythonPlatform": "All",
-  "pythonVersion": "3.12",
+  "pythonVersion": "3.13",
   "typeCheckingMode": "basic"
 }
