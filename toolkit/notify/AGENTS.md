@@ -11,7 +11,7 @@ runs on Ubuntu with Python 3.13.
 
 ## Development Workflow
 
-- Bootstrap the Python 3.12+ environment with `uv sync --extra dev --locked`.
+- Bootstrap the Python 3.13+ environment with `uv sync --extra dev --locked`.
 - Run the checkout directly with `uv run ai-notify ...`; use `just install-cli` only when testing the global install.
 - After editing CLI code, proactively run `just install-cli` to refresh the globally installed `ai-notify` so it
   reflects the change.

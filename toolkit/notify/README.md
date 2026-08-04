@@ -13,7 +13,7 @@ notifications for key events.
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.13+
 - [uv](https://github.com/astral-sh/uv) package manager
 - [terminal-notifier](https://github.com/julienXX/terminal-notifier) app: Install with `brew install terminal-notifier`
 
