@@ -20,10 +20,7 @@ bunx skills add PaulRBerg/agent-skills
 | agents-context-management | Create or polish README.md, AGENTS.md, context docs, and existing skills |
 | agents-docs               | Fetch current official Codex and Claude Code docs, including hooks/trust |
 | agents-introspection      | Retrospect on Codex/Claude Code transcript history                       |
-| audit-stale-comments      | Verify stale comments in JavaScript, TypeScript, and Go                  |
 | autoresearch              | Autonomous experiment loop                                               |
-| bump-deps                 | Node.js dependency updates via taze                                      |
-| bump-release              | Release workflow with changelog, tagging                                 |
 | claude-handoff            | Delegate approved Claude plans to Sonnet or Opus subagents               |
 | cli-cast                  | Foundry cast CLI guidance                                                |
 | cli-gh                    | GitHub CLI operations                                                    |
@@ -36,7 +33,6 @@ bunx skills add PaulRBerg/agent-skills
 | create-skill              | Bootstrap a new agent skill                                              |
 | effect-ts                 | Effect-TS patterns and guidance                                          |
 | evm-atlas                 | EVM lookup + DEX transaction/order interpretation                        |
-| find-tool                 | Find and compare current developer tools                                 |
 | frontend-design           | Distinctive, subject-specific frontend design                            |
 | fresh-eyes-sweep          | Meticulous whole-repository audit and verified fixes                     |
 | git-squash                | Squash PR branch with semantic commit message                            |
@@ -45,14 +41,18 @@ bunx skills add PaulRBerg/agent-skills
 | html-playground           | Interactive single-file HTML playgrounds                                 |
 | large-file-refactor       | Large source-file report and Serena split plans                          |
 | naming-refactor           | Exhaustive behavior-preserving repository naming refactor                |
+| node-deps-bumper          | Node.js dependency updates via taze                                      |
+| release-bumper            | Release workflow with changelog, tagging                                 |
 | repo-harmonization        | Audit and align multiple interdependent repositories                     |
 | repo-rename               | Rename GitHub repo, folder, and agent thread references                  |
 | skill-doctor              | Audit Agent Skills catalogs and installed skill roots                    |
 | skill-map                 | Find skill dependencies and references across machine                    |
 | spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                              |
+| stale-comments-audit      | Verify stale comments in JavaScript, TypeScript, and Go                  |
 | tailwind-css              | Tailwind CSS v4 styling guidance                                         |
 | task-handoff              | Create single- or multi-repository Codex task handoff plans              |
 | todo-archive              | Archive checked TODO.md tasks into .ai/todos                             |
+| tool-finder               | Find and compare current developer tools                                 |
 | vitest                    | Vitest test writing and debugging                                        |
 | yeet                      | GitHub contribution workflows                                            |
 

@@ -1,14 +1,14 @@
 ---
 coordination: exempt
 disable-model-invocation: false
-name: find-tool
+name: tool-finder
 user-invocable: true
 description:
   Use to find, compare, and recommend current tools, packages, libraries, CLIs, VSCode extensions, agent skills,
   databases, or infrastructure options for a development task.
 ---
 
-# Find Tool
+# Tool Finder
 
 This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
@@ -20,8 +20,8 @@ Recommend the current option that best fits the user's actual constraints, backe
 1. Infer the ecosystem, existing stack, must-haves, switching cost, and decision criteria from the request and
    repository. Ask only when an unknown would materially change the recommendation.
 2. Check whether the standard library, platform, or an already-installed tool is sufficient before adding a dependency.
-3. Search current authoritative sources. Read [references/find-tool.md](references/find-tool.md) only for the relevant
-   ecosystem's source routing, fallback criteria, install conventions, and red flags.
+3. Search current authoritative sources. Read [references/tool-finder.md](references/tool-finder.md) only for the
+   relevant ecosystem's source routing, fallback criteria, install conventions, and red flags.
 4. Compare the viable options against the user's criteria. Use adoption, maintenance, security, documentation,
    performance, operational cost, and ecosystem fit only where they affect this decision; do not force fixed weights or
    a fixed number of candidates.

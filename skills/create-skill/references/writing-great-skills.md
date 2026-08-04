@@ -60,6 +60,12 @@ Choose:
 When user-invoked skills multiply past what the human can remember, add a **router skill**: one user-invoked skill
 naming the others and when to reach for each. It can only hint, never fire them.
 
+## Naming skills
+
+Prefer domain-first, noun-based skill names (`<domain>-<capability noun>`) over imperative verb-object names—for
+example, `large-file-refactor` rather than `refactor-large-files`. Treat this as a heuristic, not a validation rule:
+keep a verb-based name when it is unusually clear, memorable, and fitting; `grill-me` and `yeet` are strong exceptions.
+
 ## Writing the description
 
 A model-invoked description does two jobs — state what the skill is, and list the **branches** (distinct ways of being

@@ -3,12 +3,12 @@ argument-hint: "[--dry-run] [package ...]"
 disable-model-invocation: false
 effort: medium
 model: sonnet
-name: bump-deps
+name: node-deps-bumper
 user-invocable: true
 description: "Use for dependency updates: bump npm/pnpm/yarn/bun packages, check outdated, or run taze."
 ---
 
-# Bump Dependencies
+# Node Dependency Bumper
 
 Use Taze to build one structured update plan, apply compatible ranged updates, and make major-version decisions as a
 batch.

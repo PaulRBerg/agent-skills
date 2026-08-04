@@ -1,6 +1,6 @@
-# Find Tool Reference
+# Tool Finder Reference
 
-Detailed search, scoring, and reporting guidance for the `find-tool` skill.
+Detailed search, scoring, and reporting guidance for the `tool-finder` skill.
 
 ## Search Strategy
 

@@ -3,12 +3,12 @@ argument-hint: "[packages...] [version] [--beta] [--dry-run]"
 disable-model-invocation: true
 effort: high
 model: sonnet
-name: bump-release
+name: release-bumper
 user-invocable: true
 description: "Cut a release: bump versions, write changelogs, commit, tag."
 ---
 
-# Bump Release
+# Release Bumper
 
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
