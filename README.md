@@ -30,7 +30,7 @@ bunx skills add PaulRBerg/agent-skills
 | code-polish               | Simplify and/or risk-profiled review with autofix                        |
 | coingecko-open-page       | Open CoinGecko historical data page in Chromium                          |
 | commit                    | Git commit with conventional commits                                     |
-| create-skill              | Bootstrap a new agent skill                                              |
+| skill-writing             | Bootstrap a new agent skill                                              |
 | effect-ts                 | Effect-TS patterns and guidance                                          |
 | evm-atlas                 | EVM lookup + DEX transaction/order interpretation                        |
 | frontend-design           | Distinctive, subject-specific frontend design                            |

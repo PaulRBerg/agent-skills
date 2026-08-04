@@ -1,13 +1,13 @@
 ---
 argument-hint: <skill-name>
 disable-model-invocation: false
-name: create-skill
+name: skill-writing
 user-invocable: true
 description:
   Use to create/scaffold/init a new agent skill under `.agents/skills` in the working directory where invoked.
 ---
 
-# Create Skill
+# Skill Writing
 
 Bootstrap a skill with a small observable contract, then symlink it into `.claude/skills/` so Claude Code can discover
 it. Keep invariant workflow guidance in `SKILL.md`; move deterministic mechanics and conditional detail into scripts and

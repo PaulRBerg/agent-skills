@@ -55,7 +55,7 @@ Choose exactly one workflow and read only its reference.
 | Update, refresh, sync, prune, polish, repair, or fix context    | `polish`                     | `references/brain-polish.md`              |
 | Create, initialize, generate, or regenerate context files       | `create`                     | `references/create-docs.md`               |
 | Audit, check, review, inspect, or suggest changes without edits | `polish` in `--dry-run` mode | `references/brain-polish.md`              |
-| Create or scaffold a skill                                      | Stop                         | Refer to `skills/create-skill`            |
+| Create or scaffold a skill                                      | Stop                         | Refer to `skills/skill-writing`           |
 | Install, discover, remove, or rename a skill                    | Stop                         | Use a dedicated skill-management workflow |
 
 If the intent is unclear, select `polish` in `--dry-run` mode and report the smallest useful planned change set.
