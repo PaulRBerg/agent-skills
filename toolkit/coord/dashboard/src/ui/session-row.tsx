@@ -1,11 +1,14 @@
 import { GitBranch } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { tv } from "tailwind-variants";
 import {
   formatRelativeTime,
   getLivenessTier,
   shortSessionId,
 } from "@/lib/format";
+import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
 import type { Delegate, LaneSession } from "@/lib/types";
+import { AnimatedValue } from "@/ui/animated-value";
 import { ClaimChips } from "@/ui/claim-chips";
 
 const clientBadge = tv({
@@ -29,7 +32,8 @@ function LivenessDot({ lastSeen, now }: { lastSeen: number; now: number }) {
   const tier = getLivenessTier(lastSeen, now);
   return (
     <span
-      className={`size-2 shrink-0 rounded-full ${livenessClasses[tier]}`}
+      className={`size-2 shrink-0 rounded-full transition-colors ${livenessClasses[tier]}`}
+      role="img"
       title={`${tier}; seen ${formatRelativeTime(lastSeen, now)}`}
       aria-label={`${tier} liveness; seen ${formatRelativeTime(lastSeen, now)}`}
     />
@@ -38,7 +42,19 @@ function LivenessDot({ lastSeen, now }: { lastSeen: number; now: number }) {
 
 function DelegateRow({ delegate, now }: { delegate: Delegate; now: number }) {
   return (
-    <div className="grid gap-2 border-t border-line-muted py-2 pl-8 sm:grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] sm:items-center sm:gap-4">
+    <motion.div
+      animate={{ opacity: 1, x: 0 }}
+      className="grid gap-2 border-t border-line-muted py-2 pl-8 sm:grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] sm:items-center sm:gap-4"
+      data-motion-item
+      exit={{ opacity: 0, x: -6 }}
+      initial={{ opacity: 0, x: -6 }}
+      layout="position"
+      transition={{
+        duration: MOTION_DURATION.row,
+        ease: MOTION_EASE,
+        layout: { duration: MOTION_DURATION.layout, ease: MOTION_EASE },
+      }}
+    >
       <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
         <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
         <LivenessDot lastSeen={delegate.last_seen} now={now} />
@@ -46,12 +62,17 @@ function DelegateRow({ delegate, now }: { delegate: Delegate; now: number }) {
           {delegate.agent_id}
         </span>
       </div>
-      <span className="font-mono text-xs text-muted">{delegate.state}</span>
+      <AnimatedValue
+        className="font-mono text-xs text-muted"
+        value={delegate.state}
+      >
+        {delegate.state}
+      </AnimatedValue>
       <span className="text-xs text-muted">
         Delegate · {delegate.agent_type ?? "unknown type"} · seen{" "}
         {formatRelativeTime(delegate.last_seen, now)}
       </span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -72,15 +93,32 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
       : "other";
 
   return (
-    <div className="border-t border-line-muted first:border-t-0">
+    <motion.div
+      animate={{ opacity: 1, y: 0 }}
+      className="border-t border-line-muted first:border-t-0"
+      data-motion-item
+      exit={{ opacity: 0, y: -6 }}
+      initial={{ opacity: 0, y: 8 }}
+      layout="position"
+      transition={{
+        duration: MOTION_DURATION.row,
+        ease: MOTION_EASE,
+        layout: { duration: MOTION_DURATION.layout, ease: MOTION_EASE },
+      }}
+    >
       <div className="grid gap-3 py-3 sm:grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] sm:items-center sm:gap-4">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <LivenessDot lastSeen={session.last_seen} now={now} />
             <span className={clientBadge({ client })}>{session.client}</span>
-            <span className="truncate text-sm font-semibold" title={label}>
-              {label}
-            </span>
+            <AnimatedValue
+              className="min-w-0 flex-1 overflow-hidden text-sm font-semibold"
+              value={label}
+            >
+              <span className="block truncate" title={label}>
+                {label}
+              </span>
+            </AnimatedValue>
           </div>
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-4 font-mono text-[11px]/4 text-muted">
             <span>{shortSessionId(session.session_id)}</span>
@@ -96,32 +134,63 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
         </div>
 
         <div className="flex items-center gap-2 pl-4 sm:pl-0">
-          <span className="font-mono text-xs font-medium">{session.state}</span>
+          <AnimatedValue
+            className="font-mono text-xs font-medium"
+            value={session.state}
+          >
+            {session.state}
+          </AnimatedValue>
           <span className="text-xs text-muted">
             {formatRelativeTime(session.last_seen, now)}
           </span>
         </div>
 
         <div className="min-w-0 pl-4 sm:pl-0">
-          {claim ? (
-            <ClaimChips claim={claim} />
-          ) : (
-            <span className="text-xs text-muted">No claim</span>
-          )}
+          <AnimatePresence initial={false} mode="wait">
+            {claim ? (
+              <motion.div
+                animate={{ opacity: 1, y: 0 }}
+                data-motion-item
+                exit={{ opacity: 0, y: -3 }}
+                initial={{ opacity: 0, y: 3 }}
+                key={`claim-${claim.id}`}
+                transition={{
+                  duration: MOTION_DURATION.field,
+                  ease: MOTION_EASE,
+                }}
+              >
+                <ClaimChips claim={claim} />
+              </motion.div>
+            ) : (
+              <motion.span
+                animate={{ opacity: 1 }}
+                className="text-xs text-muted"
+                data-motion-item
+                exit={{ opacity: 0 }}
+                initial={{ opacity: 0 }}
+                key="no-claim"
+                transition={{ duration: MOTION_DURATION.field }}
+              >
+                No claim
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
       {delegates.length > 0 ? (
         <div className="border-l border-line-strong">
-          {delegates.map((delegate) => (
-            <DelegateRow
-              delegate={delegate}
-              key={delegate.agent_id}
-              now={now}
-            />
-          ))}
+          <AnimatePresence initial={false} mode="popLayout">
+            {delegates.map((delegate) => (
+              <DelegateRow
+                delegate={delegate}
+                key={delegate.agent_id}
+                now={now}
+              />
+            ))}
+          </AnimatePresence>
         </div>
       ) : null}
-    </div>
+    </motion.div>
   );
 }

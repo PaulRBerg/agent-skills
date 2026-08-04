@@ -14,7 +14,7 @@ const indicator = tv({
         dot: "bg-muted",
       },
       live: {
-        root: "text-positive",
+        root: "text-active-ink",
         dot: "liveness-fresh bg-positive",
       },
       polling: {

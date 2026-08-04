@@ -12,6 +12,7 @@
   --color-line-muted-base: oklch(0.89 0.006 255);
   --color-line-strong-base: oklch(0.68 0.012 255);
   --color-accent-base: oklch(0.48 0.12 230);
+  --color-accent-wash-base: oklch(0.91 0.035 230);
   --color-positive-base: oklch(0.55 0.13 155);
   --color-warning-base: oklch(0.65 0.13 75);
   --color-warning-ink-base: oklch(0.38 0.09 65);
@@ -47,6 +48,7 @@
     --color-line-muted-base: oklch(0.29 0.01 255);
     --color-line-strong-base: oklch(0.48 0.014 255);
     --color-accent-base: oklch(0.72 0.12 225);
+    --color-accent-wash-base: oklch(0.27 0.035 225);
     --color-positive-base: oklch(0.7 0.14 155);
     --color-warning-base: oklch(0.76 0.13 80);
     --color-warning-ink-base: oklch(0.86 0.1 82);
@@ -82,6 +84,7 @@
   --color-line-muted: var(--color-line-muted-base);
   --color-line-strong: var(--color-line-strong-base);
   --color-accent: var(--color-accent-base);
+  --color-accent-wash: var(--color-accent-wash-base);
   --color-positive: var(--color-positive-base);
   --color-warning: var(--color-warning-base);
   --color-warning-ink: var(--color-warning-ink-base);
@@ -109,6 +112,7 @@
   --font-mono:
     ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono",
     monospace;
+  --z-modal: 50;
 }
 
 html {
@@ -145,16 +149,26 @@ button,
   }
 }
 
-@keyframes snapshot-flash {
-  from {
-    outline-color: color-mix(
-      in oklab,
-      var(--color-accent-base) 45%,
-      transparent
-    );
+@keyframes change-wash {
+  0% {
+    background-color: var(--color-accent-wash-base);
   }
   to {
-    outline-color: transparent;
+    background-color: transparent;
+  }
+}
+
+@keyframes refresh-sweep {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.08);
+  }
+  24% {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 0;
+    transform: scaleX(1);
   }
 }
 
@@ -162,14 +176,30 @@ button,
   animation: liveness-pulse 2.2s ease-out infinite;
 }
 
-.snapshot-flash {
-  outline: 1px solid transparent;
-  animation: snapshot-flash 900ms ease-out;
+.change-wash {
+  animation: change-wash 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.refresh-sweep {
+  position: absolute;
+  right: 0;
+  bottom: -0.45rem;
+  left: 1rem;
+  height: 1px;
+  opacity: 0;
+  transform-origin: left;
+  background: var(--color-accent-base);
+  animation: refresh-sweep 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-motion-item] {
+    transform: none !important;
+  }
+
   .liveness-fresh,
-  .snapshot-flash {
+  .change-wash,
+  .refresh-sweep {
     animation: none;
   }
 
