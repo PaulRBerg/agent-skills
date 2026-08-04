@@ -578,6 +578,41 @@ def test_earlier_overlapping_waiter_reserves_scope(
     assert second.holders == ("codex/first-wa",)
 
 
+def test_earlier_waiter_promotion_notifies_the_new_active_blocker(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    _set_identity(monkeypatch, "holder")
+    assert coordinator.start("holder", ("src",), cwd=git_repo).kind == "READY"
+    _set_identity(monkeypatch, "first-waiter")
+    assert coordinator.start("first", ("src", "docs"), cwd=git_repo).kind == "BLOCKED"
+    _set_identity(monkeypatch, "second-waiter")
+    assert coordinator.start("second", ("docs",), cwd=git_repo).kind == "BLOCKED"
+    second = coordinator.identity()
+    assert second is not None
+    second_claim = coordinator.store.claim(second)
+    assert second_claim is not None
+    assert second_claim["blocked_reason"] == "waiter"
+
+    _set_identity(monkeypatch, "holder")
+    assert coordinator.done().kind == "DONE"
+    _set_identity(monkeypatch, "first-waiter")
+    assert coordinator.start("first", ("src", "docs"), cwd=git_repo).kind == "READY"
+    first = coordinator.identity()
+    assert first is not None
+
+    _set_identity(monkeypatch, "second-waiter")
+    assert coordinator.start("second", ("docs",), cwd=git_repo).kind == "BLOCKED"
+    messages = coordinator.store.inbox(first)
+    assert [message["text"] for message in messages] == [
+        "released 'holder' — your queued claim may now be READY",
+        "queued codex/second-w: second (docs)",
+    ]
+
+    assert coordinator.start("second", ("docs",), cwd=git_repo).kind == "BLOCKED"
+    assert len(coordinator.store.inbox(first)) == 2
+
+
 def test_messages_notes_status_and_trailer(
     tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

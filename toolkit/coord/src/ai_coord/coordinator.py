@@ -201,7 +201,8 @@ class Coordinator:
                 state, reason = "queued", "dirty"
                 outcome = Outcome("UNKNOWN", 2, f"dirty-settling:{','.join(fresh_dirty)}")
             elif active_blockers or earlier_waiters:
-                state, reason = "queued", "overlap"
+                state = "queued"
+                reason = "overlap" if active_blockers else "waiter"
                 outcome = self._blocked_outcome(paths, active_blockers or earlier_waiters)
             else:
                 state, reason = "active", None
