@@ -111,7 +111,8 @@ narrower check.
   version the docs were last refreshed against: no leading `v`, prose, comments, ranges, prerelease labels, or extra
   lines. The wakeup automation maps `skills/cli-<name>` to binary `<name>` and refreshes the skill when the installed
   binary is newer than this file.
-- Bash scripts must be compatible with Bash v3.2 (`/bin/bash`), because Codex uses the built-in Bash by default.
+- Bash scripts must be compatible with Bash v3.2 (`/bin/bash`) because macOS ships that system version and skills may
+  run in Bash-based environments.
 - In `SKILL.md` frontmatter, sort fields alphabetically but always place `description` last.
 - Keep generated docs terse, imperative, and expert-to-expert.
 - Never leak personal crypto (EVM) addresses in any skill. Use well-known public addresses (e.g. Multicall3, token
