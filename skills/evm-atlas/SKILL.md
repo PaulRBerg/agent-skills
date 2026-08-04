@@ -1,5 +1,6 @@
 ---
 argument-hint: "<chain-name-or-id|address|transaction-hash|order-id>"
+compatibility: Requires the `routemesh` CLI initialized on macOS with `routemesh init` for RouteMesh requests.
 disable-model-invocation: false
 name: evm-atlas
 user-invocable: true

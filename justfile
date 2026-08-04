@@ -94,7 +94,7 @@ alias eag := evm-atlas-generate
     node {{ evm_atlas_generator }} --check
 alias eac := evm-atlas-check
 
-# Refresh atlas-overlays.json routeMesh flags from RouteMesh's live chain list (network call)
+# Refresh atlas-overlays.json routeMesh flags through the routemesh CLI (network call)
 [group("checks")]
 @evm-atlas-discover-routemesh:
     node {{ evm_atlas_generator }} --discover-routemesh

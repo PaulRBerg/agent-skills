@@ -1,9 +1,12 @@
+import { execFile } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import { access, chmod, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
 
+const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const skillRoot = path.join(repoRoot, "skills", "evm-atlas");
@@ -180,14 +183,25 @@ function assertStringArray(value, name) {
 }
 
 async function discoverRouteMesh(registryChains, data) {
-  let response;
+  let stdout;
   try {
-    response = await fetch("https://api.routeme.sh/chains");
+    ({ stdout } = await execFileAsync("routemesh", ["chains", "--output=json"]));
   } catch (error) {
-    fail(`RouteMesh chains request failed: ${error.message}`);
+    fail(`RouteMesh chains command failed: ${error.stderr?.trim() || error.message}`);
   }
-  if (!response.ok) fail(`RouteMesh chains request failed: HTTP ${response.status}`);
-  const liveChains = await response.json();
+
+  let liveChains;
+  try {
+    liveChains = JSON.parse(stdout);
+  } catch (error) {
+    fail(`RouteMesh chains command returned invalid JSON: ${error.message}`);
+  }
+  if (
+    !Array.isArray(liveChains) ||
+    liveChains.some((chain) => typeof chain?.chain_id !== "string" || !/^[1-9][0-9]*$/.test(chain.chain_id))
+  ) {
+    fail("RouteMesh chains command returned an invalid chain catalog.");
+  }
   const liveChainIds = new Set(liveChains.map((chain) => Number(chain.chain_id)));
 
   // Patch the raw text in place instead of round-tripping through JSON.stringify, so the

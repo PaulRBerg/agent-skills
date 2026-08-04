@@ -68,18 +68,20 @@ quorum, and report disagreement as unknown.
 
 ## RouteMesh and Public RPC
 
-Use RouteMesh only when the target row has `routeMesh: true` and `$ROUTEMESH_API_KEY` is available:
+Use the `routemesh` CLI exclusively for RouteMesh. Use it only when the target row has `routeMesh: true` and
+`routemesh chains` contains the exact chain ID. Never construct a RouteMesh URL or inspect, request, or print an API
+key.
 
-```text
-https://lb.routeme.sh/rpc/CHAIN_ID/$ROUTEMESH_API_KEY
-```
+Assume the user has already run `routemesh init`. If a RouteMesh command reports a credential error, stop that route and
+tell the user to obtain an API key from <https://routeme.sh/app/consumer/api-keys>, run `routemesh init`, then retry. Do
+not run initialization or fall back to a raw RouteMesh endpoint. If `routemesh` is unavailable, report that the CLI is
+required; do not work around it with direct HTTP.
 
-RouteMesh uses this authenticated consumer endpoint for every request class. It exposes no client-selectable archive
-suffix, header, or node flag: an Economy or Performance key chooses the routing strategy, not archive capability.
-RouteMesh routes a chain-method combination through a method-specific upstream pathway, so a successful request proves
-only that exact method, parameters, and block were served. It does not prove archive coverage for the key, chain, or
-another method. The keyless `https://lb.routeme.sh/rpc/evm/CHAIN_ID` endpoint is community routing, not normal, full, or
-archive evidence infrastructure.
+Use `routemesh ping CHAIN_ID` to verify a RouteMesh chain route. Use `routemesh rpc CHAIN_ID METHOD --params=JSON` for
+one read-only JSON-RPC request, or `--json=JSON` for a complete request or batch. Never pass `--allow-write`.
+
+RouteMesh routing is method-specific, so a successful command proves only that exact method, parameters, and block. It
+does not establish archive coverage for the key, chain, or another method.
 
 | Class                 | Representative methods                                                                         | Archive-state requirement                                                                            |
 | --------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -91,41 +93,36 @@ For historical state requests:
 
 1. Resolve and verify one exact block number, hash, and timestamp before querying state. Reuse that checkpoint for every
    request.
-2. Prefer the EIP-1898 `{ blockHash, requireCanonical: true }` selector where the method and provider support it.
+2. Send the EIP-1898 `{ blockHash, requireCanonical: true }` selector with `routemesh rpc` where the method and provider
+   support it.
 3. When a numeric block fallback is required, use the verified block number and retain the same-endpoint
    block-number/hash consistency checks immediately before and after the request batch.
 4. Treat pruning, missing-trie/state-unavailable errors, malformed data, or a failed block-identity check as a coverage
    failure. Try the ordered independent RPC fallback; if that cannot serve the request, report the state as unknown.
    Never turn the failure into a zero balance or empty state.
-5. On an error or suspicious `null`, retain RouteMesh's `X-Batch-Id` for traceability, but do not persist the API key or
-   authenticated URL.
+5. On an error or suspicious `null`, retain the CLI-provided batch ID for traceability, but never persist a credential.
 
-Do not prescribe arbitrary retries of the same RouteMesh request. Its routing strategies already perform
-strategy-dependent failover, and the public contract does not promise a different archive-capable pathway on repeat.
+Do not rerun a failed RouteMesh command arbitrarily. The CLI already performs its bounded retry policy, and another
+attempt does not promise a different archive-capable pathway on repeat.
 
 For a specific transaction receipt:
 
-1. Call `eth_getTransactionReceipt` through the selected provider route. Accept a non-null result only after its full
-   transaction hash, block number, and block hash match the target checkpoint.
-2. If it returns `null` but an authoritative indexer or independent `eth_getTransactionByHash` result proves the
-   transaction and exact block, call `eth_getBlockReceipts` for that exact block number.
-3. Filter that array by the full transaction hash. Require exactly one match, then verify the selected receipt's block
-   number and hash against the independently resolved block before using its logs.
-4. If `eth_getBlockReceipts` is unsupported, errors, returns a malformed array, or yields zero or multiple matches, use
-   the ordered indexed-provider or RPC fallback. If no fallback supplies the receipt, report receipt coverage as
-   unknown.
+1. Use `routemesh receipt CHAIN_ID TX_HASH`. It verifies the transaction, receipt, and exact block header and recovers a
+   proven receipt through `eth_getBlockReceipts` when the direct receipt is `null`.
+2. Accept its receipt only after the full transaction hash, block number, and block hash match the target checkpoint.
+3. On a CLI evidence or provider failure, use the ordered indexed-provider or public-RPC fallback. If none supplies the
+   receipt, report receipt coverage as unknown.
 
 A method-specific `null` is inconclusive when the transaction is otherwise proven; it is not proof that the transaction
-does not exist. Conversely, a successful block-receipt lookup repairs only that receipt path, never unrelated missing
-historical state evidence.
+does not exist. A successful receipt lookup repairs only that receipt path, never unrelated missing historical-state
+evidence.
 
-For `eth_getLogs`, use exact checkpoint-bounded ranges. RouteMesh currently accepts at most 10,000 blocks per request;
-split a larger inclusive interval into deterministic contiguous chunks of at most 10,000 blocks, advancing each next
-chunk from the prior chunk's end plus one. Do not treat a provider error as an empty log result.
+For `eth_getLogs`, pass an exact checkpoint-bounded filter to `routemesh logs --json=FILTER CHAIN_ID`. The CLI splits
+larger inclusive ranges into deterministic 10,000-block chunks and returns its checkpoint evidence. Do not treat a CLI
+error as an empty log result.
 
-Verify current RouteMesh support through `https://api.routeme.sh/chains`. Otherwise verify the target's
-`primaryPublicRpc` with `eth_chainId`, then try `references/generated/target-fallback-rpcs.json` in order. Public RPCs
-are best-effort and may be rate limited.
+Otherwise verify the target's `primaryPublicRpc` with `eth_chainId`, then try
+`references/generated/target-fallback-rpcs.json` in order. Public RPCs are best-effort and may be rate limited.
 
 ## Explorer Links
 
