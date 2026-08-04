@@ -1,7 +1,7 @@
 ---
 coordination: exempt
 disable-model-invocation: false
-name: coingecko-cli
+name: cli-coingecko
 user-invocable: false
 description:
   "Use for CoinGecko/cg CLI crypto market data: prices, market cap, trending coins, top gainers/losers, coin search, or
@@ -27,16 +27,20 @@ Use the installed CLI's machine-readable command catalog as the source of truth 
 
    Do not run interactive `cg auth` or write config without the user's approval.
 
-2. Select the command, flags, enum values, output formats, endpoint, auth requirement, and `paid_only` status from
+2. On an explicitly requested CLI update, run `cg update --dry-run`; run `cg update` only with approval. If automatic
+   detection is wrong, pass `--method` with `homebrew`, `npm`, `go`, or `script`. Recheck `cg version` and
+   `cg commands -o json`, then record the verified version in `references/version.txt` when maintaining this skill.
+
+3. Select the command, flags, enum values, output formats, endpoint, auth requirement, and `paid_only` status from
    `cg commands -o json`. Use `cg <command> --help` only when the catalog lacks a needed detail.
 
-3. Resolve CoinGecko IDs with `cg search <term> -o json` when the user supplied a name or ambiguous symbol. Do not
+4. Resolve CoinGecko IDs with `cg search <term> -o json` when the user supplied a name or ambiguous symbol. Do not
    silently treat symbols as unique.
 
-4. Preview unfamiliar or quota-sensitive requests with `--dry-run`. Execute parseable queries with `-o json`; use
+5. Preview unfamiliar or quota-sensitive requests with `--dry-run`. Execute parseable queries with `-o json`; use
    `--export` only when the user requested a CSV artifact.
 
-5. Present the requested result in the user's format. For ordinary human-readable output, use a compact table and
+6. Present the requested result in the user's format. For ordinary human-readable output, use a compact table and
    preserve enough precision for the asset's magnitude.
 
 ## Boundaries and Defaults
