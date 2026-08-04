@@ -127,9 +127,22 @@ gh project view <project-number>
 # Create project
 gh project create --owner <org-name> --title "Project Name"
 
-# List project items with a filter query
-gh project item-list <project-number> --query "status:Done"
+# List project items with a filter query (github.com and GHES 3.20+)
+gh project item-list <project-number> --owner "@me" --query "label:bug -status:Done"
+
+# Show field values as extra columns
+gh project item-list <project-number> --owner "@me" --field "Status" --field "Priority"
+
+# Set an item's field by name; --url is the issue/PR URL, not a project URL
+gh project item-edit <project-number> --owner "@me" --url <issue-url> --field "Status" --value "In Progress"
+
+# Clear a field value
+gh project item-edit <project-number> --owner "@me" --url <issue-url> --field "Status" --clear
 ```
+
+Name-based addressing is the first-class flow. Fall back to `--id`, `--field-id`, `--project-id`, and
+`--single-select-option-id` only for scripted node-ID use. Non-draft issues accept one field value per `item-edit`
+invocation.
 
 ## Repository Rulesets
 
