@@ -16,7 +16,7 @@ description:
 
 # EVM Atlas
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
 Resolve and query only the target mainnets in `references/generated/target-mainnets.json`, under a strict read-only

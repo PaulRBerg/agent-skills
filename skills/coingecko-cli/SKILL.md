@@ -10,7 +10,7 @@ description:
 
 # CoinGecko CLI
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
 Use the installed CLI's machine-readable command catalog as the source of truth for supported market-data operations.

@@ -224,12 +224,12 @@ Set it only for skills that can never write repository files: pure read-only or 
 external or out-of-repository state (GitHub, Notion, on-chain), or repository-local metadata-only skills such as
 `task-handoff`. Skills that edit repository files must not set it.
 
-An exempt skill skips the ai-coord coordination gate (`git status` / `agents-status` / `ai-coord start`) for its own
+An exempt skill skips the ai-coord coordination gate (`git status` / `ai-coord status` / `ai-coord start`) for its own
 work. Pair the field with one standard body sentence near the top of the skill so the executing agent sees the exemption
 without consulting the frontmatter:
 
 ```markdown
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 ```
 

@@ -10,7 +10,7 @@ description:
 
 # Foundry Cast CLI
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
 Separate read, preparation, simulation, signing, and broadcast so no state-changing action is hidden inside command

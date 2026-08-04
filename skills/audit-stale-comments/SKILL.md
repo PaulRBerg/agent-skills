@@ -11,7 +11,7 @@ description:
 
 # Audit Stale Comments
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
 Audit source comments against the code they describe. Report only confirmed mismatches and noise; do not edit files

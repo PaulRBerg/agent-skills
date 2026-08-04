@@ -12,7 +12,7 @@ description: >-
 
 # Agents Docs
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
 Answer Codex and Claude Code product questions from the narrowest relevant live official documentation.

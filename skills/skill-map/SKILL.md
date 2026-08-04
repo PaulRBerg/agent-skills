@@ -13,7 +13,7 @@ description:
 
 # Skill Map
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
 Find skill installs and references across local files without scanning macOS protected home paths or obvious transcript,
