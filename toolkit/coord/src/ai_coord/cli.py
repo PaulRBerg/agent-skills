@@ -8,6 +8,7 @@ import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
+from typing import NoReturn
 
 import click
 
@@ -53,7 +54,7 @@ def _reexec_argv(error: Exception, state_dir: Path | None = None) -> list[str] |
     return argv
 
 
-def _fail(error: Exception, code: int = 1) -> None:
+def _fail(error: Exception, code: int = 1) -> NoReturn:
     runner_argv = _reexec_argv(error)
     if runner_argv is not None:
         environment = os.environ.copy()
@@ -286,13 +287,10 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
                 dry_run=dry_run,
                 force=force,
             )
-            state = (
-                "WOULD_UPDATE"
-                if dry_run and result.changed
-                else "UPDATED"
-                if result.changed
-                else "OK"
-            )
+            if not result.changed:
+                state = "OK"
+            else:
+                state = "WOULD_UPDATE" if dry_run else "UPDATED"
             click.echo(f"{state}\t{selected}\t{result.path}\tlegacy={result.removed_legacy}")
     except ValueError as error:
         _fail(error, 64)
@@ -317,9 +315,8 @@ def check(as_json: bool) -> None:
                 "schema_version": SCHEMA_VERSION,
             }
         )
-        paths = {selected: default_hook_path(selected) for selected in ("codex", "claude")}
-        for selected, path in paths.items():
-            report = inspect_hooks(selected, path)
+        for selected in ("codex", "claude"):
+            report = inspect_hooks(selected, default_hook_path(selected))
             reports.append({"component": f"hooks:{selected}", **asdict(report)})
             degraded = degraded or not report.ok
         snapshot = Coordinator(store).snapshot(machine_wide=True)
@@ -330,7 +327,8 @@ def check(as_json: bool) -> None:
         degraded = degraded or not snapshot.complete
         for health in store.hook_health():
             if health["last_error_code"]:
-                reports.append({"component": "hook-health", **health})
+                summary = f"{health['client']}/{health['event']}: {health['last_error_code']}"
+                reports.append({"component": "hook-health", **health, "error": summary})
                 degraded = True
     except Exception as error:  # noqa: BLE001
         reports.append({"component": "runtime", "status": "broken", "error": str(error)})

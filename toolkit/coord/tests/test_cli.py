@@ -118,12 +118,50 @@ def test_waker_cli_is_silent_unless_a_queued_claim_wakes(
     )
 
 
-def test_link_cli_dry_run(tmp_path: Path) -> None:
+def test_link_cli_reports_dry_run_then_update_then_noop(tmp_path: Path) -> None:
     path = tmp_path / "hooks.json"
-    result = CliRunner().invoke(
-        cli_module.cli,
-        ["link", "codex", "--path", str(path), "--dry-run"],
-    )
-    assert result.exit_code == 0
-    assert result.output.startswith("WOULD_UPDATE\tcodex")
+    runner = CliRunner()
+
+    preview = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(path), "--dry-run"])
+    assert preview.exit_code == 0
+    assert preview.output.startswith("WOULD_UPDATE\tcodex")
     assert not path.exists()
+
+    applied = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(path)])
+    assert applied.exit_code == 0
+    assert applied.output.startswith("UPDATED\tcodex")
+
+    repeated = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(path)])
+    assert repeated.exit_code == 0
+    assert repeated.output.startswith("OK\tcodex")
+
+
+def test_check_reports_hook_health_codes_and_exits_degraded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hooks_path = tmp_path / "hooks.json"
+    monkeypatch.setenv("AI_COORD_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setattr(cli_module, "default_hook_path", lambda _client: hooks_path)
+    monkeypatch.setattr(
+        cli_module, "Coordinator", lambda store: Coordinator(store, StaticInventory())
+    )
+    store = Store()
+    store.hook_error("codex", "Stop", "boom")
+    store.close()
+    runner = CliRunner()
+
+    result = runner.invoke(cli_module.cli, ["check"])
+
+    assert result.exit_code == 2
+    assert "DEGRADED\thooks:codex" in result.output
+    assert "DEGRADED\thook-health\tcodex/Stop: boom\n" in result.output
+
+    as_json = runner.invoke(cli_module.cli, ["check", "--json"])
+
+    assert as_json.exit_code == 2
+    health = next(
+        report for report in json.loads(as_json.output) if report["component"] == "hook-health"
+    )
+    assert health["client"] == "codex"
+    assert health["event"] == "Stop"
+    assert health["last_error_code"] == "boom"

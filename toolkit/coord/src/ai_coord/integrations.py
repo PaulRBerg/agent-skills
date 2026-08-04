@@ -184,7 +184,7 @@ def iter_commands(value: Any) -> Iterator[str]:
 
 
 def _read_config(path: Path) -> Any:
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -194,6 +194,12 @@ def _read_config(path: Path) -> Any:
 
 
 def _strip_jsonc(text: str) -> str:
+    """Return `text` without JSONC comments and trailing commas.
+
+    Both passes keep every newline so that decoder errors still point at the source line.
+    Comments are stripped first because a trailing comma may be separated from its closing
+    bracket by a comment.
+    """
     without_comments: list[str] = []
     index = 0
     in_string = False
@@ -273,7 +279,9 @@ def _write_config(path: Path, data: dict[str, Any]) -> None:
     target = path.resolve(strict=False) if path.is_symlink() else path
     target.parent.mkdir(parents=True, exist_ok=True)
     mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o600
-    comments = _object_header_comments(target.read_text()) if target.exists() else ()
+    comments = (
+        _object_header_comments(target.read_text(encoding="utf-8")) if target.exists() else ()
+    )
     rendered = json.dumps(data, indent=2).splitlines()
     if target.suffix.lower() == ".jsonc" and comments and rendered[0] == "{":
         rendered[1:1] = comments
@@ -330,6 +338,7 @@ def _group(spec: HookSpec) -> dict[str, Any]:
 def _remove_stale_owned_commands(
     hooks: dict[str, Any], client: str, specs: tuple[HookSpec, ...]
 ) -> int:
+    owned_commands = {f"ai-coord hook {client}", f"ai-coord waker {client}"}
     removed_legacy = 0
     preserved: set[HookSpec] = set()
     for event, groups in list(hooks.items()):
@@ -343,25 +352,17 @@ def _remove_stale_owned_commands(
             handlers: list[Any] = []
             for handler in group["hooks"]:
                 command = handler.get("command") if isinstance(handler, dict) else None
-                if isinstance(command, str):
-                    if _is_legacy(command, client):
-                        removed_legacy += 1
+                if not isinstance(command, str):
+                    handlers.append(handler)
+                    continue
+                if _is_legacy(command, client):
+                    removed_legacy += 1
+                    continue
+                if command.strip() in owned_commands:
+                    matching = _matching_spec(event, group, handler, specs)
+                    if matching is None or matching in preserved:
                         continue
-                    if command.strip() in {
-                        f"ai-coord hook {client}",
-                        f"ai-coord waker {client}",
-                    }:
-                        matching = next(
-                            (
-                                spec
-                                for spec in specs
-                                if spec.event == event and _handler_matches(group, handler, spec)
-                            ),
-                            None,
-                        )
-                        if matching is None or matching in preserved:
-                            continue
-                        preserved.add(matching)
+                    preserved.add(matching)
                 handlers.append(handler)
             if handlers:
                 updated = dict(group)
@@ -372,6 +373,16 @@ def _remove_stale_owned_commands(
         else:
             hooks.pop(event, None)
     return removed_legacy
+
+
+def _matching_spec(
+    event: str, group: dict[str, Any], handler: dict[str, Any], specs: tuple[HookSpec, ...]
+) -> HookSpec | None:
+    """Return the spec this already-installed handler satisfies, if any."""
+    return next(
+        (spec for spec in specs if spec.event == event and _handler_matches(group, handler, spec)),
+        None,
+    )
 
 
 def _is_legacy(command: str, client: str) -> bool:
