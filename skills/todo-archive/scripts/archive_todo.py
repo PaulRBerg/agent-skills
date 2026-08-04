@@ -37,11 +37,6 @@ def main() -> int:
     parser.add_argument("--date", default=None, help="YYYY-MM-DD or YYYY_MM_DD; defaults to today")
     parser.add_argument("--dry-run", action="store_true", help="print rendered outputs without writing")
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="overwrite the dated archive in place instead of rolling over to a timestamped file",
-    )
-    parser.add_argument(
         "--hint",
         default=None,
         help="archive only the section whose heading contains this text (case-insensitive)",
@@ -55,7 +50,7 @@ def main() -> int:
         return 1
 
     archive_date = normalize_date(args.date)
-    dated_path = root / ".ai" / "todos" / f"TODO_UNTIL_{archive_date}.md"
+    archive_path = root / ".ai" / "todos" / archive_date[:7] / f"{archive_date[-2:]}.md"
 
     source = todo_path.read_text(encoding="utf-8")
     tree = parse_document(source.splitlines(keepends=True))
@@ -80,10 +75,13 @@ def main() -> int:
         print(f"Tasks remaining: {remaining_count}")
         return 0
 
-    archive_path, rolled_over = resolve_archive_path(dated_path, archive_date, force=args.force)
-    overwrote_existing = args.force and dated_path.exists()
-
-    archive_text = finalize(render(tree, True), fallback_heading="# TODO\n")
+    new_archive_text = finalize(render(tree, True), fallback_heading="# TODO\n")
+    existing_archive_text = archive_path.read_text(encoding="utf-8") if archive_path.exists() else None
+    archive_text = (
+        merge_archive_text(existing_archive_text, new_archive_text)
+        if existing_archive_text is not None
+        else new_archive_text
+    )
     remaining_text = finalize(render(tree, False), fallback_heading=first_heading(source) or "# TODO\n")
 
     if args.dry_run:
@@ -91,10 +89,8 @@ def main() -> int:
         print(f"ARCHIVE: {archive_path}")
         if matched:
             print(f"Section(s): {', '.join(matched)}")
-        if rolled_over:
-            print(f"NOTE: {dated_path.name} exists; rolling this batch over to a timestamped file.")
-        elif overwrote_existing:
-            print(f"NOTE: {dated_path.name} exists; --force will overwrite it.")
+        if existing_archive_text is not None:
+            print(f"NOTE: {archive_path.name} exists; this batch will be merged into it.")
         print(f"Checked tasks to archive: {archive_count}")
         print(f"Tasks remaining: {remaining_count}")
         print("\n--- TODO.md ---")
@@ -112,11 +108,8 @@ def main() -> int:
         print(f"Section(s): {', '.join(matched)}")
     print(f"Tasks remaining: {remaining_count}")
     print(f"Rewrote: {todo_path}")
-    if rolled_over:
-        print(f"Kept existing archive: {dated_path}")
-        print(f"Created timestamped archive: {archive_path}")
-    elif overwrote_existing:
-        print(f"Overwrote: {archive_path}")
+    if existing_archive_text is not None:
+        print(f"Merged: {archive_path}")
     else:
         print(f"Created: {archive_path}")
     return 0
@@ -141,37 +134,47 @@ def resolve_root(root_arg: Optional[str]) -> pathlib.Path:
 
 def normalize_date(value: Optional[str]) -> str:
     if value is None:
-        return dt.date.today().strftime("%Y_%m_%d")
+        return dt.date.today().isoformat()
 
-    normalized = value.replace("-", "_")
+    normalized = value.replace("_", "-")
     try:
-        dt.datetime.strptime(normalized, "%Y_%m_%d")
+        dt.date.fromisoformat(normalized)
     except ValueError:
         raise SystemExit("--date must be YYYY-MM-DD or YYYY_MM_DD")
     return normalized
 
 
-def resolve_archive_path(
-    dated_path: pathlib.Path, archive_date: str, force: bool
-) -> tuple[pathlib.Path, bool]:
-    """Pick the archive file to write and report whether it rolled over.
+def merge_archive_text(existing_text: str, new_text: str) -> str:
+    """Append a newly archived batch, omitting an identical leading H1.
 
-    Default to the date-only file. When it already exists and we are not forcing
-    an in-place overwrite, roll the new batch over to a distinct timestamped
-    sibling (``TODO_UNTIL_<date>_<HHMM>.md``) so the earlier batch is never
-    clobbered. Append a counter on the rare same-minute collision.
+    Daily archives normally begin with the same top-level heading as the source
+    TODO. Keeping it once makes repeated same-day archives read as one document.
+    Other content is intentionally left untouched and batches remain ordered by
+    archive time.
     """
-    if force or not dated_path.exists():
-        return dated_path, False
+    existing_heading = leading_h1(existing_text)
+    new_heading = leading_h1(new_text)
+    if existing_heading is not None and new_heading is not None:
+        existing_line, _ = existing_heading
+        new_line, new_end = new_heading
+        if existing_line == new_line:
+            new_text = new_text[new_end:].lstrip("\r\n")
 
-    stamp = dt.datetime.now().strftime("%H%M")
-    todos_dir = dated_path.parent
-    candidate = todos_dir / f"TODO_UNTIL_{archive_date}_{stamp}.md"
-    counter = 2
-    while candidate.exists():
-        candidate = todos_dir / f"TODO_UNTIL_{archive_date}_{stamp}_{counter}.md"
-        counter += 1
-    return candidate, True
+    return existing_text.rstrip("\r\n") + "\n\n" + new_text.lstrip("\r\n")
+
+
+def leading_h1(text: str) -> Optional[tuple[str, int]]:
+    """Return the first non-blank H1 line and its end offset, if present."""
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        end = offset + len(line)
+        if BLANK_RE.match(line):
+            offset = end
+            continue
+        if re.match(r"^#\s+\S.*(?:\r?\n)?$", line):
+            return line.rstrip("\r\n"), end
+        return None
+    return None
 
 
 def parse_document(lines: Iterable[str]) -> Node:
