@@ -4,9 +4,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Run all dashboard checks: types, tests, build
 @check: tsc-check test build
 
-# Start the Vite development server
+# Start the local dashboard API and Vite development server
 @dev:
-    bun run dev
+    bash -c 'cd ../cli && uv run ai-coord serve & server_pid=$!; trap "kill $server_pid" EXIT; bun run dev'
 
 # Build the production bundle
 @build:

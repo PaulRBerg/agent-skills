@@ -26,7 +26,7 @@ alias ic := install-cli
 
 # Run the local dashboard API and Vite development server
 @dev:
-    bash -c 'cd cli && uv run ai-coord serve & server_pid=$!; trap "kill $server_pid" EXIT; cd dashboard && bun run dev'
+    just dashboard::dev
 alias d := dev
 
 # Run CLI tests with pytest
