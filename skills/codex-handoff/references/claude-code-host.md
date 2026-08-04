@@ -128,6 +128,9 @@ the ten-cell bar. Set the Monitor `timeout_ms` above the wave's largest budget p
 each digest or settlement, post one short wave-status block using those exact facts. If Monitor is unavailable, run the
 same watcher in a foreground command; do not recreate its loop or arithmetic.
 
+Once Monitor is armed, wait for Monitor events. Do not launch Bash sleeps, tail artifacts, poll result or progress
+files, or add any second wait loop. Inspect artifacts only after settlement.
+
 The watcher settles an agent as failed with reason `no-sentinel` once elapsed exceeds its budget plus 120 seconds of
 grace. Silence is never evidence of safety buffering or model rerouting. Keep watching until the wrapper sentinel or
 approved timeout; never cancel, retry, extend, or downgrade because of silence. Report `no recent activity` during quiet
