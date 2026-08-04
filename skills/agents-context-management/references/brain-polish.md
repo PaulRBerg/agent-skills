@@ -22,6 +22,25 @@ move into sibling AGENTS.md.
 If a non-broad request would touch more than a handful of files, switch to dry-run, show the planned targets, and stop
 before writing.
 
+## Context Economy Audit
+
+Before applying the file-specific decisions below, classify each agent-facing target by how it enters context: always
+loaded, inherited through a scope chain, conditional or path-scoped, or independently loaded on demand.
+
+- For every retained block, identify the decision it changes, the mistake it prevents, or the non-discoverable fact it
+  supplies. Remove generic defaults, tutorials, history, inventories, stale rationale, and other prose with no durable
+  behavioral effect.
+- Remove exact and semantic duplication from the same effective load chain. Put shared meaning in the parent and keep a
+  child to its delta or override; do not deduplicate independently loaded artifacts when that would break
+  self-containment.
+- Replace equivalent lists of prohibitions with one positive decision rule. Retain rationale only when it changes how a
+  rule is interpreted, and retain one minimal example only for an exact requirement or an evidenced failure.
+- Route specialized guidance to the deepest existing applicable context or an existing on-demand doc or skill. When no
+  suitable target exists, recommend creation through the `create` workflow instead of creating or moving files here.
+- Preserve authority, safety, material exceptions, semantic completion criteria, exact commands and machine-consumed
+  text, and clarity. Re-read the effective load chain after pruning to ensure no required constraint is orphaned or
+  contradicted.
+
 ## README.md Decisions
 
 Keep README.md useful to humans browsing the repository, package registry, or project page:

@@ -19,32 +19,33 @@ with companion CLAUDE.md symlinks, existing project-installed skills under `.age
 other Markdown files, under any name or directory, whose content is durable guidance for agents or humans, such as
 conventions, command catalogs, data-format rules, workflow runbooks, and reference material.
 
-Success means every selected target is grounded in repository evidence, respects its audience and scope, and passes the
-narrowest repository-defined validation. Stop after reporting completed or planned changes, validation, and any
-blockers.
+Success means every selected target is grounded in repository evidence, respects its audience and scope, spends agent
+context only on guidance that changes behavior, and passes the narrowest repository-defined validation. Stop after
+reporting completed or planned changes, validation, and any blockers.
 
-## Model Optimization
+## Model and Context Optimization
 
 Optimize skills and other agent-facing context for GPT-5.6 and Claude Fable 5 while preserving README.md as clear
-human-facing documentation. The summaries below are reminders, not substitutes for the live guides. Read both guides
+human-facing documentation. Read the live
+[GPT-5.6 prompting guidance](https://developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6) and
+[Claude Fable 5 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5)
 before complex, long-running, multi-tool, or orchestration-heavy context work because their recommendations may evolve.
 
-- [GPT-5.6 prompting guidance](https://developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6): Prefer lean,
-  outcome-first prompts that specify the goal, success and stopping criteria, constraints, evidence, permission
-  boundaries, tool routing, output shape, and validation. Remove redundant scaffolding and evaluate changes on
-  representative tasks.
-- [Claude Fable 5 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5):
-  Use concise instructions that explain intent and boundaries; avoid over-prescription and scope creep; tune effort
-  deliberately; ground progress claims in tool evidence; and make long-run verification and scaffolding explicit when
-  needed.
-
-## Choose the representation
-
-- Preserve goals, decision rules, authority, exceptions, and semantic success criteria as prose.
-- When existing scripts, recipes, schemas, or configuration already enforce mechanics, document only routing, inputs,
-  side effects, outputs, failure signals, and completion evidence.
-- Documentation-only authority does not permit creating or changing helpers or schemas. When none exists, retain
-  accurate prose and report the extraction opportunity instead of deleting guidance or expanding scope.
+- Keep only agent-facing content that changes a decision, prevents an evidenced mistake, or supplies a non-discoverable
+  constraint. Remove generic advice, tutorials, history, inventories, no-op prose, and mechanics already enforced by
+  scripts, recipes, schemas, or configuration.
+- State each meaning once in an effective load chain. Put shared guidance in the parent and keep descendants to deltas
+  or overrides; preserve repetition when artifacts load independently and need to remain self-contained.
+- Use the narrowest reliable load scope: universal guidance inline, path-specific guidance in nested context, and rare
+  procedures in on-demand context docs or skills. Do not hide required guidance behind an unreliable pointer.
+- Prefer one positive decision rule to enumerated prohibitions. Keep one minimal example only when it encodes an exact
+  requirement or corrects a measured failure; keep tool and command descriptions only when routing, inputs, side
+  effects, outputs, or failure signals matter.
+- Preserve authority, safety, material exceptions, semantic success criteria, exact machine-consumed text, and readable
+  prose. Do not shorten human-facing README.md content merely to reduce agent tokens unless that content also enters
+  agent context.
+- Documentation-only authority does not permit creating or changing helpers or schemas. When none exists, retain the
+  smallest accurate prose and report the extraction opportunity instead of expanding scope.
 
 ## Choose a Workflow
 
