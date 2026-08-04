@@ -16,6 +16,7 @@ from ai_coord import __version__
 from ai_coord.coordinator import Coordinator, snapshot_json
 from ai_coord.integrations import default_hook_path, default_link_path, inspect_hooks, link_hooks
 from ai_coord.migration import migrate_legacy
+from ai_coord.server import create_server
 from ai_coord.store import SCHEMA_VERSION, Store
 from ai_coord.util import age_label, private_state_dir
 
@@ -145,6 +146,25 @@ def status(machine_wide: bool, as_json: bool) -> None:
         raise
     except Exception as error:  # noqa: BLE001
         _fail(error)
+
+
+@cli.command()
+@click.option("--port", type=click.IntRange(1, 65535), default=4477, show_default=True)
+@click.option("--host", default="127.0.0.1", show_default=True)
+def serve(host: str, port: int) -> None:
+    """Serve the local dashboard HTTP API."""
+    server: object | None = None
+    try:
+        server = create_server(host, port)
+        click.echo(f"Serving dashboard API at http://{host}:{port}")
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    except Exception as error:  # noqa: BLE001
+        _fail(error)
+    finally:
+        if server is not None:
+            server.server_close()
 
 
 @cli.command()

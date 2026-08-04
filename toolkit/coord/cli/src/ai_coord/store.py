@@ -642,6 +642,19 @@ class Store:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def all_messages(self) -> list[dict[str, Any]]:
+        """Return every message in chronological order for local status consumers."""
+        rows = self.connection.execute(
+            """
+            SELECT
+                id, sender_client, sender_session_id, recipient_client, recipient_session_id,
+                repo_root, text, created_at, acknowledged_at
+            FROM messages
+            ORDER BY created_at, id
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def mark_unnotified(self, identity: Identity) -> int:
         """Mark unread messages as notified without waking coordination waiters."""
         with self.transaction() as connection:
