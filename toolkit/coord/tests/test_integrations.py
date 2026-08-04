@@ -9,14 +9,14 @@ import pytest
 from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
+import ai_coord.integrations as integrations_module
 from ai_coord.integrations import (
-    _read_config,
-    _strip_jsonc,
     default_hook_path,
     default_link_path,
     inspect_hooks,
     link_hooks,
 )
+from ai_coord.jsonc import JsoncDocument
 
 JSON_SCALARS = st.none() | st.booleans() | st.integers() | st.text()
 
@@ -161,6 +161,75 @@ def test_claude_link_supports_modular_jsonc_source(tmp_path: Path) -> None:
     assert not link_hooks("claude", path).changed
 
 
+def test_claude_link_preserves_jsonc_comments_and_unrelated_source(tmp_path: Path) -> None:
+    path = tmp_path / "hooks.jsonc"
+    original = """{
+  // Source-file guidance.
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "description": "keep https://example.test/a//b/*c*/", // inline guidance
+  /* The hook configuration starts below. */
+  "hooks": {
+    // Keep this user-owned group.
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/PostToolUse/plan_claim.py",
+          },
+        ],
+      },
+      // This comment belongs to the neighboring group.
+      {
+        "hooks": [{"type": "command", "command": "clipboard-hook"}],
+      },
+    ],
+    /* Keep this event boundary. */
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "notify-hook"}]},
+    ],
+  },
+  // Keep this unrelated suffix exactly.
+  "other": {"nested": true}, // and its inline comment
+}
+"""
+    path.write_text(original)
+
+    result = link_hooks("claude", path)
+
+    assert result.removed_legacy == 1
+    assert inspect_hooks("claude", path).ok
+    rendered = path.read_text()
+    for unchanged in (
+        '  // Source-file guidance.\n  "$schema": "https://json.schemastore.org/claude-code-settings.json",\n',
+        '  "description": "keep https://example.test/a//b/*c*/", // inline guidance\n',
+        "  /* The hook configuration starts below. */\n",
+        "    // Keep this user-owned group.\n",
+        "      // This comment belongs to the neighboring group.\n",
+        "    /* Keep this event boundary. */\n",
+        '  // Keep this unrelated suffix exactly.\n  "other": {"nested": true}, // and its inline comment\n}\n',
+    ):
+        assert unchanged in rendered
+    assert "plan_claim.py" not in rendered
+    assert "clipboard-hook" in rendered
+    assert "notify-hook" in rendered
+
+
+def test_link_does_not_write_an_idempotent_jsonc_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "hooks.jsonc"
+    path.write_text("{}\n")
+    assert link_hooks("claude", path).changed
+    monkeypatch.setattr(
+        integrations_module,
+        "_write_config",
+        lambda *_args: pytest.fail("idempotent link must not write"),
+    )
+
+    assert not link_hooks("claude", path).changed
+
+
 @settings(
     max_examples=25,
     deadline=None,
@@ -185,12 +254,13 @@ def test_jsonc_parser_preserves_literals_and_accepts_comments_and_trailing_comma
     path = tmp_path / "generated.jsonc"
     path.write_text(text)
 
-    assert _read_config(path) == {
+    document = JsoncDocument.parse(text)
+    assert document.value == {
         "value": value,
         "literal": "https://example.test/a//b/*c*/",
         "items": items,
     }
-    assert _strip_jsonc(text).count("\n") == text.count("\n")
+    assert document.text == text
 
 
 @settings(max_examples=100)
@@ -205,7 +275,7 @@ def test_jsonc_parser_rejects_unterminated_trailing_block_comments(
     text = f"{json.dumps(value)}\n/*{suffix}"
 
     with pytest.raises(json.JSONDecodeError):
-        _strip_jsonc(text)
+        JsoncDocument.parse(text)
 
 
 @settings(

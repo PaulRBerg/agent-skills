@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import stat
@@ -11,6 +10,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from ai_coord.jsonc import ArrayNode, JsoncDocument, ObjectNode
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +65,6 @@ CLAUDE_HOOK_SPECS = (
 class LinkResult:
     path: Path
     changed: bool
-    added: tuple[str, ...]
     removed_legacy: int
 
 
@@ -84,46 +84,48 @@ def link_hooks(
     specs = hook_specs(client)
     if path.exists():
         try:
-            data = _read_config(path)
+            text = path.read_text(encoding="utf-8")
+            if path.suffix.lower() != ".jsonc":
+                json.loads(text)
+            document = JsoncDocument.parse(text)
         except (OSError, UnicodeError, json.JSONDecodeError) as error:
             raise ValueError(f"could not parse {path}: {error}") from error
     else:
-        data = {}
-    if not isinstance(data, dict):
+        document = JsoncDocument.parse("{}")
+    if not isinstance(document.root, ObjectNode):
         raise TypeError(f"{path} must contain a JSON object")
-    original = copy.deepcopy(data)
-    hooks = data.get("hooks")
-    if hooks is None:
-        hooks = {}
-        data["hooks"] = hooks
-    if not isinstance(hooks, dict):
+    original = document.text
+    hooks_member = document.member(document.root, "hooks")
+    if hooks_member is None:
+        document = document.insert_member(document.root, "hooks", {})
+        hooks_member = _hooks_member(document)
+    if not isinstance(hooks_member.value, ObjectNode):
         if not force:
             raise ValueError("hooks field must be an object; pass --force to replace it")
-        hooks = {}
-        data["hooks"] = hooks
+        document = document.replace_value(hooks_member.value, {})
 
-    removed = _remove_stale_owned_commands(hooks, client, specs)
-    added: list[str] = []
+    document, removed = _remove_stale_owned_commands(document, client, specs)
     for spec in specs:
-        if _spec_present(hooks.get(spec.event), spec):
-            added.append(spec.event)
+        hooks = _hooks_object(document)
+        event = document.member(hooks, spec.event)
+        if event is not None and _spec_present(event.value.value, spec):
             continue
-        groups = hooks.get(spec.event)
-        if groups is None:
-            groups = []
-            hooks[spec.event] = groups
-        if not isinstance(groups, list):
+        if event is None:
+            document = document.insert_member(hooks, spec.event, [_group(spec)])
+            continue
+        if not isinstance(event.value, ArrayNode):
             if not force:
                 raise ValueError(f"hooks.{spec.event} must be a list; pass --force to replace it")
-            groups = []
-            hooks[spec.event] = groups
-        groups.append(_group(spec))
-        added.append(spec.event)
+            document = document.replace_value(event.value, [])
+            event = document.member(_hooks_object(document), spec.event)
+            assert event is not None
+        assert isinstance(event.value, ArrayNode)
+        document = document.append_element(event.value, _group(spec))
 
-    changed = data != original
+    changed = document.text != original
     if changed and not dry_run:
-        _write_config(path, data)
-    return LinkResult(path, changed, tuple(added), removed)
+        _write_config(path, document.text)
+    return LinkResult(path, changed, removed)
 
 
 def inspect_hooks(client: str, path: Path) -> HooksCheck:
@@ -185,106 +187,15 @@ def iter_commands(value: Any) -> Iterator[str]:
 
 def _read_config(path: Path) -> Any:
     text = path.read_text(encoding="utf-8")
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        if path.suffix.lower() != ".jsonc":
-            raise
-        return json.loads(_strip_jsonc(text))
+    if path.suffix.lower() == ".jsonc":
+        return JsoncDocument.parse(text).value
+    return json.loads(text)
 
 
-def _strip_jsonc(text: str) -> str:
-    """Return `text` without JSONC comments and trailing commas.
-
-    Both passes keep every newline so that decoder errors still point at the source line.
-    Comments are stripped first because a trailing comma may be separated from its closing
-    bracket by a comment.
-    """
-    without_comments: list[str] = []
-    index = 0
-    in_string = False
-    escaped = False
-    while index < len(text):
-        character = text[index]
-        if in_string:
-            without_comments.append(character)
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == '"':
-                in_string = False
-            index += 1
-            continue
-        if character == '"':
-            in_string = True
-            without_comments.append(character)
-            index += 1
-            continue
-        next_character = text[index + 1] if index + 1 < len(text) else ""
-        if character == "/" and next_character == "/":
-            index += 2
-            while index < len(text) and text[index] not in "\r\n":
-                index += 1
-            continue
-        if character == "/" and next_character == "*":
-            comment_start = index
-            index += 2
-            while index + 1 < len(text) and text[index : index + 2] != "*/":
-                if text[index] in "\r\n":
-                    without_comments.append(text[index])
-                index += 1
-            if index + 1 >= len(text):
-                raise json.JSONDecodeError("Unterminated block comment", text, comment_start)
-            index += 2
-            continue
-        without_comments.append(character)
-        index += 1
-
-    uncommented = "".join(without_comments)
-    without_trailing_commas: list[str] = []
-    index = 0
-    in_string = False
-    escaped = False
-    while index < len(uncommented):
-        character = uncommented[index]
-        if in_string:
-            without_trailing_commas.append(character)
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == '"':
-                in_string = False
-            index += 1
-            continue
-        if character == '"':
-            in_string = True
-            without_trailing_commas.append(character)
-            index += 1
-            continue
-        if character == ",":
-            lookahead = index + 1
-            while lookahead < len(uncommented) and uncommented[lookahead].isspace():
-                lookahead += 1
-            if lookahead < len(uncommented) and uncommented[lookahead] in "}]":
-                index += 1
-                continue
-        without_trailing_commas.append(character)
-        index += 1
-    return "".join(without_trailing_commas)
-
-
-def _write_config(path: Path, data: dict[str, Any]) -> None:
+def _write_config(path: Path, text: str) -> None:
     target = path.resolve(strict=False) if path.is_symlink() else path
     target.parent.mkdir(parents=True, exist_ok=True)
     mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o600
-    comments = (
-        _object_header_comments(target.read_text(encoding="utf-8")) if target.exists() else ()
-    )
-    rendered = json.dumps(data, indent=2).splitlines()
-    if target.suffix.lower() == ".jsonc" and comments and rendered[0] == "{":
-        rendered[1:1] = comments
     descriptor, temporary_name = tempfile.mkstemp(
         dir=target.parent,
         prefix=f".{target.name}.",
@@ -293,27 +204,13 @@ def _write_config(path: Path, data: dict[str, Any]) -> None:
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-            file.write("\n".join(rendered) + "\n")
+            file.write(text)
             file.flush()
             os.fsync(file.fileno())
         temporary.chmod(mode)
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def _object_header_comments(text: str) -> tuple[str, ...]:
-    lines = text.splitlines()
-    opening = next((index for index, line in enumerate(lines) if line.strip()), None)
-    if opening is None or lines[opening].strip() != "{":
-        return ()
-    comments: list[str] = []
-    for line in lines[opening + 1 :]:
-        if line.lstrip().startswith("//"):
-            comments.append(line)
-            continue
-        break
-    return tuple(comments)
 
 
 def _group(spec: HookSpec) -> dict[str, Any]:
@@ -336,43 +233,87 @@ def _group(spec: HookSpec) -> dict[str, Any]:
 
 
 def _remove_stale_owned_commands(
-    hooks: dict[str, Any], client: str, specs: tuple[HookSpec, ...]
-) -> int:
+    document: JsoncDocument, client: str, specs: tuple[HookSpec, ...]
+) -> tuple[JsoncDocument, int]:
     owned_commands = {f"ai-coord hook {client}", f"ai-coord waker {client}"}
     removed_legacy = 0
     preserved: set[HookSpec] = set()
-    for event, groups in list(hooks.items()):
-        if not isinstance(groups, list):
-            continue
-        kept_groups: list[Any] = []
-        for group in groups:
-            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
-                kept_groups.append(group)
+    while True:
+        hooks = _hooks_object(document)
+        removed = False
+        for event in hooks.members:
+            if not isinstance(event.value, ArrayNode):
                 continue
-            handlers: list[Any] = []
-            for handler in group["hooks"]:
-                command = handler.get("command") if isinstance(handler, dict) else None
-                if not isinstance(command, str):
-                    handlers.append(handler)
+            for group_index, group_element in enumerate(event.value.elements):
+                if not isinstance(group_element.value, ObjectNode):
                     continue
-                if _is_legacy(command, client):
-                    removed_legacy += 1
+                handlers_member = document.member(group_element.value, "hooks")
+                if handlers_member is None or not isinstance(handlers_member.value, ArrayNode):
                     continue
-                if command.strip() in owned_commands:
-                    matching = _matching_spec(event, group, handler, specs)
-                    if matching is None or matching in preserved:
+                for handler_index, handler_element in enumerate(handlers_member.value.elements):
+                    handler = handler_element.value.value
+                    command = handler.get("command") if isinstance(handler, dict) else None
+                    if not isinstance(command, str):
                         continue
-                    preserved.add(matching)
-                handlers.append(handler)
-            if handlers:
-                updated = dict(group)
-                updated["hooks"] = handlers
-                kept_groups.append(updated)
-        if kept_groups:
-            hooks[event] = kept_groups
-        else:
-            hooks.pop(event, None)
-    return removed_legacy
+                    legacy = _is_legacy(command, client)
+                    matching = (
+                        _matching_spec(event.key, group_element.value.value, handler, specs)
+                        if command.strip() in owned_commands
+                        else None
+                    )
+                    if not legacy and (matching is not None and matching not in preserved):
+                        preserved.add(matching)
+                        continue
+                    if not legacy and command.strip() not in owned_commands:
+                        continue
+                    if legacy:
+                        removed_legacy += 1
+                    document = document.remove_element(handlers_member.value, handler_index)
+                    document = _prune_empty_group(document, event.key, group_index)
+                    removed = True
+                    break
+                if removed:
+                    break
+            if removed:
+                break
+        if not removed:
+            return document, removed_legacy
+
+
+def _hooks_member(document: JsoncDocument):
+    assert isinstance(document.root, ObjectNode)
+    member = document.member(document.root, "hooks")
+    assert member is not None
+    return member
+
+
+def _hooks_object(document: JsoncDocument) -> ObjectNode:
+    member = _hooks_member(document)
+    assert isinstance(member.value, ObjectNode)
+    return member.value
+
+
+def _prune_empty_group(document: JsoncDocument, event_name: str, group_index: int) -> JsoncDocument:
+    hooks = _hooks_object(document)
+    event_index = next(
+        index for index, member in enumerate(hooks.members) if member.key == event_name
+    )
+    event = hooks.members[event_index]
+    assert isinstance(event.value, ArrayNode)
+    group = event.value.elements[group_index]
+    if not isinstance(group.value, ObjectNode):
+        return document
+    handlers = document.member(group.value, "hooks")
+    if handlers is None or not isinstance(handlers.value, ArrayNode) or handlers.value.elements:
+        return document
+    document = document.remove_element(event.value, group_index)
+    hooks = _hooks_object(document)
+    event_index = next(
+        index for index, member in enumerate(hooks.members) if member.key == event_name
+    )
+    event = hooks.members[event_index]
+    assert isinstance(event.value, ArrayNode)
+    return document.remove_member(hooks, event_index) if not event.value.elements else document
 
 
 def _matching_spec(
