@@ -75,8 +75,6 @@ If `prettier-check` fails, analyze the errors and fix only files you changed.
 - `just commit-paths-test` - exercise isolated-index atomic commits, hooks, case-only renames, and shared-index
   reconciliation.
 - `just hooks-install` - install Husky hooks for this checkout through the pinned local binary.
-- `just sync` - rough fallback that commits and pushes staged changes, performs a catalog-wide reinstall into
-  `~/.agents` and `~/.claude`, then commits and pushes `~/.agents`.
 
 `package.json` exists only for local formatting and hook wiring; there is no build step. Treat Markdown formatting,
 invocation metadata checks, and skill-specific helper scripts as the verification surface unless a task introduces a
@@ -94,7 +92,7 @@ narrower check.
   overlaps the current session's active claim, do not run this step. Commit and release the claim promptly; the promoted
   follow-on agent will publish the accumulated changes automatically. Otherwise, if the task was super complex or the
   working tree has ongoing dirty changes, recommend `@publish-skills` instead. The agent must make the complexity
-  assessment. Use `just sync` only as a rough fallback when surgical, range-scoped propagation is unavailable.
+  assessment.
 - When an installable catalog skill is added or removed, update the skills table in `README.md`.
 - Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under
   `skills/`. Do not add them to `README.md`, do not create `agents/openai.yaml`, and do not treat them as installable

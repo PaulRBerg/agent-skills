@@ -70,7 +70,7 @@ cd "$HOME/.agents"
 ```
 
 Run only the nonempty command groups below. Substitute the recorded names for the illustrative names; never use `*`,
-`--all`, `skills update`, `just install-all`, or `just sync`.
+`--all`, `skills update`, or `just install-all`.
 
 First remove every deleted skill and every surviving affected skill with a restricted target. Removing restricted skills
 before reinstalling clears stale universal or opposite-client installations.
