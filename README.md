@@ -48,7 +48,7 @@ bunx skills add PaulRBerg/agent-skills
 | skill-doctor              | Audit Agent Skills catalogs and installed skill roots                    |
 | skill-map                 | Find skill dependencies and references across machine                    |
 | spreadsheets              | Opinionated CSV/TSV/XLSX wrangling on macOS                              |
-| stale-comments-audit      | Verify stale comments in JavaScript, TypeScript, and Go                  |
+| stale-comments-audit      | Audit and fix stale comments in JavaScript, TypeScript, and Go           |
 | tailwind-css              | Tailwind CSS v4 styling guidance                                         |
 | task-handoff              | Create single- or multi-repository Codex task handoff plans              |
 | todo-archive              | Archive checked TODO.md tasks into .ai/todos                             |

@@ -1,21 +1,15 @@
 ---
-agent: Plan
 argument-hint: "[path ...]"
-context: fork
-coordination: exempt
 name: stale-comments-audit
 user-invocable: true
 description:
-  Audit JavaScript, TypeScript, and Go comments for verified stale, orphaned, misleading, or redundant claims.
+  Audit and fix JavaScript, TypeScript, and Go comments that are verified as stale, orphaned, misleading, or redundant.
 ---
 
 # Stale Comments Audit
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
-skill's own work.
-
-Audit source comments against the code they describe. Report only confirmed mismatches and noise; never edit files. When
-the user requests fixes, return the verified findings for a separate writable follow-up.
+Audit source comments against the code they describe, then fix every confirmed mismatch or source of noise in the same
+run. Limit edits to comments; never change executable code merely to make a comment true.
 
 ## Scope
 
@@ -63,28 +57,44 @@ Treat these as part of program behavior or required documentation, not ordinary 
 Verify these against Go syntax, symbol use, and tooling semantics. Never mark one redundant merely because the adjacent
 declaration is obvious.
 
-## Verification
+## Fix and Verify
 
-Aggregate and deduplicate candidate findings, then reopen every reported location. Confirm its current line number and
+Aggregate and deduplicate candidate findings, then reopen every candidate location. Confirm its current line number and
 the implementation evidence that makes the comment wrong or unnecessary. Drop findings that cannot be verified. A clean
 result is valid and should not be padded with low-confidence observations.
+
+Apply the smallest comment-only fix for every confirmed finding:
+
+- `STALE` and `MISLEADING`: rewrite the comment when the intended claim is proven; otherwise remove it when the code
+  needs no replacement explanation.
+- `ORPHANED`: update the reference only when its replacement is verified; otherwise remove the obsolete reference or
+  comment.
+- `REDUNDANT`: remove the comment without reformatting unrelated code.
+
+For behavior-bearing Go comments, edit only when the intended compiler, tool, documentation, or concurrency semantics
+are proven. If the safe correction is ambiguous, leave the comment unchanged and report it as not fixed. Never delegate
+writes; apply all fixes in the main execution context after consolidating the read-only analysis.
+
+Reopen every changed location and confirm the resulting comment agrees with the implementation. Run the narrowest
+formatter, lint, typecheck, test, build, or Go tooling that proves the edited files remain valid. Behavior-bearing Go
+comment changes require the relevant Go validation; ordinary prose-only changes do not require unrelated broad tests.
 
 ## Report
 
 Return:
 
 ```markdown
-### 🔎 Stale-comments audit — <finding count or clean>
+### ✅ Comments fixed — <fixed count>
 
-| Scope   | Files analyzed | Confirmed | Not reviewed    |
-| ------- | -------------- | --------- | --------------- |
-| <paths> | <count>        | <count>   | <count or none> |
+| Scope   | Files analyzed | Confirmed | Fixed   | Not fixed       | Not reviewed    |
+| ------- | -------------- | --------- | ------- | --------------- | --------------- |
+| <paths> | <count>        | <count>   | <count> | <count or none> | <count or none> |
 
-### Findings
+### 🔧 Fixes
 
 #### STALE
 
-- path/to/file.ts:42 — <comment claim, contradictory evidence, and why it matters>
+- path/to/file.ts:42 — <previous claim, contradictory evidence, and applied fix>
 
 #### ORPHANED
 
@@ -92,13 +102,23 @@ Return:
 
 #### REDUNDANT
 
+### 🧪 Verification
+
+- `<command>` — <result>
+
+### ⚠️ Not fixed
+
+- path/to/file.go:42 — <classification, evidence, and why a safe correction is ambiguous>
+
 ### ⚠️ Not reviewed
 
 - <path and reason>
 ```
 
-Omit empty category and not-reviewed sections. When no findings remain and every file was reviewed, lead with
-`### ✅ Clean — no confirmed stale, orphaned, misleading, or redundant comments`. If files were not reviewed, lead with
-`### ⚠️ Review incomplete — no confirmed findings in reviewed scope` instead. Keep classifier tokens, paths, line
-numbers, directives, and quoted comment text exact and undecorated. Completion requires the exact scope, analyzed-file
-count, confirmed findings with current lines and evidence, and any files that could not be reviewed.
+Omit empty category, not-fixed, and not-reviewed sections. When no findings remain and every file was reviewed, lead
+with `### ✅ Clean — no confirmed stale, orphaned, misleading, or redundant comments`. If files were not reviewed, lead
+with `### ⚠️ Review incomplete — no confirmed findings in reviewed scope` instead. When any confirmed finding could not
+be fixed safely, lead with `### ⚠️ Comments partially fixed — <fixed count> fixed, <not-fixed count> not fixed`. Keep
+classifier tokens, paths, line numbers, commands, directives, and quoted comment text exact and undecorated. Completion
+requires the exact scope, analyzed-file count, confirmed and fixed counts, traceable fixes, validation evidence, and any
+files or findings that could not be completed.
