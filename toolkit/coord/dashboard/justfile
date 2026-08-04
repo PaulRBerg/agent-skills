@@ -1,0 +1,29 @@
+# See https://just.systems/man/en/settings.html
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+# Run all dashboard checks: types, tests, build
+@check: tsc-check test build
+
+# Start the Vite development server
+@dev:
+    bun run dev
+
+# Build the production bundle
+@build:
+    bun run build
+
+# Preview the production build
+@preview:
+    bun run preview
+
+# Install dependencies with Bun
+@install:
+    bun install
+
+# Run tests with Vitest
+@test:
+    bun run test
+
+# Check types with tsc
+@tsc-check:
+    bunx tsc --noEmit

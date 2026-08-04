@@ -5,6 +5,16 @@ set default-list := true
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # ---------------------------------------------------------------------------- #
+#                                   PACKAGES                                   #
+# ---------------------------------------------------------------------------- #
+
+# Python CLI package recipes
+mod cli
+
+# Vite dashboard package recipes
+mod dashboard
+
+# ---------------------------------------------------------------------------- #
 #                                   COMMANDS                                   #
 # ---------------------------------------------------------------------------- #
 
@@ -19,9 +29,9 @@ alias ic := install-cli
     bash -c 'cd cli && uv run ai-coord serve & server_pid=$!; trap "kill $server_pid" EXIT; cd dashboard && bun run dev'
 alias d := dev
 
-# Run tests with pytest
+# Run CLI tests with pytest
 @test *args:
-    cd cli && uv run pytest {{ args }}
+    just cli::test {{ args }}
 alias t := test
 
 # ---------------------------------------------------------------------------- #
@@ -32,7 +42,9 @@ alias t := test
 [group("checks")]
 @check:
     just _run-with-status full-check
-    just _run-with-status test
+    just _run-with-status cli::test
+    just _run-with-status dashboard::test
+    just _run-with-status dashboard::build
     echo ""
     echo -e '{{ GREEN }}All local checks passed!{{ NORMAL }}'
 alias c := check
@@ -41,8 +53,9 @@ alias c := check
 [group("checks")]
 @full-check:
     just _run-with-status prettier-check
-    just _run-with-status ruff-check
-    just _run-with-status pyright-check
+    just _run-with-status cli::ruff-check
+    just _run-with-status cli::pyright-check
+    just _run-with-status dashboard::tsc-check
     echo ""
     echo -e '{{ GREEN }}All code checks passed!{{ NORMAL }}'
 alias fc := full-check
@@ -51,42 +64,26 @@ alias fc := full-check
 [group("checks")]
 @full-write:
     just _run-with-status prettier-write
-    just _run-with-status ruff-write
+    just _run-with-status cli::ruff-write
     echo ""
     echo -e '{{ GREEN }}All code fixes applied!{{ NORMAL }}'
 alias fw := full-write
 
-# Check Python formatting and linting with Ruff
-[group("checks")]
-@ruff-check:
-    cd cli && uv run ruff check .
-    cd cli && uv run ruff format --check .
-alias rc := ruff-check
-
-# Auto-fix Python formatting and linting with Ruff
-[group("checks")]
-@ruff-write:
-    cd cli && uv run ruff check --fix .
-    cd cli && uv run ruff format .
-alias rw := ruff-write
-
-# Check types with Pyright
-[group("checks")]
-@pyright-check:
-    cd cli && PYRIGHT_PYTHON_IGNORE_WARNINGS=1 uv run pyright
-alias pyc := pyright-check
-
-# Check Markdown and JSON formatting with Prettier
+# Check Markdown, JSON, and dashboard source formatting with Prettier
 [group("checks")]
 @prettier-check:
     npx prettier --check "**/*.{json,jsonc,md,ts,tsx,css}"
 alias pc := prettier-check
 
-# Format Markdown and JSON with Prettier
+# Format Markdown, JSON, and dashboard sources with Prettier
 [group("checks")]
 @prettier-write:
     npx prettier --write --log-level warn "**/*.{json,jsonc,md,ts,tsx,css}"
 alias pw := prettier-write
+
+alias rc := cli::ruff-check
+alias rw := cli::ruff-write
+alias pyc := cli::pyright-check
 
 # ---------------------------------------------------------------------------- #
 #                                   UTILITIES                                  #

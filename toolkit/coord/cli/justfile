@@ -1,0 +1,23 @@
+# See https://just.systems/man/en/settings.html
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+# Run all CLI checks and tests
+@check: ruff-check pyright-check test
+
+# Run tests with pytest
+@test *args:
+    uv run pytest {{ args }}
+
+# Check Python formatting and linting with Ruff
+@ruff-check:
+    uv run ruff check .
+    uv run ruff format --check .
+
+# Auto-fix Python formatting and linting with Ruff
+@ruff-write:
+    uv run ruff check --fix .
+    uv run ruff format .
+
+# Check types with Pyright
+@pyright-check:
+    PYRIGHT_PYTHON_IGNORE_WARNINGS=1 uv run pyright
