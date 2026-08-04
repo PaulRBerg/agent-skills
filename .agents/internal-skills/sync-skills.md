@@ -69,19 +69,26 @@ identical, adjusted only for the agent noun and runtime:
   delegated agents treat the orchestrating session's presence as authorization for their assigned work.
 - Platform-agnostic agent prompt requirements: outcome plus brief, exact write scope and dirty-work boundaries,
   validation assignment, authority boundary, delegation context, stopping rule, and reporting requirement.
+- The structured result-field contract: status, summary, changed files, verification with each command and outcome,
+  residual risks, and blockers.
+- Failure classification: a returned blocked status is a plan problem that gates dependents and requires user decision;
+  an evidenced tool or infrastructure failure permits exactly one same-agent continuation after inspecting partial
+  edits, and a second infrastructure failure blocks. The continuation mechanics are platform-specific.
 - Completion rules: success verification, dependent gating on failure, changed-files union dedupe, polish invocation and
   skip conditions, and cross-repository `$commit` behavior.
 
 Treat these as out of scope unless the request explicitly names them:
 
 - Launch mechanics: `run-codex-handoff.sh` and its artifacts vs Agent-tool calls.
+- Same-agent continuation mechanics: the Codex runner's `--resume` vs Claude Code's SendMessage tool.
 - Research mechanics: codex-handoff's `--read-only` runner, per-agent artifacts, and research result schema vs
   claude-handoff's Explore subagent type and native result flow.
 - Codex-only content: effort and timeout selection, progress streams, Monitor guidance, sentinel handling, and Codex
   command conventions.
 - Each skill's model selection table and its rules about escalating or re-running a failed agent on another model. Both
   skills have a selection table, but they are intentionally different — Codex tiers model, effort, and timeout together,
-  while Claude selects only between two model aliases — so never normalize them to each other.
+  while Claude selects among three model aliases (`haiku`, `sonnet`, and `opus`) — so never normalize them to each
+  other.
 - Status reporting: codex-handoff's dashboard system vs claude-handoff's concise prose summary.
 - Frontmatter and `references/`/`scripts/` contents.
 
