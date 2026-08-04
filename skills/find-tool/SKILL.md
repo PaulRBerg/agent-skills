@@ -1,4 +1,5 @@
 ---
+coordination: exempt
 disable-model-invocation: false
 name: find-tool
 user-invocable: true
@@ -8,6 +9,9 @@ description:
 ---
 
 # Find Tool
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 Recommend the current option that best fits the user's actual constraints, backed by fresh primary evidence.
 

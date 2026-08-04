@@ -1,4 +1,5 @@
 ---
+coordination: exempt
 name: grill-me
 description:
   Interview the user relentlessly about a plan or design until every branch of the decision tree has an explicit
@@ -7,6 +8,9 @@ description:
 ---
 
 # Grill Me
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 Stress-test the plan one decision at a time until every material branch is resolved.
 

@@ -213,3 +213,23 @@ When `context: fork` is set, `agent` selects the subagent type.
 | `Explore`     | Read-only tools optimized for codebase exploration |
 | `Plan`        | Read-only tools for implementation plans           |
 | Custom agent  | Any subagent defined in `.claude/agents/`          |
+
+### Coordination Exemption
+
+`coordination: exempt` is a repository-specific field, not a Claude Code or Codex feature: the agent reads it from the
+skill body at invocation time, and the global agent instructions define its meaning.
+
+Set it only for skills that can never write repository files: pure read-only or reporting skills, skills that write only
+external or out-of-repository state (GitHub, Notion, on-chain), or repository-local metadata-only skills such as
+`task-handoff`. Skills that edit repository files must not set it.
+
+An exempt skill skips the ai-coord coordination gate (`git status` / `agents-status` / `ai-coord start`) for its own
+work. Pair the field with one standard body sentence near the top of the skill so the executing agent sees the exemption
+without consulting the frontmatter:
+
+```markdown
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
+```
+
+If a skill's work escalates beyond its declared write behavior, the gate applies again.

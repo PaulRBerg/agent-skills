@@ -1,5 +1,6 @@
 ---
 argument-hint: <task>
+coordination: exempt
 disable-model-invocation: false
 name: agents-introspection
 user-invocable: true
@@ -8,6 +9,9 @@ description:
 ---
 
 # Agents Introspection
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.

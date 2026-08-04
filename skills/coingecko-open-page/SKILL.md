@@ -1,5 +1,6 @@
 ---
 argument-hint: <coin-id> <date>
+coordination: exempt
 disable-model-invocation: true
 effort: low
 model: sonnet
@@ -9,6 +10,9 @@ description: Open the CoinGecko historical-data page for a coin/date in Chromium
 ---
 
 # CoinGecko Historical
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.

@@ -197,6 +197,10 @@ Write `<scope>/.agents/skills/<name>/SKILL.md` with:
 - A one-line summary of what the skill does.
 - `disable-model-invocation` and `user-invocable` fields set for Claude behavior. Omit only when intentionally relying
   on Claude defaults: `disable-model-invocation: false`, `user-invocable: true`.
+- Set `coordination: exempt` only for skills that can never write repository files: pure read-only or reporting skills,
+  skills that write only external or out-of-repository state, or repository-local metadata-only skills such as
+  `task-handoff`. This field skips the ai-coord gate for the skill's own work. New skills that edit repository files
+  must not set it.
 - `## Arguments` (if any) and a lean imperative workflow. Use fixed steps only when order matters; otherwise state the
   contract and let repository evidence guide execution.
 - Explicit links to every `references/` file the workflow may need, each with a one-line note describing _when_ to read

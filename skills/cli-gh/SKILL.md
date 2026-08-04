@@ -1,4 +1,5 @@
 ---
+coordination: exempt
 disable-model-invocation: false
 name: cli-gh
 user-invocable: false
@@ -8,6 +9,9 @@ description:
 ---
 
 # GitHub CLI
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 Route GitHub CLI work through current `gh` help and load only the reference for the active task.
 

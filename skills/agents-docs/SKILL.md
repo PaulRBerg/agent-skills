@@ -1,5 +1,6 @@
 ---
 compatibility: Requires network access and a URL-capable web fetch or curl.
+coordination: exempt
 disable-model-invocation: false
 name: agents-docs
 user-invocable: true
@@ -10,6 +11,9 @@ description: >-
 ---
 
 # Agents Docs
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 Answer Codex and Claude Code product questions from the narrowest relevant live official documentation.
 

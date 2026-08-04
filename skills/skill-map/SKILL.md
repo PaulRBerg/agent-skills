@@ -2,6 +2,7 @@
 argument-hint:
   "[--skill NAME] [--root PATH] [--format text|json|dot] [--include-catalog-sources] [--include-self]
   [--include-snippets] [--show-skipped]"
+coordination: exempt
 disable-model-invocation: false
 name: skill-map
 user-invocable: true
@@ -11,6 +12,9 @@ description:
 ---
 
 # Skill Map
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 Find skill installs and references across local files without scanning macOS protected home paths or obvious transcript,
 cache, dependency, and backup noise.

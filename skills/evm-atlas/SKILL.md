@@ -1,6 +1,7 @@
 ---
 argument-hint: "<chain-name-or-id|address|transaction-hash|order-id>"
 compatibility: Requires the `routemesh` CLI initialized on macOS with `routemesh init` for RouteMesh requests.
+coordination: exempt
 disable-model-invocation: false
 name: evm-atlas
 user-invocable: true
@@ -14,6 +15,9 @@ description:
 ---
 
 # EVM Atlas
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 Resolve and query only the target mainnets in `references/generated/target-mainnets.json`, under a strict read-only
 boundary.

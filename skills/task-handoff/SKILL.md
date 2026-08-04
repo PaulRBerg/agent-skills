@@ -3,6 +3,7 @@ argument-hint: "[task-to-handoff]"
 compatibility:
   Requires Bash 3.2, Git, local file-write access, and macOS pbcopy, pbpaste, and trash. The generated launch command
   requires an authenticated Codex CLI.
+coordination: exempt
 disable-model-invocation: true
 name: task-handoff
 user-invocable: true
@@ -12,6 +13,9 @@ description:
 ---
 
 # Task Handoff
+
+This skill is coordination-exempt: skip the ai-coord gate (`git status` / `agents-status` / `ai-coord start`) for this
+skill's own work.
 
 If these instructions are already present from a slash or dollar invocation, follow them directly; do not invoke this
 skill again through a skill tool.
