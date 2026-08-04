@@ -10,13 +10,13 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Install CLI globally and link host hooks
 @install-cli:
-    uv tool install --force .
+    uv tool install --force ./cli
     ai-coord link all
 alias ic := install-cli
 
 # Run tests with pytest
 @test *args:
-    uv run pytest {{ args }}
+    cd cli && uv run pytest {{ args }}
 alias t := test
 
 # ---------------------------------------------------------------------------- #
@@ -54,33 +54,33 @@ alias fw := full-write
 # Check Python formatting and linting with Ruff
 [group("checks")]
 @ruff-check:
-    uv run ruff check .
-    uv run ruff format --check .
+    cd cli && uv run ruff check .
+    cd cli && uv run ruff format --check .
 alias rc := ruff-check
 
 # Auto-fix Python formatting and linting with Ruff
 [group("checks")]
 @ruff-write:
-    uv run ruff check --fix .
-    uv run ruff format .
+    cd cli && uv run ruff check --fix .
+    cd cli && uv run ruff format .
 alias rw := ruff-write
 
 # Check types with Pyright
 [group("checks")]
 @pyright-check:
-    PYRIGHT_PYTHON_IGNORE_WARNINGS=1 uv run pyright
+    cd cli && PYRIGHT_PYTHON_IGNORE_WARNINGS=1 uv run pyright
 alias pyc := pyright-check
 
 # Check Markdown and JSON formatting with Prettier
 [group("checks")]
 @prettier-check:
-    npx prettier --check "**/*.{json,jsonc,md}"
+    npx prettier --check "**/*.{json,jsonc,md,ts,tsx,css}"
 alias pc := prettier-check
 
 # Format Markdown and JSON with Prettier
 [group("checks")]
 @prettier-write:
-    npx prettier --write --log-level warn "**/*.{json,jsonc,md}"
+    npx prettier --write --log-level warn "**/*.{json,jsonc,md,ts,tsx,css}"
 alias pw := prettier-write
 
 # ---------------------------------------------------------------------------- #
