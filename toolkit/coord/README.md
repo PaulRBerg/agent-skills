@@ -10,6 +10,15 @@ ai-coord wait
 ai-coord done
 ```
 
+## Repository layout
+
+```
+.
+├── cli/        Python `ai-coord` CLI, hooks, ledger, and local dashboard API
+├── dashboard/  Bun-managed Vite and React live coordination dashboard
+└── justfile    Shared development recipes
+```
+
 The coordinator is cooperative rather than an OS lock. It uses a private local SQLite ledger and fails closed when it
 cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
 proceed with a stale-dirt advisory and a captured baseline.
@@ -146,7 +155,7 @@ conservative queued blockers until released or expired. The importer never remov
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
-mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v3;
+mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v4;
 opening an older ledger upgrades it one way, while the public `status --json` schema remains v1.
 
 The ledger stores bounded session metadata, labels, literal scopes, messages, and notes. It never stores prompt bodies,
@@ -161,9 +170,33 @@ hours.
 ## Development
 
 ```sh
+cd cli
 uv sync --extra dev --locked
+uv run ai-coord --help
+cd ..
 just check
 just install-cli
 ```
 
-Validation runs locally on macOS. `just check` runs formatting, linting, type checks, and the full test suite.
+Validation runs locally on macOS. `just check` runs formatting, linting, type checks, and the full test suite. The root
+`justfile` also provides `just full-check`, `just full-write`, `just test`, `just prettier-check`, and
+`just prettier-write`.
+
+## Dashboard
+
+The dashboard shows the machine-wide live coordination snapshot: sessions and claims grouped by repository, plus
+messages and notes. Run both local servers from the repository root:
+
+```sh
+just dev
+```
+
+Or run the API and Vite server separately:
+
+```sh
+cd cli && uv run ai-coord serve
+cd dashboard && bun run dev
+```
+
+`ai-coord serve` listens on `127.0.0.1:4477` by default. Vite proxies `/api` requests to that address, so the dashboard
+development server can use its own origin.

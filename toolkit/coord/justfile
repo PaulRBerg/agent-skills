@@ -14,6 +14,11 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
     ai-coord link all
 alias ic := install-cli
 
+# Run the local dashboard API and Vite development server
+@dev:
+    bash -c 'cd cli && uv run ai-coord serve & server_pid=$!; trap "kill $server_pid" EXIT; cd dashboard && bun run dev'
+alias d := dev
+
 # Run tests with pytest
 @test *args:
     cd cli && uv run pytest {{ args }}
