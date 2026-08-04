@@ -9,7 +9,7 @@ from hypothesis import strategies as st
 
 from ai_coord.coordinator import Coordinator
 from ai_coord.identity import Identity
-from ai_coord.migration import migrate_legacy
+from ai_coord.migration import _timestamp, migrate_legacy
 from ai_coord.providers import StaticInventory
 from ai_coord.store import Store
 
@@ -134,6 +134,12 @@ def test_migration_dry_run_and_legacy_glob_does_not_block_literal_claims(
     monkeypatch.setenv("AI_COORD_SESSION_ID", "new-session")
     outcome = Coordinator(store, StaticInventory()).start("new work", ("docs",), cwd=git_repo)
     assert outcome.kind == "READY"
+
+
+def test_timestamp_treats_naive_legacy_iso_values_as_utc() -> None:
+    naive = "2026-08-02T13:02:29.282"
+
+    assert _timestamp(naive) == _timestamp(f"{naive}Z")
 
 
 @settings(

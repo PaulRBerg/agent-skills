@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -275,7 +275,10 @@ def _timestamp(value: Any, *, required: bool = True) -> float | None:
         timestamp = float(value)
     elif isinstance(value, str) and value:
         try:
-            timestamp = datetime.fromisoformat(value).timestamp()
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            timestamp = parsed.timestamp()
         except (OSError, OverflowError, ValueError):
             pass
     if timestamp is not None and math.isfinite(timestamp):
