@@ -12,7 +12,7 @@ from click.testing import CliRunner
 
 import ai_coord.cli as cli_module
 import ai_coord.coordinator as coordinator_module
-from ai_coord.coordinator import DIRT_HOLD_SECONDS, Coordinator
+from ai_coord.coordinator import DIRT_HOLD_SECONDS, Coordinator, StatusSnapshot
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import InventoryResult, StaticInventory
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
@@ -650,6 +650,51 @@ def test_messages_notes_status_and_trailer(
     assert snapshot.notes[0]["id"] == note_id
     assert coordinator.resolve_note(note_id, cwd=git_repo)
     assert coordinator.trailer() == "Agent-Session: claude/target-session"
+
+
+def test_status_legend_is_contextual(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    current = 10_000.0
+    monkeypatch.setattr(coordinator_module, "now_ts", lambda: current)
+    provider = {"client": "codex", "enabled": True, "ok": True, "dropped": 0}
+    base = {
+        "complete": True,
+        "scope": {"kind": "repo", "repo_root": "/repo"},
+        "self_identity": None,
+        "claims": (),
+        "notes": (),
+        "delegates": (),
+        "outside_scope": {"sessions": 0, "directories": 0},
+    }
+    quiet = coordinator.render_status(StatusSnapshot(sessions=(), providers=(provider,), **base))
+    assert quiet.splitlines()[0] == "CLIENT\tSTATE\tAGE\tCALLSIGN\tNAME/LABEL\tSESSION\tCWD\tDETAIL"
+    assert "Names/labels are hints" in quiet
+    for line in ("Idle =", "Waiting =", "Working/in_flight", "Partial coverage"):
+        assert line not in quiet
+
+    sessions = tuple(
+        {
+            "client": "codex",
+            "state": state,
+            "last_seen": seen,
+            "session_id": state,
+            "cwd": "/repo",
+            "callsign": None,
+        }
+        for state, seen in (("idle", current), ("waiting", current), ("working", current - 1801))
+    )
+    partial = dict(provider, enabled=False)
+    rendered = coordinator.render_status(
+        StatusSnapshot(sessions=sessions, providers=(partial,), **base)
+    )
+    for line in (
+        "Idle =",
+        "Waiting =",
+        "Working/in_flight",
+        "Names/labels are hints",
+        "Partial coverage",
+    ):
+        assert line in rendered
 
 
 def test_message_target_resolution_precedence_and_fuzzy_fields(tmp_path: Path) -> None:

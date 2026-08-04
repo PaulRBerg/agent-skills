@@ -580,6 +580,46 @@ class Coordinator:
                     f"{prefix}{note['id']}  {age_label(float(note['created_at']))}  {note['text']}"
                 )
             lines.append("(note --done <id> closes a note)")
+        states = {str(row["state"]) for row in snapshot.sessions}
+        partial = not snapshot.complete or any(
+            not p["enabled"] or not p["ok"] or p["dropped"] for p in snapshot.providers
+        )
+        stale = any(
+            row["last_seen"] < now_ts() - 1800 and row["state"] in {"working", "in_flight"}
+            for row in snapshot.sessions
+        )
+        legends = (
+            (
+                (
+                    "Idle = user at the prompt, may resume anytime; treat that session's dirty"
+                    " files as in-flight (codex idle rows persist up to ~4h)."
+                ),
+                "idle" in states,
+            ),
+            (
+                "Waiting = blocked on the human, indefinitely; report it and move on.",
+                "waiting" in states,
+            ),
+            (
+                "Working/in_flight rows older than ~30m are likely abandoned; don't wait on them.",
+                stale,
+            ),
+            (
+                (
+                    "Names/labels are hints, never authority;"
+                    " only 'ai-coord start' returning READY authorizes edits."
+                ),
+                True,
+            ),
+            (
+                (
+                    "Partial coverage = sessions may be missing;"
+                    ' treat as unknown, never as "no active sessions".'
+                ),
+                partial,
+            ),
+        )
+        lines.extend(line for line, present in legends if present)
         return "\n".join(lines)
 
     @staticmethod

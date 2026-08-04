@@ -120,6 +120,9 @@ ai-coord note 'Verified stale importer assumption.'
 ai-coord note --done '<note-id>'
 ```
 
+`status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output ends with a
+contextual legend; `--json` remains the versioned JSON schema.
+
 Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
 number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
 uniqueness, and equivalent emoji presentation. Naming is optional: immutable session IDs remain the identity and

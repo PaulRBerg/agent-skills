@@ -147,7 +147,10 @@ def baseline() -> None:
 @click.option("--all", "machine_wide", is_flag=True, help="Show machine-wide inventory")
 @click.option("--json", "as_json", is_flag=True, help="Emit the versioned JSON schema")
 def status(machine_wide: bool, as_json: bool) -> None:
-    """Show active sessions, work claims, coverage, and repository notes."""
+    """Show active sessions, work claims, coverage, and repository notes.
+
+    Exit 0 means complete coverage, 2 usable partial coverage, and 1 an error.
+    """
     try:
         coordinator = _coordinator()
         snapshot = coordinator.snapshot(machine_wide)
