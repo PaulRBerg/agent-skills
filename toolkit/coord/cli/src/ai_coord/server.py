@@ -83,7 +83,12 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/api/snapshot":
-            self._send_json(200, self.service.snapshot())
+            try:
+                payload = self.service.snapshot()
+            except Exception as error:  # noqa: BLE001
+                self._send_json(500, {"error": str(error)})
+                return
+            self._send_json(200, payload)
         elif path == "/api/events":
             self._serve_events()
         else:
