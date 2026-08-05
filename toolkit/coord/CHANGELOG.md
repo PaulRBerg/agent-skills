@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Break the internal ledger at schema v8, create only the current schema, reject incompatible state without modifying
+  it, and remove the retired importer, hook recognizers, and arbitration exceptions.
 - Make `start` exact-file-first with explicit repeatable `--recursive` directory scopes, and support atomic active or
   queued scope replacement with narrowing guidance, fair queue-age handling, and fail-closed expansions.
 - Cache complete provider inventory for bounded read reuse, probe Codex and Claude concurrently, keep authorization
@@ -10,23 +12,21 @@
   lifecycle nudges, CLI status, and dashboard display support while retaining immutable session-ID fallbacks.
 - Keep session-start hooks bookkeeping-only, move callsign and presence context to prompt hooks, and exclude Codex
   compaction starts from lifecycle bookkeeping.
-- Add bounded property and state-machine coverage for coordination, hooks, migration, integrations, and pure helpers.
+- Add bounded property and state-machine coverage for coordination, hooks, integrations, and pure helpers.
 - Reject unterminated JSONC block comments instead of silently accepting a valid prefix.
-- Fingerprint agent processes with PID and creation time, and upgrade the internal ledger to schema v3 without changing
-  the public status JSON schema.
+- Fingerprint agent processes with PID and creation time without changing the public status JSON schema.
 - Poll the SQLite generation counter for push-driven waits, with a slow full-refresh fallback.
 - Add counts-only mid-turn inbox nudges for Codex and Claude Code.
 - Wake blocked Claude Code sessions asynchronously and notify overlapping waiters on release.
 - Update modular Claude hook sources instead of overwriting generated settings output.
-- Upgrade the ledger one way to schema v2 to deduplicate inbox nudges.
-- Scope delegates and machine-wide notes correctly, and ignore invalid legacy-pattern claims in FIFO arbitration.
+- Scope delegates and machine-wide notes correctly.
 - Reclaim claims from stale Codex sessions after their recorded process exits.
 - Allow literal in-repository symlink scopes without dereferencing their targets.
 - Preserve literal scope identity and prevent claims from moving across repositories.
 - Make concurrent first-run database initialization safe.
 - Honor client configuration roots and validate complete hook definitions.
 - Replace hook configuration files atomically while preserving symlink targets and permissions.
-- Reject malformed lifecycle and legacy records without polluting coordination state.
+- Reject malformed lifecycle records without polluting coordination state.
 
 ## 0.1.0
 

@@ -107,12 +107,15 @@ def test_cli_usage_and_trailer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 def test_cli_help_documents_coordination_outcomes() -> None:
     runner = CliRunner()
 
+    root = runner.invoke(cli_module.cli, ["--help"])
     start = runner.invoke(cli_module.cli, ["start", "--help"])
     wait = runner.invoke(cli_module.cli, ["wait", "--help"])
     message = runner.invoke(cli_module.cli, ["msg", "--help"])
     link = runner.invoke(cli_module.cli, ["link", "--help"])
 
-    assert start.exit_code == wait.exit_code == message.exit_code == link.exit_code == 0
+    assert root.exit_code == start.exit_code == wait.exit_code == message.exit_code == 0
+    assert link.exit_code == 0
+    assert "migrate" not in root.output
     assert "pathless, non-exclusive intent" in " ".join(start.output.split())
     assert "exact file PATHS" in " ".join(start.output.split())
     assert "--recursive DIR" in " ".join(start.output.split())
@@ -189,7 +192,7 @@ def test_cli_and_coordinator_imports_leave_heavy_command_modules_lazy() -> None:
             (
                 "import sys; import ai_coord.cli; "
                 "blocked={'ai_coord.coordinator','ai_coord.integrations','ai_coord.jsonc',"
-                "'ai_coord.migration','ai_coord.providers','ai_coord.server'}; "
+                "'ai_coord.providers','ai_coord.server'}; "
                 "assert not blocked.intersection(sys.modules), blocked.intersection(sys.modules)"
             ),
         ],
@@ -404,24 +407,24 @@ def test_link_cli_reports_dry_run_then_update_then_noop(
         cli_module.cli, ["link", "codex", "--path", str(supplied_path), "--dry-run"]
     )
     assert preview.exit_code == 0
-    assert preview.output == f"WOULD_UPDATE\tcodex\t{path}\tlegacy=0\ttrust=skipped\n"
+    assert preview.output == f"WOULD_UPDATE\tcodex\t{path}\ttrust=skipped\n"
     assert not path.exists()
     assert trust_calls == []
 
     applied = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(supplied_path)])
     assert applied.exit_code == 0
-    assert applied.output == f"UPDATED\tcodex\t{path}\tlegacy=0\ttrust=updated\n"
+    assert applied.output == f"UPDATED\tcodex\t{path}\ttrust=updated\n"
 
     repeated = runner.invoke(cli_module.cli, ["link", "codex", "--path", str(supplied_path)])
     assert repeated.exit_code == 0
-    assert repeated.output == f"OK\tcodex\t{path}\tlegacy=0\ttrust=unchanged\n"
+    assert repeated.output == f"OK\tcodex\t{path}\ttrust=unchanged\n"
     assert trust_calls == [path, path]
 
     unverified = runner.invoke(
         cli_module.cli, ["link", "codex", "--path", str(supplied_path), "--dry-run"]
     )
     assert unverified.exit_code == 0
-    assert unverified.output == f"WOULD_UPDATE\tcodex\t{path}\tlegacy=0\ttrust=skipped\n"
+    assert unverified.output == f"WOULD_UPDATE\tcodex\t{path}\ttrust=skipped\n"
     assert trust_calls == [path, path]
 
 
@@ -452,11 +455,11 @@ def test_link_claude_reports_skipped_trust(tmp_path: Path) -> None:
 
     applied = runner.invoke(cli_module.cli, ["link", "claude", "--path", str(path)])
     assert applied.exit_code == 0
-    assert applied.output == f"UPDATED\tclaude\t{path}\tlegacy=0\ttrust=skipped\n"
+    assert applied.output == f"UPDATED\tclaude\t{path}\ttrust=skipped\n"
 
     repeated = runner.invoke(cli_module.cli, ["link", "claude", "--path", str(path)])
     assert repeated.exit_code == 0
-    assert repeated.output == f"OK\tclaude\t{path}\tlegacy=0\ttrust=skipped\n"
+    assert repeated.output == f"OK\tclaude\t{path}\ttrust=skipped\n"
 
 
 def test_link_all_stops_before_claude_when_codex_trust_fails(

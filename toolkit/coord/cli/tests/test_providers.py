@@ -314,7 +314,7 @@ def test_codex_provider_reports_trusted_hook_inventory(
     monkeypatch.setattr(
         providers,
         "inspect_hooks",
-        lambda _client, _path: HooksCheck("codex", hook_path, True, (), ()),
+        lambda _client, _path: HooksCheck("codex", hook_path, True, ()),
     )
 
     def inspect_trust(path: Path) -> HookCheck:
@@ -340,7 +340,7 @@ def test_codex_provider_preserves_hook_file_failures(
         providers,
         "inspect_hooks",
         lambda _client, _path: HooksCheck(
-            "codex", hook_path, False, ("SessionStart",), (), "invalid hook configuration"
+            "codex", hook_path, False, ("SessionStart",), "invalid hook configuration"
         ),
     )
     monkeypatch.setattr(
@@ -379,7 +379,7 @@ def test_codex_provider_fails_closed_when_hook_trust_is_degraded_or_unverifiable
     monkeypatch.setattr(
         providers,
         "inspect_hooks",
-        lambda _client, _path: HooksCheck("codex", hook_path, True, (), ()),
+        lambda _client, _path: HooksCheck("codex", hook_path, True, ()),
     )
     monkeypatch.setattr(
         providers,
@@ -404,7 +404,7 @@ def test_codex_provider_preserves_hook_health_failures(
     monkeypatch.setattr(
         providers,
         "inspect_hooks",
-        lambda _client, _path: HooksCheck("codex", hook_path, True, (), ()),
+        lambda _client, _path: HooksCheck("codex", hook_path, True, ()),
     )
     monkeypatch.setattr(
         providers,

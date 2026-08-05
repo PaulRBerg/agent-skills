@@ -272,7 +272,6 @@ class Coordinator:
                 Identity(str(candidate["client"]), str(candidate["session_id"]))
                 for candidate in self.store.claims(str(claim["repo_root"]))
                 if candidate["state"] == "queued"
-                and candidate.get("blocked_reason") != "legacy-pattern"
                 and any_overlap(tuple(claim["paths"]), tuple(candidate["paths"]))
             ]
         removed = self.store.delete_claim(identity)

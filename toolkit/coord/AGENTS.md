@@ -20,6 +20,20 @@ Run repository-wide tasks from the root `justfile`:
 
 Keep modules below 1000 lines and test modules below 2000 lines.
 
+## Compatibility and breaking changes
+
+This pre-1.0 repository favors one clean current implementation. Unless a task explicitly requests compatibility,
+replace obsolete behavior in one change and remove its production paths, tests, fixtures, and documentation. Do not add
+schema migration ladders, old-format importers, deprecated CLI aliases, dual reads or writes, retired protocol parsers,
+or transitional hook recognition by default. Rejecting an incompatible persisted version with an actionable error is
+required safety behavior, not backward compatibility.
+
+Before work that can invalidate live chats, their ledger, hooks, or coordination CLI, require the user to close other
+agents and explicitly authorize the break, then implement it from one fresh session. Use an isolated
+`AI_COORD_STATE_DIR` for development and validation. Never silently reset a ledger or globally install, relink, or run
+incompatible source against live state. Live hook replacement must finish before removing any one-time transitional
+recognizer; ledger replacement and global rollout remain separate explicitly authorized actions.
+
 ## Upstream documentation
 
 - Codex hooks: <https://developers.openai.com/codex/hooks>

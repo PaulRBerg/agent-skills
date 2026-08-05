@@ -9,6 +9,7 @@ from threading import Barrier
 import pytest
 
 from ai_coord.identity import Identity, ProcessReference
+from ai_coord.schema import SchemaVersionError
 from ai_coord.store import (
     CODEX_ORPHAN_GRACE,
     MAX_INBOX_MESSAGES,
@@ -18,7 +19,7 @@ from ai_coord.store import (
 )
 
 
-def test_new_store_uses_schema_v7(tmp_path: Path) -> None:
+def test_new_store_uses_schema_v8(tmp_path: Path) -> None:
     store = Store(tmp_path / "state.db")
 
     version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
@@ -31,174 +32,57 @@ def test_new_store_uses_schema_v7(tmp_path: Path) -> None:
         for row in store.connection.execute("PRAGMA table_info(sessions)").fetchall()
     }
 
-    assert version == SCHEMA_VERSION == 7
-    assert "notified_at" in message_columns
-    assert {"sender_callsign", "recipient_callsign"} <= message_columns
-    assert "process_started_at" in session_columns
-    assert "callsign" in session_columns
-    assert "permission_mode" in session_columns
-    assert {
-        "claim_baselines",
-        "dirt_observations",
-        "provider_cache",
-        "residual_owners",
-    } <= {
-        str(row["name"])
-        for row in store.connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        ).fetchall()
-    }
-
-
-def _downgrade_fixture(path: Path, version: int) -> None:
-    Store(path).close()
-    connection = sqlite3.connect(path)
-    connection.execute("DROP TABLE provider_cache")
-    if version < 6:
-        connection.execute("ALTER TABLE sessions DROP COLUMN permission_mode")
-    if version < 5:
-        connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
-        connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
-        connection.execute("ALTER TABLE messages DROP COLUMN recipient_callsign")
-    if version < 3:
-        connection.execute("ALTER TABLE sessions DROP COLUMN process_started_at")
-    if version < 2:
-        connection.execute("ALTER TABLE messages DROP COLUMN notified_at")
-    connection.execute(f"PRAGMA user_version = {version}")
-    connection.execute(
-        """
-        INSERT INTO sessions(
-            client, session_id, cwd, repo_root, state, pid, source, started_at, last_seen
-        ) VALUES ('codex', 'preserved', '/repo', '/repo', 'working', 42, 'fixture', 10, 20)
-        """
-    )
-    connection.execute(
-        """
-        INSERT INTO messages(
-            id, sender_client, sender_session_id, recipient_client,
-            recipient_session_id, repo_root, text, created_at
-        ) VALUES (
-            'preserved-message', 'claude', 'sender', 'codex',
-            'preserved', '/repo', 'preserved text', 15
-        )
-        """
-    )
-    connection.commit()
-    connection.close()
-
-
-@pytest.mark.parametrize("version", [1, 2, 4, 5, 6])
-def test_store_migrates_older_schemas_to_v7(tmp_path: Path, version: int) -> None:
-    path = tmp_path / "state.db"
-    _downgrade_fixture(path, version)
-
-    store = Store(path)
-
-    migrated = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
-    message_columns = {
-        str(row["name"])
-        for row in store.connection.execute("PRAGMA table_info(messages)").fetchall()
-    }
-    session = store.session(Identity("codex", "preserved"))
-    inbox = store.inbox(Identity("codex", "preserved"))
-    assert migrated == 7
-    assert {"notified_at", "sender_callsign", "recipient_callsign"} <= message_columns
-    assert session is not None
-    assert session["callsign"] is None
-    assert session["permission_mode"] is None
-    assert session["pid"] == 42
-    assert session["process_started_at"] is None
-    assert session["started_at"] == 10
-    assert session["last_seen"] == 20
-    assert [(row["text"], row["created_at"], row["notified_at"]) for row in inbox] == [
-        ("preserved text", 15, None)
-    ]
-    assert inbox[0]["sender_callsign"] is None
-    assert inbox[0]["recipient_callsign"] is None
-
-
-def test_store_migrates_schema_v3_to_v7(tmp_path: Path) -> None:
-    path = tmp_path / "state.db"
-    Store(path).close()
-    connection = sqlite3.connect(path)
-    connection.execute("DROP TABLE residual_owners")
-    connection.execute("DROP TABLE dirt_observations")
-    connection.execute("DROP TABLE claim_baselines")
-    connection.execute("DROP TABLE provider_cache")
-    connection.execute("ALTER TABLE sessions DROP COLUMN permission_mode")
-    connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
-    connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
-    connection.execute("ALTER TABLE messages DROP COLUMN recipient_callsign")
-    connection.execute("PRAGMA user_version = 3")
-    connection.commit()
-    connection.close()
-
-    store = Store(path)
-
-    version = int(store.connection.execute("PRAGMA user_version").fetchone()[0])
     tables = {
         str(row["name"])
         for row in store.connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         ).fetchall()
     }
-    observation_columns = {
-        str(row["name"])
-        for row in store.connection.execute("PRAGMA table_info(dirt_observations)").fetchall()
-    }
-    residual_columns = {
-        str(row["name"])
-        for row in store.connection.execute("PRAGMA table_info(residual_owners)").fetchall()
-    }
 
-    assert version == SCHEMA_VERSION == 7
-    assert {"claim_baselines", "dirt_observations", "provider_cache", "residual_owners"} <= tables
-    assert {"repo_root", "path", "blob_hash", "first_seen", "last_seen"} <= observation_columns
-    assert {"repo_root", "path", "client", "session_id", "released_at"} <= residual_columns
+    assert version == SCHEMA_VERSION == 8
+    assert "notified_at" in message_columns
+    assert {"sender_callsign", "recipient_callsign"} <= message_columns
+    assert "process_started_at" in session_columns
+    assert "callsign" in session_columns
+    assert "permission_mode" in session_columns
+    assert "imports" not in tables
+    assert {
+        "claim_baselines",
+        "dirt_observations",
+        "provider_cache",
+        "residual_owners",
+    } <= tables
 
 
-def test_store_migrates_schema_v4_data_with_null_callsigns(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", [1, SCHEMA_VERSION - 1, SCHEMA_VERSION + 1])
+def test_store_rejects_incompatible_schema_without_modifying_it(
+    tmp_path: Path, version: int
+) -> None:
     path = tmp_path / "state.db"
-    original = Store(path)
-    sender = Identity("codex", "preserved-sender")
-    recipient = Identity("claude", "preserved-recipient")
-    original.upsert_session(
-        sender,
-        cwd="/repo",
-        repo_root="/repo",
-        state="working",
-        source="fixture",
-        current=10,
-    )
-    original.upsert_session(
-        recipient,
-        cwd="/repo",
-        repo_root="/repo",
-        state="idle",
-        source="fixture",
-        current=11,
-    )
-    original.send_message(sender, [recipient], "preserved", "/repo", current=12)
-    original.close()
     connection = sqlite3.connect(path)
-    connection.execute("DROP TABLE provider_cache")
-    connection.execute("ALTER TABLE sessions DROP COLUMN permission_mode")
-    connection.execute("ALTER TABLE sessions DROP COLUMN callsign")
-    connection.execute("ALTER TABLE messages DROP COLUMN sender_callsign")
-    connection.execute("ALTER TABLE messages DROP COLUMN recipient_callsign")
-    connection.execute("PRAGMA user_version = 4")
+    connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)")
+    connection.execute("INSERT INTO sentinel VALUES ('preserved')")
+    connection.execute(f"PRAGMA user_version = {version}")
     connection.commit()
     connection.close()
 
-    migrated = Store(path)
+    with pytest.raises(SchemaVersionError) as raised:
+        Store(path)
 
-    assert migrated.session(sender)["callsign"] is None  # type: ignore[index]
-    message = migrated.inbox(recipient)[0]
-    assert (message["text"], message["sender_callsign"], message["recipient_callsign"]) == (
-        "preserved",
-        None,
-        None,
+    assert (raised.value.found, raised.value.required, raised.value.path) == (
+        version,
+        SCHEMA_VERSION,
+        path,
     )
+    assert str(raised.value) == (
+        f"state schema {version} is incompatible with required schema {SCHEMA_VERSION} at {path}; "
+        "close all agents and explicitly replace the ledger before retrying"
+    )
+    connection = sqlite3.connect(path)
+    assert int(connection.execute("PRAGMA user_version").fetchone()[0]) == version
+    assert connection.execute("SELECT value FROM sentinel").fetchone()[0] == "preserved"
+    assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+    connection.close()
 
 
 def test_callsigns_are_unique_machine_wide_and_idempotent(tmp_path: Path) -> None:
@@ -506,14 +390,14 @@ def test_store_prunes_only_the_exact_dead_session_when_pids_are_reused(
     assert store.session(live) is not None
 
 
-def test_process_identity_prefers_exact_fingerprints_then_legacy_pids(
+def test_process_identity_prefers_exact_fingerprints_then_pid_only_records(
     tmp_path: Path,
 ) -> None:
     store = Store(tmp_path / "state.db")
-    legacy = Identity("codex", "legacy")
+    pid_only = Identity("codex", "pid-only")
     exact = Identity("codex", "exact")
     store.upsert_session(
-        legacy,
+        pid_only,
         cwd="/repo",
         repo_root="/repo",
         state="working",
@@ -531,8 +415,8 @@ def test_process_identity_prefers_exact_fingerprints_then_legacy_pids(
     )
 
     assert store.identities_for_processes((ProcessReference(42, 10.0),)) == [exact]
-    assert store.identities_for_processes((ProcessReference(42, 11.0),)) == [legacy]
-    assert store.identities_for_processes((ProcessReference(42, None),)) == [legacy]
+    assert store.identities_for_processes((ProcessReference(42, 11.0),)) == [pid_only]
+    assert store.identities_for_processes((ProcessReference(42, None),)) == [pid_only]
 
 
 def test_session_process_reference_is_replaced_as_an_atomic_pair(tmp_path: Path) -> None:

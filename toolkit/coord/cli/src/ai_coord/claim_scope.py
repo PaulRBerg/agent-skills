@@ -99,7 +99,6 @@ class ClaimArbiter:
                 if claim["state"] == "queued"
                 and not self._same_identity(claim, identity)
                 and float(claim["created_at"]) < created_at
-                and claim.get("blocked_reason") != "legacy-pattern"
                 and any_overlap(paths, tuple(claim["paths"]))
             ]
             unattributed_dirty = self._unattributed_dirty(dirty, claims)
@@ -222,7 +221,6 @@ class ClaimArbiter:
                 for claim in claims
                 if claim["state"] == "queued"
                 and not self._same_identity(claim, identity)
-                and claim.get("blocked_reason") != "legacy-pattern"
                 and overlaps_outside_coverage(paths, tuple(claim["paths"]), existing_paths)
             ]
             unattributed_dirty = self._unattributed_dirty(dirty, claims)
@@ -313,7 +311,6 @@ class ClaimArbiter:
             claim
             for claim in self.store.claims(str(root))
             if claim["state"] == "queued"
-            and claim.get("blocked_reason") != "legacy-pattern"
             and any_overlap(existing_paths, tuple(claim["paths"]))
             and not any_overlap(paths, tuple(claim["paths"]))
         ]

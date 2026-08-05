@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
@@ -16,8 +15,6 @@ from ai_coord import __version__
 if TYPE_CHECKING:
     from ai_coord.coordinator import Coordinator, Outcome
 
-_NEWER_SCHEMA_ERROR = re.compile(r"^state schema (\d+) is newer than supported schema \d+$")
-
 
 def _coordinator() -> Coordinator:
     from ai_coord.coordinator import Coordinator
@@ -28,10 +25,13 @@ def _coordinator() -> Coordinator:
 
 def _reexec_argv(error: Exception, state_dir: Path | None = None) -> list[str] | None:
     """Return a compatible runner command for a newer state schema, if available."""
-    if os.environ.get("AI_COORD_REEXEC") or not isinstance(error, RuntimeError):
-        return None
-    match = _NEWER_SCHEMA_ERROR.fullmatch(str(error))
-    if match is None:
+    from ai_coord.schema import SchemaVersionError
+
+    if (
+        os.environ.get("AI_COORD_REEXEC")
+        or not isinstance(error, SchemaVersionError)
+        or error.found <= error.required
+    ):
         return None
     if state_dir is None:
         from ai_coord.util import private_state_dir
@@ -46,7 +46,7 @@ def _reexec_argv(error: Exception, state_dir: Path | None = None) -> list[str] |
     if (
         not isinstance(schema, int)
         or isinstance(schema, bool)
-        or schema < int(match.group(1))
+        or schema < error.found
         or not isinstance(argv, list)
         or not argv
         or not all(isinstance(argument, str) for argument in argv)
@@ -421,10 +421,7 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
                 state = "UPDATED"
             else:
                 state = "OK"
-            click.echo(
-                f"{state}\t{selected}\t{result.path}\tlegacy={result.removed_legacy}"
-                f"\ttrust={result.trust}"
-            )
+            click.echo(f"{state}\t{selected}\t{result.path}\ttrust={result.trust}")
     except ValueError as error:
         _fail(error, 64)
     except Exception as error:  # noqa: BLE001
@@ -488,39 +485,6 @@ def check(as_json: bool) -> None:
         raise click.exceptions.Exit(1)
     if degraded:
         raise click.exceptions.Exit(2)
-
-
-@cli.group()
-def migrate() -> None:
-    """Import state from retired coordination implementations."""
-
-
-def _legacy_source() -> Path:
-    from ai_coord.integrations import default_hook_path
-
-    return default_hook_path("codex").parent / ".tmp" / "agent-session-status"
-
-
-@migrate.command("legacy")
-@click.option(
-    "--source",
-    type=click.Path(path_type=Path),
-    default=_legacy_source,
-    show_default=True,
-)
-@click.option("--dry-run", is_flag=True, help="Count valid records without writing")
-def migrate_legacy_command(source: Path, dry_run: bool) -> None:
-    """Import the legacy AgentSessionStatus JSON registry."""
-    if not source.is_dir():
-        _fail(ValueError(f"legacy state directory not found: {source}"), 64)
-    try:
-        from ai_coord.migration import migrate_legacy
-        from ai_coord.store import Store
-
-        report = migrate_legacy(Store(), source, dry_run=dry_run)
-        click.echo(json.dumps(report.as_dict(), sort_keys=True))
-    except Exception as error:  # noqa: BLE001
-        _fail(error)
 
 
 if __name__ == "__main__":

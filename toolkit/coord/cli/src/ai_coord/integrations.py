@@ -30,7 +30,6 @@ CLAUDE_HOOK_SPECS = hook_specs("claude")
 class LinkResult:
     path: Path
     changed: bool
-    removed_legacy: int
     trust: Literal["updated", "unchanged", "skipped"] = "skipped"
 
 
@@ -40,7 +39,6 @@ class HooksCheck:
     path: Path
     ok: bool
     missing: tuple[str, ...]
-    legacy_commands: tuple[str, ...]
     error: str | None = None
 
 
@@ -106,7 +104,7 @@ def link_hooks(
             raise ValueError("hooks field must be an object; pass --force to replace it")
         document = document.replace_value(hooks_member.value, {})
 
-    document, removed = _remove_stale_owned_commands(document, client, specs)
+    document = _remove_stale_owned_commands(document, client, specs)
     for spec in specs:
         hooks = _hooks_object(document)
         event = document.member(hooks, spec.event)
@@ -127,24 +125,23 @@ def link_hooks(
     changed = document.text != original
     if changed and not dry_run:
         _write_config(path, document.text)
-    return LinkResult(path, changed, removed)
+    return LinkResult(path, changed)
 
 
 def inspect_hooks(client: str, path: Path) -> HooksCheck:
     try:
         data = _read_config(path)
     except FileNotFoundError:
-        return HooksCheck(client, path, False, tuple(spec.event for spec in hook_specs(client)), ())
+        return HooksCheck(client, path, False, tuple(spec.event for spec in hook_specs(client)))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        return HooksCheck(client, path, False, (), (), str(error))
+        return HooksCheck(client, path, False, (), str(error))
     hooks = data.get("hooks") if isinstance(data, dict) else None
     if not isinstance(hooks, dict):
-        return HooksCheck(client, path, False, (), (), "hooks field is not an object")
+        return HooksCheck(client, path, False, (), "hooks field is not an object")
     missing = tuple(
         spec.event for spec in hook_specs(client) if not _spec_present(hooks.get(spec.event), spec)
     )
-    legacy = tuple(command for command in iter_commands(hooks) if _is_legacy(command, client))
-    return HooksCheck(client, path, not missing and not legacy, missing, legacy)
+    return HooksCheck(client, path, not missing, missing)
 
 
 def trust_codex_hooks(
@@ -562,9 +559,8 @@ def _group(spec: HookSpec) -> dict[str, Any]:
 
 def _remove_stale_owned_commands(
     document: JsoncDocument, client: str, specs: tuple[HookSpec, ...]
-) -> tuple[JsoncDocument, int]:
+) -> JsoncDocument:
     owned_commands = {f"ai-coord hook {client}", f"ai-coord waker {client}"}
-    removed_legacy = 0
     preserved: set[HookSpec] = set()
     while True:
         hooks = _hooks_object(document)
@@ -583,19 +579,16 @@ def _remove_stale_owned_commands(
                     command = handler.get("command") if isinstance(handler, dict) else None
                     if not isinstance(command, str):
                         continue
-                    legacy = _is_legacy(command, client)
                     matching = (
                         _matching_spec(event.key, group_element.value.value, handler, specs)
                         if command.strip() in owned_commands
                         else None
                     )
-                    if not legacy and (matching is not None and matching not in preserved):
+                    if matching is not None and matching not in preserved:
                         preserved.add(matching)
                         continue
-                    if not legacy and command.strip() not in owned_commands:
+                    if command.strip() not in owned_commands:
                         continue
-                    if legacy:
-                        removed_legacy += 1
                     document = document.remove_element(handlers_member.value, handler_index)
                     document = _prune_empty_group(document, event.key, group_index)
                     removed = True
@@ -605,7 +598,7 @@ def _remove_stale_owned_commands(
             if removed:
                 break
         if not removed:
-            return document, removed_legacy
+            return document
 
 
 def _hooks_member(document: JsoncDocument):
@@ -652,12 +645,6 @@ def _matching_spec(
         (spec for spec in specs if spec.event == event and _handler_matches(group, handler, spec)),
         None,
     )
-
-
-def _is_legacy(command: str, client: str) -> bool:
-    if "AgentSessionStatus/agent_session_status.py" in command:
-        return True
-    return client == "claude" and command.rstrip().endswith("/plan_claim.py")
 
 
 def _spec_present(value: Any, spec: HookSpec) -> bool:

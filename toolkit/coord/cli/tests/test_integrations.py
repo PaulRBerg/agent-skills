@@ -603,42 +603,6 @@ def test_live_codex_trust_uses_isolated_home_and_preserves_unrelated_hook(
     assert "unrelated-hook" in hooks_path.read_text()
 
 
-def test_codex_link_preserves_unrelated_and_replaces_legacy(tmp_path: Path) -> None:
-    path = tmp_path / "hooks.json"
-    path.write_text(
-        json.dumps(
-            {
-                "description": "keep",
-                "hooks": {
-                    "UserPromptSubmit": [
-                        {"hooks": [{"type": "command", "command": "clipboard-hook"}]},
-                        {
-                            "hooks": [
-                                {
-                                    "type": "command",
-                                    "command": "~/.codex/hooks/AgentSessionStatus/agent_session_status.py hook",
-                                }
-                            ]
-                        },
-                    ]
-                },
-            }
-        )
-    )
-    result = link_hooks("codex", path)
-    assert result.changed
-    assert result.removed_legacy == 1
-    data = json.loads(path.read_text())
-    assert data["description"] == "keep"
-    assert "clipboard-hook" in path.read_text()
-    assert "AgentSessionStatus" not in path.read_text()
-    assert inspect_hooks("codex", path).ok
-
-    second = link_hooks("codex", path)
-    assert not second.changed
-    assert second.removed_legacy == 0
-
-
 def test_codex_link_scopes_session_start_and_replaces_unfiltered_handler(
     tmp_path: Path,
 ) -> None:
@@ -685,36 +649,6 @@ def test_codex_link_scopes_session_start_and_replaces_unfiltered_handler(
     assert "compact-hook" in path.read_text()
     assert inspect_hooks("codex", path).ok
     assert not link_hooks("codex", path).changed
-
-
-def test_claude_link_removes_plan_claim_only(tmp_path: Path) -> None:
-    path = tmp_path / "settings.json"
-    path.write_text(
-        json.dumps(
-            {
-                "hooks": {
-                    "PostToolUse": [
-                        {"hooks": [{"type": "command", "command": "add_plan_frontmatter.py"}]},
-                        {
-                            "matcher": "ExitPlanMode",
-                            "hooks": [
-                                {
-                                    "type": "command",
-                                    "command": "~/.claude/hooks/PostToolUse/plan_claim.py",
-                                }
-                            ],
-                        },
-                    ]
-                }
-            }
-        )
-    )
-    result = link_hooks("claude", path)
-    assert result.removed_legacy == 1
-    assert "add_plan_frontmatter.py" in path.read_text()
-    assert "plan_claim.py" not in path.read_text()
-    assert inspect_hooks("claude", path).ok
-    assert not link_hooks("claude", path).changed
 
 
 def test_claude_link_wires_nudge_and_async_rewake_contract(tmp_path: Path) -> None:
@@ -790,7 +724,7 @@ def test_claude_link_preserves_jsonc_comments_and_unrelated_source(tmp_path: Pat
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/PostToolUse/plan_claim.py",
+            "command": "archive-hook",
           },
         ],
       },
@@ -810,9 +744,8 @@ def test_claude_link_preserves_jsonc_comments_and_unrelated_source(tmp_path: Pat
 """
     path.write_text(original)
 
-    result = link_hooks("claude", path)
+    link_hooks("claude", path)
 
-    assert result.removed_legacy == 1
     assert inspect_hooks("claude", path).ok
     rendered = path.read_text()
     for unchanged in (
@@ -825,7 +758,7 @@ def test_claude_link_preserves_jsonc_comments_and_unrelated_source(tmp_path: Pat
         '  // Keep this unrelated suffix exactly.\n  "other": {"nested": true}, // and its inline comment\n}\n',
     ):
         assert unchanged in rendered
-    assert "plan_claim.py" not in rendered
+    assert "archive-hook" in rendered
     assert "clipboard-hook" in rendered
     assert "notify-hook" in rendered
 

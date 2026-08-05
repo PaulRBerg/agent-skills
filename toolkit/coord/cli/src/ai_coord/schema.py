@@ -1,10 +1,25 @@
-"""SQLite schema creation and migration ladder."""
+"""SQLite schema creation for the current ledger format."""
 
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
+
+
+class SchemaVersionError(RuntimeError):
+    """The ledger format is incompatible with this ai-coord build."""
+
+    def __init__(self, found: int, required: int, path: Path) -> None:
+        self.found = found
+        self.required = required
+        self.path = path
+        super().__init__(
+            f"state schema {found} is incompatible with required schema {required} at {path}; "
+            "close all agents and explicitly replace the ledger before retrying"
+        )
+
 
 _SCHEMA_STATEMENTS = (
     """
@@ -132,14 +147,6 @@ _SCHEMA_STATEMENTS = (
     )
     """,
     """
-    CREATE TABLE imports (
-        source_path TEXT NOT NULL,
-        content_hash TEXT NOT NULL,
-        imported_at REAL NOT NULL,
-        PRIMARY KEY (source_path, content_hash)
-    )
-    """,
-    """
     CREATE TABLE provider_cache (
         context_key TEXT NOT NULL,
         client TEXT NOT NULL CHECK (client IN ('codex', 'claude')),
@@ -161,101 +168,24 @@ _SCHEMA_STATEMENTS = (
 )
 
 
-def migrate(connection: sqlite3.Connection) -> None:
-    """Bring one state database to the supported schema version."""
+def initialize(connection: sqlite3.Connection, path: Path) -> None:
+    """Create or accept exactly the current schema without upgrading old ledgers."""
     current = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    if current > SCHEMA_VERSION:
-        raise RuntimeError(
-            f"state schema {current} is newer than supported schema {SCHEMA_VERSION}"
-        )
     if current == SCHEMA_VERSION:
         return
+    if current != 0:
+        raise SchemaVersionError(current, SCHEMA_VERSION, path)
+
     connection.execute("BEGIN IMMEDIATE")
     try:
         current = int(connection.execute("PRAGMA user_version").fetchone()[0])
-        if current > SCHEMA_VERSION:
-            raise RuntimeError(
-                f"state schema {current} is newer than supported schema {SCHEMA_VERSION}"
-            )
         if current == 0:
             for statement in _SCHEMA_STATEMENTS:
                 connection.execute(statement)
             connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             current = SCHEMA_VERSION
-        if current == 1:
-            connection.execute("ALTER TABLE messages ADD COLUMN notified_at REAL")
-            connection.execute("PRAGMA user_version = 2")
-            current = 2
-        if current == 2:
-            connection.execute("ALTER TABLE sessions ADD COLUMN process_started_at REAL")
-            connection.execute("PRAGMA user_version = 3")
-            current = 3
-        if current == 3:
-            # Frozen v4 snapshot: never share this DDL with the evolving _SCHEMA_STATEMENTS.
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS claim_baselines (
-                    claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
-                    path TEXT NOT NULL,
-                    oid TEXT NOT NULL,
-                    PRIMARY KEY (claim_id, path)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS dirt_observations (
-                    repo_root TEXT NOT NULL,
-                    path TEXT NOT NULL,
-                    blob_hash TEXT NOT NULL,
-                    first_seen REAL NOT NULL,
-                    last_seen REAL NOT NULL,
-                    PRIMARY KEY (repo_root, path)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS residual_owners (
-                    repo_root TEXT NOT NULL,
-                    path TEXT NOT NULL,
-                    client TEXT NOT NULL,
-                    session_id TEXT NOT NULL,
-                    released_at REAL NOT NULL,
-                    PRIMARY KEY (repo_root, path),
-                    FOREIGN KEY (repo_root, path)
-                        REFERENCES dirt_observations(repo_root, path) ON DELETE CASCADE
-                )
-                """
-            )
-            connection.execute("PRAGMA user_version = 4")
-            current = 4
-        if current == 4:
-            connection.execute("ALTER TABLE sessions ADD COLUMN callsign TEXT")
-            connection.execute("ALTER TABLE messages ADD COLUMN sender_callsign TEXT")
-            connection.execute("ALTER TABLE messages ADD COLUMN recipient_callsign TEXT")
-            connection.execute("PRAGMA user_version = 5")
-            current = 5
-        if current == 5:
-            connection.execute("ALTER TABLE sessions ADD COLUMN permission_mode TEXT")
-            connection.execute("PRAGMA user_version = 6")
-            current = 6
-        if current == 6:
-            connection.execute(
-                """
-                CREATE TABLE provider_cache (
-                    context_key TEXT NOT NULL,
-                    client TEXT NOT NULL CHECK (client IN ('codex', 'claude')),
-                    refreshed_at REAL NOT NULL,
-                    ok INTEGER NOT NULL CHECK (ok IN (0, 1)),
-                    source TEXT NOT NULL,
-                    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
-                    dropped INTEGER NOT NULL CHECK (dropped >= 0),
-                    PRIMARY KEY (context_key, client)
-                )
-                """
-            )
-            connection.execute("PRAGMA user_version = 7")
+        if current != SCHEMA_VERSION:
+            raise SchemaVersionError(current, SCHEMA_VERSION, path)
     except BaseException:
         connection.rollback()
         raise

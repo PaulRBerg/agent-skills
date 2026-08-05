@@ -128,7 +128,7 @@ def test_direct_environment_identity_precedes_process_ancestry(
     assert coordinator.identity() == Identity("codex", "direct")
 
 
-def test_ancestry_identity_prefers_an_exact_fingerprint_over_legacy_pid(
+def test_ancestry_identity_prefers_an_exact_fingerprint_over_pid_only_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     coordinator = _coordinator(tmp_path / "state.db")
@@ -139,9 +139,9 @@ def test_ancestry_identity_prefers_an_exact_fingerprint_over_legacy_pid(
         "CLAUDE_CODE_SESSION_ID",
     ):
         monkeypatch.delenv(key, raising=False)
-    legacy = Identity("codex", "legacy")
+    pid_only = Identity("codex", "pid-only")
     exact = Identity("codex", "exact")
-    for identity, started_at in ((legacy, None), (exact, 10.0)):
+    for identity, started_at in ((pid_only, None), (exact, 10.0)):
         coordinator.store.upsert_session(
             identity,
             cwd="/repo",
@@ -572,7 +572,7 @@ def test_wait_rechecks_immediately_when_generation_changes(
     assert clock.current == 1
 
 
-def test_done_notifies_only_overlapping_nonlegacy_waiters(
+def test_done_notifies_only_overlapping_waiters(
     tmp_path: Path,
     git_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -586,27 +586,6 @@ def test_done_notifies_only_overlapping_nonlegacy_waiters(
     assert coordinator.start("docs holder", ("docs",), cwd=git_repo).kind == "READY"
     _set_identity(monkeypatch, "docs-waiter")
     assert coordinator.start("docs waiter", ("docs/readme.md",), cwd=git_repo).kind == "BLOCKED"
-    legacy = Identity("claude", "legacy-waiter")
-    coordinator.store.upsert_session(
-        legacy,
-        cwd=str(git_repo),
-        repo_root=str(git_repo),
-        state="waiting",
-        source="test",
-    )
-    with coordinator.store.transaction() as connection:
-        coordinator.store.save_claim(
-            connection,
-            legacy,
-            repo_root=str(git_repo),
-            label="legacy",
-            state="queued",
-            paths=(),
-            blocked_reason="legacy-pattern",
-            created_at=0,
-            updated_at=0,
-        )
-
     _set_identity(monkeypatch, "holder")
     assert coordinator.done().detail == "released"
 
@@ -615,7 +594,6 @@ def test_done_notifies_only_overlapping_nonlegacy_waiters(
         "Released claim 'holder'; your queued claim may now be ready."
     ]
     assert coordinator.store.inbox(Identity("codex", "docs-waiter")) == []
-    assert coordinator.store.inbox(legacy) == []
     assert coordinator.done().detail == "already clear"
     assert len(coordinator.store.inbox(Identity("codex", "overlap-waiter"))) == 1
 

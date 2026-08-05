@@ -8,12 +8,13 @@ and local dashboard API.
 Bootstrap from this directory with `uv sync --extra dev --locked`, then run the checkout with `uv run ai-coord ...`. Use
 `just test [pytest args]` from the repository root while iterating. `just check` is the supported local macOS validation
 gate and runs formatting, linting, type checks, and the full test suite; use focused Ruff or Prettier commands for
-surgical formatting. `just fw` rewrites the whole project. `just install-cli` is the global-install acceptance test;
-after a ledger schema change, run it so the global CLI matches and re-exec can cover stragglers.
+surgical formatting. `just fw` rewrites the whole project. `just install-cli` is the global-install acceptance test; run
+it after a ledger schema change only when the task separately authorizes replacing the live CLI and state.
 
 ## Architecture and invariants
 
-- `Coordinator` owns identity, provider coverage, path arbitration, queueing, communication, and status behavior.
+- `Coordinator` owns identity, provider coverage, communication, and status behavior; `ClaimArbiter` owns path
+  arbitration and atomic scope replacement.
 - SQLite is both the production and test store. Tests use a temporary `AI_COORD_STATE_DIR`.
 - Hook mode is fail-open: it must not expose raw prompts, tool payloads, transcripts, errors, messages, or notes.
 - Model-visible hook context must be factual, bounded, and counts-only: never include peer text, IDs, prompts, or tool

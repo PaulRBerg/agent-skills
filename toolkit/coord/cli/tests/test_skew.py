@@ -9,6 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 import ai_coord.cli as cli_module
+from ai_coord.schema import SchemaVersionError
 from ai_coord.store import SCHEMA_VERSION, Store
 
 
@@ -24,7 +25,7 @@ def test_store_writes_runner_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyP
     }
 
 
-def test_newer_state_schema_raises_the_error_the_cli_matches(tmp_path: Path) -> None:
+def test_newer_state_schema_raises_structured_error(tmp_path: Path) -> None:
     path = tmp_path / "state.db"
     Store(path).close()
     connection = sqlite3.connect(path)
@@ -32,12 +33,14 @@ def test_newer_state_schema_raises_the_error_the_cli_matches(tmp_path: Path) -> 
     connection.commit()
     connection.close()
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(SchemaVersionError) as raised:
         Store(path)
 
-    match = cli_module._NEWER_SCHEMA_ERROR.fullmatch(str(raised.value))
-    assert match is not None
-    assert match.group(1) == str(SCHEMA_VERSION + 1)
+    assert (raised.value.found, raised.value.required, raised.value.path) == (
+        SCHEMA_VERSION + 1,
+        SCHEMA_VERSION,
+        path,
+    )
 
 
 def test_store_does_not_downgrade_runner_sidecar(
@@ -78,13 +81,27 @@ def test_reexec_argv_requires_guardless_compatible_runner(
         monkeypatch.setenv("AI_COORD_REEXEC", guard)
     argv = [executable, "-m", "ai_coord"]
     (tmp_path / "runner.json").write_text(json.dumps({"schema": schema, "argv": argv}))
-    error = RuntimeError(
-        f"state schema {SCHEMA_VERSION} is newer than supported schema {SCHEMA_VERSION - 1}"
+    error = SchemaVersionError(
+        SCHEMA_VERSION,
+        SCHEMA_VERSION - 1,
+        tmp_path / "state.db",
     )
 
     result = cli_module._reexec_argv(error, tmp_path)
 
     assert (result == argv) is expected
+
+
+def test_reexec_does_not_run_for_an_older_ledger(tmp_path: Path) -> None:
+    argv = [sys.executable, "-m", "ai_coord"]
+    (tmp_path / "runner.json").write_text(json.dumps({"schema": SCHEMA_VERSION, "argv": argv}))
+    error = SchemaVersionError(
+        SCHEMA_VERSION - 1,
+        SCHEMA_VERSION,
+        tmp_path / "state.db",
+    )
+
+    assert cli_module._reexec_argv(error, tmp_path) is None
 
 
 def test_malformed_runner_sidecar_surfaces_plain_error(
@@ -95,8 +112,10 @@ def test_malformed_runner_sidecar_surfaces_plain_error(
     (state_dir / "runner.json").write_text("not json")
     monkeypatch.setenv("AI_COORD_STATE_DIR", str(state_dir))
     monkeypatch.delenv("AI_COORD_REEXEC", raising=False)
-    error = RuntimeError(
-        f"state schema {SCHEMA_VERSION} is newer than supported schema {SCHEMA_VERSION - 1}"
+    error = SchemaVersionError(
+        SCHEMA_VERSION,
+        SCHEMA_VERSION - 1,
+        state_dir / "state.db",
     )
     monkeypatch.setattr(cli_module, "_coordinator", lambda: (_ for _ in ()).throw(error))
 

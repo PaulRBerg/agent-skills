@@ -184,25 +184,14 @@ parent; it never creates child sessions or claims, and child tool calls refresh 
 therefore session-scoped: the parent's claim covers all delegated work. Subagents must never run lifecycle commands
 (`start`, `wait`, or `done`) themselves because their inherited identity would make those commands act as the parent.
 
-## Legacy migration
-
-Install and test the new CLI before switching hooks:
-
-```sh
-ai-coord migrate legacy --dry-run
-ai-coord migrate legacy
-```
-
-The importer reads the former `$CODEX_HOME/.tmp/agent-session-status` registry, claims, messages, and notes (defaulting
-to `~/.codex`). Imports are content-hash idempotent. Literal claims retain their state; legacy glob claims become
-conservative queued blockers until released or expired. The importer never removes its source.
-
 ## Storage and privacy
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
-mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v7;
-opening an older ledger upgrades it one way, while the public `status --json` schema remains v1.
+mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
+internal schema v8. Any other nonzero schema is rejected without migration, deletion, or replacement, while the public
+`status --json` schema remains v1. Close agents and explicitly choose any backup, removal, installation, and relinking
+rollout before retrying with incompatible state.
 
 The ledger stores bounded session metadata, callsigns, labels, literal scopes, messages, notes, and complete provider
 health cache rows. Cached provider errors, hook hashes, prompt bodies, plan bodies beyond a sanitized H1, assistant
@@ -211,8 +200,8 @@ output, transcript contents, and arbitrary hook payloads are never stored.
 Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. Session processes are
 identified by PID and creation time when available, so PID reuse cannot attach ancestry or orphan cleanup to a newer
 process. Codex sessions whose exact recorded process is confirmed gone expire after a 30-minute grace period; records
-migrated without creation times retain conservative PID-only matching. Other idle Codex sessions expire after four
-hours.
+whose process creation time is unavailable retain conservative PID-only matching until a later hook or provider refresh
+obtains a fingerprint. Other idle Codex sessions expire after four hours.
 
 ## Development
 

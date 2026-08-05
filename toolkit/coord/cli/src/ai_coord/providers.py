@@ -109,8 +109,6 @@ class HostInventory:
                 details.append(hooks.error)
             if hooks.missing:
                 details.append(f"missing or invalid hooks: {', '.join(sorted(hooks.missing))}")
-            if hooks.legacy_commands:
-                details.append("legacy hooks remain")
             return ProviderReport("codex", False, "hook-ledger", error="; ".join(details))
         if errors:
             return ProviderReport(

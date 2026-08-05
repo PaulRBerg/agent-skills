@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import os
 import sqlite3
@@ -15,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_coord.identity import Identity, ProcessReference
-from ai_coord.schema import SCHEMA_VERSION, migrate
+from ai_coord.schema import SCHEMA_VERSION, initialize
 from ai_coord.util import callsign_key, new_id, now_ts, private_state_dir, sanitize
 
 CODEX_IDLE_TTL = 4 * 60 * 60
@@ -44,17 +43,18 @@ class Store:
             os.umask(previous_umask)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
+        self.connection.execute("PRAGMA busy_timeout = 5000")
+        try:
+            self._initialize_schema()
+        except BaseException:
+            # Release the database so a caller re-execing a compatible runner starts clean.
+            self.connection.close()
+            raise
         # Keep SQLite's own wait short so _enable_wal's bounded retry loop arbitrates contention.
         self.connection.execute("PRAGMA busy_timeout = 250")
         self._enable_wal()
         self.connection.execute("PRAGMA busy_timeout = 5000")
         self.connection.execute("PRAGMA synchronous = NORMAL")
-        try:
-            self._migrate()
-        except BaseException:
-            # Release the database so a caller re-execing a compatible runner starts clean.
-            self.connection.close()
-            raise
         self.path.chmod(0o600)
         self._write_runner()
 
@@ -74,8 +74,8 @@ class Store:
                     raise
                 time.sleep(0.01)
 
-    def _migrate(self) -> None:
-        migrate(self.connection)
+    def _initialize_schema(self) -> None:
+        initialize(self.connection, self.path)
 
     def _write_runner(self) -> None:
         runner_path = self.path.parent / "runner.json"
@@ -924,25 +924,6 @@ class Store:
 
     def hook_health(self) -> list[dict[str, Any]]:
         return [dict(row) for row in self.connection.execute("SELECT * FROM hook_health")]
-
-    def imported(self, source_path: str, content: bytes) -> bool:
-        digest = hashlib.sha256(content).hexdigest()
-        row = self.connection.execute(
-            "SELECT 1 FROM imports WHERE source_path = ? AND content_hash = ?",
-            (source_path, digest),
-        ).fetchone()
-        return row is not None
-
-    def mark_imported(self, source_path: str, content: bytes) -> None:
-        digest = hashlib.sha256(content).hexdigest()
-        with self.transaction() as connection:
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO imports(source_path, content_hash, imported_at)
-                VALUES (?, ?, ?)
-                """,
-                (source_path, digest, now_ts()),
-            )
 
     def generation(self) -> int:
         return int(
