@@ -34,23 +34,33 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
     let repository = Repository::discover()?;
     repository.ensure_idle()?;
     let branch = repository.branch()?;
-    let base_head = repository.head()?;
+    let head = repository.head_oid()?;
+    let unborn = head.is_none();
+    let base_head = match head {
+        Some(head) => head,
+        None => repository.empty_tree()?,
+    };
     let intended_paths = normalize_inputs(&repository, &args.paths)?;
     let baselines = parse_baselines(&repository, &args, &intended_paths)?;
     let format = select_format(&repository, &args)?;
 
     let temporary = Builder::new().prefix("prepare-").tempdir_in(store.temporary())?;
     let shared_index = repository.git_path("index")?;
-    if !shared_index.is_file() {
-        return Err(AppError::operational("the default Git index does not exist"));
-    }
     let shared_copy = temporary.path().join("shared-index");
-    copy_file(&shared_index, &shared_copy)?;
+    if shared_index.is_file() {
+        copy_file(&shared_index, &shared_copy)?;
+    } else {
+        repository.checked(["read-tree", &base_head], Some(&shared_copy))?;
+    }
     let shared_index_tree = repository.text(["write-tree"], Some(&shared_copy))?;
 
     let prepared_index = temporary.path().join("prepared-index");
     if args.staged {
-        copy_file(&shared_index, &prepared_index)?;
+        if shared_index.is_file() {
+            copy_file(&shared_index, &prepared_index)?;
+        } else {
+            repository.checked(["read-tree", &base_head], Some(&prepared_index))?;
+        }
     } else {
         repository.checked(["read-tree", &base_head], Some(&prepared_index))?;
         stage_worktree(&repository, &prepared_index, &base_head, args.all, &intended_paths)?;
@@ -110,6 +120,7 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         repository_root: repository.root.clone(),
         branch,
         base_head,
+        unborn,
         prepared_tree: prepared_tree.clone(),
         shared_index_tree,
         message_format: format,

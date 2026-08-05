@@ -39,9 +39,10 @@ ai-commit show <transaction-id>
 ai-commit discard <transaction-id>
 ```
 
-Preparation rejects repository operation states and detached HEADs. Default mode requires explicit paths; `--all`
-captures the complete worktree/index result, while `--staged` copies the current index exactly. A successful transaction
-is pinned under `refs/ai-commit/transactions/<id>` and remains retryable until committed or discarded.
+Preparation rejects repository operation states and detached HEADs. Named unborn branches are supported: preparation
+uses Git's empty tree and commit creates a transactional parentless root commit. Default mode requires explicit paths;
+`--all` captures the complete worktree/index result, while `--staged` copies the current index exactly. A successful
+transaction is pinned under `refs/ai-commit/transactions/<id>` and remains retryable until committed or discarded.
 Prepared journals do not age out; terminal receipts and their refs are retained for seven days. When available,
 `ai-coord trailer` contributes one validated `Agent-Session:` line to the preparation evidence.
 

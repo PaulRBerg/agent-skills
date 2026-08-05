@@ -22,6 +22,12 @@ pub struct TreeEntry {
     pub oid: String,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum RefUpdate<'a> {
+    Create { reference: &'a str, new_oid: &'a str },
+    Update { reference: &'a str, new_oid: &'a str, old_oid: &'a str },
+}
+
 impl Repository {
     pub fn discover() -> Result<Self> {
         let cwd = env::current_dir()?;
@@ -63,9 +69,23 @@ impl Repository {
             .map_err(|_| AppError::usage("detached HEAD is not supported"))
     }
 
+    pub fn head_oid(&self) -> Result<Option<String>> {
+        let output = self.raw(["rev-parse", "--verify", "--quiet", "HEAD"], None)?;
+        if output.status.success() {
+            return output_text(output).map(Some);
+        }
+        if output.status.code() == Some(1) {
+            return Ok(None);
+        }
+        Err(git_error(output))
+    }
+
     pub fn head(&self) -> Result<String> {
-        self.text(["rev-parse", "--verify", "HEAD"], None)
-            .map_err(|_| AppError::usage("repository must have an existing HEAD commit"))
+        self.head_oid()?.ok_or_else(|| AppError::usage("HEAD has no commit"))
+    }
+
+    pub fn empty_tree(&self) -> Result<String> {
+        output_text(self.with_input(["mktree"], b"", None)?)
     }
 
     pub fn ensure_idle(&self) -> Result<()> {
@@ -217,10 +237,15 @@ impl Repository {
         if output.status.success() { Ok(()) } else { Err(git_error(output)) }
     }
 
-    pub fn update_refs(&self, refs: &[(&str, &str, &str)]) -> Result<()> {
+    pub fn update_refs(&self, refs: &[RefUpdate<'_>]) -> Result<()> {
         let mut input = String::from("start\n");
-        for (reference, new_oid, old_oid) in refs {
-            input.push_str(&format!("update {reference} {new_oid} {old_oid}\n"));
+        for update in refs {
+            match update {
+                RefUpdate::Create { reference, new_oid } => input.push_str(&format!("create {reference} {new_oid}\n")),
+                RefUpdate::Update { reference, new_oid, old_oid } => {
+                    input.push_str(&format!("update {reference} {new_oid} {old_oid}\n"));
+                }
+            }
         }
         input.push_str("prepare\ncommit\n");
         let output = self.with_input(["update-ref", "--stdin"], input.as_bytes(), None)?;

@@ -14,7 +14,7 @@ use tempfile::Builder;
 use crate::{
     cli::CommitArgs,
     error::{AppError, Result},
-    git::{Repository, copy_file, decode_nul_paths, git_error},
+    git::{RefUpdate, Repository, copy_file, decode_nul_paths, git_error},
     push::{self, PushOutcome},
     state::{PendingCommit, Store, Transaction, TransactionStatus, now_seconds},
 };
@@ -81,10 +81,14 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         return maybe_push(&repository, &mut transaction, store, args.push);
     }
 
-    let current_head = repository.head()?;
+    let current_parent = repository.head_oid()?;
+    let current_base = match &current_parent {
+        Some(head) => head.clone(),
+        None => repository.empty_tree()?,
+    };
     let commit_index = temporary.path().join("commit-index");
-    repository.checked(["read-tree", &current_head], Some(&commit_index))?;
-    apply_prepared_delta(&repository, &transaction, &current_head, &commit_index)?;
+    repository.checked(["read-tree", &current_base], Some(&commit_index))?;
+    apply_prepared_delta(&repository, &transaction, &current_base, &commit_index)?;
     let before_hook_tree = repository.text(["write-tree"], Some(&commit_index))?;
     let message_file = temporary.path().join("commit-message");
     write_message(&message_file, &args.messages)?;
@@ -99,30 +103,44 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     }
     ensure_nonempty_message(&message_file)?;
     let commit_tree = repository.text(["write-tree"], Some(&commit_index))?;
-    let parent_tree = repository.text(["rev-parse", &format!("{current_head}^{{tree}}")], None)?;
-    if commit_tree == parent_tree {
+    if commit_tree == current_base {
         return Err(AppError::operational("hooks left no changes to commit; transaction remains retryable"));
     }
-    let final_paths = diff_paths(&repository, &current_head, &commit_tree)?;
+    let final_paths = diff_paths(&repository, &current_base, &commit_tree)?;
     let hook_added = hook_added_paths(&repository, &before_hook_tree, &commit_tree, &transaction.paths)?;
-    let commit_oid =
-        create_commit(&repository, &commit_index, &commit_tree, &current_head, &message_file, args.no_gpg_sign)?;
+    let commit_oid = create_commit(
+        &repository,
+        &commit_index,
+        &commit_tree,
+        current_parent.as_deref(),
+        &message_file,
+        args.no_gpg_sign,
+    )?;
 
     transaction.pending_commit = Some(PendingCommit {
         commit_oid: commit_oid.clone(),
         commit_tree: commit_tree.clone(),
         hook_added,
-        parent: current_head.clone(),
+        parent: current_parent.clone(),
     });
     store.save(&transaction)?;
     index_lock.ensure_owned()?;
 
     let branch_ref = format!("refs/heads/{}", transaction.branch);
     let transaction_ref = transaction.reference();
-    if let Err(error) = repository.update_refs(&[
-        (&branch_ref, &commit_oid, &current_head),
-        (&transaction_ref, &commit_oid, &transaction.prepared_tree),
-    ]) {
+    let mut updates = Vec::with_capacity(2);
+    match current_parent.as_deref() {
+        Some(parent) => {
+            updates.push(RefUpdate::Update { reference: &branch_ref, new_oid: &commit_oid, old_oid: parent })
+        }
+        None => updates.push(RefUpdate::Create { reference: &branch_ref, new_oid: &commit_oid }),
+    }
+    updates.push(RefUpdate::Update {
+        reference: &transaction_ref,
+        new_oid: &commit_oid,
+        old_oid: &transaction.prepared_tree,
+    });
+    if let Err(error) = repository.update_refs(&updates) {
         transaction.pending_commit = None;
         store.save(&transaction)?;
         return Err(AppError::retry(format!(
@@ -180,27 +198,38 @@ fn recover_after_ref_update(
         pending
     } else if let Some(commit_oid) = transaction.commit_oid.clone() {
         let commit_tree = repository.text(["rev-parse", &format!("{commit_oid}^{{tree}}")], None)?;
-        let parent = repository.text(["rev-parse", &format!("{commit_oid}^")], None)?;
+        let parent = commit_parent(repository, &commit_oid)?;
         PendingCommit { commit_oid, commit_tree, hook_added: transaction.hook_added.clone(), parent }
     } else {
         return Ok(false);
     };
-    let mut head = repository.head()?;
-    let exists_on_branch = head == pending.commit_oid || is_ancestor(repository, &pending.commit_oid, &head)?;
+    let mut head = repository.head_oid()?;
+    let exists_on_branch = match head.as_deref() {
+        Some(head) => head == pending.commit_oid || is_ancestor(repository, &pending.commit_oid, head)?,
+        None => false,
+    };
     if !exists_on_branch {
-        if head == pending.parent {
+        if head.as_deref() == pending.parent.as_deref() {
             let branch_ref = format!("refs/heads/{}", transaction.branch);
             let transaction_ref = transaction.reference();
-            if repository
-                .update_refs(&[
-                    (&branch_ref, &pending.commit_oid, &pending.parent),
-                    (&transaction_ref, &pending.commit_oid, &transaction.prepared_tree),
-                ])
-                .is_err()
-            {
+            let mut updates = Vec::with_capacity(2);
+            match pending.parent.as_deref() {
+                Some(parent) => updates.push(RefUpdate::Update {
+                    reference: &branch_ref,
+                    new_oid: &pending.commit_oid,
+                    old_oid: parent,
+                }),
+                None => updates.push(RefUpdate::Create { reference: &branch_ref, new_oid: &pending.commit_oid }),
+            }
+            updates.push(RefUpdate::Update {
+                reference: &transaction_ref,
+                new_oid: &pending.commit_oid,
+                old_oid: &transaction.prepared_tree,
+            });
+            if repository.update_refs(&updates).is_err() {
                 return Err(AppError::retry("pending commit could not be restored because the branch moved"));
             }
-            head.clone_from(&pending.commit_oid);
+            head = Some(pending.commit_oid.clone());
         } else if transaction.status == TransactionStatus::Prepared {
             transaction.pending_commit = None;
             repository.checked(["update-ref", &transaction.reference(), &transaction.prepared_tree], None)?;
@@ -219,7 +248,12 @@ fn recover_after_ref_update(
     transaction.pending_commit = Some(pending.clone());
     store.save(transaction)?;
     if !transaction.reconciled {
-        let final_paths = diff_paths(repository, &pending.parent, &pending.commit_tree)?;
+        let parent_base = match pending.parent.as_deref() {
+            Some(parent) => parent.to_owned(),
+            None => repository.empty_tree()?,
+        };
+        let final_paths = diff_paths(repository, &parent_base, &pending.commit_tree)?;
+        let head = head.as_deref().expect("pending commit was restored or is reachable");
         let head_tree = repository.text(["rev-parse", &format!("{head}^{{tree}}")], None)?;
         reconcile_shared_index(repository, transaction, &head_tree, &final_paths, index_lock, temporary).map_err(
             |error| {
@@ -262,7 +296,7 @@ fn ensure_branch(repository: &Repository, expected: &str) -> Result<()> {
 fn apply_prepared_delta(
     repository: &Repository,
     transaction: &Transaction,
-    current_head: &str,
+    current_base: &str,
     commit_index: &Path,
 ) -> Result<()> {
     let patch = repository.bytes(
@@ -286,7 +320,7 @@ fn apply_prepared_delta(
     if !output.status.success() {
         let detail = git_error(output).message;
         return Err(AppError::retry(format!(
-            "prepared changes do not apply cleanly to current HEAD {current_head}: {detail}"
+            "prepared changes do not apply cleanly to current branch base {current_base}: {detail}"
         )));
     }
     Ok(())
@@ -333,18 +367,15 @@ fn create_commit(
     repository: &Repository,
     index: &Path,
     tree: &str,
-    parent: &str,
+    parent: Option<&str>,
     message_file: &Path,
     no_gpg_sign: bool,
 ) -> Result<String> {
-    let mut arguments = vec![
-        "commit-tree".to_owned(),
-        tree.to_owned(),
-        "-p".to_owned(),
-        parent.to_owned(),
-        "-F".to_owned(),
-        message_file.to_string_lossy().into_owned(),
-    ];
+    let mut arguments =
+        vec!["commit-tree".to_owned(), tree.to_owned(), "-F".to_owned(), message_file.to_string_lossy().into_owned()];
+    if let Some(parent) = parent {
+        arguments.splice(2..2, ["-p".to_owned(), parent.to_owned()]);
+    }
     if !no_gpg_sign && signing_enabled(repository)? {
         arguments.push("-S".to_owned());
     }
@@ -389,6 +420,20 @@ fn is_ancestor(repository: &Repository, ancestor: &str, descendant: &str) -> Res
     }
 }
 
+fn commit_parent(repository: &Repository, commit: &str) -> Result<Option<String>> {
+    let parents = repository.text(["rev-list", "--parents", "-n", "1", commit], None)?;
+    let mut fields = parents.split_ascii_whitespace();
+    let oid = fields.next().ok_or_else(|| AppError::operational("cannot parse commit parents"))?;
+    if oid != commit {
+        return Err(AppError::operational("cannot parse commit parents"));
+    }
+    let parent = fields.next().map(str::to_owned);
+    if fields.next().is_some() {
+        return Err(AppError::operational("prepared commit has more than one parent"));
+    }
+    Ok(parent)
+}
+
 fn reconcile_shared_index(
     repository: &Repository,
     transaction: &Transaction,
@@ -398,7 +443,11 @@ fn reconcile_shared_index(
     temporary: &Path,
 ) -> Result<()> {
     let reconciliation_index = temporary.join("reconciliation-index");
-    copy_file(&index_lock.index_path, &reconciliation_index)?;
+    if index_lock.has_index {
+        copy_file(&index_lock.index_path, &reconciliation_index)?;
+    } else {
+        repository.checked(["read-tree", commit_tree], Some(&reconciliation_index))?;
+    }
     let current_index_tree = repository.text(["write-tree"], Some(&reconciliation_index))?;
     let current_entries = repository.tree_file_entries(&current_index_tree, final_paths)?;
     let prepared_entries = repository.tree_file_entries(&transaction.shared_index_tree, final_paths)?;
@@ -475,23 +524,27 @@ fn maybe_push(repository: &Repository, transaction: &mut Transaction, store: &St
 struct IndexLock {
     index_path: PathBuf,
     lock_path: PathBuf,
+    has_index: bool,
     file: Option<File>,
 }
 
 impl IndexLock {
     fn acquire(repository: &Repository, marker: &str) -> Result<Self> {
         let index_path = repository.git_path("index")?;
-        if !index_path.is_file() {
-            return Err(AppError::operational(format!("default Git index does not exist: {}", index_path.display())));
-        }
         let mut lock_name = index_path.as_os_str().to_os_string();
         lock_name.push(".lock");
         let lock_path = PathBuf::from(lock_name);
         for attempt in 1..=5 {
             match OpenOptions::new().read(true).write(true).create_new(true).open(&lock_path) {
                 Ok(mut file) => {
-                    if let Err(error) = fs::metadata(&index_path)
-                        .and_then(|metadata| fs::set_permissions(&lock_path, metadata.permissions()))
+                    let has_index = index_path.is_file();
+                    let preserved_permissions = if has_index {
+                        fs::metadata(&index_path)
+                            .and_then(|metadata| fs::set_permissions(&lock_path, metadata.permissions()))
+                    } else {
+                        Ok(())
+                    };
+                    if let Err(error) = preserved_permissions
                         .and_then(|()| file.write_all(marker.as_bytes()))
                         .and_then(|()| file.sync_all())
                     {
@@ -501,7 +554,7 @@ impl IndexLock {
                             "cannot preserve default Git index permissions: {error}"
                         )));
                     }
-                    return Ok(Self { index_path, lock_path, file: Some(file) });
+                    return Ok(Self { index_path, lock_path, has_index, file: Some(file) });
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && attempt < 5 => {
                     if fs::read(&lock_path).ok().as_deref() == Some(marker.as_bytes()) {

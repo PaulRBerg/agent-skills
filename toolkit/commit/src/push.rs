@@ -32,6 +32,7 @@ struct Destination {
 
 pub fn execute(repository: &Repository) -> Result<PushOutcome> {
     let branch = repository.branch()?;
+    repository.head()?;
     let mut destination = destination(repository, &branch)?;
     fetch(repository, &destination.remote)?;
     destination.compare_ref = refreshed_compare_ref(repository, &destination)?;

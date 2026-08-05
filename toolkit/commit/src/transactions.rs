@@ -18,6 +18,7 @@ pub fn show(store: &Store, id: &str) -> Result<()> {
     println!("repository\t{}", transaction.repository_root.display());
     println!("branch\t{}", transaction.branch);
     println!("base-head\t{}", transaction.base_head);
+    println!("unborn\t{}", transaction.unborn);
     println!("prepared-tree\t{}", transaction.prepared_tree);
     println!("message-format\t{}", transaction.message_format.label());
     if let Some(trailer) = transaction.trailer {

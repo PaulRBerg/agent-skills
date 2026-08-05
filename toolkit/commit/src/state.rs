@@ -48,7 +48,8 @@ pub struct PendingCommit {
     pub commit_oid: String,
     pub commit_tree: String,
     pub hook_added: Vec<String>,
-    pub parent: String,
+    #[serde(default)]
+    pub parent: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -57,6 +58,8 @@ pub struct Transaction {
     pub repository_root: PathBuf,
     pub branch: String,
     pub base_head: String,
+    #[serde(default)]
+    pub unborn: bool,
     pub prepared_tree: String,
     pub shared_index_tree: String,
     pub message_format: MessageFormat,
