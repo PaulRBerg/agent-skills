@@ -66,6 +66,7 @@ Select every applicable profile and read it once:
 | auth, secrets, crypto, external input/network, unsafe parsing | `security`              |
 | env, config, timeouts, retries, pools, limits                 | `configuration`         |
 | Go behavior, concurrency, context, errors                     | `go`                    |
+| Rust, Cargo/workspaces, async/concurrency, unsafe/FFI         | `rust`                  |
 | TypeScript types, modules, packages, async behavior           | `typescript`            |
 | Python services, scripts, async, packaging, data IO           | `python`                |
 | shell, CI, deploy, installers, quoting                        | `shell`                 |
