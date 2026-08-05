@@ -1,0 +1,7 @@
+# Changelog
+
+## 0.1.0 - Unreleased
+
+- Add immutable prepare/commit transactions for shared Git working trees.
+- Add safe upstream-aware push, transaction inspection, and discard workflows.
+

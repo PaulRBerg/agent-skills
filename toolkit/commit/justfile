@@ -1,0 +1,24 @@
+set default-list := true
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set quiet := true
+
+default:
+    @just --list
+
+# Build the CLI
+build:
+    cargo build --locked
+
+# Format, lint, and compile every target
+full-check:
+    cargo fmt --all --check
+    cargo clippy --all-targets --locked -- --deny warnings
+
+# Format Rust sources
+full-write:
+    cargo fmt --all
+
+# Run all tests
+test:
+    cargo test --locked
+
