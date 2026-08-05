@@ -144,11 +144,13 @@ class Coordinator:
 
     def _claim_arbiter(self) -> ClaimArbiter:
         return ClaimArbiter(
-            self.store,
-            self._refresh_inventory,
-            lambda repo, timestamp: self._observe_git_dirt(repo, current=timestamp),
-            self._identity_display,
-            now_ts,
+            store=self.store,
+            refresh_inventory=self._refresh_inventory,
+            observe_git_dirt=lambda repo, timestamp: self._observe_git_dirt(
+                repo, current=timestamp
+            ),
+            identity_display=self._identity_display,
+            current_time=now_ts,
         )
 
     def wait(self, timeout_seconds: int = 300, poll_seconds: float = 1.0) -> Outcome:

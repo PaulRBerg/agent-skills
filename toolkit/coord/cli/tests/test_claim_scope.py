@@ -62,6 +62,32 @@ def test_blocking_reports_only_real_overlap_and_nudges_broad_holder(
     ]
 
 
+def test_queued_scope_move_notifies_only_the_new_holder(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coordinator = _coordinator(tmp_path / "state.db")
+    first_holder = Identity("codex", "first-holder")
+    second_holder = Identity("codex", "second-holder")
+    waiter = Identity("codex", "waiter")
+    _set_identity(monkeypatch, first_holder.session_id)
+    assert coordinator.start("app", ("src/app.py",), cwd=git_repo).kind == "READY"
+    _set_identity(monkeypatch, second_holder.session_id)
+    assert coordinator.start("docs", ("docs/readme.md",), cwd=git_repo).kind == "READY"
+    _set_identity(monkeypatch, waiter.session_id)
+    assert coordinator.start("app edit", ("src/app.py",), cwd=git_repo).kind == "BLOCKED"
+
+    assert coordinator.start("docs edit", ("docs/readme.md",), cwd=git_repo).kind == "BLOCKED"
+
+    assert [message["text"] for message in coordinator.store.inbox(first_holder)] == [
+        "Queued behind your claim: app edit; overlaps: src/app.py."
+    ]
+    assert [message["text"] for message in coordinator.store.inbox(second_holder)] == [
+        "Queued behind your claim: docs edit; overlaps: docs/readme.md."
+    ]
+
+
 def test_active_refinement_replaces_scope_and_wakes_newly_unblocked_waiter(
     tmp_path: Path,
     git_repo: Path,

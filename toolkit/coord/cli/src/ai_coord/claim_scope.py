@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from sqlite3 import Connection
 from typing import TYPE_CHECKING, Any
 
 from ai_coord.identity import Identity
@@ -126,7 +127,11 @@ class ClaimArbiter:
                 detail = f"stale-dirt:{','.join(advisory_dirty)}" if advisory_dirty else ""
                 outcome = Outcome("READY", 0, detail, paths)
 
-            previous_reason = existing.get("blocked_reason") if existing else None
+            should_notify_holders = (
+                existing is None
+                or existing.get("blocked_reason") != "overlap"
+                or set(existing_paths) != set(paths)
+            )
             self.store.save_claim(
                 connection,
                 identity,
@@ -138,7 +143,7 @@ class ClaimArbiter:
                 created_at=created_at,
                 updated_at=timestamp,
             )
-            if active_blockers and previous_reason != "overlap":
+            if should_notify_holders:
                 for blocker in active_blockers:
                     self.store.add_message(
                         connection,
@@ -269,7 +274,7 @@ class ClaimArbiter:
 
     def _save_active_scope(
         self,
-        connection: Any,
+        connection: Connection,
         identity: Identity,
         root: Path,
         label: str,
