@@ -81,7 +81,9 @@ class Store:
         runner_path = self.path.parent / "runner.json"
         desired = {
             "schema": SCHEMA_VERSION,
-            "argv": [str(Path(sys.executable).resolve()), "-m", "ai_coord"],
+            # Preserve virtual-environment symlinks: resolving one can select the base
+            # interpreter, which cannot import the installed ai_coord package.
+            "argv": [os.path.abspath(sys.executable), "-m", "ai_coord"],
         }
         try:
             existing = json.loads(runner_path.read_text())

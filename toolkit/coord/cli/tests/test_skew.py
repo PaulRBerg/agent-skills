@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -21,7 +22,7 @@ def test_store_writes_runner_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     assert json.loads((state_dir / "runner.json").read_text()) == {
         "schema": SCHEMA_VERSION,
-        "argv": [str(Path(sys.executable).resolve()), "-m", "ai_coord"],
+        "argv": [os.path.abspath(sys.executable), "-m", "ai_coord"],
     }
 
 
