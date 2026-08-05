@@ -165,6 +165,31 @@ polish, and do not silently take over implementation.
 - Never classify an ordinary timeout, a returned blocker, silence, or task-level validation failure as infrastructure
   failure. Continue only work proven independent.
 
+## Skill Evolution Review
+
+After every required implementation agent has completed successfully and the overall complex task is verified, the
+parent agent reviews the user's completed task for skill-evolution opportunities. Do not run or report this review for a
+blocked, failed, or partial handoff. The parent agent makes the judgment itself; research and implementation agents
+never make the user-facing recommendation.
+
+Recommend skill work only when the completed task exposes a stable, reusable workflow credibly likely to recur. Task
+size or difficulty alone does not establish recurrence; reject one-off work, rare contingencies, incidental cleanup, and
+patterns whose future value is speculative.
+
+- For a new skill, state whether it belongs in the repository where the work was done because its reuse is
+  project-specific or globally in `~/projects/agent-skills` because it is useful across projects.
+- For a revision, name every exact existing skill and briefly state why each needs to change.
+
+When a proposal clears this bar, append at most one compact suggestion of no more than two short sentences to the
+selected adapter's existing completion report without otherwise changing its format. State the reusable need and the
+proposed create or revise target, then offer `$task-handoff` as the next action for capturing a decision-complete
+implementation handoff. Leave design choices, file-level changes, acceptance details, and other low-level material to
+that future handoff.
+
+Never invoke `$task-handoff`, create a handoff, create a skill, or revise a skill automatically during this review. When
+no proposal clears the recurrence bar, remain silent: add no placeholder section and do not report that no skill
+opportunity was found.
+
 ## Completion
 
 - After every required agent completes, deduplicate the union of reported `changed_files` and confirm the combined

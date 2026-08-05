@@ -76,6 +76,13 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
 - Failure classification: a returned blocked status is a plan problem that gates dependents and requires user decision;
   an evidenced tool or infrastructure failure permits exactly one same-agent continuation after inspecting partial
   edits, and a second infrastructure failure blocks. The continuation mechanics are platform-specific.
+- Post-success skill-evolution review: run only after every required implementation agent succeeds and the overall task
+  is verified; keep the judgment with the parent orchestrator; require credible recurrence and durable reuse rather than
+  task size or difficulty; reject one-offs, rare contingencies, incidental cleanup, and speculative value; place a new
+  skill in the work repository for project-specific reuse or `~/projects/agent-skills` for cross-project reuse; name
+  every exact skill and reason when revision is warranted; allow at most one two-sentence suggestion that offers
+  `$task-handoff` while reserving low-level details for that future handoff; never act automatically; and remain silent
+  for blocked, failed, partial, or below-threshold work.
 - Completion rules: success verification, dependent gating on failure, changed-files union dedupe, polish invocation and
   skip conditions, and cross-repository `$commit` behavior.
 - Adapter integrity: each codex-handoff adapter implements the shared prompt, result, failure, and completion contracts

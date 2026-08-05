@@ -5,7 +5,8 @@ disable-model-invocation: false
 name: agents-introspection
 user-invocable: true
 description:
-  Retrospect on a task against local Codex/Claude Code transcripts; propose durable fixes (AGENTS.md, skills).
+  Assess recurrence risk for agent behavior using local Codex/Claude Code transcripts and recommend evidence-backed
+  durable fixes to AGENTS.md or skills. Not for routine post-success skill-evolution or agent self-improvement reviews.
 ---
 
 # Agents Introspection
