@@ -1,148 +1,113 @@
 ---
 argument-hint: "[--all] [--staged] [--natural] [--push] [--close <issue_numbers>]"
+compatibility: Requires Git and ai-commit >=0.1.0 on PATH.
 disable-model-invocation: false
 effort: medium
 name: commit
 user-invocable: true
 description:
-  "Commit staged or intended changes: craft a Conventional Prefix or Natural Language message, then commit — with --all,
-  --staged, --close, or --push."
+  "Commit staged or intended changes: compose a Conventional Prefix or Natural Language message, then use ai-commit —
+  with --all, --staged, --close, or --push."
 ---
 
 # Git Commit
 
-Create atomic commits by staging the right files, analyzing the staged diff, composing a commit message, and pushing
-when explicitly requested or authorized by standing instructions.
+Compose the semantic commit message from immutable evidence. Let `ai-commit` own deterministic preparation, commit,
+index reconciliation, and push mechanics.
 
-## Workflow
+Run every command from the target repository cwd. Do not surround `ai-commit` with extra `git status`, `git log`, or
+`git diff` calls: preparation provides the complete evidence for this workflow. Use `--porcelain` only in deterministic
+automation that explicitly parses its stable TSV records; the normal skill flow consumes the human-readable sections.
 
-Do not run extra Git inspection commands (`git status`, `git log`, or `git diff`) around the helpers; helper output is
-the complete evidence for composing the message and receipt.
-
-### 1) Parse arguments
+## 1. Parse Arguments
 
 Arguments: `$ARGUMENTS`
 
-- Flags:
-  - `--all` commit all changes
-  - `--staged` commit exactly the current index; do not auto-stage or unstage (conflicts with `--all`)
-  - `--natural` force Natural Language Format
-  - `--push` explicitly request a push after commit; otherwise push only when standing instructions authorize it
-  - `--close <issue_numbers>` append `Closes #N` trailers for listed issues (comma/space-separated)
-- Value arguments:
-  - Conventional Prefix Format: type keyword overrides inferred type
-  - Natural Language Format: leading verb/category keyword overrides inferred verb
-  - Quoted text overrides inferred description or subject
+- `--all`: capture all worktree and index changes. This intentionally risks including another agent's work.
+- `--staged`: capture exactly the current index; do not add session paths. It conflicts with `--all`.
+- `--natural`: force Natural Language Format.
+- `--push`: request a push after commit. Otherwise push only when standing instructions authorize it.
+- `--close <issue_numbers>`: append one `Closes #N` trailer per positive decimal issue number; accept comma- or
+  space-separated input.
+- In Conventional Prefix Format, a positional type keyword overrides the inferred type. In Natural Language Format, a
+  positional verb or category keyword overrides the inferred verb. Quoted positional text overrides the inferred
+  description or subject.
 
-Pass `--natural` through to the prepare helper when requested. The helper resolves the message format from the target
-repository cwd.
+If the requested operation is only to push a clean branch that is already ahead, skip preparation and run
+`ai-commit push`.
 
-### 2) Prepare staged diff
+## 2. Prepare Once
 
-Run the portable helper from the target repository cwd. Never `cd` into the skill directory, and never use dynamic `!`
-shell injection.
-
-Resolve `<skill-dir>` from the loaded `SKILL.md` path:
+Run one preparation command:
 
 ```bash
-bash "<skill-dir>/scripts/prepare-commit.sh" [--all] [--staged] [--natural] [--diff summary|full] -- [session_modified_paths...]
+ai-commit prepare [--all | --staged] [--natural] --diff full \
+  [--exclude-baseline '<path>=<oid>']... [-- <session-modified-paths>...]
 ```
 
-Use `--diff summary` by default. Use `--diff full` only when the intent is ambiguous.
+- Default mode requires every path edited in this session. For a rename, include both old and new names, including
+  case-only file or directory renames.
+- `--all` accepts no explicit paths and captures all tracked, untracked, modified, deleted, and staged changes.
+- `--staged` accepts neither explicit paths nor baseline exclusions and captures the shared index exactly.
+- When `ai-coord start` reported `stale-dirt:<paths>`, run `ai-coord baseline` and pass every returned path/blob pair as
+  a repeated `--exclude-baseline '<path>=<oid>'`. Without that baseline, preparation includes the whole current file.
+  Never revert unrelated changes.
 
-The helper performs Git preflight checks, rejects empty change sets, and prints the message format, branch, name-status,
-shortstat, and optional full diff. `--all` and `--staged` stage or read the shared index directly (index-trusting by
-design). Default mode delegates to `commit-paths.sh preview`, which builds a temporary index from `HEAD` and never
-changes the shared index. If preparation fails, stop with its error and a concise suggested fix.
+Preparation pins the exact tree and delta under the printed transaction ID without changing the shared index. Keep that
+ID. The later commit reuses the transaction instead of recomputing intended content from the mutable worktree or shared
+index. It applies that immutable delta to the locked current branch and fails safely if intervening branch movement
+conflicts. If preparation fails, stop with its error and the smallest safe correction.
 
-- If `--all`:
-  - Include all tracked, untracked, modified, deleted, and already staged changes — this also sweeps in any other
-    agent's in-flight work by design; see the step 4 output contract for the resulting flag.
-- If `--staged`:
-  - Commit exactly what is already staged; pass no session paths. The helper neither stages nor unstages. Conflicts with
-    `--all`. The index may hold another agent's staged files; committing it verbatim is the user's explicit choice.
-- Otherwise (atomic commits):
-  - Session-modified files = files edited in this session
-  - Pass every session-modified path after `--`
-  - The helper prints the exact old and new file paths under `## commit paths`; pass that list to the commit helper in
-    step 4
-  - **Renames**: pass both the old and new name as session paths, including for case-only file or directory renames
-- **Unrelated changes**: session-modified files may contain pre-existing uncommitted changes (hunks not from this
-  session). Preserve `stale-dirt:` baselines as described in step 4. Without a baseline, include the entire file. Never
-  revert, discard, or `git checkout` unrelated changes.
+## 3. Analyze and Compose
 
-### 3) Analyze + compose message
+Analyze the single prepared full diff. Do not prepare again to get different evidence.
 
-Read the helper output and produce the commit message in a single pass.
+- Use the printed message format and message-format rules. `ai-commit` is the source of those rules; do not load a
+  separate Conventional or Natural reference.
+- Apply positional overrides, detect breaking changes, infer scope or context from the code, and include a body only
+  when it adds material rationale.
+- Add `Closes #N` trailers from `--close` and from transcript issue references only when this commit actually resolves
+  them. De-duplicate issue numbers.
+- Append the exact `Agent-Session:` line from the preparation trailer section when present. `ai-commit` has already
+  validated it; do not synthesize or repair a missing or malformed trailer.
 
-**Message format** — use the `## message format` value from the helper output. Its `## message format rules` section
-contains the complete selected rules; compose the message from those rules.
+Compose one subject paragraph, an optional body paragraph, and one final trailer paragraph containing all issue and
+Agent-Session lines.
 
-**Issue linking** — scan the chat transcript for GitHub issue references (e.g. `#123`, `owner/repo#123`, issue URLs)
-that the current changes resolve. For each match, append a `Closes #N` trailer. Skip issues merely mentioned in passing;
-include only ones the commit actually closes.
+## 4. Commit the Transaction
 
-**Analysis** — perform semantic analysis of the staged diff:
+Run:
 
-- Detect breaking changes
-- Infer Conventional Prefix Format scope or Natural Language context from code structure even when the path isn't clear
-- Follow the selected reference's body and breaking-change rules
+```bash
+ai-commit commit <transaction-id> -m '<subject>' [-m '<body>'] [-m '<trailers>'] [--push]
+```
 
-**If `--close`:**
+Append `--push` when explicitly requested or authorized by standing instructions. The same command handles default,
+`--all`, and `--staged` transactions; never stage or commit them with direct Git commands.
 
-- Append a `Closes #N` line for each issue number provided
-- Multiple issues: one `Closes #N` per line in the body/trailer
-- Merge with transcript-scanned issues; de-duplicate
+Transactions are idempotent. After an interruption, lock race, or retryable exit, retry the same transaction ID and
+message arguments; do not prepare a replacement from newer mutable state. A replay recovers or returns the retained
+receipt without creating a duplicate commit. Never delete an index lock.
 
-**Agent-Session attribution** — when the helper output includes an optional `## trailer` section, append its line as a
-trailer alongside any `Closes #N` trailers.
+Read [references/failure-recovery.md](references/failure-recovery.md) before adding `--no-verify` or `--no-gpg-sign`.
+Those are explicit per-attempt recovery options, not first-attempt defaults.
 
-### 4) Commit
+## 5. Interpret the Receipt
 
-- Default mode (no `--all`/`--staged`): run the helper from the target repository cwd:
+Keep the receipt compact and forward its outcome lines without decoration:
 
-  ```bash
-  bash "<skill-dir>/scripts/commit-paths.sh" commit -m "subject" [-m "body"] \
-    [--exclude-baseline "<path>=<oid>"]... -- \
-    <paths from the "## commit paths" section>
-  ```
+- `COMMITTED <transaction-id> <commit-oid>` proves commit creation or idempotent recovery.
+- `HOOK_ADDED <path>` identifies content introduced by a hook outside the prepared path set. Disclose every such line.
+- `PUSHED <branch>` or `PUSHED_NEW <branch>` proves propagation.
+- `PUSHED <transaction-id> <commit-oid>` is the retained proof returned when an already-pushed transaction is replayed.
+- `BEHIND <branch> <count>` is safe noncompletion: `ai-commit` fetched and refused to integrate or push. A preceding
+  `COMMITTED` line still proves the local commit, but the push workflow is incomplete until the user reconciles the
+  branch and the same transaction command is replayed. For push-only work, rerun `ai-commit push` after reconciliation.
 
-  When `ai-coord start` returned a `stale-dirt:<paths>` advisory covering an intended path, run `ai-coord baseline` and
-  pass `--exclude-baseline "<path>=<oid>"` for each affected intended path. The helper applies only the
-  baseline-to-worktree change onto locked `HEAD`; if any patch does not apply cleanly, it aborts the whole commit and
-  leaves the worktree and shared index unchanged.
-
-  The helper rejects an inherited `GIT_INDEX_FILE`, waits only on an explicit default-index lock, and holds that lock
-  through the commit. It builds the commit from locked `HEAD` in a separate index whose name does not end in `.lock`, so
-  normal hooks and signing run without exposing formatter staging to the shared index. After success, it updates only
-  the committed path entries in the locked shared index; unrelated staging remains intact.
-
-- `--all` / `--staged`: commit the prepared index as-is with `git commit -m "subject"` (add `-m "body"` only if body is
-  non-empty).
-- Output exactly: commit hash, subject, and `N files changed` summary. In `--all` mode, if the committed set plausibly
-  includes files not modified in this session, also print one line listing those files so the user can catch an
-  accidental sweep of another agent's work. Nothing else. This exact receipt is intentionally plain: do not add emoji,
-  headings, trees, or labels.
-- Do not report branch ahead/behind counts, unpushed commits, push availability, unrelated tree state, staging steps, or
-  pre-commit hook activity unless the push workflow requires the user to reconcile a behind branch or a command failed.
-- Never delete index locks; wait and retry the same command. Never retry a commit after the helper reports a created
-  commit with failed shared-index reconciliation; stop and report the commit ID. On any pre-commit hook or signing
-  failure, read [references/failure-recovery.md](references/failure-recovery.md) before deciding on a bypass; bypasses
-  always require their one-line disclosure.
-
-### 5) Push when requested or authorized
-
-Run this step when `--push` was supplied or standing instructions authorize automatic pushing for the current
-repository. Otherwise stop after the commit receipt.
-
-In default mode, append `--push` to the `commit-paths.sh commit` invocation. In `--all` / `--staged` modes, run
-`bash "<skill-dir>/scripts/commit-paths.sh" push` after the direct `git commit`. Report the helper's one-line outcome;
-when it reports `behind <n> — push skipped`, explicitly state that the push was skipped for user reconciliation.
+Do not report unrelated tree state, ahead/behind counts not emitted by the command, staging narration, or successful
+hook activity. Add only a required one-line bypass disclosure from the recovery reference.
 
 ## Completion
 
-Completion evidence is the created commit hash, subject, and changed-file count. When the push workflow applies, also
-require the push helper's successful outcome line unless the branch is behind; in that case, completion requires its
-`behind <n> — push skipped` outcome and explicitly reporting that the push was skipped for user reconciliation. A hook
-bypass is complete only with the one-line unrelated-failure disclosure; a signing bypass is complete only with the
-one-line unsigned-commit disclosure.
+Without push authorization, completion requires `COMMITTED`. With push authorization, completion also requires `PUSHED`
+or `PUSHED_NEW`; `BEHIND` is not completion. A push-only request completes on `PUSHED` or `PUSHED_NEW`.

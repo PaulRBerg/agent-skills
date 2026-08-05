@@ -197,9 +197,10 @@ opportunity was found.
 - When the plan marked polish as required, invoke `$code-polish` once with exactly that union and its default
   simplify-then-review mode. Skip polish if any required agent failed; do not recompute or broaden scope.
 - If approved work changes repositories on this machine other than the repository where the handoff began, invoke
-  `$commit` from each additional repository after its work, validation, and required polish complete. Scope each
-  invocation to files changed there; do not commit incomplete, blocked, unexpected, or out-of-scope changes. Push only
-  when the user explicitly requested it.
+  `$commit` from each additional repository after its work, validation, and required polish complete. `$commit` owns
+  semantic message composition; its `ai-commit` backend owns deterministic transaction, commit, and push mechanics.
+  Scope each invocation to files changed there; do not commit incomplete, blocked, unexpected, or out-of-scope changes.
+  Push only when the user explicitly requested it.
 - Finish with the selected adapter's completion report. It must include the strategy, wave and agent counts, each
   agent's requested configuration, status, and summary, plus combined changed files, verification, polish when run,
   automatic cross-repository commit hashes when any, blockers, and residual risks. Write `none` for applicable empty

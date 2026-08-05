@@ -150,8 +150,9 @@ implemented fixes.
   applicable.
 - Attribute an aggregate failure before acting: a failure outside the approved files is concurrent work, not evidence to
   broaden this change.
-- Use `$commit` when available to commit each repository after its validation succeeds.
-- Scope staging to task files; never use `git add -A`, `git commit -a`, stash, or reset.
+- Use `$commit` when available to compose each repository's semantic message after validation; let its `ai-commit`
+  backend handle deterministic transaction, commit, and push mechanics.
+- Pass only task files to `$commit`; never bypass it with `git add -A`, `git commit -a`, stash, or reset.
 - Inspect each scoped commit before creating the next so an upstream commit remains independently reversible.
 - Keep commits per repository so their histories, hooks, and publication states remain independently auditable.
 - Rerun every required publish or install flow after its source changes.

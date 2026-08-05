@@ -103,8 +103,8 @@ next session.
   only one process touches the Git index.
 - A lint-staged `Failed to get staged files!` or bare `"lint-staged" exited with code 1` is not enough to diagnose index
   contention. Retry as contention only when the same output explicitly names an index lock; otherwise inspect the hook
-  output or lint-staged debug trace before deciding whether to fix, report, or apply `$commit`'s unrelated-hook bypass
-  rule.
+  diagnostics emitted by `ai-commit` or the lint-staged debug trace before deciding whether to fix, report, or use
+  `$commit` to apply `ai-commit`'s transaction-aware unrelated-hook recovery.
 
 ## Inspect and Fix
 

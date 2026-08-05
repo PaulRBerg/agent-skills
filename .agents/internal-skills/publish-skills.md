@@ -36,8 +36,10 @@ attributable source changes to commit, report the no-op and stop.
 ### 2. Commit and Push Source Changes
 
 If attributable source changes are uncommitted, invoke `$commit --push` from the source repository without `--all` and
-include only those paths. If the worktree is clean but `main` is ahead, use the commit skill's push workflow. Do not
-change global installations until the source commit and push succeed.
+include only those paths. `$commit` owns semantic message composition; its `ai-commit` backend owns deterministic
+transaction, commit, and push mechanics. If the worktree is clean but `main` is ahead, run `ai-commit push`. A `BEHIND`
+receipt means the source is not propagated: stop before changing global installations and report that branch
+reconciliation is required. Otherwise, do not change global installations until the source commit and push succeed.
 
 Re-run the same planner command after the push. Record the exact source HEAD:
 
@@ -77,7 +79,8 @@ node scripts/publish-skills.mjs check
 ```
 
 Completion requires zero selected content, mode, target, deletion, symlink, or lock-metadata drift and successful pushes
-for every source or global repository commit created by this workflow.
+for every source or global repository commit created by this workflow. `BEHIND` is safe noncompletion, not successful
+propagation.
 
 ## Report
 

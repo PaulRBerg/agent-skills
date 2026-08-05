@@ -1,24 +1,24 @@
 # Failure Recovery
 
-Read these rules before deciding whether to retry or bypass a failed pre-commit hook or signing attempt.
+Retry the existing immutable transaction. Do not run `prepare` again after a commit, hook, signing, lock, receipt, or
+reconciliation failure: `ai-commit commit <transaction-id> ...` is idempotent and recovers a commit created before an
+interruption without duplicating it.
 
-- **Pre-commit hook failure:** `Failed to get staged files!` and a bare `"lint-staged" exited with code 1` do not by
-  themselves prove contention. Retry as contention only when the same output explicitly names an index lock or the
-  helper reports its lock refusal. Otherwise inspect the named hook output or lint-staged debug trace. Retry with
-  `--no-verify` only when that evidence plus the prepared diff conclusively shows an unrelated pre-existing failure. A
-  generic failure, repo-wide check, or uncertain ownership is not enough. Never bypass a failure caused by or plausibly
-  affected by the intended paths; fix it or surface it. When bypassing, keep the existing one-line disclosure that the
-  unrelated hook failure was skipped.
-- **Signing failure (signer unreachable):** if `git commit` fails _after_ the pre-commit/commit-msg hooks already
-  passed, with an error naming the configured signer rather than the content or a hook (e.g. `1Password`,
-  `failed to fill whole buffer`, `ssh-agent`, `gpg failed to sign the data`, `no such identity`) — retry once, same
-  command, with `--no-gpg-sign` appended. Interactive/hardware signers (1Password, YubiKey, etc.) can be unreachable
-  when unattended, and the user has authorized landing unsigned commits in that case rather than blocking. Only retry on
-  a genuine signer error at the signing step, never speculatively, and never edit repo/global git config
-  (`commit.gpgsign`, `gpg.format`, etc.) — the bypass is per-commit only. Disclose with one line:
-  `Commit created unsigned — signer unavailable ("<short error>")`. In default mode, append `--no-gpg-sign` to the
-  `commit-paths.sh commit` command; keep direct Git flags for `--all` and `--staged`.
-  - **Session memo:** once a genuine signer error has triggered the fallback in this session, treat the signer as
-    unavailable for the rest of it: later commits may append `--no-gpg-sign` on the first attempt instead of re-failing.
-    Still per-commit only — never touch git config. Replace the per-commit disclosure with a single line in the
-    session's final receipt: `N commits created unsigned — signer unavailable ("<short error>")`.
+- **Index lock:** wait and retry the same command only when the diagnostic names the default-index lock or `ai-commit`
+  reports its lock refusal. Never delete a lock.
+- **Hook failure:** a bare lint-staged `Failed to get staged files!` or `"lint-staged" exited with code 1` does not
+  prove contention. Inspect the named hook output or lint-staged debug trace. Retry the same transaction with
+  `--no-verify` only when that evidence and the immutable prepared diff conclusively prove an unrelated pre-existing
+  failure. Never bypass a failure caused by, or plausibly affected by, the prepared paths. The flag bypasses pre-commit
+  and commit-msg hooks for that attempt; it does not change repository configuration. After success disclose exactly one
+  line: `Commit created with hooks bypassed — unrelated failure ("<short error>")`.
+- **Signing failure:** when commit creation fails at signing after hooks passed, and the error names the configured
+  signer rather than content or a hook, retry the same transaction once with `--no-gpg-sign`. Examples include an
+  unreachable 1Password or YubiKey signer, `failed to fill whole buffer`, `ssh-agent`, `gpg failed to sign the data`, or
+  `no such identity`. Never add the flag speculatively and never edit `commit.gpgsign`, `gpg.format`, or other Git
+  configuration. After success disclose exactly one line:
+  `Commit created unsigned — signer unavailable ("<short error>")`.
+
+Once a genuine signer error establishes that the signer is unavailable for the session, later transactions may use
+`--no-gpg-sign` on their first commit attempt. Keep the bypass per transaction and replace repeated disclosures in the
+final receipt with: `N commits created unsigned — signer unavailable ("<short error>")`.

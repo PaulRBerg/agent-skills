@@ -79,8 +79,6 @@ If `prettier-check` fails, analyze the errors and fix only files you changed.
 - `just publish-skills-test` - exercise publisher fixtures, apply guards, batching, and partial-failure reporting.
 - `just pre-commit` - reject partial staging, then run serial staged-file checks through the pinned local lint-staged
   binary without stashing or hiding files.
-- `just commit-paths-test` - exercise isolated-index atomic commits, hooks, case-only renames, and shared-index
-  reconciliation.
 - `just hooks-install` - install Husky hooks for this checkout through the pinned local binary.
 
 `package.json` exists only for local formatting and hook wiring; there is no build step. Treat Markdown formatting,

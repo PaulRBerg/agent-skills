@@ -13,7 +13,6 @@ evm_atlas_generator := "scripts/generate-evm-atlas.mjs"
 skill_invocation_script := "scripts/sync-invocation-policy.mjs"
 publish_skills_script := "scripts/publish-skills.mjs"
 publish_skills_test := "scripts/test-publish-skills.mjs"
-commit_paths_test := "tests/commit/test-commit-paths.sh"
 codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
 codex_handoff_wave_test := "tests/codex-handoff/test-watch-codex-wave.py"
 
@@ -98,11 +97,6 @@ alias pw := prettier-write
 # Run every repository test suite
 [group("checks")]
 @test: python-test shell-test bats-test
-
-# Exercise isolated-index atomic commits and shared-index reconciliation
-[group("checks")]
-@commit-paths-test:
-    bash {{ commit_paths_test }}
 
 # Exercise the Codex handoff runner and wave watcher
 [group("checks")]

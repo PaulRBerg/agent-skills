@@ -29,7 +29,7 @@ bunx skills add PaulRBerg/agent-skills
 | codex-handoff             | Delegate approved plans to Codex agents from Claude Code or Codex CLI    |
 | code-polish               | Simplify and/or risk-profiled review with autofix                        |
 | coingecko-open-page       | Open CoinGecko historical data page in Chromium                          |
-| commit                    | Git commit with conventional commits                                     |
+| commit                    | Semantic commit messages with deterministic ai-commit mechanics          |
 | skill-writing             | Bootstrap a new agent skill                                              |
 | effect-ts                 | Effect-TS patterns and guidance                                          |
 | evm-atlas                 | EVM lookup + DEX transaction/order interpretation                        |
