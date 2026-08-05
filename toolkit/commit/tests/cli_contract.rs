@@ -1,8 +1,29 @@
 mod common;
 
+use ai_commit::cli::{Cli, Command};
+use clap::Parser;
 use std::{fs, time::Instant};
 
 use common::{Harness, exit_code, stderr, stdout, write_executable};
+
+#[test]
+fn commit_messages_accept_hyphen_leading_paragraphs() {
+    let transaction = "a9a4f5c260c251a8";
+    let subject = "Add shared image uploads to Yeet workflows";
+    let body = "- Centralize image validation, uploader fallback, placement, and failure handling.\n- Add full discussion updates and image support.";
+    let trailer = "Agent-Session: codex/019fd1e6-c747-7d73-b07d-638c0fab8f3b";
+
+    let cli =
+        Cli::try_parse_from(["ai-commit", "commit", transaction, "-m", subject, "-m", body, "-m", trailer, "--push"])
+            .unwrap();
+    let Command::Commit(args) = cli.command else {
+        panic!("expected commit command");
+    };
+
+    assert_eq!(args.transaction_id, transaction);
+    assert_eq!(args.messages, [subject, body, trailer]);
+    assert!(args.push);
+}
 
 #[test]
 fn config_uses_exact_canonical_root_and_explicit_format_wins() {

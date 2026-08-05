@@ -68,7 +68,7 @@ pub struct CommitArgs {
     pub transaction_id: String,
 
     /// Commit message paragraph; repeat for a body.
-    #[arg(short = 'm', long = "message", required = true)]
+    #[arg(short = 'm', long = "message", required = true, allow_hyphen_values = true)]
     pub messages: Vec<String>,
 
     /// Push after creating or recovering the commit.
