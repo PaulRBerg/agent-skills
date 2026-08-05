@@ -10,14 +10,14 @@ blocker. Never invoke `codex exec` or fall back to any nested CLI process.
 
 Use these tiers for research and implementation:
 
-| Work                                  | Model           | Effort   |
-| ------------------------------------- | --------------- | -------- |
-| Bounded research or routine work      | `gpt-5.6-terra` | `medium` |
-| Involved research or implementation   | `gpt-5.6-terra` | `high`   |
-| Semantic or cross-cutting work        | `gpt-5.6-sol`   | `xhigh`  |
-| Exceptional, high-risk implementation | `gpt-5.6-sol`   | `max`    |
+| Work                                       | Model           | Effort   |
+| ------------------------------------------ | --------------- | -------- |
+| Bounded research or routine implementation | `gpt-5.6-terra` | `medium` |
+| Involved research or implementation        | `gpt-5.6-terra` | `high`   |
+| Semantic or cross-cutting implementation   | `gpt-5.6-sol`   | `xhigh`  |
 
-Reserve Sol at `max` for exceptional risk. Never select `low` or `ultra`, and do not use Luna in this adapter. Keep the
+Sol at `xhigh` is the ceiling and is implementation-only; research agents always use Terra — research gathers evidence,
+the parent synthesizes. Never select `low`, `ultra`, or `max`, and do not use Luna in this adapter. Keep the
 highest-tier agent's scope minimal and move deferrable validation to the validation owner.
 
 Spawn every research or implementation worker with a self-contained prompt and `fork_turns: "none"`. This avoids copying
@@ -26,7 +26,7 @@ derived from its manifest ID and scope, and preserve the visible `R1` or `A1` ID
 
 Never exceed the active-agent concurrency limit reported by the harness. Reserve one slot for the parent and account for
 other active workers when the harness reports them. Split a wider manifest into dependency-preserving waves; the
-five-agent shared limit is total implementation agents, not concurrent width. When no concurrency cap is reported,
+eight-agent shared limit is total implementation agents, not concurrent width. When no concurrency cap is reported,
 launch one worker at a time.
 
 Codex subagents inherit the parent sandbox and approval policy. Plan-mode research therefore stays under the parent's
@@ -47,9 +47,9 @@ contract violation.
 Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                          | Effort                       | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | ------------------------------ | ---------------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-terra\|gpt-5.6-sol>` | `<medium\|high\|xhigh\|max>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                          | Effort                  | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | ------------------------------ | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-terra\|gpt-5.6-sol>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
 Use the native configuration table above for every manifest row. Do not add artificial timeout budgets: native agent
@@ -74,6 +74,11 @@ wave before launching dependents. Never spawn more workers merely because a thre
 Use `wait_agent` to await mailbox updates and completed results. Codex's native thread UI is the progress surface: do
 not reproduce it with custom dashboards, polling loops, wrapper artifacts, or synthetic percentages. Ground any concise
 user update in an actual agent result or harness state.
+
+Practice wait economy: when `wait_agent` returns without a settled result or an actionable mailbox message, immediately
+call `wait_agent` again with no analysis, narration, or `list_agents` round-trips. Reserve reasoning and user-visible
+status for settlements, steering-worthy evidence, or at most one compact update per roughly fifteen minutes of elapsed
+wave time; every idle wakeup otherwise costs a full model turn.
 
 Use `send_message` only to steer a currently running agent when new evidence shows it is off track or missing material
 context. Do not use it for routine check-ins, completed agents, or retries.

@@ -25,11 +25,10 @@ Select research configuration from these tiers:
 | -------------------------------------- | --------------- | ------------------ | ---------------- |
 | Bounded, routine survey                | `gpt-5.6-luna`  | `medium`           | 10 minutes       |
 | Involved survey across unfamiliar code | `gpt-5.6-terra` | `medium` or `high` | 15 minutes       |
-| Deep, cross-cutting investigation      | `gpt-5.6-sol`   | `xhigh`            | 20 minutes       |
 
-Use Luna or Terra for bounded surveys and Sol at `xhigh` for deep cross-cutting investigation. Never select `low` or
-`ultra`. Research should normally use shorter budgets than implementation; keep the baseline between 10 and 20 minutes
-unless repository evidence requires otherwise.
+Use Luna for bounded surveys and Terra for involved ones; research never uses Sol — research gathers evidence, the
+parent synthesizes. Never select `low`, `ultra`, or `max`. Research should normally use shorter budgets than
+implementation; keep the baseline between 10 and 15 minutes unless repository evidence requires otherwise.
 
 When the research wave settles, parse each result against `research-result.schema.json`, read its stderr artifact for
 failure forensics, and return the findings to the shared Research Phase. Do not reconcile the working tree.
@@ -39,9 +38,9 @@ failure forensics, and return the findings to the shared Research Phase. Do not 
 Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                                        | Effort                       | Timeout             | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | -------------------------------------------- | ---------------------------- | ------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-luna\|gpt-5.6-terra\|gpt-5.6-sol>` | `<medium\|high\|xhigh\|max>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                                        | Effort                  | Timeout             | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | -------------------------------------------- | ----------------------- | ------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-luna\|gpt-5.6-terra\|gpt-5.6-sol>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
 Select implementation configuration deliberately:
@@ -51,11 +50,10 @@ Select implementation configuration deliberately:
 | Bounded, routine implementation          | `gpt-5.6-luna`  | `medium`           | 10 minutes       |
 | Everyday or involved implementation      | `gpt-5.6-terra` | `medium` or `high` | 20 minutes       |
 | Semantic or cross-cutting implementation | `gpt-5.6-sol`   | `xhigh`            | 40 minutes       |
-| Exceptional, high-risk implementation    | `gpt-5.6-sol`   | `max`              | 60 minutes       |
 
-Never select `low` or `ultra`. Adjust a timeout when repository evidence shows that required validation needs materially
-more or less time. The timeout is a kill-switch, not pacing: Codex never sees it and an early finish costs nothing, so
-size it only to bound how long a hung agent can block its wave.
+Never select `low`, `ultra`, or `max`. Adjust a timeout when repository evidence shows that required validation needs
+materially more or less time. The timeout is a kill-switch, not pacing: Codex never sees it and an early finish costs
+nothing, so size it only to bound how long a hung agent can block its wave.
 
 Keep the highest-tier agent's scope minimal and move deferrable validation to the validation owner.
 

@@ -9,7 +9,7 @@ metadata:
 name: codex-handoff
 user-invocable: true
 description:
-  Orchestrate read-only planning research and one to five Codex agents to implement approved plans from Claude Code or
+  Orchestrate read-only planning research and one to eight Codex agents to implement approved plans from Claude Code or
   Codex CLI.
 ---
 
@@ -45,9 +45,13 @@ selected adapter may specialize host mechanics and manifest configuration, but i
 - Each implementation agent implements its assigned part of the approved plan. It may inspect, edit, and validate, but
   must not redesign the solution or return another plan.
 - Use the smallest effective implementation team. One implementation agent remains valid; use additional agents only
-  when decomposition materially improves latency, correctness, or verification. Never exceed five implementation agents
+  when decomposition materially improves latency, correctness, or verification. Never exceed eight implementation agents
   across the handoff.
-- Use at most three research agents with stable IDs `R1` through `R3`. Count them separately from the five
+- Size every implementation brief before finalizing the team: estimate its wall-clock agent time, and split any brief
+  likely to exceed roughly 25-30 minutes into parallel disjoint scopes or dependency waves, adding an integration agent
+  when needed, instead of one monolithic agent. Steering, follow-up, and interrupt churn on an oversized agent costs
+  more than decomposition.
+- Use at most three research agents with stable IDs `R1` through `R3`. Count them separately from the eight
   implementation agents.
 - Keep the parent agent's implementation work to orchestration, integrity checks, failure handling, and the conditional
   polish pass.
@@ -83,7 +87,7 @@ Produce a decision-complete plan with this section and the selected adapter's ex
 
 - Research: `<none | R1..Rn — key findings used>`
 - Strategy: `<sequential|parallel|hybrid>`
-- Agents: `<1-5>` — `<why this is the smallest effective count>`
+- Agents: `<1-8>` — `<why this is the smallest effective count>`
 - Validation owner: `<agent-id|parent>` — `<aggregate checks it runs once>`
 
 <host-adapter manifest table>
@@ -123,14 +127,16 @@ Build a self-contained, outcome-first prompt for every implementation agent. Inc
 2. Its exact write scope, relevant repository constraints, known dirty-work boundaries, and prerequisite agent results.
 3. Its validation assignment: scoped checks it must run and, unless it owns validation, aggregate checks it must not run
    because the validation owner runs them once.
-4. This authority boundary: inspect, edit only within the assigned scope, and validate locally; do not commit, push,
+4. A soft time budget matching its manifest sizing, with the instruction to return `blocked` with partial evidence
+   rather than grinding past it.
+5. This authority boundary: inspect, edit only within the assigned scope, and validate locally; do not commit, push,
    deploy, make external writes, or broaden scope, even when repository or host instructions favor committing finished
    work promptly. Committing stays with the parent after reconciliation.
-5. The selected adapter's delegation and coordination context, including why the parent session and disjoint siblings
+6. The selected adapter's delegation and coordination context, including why the parent session and disjoint siblings
    are not conflicting work and what unrelated exact-scope claim would justify returning `blocked`.
-6. This stopping rule: implement the approved plan exactly; if it is infeasible or requires redesign, return `blocked`
+7. This stopping rule: implement the approved plan exactly; if it is infeasible or requires redesign, return `blocked`
    with evidence instead of proposing a replacement plan.
-7. A requirement to return every result field: `status` (`completed` or `blocked`), `summary`, `changed_files` listing
+8. A requirement to return every result field: `status` (`completed` or `blocked`), `summary`, `changed_files` listing
    only files actually touched, `verification` listing every command and outcome, `residual_risks`, and `blockers`.
 
 Add the selected adapter's command, permission, transport, and host-tool constraints without restating this contract.
@@ -160,7 +166,7 @@ polish, and do not silently take over implementation.
   report the evidence, and let the user decide. Never silently take over or relaunch on a larger model.
 - Treat a tool or infrastructure failure as retryable only when adapter-specific evidence supports that classification.
   Inspect partial edits first, then use the adapter's same-agent mechanism for exactly one verify-and-continue attempt.
-  This continuation is not a new agent against the five-agent limit. A second infrastructure failure blocks that agent
+  This continuation is not a new agent against the eight-agent limit. A second infrastructure failure blocks that agent
   and its dependents.
 - Never classify an ordinary timeout, a returned blocker, silence, or task-level validation failure as infrastructure
   failure. Continue only work proven independent.

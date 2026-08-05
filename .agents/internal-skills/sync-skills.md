@@ -56,16 +56,16 @@ adapters specialize runtime mechanics. `claude-handoff` remains Claude Code only
 both skill entrypoints and keep them semantically identical, adjusted only for the parent/agent noun and runtime:
 
 - Contract bullets: the Plan-mode gate; parent ownership of decisions, the final plan, and orchestration; the
-  no-redesign rule for implementation agents; the smallest-effective-team and five-implementation-agent limits; and
-  parent implementation work being limited to orchestration, integrity checks, failure handling, and the conditional
-  polish pass.
+  no-redesign rule for implementation agents; the smallest-effective-team and eight-implementation-agent limits; the
+  brief-sizing rule that splits any brief likely to exceed roughly 25-30 minutes; and parent implementation work being
+  limited to orchestration, integrity checks, failure handling, and the conditional polish pass.
 - Pre-plan research delegation: trigger it for uncertain scope, multiple or unfamiliar subsystems, or materially slower
   serial evidence gathering; keep zero research agents as the default; let the parent alone decide whether it runs
   without asking the user; require research agents to stay read-only, gather evidence, and return findings rather than
   decisions or plans; limit the separate research budget to three agents (`R1` through `R3`); feed findings into the
   final plan; and include the optional plan `Research:` traceability line.
 - Strategy selection guidance: sequential vs parallel vs hybrid criteria, disjoint-write-scope requirement, wave
-  semantics, the slowest-agent note, and the whole-handoff five-implementation-agent limit with stable IDs and
+  semantics, the slowest-agent note, and the whole-handoff eight-implementation-agent limit with stable IDs and
   dependencies.
 - The single-validation-owner rule: aggregate checks run once; every other agent runs only the narrowest checks proving
   its own edits; aggregate-check failures confined to files outside every agent's scope are attributed to unrelated
@@ -74,7 +74,8 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
 - Before-launch session-claim guidance: delegated agents treat the orchestrating session's presence as authorization for
   their assigned work. The exact claim owner is host-specific.
 - Platform-agnostic agent prompt requirements: outcome plus brief, exact write scope and dirty-work boundaries,
-  validation assignment, authority boundary, delegation context, stopping rule, and reporting requirement.
+  validation assignment, soft time budget, authority boundary, delegation context, stopping rule, and reporting
+  requirement.
 - The structured result-field contract: status, summary, changed files, verification with each command and outcome,
   residual risks, and blockers.
 - Failure classification: a returned blocked status is a plan problem that gates dependents and requires user decision;
@@ -104,9 +105,9 @@ Treat these as out of scope unless the request explicitly names them:
   dangerous bypass behavior, and subprocess command conventions.
 - Codex-adapter-only content: harness concurrency limits, fresh-context spawning, native steering and waiting, inherited
   sandbox and approval controls, and native progress rendering.
-- Each skill's model selection table and its rules about escalating or re-running a failed agent on another model. Both
-  skills have selection tables, but they are intentionally different — the codex-handoff adapters choose GPT-5.6 model
-  and effort tiers, while Claude selects among three aliases (`haiku`, `sonnet`, and `opus`) — so never normalize them.
+- Each skill's model configuration and its rules about re-running a failed agent. They are intentionally different — the
+  codex-handoff adapters choose GPT-5.6 model and effort tiers, while claude-handoff pins every subagent to `sonnet` —
+  so never normalize them.
 - Status reporting: the Claude adapter's dashboard system versus both native hosts' concise progress and completion
   reports.
 - Frontmatter and `references/`/`scripts/` contents.
