@@ -11,6 +11,8 @@ prettier := "bunx --no-install prettier"
 prettier_globs := "\"**/*.md\""
 evm_atlas_generator := "scripts/generate-evm-atlas.mjs"
 skill_invocation_script := "scripts/sync-invocation-policy.mjs"
+publish_skills_script := "scripts/publish-skills.mjs"
+publish_skills_test := "scripts/test-publish-skills.mjs"
 commit_paths_test := "skills/commit/scripts/test-commit-paths.sh"
 codex_handoff_runner_test := "skills/codex-handoff/scripts/test-run-codex-handoff.sh"
 codex_handoff_wave_test := "skills/codex-handoff/scripts/test-watch-codex-wave.py"
@@ -111,3 +113,15 @@ alias sic := skill-invocation-check
 @skill-invocation-fix:
     node {{ skill_invocation_script }} --fix
 alias sif := skill-invocation-fix
+
+# Check source-owned global skill installations and CLI metadata for drift
+[group("checks")]
+@publish-skills-check *args:
+    node {{ publish_skills_script }} check {{ args }}
+alias psc := publish-skills-check
+
+# Exercise deterministic skill planning, apply guards, and command batching
+[group("checks")]
+@publish-skills-test:
+    node --test {{ publish_skills_test }}
+alias pst := publish-skills-test

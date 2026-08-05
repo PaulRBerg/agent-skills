@@ -1,138 +1,85 @@
 ---
 name: publish-skills
 description:
-  Commit and push catalog skills changed since the last successful publication or in a user-specified commit range,
-  surgically propagate only those global installations, then commit and push the affected global skill paths.
+  Commit and push attributable catalog changes, reconcile deterministic source-owned installation drift in one guarded
+  batch, then commit and push only the global skill paths that actually changed.
 ---
 
 # Publish Skills
 
-Publish and propagate every catalog skill changed since the last successfully published source commit, or in a commit
-range the user specifies.
+Publish current catalog content and repair every selected source-owned global installation and CLI-lock drift.
+
+## Scope
+
+Default to every candidate reported by `scripts/publish-skills.mjs`. Do not reconstruct a last-published Git boundary
+and do not use the current transcript as one.
+
+When the user explicitly names a commit range, resolve the range to commits reachable from the current branch, collect
+only paths matching `skills/<name>/...`, validate and de-duplicate the kebab-case names, and pass each name as a
+repeated `--skill <name>` filter in every planner, apply, and final-check command. Treat a rename as the old and new
+names. Stop if the range or ownership is ambiguous.
 
 ## Workflow
 
-### 1. Resolve the Skill Sets
+### 1. Plan Current Drift
 
-Run in one of two modes, chosen by how the user invoked this skill:
-
-- **Accumulated-changes mode** (default): establish the most recent source commit whose catalog-skill changes were
-  successfully published, then inspect every subsequent commit through `HEAD` plus attributable uncommitted paths under
-  `skills/<name>/`. Include changes from every agent; use the current transcript and coordination state only to
-  attribute safe uncommitted paths, never as the publication boundary. Establish the last-published boundary from Git
-  history and the current declared-target installations, not merely from whether a source commit was pushed. If the
-  boundary cannot be established uniquely, stop and request an explicit commit range rather than falling back to the
-  current chat.
-- **Commit-range mode**: the user names commits instead of relying on this chat's own edits — a date ("today"), a range,
-  specific SHAs, or similar. Resolve the range with Git (e.g. `git log --since/--until`, explicit SHAs) and use
-  `git show --stat` per commit as the source of ownership in place of the transcript. Confirm every resolved commit is
-  reachable from the current branch; if some are and some aren't, stop and report the mismatch rather than guessing
-  which the user meant.
-
-In every mode, inspect the resolved paths under `skills/<name>/` and classify every attributable skill as introduced,
-modified, or deleted.
-
-- Ignore changes outside `skills/`, including internal skills and documentation.
-- Treat a rename as one deletion plus one introduction.
-- De-duplicate names and accept only kebab-case names matching `[a-z0-9]+(-[a-z0-9]+)*`.
-- Stop before committing if no catalog skills changed in the resolved scope or if ownership or classification is
-  ambiguous.
-
-For each introduced or modified skill, read `metadata.install-targets` from its current `SKILL.md` and group it as:
-
-- Shared: omitted or `claude-code codex`.
-- Claude Code only: `claude-code`.
-- Codex only: `codex`.
-
-Stop on any other value. Record the deleted, shared, Claude-only, and Codex-only sets before committing.
-
-### 2. Commit and Push
-
-From the repository root, invoke the commit skill exactly as:
-
-```text
-$commit --push
-```
-
-Do not add `--all`. Wait for both the commit and push to succeed. On failure, stop without changing global skill
-installations.
-
-In accumulated-changes mode and commit-range mode the resolved commits are usually already committed, sometimes already
-pushed. Skip creating a new commit when the working tree is clean; still push if the branch is ahead of its upstream. If
-attributable uncommitted changes exist locally, commit them before pushing without sweeping in another agent's work.
-
-### 3. Propagate Only the Recorded Skills
-
-Run from the global agents repository:
+From the source repository, run:
 
 ```bash
-cd "$HOME/.agents"
+node scripts/publish-skills.mjs plan --json
 ```
 
-Run only the nonempty command groups below. Substitute the recorded names for the illustrative names; never use `*`,
-`--all`, `skills update`, or `just install-all`.
+Append the resolved `--skill` filters only for explicit commit-range mode. The planner is read-only and reports content,
+executable-bit, target-layout, symlink, deletion, and CLI metadata drift. If it reports no drift and there are no
+attributable source changes to commit, report the no-op and stop.
 
-First remove every deleted skill and every surviving affected skill with a restricted target. Removing restricted skills
-before reinstalling clears stale universal or opposite-client installations.
+### 2. Commit and Push Source Changes
+
+If attributable source changes are uncommitted, invoke `$commit --push` from the source repository without `--all` and
+include only those paths. If the worktree is clean but `main` is ahead, use the commit skill's push workflow. Do not
+change global installations until the source commit and push succeed.
+
+Re-run the same planner command after the push. Record the exact source HEAD:
 
 ```bash
-bunx skills remove --global --skill "skill-a" "skill-b" --yes
+git rev-parse HEAD
 ```
 
-Add or refresh shared skills:
+### 3. Apply Once
+
+Run one guarded apply with the recorded full SHA and the same optional filters:
 
 ```bash
-bunx skills add PaulRBerg/agent-skills --global --agent claude-code codex --skill "skill-a" "skill-b" --yes
+node scripts/publish-skills.mjs apply --expected-head <full-sha>
 ```
 
-Add or refresh Claude-only skills:
+Do not issue separate `bunx skills` commands or edit the CLI lock. The helper requires clean selected source paths,
+`main` equal to its upstream and the expected HEAD, readable v3 lock metadata, and an exclusive process lock. It removes
+only deleted or stale entries and target-restriction changes, batches at most one add per target group, verifies the
+result, and prints every global path whose final state changed.
+
+If apply fails after partial progress, preserve its completed-command list. Commit and push only its reported repository
+paths, then re-plan and retry the remaining drift once with the same expected HEAD. A second failure blocks publication;
+report the failed command, completed groups, and changed paths.
+
+### 4. Commit and Push Reported Global Paths
+
+Group `Changed global paths` under `~/.agents` and `~/.claude`. In each repository with a reported diff, invoke
+`$commit --push` and pass only the reported skill paths as session-modified paths, including deletions. Never include
+unreported skills, unrelated dirty paths, or the CLI state lock. Skip repositories with no reported diff.
+
+### 5. Require a Clean Final Check
+
+Run the same selected scope through:
 
 ```bash
-bunx skills add PaulRBerg/agent-skills --global --agent claude-code --skill "skill-a" "skill-b" --yes
+node scripts/publish-skills.mjs check
 ```
 
-Add or refresh Codex-only skills:
+Completion requires zero selected content, mode, target, deletion, symlink, or lock-metadata drift and successful pushes
+for every source or global repository commit created by this workflow.
 
-```bash
-bunx skills add PaulRBerg/agent-skills --global --agent codex --skill "skill-a" "skill-b" --yes
-```
+## Report
 
-`skills add` refreshes an existing named installation and also handles newly introduced skills. If any command fails,
-stop and report the failed command plus the sets already completed; do not fall back to a catalog-wide reinstall.
-
-### 4. Verify the Installations
-
-Verify every recorded skill:
-
-- Shared: `SKILL.md` exists under both `~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`.
-- Claude-only: it exists under `~/.claude/skills/<name>/` and is absent from `~/.agents/skills/<name>/` and
-  `~/.codex/skills/<name>/`.
-- Codex-only: it exists under `~/.agents/skills/<name>/` or `~/.codex/skills/<name>/` and is absent from
-  `~/.claude/skills/<name>/`.
-- Deleted: it is absent from all three locations.
-
-Treat a path as absent only when both `test ! -e` and `test ! -L` pass, so dangling symlinks fail verification.
-
-### 5. Commit and Push the Global Repositories
-
-Inspect `~/.agents` and `~/.claude` separately. In each Git worktree with a diff under a recorded skill path, invoke the
-commit skill from that worktree as:
-
-```text
-$commit --push
-```
-
-Treat only `skills/<recorded-name>/` paths as session-modified paths. Include deletions with `git add -A` semantics, and
-do not stage or commit unrelated changes. Skip a worktree when none of its recorded skill paths changed. Wait for every
-required commit and push to succeed; if one fails, stop and report which global worktrees were already pushed.
-
-`~/.claude/skills/<name>` is normally a symlink into `~/.agents/skills/<name>`, so a shared skill routinely has no
-separate diff to commit there. This is expected, established repo layout, not a finding — skip that worktree silently
-and do not explain the symlink relationship in the report.
-
-### 6. Report
-
-Report the source and global-repository commit summaries plus the introduced, refreshed, and deleted skill names. Omit
-worktrees that were skipped because they had no diff; do not narrate why they had none. Completion requires every
-recorded skill to match its declared target state and every resulting diff under `~/.agents/skills/<name>/` or
-`~/.claude/skills/<name>/` to be committed and pushed.
+Report the source and global commit receipts, introduced or refreshed names, deleted names, and the final clean-check
+result. Omit repositories and target groups that had no changes.
