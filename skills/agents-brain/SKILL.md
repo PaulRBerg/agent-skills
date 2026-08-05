@@ -2,14 +2,14 @@
 argument-hint:
   <polish|create> [path] [target ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run] [--force]
 disable-model-invocation: true
-name: agents-context-management
+name: agents-brain
 user-invocable: true
 description:
   "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.md, installed project skills, and other Markdown
   context docs."
 ---
 
-# Agents Context Management
+# Agents Brain
 
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
