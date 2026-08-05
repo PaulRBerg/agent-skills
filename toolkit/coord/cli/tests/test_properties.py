@@ -18,7 +18,7 @@ import ai_coord.coordinator as coordinator_module
 from ai_coord.coordinator import Coordinator
 from ai_coord.providers import StaticInventory
 from ai_coord.store import Store
-from ai_coord.util import any_overlap
+from ai_coord.util import any_overlap, overlaps_outside_coverage, scopes_cover
 
 SESSIONS = st.sampled_from(tuple(f"session-{index}" for index in range(4)))
 SCOPES = st.sampled_from(
@@ -117,6 +117,34 @@ class CoordinatorStateMachine(RuleBasedStateMachine):
 
         assert outcome.kind == ("READY" if expected == "active" else "BLOCKED")
         self.model[session] = _Claim(expected, claim.paths, claim.created_at)
+
+    @rule(session=SESSIONS, paths=SCOPES)
+    def replace_scope(self, session: str, paths: tuple[str, ...]) -> None:
+        claim = self.model.get(session)
+        if claim is None:
+            return
+        self.clock += 1
+        normalized = tuple(sorted(paths))
+        if claim.state == "active":
+            blocked = not scopes_cover(claim.paths, normalized) and any(
+                candidate != session
+                and other.state in {"active", "queued"}
+                and overlaps_outside_coverage(normalized, other.paths, claim.paths)
+                for candidate, other in self.model.items()
+            )
+            expected_kind = "ACTIVE" if blocked else "READY"
+            expected = claim if blocked else _Claim("active", normalized, claim.created_at)
+        else:
+            created_at = claim.created_at if scopes_cover(claim.paths, normalized) else self.clock
+            state = self.expected_state(session, normalized, created_at)
+            expected_kind = "READY" if state == "active" else "BLOCKED"
+            expected = _Claim(state, normalized, created_at)
+
+        with self.identity(session):
+            outcome = self.coordinator.start(f"replace {session}", paths, cwd=self.repo)
+
+        assert outcome.kind == expected_kind
+        self.model[session] = expected
 
     @rule(session=SESSIONS)
     def release(self, session: str) -> None:

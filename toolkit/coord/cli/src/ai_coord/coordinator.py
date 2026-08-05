@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ai_coord.claim_scope import DIRT_HOLD_SECONDS as _DIRT_HOLD_SECONDS
+from ai_coord.claim_scope import ClaimArbiter, Outcome
 from ai_coord.hook_specs import hook_specs
 from ai_coord.identity import (
     Identity,
@@ -19,15 +21,14 @@ from ai_coord.identity import (
     process_ancestors,
     process_reference,
 )
+from ai_coord.status import StatusSnapshot, render_status
+from ai_coord.status import snapshot_json as _snapshot_json
 from ai_coord.store import Store
 from ai_coord.util import (
     MAX_LABEL_CHARS,
     MAX_MESSAGE_CHARS,
     MAX_PRESENCE_CHARS,
-    UNHASHABLE_BLOB_HASH,
-    age_label,
     any_overlap,
-    benign_dirt_scopes,
     callsign_key,
     first_heading,
     git_blob_hash,
@@ -36,8 +37,6 @@ from ai_coord.util import (
     normalize_callsign,
     normalize_scopes,
     now_ts,
-    overlapping_paths,
-    paths_overlap,
     relevant_dirty,
     sanitize,
 )
@@ -46,7 +45,7 @@ if TYPE_CHECKING:
     from ai_coord.providers import Inventory, InventoryResult
 
 FULL_REFRESH_SECONDS = 20
-DIRT_HOLD_SECONDS = 90
+DIRT_HOLD_SECONDS = _DIRT_HOLD_SECONDS
 WAKER_TIMEOUT_SECONDS = 3480
 WAKER_POLL_SECONDS = 1.0
 INBOX_NUDGE = (
@@ -61,55 +60,9 @@ _NUDGE_EVENTS = frozenset({("claude", "PostToolBatch"), ("codex", "PostToolUse")
 _PERMISSION_MODES = frozenset({"default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"})
 
 
-@dataclass(frozen=True, slots=True)
-class Outcome:
-    kind: str
-    code: int
-    detail: str = ""
-    paths: tuple[str, ...] = ()
-    holders: tuple[str, ...] = ()
-
-    def line(self) -> str:
-        fields = [self.kind]
-        if self.detail:
-            fields.append(self.detail)
-        fields.extend(self.paths)
-        return "\t".join(fields)
-
-
-@dataclass(frozen=True, slots=True)
-class StatusSnapshot:
-    complete: bool
-    scope: dict[str, Any]
-    self_identity: Identity | None
-    providers: tuple[dict[str, Any], ...]
-    sessions: tuple[dict[str, Any], ...]
-    claims: tuple[dict[str, Any], ...]
-    notes: tuple[dict[str, Any], ...]
-    delegates: tuple[dict[str, Any], ...]
-    outside_scope: dict[str, int]
-    schema_version: int = 1
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "schema_version": self.schema_version,
-            "complete": self.complete,
-            "scope": self.scope,
-            "self": (
-                {
-                    "client": self.self_identity.client,
-                    "session_id": self.self_identity.session_id,
-                }
-                if self.self_identity
-                else None
-            ),
-            "providers": list(self.providers),
-            "sessions": list(self.sessions),
-            "claims": list(self.claims),
-            "notes": list(self.notes),
-            "delegates": list(self.delegates),
-            "outside_scope": self.outside_scope,
-        }
+def snapshot_json(snapshot: StatusSnapshot) -> str:
+    """Serialize a status snapshot through the dedicated status module."""
+    return _snapshot_json(snapshot)
 
 
 @dataclass
@@ -187,144 +140,16 @@ class Coordinator:
                 tuple(existing["paths"]),
             )
         self._ensure_session(identity, working_dir, root)
+        return self._claim_arbiter().start(identity, root, clean_label, paths, existing)
 
-        if not paths:
-            return self._save_intent(identity, root, clean_label, existing)
-        if existing and existing["state"] == "active":
-            existing_paths = tuple(existing["paths"])
-            if existing["repo_root"] == str(root) and set(existing_paths) == set(paths):
-                return Outcome("READY", 0, paths=paths)
-            return Outcome("ACTIVE", 3, "active claim has a different scope", existing_paths)
-
-        timestamp = now_ts()
-        inventory = self._refresh_inventory()
-        all_dirty, observations = self._observe_git_dirt(root, current=timestamp)
-        dirty = relevant_dirty(paths, all_dirty)
-        benign_scopes = benign_dirt_scopes(root)
-        residual_owners = self.store.residual_owners(str(root))
-        created_at = float(existing["created_at"]) if existing else timestamp
-
-        with self.store.transaction() as connection:
-            claims = self.store.claims(str(root))
-            active_blockers = [
-                claim
-                for claim in claims
-                if claim["state"] == "active"
-                and not self._same_identity(claim, identity)
-                and any_overlap(paths, tuple(claim["paths"]))
-            ]
-            earlier_waiters = [
-                claim
-                for claim in claims
-                if claim["state"] == "queued"
-                and not self._same_identity(claim, identity)
-                and float(claim["created_at"]) < created_at
-                and claim.get("blocked_reason") != "legacy-pattern"
-                and any_overlap(paths, tuple(claim["paths"]))
-            ]
-            unattributed_dirty = self._unattributed_dirty(dirty, claims)
-            fresh_dirty, advisory_dirty = self._partition_dirty(
-                unattributed_dirty,
-                observations,
-                residual_owners,
-                benign_scopes,
-                identity,
-                timestamp,
-            )
-
-            if not inventory.complete:
-                state, reason = "queued", "coverage"
-                outcome = Outcome("UNKNOWN", 2, "coverage")
-            elif fresh_dirty:
-                state, reason = "queued", "dirty"
-                outcome = Outcome("UNKNOWN", 2, f"dirty-settling:{','.join(fresh_dirty)}")
-            elif active_blockers or earlier_waiters:
-                state = "queued"
-                reason = "overlap" if active_blockers else "waiter"
-                outcome = self._blocked_outcome(paths, active_blockers or earlier_waiters)
-            else:
-                state, reason = "active", None
-                detail = f"stale-dirt:{','.join(advisory_dirty)}" if advisory_dirty else ""
-                outcome = Outcome("READY", 0, detail, paths)
-
-            previous_reason = existing.get("blocked_reason") if existing else None
-            self.store.save_claim(
-                connection,
-                identity,
-                repo_root=str(root),
-                label=clean_label,
-                state=state,
-                paths=paths,
-                blocked_reason=reason,
-                created_at=created_at,
-                updated_at=timestamp,
-            )
-            if active_blockers and previous_reason != "overlap":
-                message = sanitize(
-                    f"Queued behind your claim: {clean_label} ({', '.join(paths)}).",
-                    MAX_MESSAGE_CHARS,
-                )
-                for blocker in active_blockers:
-                    self.store.add_message(
-                        connection,
-                        identity,
-                        Identity(str(blocker["client"]), str(blocker["session_id"])),
-                        message,
-                        str(root),
-                        timestamp,
-                    )
-        if outcome.kind == "READY" and advisory_dirty:
-            baselines = {
-                path: oid
-                for path in advisory_dirty
-                if (oid := git_blob_hash(root, path, write=True)) != UNHASHABLE_BLOB_HASH
-            }
-            self.store.replace_baselines(identity, baselines)
-        return outcome
-
-    def _blocked_outcome(self, paths: tuple[str, ...], blockers: list[dict[str, Any]]) -> Outcome:
-        holders = tuple(
-            self._identity_display(str(claim["client"]), str(claim["session_id"]))
-            for claim in blockers
+    def _claim_arbiter(self) -> ClaimArbiter:
+        return ClaimArbiter(
+            self.store,
+            self._refresh_inventory,
+            lambda repo, timestamp: self._observe_git_dirt(repo, current=timestamp),
+            self._identity_display,
+            now_ts,
         )
-        overlaps = tuple(
-            sorted(
-                {
-                    path
-                    for claim in blockers
-                    for path in overlapping_paths(paths, tuple(claim["paths"]))
-                }
-            )
-        )
-        return Outcome("BLOCKED", 3, ",".join(holders), overlaps, holders)
-
-    def _save_intent(
-        self,
-        identity: Identity,
-        root: Path,
-        label: str,
-        existing: dict[str, Any] | None,
-    ) -> Outcome:
-        timestamp = now_ts()
-        state = str(existing["state"]) if existing else "intent"
-        paths = tuple(existing["paths"]) if existing else ()
-        with self.store.transaction() as connection:
-            self.store.save_claim(
-                connection,
-                identity,
-                repo_root=str(root),
-                label=label,
-                state=state,
-                paths=paths,
-                blocked_reason=existing.get("blocked_reason") if existing else None,
-                created_at=float(existing["created_at"]) if existing else timestamp,
-                updated_at=timestamp,
-            )
-        if state == "active":
-            return Outcome("READY", 0, paths=paths)
-        if state == "queued":
-            return Outcome("BLOCKED", 3, "intent updated", paths)
-        return Outcome("INTENT", 0, label)
 
     def wait(self, timeout_seconds: int = 300, poll_seconds: float = 1.0) -> Outcome:
         identity = self.identity()
@@ -561,108 +386,7 @@ class Coordinator:
         )
 
     def render_status(self, snapshot: StatusSnapshot) -> str:
-        lines = ["CLIENT\tSTATE\tAGE\tCALLSIGN\tNAME/LABEL\tSESSION\tCWD\tDETAIL"]
-        anonymous: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
-        named: list[dict[str, Any]] = []
-        for row in snapshot.sessions:
-            if (
-                row.get("callsign")
-                or row.get("name")
-                or row.get("label")
-                or row.get("permission_mode") == "plan"
-                or row.get("delegate_count")
-            ):
-                named.append(row)
-            else:
-                key = (str(row["client"]), str(row["state"]), str(row["cwd"]))
-                anonymous.setdefault(key, []).append(row)
-        for row in named:
-            lines.append(self._session_line(row))
-        for rows in anonymous.values():
-            if len(rows) == 1:
-                lines.append(self._session_line(rows[0]))
-            else:
-                row = dict(rows[0])
-                row["session_id"] = f"count={len(rows)}"
-                lines.append(self._session_line(row))
-        coverage = "; ".join(
-            f"{provider['client']}={self._coverage_label(provider)}"
-            for provider in snapshot.providers
-        )
-        lines.append(f"Coverage: {coverage}")
-        if snapshot.outside_scope["sessions"]:
-            lines.append(
-                f"Other directories: {snapshot.outside_scope['sessions']} reported sessions across "
-                f"{snapshot.outside_scope['directories']} working directories."
-            )
-        if snapshot.notes:
-            machine_wide = snapshot.scope["kind"] == "machine"
-            note_scope = "machine-wide" if machine_wide else snapshot.scope.get("repo_root", "")
-            lines.append(f"Notes ({note_scope}):")
-            for note in snapshot.notes:
-                prefix = f"{note['repo_root']}  " if machine_wide else ""
-                lines.append(
-                    f"{prefix}{note['id']}  {age_label(float(note['created_at']))}  {note['text']}"
-                )
-            lines.append("(note --done <id> closes a note)")
-        states = {str(row["state"]) for row in snapshot.sessions}
-        partial = not snapshot.complete or any(
-            not p["enabled"] or not p["ok"] or p["dropped"] for p in snapshot.providers
-        )
-        stale = any(
-            row["last_seen"] < now_ts() - 1800 and row["state"] in {"working", "in_flight"}
-            for row in snapshot.sessions
-        )
-        legends = (
-            ("Idle: user prompt; dirt may remain in flight (Codex ~4h).", "idle" in states),
-            (
-                "Waiting: host/human wait; claim=queued means coordination queue.",
-                "waiting" in states,
-            ),
-            ("Working/in_flight older than ~30m: likely stale.", stale),
-            (
-                "Names/labels: hints; only 'ai-coord start' returning READY grants an edit scope.",
-                True,
-            ),
-            (
-                "Partial coverage: sessions may be missing; absence does not mean no conflicts.",
-                partial,
-            ),
-        )
-        lines.extend(line for line, present in legends if present)
-        return "\n".join(lines)
-
-    @staticmethod
-    def _coverage_label(provider: dict[str, Any]) -> str:
-        if not provider["enabled"]:
-            return "disabled"
-        return "ok" if provider["ok"] and not provider["dropped"] else "partial"
-
-    def _session_line(self, row: dict[str, Any]) -> str:
-        detail: list[str] = []
-        if row.get("permission_mode") == "plan":
-            detail.append("planning")
-        if row.get("delegate_count"):
-            detail.append(f"delegates={row['delegate_count']}")
-        if row.get("claim_state") == "queued":
-            detail.append("claim=queued")
-        if row.get("waiting_for"):
-            detail.append(f"waiting={row['waiting_for']}")
-        if row.get("paths"):
-            detail.append(f"paths={','.join(row['paths'])}")
-        name = row.get("label") or row.get("name") or ""
-        return "\t".join(
-            (
-                str(row["client"]),
-                str(row["state"]),
-                age_label(float(row["last_seen"])),
-                str(row.get("callsign") or ""),
-                str(name),
-                str(row["session_id"]),
-                str(row["cwd"]),
-                " ".join(detail),
-            )
-        )
+        return render_status(snapshot)
 
     def send(self, target: str, text: str, cwd: Path | None = None) -> tuple[list[str], int]:
         sender = self.identity()
@@ -874,7 +598,7 @@ class Coordinator:
                 pid=parent.pid,
                 process_started_at=parent.started_at,
             )
-        self._save_intent(identity, root, label, self.store.claim(identity))
+        self._claim_arbiter().start(identity, root, label, (), self.store.claim(identity))
 
     @staticmethod
     def _plan_from_payload(payload: dict[str, Any]) -> str | None:
@@ -979,45 +703,3 @@ class Coordinator:
             str(root), blob_hashes, current=now_ts() if current is None else current
         )
         return dirty, observations
-
-    @staticmethod
-    def _partition_dirty(
-        dirty: tuple[str, ...],
-        observations: dict[str, dict[str, Any]],
-        residual_owners: dict[str, dict[str, Any]],
-        benign_scopes: tuple[str, ...],
-        identity: Identity,
-        current: float,
-    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        fresh: list[str] = []
-        advisory: list[str] = []
-        for path in dirty:
-            residual = residual_owners.get(path)
-            benign = any(paths_overlap(path, scope) for scope in benign_scopes)
-            residual_own = residual is not None and (
-                residual["client"],
-                residual["session_id"],
-            ) == (identity.client, identity.session_id)
-            observation = observations[path]
-            stale = current - float(observation["first_seen"]) >= DIRT_HOLD_SECONDS
-            (advisory if benign or residual_own or stale else fresh).append(path)
-        return tuple(fresh), tuple(advisory)
-
-    @staticmethod
-    def _same_identity(claim: dict[str, Any], identity: Identity) -> bool:
-        return claim["client"] == identity.client and claim["session_id"] == identity.session_id
-
-    @staticmethod
-    def _unattributed_dirty(
-        dirty: tuple[str, ...], claims: list[dict[str, Any]]
-    ) -> tuple[str, ...]:
-        owned_scopes = [
-            scope for claim in claims if claim["state"] == "active" for scope in claim["paths"]
-        ]
-        return tuple(
-            path for path in dirty if not any(paths_overlap(path, scope) for scope in owned_scopes)
-        )
-
-
-def snapshot_json(snapshot: StatusSnapshot) -> str:
-    return json.dumps(snapshot.as_dict(), indent=2, sort_keys=True)

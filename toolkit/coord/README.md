@@ -43,16 +43,26 @@ the already-written Codex hook file is intentionally not rolled back.
 
 ## Coordination workflow
 
-Acquire literal file or directory scopes before editing:
+Acquire exact file scopes before editing:
 
 ```sh
 ai-coord start 'regenerate 2025 tax year' \
-  'accounting/txs/incomes' \
-  'accounting/reports/2025'
+  'accounting/txs/incomes/2025.tsv' \
+  'accounting/reports/2025/tax-summary.md'
 ```
 
-Scopes are repository-relative prefixes. `.` covers the worktree. Globs, non-printable paths, normalized scopes over 120
-characters, and paths outside the repository are rejected so overlap checks stay exact.
+Positional paths are exact leaves. Claim a directory prefix only when the work really spans an unknown set of files,
+using a repeatable `--recursive` option:
+
+```sh
+ai-coord start --recursive 'accounting/reports/2025' 'regenerate all 2025 reports'
+```
+
+An existing directory passed positionally is rejected with exit 64 before the ledger is opened; re-run it with
+`--recursive` or replace it with the actual files. Existing regular files, literal symlink leaves, and nonexistent
+planned files are valid positional scopes. Existing files and symlinks are rejected for `--recursive`; a nonexistent
+path is accepted there as an explicitly planned subtree. Scopes remain repository-relative and literal. Globs,
+non-printable paths, normalized scopes over 120 characters, and paths outside the repository are rejected.
 
 With no paths, `start` records the label as pathless, non-exclusive intent. Intent advertises planned work but owns no
 edit scope.
@@ -66,9 +76,16 @@ edit scope.
 | `BLOCKED`                  |    3 | The work is queued behind an active or earlier overlapping claim. |
 | `UNKNOWN coverage`         |    2 | Provider coverage is incomplete; work was not granted.            |
 | `UNKNOWN dirty-settling:…` |    2 | Relevant unattributed dirt is settling; wait and retry.           |
-| `ACTIVE`                   |    3 | This session already owns a different scope; release it first.    |
+| `ACTIVE`                   |    3 | A requested active-scope expansion failed; the old scope remains. |
 
-Blocked work retains its paths and queue position. Waiting therefore needs no repeated session or path arguments:
+Re-running `start` atomically replaces the session's full desired scope. Narrowing an active claim takes effect
+immediately and wakes queued sessions that no longer overlap. Expanding or moving an active claim succeeds only when
+coverage is complete, relevant dirt is safe, and no active or queued claim intersects the newly requested area;
+otherwise `ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged.
+
+Blocked work retains its paths. Narrowing a queued claim preserves its original queue age; expanding or moving it, or
+turning pathless intent into a scoped claim, receives a new age so stale broad requests cannot reserve unrelated work.
+Waiting therefore needs no repeated session or path arguments:
 
 ```sh
 ai-coord wait        # waits up to 300 seconds
@@ -82,7 +99,8 @@ such wake, inspect the reported state and re-arm as needed. `done` idempotently 
 work and notifies overlapping queued holders that their claim may now be ready.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. A newly blocked claim
-also sends a bounded system message to its current holders.
+reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
+recursive holder is blocking a more targeted request; blocked recursive callers receive a matching stderr hint.
 
 In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its claim is
 promoted, a message or note arrives, the claim is released, coverage becomes unknown, or the waker times out. A

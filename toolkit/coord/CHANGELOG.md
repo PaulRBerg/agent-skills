@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make `start` exact-file-first with explicit repeatable `--recursive` directory scopes, and support atomic active or
+  queued scope replacement with narrowing guidance, fair queue-age handling, and fail-closed expansions.
 - Cache complete provider inventory for bounded read reuse, probe Codex and Claude concurrently, keep authorization
   refreshes fresh, and lazy-load command-specific modules.
 - Add optional emoji callsigns with machine-wide uniqueness, historical message endpoint snapshots, callsign targeting,

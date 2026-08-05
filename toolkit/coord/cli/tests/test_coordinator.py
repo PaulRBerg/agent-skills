@@ -12,7 +12,8 @@ from click.testing import CliRunner
 
 import ai_coord.cli as cli_module
 import ai_coord.coordinator as coordinator_module
-from ai_coord.coordinator import DIRT_HOLD_SECONDS, Coordinator, StatusSnapshot
+from ai_coord.claim_scope import DIRT_HOLD_SECONDS
+from ai_coord.coordinator import Coordinator, StatusSnapshot
 from ai_coord.identity import Identity, ProcessReference
 from ai_coord.providers import HostInventory, InventoryResult, StaticInventory
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
@@ -169,9 +170,12 @@ def test_start_intent_and_idempotent_active(
     assert (ready.kind, ready.code, ready.paths) == ("READY", 0, ("src", "docs"))
     assert coordinator.start("plan work", ("docs", "src"), cwd=git_repo).kind == "READY"
     changed = coordinator.start("plan work", ("docs",), cwd=git_repo)
-    assert changed.kind == "ACTIVE"
-    assert changed.code == 3
-    assert changed.detail == "active claim has a different scope"
+    assert (changed.kind, changed.code, changed.paths) == ("READY", 0, ("docs",))
+    identity = coordinator.identity()
+    assert identity is not None
+    claim = coordinator.store.claim(identity)
+    assert claim is not None
+    assert claim["paths"] == ("docs",)
 
 
 def test_claim_cannot_move_between_repositories(
@@ -265,7 +269,10 @@ def test_blocked_claim_messages_holder_and_promotes_after_done(
     _set_identity(monkeypatch, "holder-session")
     queued_message = coordinator.inbox()[0]
     assert queued_message["sender_callsign"] == "🐢 Queue Kid"
-    assert queued_message["text"] == "Queued behind your claim: waiter (src/app.py)."
+    assert queued_message["text"] == (
+        "Narrow broad claim src with ai-coord start if unrelated; "
+        "queued work 'waiter' overlaps: src/app.py."
+    )
     assert "Queue Kid" not in queued_message["text"]
     assert coordinator.done().kind == "DONE"
 
@@ -655,7 +662,7 @@ def test_earlier_waiter_promotion_notifies_the_new_active_blocker(
     messages = coordinator.store.inbox(first)
     assert [message["text"] for message in messages] == [
         "Released claim 'holder'; your queued claim may now be ready.",
-        "Queued behind your claim: second (docs).",
+        "Queued behind your claim: second; overlaps: docs.",
     ]
 
     assert coordinator.start("second", ("docs",), cwd=git_repo).kind == "BLOCKED"

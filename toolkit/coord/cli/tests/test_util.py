@@ -16,10 +16,13 @@ from ai_coord.util import (
     first_heading,
     git_dirty_paths,
     normalize_callsign,
+    normalize_claim_scopes,
     normalize_scopes,
+    overlaps_outside_coverage,
     paths_overlap,
     relevant_dirty,
     sanitize,
+    scopes_cover,
 )
 
 PATH_SEGMENTS = st.text(
@@ -162,6 +165,44 @@ def test_normalize_scopes_preserves_spaces_and_rejects_unsafe_lengths(git_repo: 
         normalize_scopes(("x" * (MAX_SCOPE_CHARS + 1),), git_repo, git_repo)
     with pytest.raises(ValueError, match="non-printable"):
         normalize_scopes(("src/line\nbreak.py",), git_repo, git_repo)
+
+
+def test_claim_scopes_require_explicit_recursion_for_existing_directories(
+    git_repo: Path,
+) -> None:
+    with pytest.raises(ValueError, match=r"directory scope requires --recursive: src"):
+        normalize_claim_scopes(("src",), (), git_repo, git_repo)
+
+    assert normalize_claim_scopes(
+        ("src/app.py", "planned.py"), ("src", "planned-dir"), git_repo, git_repo
+    ) == ("src/app.py", "planned.py", "src", "planned-dir")
+
+
+def test_claim_scopes_preserve_symlink_leaves_but_reject_recursive_symlinks(
+    git_repo: Path,
+) -> None:
+    link = git_repo / "src-link"
+    link.symlink_to(git_repo / "src", target_is_directory=True)
+
+    assert normalize_claim_scopes(("src-link",), (), git_repo, git_repo) == ("src-link",)
+    with pytest.raises(ValueError, match=r"recursive scope cannot be a symlink: src-link"):
+        normalize_claim_scopes((), ("src-link",), git_repo, git_repo)
+
+
+def test_claim_scopes_reject_recursive_files_and_cross_class_duplicates(git_repo: Path) -> None:
+    with pytest.raises(ValueError, match=r"recursive scope is not a directory: src/app.py"):
+        normalize_claim_scopes((), ("src/app.py",), git_repo, git_repo)
+    with pytest.raises(ValueError, match=r"scope cannot be both exact and recursive: planned"):
+        normalize_claim_scopes(("planned",), ("planned",), git_repo, git_repo)
+
+
+def test_scope_coverage_distinguishes_refinement_from_expansion() -> None:
+    assert scopes_cover(("src", "docs/readme.md"), ("src/app.py", "docs/readme.md"))
+    assert not scopes_cover(("src/app.py",), ("src",))
+    assert overlaps_outside_coverage(
+        ("src/app.py", "docs/readme.md"), ("docs",), ("src/app.py",)
+    ) == ("docs/readme.md",)
+    assert overlaps_outside_coverage(("src/app.py",), ("src",), ("src/app.py",)) == ()
 
 
 def test_git_dirty_paths_includes_renames_and_untracked(git_repo: Path) -> None:

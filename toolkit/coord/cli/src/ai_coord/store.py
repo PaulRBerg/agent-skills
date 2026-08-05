@@ -480,6 +480,8 @@ class Store:
         blocked_reason: str | None,
         created_at: float,
         updated_at: float,
+        baselines: dict[str, str] | None = None,
+        residual_paths: tuple[str, ...] = (),
     ) -> int:
         connection.execute(
             """
@@ -491,6 +493,7 @@ class Store:
                 label = excluded.label,
                 state = excluded.state,
                 blocked_reason = excluded.blocked_reason,
+                created_at = excluded.created_at,
                 updated_at = excluded.updated_at
             """,
             (
@@ -514,6 +517,27 @@ class Store:
         connection.executemany(
             "INSERT INTO claim_paths(claim_id, path) VALUES (?, ?)",
             [(claim_id, path) for path in paths],
+        )
+        if baselines is not None:
+            connection.execute("DELETE FROM claim_baselines WHERE claim_id = ?", (claim_id,))
+            connection.executemany(
+                "INSERT INTO claim_baselines(claim_id, path, oid) VALUES (?, ?, ?)",
+                [(claim_id, path, oid) for path, oid in baselines.items()],
+            )
+        connection.executemany(
+            """
+            INSERT INTO residual_owners(
+                repo_root, path, client, session_id, released_at
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo_root, path) DO UPDATE SET
+                client = excluded.client,
+                session_id = excluded.session_id,
+                released_at = excluded.released_at
+            """,
+            [
+                (repo_root, path, identity.client, identity.session_id, updated_at)
+                for path in residual_paths
+            ],
         )
         connection.execute(
             "UPDATE sessions SET label = ? WHERE client = ? AND session_id = ?",

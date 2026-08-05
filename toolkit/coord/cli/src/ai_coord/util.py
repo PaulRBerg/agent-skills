@@ -126,6 +126,41 @@ def normalize_scopes(scopes: tuple[str, ...], cwd: Path, root: Path) -> tuple[st
     return tuple(normalized)
 
 
+def normalize_claim_scopes(
+    files: tuple[str, ...],
+    recursive: tuple[str, ...],
+    cwd: Path,
+    root: Path,
+) -> tuple[str, ...]:
+    """Normalize exact file leaves and explicitly recursive directory scopes."""
+    normalized_files = normalize_scopes(files, cwd, root)
+    normalized_recursive = normalize_scopes(recursive, cwd, root)
+    ambiguous = sorted(set(normalized_files).intersection(normalized_recursive))
+    if ambiguous:
+        raise ValueError(f"scope cannot be both exact and recursive: {ambiguous[0]}")
+
+    for scope in normalized_files:
+        candidate = root / scope
+        if not candidate.is_symlink() and candidate.is_dir():
+            raise ValueError(f"directory scope requires --recursive: {scope}")
+    for scope in normalized_recursive:
+        candidate = root / scope
+        if candidate.is_symlink():
+            raise ValueError(f"recursive scope cannot be a symlink: {scope}")
+        if candidate.exists() and not candidate.is_dir():
+            raise ValueError(f"recursive scope is not a directory: {scope}")
+
+    return (*normalized_files, *normalized_recursive)
+
+
+def scopes_cover(covering: tuple[str, ...], covered: tuple[str, ...]) -> bool:
+    """Return whether every covered prefix lies wholly beneath a covering prefix."""
+    return all(
+        any(parent == "." or path == parent or path.startswith(f"{parent}/") for parent in covering)
+        for path in covered
+    )
+
+
 def paths_overlap(left: str, right: str) -> bool:
     """Return whether two normalized literal scopes overlap by ancestry."""
     if left == "." or right == ".":
@@ -140,6 +175,19 @@ def any_overlap(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
 def overlapping_paths(left: tuple[str, ...], right: tuple[str, ...]) -> tuple[str, ...]:
     values = {a if len(a) >= len(b) else b for a in left for b in right if paths_overlap(a, b)}
     return tuple(sorted(values))
+
+
+def overlaps_outside_coverage(
+    requested: tuple[str, ...],
+    contender: tuple[str, ...],
+    existing: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return requested/contender intersections not already covered by existing."""
+    return tuple(
+        path
+        for path in overlapping_paths(requested, contender)
+        if not scopes_cover(existing, (path,))
+    )
 
 
 def git_dirty_paths(root: Path) -> tuple[str, ...]:

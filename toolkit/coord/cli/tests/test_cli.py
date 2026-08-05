@@ -38,9 +38,9 @@ def test_cli_start_status_done(
     monkeypatch.chdir(git_repo)
     runner = CliRunner()
 
-    start = runner.invoke(cli_module.cli, ["start", "cli work", "src"])
+    start = runner.invoke(cli_module.cli, ["start", "cli work", "src/app.py"])
     assert start.exit_code == 0
-    assert start.output == "READY\tsrc\n"
+    assert start.output == "READY\tsrc/app.py\n"
 
     status = runner.invoke(cli_module.cli, ["status", "--json"])
     assert status.exit_code == 0
@@ -114,6 +114,8 @@ def test_cli_help_documents_coordination_outcomes() -> None:
 
     assert start.exit_code == wait.exit_code == message.exit_code == link.exit_code == 0
     assert "pathless, non-exclusive intent" in " ".join(start.output.split())
+    assert "exact file PATHS" in " ".join(start.output.split())
+    assert "--recursive DIR" in " ".join(start.output.split())
     assert "non-readiness wake events" in " ".join(wait.output.split()).replace("- ", "-")
     assert "TARGET=repo selects live peers in the current Git worktree" in " ".join(
         message.output.split()
@@ -121,6 +123,62 @@ def test_cli_help_documents_coordination_outcomes() -> None:
     assert "Codex: active hooks file only; Claude: one alternate settings file" in " ".join(
         link.output.split()
     )
+
+
+def test_cli_start_rejects_bare_directory_before_opening_the_ledger(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(git_repo)
+    monkeypatch.setattr(
+        cli_module,
+        "_coordinator",
+        lambda: pytest.fail("invalid path classes must not open the coordination ledger"),
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["start", "work", "src"])
+
+    assert result.exit_code == 64
+    assert result.output == "error: directory scope requires --recursive: src\n"
+
+
+def test_cli_start_accepts_explicit_recursive_and_nonexistent_exact_scopes(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coordinator = Coordinator(Store(tmp_path / "state.db"), StaticInventory())
+    monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)
+    monkeypatch.setenv("AI_COORD_CLIENT", "codex")
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "cli-session")
+    monkeypatch.chdir(git_repo)
+    runner = CliRunner()
+
+    recursive = runner.invoke(cli_module.cli, ["start", "--recursive", "src", "work"])
+    assert (recursive.exit_code, recursive.output) == (0, "READY\tsrc\n")
+
+    planned = runner.invoke(cli_module.cli, ["start", "work", "planned.py"])
+    assert (planned.exit_code, planned.output) == (0, "READY\tplanned.py\n")
+
+
+def test_cli_start_explains_recursive_scope_blocking_narrower_work(
+    tmp_path: Path,
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coordinator = Coordinator(Store(tmp_path / "state.db"), StaticInventory())
+    monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)
+    monkeypatch.chdir(git_repo)
+    monkeypatch.setenv("AI_COORD_CLIENT", "codex")
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "holder-session")
+    assert coordinator.start("holder", ("src/app.py",), cwd=git_repo).kind == "READY"
+    monkeypatch.setenv("AI_COORD_SESSION_ID", "waiter-session")
+
+    result = CliRunner().invoke(cli_module.cli, ["start", "--recursive", "src", "broad work"])
+
+    assert result.exit_code == 3
+    assert result.stdout == "BLOCKED\tcodex/holder-s\tsrc/app.py\n"
+    assert "recursive scope(s) src caused narrower overlaps" in result.stderr
+    assert "without losing its position" in result.stderr
 
 
 def test_cli_and_coordinator_imports_leave_heavy_command_modules_lazy() -> None:

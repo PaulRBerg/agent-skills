@@ -324,6 +324,91 @@ def test_concurrent_callsign_claims_have_one_winner(tmp_path: Path) -> None:
     assert sorted(results) == [False, True]
 
 
+def test_save_claim_atomically_replaces_scope_age_baselines_and_residuals(tmp_path: Path) -> None:
+    store = Store(tmp_path / "state.db")
+    identity = Identity("codex", "owner")
+    store.upsert_session(
+        identity,
+        cwd="/repo",
+        repo_root="/repo",
+        state="working",
+        source="test",
+    )
+    store.observe_dirt("/repo", {"docs/readme.md": "dirty-oid"}, current=1)
+    with store.transaction() as connection:
+        store.save_claim(
+            connection,
+            identity,
+            repo_root="/repo",
+            label="broad",
+            state="active",
+            paths=("docs/readme.md", "src/app.py"),
+            blocked_reason=None,
+            created_at=1,
+            updated_at=1,
+            baselines={"docs/readme.md": "docs-oid", "src/app.py": "src-oid"},
+        )
+
+    with pytest.raises(RuntimeError, match="rollback"), store.transaction() as connection:
+        store.save_claim(
+            connection,
+            identity,
+            repo_root="/repo",
+            label="rolled back",
+            state="active",
+            paths=("src/app.py",),
+            blocked_reason=None,
+            created_at=2,
+            updated_at=2,
+            baselines={"src/app.py": "new-src-oid"},
+            residual_paths=("docs/readme.md",),
+        )
+        raise RuntimeError("rollback")
+
+    claim = store.claim(identity)
+    assert claim is not None
+    assert (claim["label"], claim["paths"], claim["created_at"]) == (
+        "broad",
+        ("docs/readme.md", "src/app.py"),
+        1,
+    )
+    assert store.baselines(identity) == [
+        {"path": "docs/readme.md", "oid": "docs-oid"},
+        {"path": "src/app.py", "oid": "src-oid"},
+    ]
+    assert store.residual_owners("/repo") == {}
+
+    with store.transaction() as connection:
+        store.save_claim(
+            connection,
+            identity,
+            repo_root="/repo",
+            label="narrow",
+            state="active",
+            paths=("src/app.py",),
+            blocked_reason=None,
+            created_at=3,
+            updated_at=3,
+            baselines={"src/app.py": "new-src-oid"},
+            residual_paths=("docs/readme.md",),
+        )
+
+    claim = store.claim(identity)
+    assert claim is not None
+    assert (claim["label"], claim["paths"], claim["created_at"]) == (
+        "narrow",
+        ("src/app.py",),
+        3,
+    )
+    assert store.baselines(identity) == [{"path": "src/app.py", "oid": "new-src-oid"}]
+    residual = store.residual_owners("/repo")["docs/readme.md"]
+    assert (residual["client"], residual["session_id"], residual["released_at"]) == (
+        identity.client,
+        identity.session_id,
+        3,
+    )
+
+
 def test_store_permissions_and_message_cap(tmp_path: Path) -> None:
     path = tmp_path / "private" / "state.db"
     store = Store(path)

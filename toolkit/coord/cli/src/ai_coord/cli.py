@@ -123,17 +123,40 @@ def name(callsign: str) -> None:
 
 
 @cli.command()
+@click.option(
+    "--recursive",
+    "recursive_paths",
+    multiple=True,
+    metavar="DIR",
+    help="Explicitly claim a directory prefix; repeat for multiple directories.",
+)
 @click.argument("label")
 @click.argument("paths", nargs=-1)
-def start(label: str, paths: tuple[str, ...]) -> None:
-    """Return READY after acquiring literal PATHS, or queue the claim.
+def start(recursive_paths: tuple[str, ...], label: str, paths: tuple[str, ...]) -> None:
+    """Return READY after acquiring exact file PATHS, or queue the claim.
 
-    With no PATHS, record LABEL as a pathless, non-exclusive intent.
+    Use --recursive DIR for intentional directory-prefix ownership. With no
+    PATHS or recursive directories, record LABEL as a pathless, non-exclusive
+    intent.
     """
     try:
+        from ai_coord.util import git_root, normalize_claim_scopes
+
+        working_dir = Path.cwd().resolve()
+        root = git_root(working_dir)
+        if root is None:
+            raise RuntimeError("start requires a Git worktree")
+        normalized = normalize_claim_scopes(paths, recursive_paths, working_dir, root)
         coordinator = _coordinator()
-        outcome = coordinator.start(label, paths)
+        outcome = coordinator.start(label, normalized, cwd=working_dir)
         click.echo(outcome.line())
+        if outcome.kind == "BLOCKED" and outcome.broad_paths:
+            click.echo(
+                "hint: recursive scope(s) "
+                f"{', '.join(outcome.broad_paths)} caused narrower overlaps; re-run "
+                "start with exact files to replace the queued scope without losing its position.",
+                err=True,
+            )
         raise click.exceptions.Exit(outcome.code)
     except click.exceptions.Exit:
         raise
@@ -197,7 +220,7 @@ def status(machine_wide: bool, as_json: bool) -> None:
     Exit 0 means complete coverage, 2 usable partial coverage, and 1 an error.
     """
     try:
-        from ai_coord.coordinator import snapshot_json
+        from ai_coord.status import snapshot_json
 
         coordinator = _coordinator()
         snapshot = coordinator.snapshot(machine_wide, allow_cached_inventory=True)
