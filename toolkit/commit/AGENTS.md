@@ -24,5 +24,6 @@
 
 ## Validation
 
-Run `just full-check`, then `just test`. During focused development, use the narrowest relevant `cargo test` filter
-before the aggregate commands.
+Run `just full-check`, then `just test`. After any Rust source change, finish with `just install-cli` so the
+`ai-commit` binary on `PATH` matches the current checkout. During focused development, use the narrowest relevant
+`cargo test` filter before the aggregate commands.

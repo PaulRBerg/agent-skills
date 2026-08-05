@@ -9,6 +9,11 @@ default:
 build:
     cargo build --locked
 
+# Install the CLI globally from the current checkout
+install-cli:
+    cargo install --path . --locked --force --root "$HOME/.local"
+alias ic := install-cli
+
 # Format, lint, and compile every target
 full-check:
     cargo fmt --all --check
@@ -21,4 +26,3 @@ full-write:
 # Run all tests
 test:
     cargo test --locked
-
