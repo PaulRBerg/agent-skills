@@ -9,10 +9,10 @@ set unstable
 
 prettier := "bunx --no-install prettier"
 prettier_globs := "\"**/*.md\""
-evm_atlas_generator := "scripts/generate-evm-atlas.mjs"
-skill_invocation_script := "scripts/sync-invocation-policy.mjs"
-publish_skills_script := "scripts/publish-skills.mjs"
-publish_skills_test := "scripts/test-publish-skills.mjs"
+evm_atlas_generator := "scripts/generate-evm-atlas.ts"
+skill_invocation_script := "scripts/sync-invocation-policy.ts"
+publish_skills_script := "scripts/publish-skills.ts"
+publish_skills_test := "scripts/publish-skills.test.ts"
 codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
 codex_handoff_wave_test := "tests/codex-handoff/test-watch-codex-wave.py"
 
@@ -107,41 +107,46 @@ alias pw := prettier-write
 # Regenerate evm-atlas references from crypto-registry's canonical chain JSON + atlas overlays
 [group("checks")]
 @evm-atlas-generate:
-    node {{ evm_atlas_generator }} --write
+    bun run {{ evm_atlas_generator }} --write
 alias eag := evm-atlas-generate
 
 # Check evm-atlas generated references are current
 [group("checks")]
 @evm-atlas-check:
-    node {{ evm_atlas_generator }} --check
+    bun run {{ evm_atlas_generator }} --check
 alias eac := evm-atlas-check
 
 # Refresh atlas-overlays.json routeMesh flags through the routemesh CLI (network call)
 [group("checks")]
 @evm-atlas-discover-routemesh:
-    node {{ evm_atlas_generator }} --discover-routemesh
+    bun run {{ evm_atlas_generator }} --discover-routemesh
 alias eadr := evm-atlas-discover-routemesh
 
 # Check SKILL.md invocation fields against agents/openai.yaml
 [group("checks")]
 @skill-invocation-check:
-    node {{ skill_invocation_script }}
+    bun run {{ skill_invocation_script }}
 alias sic := skill-invocation-check
 
 # Update agents/openai.yaml invocation policy from SKILL.md
 [group("checks")]
 @skill-invocation-fix:
-    node {{ skill_invocation_script }} --fix
+    bun run {{ skill_invocation_script }} --fix
 alias sif := skill-invocation-fix
 
 # Check source-owned global skill installations and CLI metadata for drift
 [group("checks")]
 @publish-skills-check *args:
-    node {{ publish_skills_script }} check {{ args }}
+    bun run {{ publish_skills_script }} check {{ args }}
 alias psc := publish-skills-check
 
 # Exercise deterministic skill planning, apply guards, and command batching
 [group("checks")]
 @publish-skills-test:
-    node --test {{ publish_skills_test }}
+    bun test {{ publish_skills_test }}
 alias pst := publish-skills-test
+
+# Type-check Bun TypeScript helper scripts without emitting JavaScript
+@typescript-check:
+    bunx --no-install tsc --noEmit
+alias tsc := typescript-check

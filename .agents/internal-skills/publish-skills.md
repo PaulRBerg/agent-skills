@@ -11,8 +11,8 @@ Publish current catalog content and repair every selected source-owned global in
 
 ## Scope
 
-Default to every candidate reported by `scripts/publish-skills.mjs`. Do not reconstruct a last-published Git boundary
-and do not use the current transcript as one.
+Default to every candidate reported by `scripts/publish-skills.ts`. Do not reconstruct a last-published Git boundary and
+do not use the current transcript as one.
 
 When the user explicitly names a commit range, resolve the range to commits reachable from the current branch, collect
 only paths matching `skills/<name>/...`, validate and de-duplicate the kebab-case names, and pass each name as a
@@ -26,7 +26,7 @@ names. Stop if the range or ownership is ambiguous.
 From the source repository, run:
 
 ```bash
-node scripts/publish-skills.mjs plan --json
+bun run scripts/publish-skills.ts plan --json
 ```
 
 Append the resolved `--skill` filters only for explicit commit-range mode. The planner is read-only and reports content,
@@ -52,7 +52,7 @@ git rev-parse HEAD
 Run one guarded apply with the recorded full SHA and the same optional filters:
 
 ```bash
-node scripts/publish-skills.mjs apply --expected-head <full-sha>
+bun run scripts/publish-skills.ts apply --expected-head <full-sha>
 ```
 
 Do not issue separate `bunx skills` commands or edit the CLI lock. The helper requires clean selected source paths,
@@ -75,7 +75,7 @@ unreported skills, unrelated dirty paths, or the CLI state lock. Skip repositori
 Run the same selected scope through:
 
 ```bash
-node scripts/publish-skills.mjs check
+bun run scripts/publish-skills.ts check
 ```
 
 Completion requires zero selected content, mode, target, deletion, symlink, or lock-metadata drift and successful pushes

@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO_ROOT / "skills" / "release-bumper" / "scripts"
-PLANNER = SCRIPTS / "plan-release.mjs"
+PLANNER = SCRIPTS / "plan-release.ts"
 FINALIZER = SCRIPTS / "finalize-release-plan.py"
 VALIDATOR = SCRIPTS / "validate-changelog.py"
 
@@ -64,7 +64,7 @@ class PlannerTests(unittest.TestCase):
             git(repo, "commit", "-qm", "initial")
 
             result = subprocess.run(
-                ["node", str(PLANNER), "--cwd", str(repo), "--package", "."],
+                ["bun", "run", str(PLANNER), "--cwd", str(repo), "--package", "."],
                 check=True,
                 text=True,
                 capture_output=True,
@@ -82,7 +82,7 @@ class PlannerTests(unittest.TestCase):
             git(repo, "commit", "-qm", "add workspace package")
 
             result = subprocess.run(
-                ["node", str(PLANNER), "--cwd", str(repo)],
+                ["bun", "run", str(PLANNER), "--cwd", str(repo)],
                 check=True,
                 text=True,
                 capture_output=True,
@@ -110,7 +110,7 @@ class PlannerTests(unittest.TestCase):
             git(repo, "add", "Dockerfile", "src.js", "src.test.js")
             git(repo, "commit", "-qm", "change runtime tooling and tests")
             result = subprocess.run(
-                ["node", str(PLANNER), "--cwd", str(repo)], check=True, text=True, capture_output=True
+                ["bun", "run", str(PLANNER), "--cwd", str(repo)], check=True, text=True, capture_output=True
             )
             payload = json.loads(result.stdout)
             self.assertEqual(payload["schemaVersion"], 2)

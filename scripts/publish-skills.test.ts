@@ -1,11 +1,9 @@
-#!/usr/bin/env node
-
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { afterEach, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 
 const repository = "PaulRBerg/agent-skills";
@@ -13,11 +11,32 @@ const sourceUrl = "https://github.com/PaulRBerg/agent-skills.git";
 const scriptPath = path.join(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
   "scripts",
-  "publish-skills.mjs",
+  "publish-skills.ts",
 );
 
-test("plan and check cover clean shared and restricted installs, content, modes, and filters", (context) => {
-  const fixture = createFixture(context);
+type Fixture = {
+  agentsRoot: string;
+  claudeRoot: string;
+  codexRoot: string;
+  commandLog: string;
+  env: NodeJS.ProcessEnv;
+  fakeBunx: string;
+  head: string;
+  lockFile: string;
+  processLock: string;
+  remoteRoot: string;
+  root: string;
+  sourceRoot: string;
+};
+
+const temporaryRoots: string[] = [];
+
+afterEach(() => {
+  for (const root of temporaryRoots.splice(0)) fs.rmSync(root, { force: true, recursive: true });
+});
+
+test("plan and check cover clean shared and restricted installs, content, modes, and filters", () => {
+  const fixture = createFixture();
   const clean = runJson(fixture, "plan", "--json");
   assert.equal(clean.result.status, 0, clean.result.stderr);
   assert.equal(clean.json.clean, true);
@@ -38,8 +57,8 @@ test("plan and check cover clean shared and restricted installs, content, modes,
   assert.equal(run(fixture, "check", "--skill", "alpha").status, 1);
 });
 
-test("planner detects target layout, symlink, deletion, and stale lock metadata", (context) => {
-  const fixture = createFixture(context);
+test("planner detects target layout, symlink, deletion, and stale lock metadata", () => {
+  const fixture = createFixture();
   const alphaLink = path.join(fixture.claudeRoot, "skills", "alpha");
   fs.rmSync(alphaLink);
   fs.symlinkSync("../wrong", alphaLink);
@@ -75,29 +94,29 @@ test("planner detects target layout, symlink, deletion, and stale lock metadata"
   assert(json.groups.remove.includes("gone"));
 });
 
-test("planner rejects invalid source and CLI lock metadata", (context) => {
-  const invalidTarget = createFixture(context);
+test("planner rejects invalid source and CLI lock metadata", () => {
+  const invalidTarget = createFixture();
   const skillFile = path.join(invalidTarget.sourceRoot, "skills", "beta", "SKILL.md");
   fs.writeFileSync(skillFile, skillMarkdown("beta", "invalid-target"));
   const targetResult = run(invalidTarget, "plan");
   assert.equal(targetResult.status, 2);
   assert.match(targetResult.stderr, /invalid metadata\.install-targets/);
 
-  const malformed = createFixture(context);
+  const malformed = createFixture();
   fs.writeFileSync(malformed.lockFile, "{not-json\n");
   const malformedResult = run(malformed, "plan");
   assert.equal(malformedResult.status, 2);
   assert.match(malformedResult.stderr, /Malformed skills CLI lock/);
 
-  const wrongVersion = createFixture(context);
+  const wrongVersion = createFixture();
   writeLock(wrongVersion, { skills: {}, version: 2 });
   const versionResult = run(wrongVersion, "plan");
   assert.equal(versionResult.status, 2);
   assert.match(versionResult.stderr, /expected skills CLI lock version 3/);
 });
 
-test("apply batches one remove and one add per target group, then verifies clean state", (context) => {
-  const fixture = createFixture(context);
+test("apply batches one remove and one add per target group, then verifies clean state", () => {
+  const fixture = createFixture();
   driftInstalledSkill(fixture, "alpha", "agents");
   driftInstalledSkill(fixture, "beta", "claude");
   driftInstalledSkill(fixture, "gamma", "agents");
@@ -115,21 +134,21 @@ test("apply batches one remove and one add per target group, then verifies clean
   assert.equal(readLock(fixture).skills.gone, undefined);
 });
 
-test("apply guards reject dirty sources, HEAD and upstream mismatches, malformed locks, and concurrent runs", (context) => {
-  const dirty = createFixture(context);
+test("apply guards reject dirty sources, HEAD and upstream mismatches, malformed locks, and concurrent runs", () => {
+  const dirty = createFixture();
   fs.appendFileSync(path.join(dirty.sourceRoot, "skills", "alpha", "SKILL.md"), "dirty\n");
   const dirtyResult = run(dirty, "apply", "--expected-head", dirty.head, "--skill", "alpha");
   assert.equal(dirtyResult.status, 1);
   assert.match(dirtyResult.stderr, /selected source paths are dirty/);
 
-  const headMismatch = createFixture(context);
+  const headMismatch = createFixture();
   const oldHead = headMismatch.head;
   commitFixtureFile(headMismatch, "README.md", "new head\n", true);
   const headResult = run(headMismatch, "apply", "--expected-head", oldHead, "--skill", "alpha");
   assert.equal(headResult.status, 1);
   assert.match(headResult.stderr, /HEAD is .* expected/);
 
-  const upstreamMismatch = createFixture(context);
+  const upstreamMismatch = createFixture();
   commitFixtureFile(upstreamMismatch, "README.md", "ahead\n", false);
   const upstreamResult = run(
     upstreamMismatch,
@@ -142,13 +161,13 @@ test("apply guards reject dirty sources, HEAD and upstream mismatches, malformed
   assert.equal(upstreamResult.status, 1);
   assert.match(upstreamResult.stderr, /does not equal upstream/);
 
-  const malformed = createFixture(context);
+  const malformed = createFixture();
   fs.writeFileSync(malformed.lockFile, "{");
   const malformedResult = run(malformed, "apply", "--expected-head", malformed.head);
   assert.equal(malformedResult.status, 1);
   assert.match(malformedResult.stderr, /Malformed skills CLI lock/);
 
-  const concurrent = createFixture(context);
+  const concurrent = createFixture();
   fs.mkdirSync(concurrent.processLock);
   const concurrentResult = run(concurrent, "apply", "--expected-head", concurrent.head);
   assert.equal(concurrentResult.status, 2);
@@ -156,8 +175,8 @@ test("apply guards reject dirty sources, HEAD and upstream mismatches, malformed
   assert.equal(readCommandLog(concurrent).length, 0);
 });
 
-test("partial apply failures report completed groups and exact changed global paths", (context) => {
-  const fixture = createFixture(context);
+test("partial apply failures report completed groups and exact changed global paths", () => {
+  const fixture = createFixture();
   driftInstalledSkill(fixture, "alpha", "agents");
   driftInstalledSkill(fixture, "beta", "claude");
   fixture.env.FAKE_SKILLS_FAIL_MATCH = "--skill beta";
@@ -172,14 +191,17 @@ test("partial apply failures report completed groups and exact changed global pa
   assert(plan.driftSkills.includes("beta"));
 });
 
-function createFixture(context) {
+function createFixture(): Fixture {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "publish-skills-test-"));
-  context.after(() => fs.rmSync(root, { force: true, recursive: true }));
-  const fixture = {
+  temporaryRoots.push(root);
+  const fixture: Fixture = {
     agentsRoot: path.join(root, ".agents"),
     claudeRoot: path.join(root, ".claude"),
     codexRoot: path.join(root, ".codex"),
     commandLog: path.join(root, "commands.jsonl"),
+    env: {},
+    fakeBunx: "",
+    head: "",
     lockFile: path.join(root, "state", ".skill-lock.json"),
     processLock: path.join(root, "state", "publish.lock"),
     remoteRoot: path.join(root, "remote.git"),
@@ -222,7 +244,7 @@ function createFixture(context) {
     version: 3,
   });
 
-  fixture.fakeBunx = path.join(root, "fake-bunx.mjs");
+  fixture.fakeBunx = path.join(root, "fake-bunx.ts");
   fs.writeFileSync(fixture.fakeBunx, fakeBunxSource());
   fs.chmodSync(fixture.fakeBunx, 0o755);
   fixture.env = {
@@ -339,7 +361,7 @@ function escapeRegExp(value) {
 }
 
 function fakeBunxSource() {
-  return `#!/usr/bin/env node
+  return `#!/usr/bin/env bun
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";

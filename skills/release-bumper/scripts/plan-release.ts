@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -150,7 +150,9 @@ function throwUsage(message) {
 }
 
 function printUsage() {
-  console.error(`Usage: plan-release.mjs [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] [--package <name-or-dir>]...`);
+  console.error(
+    `Usage: plan-release.ts [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] [--package <name-or-dir>]...`,
+  );
 }
 
 function git(args, cwdArg) {
@@ -338,15 +340,23 @@ function serializePackage(pkg) {
   };
 }
 
-function dependencyEdges(packages) {
+function dependencyEdges(
+  packages: Array<{
+    dependencies: Record<string, string>;
+    id: string;
+    name: string;
+    peerDependencies: Record<string, string>;
+  }>,
+) {
   const byName = new Map(packages.filter((pkg) => pkg.name).map((pkg) => [pkg.name, pkg]));
-  const edges = [];
+  const edges: Array<{ from: string; name: string; range: string; to: string; type: string }> = [];
 
   for (const from of packages) {
-    for (const [type, deps] of [
+    const dependencySets: Array<[string, Record<string, string>]> = [
       ["dependencies", from.dependencies],
       ["peerDependencies", from.peerDependencies],
-    ]) {
+    ];
+    for (const [type, deps] of dependencySets) {
       for (const [name, range] of Object.entries(deps)) {
         const to = byName.get(name);
         if (to) edges.push({ from: from.id, to: to.id, type, name, range });
@@ -379,9 +389,7 @@ function tagPatterns(pkg, isMonorepoArg) {
 
 function gitTags(root) {
   try {
-    return git(["tag", "--list", "--sort=-creatordate"], root)
-      .split(/\r?\n/)
-      .filter(Boolean);
+    return git(["tag", "--list", "--sort=-creatordate"], root).split(/\r?\n/).filter(Boolean);
   } catch {
     return [];
   }
@@ -437,10 +445,7 @@ function versionFromTag(tag, isMonorepoArg) {
 function changedFiles(root, pkg, tag) {
   const args = tag ? ["diff", "--name-only", `${tag}..HEAD`, "--"] : ["ls-files", "--"];
   if (pkg.dir !== ".") args.push(pkg.dir);
-  return git(args, root)
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .sort();
+  return git(args, root).split(/\r?\n/).filter(Boolean).sort();
 }
 
 function fileHint(pkg, repoRel) {
@@ -449,10 +454,14 @@ function fileHint(pkg, repoRel) {
   const local = slash(packageRel);
   const base = path.basename(local);
   if (/^(\.github|\.gitlab|\.circleci|\.husky)\//.test(rel)) return "ci";
-  if (/(^|\/)(__tests__|tests?|fixtures?|mocks?)\//i.test(local) || /\.(test|spec|bench|fixture)\.[cm]?[jt]sx?$/i.test(base)) {
+  if (
+    /(^|\/)(__tests__|tests?|fixtures?|mocks?)\//i.test(local) ||
+    /\.(test|spec|bench|fixture)\.[cm]?[jt]sx?$/i.test(base)
+  ) {
     return "test";
   }
-  if (/^(eslint|prettier|biome|vitest|jest|commitlint|lint-staged|lefthook|husky)\.config\./.test(base)) return "tooling";
+  if (/^(eslint|prettier|biome|vitest|jest|commitlint|lint-staged|lefthook|husky)\.config\./.test(base))
+    return "tooling";
   if (/^(\.eslintrc|\.prettierrc|\.lintstagedrc|\.npmrc|\.node-version|\.nvmrc)$/.test(base)) return "tooling";
   if (/^(justfile|Makefile|Dockerfile)$/.test(base)) return "tooling";
   if (/^(pnpm-lock\.yaml|bun\.lockb?|package-lock\.json|yarn\.lock)$/.test(base)) return "tooling";
@@ -468,9 +477,7 @@ function fileHint(pkg, repoRel) {
 }
 
 function readWorkingTree(root) {
-  const status = git(["status", "--porcelain=v1"], root)
-    .split(/\r?\n/)
-    .filter(Boolean);
+  const status = git(["status", "--porcelain=v1"], root).split(/\r?\n/).filter(Boolean);
   return { clean: status.length === 0, status };
 }
 
@@ -495,7 +502,9 @@ function matchWorkspaceGlob(rel, glob) {
 }
 
 function normalizeGlob(glob) {
-  return slash(glob).replace(/^\.\//, "").replace(/\/package\.json$/, "");
+  return slash(glob)
+    .replace(/^\.\//, "")
+    .replace(/\/package\.json$/, "");
 }
 
 function matchGlob(value, glob) {

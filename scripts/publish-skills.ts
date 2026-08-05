@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -44,7 +44,7 @@ function parseArgs(args) {
   const command = args.shift();
   if (!command || !["apply", "check", "plan"].includes(command)) {
     throw new Error(
-      "Usage: publish-skills.mjs plan|check [--json] [--skill NAME]... | " +
+      "Usage: publish-skills.ts plan|check [--json] [--skill NAME]... | " +
         "apply --expected-head SHA [--skill NAME]...",
     );
   }
@@ -82,7 +82,7 @@ function parseArgs(args) {
 function createPlan(requestedSkills, { emptyMeansAll = true } = {}) {
   const sourceSkills = readSourceSkills();
   const lock = readCliLock();
-  const sourceOwnedLockNames = Object.entries(lock.data.skills)
+  const sourceOwnedLockNames = Object.entries(lock.data.skills as Record<string, any>)
     .filter(([, entry]) => isObject(entry) && entry.source === repository)
     .map(([name]) => name);
   const candidateNames = [...new Set([...sourceSkills.keys(), ...sourceOwnedLockNames])].sort();
@@ -403,7 +403,7 @@ function expectAbsent(name, target, targetPath, drifts) {
   );
 }
 
-function snapshotDirectory(root, relativeFiles) {
+function snapshotDirectory(root, relativeFiles = null) {
   const snapshot = new Map();
   if (relativeFiles) {
     for (const relativePath of relativeFiles.sort(compareNames)) snapshotPath(root, relativePath, snapshot);
@@ -565,9 +565,9 @@ function buildCommands(groups) {
 }
 
 async function runSkillsCli(args) {
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const child = spawn(config.bunx, args, { cwd: config.agentsRoot, stdio: "inherit" });
-    const signals = ["SIGINT", "SIGTERM"];
+    const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
     const handlers = new Map(signals.map((signal) => [signal, () => child.kill(signal)]));
     for (const [signal, handler] of handlers) process.once(signal, handler);
 

@@ -1,5 +1,6 @@
 ---
 argument-hint: "[packages...] [version] [--beta] [--dry-run]"
+compatibility: Requires Bun, Git, and uv.
 disable-model-invocation: true
 effort: high
 model: sonnet
@@ -28,7 +29,7 @@ single-package repositories, workspace monorepos, stable releases, beta releases
 Resolve `<skill-dir>` from this `SKILL.md`. Keep helper stdout as JSON and diagnostics on stderr.
 
 ```sh
-node "<skill-dir>/scripts/plan-release.mjs" \
+bun run "<skill-dir>/scripts/plan-release.ts" \
   [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] \
   [--package <name-or-dir>]...
 ```

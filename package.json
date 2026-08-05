@@ -8,15 +8,18 @@
     "pre-commit": "just pre-commit"
   },
   "devDependencies": {
+    "@tsconfig/bun": "^1.0.10",
+    "@types/bun": "^1.3.14",
     "husky": "9.1.7",
     "lint-staged": "17.3.0",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2"
   },
   "lint-staged": {
     "*": "bash -c 'just evm-atlas-check' --",
     "{skills/*/scripts/*.sh,tests/**/*.sh,tests/**/*.bats}": "shellcheck",
     "**/*.md": "bunx --no-install prettier --write --cache --log-level warn",
     "skills/*/{SKILL.md,agents/openai.yaml}": "bash -c 'just skill-invocation-check' --",
-    "scripts/sync-invocation-policy.mjs": "bash -c 'just skill-invocation-check' --"
+    "scripts/sync-invocation-policy.ts": "bash -c 'just skill-invocation-check' --"
   }
 }

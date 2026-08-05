@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import fs from "node:fs";
 import path from "node:path";
@@ -42,12 +42,7 @@ function checkSkill(skillPath, openaiPath) {
     return;
   }
 
-  const disableModelInvocation = readOptionalBoolean(
-    frontmatter,
-    "disable-model-invocation",
-    false,
-    skillPath,
-  );
+  const disableModelInvocation = readOptionalBoolean(frontmatter, "disable-model-invocation", false, skillPath);
   const userInvocable = readOptionalBoolean(frontmatter, "user-invocable", true, skillPath);
   if (disableModelInvocation === null || userInvocable === null) return;
 
