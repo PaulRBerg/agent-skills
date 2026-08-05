@@ -25,9 +25,9 @@ Make every name in the current repository communicate one coherent domain model,
   can prove the fix. Keep bug fixes in a distinct change wave and report them separately.
 - Preserve pre-existing work. Local edits, file moves, directory restructuring, and non-destructive validation are
   authorized. Do not commit, push, publish, or write externally unless the user or repository instructions require it.
-- Require an exclusive implementation window. Complete codebase analysis and the refactor plan first, then obtain the
-  user's explicit confirmation that no other coding agent is running or will perform parallel work in the repository
-  through implementation and verification. The initial invocation does not grant that confirmation.
+- Serialize implementation and verification against intersecting repository writes. Complete codebase analysis and the
+  refactor plan first, then acquire a coordination scope covering the complete worktree before the first edit. If no
+  reliable coordination mechanism is available, require the user to confirm an exclusive write window instead.
 - A verified no-op is valid only after exhaustive coverage. Do not rename a clear, conventional name merely to create
   churn, but do not retain a weak name to minimize diff size.
 
@@ -100,20 +100,29 @@ reference inspection before choosing a name. Never use blind global replacement 
 Completion of this phase requires every non-excluded path to be retained with a reasoned naming model, assigned to a
 validated rename group, or marked blocked with concrete evidence.
 
-## Confirm Exclusive Execution
+## Acquire the Implementation Scope
 
 After completing the codebase analysis and rename map, present the evidence-backed refactor plan, including its rename
-groups, dependency waves, contract boundaries, risks, and proving checks. Then ask the user to confirm that no other
-coding agent is running or will perform parallel work in the repository until implementation and verification finish.
+groups, dependency waves, contract boundaries, risks, and proving checks. Before editing, use the repository's
+coordination mechanism to acquire a claim covering the complete worktree. For `ai-coord`, run
+`ai-coord start 'naming refactor' '.'` and proceed only after it returns `READY`; `BLOCKED`, `UNKNOWN`, and pathless
+`INTENT` results do not authorize edits and cannot be overridden by user confirmation. Hold the claim through final
+verification.
 
-Stop and wait for an explicit affirmative response before editing files, moving paths, or otherwise implementing the
-plan. Do not infer exclusivity from a stable worktree, the absence of visible processes, or the user's initial request.
-If the user cannot confirm exclusivity, deliver the analysis and plan without implementing the refactor.
+After acquiring the claim, re-read the current commit and worktree status, refresh the ledger, and compare the
+repository with the recorded baseline. Reinspect every path whose content or presence changed during analysis, then
+update the rename map, contract boundaries, and proving checks before implementing. The ledger refresh detects path
+changes, not content changes to existing paths.
+
+If the repository has no reliable coordination mechanism, ask the user to confirm that no other coding agent will write
+to the repository through implementation and verification. Stop until the user explicitly confirms that fallback window;
+do not infer it from a stable worktree, absent processes, or the initial invocation.
 
 ## Execute in Verified Waves
 
-After the user confirms exclusive execution, apply rename groups in coherent dependency waves. Do not delegate work to
-another coding agent or continue if another agent begins parallel work before verification finishes.
+With the implementation scope active, apply rename groups in coherent dependency waves. Keep every delegated write
+within the same coordination ownership. If scope ownership is lost or an uncovered writer appears, stop before
+continuing.
 
 - Prefer language-server, compiler, or AST-aware rename support for symbols. Use exact text replacement only after
   proving each occurrence has the same meaning.
