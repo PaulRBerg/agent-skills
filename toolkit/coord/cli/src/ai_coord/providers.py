@@ -68,7 +68,7 @@ class HostInventory:
     def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
         current = now_ts()
         executables = {client: shutil.which(client) for client in _PROVIDER_CLIENTS}
-        context_key = _cache_context(executables)
+        context_key = _cache_context_key(executables)
         store.prune(current, dead_codex_sessions=_dead_codex_sessions(store, current))
         if (
             allow_cached
@@ -83,10 +83,8 @@ class HostInventory:
         if claude.ok and claude.enabled:
             store.replace_claude_sessions(rows, current)
         reports = (codex, claude)
-        complete = all(
-            (not report.enabled) or (report.ok and report.dropped == 0) for report in reports
-        )
-        if complete:
+        result = _inventory_result(reports)
+        if result.complete:
             store.replace_provider_cache(
                 context_key,
                 [report.as_dict() for report in reports],
@@ -94,7 +92,7 @@ class HostInventory:
             )
         else:
             store.clear_provider_cache()
-        return InventoryResult(complete=complete, providers=reports)
+        return result
 
     def _codex_report(self, store: Store, executable: str | None) -> ProviderReport:
         if executable is None:
@@ -170,10 +168,17 @@ class StaticInventory:
             ProviderReport("codex", self.complete, "static"),
             ProviderReport("claude", self.complete, "static"),
         )
-        return InventoryResult(self.complete, reports)
+        return _inventory_result(reports)
 
 
-def _cache_context(executables: dict[str, str | None]) -> str:
+def _inventory_result(reports: tuple[ProviderReport, ...]) -> InventoryResult:
+    complete = all(
+        (not report.enabled) or (report.ok and report.dropped == 0) for report in reports
+    )
+    return InventoryResult(complete, reports)
+
+
+def _cache_context_key(executables: dict[str, str | None]) -> str:
     context = {
         "codex_executable": _resolved_executable(executables["codex"]),
         "codex_home": str(default_hook_path("codex").parent.resolve(strict=False)),
@@ -209,7 +214,8 @@ def _cached_inventory(store: Store, context_key: str, *, current: float) -> Inve
         )
         for client in _PROVIDER_CLIENTS
     )
-    return InventoryResult(complete=True, providers=reports)
+    result = _inventory_result(reports)
+    return result if result.complete else None
 
 
 def _dead_codex_sessions(store: Store, current: float) -> tuple[Identity, ...]:

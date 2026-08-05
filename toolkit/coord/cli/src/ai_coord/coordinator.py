@@ -462,7 +462,7 @@ class Coordinator:
         machine_wide: bool = False,
         cwd: Path | None = None,
         *,
-        allow_cached_inventory: bool = True,
+        allow_cached_inventory: bool = False,
     ) -> StatusSnapshot:
         inventory = self._inventory_adapter().refresh(
             self.store, allow_cached=allow_cached_inventory

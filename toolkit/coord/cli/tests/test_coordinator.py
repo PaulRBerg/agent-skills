@@ -65,7 +65,7 @@ def _set_identity(monkeypatch: pytest.MonkeyPatch, session_id: str, client: str 
     monkeypatch.setenv("AI_COORD_SESSION_ID", session_id)
 
 
-def test_authorization_refreshes_fresh_while_inventory_reads_allow_cache(
+def test_inventory_cache_requires_opt_in_while_authorization_refreshes_fresh(
     tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     inventory = _CountingInventory()
@@ -73,10 +73,11 @@ def test_authorization_refreshes_fresh_while_inventory_reads_allow_cache(
     _set_identity(monkeypatch, "freshness")
 
     coordinator.snapshot(cwd=git_repo)
+    coordinator.snapshot(cwd=git_repo, allow_cached_inventory=True)
     assert coordinator.start("work", ("new-scope",), cwd=git_repo).kind == "READY"
     assert coordinator.send("repo", "hello", cwd=git_repo) == ([], 0)
 
-    assert inventory.cache_requests == [True, False, True]
+    assert inventory.cache_requests == [False, True, False, True]
 
 
 def _start_worker(

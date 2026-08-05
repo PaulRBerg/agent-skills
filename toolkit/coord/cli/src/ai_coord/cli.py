@@ -200,7 +200,7 @@ def status(machine_wide: bool, as_json: bool) -> None:
         from ai_coord.coordinator import snapshot_json
 
         coordinator = _coordinator()
-        snapshot = coordinator.snapshot(machine_wide)
+        snapshot = coordinator.snapshot(machine_wide, allow_cached_inventory=True)
         click.echo(snapshot_json(snapshot) if as_json else coordinator.render_status(snapshot))
         if not snapshot.complete:
             raise click.exceptions.Exit(2)

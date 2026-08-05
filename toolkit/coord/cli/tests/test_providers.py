@@ -231,6 +231,37 @@ def test_host_inventory_clears_complete_cache_after_fresh_degradation(
     assert store.connection.execute("SELECT COUNT(*) FROM provider_cache").fetchone()[0] == 0
 
 
+def test_host_inventory_reprobes_cache_rows_that_are_not_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = Store(tmp_path / "state.db")
+    calls = 0
+    monkeypatch.setattr(providers, "now_ts", lambda: 100.0)
+    monkeypatch.setattr(providers.shutil, "which", lambda client: f"/bin/{client}")
+
+    def codex_report(
+        _inventory: HostInventory, _store: Store, _executable: str | None
+    ) -> ProviderReport:
+        nonlocal calls
+        calls += 1
+        return ProviderReport("codex", True, "test")
+
+    def collect_claude(
+        _inventory: HostInventory, _executable: str | None
+    ) -> tuple[ProviderReport, list[dict[str, object]]]:
+        return ProviderReport("claude", True, "test", enabled=False), []
+
+    monkeypatch.setattr(HostInventory, "_codex_report", codex_report)
+    monkeypatch.setattr(HostInventory, "_collect_claude", collect_claude)
+    inventory = HostInventory()
+    assert inventory.refresh(store, allow_cached=True).complete
+    with store.transaction() as connection:
+        connection.execute("UPDATE provider_cache SET ok = 0 WHERE client = 'codex'")
+
+    assert inventory.refresh(store, allow_cached=True).complete
+    assert calls == 2
+
+
 def test_host_inventory_overlaps_probes_and_reconciles_on_calling_thread(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

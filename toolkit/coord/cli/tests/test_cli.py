@@ -18,10 +18,20 @@ from ai_coord.providers import InventoryResult, StaticInventory
 from ai_coord.store import Store
 
 
+class _RecordingInventory:
+    def __init__(self) -> None:
+        self.cache_requests: list[bool] = []
+
+    def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
+        self.cache_requests.append(allow_cached)
+        return StaticInventory().refresh(store)
+
+
 def test_cli_start_status_done(
     tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    coordinator = Coordinator(Store(tmp_path / "state.db"), StaticInventory())
+    inventory = _RecordingInventory()
+    coordinator = Coordinator(Store(tmp_path / "state.db"), inventory)
     monkeypatch.setattr(cli_module, "_coordinator", lambda: coordinator)
     monkeypatch.setenv("AI_COORD_CLIENT", "codex")
     monkeypatch.setenv("AI_COORD_SESSION_ID", "cli-session")
@@ -41,6 +51,7 @@ def test_cli_start_status_done(
     done = runner.invoke(cli_module.cli, ["done"])
     assert done.exit_code == 0
     assert done.output == "DONE\treleased\n"
+    assert inventory.cache_requests == [False, True]
 
 
 def test_cli_status_labels_planning_sessions_and_delegate_counts(
@@ -424,12 +435,7 @@ def test_check_reports_hook_health_codes_and_exits_degraded(
         details: dict[str, str]
 
     hooks_path = tmp_path / "hooks.json"
-    cache_requests: list[bool] = []
-
-    class RecordingInventory:
-        def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
-            cache_requests.append(allow_cached)
-            return StaticInventory().refresh(store)
+    inventory = _RecordingInventory()
 
     monkeypatch.setenv("AI_COORD_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setattr(integrations_module, "default_hook_path", lambda _client: hooks_path)
@@ -442,9 +448,7 @@ def test_check_reports_hook_health_codes_and_exits_degraded(
     )
     store = Store()
     store.hook_error("codex", "Stop", "boom")
-    monkeypatch.setattr(
-        cli_module, "_coordinator", lambda: Coordinator(store, RecordingInventory())
-    )
+    monkeypatch.setattr(cli_module, "_coordinator", lambda: Coordinator(store, inventory))
     runner = CliRunner()
 
     result = runner.invoke(cli_module.cli, ["check"])
@@ -471,4 +475,4 @@ def test_check_reports_hook_health_codes_and_exits_degraded(
     assert trust["ok"] is False
     assert trust["error"] == "owned hook is untrusted"
     assert trust["details"] == {"reason": "untrusted"}
-    assert cache_requests == [False, False]
+    assert inventory.cache_requests == [False, False]

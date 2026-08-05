@@ -22,6 +22,9 @@ from ai_coord.hook_specs import (
 )
 from ai_coord.jsonc import ArrayNode, JsoncDocument, ObjectNode
 
+# Keep the pre-extraction import surface stable.
+CLAUDE_HOOK_SPECS = hook_specs("claude")
+
 
 @dataclass(frozen=True, slots=True)
 class LinkResult:
