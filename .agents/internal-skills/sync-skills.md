@@ -59,6 +59,9 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
   no-redesign rule for implementation agents; the smallest-effective-team and eight-implementation-agent limits; the
   brief-sizing rule that splits any brief likely to exceed roughly 25-30 minutes; and parent implementation work being
   limited to orchestration, integrity checks, failure handling, and the conditional polish pass.
+- Follow-on authorization: the approved outcome, not the initial manifest or worker write scopes, is the authorization
+  boundary; workers stop and report newly discovered out-of-scope prerequisites, while the parent extends the manifest,
+  coordinates the new scope, and delegates the smallest sufficient in-repository fix without asking the user again.
 - Pre-plan research delegation: trigger it for uncertain scope, multiple or unfamiliar subsystems, or materially slower
   serial evidence gathering; keep zero research agents as the default; let the parent alone decide whether it runs
   without asking the user; require research agents to stay read-only, gather evidence, and return findings rather than
@@ -78,9 +81,11 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
   requirement.
 - The structured result-field contract: status, summary, changed files, verification with each command and outcome,
   residual risks, and blockers.
-- Failure classification: a returned blocked status is a plan problem that gates dependents and requires user decision;
-  an evidenced tool or infrastructure failure permits exactly one same-agent continuation after inspecting partial
-  edits, and a second infrastructure failure blocks. The continuation mechanics are platform-specific.
+- Failure classification: a returned blocker caused by a newly discovered, necessary in-repository fix or evidence
+  change triggers parent-owned follow-on delegation without fresh authorization; user input is reserved for a changed
+  outcome, material redesign, unrelated work, or an existing confirmation boundary. An evidenced tool or infrastructure
+  failure permits exactly one same-agent continuation after inspecting partial edits, and a second infrastructure
+  failure blocks. The continuation mechanics are platform-specific.
 - Post-success skill-evolution review: run only after every required implementation agent succeeds and the overall task
   is verified; keep the judgment with the parent orchestrator; require credible recurrence and durable reuse rather than
   task size or difficulty; reject one-offs, rare contingencies, incidental cleanup, and speculative value; place a new
