@@ -41,6 +41,22 @@ pricing, authentication, model selection, migration, or managed-agent workflows.
 
 Follow redirects only within the matching official domain and cite the final page URL.
 
+## Investigate under-documented Codex configuration
+
+When a Codex feature or `config.toml` key is missing from the prose documentation, use this bounded procedure:
+
+1. Record the installed client and effective feature state with `codex --version` and `codex features list`.
+2. Fetch the official `config-schema.json` to an operating-system temporary location, then search only the relevant
+   definition or path. Do not cache the schema in the repository or skill installation.
+3. Compare the schema with the current prose config reference. Treat schema-only fields as under-documented, not as
+   behavior guaranteed by every client.
+4. Validate candidate syntax against the installed client with `codex --strict-config --help`; use one-off `-c`
+   overrides when needed without persisting changes. Parsing acceptance is not runtime proof.
+5. Report evidence separately as official docs/schema, local observations, or inference. If sources disagree, prefer the
+   installed client's observed behavior for the user's environment and disclose the discrepancy.
+
+Do not turn this into a full feature inventory: investigate only the key or feature relevant to the request.
+
 ## Answer from evidence
 
 - Treat live official documentation as authoritative for published product claims. Do not answer current or unstable
