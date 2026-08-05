@@ -175,13 +175,17 @@ class StaticInventory:
 
 def _cache_context(executables: dict[str, str | None]) -> str:
     context = {
-        "codex_executable": executables["codex"],
+        "codex_executable": _resolved_executable(executables["codex"]),
         "codex_home": str(default_hook_path("codex").parent.resolve(strict=False)),
-        "claude_executable": executables["claude"],
+        "claude_executable": _resolved_executable(executables["claude"]),
         "claude_config_dir": str(default_hook_path("claude").parent.resolve(strict=False)),
     }
     encoded = json.dumps(context, separators=(",", ":"), sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _resolved_executable(executable: str | None) -> str | None:
+    return str(Path(executable).resolve(strict=False)) if executable is not None else None
 
 
 def _cached_inventory(store: Store, context_key: str, *, current: float) -> InventoryResult | None:

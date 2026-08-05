@@ -6,31 +6,23 @@ import json
 import os
 import re
 import sys
-from dataclasses import asdict, replace
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 import click
 
 from ai_coord import __version__
-from ai_coord.coordinator import Coordinator, Outcome, snapshot_json
-from ai_coord.integrations import (
-    default_hook_path,
-    default_link_path,
-    inspect_codex_hook_trust,
-    inspect_hooks,
-    link_hooks,
-    trust_codex_hooks,
-)
-from ai_coord.migration import migrate_legacy
-from ai_coord.server import create_server
-from ai_coord.store import SCHEMA_VERSION, Store
-from ai_coord.util import age_label, private_state_dir
+
+if TYPE_CHECKING:
+    from ai_coord.coordinator import Coordinator, Outcome
 
 _NEWER_SCHEMA_ERROR = re.compile(r"^state schema (\d+) is newer than supported schema \d+$")
 
 
 def _coordinator() -> Coordinator:
+    from ai_coord.coordinator import Coordinator
+    from ai_coord.store import Store
+
     return Coordinator(Store())
 
 
@@ -41,8 +33,12 @@ def _reexec_argv(error: Exception, state_dir: Path | None = None) -> list[str] |
     match = _NEWER_SCHEMA_ERROR.fullmatch(str(error))
     if match is None:
         return None
+    if state_dir is None:
+        from ai_coord.util import private_state_dir
+
+        state_dir = private_state_dir()
     try:
-        runner = json.loads(((state_dir or private_state_dir()) / "runner.json").read_text())
+        runner = json.loads((state_dir / "runner.json").read_text())
         schema = runner["schema"]
         argv = runner["argv"]
     except (OSError, KeyError, TypeError, ValueError):
@@ -201,6 +197,8 @@ def status(machine_wide: bool, as_json: bool) -> None:
     Exit 0 means complete coverage, 2 usable partial coverage, and 1 an error.
     """
     try:
+        from ai_coord.coordinator import snapshot_json
+
         coordinator = _coordinator()
         snapshot = coordinator.snapshot(machine_wide)
         click.echo(snapshot_json(snapshot) if as_json else coordinator.render_status(snapshot))
@@ -219,6 +217,8 @@ def serve(host: str, port: int) -> None:
     """Serve the local dashboard HTTP API."""
     server: object | None = None
     try:
+        from ai_coord.server import create_server
+
         server = create_server(host, port)
         click.echo(f"Serving dashboard API at http://{host}:{port}")
         server.serve_forever()
@@ -256,6 +256,8 @@ def inbox(message_id: str | None, ack_all: bool) -> None:
     if message_id and ack_all:
         _fail(ValueError("use only one of --ack or --ack-all"), 64)
     try:
+        from ai_coord.util import age_label
+
         coordinator = _coordinator()
         if message_id or ack_all:
             count = coordinator.acknowledge(None if ack_all else message_id)
@@ -364,10 +366,14 @@ def waker(client: str) -> None:
 @click.option("--force", is_flag=True, help="Replace malformed owned hook containers")
 def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
     """Install owned lifecycle hooks while preserving unrelated hooks."""
+    from dataclasses import replace
+
+    from ai_coord import integrations
+
     if client == "all" and path is not None:
         _fail(ValueError("--path is available only when linking one client"), 64)
     if client == "codex" and path is not None:
-        expected_path = default_hook_path("codex").resolve(strict=False)
+        expected_path = integrations.default_hook_path("codex").resolve(strict=False)
         supplied_path = path.expanduser().resolve(strict=False)
         if supplied_path != expected_path:
             _fail(
@@ -378,14 +384,14 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
     clients = ("codex", "claude") if client == "all" else (client,)
     try:
         for selected in clients:
-            result = link_hooks(
+            result = integrations.link_hooks(
                 selected,
-                path or default_link_path(selected),
+                path or integrations.default_link_path(selected),
                 dry_run=dry_run,
                 force=force,
             )
             if selected == "codex" and not dry_run:
-                result = replace(result, trust=trust_codex_hooks(result.path))
+                result = replace(result, trust=integrations.trust_codex_hooks(result.path))
             if dry_run and (result.changed or selected == "codex"):
                 state = "WOULD_UPDATE"
             elif result.changed or result.trust == "updated":
@@ -406,11 +412,17 @@ def link(client: str, path: Path | None, dry_run: bool, force: bool) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable diagnostics")
 def check(as_json: bool) -> None:
     """Report installation, schema, hook, provider, and hook-health status."""
+    from dataclasses import asdict
+
+    from ai_coord import integrations
+    from ai_coord.store import SCHEMA_VERSION
+
     reports: list[dict[str, object]] = []
     broken = False
     degraded = False
     try:
-        store = Store()
+        coordinator = _coordinator()
+        store = coordinator.store
         reports.append(
             {
                 "component": "state",
@@ -420,13 +432,13 @@ def check(as_json: bool) -> None:
             }
         )
         for selected in ("codex", "claude"):
-            report = inspect_hooks(selected, default_hook_path(selected))
+            report = integrations.inspect_hooks(selected, integrations.default_hook_path(selected))
             reports.append({"component": f"hooks:{selected}", **asdict(report)})
             degraded = degraded or not report.ok
-        trust = inspect_codex_hook_trust(default_hook_path("codex"))
+        trust = integrations.inspect_codex_hook_trust(integrations.default_hook_path("codex"))
         reports.append({"component": "hooks-trust:codex", **asdict(trust)})
         degraded = degraded or not trust.ok
-        snapshot = Coordinator(store).snapshot(machine_wide=True)
+        snapshot = coordinator.snapshot(machine_wide=True, allow_cached_inventory=False)
         reports.extend(
             {"component": f"provider:{provider['client']}", **provider}
             for provider in snapshot.providers
@@ -460,11 +472,17 @@ def migrate() -> None:
     """Import state from retired coordination implementations."""
 
 
+def _legacy_source() -> Path:
+    from ai_coord.integrations import default_hook_path
+
+    return default_hook_path("codex").parent / ".tmp" / "agent-session-status"
+
+
 @migrate.command("legacy")
 @click.option(
     "--source",
     type=click.Path(path_type=Path),
-    default=default_hook_path("codex").parent / ".tmp" / "agent-session-status",
+    default=_legacy_source,
     show_default=True,
 )
 @click.option("--dry-run", is_flag=True, help="Count valid records without writing")
@@ -473,6 +491,9 @@ def migrate_legacy_command(source: Path, dry_run: bool) -> None:
     if not source.is_dir():
         _fail(ValueError(f"legacy state directory not found: {source}"), 64)
     try:
+        from ai_coord.migration import migrate_legacy
+        from ai_coord.store import Store
+
         report = migrate_legacy(Store(), source, dry_run=dry_run)
         click.echo(json.dumps(report.as_dict(), sort_keys=True))
     except Exception as error:  # noqa: BLE001

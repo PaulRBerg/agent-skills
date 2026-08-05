@@ -124,7 +124,9 @@ ai-coord note --done '<note-id>'
 
 `status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output marks
 queued claims with `claim=queued` and ends with compact, contextual definitions for the states present; `--json` remains
-the versioned JSON schema.
+the versioned JSON schema. Status, dashboard snapshots, and message recipient discovery may reuse complete provider
+inventory for up to two seconds. `start`, wait promotion, and `check` always probe providers freshly before granting
+work or reporting installation health.
 
 Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
 number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
@@ -181,11 +183,12 @@ conservative queued blockers until released or expired. The importer never remov
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
-mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v6;
+mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. The internal schema is currently v7;
 opening an older ledger upgrades it one way, while the public `status --json` schema remains v1.
 
-The ledger stores bounded session metadata, callsigns, labels, literal scopes, messages, and notes. It never stores
-prompt bodies, plan bodies beyond a sanitized H1, assistant output, transcript contents, or arbitrary hook payloads.
+The ledger stores bounded session metadata, callsigns, labels, literal scopes, messages, notes, and complete provider
+health cache rows. Cached provider errors, hook hashes, prompt bodies, plan bodies beyond a sanitized H1, assistant
+output, transcript contents, and arbitrary hook payloads are never stored.
 
 Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. Session processes are
 identified by PID and creation time when available, so PID reuse cannot attach ancestry or orphan cleanup to a newer

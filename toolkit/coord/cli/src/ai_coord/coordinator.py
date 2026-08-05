@@ -7,10 +7,11 @@ import json
 import os
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from ai_coord.hook_specs import hook_specs
 from ai_coord.identity import (
     Identity,
     ProcessReference,
@@ -18,8 +19,6 @@ from ai_coord.identity import (
     process_ancestors,
     process_reference,
 )
-from ai_coord.integrations import hook_specs
-from ai_coord.providers import HostInventory, Inventory
 from ai_coord.store import Store
 from ai_coord.util import (
     MAX_LABEL_CHARS,
@@ -42,6 +41,9 @@ from ai_coord.util import (
     relevant_dirty,
     sanitize,
 )
+
+if TYPE_CHECKING:
+    from ai_coord.providers import Inventory
 
 FULL_REFRESH_SECONDS = 20
 DIRT_HOLD_SECONDS = 90
@@ -113,7 +115,14 @@ class StatusSnapshot:
 @dataclass
 class Coordinator:
     store: Store
-    inventory: Inventory = field(default_factory=HostInventory)
+    inventory: Inventory | None = None
+
+    def _inventory_adapter(self) -> Inventory:
+        if self.inventory is None:
+            from ai_coord.providers import HostInventory
+
+            self.inventory = HostInventory()
+        return self.inventory
 
     def identity(self, required: bool = True) -> Identity | None:
         direct = from_environment()
@@ -179,7 +188,7 @@ class Coordinator:
             return Outcome("ACTIVE", 3, "active claim has a different scope", existing_paths)
 
         timestamp = now_ts()
-        inventory = self.inventory.refresh(self.store)
+        inventory = self._inventory_adapter().refresh(self.store)
         all_dirty, observations = self._observe_git_dirt(root, current=timestamp)
         dirty = relevant_dirty(paths, all_dirty)
         benign_scopes = benign_dirt_scopes(root)
@@ -448,8 +457,16 @@ class Coordinator:
             return []
         return self.store.baselines(identity)
 
-    def snapshot(self, machine_wide: bool = False, cwd: Path | None = None) -> StatusSnapshot:
-        inventory = self.inventory.refresh(self.store)
+    def snapshot(
+        self,
+        machine_wide: bool = False,
+        cwd: Path | None = None,
+        *,
+        allow_cached_inventory: bool = True,
+    ) -> StatusSnapshot:
+        inventory = self._inventory_adapter().refresh(
+            self.store, allow_cached=allow_cached_inventory
+        )
         identity = self.identity(required=False)
         working_dir = (cwd or Path.cwd()).resolve()
         root = git_root(working_dir)
@@ -646,7 +663,7 @@ class Coordinator:
         clean_text = sanitize(text, MAX_MESSAGE_CHARS)
         if not clean_text:
             raise ValueError("message must contain printable text")
-        self.inventory.refresh(self.store)
+        self._inventory_adapter().refresh(self.store, allow_cached=True)
         root = git_root((cwd or Path.cwd()).resolve())
         sessions = self.store.sessions()
         recipients = self._resolve_targets(target, sessions, root, sender)

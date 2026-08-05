@@ -23,7 +23,8 @@ class _PruningInventory:
         self.current = current
         self.dead_codex_sessions = dead_codex_sessions
 
-    def refresh(self, store: Store) -> InventoryResult:
+    def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
+        del allow_cached
         store.prune(self.current, dead_codex_sessions=self.dead_codex_sessions)
         return StaticInventory().refresh(store)
 
@@ -31,9 +32,11 @@ class _PruningInventory:
 class _CountingInventory:
     def __init__(self) -> None:
         self.calls = 0
+        self.cache_requests: list[bool] = []
 
-    def refresh(self, store: Store) -> InventoryResult:
+    def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
         self.calls += 1
+        self.cache_requests.append(allow_cached)
         return StaticInventory().refresh(store)
 
 
@@ -60,6 +63,20 @@ def _coordinator(db_path: Path, complete: bool = True) -> Coordinator:
 def _set_identity(monkeypatch: pytest.MonkeyPatch, session_id: str, client: str = "codex") -> None:
     monkeypatch.setenv("AI_COORD_CLIENT", client)
     monkeypatch.setenv("AI_COORD_SESSION_ID", session_id)
+
+
+def test_authorization_refreshes_fresh_while_inventory_reads_allow_cache(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inventory = _CountingInventory()
+    coordinator = Coordinator(Store(tmp_path / "state.db"), inventory)
+    _set_identity(monkeypatch, "freshness")
+
+    coordinator.snapshot(cwd=git_repo)
+    assert coordinator.start("work", ("new-scope",), cwd=git_repo).kind == "READY"
+    assert coordinator.send("repo", "hello", cwd=git_repo) == ([], 0)
+
+    assert inventory.cache_requests == [True, False, True]
 
 
 def _start_worker(

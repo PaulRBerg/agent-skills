@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cache complete provider inventory for bounded read reuse, probe Codex and Claude concurrently, keep authorization
+  refreshes fresh, and lazy-load command-specific modules.
 - Add optional emoji callsigns with machine-wide uniqueness, historical message endpoint snapshots, callsign targeting,
   lifecycle nudges, CLI status, and dashboard display support while retaining immutable session-ID fallbacks.
 - Keep session-start hooks bookkeeping-only, move callsign and presence context to prompt hooks, and exclude Codex

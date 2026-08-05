@@ -15,59 +15,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Self
 
+from ai_coord.hook_specs import (
+    CODEX_HOOK_SPECS,
+    HookSpec,
+    hook_specs,
+)
 from ai_coord.jsonc import ArrayNode, JsoncDocument, ObjectNode
-
-
-@dataclass(frozen=True, slots=True)
-class HookSpec:
-    event: str
-    command: str
-    matcher: str | None = None
-    timeout: int | None = None
-    additional_context_limit: int | None = None
-    if_filter: str | None = None
-    async_: bool | None = None
-    async_rewake: bool | None = None
-
-
-CODEX_HOOK_SPECS = (
-    HookSpec(
-        "SessionStart",
-        "ai-coord hook codex",
-        matcher="startup|resume|clear",
-        timeout=5,
-    ),
-    HookSpec(
-        "UserPromptSubmit",
-        "ai-coord hook codex",
-        timeout=5,
-        additional_context_limit=200,
-    ),
-    HookSpec("Stop", "ai-coord hook codex", timeout=5),
-    HookSpec("SessionEnd", "ai-coord hook codex", timeout=3),
-    HookSpec("SubagentStart", "ai-coord hook codex", timeout=5),
-    HookSpec("SubagentStop", "ai-coord hook codex", timeout=5),
-    HookSpec("PostToolUse", "ai-coord hook codex", timeout=5),
-)
-CLAUDE_HOOK_SPECS = (
-    HookSpec("SessionStart", "ai-coord hook claude", timeout=5),
-    HookSpec("UserPromptSubmit", "ai-coord hook claude", timeout=5),
-    HookSpec("Stop", "ai-coord hook claude", timeout=5),
-    HookSpec("SessionEnd", "ai-coord hook claude", timeout=3),
-    HookSpec("SubagentStart", "ai-coord hook claude", timeout=5),
-    HookSpec("SubagentStop", "ai-coord hook claude", timeout=5),
-    HookSpec("PostToolUse", "ai-coord hook claude", matcher="ExitPlanMode", timeout=5),
-    HookSpec("PostToolBatch", "ai-coord hook claude", timeout=5),
-    HookSpec(
-        "PostToolUseFailure",
-        "ai-coord waker claude",
-        matcher="Bash",
-        timeout=3600,
-        if_filter="Bash(ai-coord start *)",
-        async_=True,
-        async_rewake=True,
-    ),
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -523,14 +476,6 @@ class _CodexAppServer:
         ):
             raise CodexTrustError("Codex app-server emitted malformed JSON-RPC")
         return response
-
-
-def hook_specs(client: str) -> tuple[HookSpec, ...]:
-    if client == "codex":
-        return CODEX_HOOK_SPECS
-    if client == "claude":
-        return CLAUDE_HOOK_SPECS
-    raise ValueError(f"unsupported client: {client}")
 
 
 def default_hook_path(client: str) -> Path:

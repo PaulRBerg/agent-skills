@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,9 +11,10 @@ from click.testing import CliRunner
 
 import ai_coord.cli as cli_module
 import ai_coord.coordinator as coordinator_module
+import ai_coord.integrations as integrations_module
 from ai_coord.coordinator import Coordinator, Outcome
 from ai_coord.identity import Identity
-from ai_coord.providers import StaticInventory
+from ai_coord.providers import InventoryResult, StaticInventory
 from ai_coord.store import Store
 
 
@@ -107,6 +110,41 @@ def test_cli_help_documents_coordination_outcomes() -> None:
     assert "Codex: active hooks file only; Claude: one alternate settings file" in " ".join(
         link.output.split()
     )
+
+
+def test_cli_and_coordinator_imports_leave_heavy_command_modules_lazy() -> None:
+    cli_result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; import ai_coord.cli; "
+                "blocked={'ai_coord.coordinator','ai_coord.integrations','ai_coord.jsonc',"
+                "'ai_coord.migration','ai_coord.providers','ai_coord.server'}; "
+                "assert not blocked.intersection(sys.modules), blocked.intersection(sys.modules)"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    coordinator_result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; import ai_coord.coordinator; "
+                "blocked={'ai_coord.integrations','ai_coord.jsonc','ai_coord.providers'}; "
+                "assert not blocked.intersection(sys.modules), blocked.intersection(sys.modules)"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert (cli_result.returncode, cli_result.stderr) == (0, "")
+    assert (coordinator_result.returncode, coordinator_result.stderr) == (0, "")
 
 
 def test_cli_name_validation_uniqueness_and_inbox_snapshot(
@@ -289,7 +327,7 @@ def test_link_cli_reports_dry_run_then_update_then_noop(
         trust_calls.append(trusted_path)
         return "updated" if len(trust_calls) == 1 else "unchanged"
 
-    monkeypatch.setattr(cli_module, "trust_codex_hooks", trust_hook_path)
+    monkeypatch.setattr(integrations_module, "trust_codex_hooks", trust_hook_path)
     runner = CliRunner()
     supplied_path = path.parent / "not-a-directory" / ".." / "hooks.json"
 
@@ -325,7 +363,7 @@ def test_link_codex_path_must_resolve_to_active_hooks_file(
     invalid_path = tmp_path / "other" / "hooks.json"
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     monkeypatch.setattr(
-        cli_module,
+        integrations_module,
         "trust_codex_hooks",
         lambda _path: pytest.fail("Codex trust must not run for a rejected path"),
     )
@@ -365,7 +403,7 @@ def test_link_all_stops_before_claude_when_codex_trust_fails(
     def trust_failure(_path: Path) -> str:
         raise RuntimeError("Codex app-server trust failed")
 
-    monkeypatch.setattr(cli_module, "trust_codex_hooks", trust_failure)
+    monkeypatch.setattr(integrations_module, "trust_codex_hooks", trust_failure)
 
     result = CliRunner().invoke(cli_module.cli, ["link", "all"])
 
@@ -386,21 +424,27 @@ def test_check_reports_hook_health_codes_and_exits_degraded(
         details: dict[str, str]
 
     hooks_path = tmp_path / "hooks.json"
+    cache_requests: list[bool] = []
+
+    class RecordingInventory:
+        def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
+            cache_requests.append(allow_cached)
+            return StaticInventory().refresh(store)
+
     monkeypatch.setenv("AI_COORD_STATE_DIR", str(tmp_path / "state"))
-    monkeypatch.setattr(cli_module, "default_hook_path", lambda _client: hooks_path)
+    monkeypatch.setattr(integrations_module, "default_hook_path", lambda _client: hooks_path)
     monkeypatch.setattr(
-        cli_module,
+        integrations_module,
         "inspect_codex_hook_trust",
         lambda _path: TrustCheck(
             False, hooks_path, "owned hook is untrusted", {"reason": "untrusted"}
         ),
     )
-    monkeypatch.setattr(
-        cli_module, "Coordinator", lambda store: Coordinator(store, StaticInventory())
-    )
     store = Store()
     store.hook_error("codex", "Stop", "boom")
-    store.close()
+    monkeypatch.setattr(
+        cli_module, "_coordinator", lambda: Coordinator(store, RecordingInventory())
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli_module.cli, ["check"])
@@ -427,3 +471,4 @@ def test_check_reports_hook_health_codes_and_exits_degraded(
     assert trust["ok"] is False
     assert trust["error"] == "owned hook is untrusted"
     assert trust["details"] == {"reason": "untrusted"}
+    assert cache_requests == [False, False]
