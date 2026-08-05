@@ -14,7 +14,7 @@ import ai_coord.cli as cli_module
 import ai_coord.coordinator as coordinator_module
 from ai_coord.coordinator import DIRT_HOLD_SECONDS, Coordinator, StatusSnapshot
 from ai_coord.identity import Identity, ProcessReference
-from ai_coord.providers import InventoryResult, StaticInventory
+from ai_coord.providers import HostInventory, InventoryResult, StaticInventory
 from ai_coord.store import CODEX_ORPHAN_GRACE, Store
 
 
@@ -29,7 +29,7 @@ class _PruningInventory:
         return StaticInventory().refresh(store)
 
 
-class _CountingInventory:
+class _CountingInventory(HostInventory):
     def __init__(self) -> None:
         self.calls = 0
         self.cache_requests: list[bool] = []
@@ -37,6 +37,15 @@ class _CountingInventory:
     def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult:
         self.calls += 1
         self.cache_requests.append(allow_cached)
+        return StaticInventory().refresh(store)
+
+
+class _OriginalInventory:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def refresh(self, store: Store) -> InventoryResult:
+        self.calls += 1
         return StaticInventory().refresh(store)
 
 
@@ -78,6 +87,19 @@ def test_inventory_cache_requires_opt_in_while_authorization_refreshes_fresh(
     assert coordinator.send("repo", "hello", cwd=git_repo) == ([], 0)
 
     assert inventory.cache_requests == [False, True, False, True]
+
+
+def test_custom_inventory_keeps_original_refresh_contract(
+    tmp_path: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inventory = _OriginalInventory()
+    coordinator = Coordinator(Store(tmp_path / "state.db"), inventory)
+    _set_identity(monkeypatch, "custom-inventory")
+
+    coordinator.snapshot(cwd=git_repo, allow_cached_inventory=True)
+    assert coordinator.send("repo", "hello", cwd=git_repo) == ([], 0)
+
+    assert inventory.calls == 2
 
 
 def _start_worker(

@@ -14,11 +14,11 @@ import ai_coord.coordinator as coordinator_module
 import ai_coord.integrations as integrations_module
 from ai_coord.coordinator import Coordinator, Outcome
 from ai_coord.identity import Identity
-from ai_coord.providers import InventoryResult, StaticInventory
+from ai_coord.providers import HostInventory, InventoryResult, StaticInventory
 from ai_coord.store import Store
 
 
-class _RecordingInventory:
+class _RecordingInventory(HostInventory):
     def __init__(self) -> None:
         self.cache_requests: list[bool] = []
 

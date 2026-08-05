@@ -43,7 +43,7 @@ from ai_coord.util import (
 )
 
 if TYPE_CHECKING:
-    from ai_coord.providers import Inventory
+    from ai_coord.providers import Inventory, InventoryResult
 
 FULL_REFRESH_SECONDS = 20
 DIRT_HOLD_SECONDS = 90
@@ -124,6 +124,15 @@ class Coordinator:
             self.inventory = HostInventory()
         return self.inventory
 
+    def _refresh_inventory(self, *, allow_cached: bool = False) -> InventoryResult:
+        inventory = self._inventory_adapter()
+        if allow_cached:
+            from ai_coord.providers import HostInventory
+
+            if isinstance(inventory, HostInventory):
+                return inventory.refresh(self.store, allow_cached=True)
+        return inventory.refresh(self.store)
+
     def identity(self, required: bool = True) -> Identity | None:
         direct = from_environment()
         if direct:
@@ -188,7 +197,7 @@ class Coordinator:
             return Outcome("ACTIVE", 3, "active claim has a different scope", existing_paths)
 
         timestamp = now_ts()
-        inventory = self._inventory_adapter().refresh(self.store)
+        inventory = self._refresh_inventory()
         all_dirty, observations = self._observe_git_dirt(root, current=timestamp)
         dirty = relevant_dirty(paths, all_dirty)
         benign_scopes = benign_dirt_scopes(root)
@@ -464,9 +473,7 @@ class Coordinator:
         *,
         allow_cached_inventory: bool = False,
     ) -> StatusSnapshot:
-        inventory = self._inventory_adapter().refresh(
-            self.store, allow_cached=allow_cached_inventory
-        )
+        inventory = self._refresh_inventory(allow_cached=allow_cached_inventory)
         identity = self.identity(required=False)
         working_dir = (cwd or Path.cwd()).resolve()
         root = git_root(working_dir)
@@ -663,7 +670,7 @@ class Coordinator:
         clean_text = sanitize(text, MAX_MESSAGE_CHARS)
         if not clean_text:
             raise ValueError("message must contain printable text")
-        self._inventory_adapter().refresh(self.store, allow_cached=True)
+        self._refresh_inventory(allow_cached=True)
         root = git_root((cwd or Path.cwd()).resolve())
         sessions = self.store.sessions()
         recipients = self._resolve_targets(target, sessions, root, sender)

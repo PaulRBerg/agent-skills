@@ -59,7 +59,7 @@ class InventoryResult:
 
 
 class Inventory(Protocol):
-    def refresh(self, store: Store, *, allow_cached: bool = False) -> InventoryResult: ...
+    def refresh(self, store: Store) -> InventoryResult: ...
 
 
 class HostInventory:
