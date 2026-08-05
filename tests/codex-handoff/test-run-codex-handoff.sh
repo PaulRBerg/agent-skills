@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+script_dir="$repo_root/skills/codex-handoff/scripts"
 runner="$script_dir/run-codex-handoff.sh"
 schema="$script_dir/../references/result.schema.json"
 research_schema="$script_dir/../references/research-result.schema.json"

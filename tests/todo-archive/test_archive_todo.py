@@ -8,7 +8,8 @@ import tempfile
 import unittest
 
 
-SCRIPT_PATH = pathlib.Path(__file__).with_name("archive_todo.py")
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+SCRIPT_PATH = REPO_ROOT / "skills" / "todo-archive" / "scripts" / "archive_todo.py"
 SPEC = importlib.util.spec_from_file_location("archive_todo", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 archive_todo = importlib.util.module_from_spec(SPEC)

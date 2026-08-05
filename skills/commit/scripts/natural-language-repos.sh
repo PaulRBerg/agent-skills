@@ -1,4 +1,6 @@
 # Shared repository list for natural-language commit messages.
+# This array is consumed by scripts that source this file.
+# shellcheck disable=SC2034
 always_natural_language_repos=(
   "$HOME/.agents"
   "$HOME/.claude"

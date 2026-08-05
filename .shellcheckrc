@@ -1,0 +1,4 @@
+shell=bash
+external-sources=true
+source-path=SCRIPTDIR
+enable=check-unassigned-uppercase,deprecate-which,quote-safe-variables

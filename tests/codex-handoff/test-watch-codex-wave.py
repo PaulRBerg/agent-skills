@@ -9,7 +9,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("watch-codex-wave.sh")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "codex-handoff" / "scripts" / "watch-codex-wave.sh"
 
 
 class WatchCodexWaveTests(unittest.TestCase):

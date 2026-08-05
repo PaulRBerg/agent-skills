@@ -538,12 +538,13 @@ write_footer() {
   _category=$3
   _quoted_target=$(shell_quote "$_target")
 
-  cat >"$_footer" <<'EOF'
+  {
+    cat <<'EOF'
 ## Handoff category
 
 EOF
-  printf '%s\n\n' "Category: \`$_category\`" >>"$_footer"
-  cat >>"$_footer" <<'EOF'
+    printf '%s\n\n' "Category: \`$_category\`"
+    cat <<'EOF'
 This handoff is categorized above. Complete the requested task according to its stated outcome, boundaries, authority
 constraints, and validation requirements.
 
@@ -558,12 +559,13 @@ action.
 ## Handoff cleanup
 
 EOF
-  printf '%s%s%s\n' 'Run `/usr/bin/trash ' "$_quoted_target" \
-    '` only after every success criterion is satisfied and every required validation passes,' >>"$_footer"
-  cat >>"$_footer" <<'EOF'
+    printf '%s%s%s\n' 'Run `/usr/bin/trash ' "$_quoted_target" \
+      '` only after every success criterion is satisfied and every required validation passes,'
+    cat <<'EOF'
 then verify the original path no longer exists. Keep this handoff when work remains, the requested task or validation fails,
 or required validation is skipped. Never trash `.ai/task-handoffs/` or any other handoff.
 EOF
+  } >"$_footer"
 }
 
 validate_complete_file() {

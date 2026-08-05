@@ -9,7 +9,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("git-squash.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "git-squash" / "scripts" / "git-squash.py"
 
 
 def git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:

@@ -62,6 +62,11 @@ If `prettier-check` fails, analyze the errors and fix only files you changed.
 - `just` - list recipes.
 - `just prettier-check` - check Markdown formatting with Prettier.
 - `just prettier-write` - format Markdown in place.
+- `just python-test` - execute every `tests/*/test*.py` script with `uv run`.
+- `just shell-test` - execute every legacy `tests/*/test-*.sh` script.
+- `just bats-test [paths...]` - recursively run Bats suites, defaulting to `tests/`.
+- `just shell-check [paths...]` - lint repository shell scripts and tests with ShellCheck.
+- `just test` - run the Python, legacy shell, and Bats suites.
 - `just evm-atlas-check` - verify generated `evm-atlas` references match `@prb/crypto-registry`'s canonical chain JSON
   plus atlas overlays.
 - `just evm-atlas-generate` - regenerate generated `evm-atlas` references from `@prb/crypto-registry`'s canonical chain

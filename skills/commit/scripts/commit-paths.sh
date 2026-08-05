@@ -383,7 +383,7 @@ check_push_behind() {
     return "$push_git_rc"
   fi
 
-  read -r push_ahead push_behind <<EOF
+  read -r _push_ahead push_behind <<EOF
 $push_counts
 EOF
   case "$push_behind" in

@@ -10,7 +10,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("repo-rename.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "repo-rename" / "scripts" / "repo-rename.py"
 
 
 class RepoRenameTests(unittest.TestCase):

@@ -8,7 +8,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("update-bun-catalogs.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "node-deps-bumper" / "scripts" / "update-bun-catalogs.py"
 
 
 class UpdateBunCatalogsTests(unittest.TestCase):

@@ -7,7 +7,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("skill-doctor.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "skill-doctor" / "scripts" / "skill-doctor.py"
 
 
 class SkillDoctorAdvisoryTests(unittest.TestCase):

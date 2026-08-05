@@ -8,7 +8,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("sweep-ledger.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "fresh-eyes-sweep" / "scripts" / "sweep-ledger.py"
 
 
 def git(repo: Path, *args: str) -> None:

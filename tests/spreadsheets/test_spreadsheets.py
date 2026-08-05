@@ -16,10 +16,11 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-ROOT = Path(__file__).resolve().parent
-PEEK = ROOT / "peek.py"
-PROFILE = ROOT / "profile.py"
-RECALC = ROOT / "recalc.py"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS = REPO_ROOT / "skills" / "spreadsheets" / "scripts"
+PEEK = SCRIPTS / "peek.py"
+PROFILE = SCRIPTS / "profile.py"
+RECALC = SCRIPTS / "recalc.py"
 
 
 def run(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:

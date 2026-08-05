@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+script_dir=$repo_root/skills/task-handoff/scripts
 helper=$script_dir/task-handoff.sh
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/task-handoff-tests.XXXXXX")
 fake_bin=$test_root/bin

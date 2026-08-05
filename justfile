@@ -13,9 +13,9 @@ evm_atlas_generator := "scripts/generate-evm-atlas.mjs"
 skill_invocation_script := "scripts/sync-invocation-policy.mjs"
 publish_skills_script := "scripts/publish-skills.mjs"
 publish_skills_test := "scripts/test-publish-skills.mjs"
-commit_paths_test := "skills/commit/scripts/test-commit-paths.sh"
-codex_handoff_runner_test := "skills/codex-handoff/scripts/test-run-codex-handoff.sh"
-codex_handoff_wave_test := "skills/codex-handoff/scripts/test-watch-codex-wave.py"
+commit_paths_test := "tests/commit/test-commit-paths.sh"
+codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
+codex_handoff_wave_test := "tests/codex-handoff/test-watch-codex-wave.py"
 
 # ---------------------------------------------------------------------------- #
 #                                 ENTRYPOINTS                                  #
@@ -72,6 +72,32 @@ alias pw := prettier-write
 [group("checks")]
 @pre-commit:
     sh .husky/pre-commit
+
+# Run every Python test script
+[group("checks")]
+@python-test:
+    for test_file in tests/*/test*.py; do uv run "$test_file"; done
+
+# Run every legacy shell test script
+[group("checks")]
+@shell-test:
+    for test_file in tests/*/test-*.sh; do bash "$test_file"; done
+
+# Run Bats tests recursively, defaulting to tests/
+[group("checks")]
+[positional-arguments]
+@bats-test *paths:
+    if [ "$#" -eq 0 ]; then bats --recursive tests; else bats --recursive "$@"; fi
+
+# Lint repository shell scripts and tests
+[group("checks")]
+[positional-arguments]
+@shell-check *paths:
+    if [ "$#" -eq 0 ]; then shellcheck skills/*/scripts/*.sh tests/*/*.sh tests/*/*.bats; else shellcheck "$@"; fi
+
+# Run every repository test suite
+[group("checks")]
+@test: python-test shell-test bats-test
 
 # Exercise isolated-index atomic commits and shared-index reconciliation
 [group("checks")]

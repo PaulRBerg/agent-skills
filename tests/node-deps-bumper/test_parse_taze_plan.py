@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("parse-taze-plan.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "node-deps-bumper" / "scripts" / "parse-taze-plan.py"
 SPEC = importlib.util.spec_from_file_location("parse_taze_plan", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

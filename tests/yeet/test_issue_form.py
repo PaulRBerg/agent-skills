@@ -13,8 +13,10 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("issue-form.py")
-FIXTURE = SCRIPT.parent.parent / "fixtures" / "issue-form.yml"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SKILL_ROOT = REPO_ROOT / "skills" / "yeet"
+SCRIPT = SKILL_ROOT / "scripts" / "issue-form.py"
+FIXTURE = SKILL_ROOT / "fixtures" / "issue-form.yml"
 SPEC = importlib.util.spec_from_file_location("issue_form", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

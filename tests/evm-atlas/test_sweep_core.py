@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("sweep-core.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "skills" / "evm-atlas" / "scripts" / "sweep-core.py"
 SPEC = importlib.util.spec_from_file_location("sweep_core", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

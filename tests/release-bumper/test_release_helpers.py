@@ -9,10 +9,11 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent
-PLANNER = ROOT / "plan-release.mjs"
-FINALIZER = ROOT / "finalize-release-plan.py"
-VALIDATOR = ROOT / "validate-changelog.py"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS = REPO_ROOT / "skills" / "release-bumper" / "scripts"
+PLANNER = SCRIPTS / "plan-release.mjs"
+FINALIZER = SCRIPTS / "finalize-release-plan.py"
+VALIDATOR = SCRIPTS / "validate-changelog.py"
 
 
 def load_script(name: str, path: Path):
