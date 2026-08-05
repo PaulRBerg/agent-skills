@@ -58,7 +58,7 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
 - Contract bullets: the Plan-mode gate; parent ownership of decisions, the final plan, and orchestration; the
   no-redesign rule for implementation agents; the smallest-effective-team and eight-implementation-agent limits; the
   brief-sizing rule that splits any brief likely to exceed roughly 25-30 minutes; and parent implementation work being
-  limited to orchestration, integrity checks, failure handling, and the conditional polish pass.
+  limited to orchestration, integrity checks, failure handling, and the conditional polish passes.
 - Follow-on authorization: the approved outcome, not the initial manifest or worker write scopes, is the authorization
   boundary; workers stop and report newly discovered out-of-scope prerequisites, while the parent extends the manifest,
   coordinates the new scope, and delegates the smallest sufficient in-repository fix without asking the user again.
@@ -73,7 +73,10 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
 - The single-validation-owner rule: aggregate checks run once; every other agent runs only the narrowest checks proving
   its own edits; aggregate-check failures confined to files outside every agent's scope are attributed to unrelated
   concurrent work, not treated as blockers.
-- The `$code-polish` trigger list, including "file count alone is not a trigger".
+- The independent polish-selection rules: `$code-polish` retains its risk trigger list, including "file count alone is
+  not a trigger"; `$agents-brain polish` applies to README.md, AGENTS.md or CLAUDE.md, durable context docs, and
+  existing project-installed skills under `.agents/skills`, while source catalog skills under `skills/` remain excluded;
+  both or neither pass may be selected.
 - Before-launch session-claim guidance: delegated agents treat the orchestrating session's presence as authorization for
   their assigned work. The exact claim owner is host-specific.
 - Platform-agnostic agent prompt requirements: outcome plus brief, exact write scope and dirty-work boundaries,
@@ -93,8 +96,8 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
   every exact skill and reason when revision is warranted; allow at most one two-sentence suggestion that offers
   `$task-handoff` while reserving low-level details for that future handoff; never act automatically; and remain silent
   for blocked, failed, partial, or below-threshold work.
-- Completion rules: success verification, dependent gating on failure, changed-files union dedupe, polish invocation and
-  skip conditions, and cross-repository `$commit` behavior.
+- Completion rules: success verification, dependent gating on failure, changed-files union dedupe, ordered and scoped
+  polish invocation, polish skip and failure conditions, and cross-repository `$commit` behavior.
 - Adapter integrity: each codex-handoff adapter implements the shared prompt, result, failure, and completion contracts
   without weakening them, while the shared entrypoint loads exactly one adapter.
 

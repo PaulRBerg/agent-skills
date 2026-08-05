@@ -54,7 +54,7 @@ selected adapter may specialize host mechanics and manifest configuration, but i
 - Use at most three research agents with stable IDs `R1` through `R3`. Count them separately from the eight
   implementation agents.
 - Keep the parent agent's implementation work to orchestration, integrity checks, failure handling, and the conditional
-  polish pass.
+  polish passes.
 - Treat the approved outcome, not the initial agent manifest or its write scopes, as the authorization boundary. When
   implementation reveals a related in-repository fix or evidence change required to achieve that outcome, the parent is
   fully authorized to extend the handoff and launch follow-on implementation agents for the newly discovered scope
@@ -98,6 +98,7 @@ Produce a decision-complete plan with this section and the selected adapter's ex
 <host-adapter manifest table>
 
 - Code polish: `<required|not required>` — `<reason>`
+- Agent-context polish: `<required|not required>` — `<reason>`
 ```
 
 Choose the execution shape from repository evidence and the approved work:
@@ -120,6 +121,11 @@ Duplicate aggregate runs across a wave are wasted wall-clock time, not extra ass
 
 Require `$code-polish` for nonlocal invariants, concurrency or state machines, migrations or parsing, auth or security,
 retry or error semantics, and public API or data-contract changes. File count alone is not a trigger.
+
+Require `$agents-brain polish` when approved work changes a target supported by its polish workflow: README.md,
+AGENTS.md or CLAUDE.md, a durable context doc, or an existing project-installed skill under `.agents/skills`. Source
+catalog skills under `skills/` remain outside that workflow. Mark both passes required when both trigger rules apply;
+mark neither when neither applies.
 
 Do not launch implementation agents until the user approves the plan and the host leaves Plan mode. Read-only research
 is the only pre-approval exception.
@@ -214,8 +220,13 @@ opportunity was found.
 
 - After every required agent completes, deduplicate the union of reported `changed_files` and confirm the combined
   verification evidence proves the approved plan.
-- When the plan marked polish as required, invoke `$code-polish` once with exactly that union and its default
-  simplify-then-review mode. Skip polish if any required agent failed; do not recompute or broaden scope.
+- If any required agent failed, skip every planned polish pass. Otherwise, invoke each required pass once with only its
+  applicable paths from that union: `$code-polish` first in its default simplify-then-review mode, then
+  `$agents-brain polish` with its eligible context targets. When only one pass is required, invoke only that one. Do not
+  seed either pass with paths outside the union or let it broaden beyond its declared workflow authority.
+- Reconcile in-scope files actually changed by each polish pass into the final changed-files set and verification. A
+  required polish pass that blocks, fails, or writes outside its supported scope blocks later polish and
+  cross-repository commits.
 - If approved work changes repositories on this machine other than the repository where the handoff began, invoke
   `$commit` from each additional repository after its work, validation, and required polish complete. `$commit` owns
   semantic message composition; its `ai-commit` backend owns deterministic transaction, commit, and push mechanics.
@@ -223,5 +234,5 @@ opportunity was found.
   Push only when the user explicitly requested it.
 - Finish with the selected adapter's completion report. It must include the strategy, wave and agent counts, each
   agent's requested configuration, status, and summary, plus combined changed files, verification, polish when run,
-  automatic cross-repository commit hashes when any, blockers, and residual risks. Write `none` for applicable empty
-  values and never expose machine result payloads.
+  listing each pass and outcome, automatic cross-repository commit hashes when any, blockers, and residual risks. Write
+  `none` for applicable empty values and never expose machine result payloads.
