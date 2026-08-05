@@ -1,7 +1,6 @@
 {
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
-    "strict": false,
     "types": ["bun"]
   },
   "include": ["scripts/**/*.ts", "skills/*/scripts/**/*.ts"]

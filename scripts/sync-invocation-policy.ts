@@ -6,7 +6,7 @@ import process from "node:process";
 
 const roots = ["skills"];
 const fix = process.argv.includes("--fix");
-const errors = [];
+const errors: string[] = [];
 let fixed = 0;
 
 for (const root of roots) {
@@ -35,7 +35,7 @@ if (fixed > 0) {
   console.log("Skill invocation metadata consistent.");
 }
 
-function checkSkill(skillPath, openaiPath) {
+function checkSkill(skillPath: string, openaiPath: string): void {
   const frontmatter = readFrontmatter(skillPath);
   if (!frontmatter) {
     errors.push(`${skillPath}: missing YAML frontmatter`);
@@ -72,20 +72,25 @@ function checkSkill(skillPath, openaiPath) {
   );
 }
 
-function readFrontmatter(filePath) {
+function readFrontmatter(filePath: string): Map<string, string> | null {
   const text = fs.readFileSync(filePath, "utf8");
   const match = text.match(/^---\n([\s\S]*?)\n---\n/);
   if (!match) return null;
 
-  const fields = new Map();
-  for (const line of match[1].split("\n")) {
+  const fields = new Map<string, string>();
+  for (const line of match[1]?.split("\n") ?? []) {
     const field = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (field) fields.set(field[1], field[2].trim());
+    if (field?.[1] && field[2] !== undefined) fields.set(field[1], field[2].trim());
   }
   return fields;
 }
 
-function readOptionalBoolean(fields, key, defaultValue, filePath) {
+function readOptionalBoolean(
+  fields: Map<string, string>,
+  key: string,
+  defaultValue: boolean,
+  filePath: string,
+): boolean | null {
   if (!fields.has(key)) return defaultValue;
 
   const value = fields.get(key);
@@ -96,7 +101,7 @@ function readOptionalBoolean(fields, key, defaultValue, filePath) {
   return null;
 }
 
-function readOpenaiPolicy(text, filePath) {
+function readOpenaiPolicy(text: string, filePath: string): boolean | null {
   const match = text.match(/^\s*allow_implicit_invocation:\s*(true|false)\s*$/m);
   if (!match) {
     errors.push(`${filePath}: missing policy.allow_implicit_invocation`);

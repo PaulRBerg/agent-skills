@@ -6,6 +6,18 @@ import path from "node:path";
 import { afterEach, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 
+type InstallTarget = "claude-code" | "codex" | "shared";
+type Drift = { kind: string; skill: string };
+type PlanJson = {
+  clean: boolean;
+  drifts: Drift[];
+  driftSkills: string[];
+  groups: Record<"claude" | "codex" | "remove" | "shared", string[]>;
+  selected: string[];
+};
+type LockEntry = Record<string, unknown>;
+type CliLock = { [key: string]: unknown; skills: Record<string, LockEntry>; version: number };
+
 const repository = "PaulRBerg/agent-skills";
 const sourceUrl = "https://github.com/PaulRBerg/agent-skills.git";
 const scriptPath = path.join(
@@ -261,7 +273,7 @@ function createFixture(): Fixture {
   return fixture;
 }
 
-function writeSkill(sourceRoot, name, target) {
+function writeSkill(sourceRoot: string, name: string, target: InstallTarget): void {
   const root = path.join(sourceRoot, "skills", name);
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.writeFileSync(path.join(root, "SKILL.md"), skillMarkdown(name, target));
@@ -270,12 +282,12 @@ function writeSkill(sourceRoot, name, target) {
   fs.chmodSync(script, 0o755);
 }
 
-function skillMarkdown(name, target) {
+function skillMarkdown(name: string, target: InstallTarget | "invalid-target"): string {
   const metadata = target === "shared" ? "" : `metadata:\n  install-targets: ${target}\n`;
   return `---\n${metadata}name: ${name}\ndescription: ${name}\n---\n\n# ${name}\n`;
 }
 
-function installFixtureSkill(fixture, name, target) {
+function installFixtureSkill(fixture: Fixture, name: string, target: InstallTarget): void {
   const source = path.join(fixture.sourceRoot, "skills", name);
   const agents = path.join(fixture.agentsRoot, "skills", name);
   const claude = path.join(fixture.claudeRoot, "skills", name);
@@ -286,7 +298,7 @@ function installFixtureSkill(fixture, name, target) {
   if (target === "claude-code") fs.cpSync(source, claude, { recursive: true });
 }
 
-function lockEntry(fixture, sourceName, overrides = {}) {
+function lockEntry(fixture: Fixture, sourceName: string, overrides: LockEntry = {}): LockEntry {
   return {
     installedAt: "2026-01-01T00:00:00.000Z",
     skillFolderHash: git(fixture.sourceRoot, "rev-parse", `HEAD:skills/${sourceName}`),
@@ -299,68 +311,68 @@ function lockEntry(fixture, sourceName, overrides = {}) {
   };
 }
 
-function driftInstalledSkill(fixture, name, target) {
+function driftInstalledSkill(fixture: Fixture, name: string, target: "agents" | "claude"): void {
   const root = target === "claude" ? fixture.claudeRoot : fixture.agentsRoot;
   fs.appendFileSync(path.join(root, "skills", name, "SKILL.md"), "drift\n");
 }
 
-function commitFixtureFile(fixture, relativePath, content, push) {
+function commitFixtureFile(fixture: Fixture, relativePath: string, content: string, push: boolean): void {
   fs.writeFileSync(path.join(fixture.sourceRoot, relativePath), content);
   git(fixture.sourceRoot, "add", relativePath);
   git(fixture.sourceRoot, "commit", "-m", relativePath);
   if (push) git(fixture.sourceRoot, "push");
 }
 
-function run(fixture, ...args) {
+function run(fixture: Fixture, ...args: string[]) {
   return spawnSync(process.execPath, [scriptPath, ...args], {
     encoding: "utf8",
     env: fixture.env,
   });
 }
 
-function runJson(fixture, ...args) {
+function runJson(fixture: Fixture, ...args: string[]): { json: PlanJson; result: ReturnType<typeof run> } {
   const result = run(fixture, ...args);
-  return { json: result.stdout ? JSON.parse(result.stdout) : null, result };
+  return { json: JSON.parse(result.stdout) as PlanJson, result };
 }
 
-function readLock(fixture) {
-  return JSON.parse(fs.readFileSync(fixture.lockFile, "utf8"));
+function readLock(fixture: Fixture): CliLock {
+  return JSON.parse(fs.readFileSync(fixture.lockFile, "utf8")) as CliLock;
 }
 
-function writeLock(fixture, data) {
+function writeLock(fixture: Fixture, data: CliLock): void {
   fs.writeFileSync(fixture.lockFile, `${JSON.stringify(data, null, 2)}\n`);
 }
 
-function readCommandLog(fixture) {
+function readCommandLog(fixture: Fixture): string[][] {
   if (!fs.existsSync(fixture.commandLog)) return [];
   return fs
     .readFileSync(fixture.commandLog, "utf8")
     .trim()
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line) as string[]);
 }
 
-function commandKind(args) {
+function commandKind(args: string[]): string | undefined {
   if (args[1] === "remove") return "remove";
   const agents = args.slice(args.indexOf("--agent") + 1, args.indexOf("--skill"));
   if (agents.length === 2) return "shared";
   return agents[0] === "claude-code" ? "claude" : "codex";
 }
 
-function hasDrift(plan, skill, kind) {
+function hasDrift(plan: PlanJson, skill: string, kind: string): boolean {
   return plan.drifts.some((drift) => drift.skill === skill && drift.kind === kind);
 }
 
-function git(cwd, ...args) {
+function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
-function escapeRegExp(value) {
+function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function fakeBunxSource() {
+function fakeBunxSource(): string {
   return `#!/usr/bin/env bun
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";

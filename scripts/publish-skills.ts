@@ -8,6 +8,60 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+type Command = "apply" | "check" | "plan";
+type InstallTarget = "claude" | "codex" | "shared";
+type DriftTarget = "agents" | "claude" | "codex" | "lock" | "source";
+type NodeKind = "directory" | "file" | "missing" | "other" | "symlink";
+
+type CliOptions = {
+  command: Command;
+  expectedHead: string | null;
+  json: boolean;
+  skills: string[];
+};
+
+type Drift = {
+  detail: string;
+  kind: string;
+  path: string;
+  skill: string;
+  target: DriftTarget;
+};
+
+type SnapshotEntry =
+  { executable: boolean; hash: string; type: "file" } | { target: string; type: "symlink" } | { type: "unsupported" };
+type Snapshot = Map<string, SnapshotEntry>;
+type IndexedTree = Map<string, IndexedTree | string>;
+
+type SourceSkill = {
+  name: string;
+  root: string;
+  snapshot: Snapshot;
+  target: InstallTarget;
+  treeHash: string;
+};
+
+type CliLock = {
+  data: { skills: Record<string, unknown>; version: number };
+  fingerprint: string;
+  raw: string;
+};
+
+type Groups = Record<InstallTarget | "remove", string[]>;
+type Plan = {
+  candidateNames: string[];
+  clean: boolean;
+  drifts: Drift[];
+  groups: Groups;
+  lock: CliLock;
+  selected: string[];
+  sourceSkills: Map<string, SourceSkill>;
+};
+
+type ProcessLock = { owner: string; token: string };
+type GlobalChanges = { lockChanged: boolean; paths: string[] };
+type TargetPaths = Record<"agents" | "claude" | "codex", string>;
+
 const repository = "PaulRBerg/agent-skills";
 const sourceUrl = "https://github.com/PaulRBerg/agent-skills.git";
 const validSkillName = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -36,11 +90,11 @@ try {
     if (options.command === "check" && plan.drifts.length > 0) process.exitCode = 1;
   }
 } catch (error) {
-  console.error(`Error: ${error.message}`);
+  console.error(`Error: ${errorMessage(error)}`);
   process.exitCode = 2;
 }
 
-function parseArgs(args) {
+function parseArgs(args: string[]): CliOptions {
   const command = args.shift();
   if (!command || !["apply", "check", "plan"].includes(command)) {
     throw new Error(
@@ -49,7 +103,7 @@ function parseArgs(args) {
     );
   }
 
-  const options = { command, expectedHead: null, json: false, skills: [] };
+  const options: CliOptions = { command: command as Command, expectedHead: null, json: false, skills: [] };
   while (args.length > 0) {
     const flag = args.shift();
     if (flag === "--json") {
@@ -79,10 +133,10 @@ function parseArgs(args) {
   return options;
 }
 
-function createPlan(requestedSkills, { emptyMeansAll = true } = {}) {
+function createPlan(requestedSkills: string[], { emptyMeansAll = true }: { emptyMeansAll?: boolean } = {}): Plan {
   const sourceSkills = readSourceSkills();
   const lock = readCliLock();
-  const sourceOwnedLockNames = Object.entries(lock.data.skills as Record<string, any>)
+  const sourceOwnedLockNames = Object.entries(lock.data.skills)
     .filter(([, entry]) => isObject(entry) && entry.source === repository)
     .map(([name]) => name);
   const candidateNames = [...new Set([...sourceSkills.keys(), ...sourceOwnedLockNames])].sort();
@@ -91,8 +145,8 @@ function createPlan(requestedSkills, { emptyMeansAll = true } = {}) {
   if (unknown.length > 0)
     throw new Error(`Unknown source-owned skill${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`);
 
-  const drifts = [];
-  const restrictionsChanged = new Set();
+  const drifts: Drift[] = [];
+  const restrictionsChanged = new Set<string>();
   for (const name of selected) {
     const skill = sourceSkills.get(name);
     const lockEntry = lock.data.skills[name];
@@ -115,7 +169,7 @@ function createPlan(requestedSkills, { emptyMeansAll = true } = {}) {
 
   drifts.sort(compareDrifts);
   const driftNames = new Set(drifts.map((drift) => drift.skill));
-  const groups = { claude: [], codex: [], remove: [], shared: [] };
+  const groups: Groups = { claude: [], codex: [], remove: [], shared: [] };
   for (const name of selected) {
     if (!driftNames.has(name)) continue;
     const skill = sourceSkills.get(name);
@@ -139,17 +193,17 @@ function createPlan(requestedSkills, { emptyMeansAll = true } = {}) {
   };
 }
 
-function readSourceSkills() {
+function readSourceSkills(): Map<string, SourceSkill> {
   const skillsRoot = path.join(config.sourceRoot, "skills");
   const sourceFiles = readSourceFileIndex();
   let entries;
   try {
     entries = fs.readdirSync(skillsRoot, { withFileTypes: true });
   } catch (error) {
-    throw new Error(`Cannot read source skills at ${skillsRoot}: ${error.message}`);
+    throw new Error(`Cannot read source skills at ${skillsRoot}: ${errorMessage(error)}`);
   }
 
-  const skills = new Map();
+  const skills = new Map<string, SourceSkill>();
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (!entry.isDirectory() || !validSkillName.test(entry.name)) continue;
     const root = path.join(skillsRoot, entry.name);
@@ -169,8 +223,8 @@ function readSourceSkills() {
   return skills;
 }
 
-function readSourceFileIndex() {
-  let output;
+function readSourceFileIndex(): string[] {
+  let output: string;
   try {
     output = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "skills"], {
       cwd: config.sourceRoot,
@@ -178,25 +232,28 @@ function readSourceFileIndex() {
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {
-    throw new Error(`Cannot enumerate source skill files: ${error.stderr?.trim() || error.message}`);
+    throw new Error(`Cannot enumerate source skill files: ${commandErrorMessage(error)}`);
   }
   return output
     .split("\0")
     .filter((sourcePath) => sourcePath && nodeKind(path.join(config.sourceRoot, sourcePath)) !== "missing");
 }
 
-function readInstallTarget(skillFile) {
+function readInstallTarget(skillFile: string): InstallTarget {
   const text = fs.readFileSync(skillFile, "utf8");
   const frontmatter = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   if (frontmatter === undefined) throw new Error(`${skillFile}: missing YAML frontmatter.`);
 
   const lines = frontmatter.split(/\r?\n/);
-  let value;
+  let value: string | undefined;
   for (let index = 0; index < lines.length; index += 1) {
-    if (!/^metadata:\s*$/.test(lines[index])) continue;
-    for (index += 1; index < lines.length && /^(?:\s|$)/.test(lines[index]); index += 1) {
-      const match = lines[index].match(/^\s{2}install-targets:\s*(.*?)\s*$/);
-      if (match) value = stripYamlQuotes(match[1]);
+    const line = lines[index];
+    if (!line || !/^metadata:\s*$/.test(line)) continue;
+    for (index += 1; index < lines.length; index += 1) {
+      const nestedLine = lines[index];
+      if (nestedLine === undefined || !/^(?:\s|$)/.test(nestedLine)) break;
+      const match = nestedLine.match(/^\s{2}install-targets:\s*(.*?)\s*$/);
+      if (match?.[1] !== undefined) value = stripYamlQuotes(match[1]);
     }
     break;
   }
@@ -207,7 +264,7 @@ function readInstallTarget(skillFile) {
   throw new Error(`${skillFile}: invalid metadata.install-targets: ${JSON.stringify(value)}`);
 }
 
-function stripYamlQuotes(value) {
+function stripYamlQuotes(value: string): string {
   if (
     value.length >= 2 &&
     ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
@@ -217,27 +274,27 @@ function stripYamlQuotes(value) {
   return value;
 }
 
-function readCliLock() {
-  let raw;
+function readCliLock(): CliLock {
+  let raw: string;
   try {
     raw = fs.readFileSync(config.lockFile, "utf8");
   } catch (error) {
-    throw new Error(`Cannot read skills CLI lock at ${config.lockFile}: ${error.message}`);
+    throw new Error(`Cannot read skills CLI lock at ${config.lockFile}: ${errorMessage(error)}`);
   }
 
-  let data;
+  let data: unknown;
   try {
     data = JSON.parse(raw);
   } catch (error) {
-    throw new Error(`Malformed skills CLI lock at ${config.lockFile}: ${error.message}`);
+    throw new Error(`Malformed skills CLI lock at ${config.lockFile}: ${errorMessage(error)}`);
   }
   if (!isObject(data) || data.version !== 3 || !isObject(data.skills)) {
     throw new Error(`${config.lockFile}: expected skills CLI lock version 3 with a skills object.`);
   }
-  return { data, fingerprint: digest(Buffer.from(raw)), raw };
+  return { data: data as CliLock["data"], fingerprint: digest(Buffer.from(raw)), raw };
 }
 
-function inspectLockEntry(skill, entry, drifts) {
+function inspectLockEntry(skill: SourceSkill, entry: unknown, drifts: Drift[]): void {
   const lockPath = config.lockFile;
   if (!isObject(entry)) {
     addDrift(drifts, skill.name, "lock", "lock-metadata", lockPath, "entry is missing or is not an object");
@@ -264,7 +321,7 @@ function inspectLockEntry(skill, entry, drifts) {
   }
 }
 
-function inspectTargetLayout(skill, drifts) {
+function inspectTargetLayout(skill: SourceSkill, drifts: Drift[]): boolean {
   const paths = targetPaths(skill.name);
   const agentsKind = nodeKind(paths.agents);
   const claudeKind = nodeKind(paths.claude);
@@ -290,14 +347,21 @@ function inspectTargetLayout(skill, drifts) {
   return restrictionChanged;
 }
 
-function inspectDeletedTargets(name, drifts) {
+function inspectDeletedTargets(name: string, drifts: Drift[]): void {
   for (const [target, targetPath] of Object.entries(targetPaths(name))) {
     if (nodeKind(targetPath) === "missing") continue;
-    addDrift(drifts, name, target, "deleted-install", targetPath, "deleted source skill remains installed");
+    addDrift(
+      drifts,
+      name,
+      target as keyof TargetPaths,
+      "deleted-install",
+      targetPath,
+      "deleted source skill remains installed",
+    );
   }
 }
 
-function targetPaths(name) {
+function targetPaths(name: string): TargetPaths {
   return {
     agents: path.join(config.agentsRoot, "skills", name),
     claude: path.join(config.claudeRoot, "skills", name),
@@ -305,7 +369,7 @@ function targetPaths(name) {
   };
 }
 
-function compareInstalledDirectory(skill, targetPath, target, drifts) {
+function compareInstalledDirectory(skill: SourceSkill, targetPath: string, target: DriftTarget, drifts: Drift[]): void {
   const kind = nodeKind(targetPath);
   if (kind === "missing") {
     addDrift(drifts, skill.name, target, "missing", targetPath, "required installation is missing");
@@ -334,9 +398,17 @@ function compareInstalledDirectory(skill, targetPath, target, drifts) {
         targetPath,
         `${relativePath} is ${actualEntry.type}, expected ${expectedEntry.type}`,
       );
-    } else if (expectedEntry.type === "file" && expectedEntry.hash !== actualEntry.hash) {
+    } else if (
+      expectedEntry.type === "file" &&
+      actualEntry.type === "file" &&
+      expectedEntry.hash !== actualEntry.hash
+    ) {
       addDrift(drifts, skill.name, target, "content", targetPath, `${relativePath} content differs`);
-    } else if (expectedEntry.type === "file" && expectedEntry.executable !== actualEntry.executable) {
+    } else if (
+      expectedEntry.type === "file" &&
+      actualEntry.type === "file" &&
+      expectedEntry.executable !== actualEntry.executable
+    ) {
       addDrift(
         drifts,
         skill.name,
@@ -345,13 +417,17 @@ function compareInstalledDirectory(skill, targetPath, target, drifts) {
         targetPath,
         `${relativePath} executable bit is ${actualEntry.executable}, expected ${expectedEntry.executable}`,
       );
-    } else if (expectedEntry.type === "symlink" && expectedEntry.target !== actualEntry.target) {
+    } else if (
+      expectedEntry.type === "symlink" &&
+      actualEntry.type === "symlink" &&
+      expectedEntry.target !== actualEntry.target
+    ) {
       addDrift(drifts, skill.name, target, "content", targetPath, `${relativePath} symlink target differs`);
     }
   }
 }
 
-function snapshotInstalledDirectory(targetPath, target) {
+function snapshotInstalledDirectory(targetPath: string, target: DriftTarget): Snapshot {
   const repositoryRoot =
     target === "agents" ? config.agentsRoot : target === "claude" ? config.claudeRoot : config.codexRoot;
   try {
@@ -373,7 +449,7 @@ function snapshotInstalledDirectory(targetPath, target) {
   }
 }
 
-function expectClaudeSymlink(name, paths, drifts) {
+function expectClaudeSymlink(name: string, paths: TargetPaths, drifts: Drift[]): void {
   const kind = nodeKind(paths.claude);
   const expected = path.relative(path.dirname(paths.claude), paths.agents);
   if (kind === "missing") {
@@ -390,7 +466,7 @@ function expectClaudeSymlink(name, paths, drifts) {
   }
 }
 
-function expectAbsent(name, target, targetPath, drifts) {
+function expectAbsent(name: string, target: DriftTarget, targetPath: string, drifts: Drift[]): void {
   const kind = nodeKind(targetPath);
   if (kind === "missing") return;
   addDrift(
@@ -403,8 +479,8 @@ function expectAbsent(name, target, targetPath, drifts) {
   );
 }
 
-function snapshotDirectory(root, relativeFiles = null) {
-  const snapshot = new Map();
+function snapshotDirectory(root: string, relativeFiles: string[] | null = null): Snapshot {
+  const snapshot: Snapshot = new Map();
   if (relativeFiles) {
     for (const relativePath of relativeFiles.sort(compareNames)) snapshotPath(root, relativePath, snapshot);
   } else {
@@ -413,7 +489,7 @@ function snapshotDirectory(root, relativeFiles = null) {
   return snapshot;
 }
 
-function walkDirectory(root, relativeRoot, snapshot) {
+function walkDirectory(root: string, relativeRoot: string, snapshot: Snapshot): void {
   const current = relativeRoot ? path.join(root, relativeRoot) : root;
   const names = fs.readdirSync(current).sort(compareNames);
   for (const name of names) {
@@ -428,7 +504,7 @@ function walkDirectory(root, relativeRoot, snapshot) {
   }
 }
 
-function snapshotPath(root, relativePath, snapshot) {
+function snapshotPath(root: string, relativePath: string, snapshot: Snapshot): void {
   const fullPath = path.join(root, relativePath);
   const stats = fs.lstatSync(fullPath);
   if (stats.isFile()) {
@@ -444,21 +520,28 @@ function snapshotPath(root, relativePath, snapshot) {
   }
 }
 
-function gitTreeHash(root, relativeFiles) {
-  const tree = new Map();
+function gitTreeHash(root: string, relativeFiles: string[]): string {
+  const tree: IndexedTree = new Map();
   for (const relativePath of relativeFiles) {
     const parts = relativePath.split("/");
     let current = tree;
     for (const part of parts.slice(0, -1)) {
-      if (!current.has(part)) current.set(part, new Map());
-      current = current.get(part);
+      const existing = current.get(part);
+      if (existing instanceof Map) {
+        current = existing;
+      } else {
+        const child: IndexedTree = new Map();
+        current.set(part, child);
+        current = child;
+      }
     }
-    current.set(parts.at(-1), relativePath);
+    const name = parts.at(-1);
+    if (name) current.set(name, relativePath);
   }
   return hashIndexedTree(root, tree).toString("hex");
 }
 
-function hashIndexedTree(root, tree) {
+function hashIndexedTree(root: string, tree: IndexedTree): Buffer {
   const entries = [...tree.entries()].map(([name, value]) => {
     if (value instanceof Map) return { mode: "40000", name, oid: hashIndexedTree(root, value), tree: true };
     const fullPath = path.join(root, value);
@@ -479,20 +562,20 @@ function hashIndexedTree(root, tree) {
   return hashGitObject("tree", body);
 }
 
-function hashGitObject(type, body) {
+function hashGitObject(type: "blob" | "tree", body: Buffer): Buffer {
   return createHash("sha1").update(`${type} ${body.length}\0`).update(body).digest();
 }
 
-function digest(body) {
+function digest(body: Buffer): string {
   return createHash("sha256").update(body).digest("hex");
 }
 
-async function applyPlan(options) {
+async function applyPlan(options: CliOptions): Promise<number> {
   const processLock = acquireProcessLock();
-  let before;
-  let beforeLockFingerprint;
-  let names = [];
-  const completed = [];
+  let before: Map<string, string> | undefined;
+  let beforeLockFingerprint: string | undefined;
+  let names: string[] = [];
+  const completed: string[] = [];
   try {
     const plan = createPlan(options.skills);
     assertApplyGuards(options.expectedHead, plan);
@@ -517,15 +600,15 @@ async function applyPlan(options) {
       ? collectGlobalChanges(before, names, beforeLockFingerprint)
       : { lockChanged: false, paths: [] };
     printApplyResult(false, completed, changes);
-    console.error(`Apply failed: ${error.message}`);
+    console.error(`Apply failed: ${errorMessage(error)}`);
     return 1;
   } finally {
     releaseProcessLock(processLock);
   }
 }
 
-function buildCommands(groups) {
-  const commands = [];
+function buildCommands(groups: Groups): Array<{ args: string[]; label: string }> {
+  const commands: Array<{ args: string[]; label: string }> = [];
   if (groups.remove.length > 0) {
     commands.push({
       args: ["skills", "remove", "--global", "--skill", ...groups.remove, "--yes"],
@@ -564,7 +647,7 @@ function buildCommands(groups) {
   return commands;
 }
 
-async function runSkillsCli(args) {
+async function runSkillsCli(args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(config.bunx, args, { cwd: config.agentsRoot, stdio: "inherit" });
     const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
@@ -587,7 +670,8 @@ async function runSkillsCli(args) {
   });
 }
 
-function assertApplyGuards(expectedHead, plan) {
+function assertApplyGuards(expectedHead: string | null, plan: Plan): void {
+  if (!expectedHead) throw new Error("apply requires --expected-head SHA");
   const branch = git(["branch", "--show-current"]);
   if (branch !== "main") throw new Error(`source branch is ${branch || "detached"}, expected main`);
   const head = git(["rev-parse", "HEAD"]);
@@ -609,7 +693,7 @@ function assertApplyGuards(expectedHead, plan) {
   readCliLock();
 }
 
-function git(args) {
+function git(args: string[]): string {
   return execFileSync("git", args, {
     cwd: config.sourceRoot,
     encoding: "utf8",
@@ -617,7 +701,7 @@ function git(args) {
   }).trim();
 }
 
-function verifyAppliedPlan(requestedSkills, currentPlan, originalNames) {
+function verifyAppliedPlan(requestedSkills: string[], currentPlan: Plan, originalNames: string[]): void {
   const requested = requestedSkills.length > 0 ? requestedSkills : originalNames;
   const currentSourceNames = requested.filter((name) => currentPlan.sourceSkills.has(name));
   const verification = createPlan(currentSourceNames, { emptyMeansAll: false });
@@ -638,21 +722,20 @@ function verifyAppliedPlan(requestedSkills, currentPlan, originalNames) {
   }
 }
 
-function acquireProcessLock() {
+function acquireProcessLock(): ProcessLock {
   const token = `${process.pid}-${randomUUID()}`;
   try {
     fs.mkdirSync(config.processLock);
   } catch (error) {
-    if (error.code === "EEXIST") throw new Error(`another publish-skills apply holds ${config.processLock}`);
-    throw new Error(`cannot create process lock ${config.processLock}: ${error.message}`);
+    if (errorCode(error) === "EEXIST") throw new Error(`another publish-skills apply holds ${config.processLock}`);
+    throw new Error(`cannot create process lock ${config.processLock}: ${errorMessage(error)}`);
   }
   const owner = path.join(config.processLock, "owner.json");
   fs.writeFileSync(owner, `${JSON.stringify({ pid: process.pid, token })}\n`, { flag: "wx" });
   return { owner, token };
 }
 
-function releaseProcessLock(processLock) {
-  if (!processLock) return;
+function releaseProcessLock(processLock: ProcessLock): void {
   try {
     const owner = JSON.parse(fs.readFileSync(processLock.owner, "utf8"));
     if (owner.token === processLock.token) fs.rmSync(config.processLock, { recursive: true });
@@ -661,15 +744,15 @@ function releaseProcessLock(processLock) {
   }
 }
 
-function snapshotGlobalPaths(names) {
-  const snapshot = new Map();
+function snapshotGlobalPaths(names: string[]): Map<string, string> {
+  const snapshot = new Map<string, string>();
   for (const name of names) {
     for (const targetPath of Object.values(targetPaths(name))) snapshot.set(targetPath, fingerprintNode(targetPath));
   }
   return snapshot;
 }
 
-function fingerprintNode(targetPath) {
+function fingerprintNode(targetPath: string): string {
   const kind = nodeKind(targetPath);
   if (kind === "missing") return "missing";
   if (kind === "symlink") return `symlink:${fs.readlinkSync(targetPath)}`;
@@ -681,8 +764,8 @@ function fingerprintNode(targetPath) {
   return kind;
 }
 
-function fingerprintDirectory(root) {
-  const parts = [];
+function fingerprintDirectory(root: string): string {
+  const parts: string[] = [];
   const names = fs.readdirSync(root).sort(compareNames);
   for (const name of names) {
     const targetPath = path.join(root, name);
@@ -692,7 +775,11 @@ function fingerprintDirectory(root) {
   return digest(Buffer.from(parts.join("")));
 }
 
-function collectGlobalChanges(before, names, beforeLockFingerprint) {
+function collectGlobalChanges(
+  before: Map<string, string>,
+  names: string[],
+  beforeLockFingerprint: string | undefined,
+): GlobalChanges {
   const after = snapshotGlobalPaths(names);
   const changedPaths = [...before.entries()]
     .filter(([targetPath, fingerprint]) => after.get(targetPath) !== fingerprint)
@@ -707,7 +794,7 @@ function collectGlobalChanges(before, names, beforeLockFingerprint) {
   return { lockChanged, paths: changedPaths };
 }
 
-function printPlan(plan, json) {
+function printPlan(plan: Plan, json: boolean): void {
   const driftSkills = [...new Set(plan.drifts.map((drift) => drift.skill))].sort();
   if (json) {
     console.log(
@@ -751,11 +838,11 @@ function printPlan(plan, json) {
   }
 }
 
-function printGroup(label, names) {
+function printGroup(label: string, names: string[]): void {
   if (names.length > 0) console.log(`${label}: ${names.join(", ")}`);
 }
 
-function printApplyResult(success, completed, changes) {
+function printApplyResult(success: boolean, completed: string[], changes: GlobalChanges): void {
   console.log(success ? "Apply completed and verified." : "Apply stopped with partial progress.");
   console.log(`Completed commands: ${completed.length === 0 ? "none" : completed.join("; ")}`);
   console.log("Changed global paths:");
@@ -764,11 +851,18 @@ function printApplyResult(success, completed, changes) {
   console.log(`CLI lock changed: ${changes.lockChanged ? config.lockFile : "no"}`);
 }
 
-function addDrift(drifts, skill, target, kind, targetPath, detail) {
+function addDrift(
+  drifts: Drift[],
+  skill: string,
+  target: DriftTarget,
+  kind: string,
+  targetPath: string,
+  detail: string,
+): void {
   drifts.push({ detail, kind, path: targetPath, skill, target });
 }
 
-function compareDrifts(left, right) {
+function compareDrifts(left: Drift, right: Drift): number {
   return (
     left.skill.localeCompare(right.skill) ||
     left.target.localeCompare(right.target) ||
@@ -777,11 +871,11 @@ function compareDrifts(left, right) {
   );
 }
 
-function compareNames(left, right) {
+function compareNames(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left), Buffer.from(right));
 }
 
-function nodeKind(targetPath) {
+function nodeKind(targetPath: string): NodeKind {
   try {
     const stats = fs.lstatSync(targetPath);
     if (stats.isSymbolicLink()) return "symlink";
@@ -789,12 +883,12 @@ function nodeKind(targetPath) {
     if (stats.isFile()) return "file";
     return "other";
   } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return "missing";
+    if (errorCode(error) === "ENOENT" || errorCode(error) === "ENOTDIR") return "missing";
     throw error;
   }
 }
 
-function isRegularFile(targetPath) {
+function isRegularFile(targetPath: string): boolean {
   try {
     return fs.statSync(targetPath).isFile();
   } catch {
@@ -802,6 +896,19 @@ function isRegularFile(targetPath) {
   }
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function commandErrorMessage(error: unknown): string {
+  if (isObject(error) && typeof error.stderr === "string" && error.stderr.trim()) return error.stderr.trim();
+  return errorMessage(error);
+}
+
+function errorCode(error: unknown): string | undefined {
+  return isObject(error) && typeof error.code === "string" ? error.code : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

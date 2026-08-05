@@ -6,6 +6,49 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
 
+type Mode = "check" | "discover-routemesh" | "write";
+type MarkdownCell = number | string | null | undefined;
+
+type RegistryChain = {
+  accountActivityModel: string;
+  aliases: string[];
+  chainId: number;
+  explorer: { addressUrl: string; txUrl: string };
+  name: string;
+  nativeCurrency: { symbol: string };
+  slug: string;
+};
+
+type Registry = {
+  chains?: RegistryChain[];
+  schemaVersion?: number;
+};
+
+type BlockscoutOverlay = {
+  hostedBy?: string;
+  instanceUrl?: string;
+  notes?: string;
+  status: "absent" | "observed" | "unsafe";
+};
+
+type ChainOverlay = {
+  blockscout: BlockscoutOverlay;
+  chainscoutNamePattern?: string;
+  etherscan: { notes?: string; support: "free" | "paid" | "unsupported" };
+  fallbackPublicRpcs: string[];
+  primaryPublicRpc: string;
+  routeMesh: boolean;
+};
+
+type AtlasOverlay = {
+  chains: Record<string, ChainOverlay>;
+  metadata?: {
+    blockscoutObservedAt?: string;
+    etherscanProviderChainCount?: number;
+    etherscanVerifiedAt?: string;
+  };
+};
+
 const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
@@ -21,9 +64,9 @@ const blockscoutChainsPath = path.join(generatedDir, "blockscout-chains.md");
 const accountActivityModels = new Set(["cross-vm", "ethereum-eoa", "native-account-abstraction", "unknown"]);
 
 const mode = parseMode(process.argv.slice(2));
-const overlay = await readJson(overlayPath);
+const overlay = await readJson<AtlasOverlay>(overlayPath);
 const registryDir = await resolveRegistryDir();
-const registry = await readJson(path.join(registryDir, "data", "chains.json"));
+const registry = await readJson<Registry>(path.join(registryDir, "data", "chains.json"));
 const registryChains = registry?.chains;
 
 if (registry?.schemaVersion !== 2) {
@@ -36,7 +79,11 @@ if (!Array.isArray(registryChains) || registryChains.length === 0) {
 validateRegistryChains(registryChains);
 validateOverlay(overlay, registryChains);
 const chainsBySlug = new Map(registryChains.map((chain) => [chain.slug, chain]));
-const chains = Object.keys(overlay.chains).map((slug) => chainsBySlug.get(slug));
+const chains = Object.keys(overlay.chains).map((slug) => {
+  const chain = chainsBySlug.get(slug);
+  if (!chain) fail(`Missing registry chain for overlay slug: ${slug}.`);
+  return chain;
+});
 
 const files = new Map([
   [
@@ -61,7 +108,7 @@ if (mode === "write") {
 } else if (mode === "discover-routemesh") {
   await discoverRouteMesh(chains, overlay);
 } else {
-  const dirty = [];
+  const dirty: string[] = [];
   for (const [filePath, expected] of files) {
     const actual = await readFile(filePath, "utf8").catch(() => "");
     if (actual !== expected) dirty.push(path.relative(repoRoot, filePath));
@@ -75,30 +122,33 @@ if (mode === "write") {
   process.stdout.write(`evm-atlas generated files are current (${registryDir})\n`);
 }
 
-function parseMode(args) {
-  if (args.length !== 1 || !["--write", "--check", "--discover-routemesh"].includes(args[0])) {
+function parseMode(args: string[]): Mode {
+  const arg = args[0];
+  if (args.length !== 1 || !arg || !["--write", "--check", "--discover-routemesh"].includes(arg)) {
     fail("Usage: bun run scripts/generate-evm-atlas.ts --write|--check|--discover-routemesh");
   }
-  if (args[0] === "--write") return "write";
-  if (args[0] === "--check") return "check";
+  if (arg === "--write") return "write";
+  if (arg === "--check") return "check";
   return "discover-routemesh";
 }
 
-async function formatMarkdown(filePath, content) {
+async function formatMarkdown(filePath: string, content: string): Promise<string> {
   const options = await prettier.resolveConfig(filePath);
   return await prettier.format(content, { ...options, filepath: filePath });
 }
 
-async function readJson(filePath) {
+async function readJson<T>(filePath: string): Promise<T> {
   try {
-    return JSON.parse(await readFile(filePath, "utf8"));
+    return JSON.parse(await readFile(filePath, "utf8")) as T;
   } catch (error) {
-    fail(`Failed to read JSON at ${filePath}: ${error.message}`);
+    fail(`Failed to read JSON at ${filePath}: ${errorMessage(error)}`);
   }
 }
 
 async function resolveRegistryDir() {
-  const candidates = [process.env.CRYPTO_REGISTRY_DIR, path.resolve(repoRoot, "..", "crypto-registry")].filter(Boolean);
+  const candidates = [process.env.CRYPTO_REGISTRY_DIR, path.resolve(repoRoot, "..", "crypto-registry")].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
 
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);
@@ -108,7 +158,7 @@ async function resolveRegistryDir() {
     } catch {
       continue;
     }
-    const packageJson = await readJson(packageJsonPath);
+    const packageJson = await readJson<{ name?: string }>(packageJsonPath);
     if (packageJson.name !== "@prb/crypto-registry") {
       fail(`${resolved} is not @prb/crypto-registry (package name: ${packageJson.name ?? "missing"}).`);
     }
@@ -118,7 +168,7 @@ async function resolveRegistryDir() {
   fail("Missing @prb/crypto-registry checkout. Set CRYPTO_REGISTRY_DIR or clone it at ../crypto-registry.");
 }
 
-function validateRegistryChains(registryChains) {
+function validateRegistryChains(registryChains: RegistryChain[]): void {
   for (const chain of registryChains) {
     if (!accountActivityModels.has(chain.accountActivityModel)) {
       fail(
@@ -128,7 +178,7 @@ function validateRegistryChains(registryChains) {
   }
 }
 
-function validateOverlay(data: Record<string, any>, registryChains: Array<{ slug: string }>) {
+function validateOverlay(data: AtlasOverlay, registryChains: Array<{ slug: string }>): void {
   if (!data || typeof data !== "object" || !data.chains || typeof data.chains !== "object") {
     fail("atlas-overlays.json must contain a chains object.");
   }
@@ -150,6 +200,7 @@ function validateOverlay(data: Record<string, any>, registryChains: Array<{ slug
 
   for (const chain of registryChains) {
     const row = data.chains[chain.slug];
+    if (!row) fail(`Missing overlay row: ${chain.slug}.`);
     assertString(row.primaryPublicRpc, `${chain.slug}.primaryPublicRpc`);
     assertStringArray(row.fallbackPublicRpcs, `${chain.slug}.fallbackPublicRpcs`);
     if (typeof row.routeMesh !== "boolean") fail(`${chain.slug}.routeMesh must be boolean.`);
@@ -172,11 +223,11 @@ function validateOverlay(data: Record<string, any>, registryChains: Array<{ slug
   }
 }
 
-function assertString(value, name) {
+function assertString(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string" || value.length === 0) fail(`${name} must be a non-empty string.`);
 }
 
-function assertStringArray(value, name) {
+function assertStringArray(value: unknown, name: string): asserts value is string[] {
   if (
     !Array.isArray(value) ||
     value.length === 0 ||
@@ -186,19 +237,19 @@ function assertStringArray(value, name) {
   }
 }
 
-async function discoverRouteMesh(registryChains, data) {
-  let stdout;
+async function discoverRouteMesh(registryChains: RegistryChain[], data: AtlasOverlay): Promise<void> {
+  let stdout: string;
   try {
     ({ stdout } = await execFileAsync("routemesh", ["chains", "--output=json"]));
   } catch (error) {
-    fail(`RouteMesh chains command failed: ${error.stderr?.trim() || error.message}`);
+    fail(`RouteMesh chains command failed: ${commandErrorMessage(error)}`);
   }
 
-  let liveChains;
+  let liveChains: Array<{ chain_id: string }>;
   try {
-    liveChains = JSON.parse(stdout);
+    liveChains = JSON.parse(stdout) as Array<{ chain_id: string }>;
   } catch (error) {
-    fail(`RouteMesh chains command returned invalid JSON: ${error.message}`);
+    fail(`RouteMesh chains command returned invalid JSON: ${errorMessage(error)}`);
   }
   if (
     !Array.isArray(liveChains) ||
@@ -211,14 +262,15 @@ async function discoverRouteMesh(registryChains, data) {
   // Patch the raw text in place instead of round-tripping through JSON.stringify, so the
   // hand-formatted overlay (compact single-line arrays/objects) isn't reflowed wholesale.
   let text = await readFile(overlayPath, "utf8");
-  const changes = [];
+  const changes: string[] = [];
   for (const chain of registryChains) {
     const live = liveChainIds.has(chain.chainId);
-    if (data.chains[chain.slug].routeMesh === live) continue;
+    const row = overlayRow(data, chain);
+    if (row.routeMesh === live) continue;
     const pattern = new RegExp(`("${escapeRegExp(chain.slug)}":\\s*\\{[\\s\\S]*?"routeMesh":\\s*)(?:true|false)`);
     if (!pattern.test(text)) fail(`Could not locate ${chain.slug}.routeMesh in atlas-overlays.json.`);
     text = text.replace(pattern, `$1${live}`);
-    changes.push(`${chain.name} (${chain.slug}): ${data.chains[chain.slug].routeMesh} -> ${live}`);
+    changes.push(`${chain.name} (${chain.slug}): ${row.routeMesh} -> ${live}`);
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -239,13 +291,13 @@ async function discoverRouteMesh(registryChains, data) {
   }
 }
 
-function escapeRegExp(value) {
+function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function targetMainnets(registryChains, data) {
+function targetMainnets(registryChains: RegistryChain[], data: AtlasOverlay) {
   return registryChains.map((chain) => {
-    const row = data.chains[chain.slug];
+    const row = overlayRow(data, chain);
     return {
       chainName: chain.name,
       chainId: chain.chainId,
@@ -259,17 +311,17 @@ function targetMainnets(registryChains, data) {
   });
 }
 
-function targetFallbackRpcs(registryChains, data) {
+function targetFallbackRpcs(registryChains: RegistryChain[], data: AtlasOverlay) {
   return registryChains.map((chain) => ({
     chainName: chain.name,
     chainId: chain.chainId,
-    fallbackPublicRpcs: data.chains[chain.slug].fallbackPublicRpcs,
+    fallbackPublicRpcs: overlayRow(data, chain).fallbackPublicRpcs,
   }));
 }
 
-function chainAliases(registryChains) {
-  const rows = [];
-  const seen = new Map();
+function chainAliases(registryChains: RegistryChain[]) {
+  const rows: Array<{ alias: string; chainId: number; chainName: string }> = [];
+  const seen = new Map<string, RegistryChain>();
   for (const chain of registryChains) {
     const slugAlias = slugDiffersFromName(chain) ? [chain.slug] : [];
     for (const alias of [...slugAlias, ...chain.aliases]) {
@@ -284,24 +336,24 @@ function chainAliases(registryChains) {
   return rows;
 }
 
-function slugDiffersFromName(chain) {
+function slugDiffersFromName(chain: RegistryChain): boolean {
   return chain.slug !== chain.name.toLowerCase().replaceAll(" ", "-");
 }
 
-function explorerBaseUrl(chain) {
+function explorerBaseUrl(chain: RegistryChain): string {
   const addressBase = stripSuffix(chain.explorer.addressUrl, "/address/{address}", `${chain.slug}.explorer.addressUrl`);
   const txBase = stripSuffix(chain.explorer.txUrl, "/tx/{tx_hash}", `${chain.slug}.explorer.txUrl`);
   if (addressBase !== txBase) fail(`${chain.slug} explorer address/tx base URLs differ.`);
   return addressBase;
 }
 
-function stripSuffix(value, suffix, name) {
+function stripSuffix(value: string, suffix: string, name: string): string {
   if (!value.endsWith(suffix)) fail(`${name} must end with ${suffix}.`);
   return value.slice(0, -suffix.length);
 }
 
-function etherscanChainsMarkdown(registryChains: any[], data: any) {
-  const rowsBySupport = groupBy(registryChains, (chain) => data.chains[chain.slug].etherscan.support);
+function etherscanChainsMarkdown(registryChains: RegistryChain[], data: AtlasOverlay): string {
+  const rowsBySupport = groupBy(registryChains, (chain) => overlayRow(data, chain).etherscan.support);
   const meta = data.metadata ?? {};
   return [
     "# Etherscan Supported Target Chains Reference",
@@ -320,7 +372,7 @@ function etherscanChainsMarkdown(registryChains: any[], data: any) {
       (rowsBySupport.free ?? []).map((chain) => [
         chain.name,
         code(chain.chainId),
-        data.chains[chain.slug].etherscan.notes ?? "",
+        overlayRow(data, chain).etherscan.notes ?? "",
       ]),
     ),
     "",
@@ -342,7 +394,7 @@ function etherscanChainsMarkdown(registryChains: any[], data: any) {
       (rowsBySupport.unsupported ?? []).map((chain) => [
         chain.name,
         code(chain.chainId),
-        data.chains[chain.slug].etherscan.notes ?? "Not returned by the live chainlist",
+        overlayRow(data, chain).etherscan.notes ?? "Not returned by the live chainlist",
       ]),
     ),
     "",
@@ -351,9 +403,9 @@ function etherscanChainsMarkdown(registryChains: any[], data: any) {
   ].join("\n");
 }
 
-function blockscoutChainsMarkdown(registryChains, data) {
-  const observed = registryChains.filter((chain) => data.chains[chain.slug].blockscout.status === "observed");
-  const absentOrUnsafe = registryChains.filter((chain) => data.chains[chain.slug].blockscout.status !== "observed");
+function blockscoutChainsMarkdown(registryChains: RegistryChain[], data: AtlasOverlay): string {
+  const observed = registryChains.filter((chain) => overlayRow(data, chain).blockscout.status === "observed");
+  const absentOrUnsafe = registryChains.filter((chain) => overlayRow(data, chain).blockscout.status !== "observed");
   return [
     "# Target Chains & Chainscout",
     "",
@@ -401,7 +453,7 @@ function blockscoutChainsMarkdown(registryChains, data) {
     markdownTable(
       ["Chain", "`chain_id`", "Native", "Hosted by", "Instance URL", "Notes"],
       observed.map((chain) => {
-        const blockscout = data.chains[chain.slug].blockscout;
+        const blockscout = overlayRow(data, chain).blockscout;
         return [
           chain.name,
           code(chain.chainId),
@@ -419,7 +471,7 @@ function blockscoutChainsMarkdown(registryChains, data) {
     "",
     markdownTable(
       ["Chain", "`chain_id`", "Notes"],
-      absentOrUnsafe.map((chain) => [chain.name, code(chain.chainId), data.chains[chain.slug].blockscout.notes]),
+      absentOrUnsafe.map((chain) => [chain.name, code(chain.chainId), overlayRow(data, chain).blockscout.notes]),
     ),
     "",
     "## Contributing",
@@ -429,20 +481,21 @@ function blockscoutChainsMarkdown(registryChains, data) {
   ].join("\n");
 }
 
-function resolveChainScript(registryChains, data) {
+function resolveChainScript(registryChains: RegistryChain[], data: AtlasOverlay): string {
   const cases = registryChains.map((chain) => {
-    const pattern = data.chains[chain.slug].chainscoutNamePattern ?? chain.name;
+    const pattern = overlayRow(data, chain).chainscoutNamePattern ?? chain.name;
     return `    ${chain.chainId}) printf '%s\\n' '${singleQuote(pattern)}' ;;`;
   });
   const unsafeCases = registryChains
-    .filter((chain) => data.chains[chain.slug].blockscout.status === "unsafe")
+    .filter((chain) => overlayRow(data, chain).blockscout.status === "unsafe")
     .map((chain) => {
-      const notes = data.chains[chain.slug].blockscout.notes;
+      const notes = overlayRow(data, chain).blockscout.notes ?? "";
       return `    ${chain.chainId}) printf '%s\\n' '${singleQuote(notes)}' ;;`;
     });
   const unsafeShellcheckDirectives = registryChains.some(
     (chain) =>
-      data.chains[chain.slug].blockscout.status === "unsafe" && data.chains[chain.slug].blockscout.notes.includes("`"),
+      overlayRow(data, chain).blockscout.status === "unsafe" &&
+      (overlayRow(data, chain).blockscout.notes?.includes("`") ?? false),
   )
     ? ["  # shellcheck disable=SC2016"]
     : [];
@@ -560,23 +613,47 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]>
   return result;
 }
 
-function markdownTable(headers, rows) {
+function overlayRow(data: AtlasOverlay, chain: Pick<RegistryChain, "slug">): ChainOverlay {
+  const row = data.chains[chain.slug];
+  if (!row) fail(`Missing overlay row: ${chain.slug}.`);
+  return row;
+}
+
+function markdownTable(headers: string[], rows: MarkdownCell[][]): string {
   const widths = headers.map((header, index) =>
     Math.max(header.length, ...rows.map((row) => String(row[index] ?? "").length)),
   );
-  const formatRow = (row) => `| ${row.map((cell, index) => String(cell ?? "").padEnd(widths[index])).join(" | ")} |`;
+  const formatRow = (row: MarkdownCell[]) =>
+    `| ${row.map((cell, index) => String(cell ?? "").padEnd(widths[index] ?? 0)).join(" | ")} |`;
   return [formatRow(headers), formatRow(widths.map((width) => "-".repeat(width))), ...rows.map(formatRow)].join("\n");
 }
 
-function code(value) {
+function code(value: number | string): string {
   return `\`${value}\``;
 }
 
-function singleQuote(value) {
+function singleQuote(value: string): string {
   return value.replaceAll("'", "'\\''");
 }
 
-function fail(message) {
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function commandErrorMessage(error: unknown): string {
+  if (
+    error !== null &&
+    typeof error === "object" &&
+    "stderr" in error &&
+    typeof error.stderr === "string" &&
+    error.stderr.trim()
+  ) {
+    return error.stderr.trim();
+  }
+  return errorMessage(error);
+}
+
+function fail(message: string): never {
   process.stderr.write(`${message}\n`);
   process.exit(1);
 }

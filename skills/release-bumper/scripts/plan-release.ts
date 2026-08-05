@@ -5,6 +5,47 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+type CliOptions = {
+  beta: boolean;
+  cwd: string;
+  dryRun: boolean;
+  help: boolean;
+  packages: string[];
+  version: string | null;
+};
+
+type PackageManifest = {
+  dependencies?: Record<string, string>;
+  files?: string[];
+  name?: string;
+  peerDependencies?: Record<string, string>;
+  version?: string;
+  workspaces?: string[] | { packages?: string[] };
+};
+
+type PackageRecord = {
+  absDir: string;
+  dependencies: Record<string, string>;
+  dir: string;
+  files: string[] | null;
+  id: string;
+  name: string | null;
+  peerDependencies: Record<string, string>;
+  version: string | null;
+};
+
+type ResolveTargetOptions = {
+  cwd: string;
+  errors: string[];
+  isMonorepo: boolean;
+  packages: PackageRecord[];
+  repoRoot: string;
+  selectors: string[];
+};
+
+type Semver = { major: number; minor: number; patch: number; pre: string[] };
+type ParsedPackageTag = { hasLeadingV: boolean; name: string; version: string };
+
 const ignoredDirs = new Set([
   ".git",
   ".next",
@@ -25,7 +66,7 @@ if (options.help) {
 }
 
 const cwd = path.resolve(options.cwd);
-const argErrors = [];
+const argErrors: string[] = [];
 if (options.version && !isSemver(options.version)) {
   argErrors.push(`invalid --version: ${options.version}`);
 }
@@ -48,9 +89,9 @@ const rootPackage = readJson(rootPackagePath, argErrors);
 const hasPnpmWorkspace = fs.existsSync(path.join(repoRoot, "pnpm-workspace.yaml"));
 const workspacePatterns = workspaceGlobs(repoRoot, rootPackage);
 const isMonorepo = workspacePatterns.length > 0;
-const packageRecords = isMonorepo
+const packageRecords: PackageRecord[] = isMonorepo
   ? discoverWorkspacePackages(repoRoot, workspacePatterns, argErrors, { preferPnpm: hasPnpmWorkspace })
-  : [readPackage(repoRoot, repoRoot, argErrors)].filter(Boolean);
+  : [readPackage(repoRoot, repoRoot, argErrors)].filter(isPresent);
 const releaseTags = gitTags(repoRoot);
 const selectedTargets = resolveTargets({
   cwd,
@@ -81,8 +122,8 @@ const output = {
   targets: selectedTargets.map(serializePackage),
   dependencyEdges: dependencyEdges(packageRecords),
   previousTags: Object.fromEntries(packageRecords.map((pkg) => [pkg.id, previousTag(pkg, isMonorepo, releaseTags)])),
-  changedFiles: {},
-  changeHints: { authoritative: false, byPackage: {} },
+  changedFiles: {} as Record<string, string[]>,
+  changeHints: { authoritative: false, byPackage: {} as Record<string, Array<{ hint: string; path: string }>> },
 };
 
 for (const pkg of packageRecords) {
@@ -95,8 +136,8 @@ for (const pkg of packageRecords) {
 console.log(`${JSON.stringify(output, null, 2)}\n`);
 process.exit(argErrors.length > 0 ? 64 : 0);
 
-function parseArgs(args) {
-  const parsed = {
+function parseArgs(args: string[]): CliOptions {
+  const parsed: CliOptions = {
     beta: false,
     cwd: process.cwd(),
     dryRun: false,
@@ -107,6 +148,7 @@ function parseArgs(args) {
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
+    if (!arg) continue;
     if (arg === "--help" || arg === "-h") {
       parsed.help = true;
     } else if (arg === "--beta") {
@@ -137,39 +179,39 @@ function parseArgs(args) {
   return parsed;
 }
 
-function requireValue(args, index, flag) {
+function requireValue(args: string[], index: number, flag: string): string {
   const value = args[index];
   if (!value || value.startsWith("--")) throwUsage(`${flag} requires a value`);
   return value;
 }
 
-function throwUsage(message) {
+function throwUsage(message: string): never {
   console.error(`ERROR: ${message}\n`);
   printUsage();
   process.exit(64);
 }
 
-function printUsage() {
+function printUsage(): void {
   console.error(
     `Usage: plan-release.ts [--cwd <repo>] [--beta] [--dry-run] [--version <semver>] [--package <name-or-dir>]...`,
   );
 }
 
-function git(args, cwdArg) {
+function git(args: string[], cwdArg: string): string {
   return execFileSync("git", args, { cwd: cwdArg, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
-function readJson(filePath, errors) {
+function readJson(filePath: string, errors: string[]): PackageManifest {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as PackageManifest;
   } catch (error) {
-    errors.push(`${path.relative(process.cwd(), filePath)}: ${error.message}`);
+    errors.push(`${path.relative(process.cwd(), filePath)}: ${errorMessage(error)}`);
     return {};
   }
 }
 
-function workspaceGlobs(root, rootPackageJson) {
-  const globs = [];
+function workspaceGlobs(root: string, rootPackageJson: PackageManifest): string[] {
+  const globs: string[] = [];
   const workspaces = rootPackageJson.workspaces;
   if (Array.isArray(workspaces)) {
     globs.push(...workspaces);
@@ -185,9 +227,9 @@ function workspaceGlobs(root, rootPackageJson) {
   return unique(globs.filter((glob) => typeof glob === "string" && glob));
 }
 
-function readPnpmWorkspaceGlobs(filePath) {
+function readPnpmWorkspaceGlobs(filePath: string): string[] {
   const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
-  const globs = [];
+  const globs: string[] = [];
   let inPackages = false;
 
   for (const line of lines) {
@@ -196,14 +238,19 @@ function readPnpmWorkspaceGlobs(filePath) {
       continue;
     }
     if (inPackages && /^\S/.test(line)) break;
-    const match = inPackages && line.match(/^\s*-\s*['"]?([^'"]+)['"]?\s*$/);
-    if (match) globs.push(match[1]);
+    const match = inPackages ? line.match(/^\s*-\s*['"]?([^'"]+)['"]?\s*$/) : null;
+    if (match?.[1]) globs.push(match[1]);
   }
 
   return globs;
 }
 
-function discoverWorkspacePackages(root, globs, errors, { preferPnpm = false } = {}) {
+function discoverWorkspacePackages(
+  root: string,
+  globs: string[],
+  errors: string[],
+  { preferPnpm = false }: { preferPnpm?: boolean } = {},
+): PackageRecord[] {
   const pnpmPackages = preferPnpm ? discoverPnpmWorkspacePackages(root, errors) : null;
   if (pnpmPackages?.length) return pnpmPackages;
 
@@ -216,10 +263,10 @@ function discoverWorkspacePackages(root, globs, errors, { preferPnpm = false } =
     })
     .sort((a, b) => slash(path.relative(root, a)).localeCompare(slash(path.relative(root, b))));
 
-  return packageDirs.map((dir) => readPackage(root, dir, errors)).filter(Boolean);
+  return packageDirs.map((dir) => readPackage(root, dir, errors)).filter(isPresent);
 }
 
-function discoverPnpmWorkspacePackages(root, errors) {
+function discoverPnpmWorkspacePackages(root: string, errors: string[]): PackageRecord[] | null {
   try {
     const projects = JSON.parse(
       execFileSync("pnpm", ["--dir", root, "list", "-r", "--depth", "-1", "--json"], {
@@ -227,21 +274,21 @@ function discoverPnpmWorkspacePackages(root, errors) {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       }),
-    );
+    ) as Array<{ path?: string }>;
     if (!Array.isArray(projects)) return null;
 
     return projects
       .map((project) => workspaceProjectDir(root, project.path))
-      .filter((dir) => dir && dir !== root)
+      .filter((dir): dir is string => Boolean(dir && dir !== root))
       .map((dir) => readPackage(root, dir, errors))
-      .filter(Boolean)
+      .filter(isPresent)
       .sort((a, b) => a.dir.localeCompare(b.dir));
   } catch {
     return null;
   }
 }
 
-function workspaceProjectDir(root, projectPath) {
+function workspaceProjectDir(root: string, projectPath?: string): string | null {
   if (!projectPath) return null;
 
   const rootReal = safeRealpath(root);
@@ -251,7 +298,7 @@ function workspaceProjectDir(root, projectPath) {
   return path.join(root, rel);
 }
 
-function safeRealpath(value) {
+function safeRealpath(value: string): string {
   try {
     return fs.realpathSync.native(value);
   } catch {
@@ -259,12 +306,12 @@ function safeRealpath(value) {
   }
 }
 
-function findPackageDirs(root) {
-  const results = [];
+function findPackageDirs(root: string): string[] {
+  const results: string[] = [];
   walk(root);
   return results;
 
-  function walk(dir) {
+  function walk(dir: string): void {
     const base = path.basename(dir);
     if (ignoredDirs.has(base)) return;
     const packagePath = path.join(dir, "package.json");
@@ -278,7 +325,7 @@ function findPackageDirs(root) {
   }
 }
 
-function readPackage(root, dir, errors) {
+function readPackage(root: string, dir: string, errors: string[]): PackageRecord | null {
   const packagePath = path.join(dir, "package.json");
   if (!fs.existsSync(packagePath)) return null;
   const manifest = readJson(packagePath, errors);
@@ -296,18 +343,26 @@ function readPackage(root, dir, errors) {
   };
 }
 
-function resolveTargets({ cwd: cwdArg, errors, isMonorepo, packages, repoRoot: root, selectors }) {
+function resolveTargets({
+  cwd: cwdArg,
+  errors,
+  isMonorepo,
+  packages,
+  repoRoot: root,
+  selectors,
+}: ResolveTargetOptions): PackageRecord[] {
   if (!isMonorepo) return packages;
   if (selectors.length > 0) {
-    const selected = [];
+    const selected: PackageRecord[] = [];
     for (const selector of selectors) {
       const matches = packages.filter((pkg) => packageMatches(pkg, selector));
       if (matches.length === 0) {
         errors.push(`unknown package selector: ${selector}`);
       } else if (matches.length > 1) {
         errors.push(`ambiguous package selector: ${selector}`);
-      } else if (!selected.some((pkg) => pkg.id === matches[0].id)) {
-        selected.push(matches[0]);
+      } else {
+        const match = matches[0];
+        if (match && !selected.some((pkg) => pkg.id === match.id)) selected.push(match);
       }
     }
     return selected;
@@ -321,14 +376,14 @@ function resolveTargets({ cwd: cwdArg, errors, isMonorepo, packages, repoRoot: r
   return matches.length === 1 ? matches : [];
 }
 
-function packageMatches(pkg, selector) {
+function packageMatches(pkg: PackageRecord, selector: string): boolean {
   const normalized = selector.replace(/\/$/, "");
   const base = path.basename(pkg.dir);
   const unscoped = pkg.name?.startsWith("@") ? pkg.name.split("/").at(-1) : pkg.name;
   return normalized === pkg.dir || normalized === base || normalized === pkg.name || normalized === unscoped;
 }
 
-function serializePackage(pkg) {
+function serializePackage(pkg: PackageRecord) {
   return {
     id: pkg.id,
     dir: pkg.dir,
@@ -340,15 +395,10 @@ function serializePackage(pkg) {
   };
 }
 
-function dependencyEdges(
-  packages: Array<{
-    dependencies: Record<string, string>;
-    id: string;
-    name: string;
-    peerDependencies: Record<string, string>;
-  }>,
-) {
-  const byName = new Map(packages.filter((pkg) => pkg.name).map((pkg) => [pkg.name, pkg]));
+function dependencyEdges(packages: PackageRecord[]) {
+  const byName = new Map(
+    packages.filter((pkg): pkg is PackageRecord & { name: string } => Boolean(pkg.name)).map((pkg) => [pkg.name, pkg]),
+  );
   const edges: Array<{ from: string; name: string; range: string; to: string; type: string }> = [];
 
   for (const from of packages) {
@@ -367,11 +417,11 @@ function dependencyEdges(
   return edges.sort((a, b) => `${a.from}:${a.to}:${a.type}`.localeCompare(`${b.from}:${b.to}:${b.type}`));
 }
 
-function previousTag(pkg, isMonorepoArg, allTags) {
+function previousTag(pkg: PackageRecord, isMonorepoArg: boolean, allTags: string[]) {
   const candidates = tagPatterns(pkg, isMonorepoArg);
   const parsed = candidateTags(pkg, isMonorepoArg, allTags)
     .map((tag) => ({ tag, version: versionFromTag(tag, isMonorepoArg) }))
-    .filter((entry) => entry.version)
+    .filter((entry): entry is { tag: string; version: string } => Boolean(entry.version))
     .sort((a, b) => compareSemverDesc(a.version, b.version));
 
   return {
@@ -381,13 +431,13 @@ function previousTag(pkg, isMonorepoArg, allTags) {
   };
 }
 
-function tagPatterns(pkg, isMonorepoArg) {
+function tagPatterns(pkg: PackageRecord, isMonorepoArg: boolean): string[] {
   if (!isMonorepoArg) return ["v[0-9]*.[0-9]*.[0-9]*", "[0-9]*.[0-9]*.[0-9]*"];
 
   return packageTagNames(pkg).flatMap((name) => [`${name}@[0-9]*.[0-9]*.[0-9]*`, `${name}@v[0-9]*.[0-9]*.[0-9]*`]);
 }
 
-function gitTags(root) {
+function gitTags(root: string): string[] {
   try {
     return git(["tag", "--list", "--sort=-creatordate"], root).split(/\r?\n/).filter(Boolean);
   } catch {
@@ -395,7 +445,7 @@ function gitTags(root) {
   }
 }
 
-function candidateTags(pkg, isMonorepoArg, allTags) {
+function candidateTags(pkg: PackageRecord, isMonorepoArg: boolean, allTags: string[]): string[] {
   if (!isMonorepoArg) {
     return unique([
       ...allTags.filter((tag) => tag.startsWith("v") && stripLeadingV(tag)),
@@ -403,7 +453,7 @@ function candidateTags(pkg, isMonorepoArg, allTags) {
     ]);
   }
 
-  const matches = [];
+  const matches: string[] = [];
   for (const name of packageTagNames(pkg)) {
     for (const hasLeadingV of [false, true]) {
       matches.push(
@@ -417,16 +467,19 @@ function candidateTags(pkg, isMonorepoArg, allTags) {
   return unique(matches);
 }
 
-function packageTagNames(pkg) {
-  const names = new Set([pkg.dir, path.basename(pkg.dir)]);
+function packageTagNames(pkg: PackageRecord): string[] {
+  const names = new Set<string>([pkg.dir, path.basename(pkg.dir)]);
   if (pkg.name) {
     names.add(pkg.name);
-    if (pkg.name.startsWith("@")) names.add(pkg.name.split("/").at(-1));
+    if (pkg.name.startsWith("@")) {
+      const unscoped = pkg.name.split("/").at(-1);
+      if (unscoped) names.add(unscoped);
+    }
   }
   return [...names].filter(Boolean);
 }
 
-function parsePackageTag(tag) {
+function parsePackageTag(tag: string): ParsedPackageTag | null {
   const at = tag.lastIndexOf("@");
   if (at <= 0) return null;
 
@@ -437,18 +490,18 @@ function parsePackageTag(tag) {
   return version ? { hasLeadingV, name, version } : null;
 }
 
-function versionFromTag(tag, isMonorepoArg) {
+function versionFromTag(tag: string, isMonorepoArg: boolean): string | null {
   if (!isMonorepoArg) return stripLeadingV(tag);
   return parsePackageTag(tag)?.version ?? null;
 }
 
-function changedFiles(root, pkg, tag) {
+function changedFiles(root: string, pkg: PackageRecord, tag: string | null): string[] {
   const args = tag ? ["diff", "--name-only", `${tag}..HEAD`, "--"] : ["ls-files", "--"];
   if (pkg.dir !== ".") args.push(pkg.dir);
   return git(args, root).split(/\r?\n/).filter(Boolean).sort();
 }
 
-function fileHint(pkg, repoRel) {
+function fileHint(pkg: PackageRecord, repoRel: string): string {
   const rel = slash(repoRel);
   const packageRel = pkg.dir === "." ? repoRel : slash(path.relative(pkg.dir, repoRel));
   const local = slash(packageRel);
@@ -476,14 +529,14 @@ function fileHint(pkg, repoRel) {
   return "runtime-or-docs";
 }
 
-function readWorkingTree(root) {
+function readWorkingTree(root: string): { clean: boolean; status: string[] } {
   const status = git(["status", "--porcelain=v1"], root).split(/\r?\n/).filter(Boolean);
   return { clean: status.length === 0, status };
 }
 
-function matchesWorkspaceGlobs(rel, globs) {
-  const positive = [];
-  const negative = [];
+function matchesWorkspaceGlobs(rel: string, globs: string[]): boolean {
+  const positive: string[] = [];
+  const negative: string[] = [];
 
   for (const glob of globs) {
     const negated = glob.startsWith("!");
@@ -496,22 +549,22 @@ function matchesWorkspaceGlobs(rel, globs) {
   return included && !negative.some((glob) => matchWorkspaceGlob(rel, glob));
 }
 
-function matchWorkspaceGlob(rel, glob) {
+function matchWorkspaceGlob(rel: string, glob: string): boolean {
   if (!hasGlob(glob)) return rel === glob || rel.startsWith(`${glob}/`);
   return matchGlob(rel, glob);
 }
 
-function normalizeGlob(glob) {
+function normalizeGlob(glob: string): string {
   return slash(glob)
     .replace(/^\.\//, "")
     .replace(/\/package\.json$/, "");
 }
 
-function matchGlob(value, glob) {
+function matchGlob(value: string, glob: string): boolean {
   return globToRegex(glob).test(value);
 }
 
-function globToRegex(glob) {
+function globToRegex(glob: string): RegExp {
   let source = "^";
   for (let i = 0; i < glob.length; i += 1) {
     const char = glob[i];
@@ -529,46 +582,46 @@ function globToRegex(glob) {
     } else if (char === "?") {
       source += "[^/]";
     } else {
-      source += escapeRegex(char);
+      if (char) source += escapeRegex(char);
     }
   }
   source += "$";
   return new RegExp(source);
 }
 
-function hasGlob(value) {
+function hasGlob(value: string): boolean {
   return /[*?[\]{}]/.test(value);
 }
 
-function escapeRegex(value) {
+function escapeRegex(value: string): string {
   return value.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
 }
 
-function slash(value) {
+function slash(value: string): string {
   return value.split(path.sep).join("/");
 }
 
-function unique(values) {
+function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
-function isSemver(value) {
+function isSemver(value: string): boolean {
   return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/.test(value);
 }
 
-function stripLeadingV(value) {
+function stripLeadingV(value: string): string | null {
   const version = value.startsWith("v") ? value.slice(1) : value;
   return isSemver(version) ? version : null;
 }
 
-function compareSemverDesc(a, b) {
+function compareSemverDesc(a: string, b: string): number {
   return -compareSemver(a, b);
 }
 
-function compareSemver(a, b) {
+function compareSemver(a: string, b: string): number {
   const left = parseSemver(a);
   const right = parseSemver(b);
-  for (const key of ["major", "minor", "patch"]) {
+  for (const key of ["major", "minor", "patch"] as const) {
     if (left[key] !== right[key]) return left[key] - right[key];
   }
   if (left.pre.length === 0 && right.pre.length === 0) return 0;
@@ -591,9 +644,17 @@ function compareSemver(a, b) {
   return 0;
 }
 
-function parseSemver(value) {
-  const [withoutBuild] = value.split("+");
-  const [core, pre = ""] = withoutBuild.split("-");
-  const [major, minor, patch] = core.split(".").map(Number);
+function parseSemver(value: string): Semver {
+  const withoutBuild = value.split("+")[0] ?? value;
+  const [core = "0.0.0", pre = ""] = withoutBuild.split("-");
+  const [major = 0, minor = 0, patch = 0] = core.split(".").map(Number);
   return { major, minor, patch, pre: pre ? pre.split(".") : [] };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
 }
