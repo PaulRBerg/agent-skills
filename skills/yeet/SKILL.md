@@ -1,12 +1,13 @@
 ---
-argument-hint: <create-pr|update-pr|create-issue|update-issue|comment-issue|create-discussion> [options]
+argument-hint:
+  <create-pr|update-pr|create-issue|update-issue|comment-issue|create-discussion|update-discussion> [options]
 coordination: exempt
 disable-model-invocation: false
 effort: high
 name: yeet
 user-invocable: true
 description:
-  "Use for GitHub PR/issue/discussion workflows: create/update PRs or issues, post comments, start discussions; triggers
+  "Use for GitHub PR/issue/discussion workflows: create/update PRs, issues, or discussions and post comments; triggers
   include yeet."
 ---
 
@@ -53,6 +54,7 @@ Each workflow is fully documented in its reference file. Load the appropriate re
 | Sablier Issue     | "Sablier issue", "sablier-labs issue"                  | `references/issue-sablier.md`     |
 | Comment on Issue  | "comment on issue", "reply on issue", "post a comment" | `references/comment-issue.md`     |
 | Create Discussion | "create discussion", "start discussion"                | `references/create-discussion.md` |
+| Update Discussion | "update discussion", "edit discussion"                 | `references/update-discussion.md` |
 
 Each workflow reference links only the shared context, writing, or posting guidance it needs. Post directly when the
 user requested creation or update; do not add a confirmation gate. After a failed write, run the linked idempotency

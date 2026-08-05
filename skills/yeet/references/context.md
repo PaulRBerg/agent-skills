@@ -42,7 +42,24 @@ authenticated viewer or `sablier-labs` unless the user explicitly asks; preserve
 
 ## Image Uploads
 
-GitHub has no public issue/PR attachment API. Prefer `gh img` when installed; for existing issues/PRs,
-`gh attach --url-only` is an acceptable fallback. Do not create a placeholder artifact just to upload an image. A
-release-asset fallback is a separate external mutation and requires explicit authorization. If an image is required and
-no approved upload path works, stop before posting.
+This workflow applies to issue and discussion creation and updates. Parse repeated `--image <path>` arguments and the
+optional `--image-release` flag. Resolve every path to a readable local file, preserve argument order, and
+privacy-review the files before uploading them.
+
+GitHub has no public attachment upload API. Try these paths in order:
+
+1. If `gh img` is installed, run `gh img --repo "<owner>/<repo>" <paths...>` and capture its Markdown output.
+2. If `gh img` is unavailable or clearly fails before upload, use `gh attach <paths...> -R "<owner>/<repo>" --markdown`
+   only when `gh extension list` identifies the command as `sudosubin/gh-attach`. Other `gh attach` extensions have
+   incompatible interfaces; do not guess their flags or install an extension automatically.
+3. Use a release asset only when `--image-release` explicitly authorizes that separate external mutation.
+
+Advance to the next path only when the prior uploader is unavailable or clearly failed before uploading anything. A
+nonzero exit with any asset output is an ambiguous partial upload: stop and report the uploaded paths and failure rather
+than retrying and creating duplicates. Continue only after every requested image produced usable Markdown; otherwise
+leave an existing artifact unchanged or stop before creating a new one. Do not create a placeholder artifact just to
+upload an image.
+
+Place the Markdown in the user-requested field or section when specified. Otherwise prefer a live template field for
+images, reproduction material, or uploads; failing that, append to an existing `## Images` section or create that
+section at the end. Preserve the rest of an existing body verbatim and keep images in input order.

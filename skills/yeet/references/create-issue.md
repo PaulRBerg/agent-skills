@@ -11,8 +11,8 @@ fixed target and never infer it. Fetch authenticated context once:
 <skill-dir>/scripts/yeet-context.sh repo "<owner>/<repo>" --issue-templates
 ```
 
-Cache viewer login, permission, default branch, and template entries. Parse `--check`, repeated `--image <path>`, and
-`--image-release` as before. With `--check`, search similar open issues and show results without adding a confirmation
+Cache viewer login, permission, default branch, and template entries. Parse `--check`; handle image options through
+`context.md > Image Uploads`. With `--check`, search similar open issues and show results without adding a confirmation
 gate.
 
 Select the best template from the user's intent. This is an agent decision. Prefer YAML when a suitable YAML and
@@ -61,9 +61,7 @@ template labels with agent-selected semantic labels and deduplicate. Write a con
 
 ## Images and Posting
 
-If images were requested, follow `context.md > Image Uploads`. Use `gh img` by default; use the release-asset fallback
-only with explicit `--image-release`. Place returned Markdown in the live image/reproduction field when one exists,
-otherwise append an `Images` section. Stop before issue creation on upload failure.
+If images were requested, complete `context.md > Image Uploads` before creating the issue.
 
 Privacy-review the title, rendered body, labels, type, and attachments. Then post with `gh issue create --repo`,
 `--title`, and `--body-file`, adding `--label` and `--type` only when applicable. Post directly because creation was

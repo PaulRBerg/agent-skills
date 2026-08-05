@@ -47,6 +47,7 @@ Parse the instructions naturally — multiple intents may apply at once:
 | Update title    | "title", "rename", quoted text passed as new title | `--title`                             |
 | Regenerate body | "description", "body", "rewrite"                   | `--body`                              |
 | Append to body  | "add to body", "append"                            | `--body` (preserve existing + append) |
+| Add images      | `--image <path>`                                   | `--body` after shared image upload    |
 | Add labels      | "label X", "tag as X", "add label"                 | `--add-label`                         |
 | Remove labels   | "unlabel", "remove label"                          | `--remove-label`                      |
 | Assign user     | "assign X", "assign to X", `@user`                 | `--add-assignee`                      |
@@ -55,8 +56,8 @@ Parse the instructions naturally — multiple intents may apply at once:
 | Close           | "close", "resolve"                                 | `gh issue close` (separate command)   |
 | Reopen          | "reopen"                                           | `gh issue reopen` (separate command)  |
 
-If user provides only an issue identifier with no instructions, ERROR: "Tell me what to update — title, body, labels,
-assignees, or state."
+If user provides only an issue identifier with no instructions, ERROR: "Tell me what to update — title, body, images,
+labels, assignees, or state."
 
 ## Regenerate Title or Body
 
@@ -67,6 +68,12 @@ structure (sections, admonitions, file links). If the issue uses a YAML template
 
 For appends, preserve the existing body verbatim, then append the new content with a separator (blank line) — do not
 rewrite or echo the full existing body to the user.
+
+## Images
+
+If images were requested, complete `context.md > Image Uploads` before editing the issue. Treat the resulting body as
+the body update and combine it with any other requested edits in one `gh issue edit` command. If another instruction
+regenerates the body, place the images in that regenerated body rather than the superseded original.
 
 ## Validate Labels Before Adding
 

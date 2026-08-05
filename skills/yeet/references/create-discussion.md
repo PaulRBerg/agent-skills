@@ -12,6 +12,8 @@ See `context.md > Auth Validation`. The repository context read below is the aut
 - Otherwise: infer from the local `origin` remote via `{skill-dir}/scripts/yeet-context.sh repo`
 - Error if not in a repo and no explicit repository provided
 
+Parse `--check`; handle image options through `context.md > Image Uploads`.
+
 ## Collect Repository Context
 
 Fetch repo id, categories, and discussion-template tree once:
@@ -104,6 +106,8 @@ See `writing.md > Informal Tone` for tone guidance.
 
 Use ordinary GitHub Markdown only where it improves this discussion. See `context.md > Platform String Normalization` if
 OS details are required.
+
+If images were requested, complete `context.md > Image Uploads` before creating the discussion.
 
 ## Create the Discussion
 
