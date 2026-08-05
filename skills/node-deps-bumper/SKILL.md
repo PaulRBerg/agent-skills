@@ -46,11 +46,13 @@ batch.
 5. Before the first manifest or lockfile write, discover and run the repository's standard validation suite against the
    existing dependency state. Prefer its advertised aggregate check; otherwise run every exposed dependency-resolution,
    build, test, typecheck, lint, formatting-check, codegen-check, and repository-invariant command. Use frozen or
-   non-writing modes where available, and record the exact commands for the post-bump rerun. Command failures,
-   dependency or peer-resolution conflicts, and actionable warnings that signal incompatibility or unsafe behavior block
-   the bump; informational notices such as unavoidable deprecations do not. If the baseline has any blocking issue, stop
-   with `### ⛔ Dependency bump blocked — baseline failed`, show the exact commands and diagnostics, and ask the user to
-   resolve the pre-existing issues. Do not modify manifests, lockfiles, source, or configuration.
+   non-writing modes where available, and record the exact commands for the post-bump rerun. Attribute every failure
+   before deciding whether it blocks. Proceed when an unrelated pre-existing failure is reproducible, can be compared
+   after the bump, and does not prevent dependency resolution or the checks needed to detect regressions; do not fix it
+   as part of the bump. Dependency or peer-resolution conflicts, actionable unsafe behavior, or a baseline that cannot
+   provide trustworthy before/after signal block the bump. In that case, stop with
+   `### ⛔ Dependency bump blocked — baseline unusable` and report the exact prerequisite and diagnostics without asking
+   for redundant authorization. Informational notices such as unavoidable deprecations do not block.
 
 6. Write all selected Taze updates in one command:
 
@@ -100,6 +102,6 @@ undecorated.
 - Do not infer compatibility from SemVer alone when repository evidence, peer ranges, or release notes indicate
   otherwise.
 
-Completion requires a clean pre-write baseline, a reviewed plan, the retained selected updates, a regenerated lockfile,
-a passing rerun of the recorded suite and dependency-specific checks, and no unresolved issue caused by the bump.
-Dry-run completion requires the structured plan and zero writes.
+Completion requires an attributed, comparison-safe pre-write baseline, a reviewed plan, the retained selected updates, a
+regenerated lockfile, no new failure in the recorded suite or dependency-specific checks, and no unresolved issue caused
+by the bump. Dry-run completion requires the structured plan and zero writes.

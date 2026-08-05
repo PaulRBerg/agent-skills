@@ -17,8 +17,9 @@ asks.
 
 - Output: `./.ai/debriefs/<slug>/index.html` using the installed `html-playground` skill.
 - Derive a short topical kebab-case slug when omitted.
-- Write only inside the selected debrief directory. If the output exists, stop and ask whether to overwrite or choose a
-  new slug.
+- Write only inside the selected debrief directory. If an inferred slug already exists, choose a collision-free semantic
+  qualifier, falling back to a timestamp suffix, and continue without overwriting. If the user explicitly supplied the
+  slug, stop and ask whether to overwrite or choose a new slug.
 - Use only evidence present in the current task: real findings, paths, verified locations, metrics, decisions, and
   unresolved risks. Do not invent filler.
 
@@ -30,8 +31,9 @@ asks.
    bash <skill-dir>/scripts/prepare.sh <slug>
    ```
 
-   Use its `PLAYGROUND_DIR`, `DEBRIEFS_DIR`, `DEBRIEF_PATH`, and `EXISTS` output. Relay dependency or slug errors and
-   stop.
+   Use its `PLAYGROUND_DIR`, `DEBRIEFS_DIR`, `DEBRIEF_PATH`, and `EXISTS` output. When `EXISTS` is true for an inferred
+   slug, derive a unique slug and rerun the preparer before writing. When it is true for an explicit slug, request the
+   choice defined above. Relay dependency or slug-validation errors and stop.
 
 2. Read the resolved HTML playground `SKILL.md` and exactly one matching template: diff review, document critique, code
    map, concept map, data explorer, or design playground. Adapt its interaction model to the evidence; do not load every
@@ -46,5 +48,5 @@ asks.
    and presets.
 
 Completion requires a non-placeholder HTML debrief at the selected path, evidence-grounded content, successful
-rendered/file inspection, and explicit overwrite handling. Keep preparer `KEY=VALUE` output, dependency commands, paths,
-and slug errors exact and undecorated.
+rendered/file inspection, and collision handling that never silently overwrites. Keep preparer `KEY=VALUE` output,
+dependency commands, paths, and slug errors exact and undecorated.

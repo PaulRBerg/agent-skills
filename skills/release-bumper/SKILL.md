@@ -17,6 +17,11 @@ do not invoke this skill again through a skill tool.
 Release one package or several packages with version bumps, changelog entries, commits, and tags. Supports
 single-package repositories, workspace monorepos, stable releases, beta releases, and dry runs.
 
+A non-dry-run invocation authorizes the repository-local version edits, changelogs, commits, and annotated tags defined
+by this workflow. Do not add a generic confirmation gate after the agent derives the release plan. Ask only when an
+unresolved package selection or dependency-range policy changes the release set or approach; GitHub release creation
+remains a separate external write governed below.
+
 ## Arguments
 
 - `packages`: optional package names or directories. Omit in a single-package repository.
@@ -113,6 +118,6 @@ requires validated manifests and stable changelogs, formatting, one commit and a
 order, and a report of created commits/tags, agent-decided skips, the exact tag-push command, and any applicable GitHub
 release proposal.
 
-Use `### ⛔ Release stopped — working tree is not clean`, `### ⚠️ Confirm release plan`,
+Use `### ⛔ Release stopped — working tree is not clean`, `### ⚠️ Release decision required`,
 `### 🔎 Release preview — no files, commits, or tags written`, or `### 🏁 Release complete` as applicable. Keep helper
 JSON, versions, hashes, tags, commands, and changelog text exact and undecorated.

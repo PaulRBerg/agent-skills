@@ -39,6 +39,11 @@ implemented fixes.
   deliberate or necessary duplication to document without changing.
 - Send judgment calls about deduplications to implement, competing workflows to retire, trim depth, and publish versus
   hold to the user before planning; never expand beyond the approved decisions.
+- Treat the approved alignment outcome and resolved judgment calls, not the initial file manifest, as the implementation
+  authorization boundary. When implementation discovers a related in-repository prerequisite needed to carry out those
+  decisions, the orchestrator may extend the manifest, acquire coordination for the new scope, and delegate the smallest
+  sufficient follow-on fix without asking again. Workers still stop at their assigned write scopes and return the
+  evidence to the orchestrator.
 - Prefer surgical fixes to restructuring; add no include pipeline, templating layer, shared reference, or other
   machinery unless it removes more complexity than it adds.
 - Respect every repository's generation pipelines and hooks; edit canonical sources only, regenerate artifacts through
@@ -137,7 +142,9 @@ implemented fixes.
   directly.
 - Use disjoint per-repository write scopes for delegated work in every implementation shape.
 - Reserve aggregate cross-repository validation for one owner so it runs once after dependent edits settle.
-- Keep the plan limited to user-approved decisions and report any newly discovered decision instead of assuming it.
+- Keep the plan limited to user-approved decisions. Extend it autonomously for technical prerequisites covered by those
+  decisions; report and ask only when a new finding introduces a subjective consolidation choice, changes the repository
+  set or intended outcome, or crosses an unapproved destructive, publish, or other external-write boundary.
 
 ## Implement and finalize
 
