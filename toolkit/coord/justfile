@@ -17,7 +17,7 @@ mod dashboard
 
 # Install CLI globally and link host hooks
 @install-cli:
-    cargo install --locked --path . --force
+    cargo install --locked --quiet --path . --force
     ai-coord link all
 alias ic := install-cli
 
