@@ -97,6 +97,23 @@ fn new_store_has_exact_v10_schema_and_runtime_pragmas() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn opening_store_does_not_change_an_existing_shared_directory() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+
+    let temporary = tempdir().unwrap();
+    let shared = temporary.path().join("shared");
+    fs::create_dir(&shared).unwrap();
+    fs::set_permissions(&shared, fs::Permissions::from_mode(0o755)).unwrap();
+    let database = shared.join("state.db");
+
+    Store::open(&database).unwrap();
+
+    assert_eq!(shared.metadata().unwrap().permissions().mode() & 0o777, 0o755);
+    assert_eq!(database.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+}
+
 #[test]
 fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let temporary = tempdir().unwrap();

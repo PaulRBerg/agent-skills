@@ -148,35 +148,52 @@ async fn shutdown_signal() {
 async fn snapshot<S: SnapshotSource>(
     State(service): State<Arc<SnapshotService<S>>>,
 ) -> std::result::Result<Json<DashboardSnapshotV2>, ApiError> {
-    Ok(Json(service.snapshot()?))
+    Ok(Json(run_blocking(move || service.snapshot()).await?))
 }
 
 async fn events<S: SnapshotSource>(State(service): State<Arc<SnapshotService<S>>>) -> impl IntoResponse {
     let snapshots = stream! {
         let mut last_generation = None;
-        let mut last_sent = Instant::now() - Duration::from_secs(HEARTBEAT_SECONDS);
+        let mut last_sent = Instant::now();
         let mut ticker = interval(Duration::from_secs(POLL_SECONDS));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             ticker.tick().await;
-            let generation = match service.generation() {
-                Ok(generation) => generation,
-                Err(_) => continue,
+            let generation_service = Arc::clone(&service);
+            let Ok(generation) = run_blocking(move || generation_service.generation()).await else {
+                continue;
             };
-            if should_send(last_generation, generation, last_sent.elapsed()) &&
-                let Ok(payload) = service.snapshot()
-            {
-                match sse_snapshot_event(&payload) {
-                    Ok(event) => yield Ok::<Event, Infallible>(event),
-                    Err(_) => continue,
-                }
-                last_generation = Some(generation);
-                last_sent = Instant::now();
+            if !should_send(last_generation, generation, last_sent.elapsed()) {
+                continue;
             }
+            let snapshot_service = Arc::clone(&service);
+            let Ok(payload) = run_blocking(move || snapshot_service.snapshot()).await else {
+                continue;
+            };
+            // A still-valid cache entry can predate `generation`. Only record
+            // and emit the generation that this event actually carries.
+            if !should_send(last_generation, payload.generation, last_sent.elapsed()) {
+                continue;
+            }
+            match sse_snapshot_event(&payload) {
+                Ok(event) => yield Ok::<Event, Infallible>(event),
+                Err(_) => continue,
+            }
+            last_generation = Some(payload.generation);
+            last_sent = Instant::now();
         }
     };
     Sse::new(snapshots)
+}
+
+async fn run_blocking<T>(operation: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T>
+where
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(operation)
+        .await
+        .map_err(|error| AppError::operational(format!("dashboard worker failed: {error}")))?
 }
 
 fn should_send(last_generation: Option<u64>, generation: u64, since_last_send: Duration) -> bool {

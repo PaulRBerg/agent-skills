@@ -37,7 +37,8 @@ use crate::{
 const MAX_HOOK_INPUT_BYTES: u64 = 1024 * 1024;
 
 pub async fn run() -> ExitCode {
-    run_from(std::env::args_os()).await
+    let arguments = std::env::args_os().collect::<Vec<_>>();
+    run_from(arguments).await
 }
 
 async fn run_from<I, T>(arguments: I) -> ExitCode

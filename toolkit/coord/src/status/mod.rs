@@ -155,7 +155,12 @@ fn session_line(
         session.cwd.clone(),
         detail.join(" "),
     ]
+    .map(|value| terminal_field(&value))
     .join("\t")
+}
+
+fn terminal_field(value: &str) -> String {
+    value.chars().map(|character| if character.is_control() { ' ' } else { character }).collect()
 }
 
 fn coverage_label(provider: &crate::domain::ProviderReport) -> &'static str {
@@ -281,12 +286,13 @@ mod tests {
     #[test]
     fn rendering_groups_anonymous_but_keeps_work_rows_and_hides_draft_paths() {
         let mut named = session("named");
-        named.callsign = Some("🦊 Fox".into());
+        named.callsign = Some("🦊 Fox\u{1b}[2J".into());
         let rendered = render_status_at(
             &snapshot(vec![session("one"), session("two"), named], vec![work("named", WorkState::Draft)]),
             2_000.0,
         );
-        assert!(rendered.contains("\t🦊 Fox\texact files\tnamed\t/repo\tdraft · 1 scopes"));
+        assert!(rendered.contains("\t🦊 Fox [2J\texact files\tnamed\t/repo\tdraft · 1 scopes"));
+        assert!(!rendered.contains('\u{1b}'));
         assert!(rendered.contains("\tcount=2\t/repo\t"));
         assert!(!rendered.contains("src/lib.rs"));
     }

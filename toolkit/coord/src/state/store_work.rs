@@ -24,11 +24,11 @@ pub(crate) struct WorkTransaction<'store> {
 impl Store {
     pub(crate) fn with_work_transaction<T>(
         &mut self,
-        operation: impl FnOnce(&mut WorkTransaction<'_>) -> Result<T>,
+        operation: impl FnOnce(&WorkTransaction<'_>) -> Result<T>,
     ) -> Result<T> {
         let transaction = self.connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let mut work = WorkTransaction { transaction };
-        let result = operation(&mut work)?;
+        let work = WorkTransaction { transaction };
+        let result = operation(&work)?;
         work.transaction.commit()?;
         Ok(result)
     }
@@ -63,13 +63,13 @@ impl WorkTransaction<'_> {
         residual_owners_from(&self.transaction, repo_root)
     }
 
-    pub(crate) fn save_work(&mut self, update: &WorkUpdate) -> Result<i64> {
+    pub(crate) fn save_work(&self, update: &WorkUpdate) -> Result<i64> {
         save_work(&self.transaction, update)
     }
 
     /// Allocate a strictly increasing submission timestamp without giving
     /// drafts any queue age before promotion.
-    pub(crate) fn next_submission_time(&mut self, current: f64) -> Result<f64> {
+    pub(crate) fn next_submission_time(&self, current: f64) -> Result<f64> {
         let previous = self.transaction.query_row(
             "SELECT value FROM metadata WHERE key = 'submission_clock_micros'",
             [],
@@ -83,7 +83,7 @@ impl WorkTransaction<'_> {
     }
 
     pub(crate) fn send_message(
-        &mut self,
+        &self,
         sender: &Identity,
         recipient: &Identity,
         text: &str,

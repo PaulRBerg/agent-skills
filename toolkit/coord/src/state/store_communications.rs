@@ -94,7 +94,7 @@ impl Store {
     }
 
     pub(crate) fn notes(&self, repo_root: &str, since: Option<f64>) -> Result<Vec<NoteRow>> {
-        let mut rows = match since {
+        let rows = match since {
             Some(since) => {
                 let mut statement = self.connection.prepare(
                     "SELECT id, repo_root, author_client, author_session_id, text,
@@ -115,7 +115,6 @@ impl Store {
                 statement.query_map([repo_root], note_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?
             }
         };
-        rows.shrink_to_fit();
         Ok(rows)
     }
 

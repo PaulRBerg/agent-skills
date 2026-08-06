@@ -400,7 +400,11 @@ fn timestamp(value: &Value) -> Option<f64> {
 fn parse_iso_timestamp(value: &str) -> Option<f64> {
     let (date, rest) = value.split_once(['T', ' '])?;
     let mut date_parts = date.split('-');
-    let year = date_parts.next()?.parse::<i32>().ok()?;
+    let year = date_parts.next()?;
+    if year.len() != 4 || !year.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let year = year.parse::<i32>().ok()?;
     let month = date_parts.next()?.parse::<u32>().ok()?;
     let day = date_parts.next()?.parse::<u32>().ok()?;
     if date_parts.next().is_some() || month == 0 || month > 12 || day == 0 || day > days_in_month(year, month) {
@@ -596,6 +600,7 @@ mod tests {
         assert_eq!(parse_iso_timestamp("1970-01-01T01:00:00+01:00"), Some(0.0));
         assert_eq!(parse_iso_timestamp("2024-02-29T00:00:00Z"), Some(1_709_164_800.0));
         assert_eq!(parse_iso_timestamp("2023-02-29T00:00:00Z"), None);
+        assert_eq!(parse_iso_timestamp("2147483647-01-01T00:00:00Z"), None);
     }
 
     #[test]

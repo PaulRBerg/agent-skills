@@ -2,7 +2,8 @@ use std::{
     ffi::OsString,
     io::Read,
     path::{Path, PathBuf},
-    process::{Command, ExitStatus, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
+    sync::mpsc::{self, Receiver, TryRecvError},
     thread,
     time::{Duration, Instant},
 };
@@ -17,6 +18,7 @@ pub(crate) const UNHASHABLE_BLOB_HASH: &str = "<deleted-or-unhashable>";
 
 const GIT_ROOT_TIMEOUT: Duration = Duration::from_secs(5);
 const GIT_INSPECTION_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_COMMAND_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug)]
 pub(super) struct CommandOutput {
@@ -30,34 +32,90 @@ pub(super) fn run_output_timeout(command: &mut Command, timeout: Duration) -> st
     let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
-    let stdout_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout.read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let stderr_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).map(|_| bytes)
-    });
+    let readers = (
+        spawn_output_reader(move || read_bounded_output(&mut stdout, MAX_COMMAND_OUTPUT_BYTES)),
+        spawn_output_reader(move || read_bounded_output(&mut stderr, MAX_COMMAND_OUTPUT_BYTES)),
+    );
+    let (stdout_reader, stderr_reader) = match readers {
+        (Ok(stdout), Ok(stderr)) => (stdout, stderr),
+        (Err(error), _) | (_, Err(error)) => {
+            terminate_child(&mut child);
+            return Err(error);
+        }
+    };
     let started = Instant::now();
-    let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break status;
+    let mut status = None;
+    let mut stdout = None;
+    let mut stderr = None;
+    loop {
+        if stdout.is_none() {
+            stdout = cleanup_on_error(poll_output(&stdout_reader), &mut child)?;
+        }
+        if stderr.is_none() {
+            stderr = cleanup_on_error(poll_output(&stderr_reader), &mut child)?;
+        }
+        if status.is_none() {
+            let observed = child.try_wait();
+            status = cleanup_on_error(observed, &mut child)?;
+        }
+        if stdout.is_some() &&
+            stderr.is_some() &&
+            let Some(status) = status &&
+            let Some(stdout) = stdout.take() &&
+            let Some(stderr) = stderr.take()
+        {
+            return Ok(CommandOutput { status, stdout, stderr });
         }
         if started.elapsed() >= timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_reader.join();
-            let _ = stderr_reader.join();
+            if status.is_none() {
+                terminate_child(&mut child);
+            }
             return Err(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!("command timed out after {} seconds", timeout.as_secs()),
             ));
         }
         thread::sleep(Duration::from_millis(10));
-    };
-    let stdout = stdout_reader.join().map_err(|_| std::io::Error::other("stdout reader panicked"))??;
-    let stderr = stderr_reader.join().map_err(|_| std::io::Error::other("stderr reader panicked"))??;
-    Ok(CommandOutput { status, stdout, stderr })
+    }
+}
+
+fn spawn_output_reader(
+    read: impl FnOnce() -> std::io::Result<Vec<u8>> + Send + 'static,
+) -> std::io::Result<Receiver<std::io::Result<Vec<u8>>>> {
+    let (sender, receiver) = mpsc::sync_channel(1);
+    thread::Builder::new().name("ai-coord-output".to_owned()).spawn(move || {
+        let _ = sender.send(read());
+    })?;
+    Ok(receiver)
+}
+
+fn read_bounded_output(reader: &mut impl Read, limit: usize) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(limit.saturating_add(1) as u64).read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "command output exceeded size limit"));
+    }
+    Ok(bytes)
+}
+
+fn poll_output(reader: &Receiver<std::io::Result<Vec<u8>>>) -> std::io::Result<Option<Vec<u8>>> {
+    match reader.try_recv() {
+        Ok(result) => result.map(Some),
+        Err(TryRecvError::Empty) => Ok(None),
+        Err(TryRecvError::Disconnected) => Err(std::io::Error::other("command output reader stopped")),
+    }
+}
+
+fn terminate_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn cleanup_on_error<T>(result: std::io::Result<T>, child: &mut Child) -> std::io::Result<T> {
+    if result.is_err() {
+        terminate_child(child);
+    }
+    result
 }
 
 pub(crate) fn git_root(cwd: &Path) -> Option<PathBuf> {
@@ -328,7 +386,7 @@ fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, io::Cursor};
 
     use tempfile::TempDir;
 
@@ -425,5 +483,22 @@ mod tests {
         let dirty = git_dirty_paths(root).unwrap();
         assert!(dirty.contains(&"before.txt".to_owned()));
         assert!(dirty.contains(&"after.txt".to_owned()));
+    }
+
+    #[test]
+    fn command_output_reader_enforces_its_byte_limit() {
+        let error = read_bounded_output(&mut Cursor::new(b"abcd"), 3).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_timeout_includes_inherited_output_pipes() {
+        let started = Instant::now();
+        let error = run_output_timeout(Command::new("/bin/sh").args(["-c", "sleep 1 &"]), Duration::from_millis(50))
+            .unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < Duration::from_millis(500));
     }
 }

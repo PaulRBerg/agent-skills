@@ -3,6 +3,8 @@
 use serde_json::Value;
 use thiserror::Error;
 
+const MAX_NESTING_DEPTH: usize = 128;
+
 #[derive(Debug, Error)]
 pub(crate) enum JsoncError {
     #[error("JSONC parse error at byte {position}: {message}")]
@@ -91,7 +93,7 @@ impl ValueNode {
 impl JsoncDocument {
     pub(crate) fn parse(text: impl Into<String>) -> Result<Self, JsoncError> {
         let text = text.into();
-        let mut parser = Parser { text: &text, index: 0 };
+        let mut parser = Parser { text: &text, index: 0, depth: 0 };
         let root = parser.parse_value()?;
         parser.skip_trivia()?;
         if parser.index != text.len() {
@@ -202,6 +204,7 @@ impl JsoncDocument {
 struct Parser<'a> {
     text: &'a str,
     index: usize,
+    depth: usize,
 }
 
 impl Parser<'_> {
@@ -212,8 +215,8 @@ impl Parser<'_> {
             return Err(self.error("expecting value"));
         };
         match character {
-            '{' => self.parse_object(),
-            '[' => self.parse_array(),
+            '{' => self.parse_nested(Self::parse_object),
+            '[' => self.parse_nested(Self::parse_array),
             '"' => {
                 let value = Value::String(self.parse_string()?);
                 Ok(ValueNode { start, end: self.index, kind: NodeKind::Scalar(value) })
@@ -242,6 +245,19 @@ impl Parser<'_> {
         }
     }
 
+    fn parse_nested(
+        &mut self,
+        parse: impl FnOnce(&mut Self) -> Result<ValueNode, JsoncError>,
+    ) -> Result<ValueNode, JsoncError> {
+        if self.depth >= MAX_NESTING_DEPTH {
+            return Err(self.error("nesting limit exceeded"));
+        }
+        self.depth += 1;
+        let result = parse(self);
+        self.depth -= 1;
+        result
+    }
+
     fn parse_object(&mut self) -> Result<ValueNode, JsoncError> {
         let start = self.index;
         self.bump();
@@ -254,6 +270,12 @@ impl Parser<'_> {
                 return Err(self.error("expecting property name"));
             }
             let key = self.parse_string()?;
+            if members.iter().any(|member: &ObjectMember| member.key == key) {
+                return Err(JsoncError::Parse {
+                    position: member_start,
+                    message: format!("duplicate property {key:?}"),
+                });
+            }
             self.skip_trivia()?;
             if self.peek() != Some(':') {
                 return Err(self.error("expecting ':' delimiter"));
@@ -429,7 +451,7 @@ fn render_value(value: &Value, indentation: &str) -> String {
 mod tests {
     use serde_json::json;
 
-    use super::JsoncDocument;
+    use super::{JsoncDocument, MAX_NESTING_DEPTH};
 
     #[test]
     fn edits_jsonc_without_reformatting_unrelated_content() {
@@ -450,5 +472,21 @@ mod tests {
     fn parses_comments_adjacent_to_literals() {
         let document = JsoncDocument::parse("{\"enabled\":true/* intentional */}").unwrap();
         assert_eq!(document.value(), json!({"enabled": true}));
+    }
+
+    #[test]
+    fn rejects_duplicate_decoded_property_names() {
+        let error = JsoncDocument::parse(r#"{"hooks": {}, "\u0068ooks": {}}"#).unwrap_err();
+        assert!(error.to_string().contains("duplicate property \"hooks\""));
+    }
+
+    #[test]
+    fn rejects_excessive_nesting() {
+        let depth = MAX_NESTING_DEPTH + 1;
+        let text = format!("{}null{}", "[".repeat(depth), "]".repeat(depth));
+
+        let error = JsoncDocument::parse(text).unwrap_err();
+
+        assert!(error.to_string().contains("nesting limit exceeded"));
     }
 }

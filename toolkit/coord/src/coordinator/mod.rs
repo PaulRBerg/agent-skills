@@ -802,6 +802,9 @@ fn message_snapshot(row: MessageRow) -> SnapshotMessageV1 {
 }
 
 fn normalize_callsign(text: &str) -> Result<String> {
+    if text.chars().any(char::is_control) {
+        return Err(AppError::usage("callsign must not contain control characters"));
+    }
     let value = text.nfc().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ");
     if value.is_empty() {
         return Err(AppError::usage("callsign must contain text"));

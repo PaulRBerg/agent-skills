@@ -463,6 +463,18 @@ mod tests {
     }
 
     #[test]
+    fn inspection_rejects_duplicate_hook_containers() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("hooks.json");
+        fs::write(&path, r#"{"hooks":{},"hooks":{}}"#).unwrap();
+
+        let check = inspect_hooks(Client::Codex, &path);
+
+        assert!(!check.ok);
+        assert!(check.error.is_some_and(|error| error.contains("duplicate property \"hooks\"")));
+    }
+
+    #[test]
     fn write_preserves_symlink_and_target_mode() {
         let directory = tempdir().unwrap();
         let target = directory.path().join("target.json");

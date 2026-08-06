@@ -11,7 +11,7 @@ use std::{
 
 use tempfile::TempDir;
 
-use super::{Clock, Coordinator, inventory::StaticInventory};
+use super::{Clock, Coordinator, inventory::StaticInventory, normalize_callsign};
 use crate::{
     domain::{Client, Identity, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe, SessionState},
     error::Result,
@@ -67,6 +67,11 @@ fn repo() -> TempDir {
 
 fn identity(id: &str) -> Identity {
     Identity { client: Client::Codex, session_id: id.to_owned() }
+}
+
+#[test]
+fn callsigns_reject_terminal_control_characters() {
+    assert!(normalize_callsign("🚀 trusted\u{1b}[2J").is_err());
 }
 
 fn add_session(store: &mut Store, identity: &Identity, root: &Path, pid: u32, current: f64) {

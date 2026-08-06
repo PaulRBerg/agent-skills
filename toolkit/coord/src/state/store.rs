@@ -32,7 +32,7 @@ impl Store {
     pub(crate) fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         let parent = path.parent().ok_or_else(|| AppError::operational("state database path has no parent"))?;
-        create_private_dir(parent)?;
+        create_directory(parent)?;
 
         let mut connection = Connection::open(&path)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
@@ -91,12 +91,32 @@ pub(crate) fn private_state_dir() -> Result<PathBuf> {
 }
 
 fn create_private_dir(path: &Path) -> Result<()> {
-    fs::create_dir_all(path)?;
+    create_directory(path)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+
+        let mode = fs::metadata(path)?.permissions().mode() & 0o777;
+        if mode & 0o077 != 0 {
+            return Err(AppError::operational(format!(
+                "state directory must not be accessible by group or others: {} (mode {mode:04o})",
+                path.display()
+            )));
+        }
     }
+    Ok(())
+}
+
+fn create_directory(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true).mode(0o700).create(path)?;
+    }
+    #[cfg(not(unix))]
+    fs::create_dir_all(path)?;
     Ok(())
 }
 
