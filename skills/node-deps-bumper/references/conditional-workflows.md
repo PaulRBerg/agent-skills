@@ -36,7 +36,7 @@ transitive resolution.
 
 ## Update Bun Catalogs
 
-When the root `package.json` contains `workspaces.catalog` or `workspaces.catalogs`, use
+When the root `package.json` contains `catalog` / `catalogs` at the top level or under `workspaces`, use
 `scripts/update-bun-catalogs.py` with the saved Taze plan and agent-accepted include set. Preview before manifest
 writes; after the Taze write, rerun the same command with `--write` before regenerating the lockfile.
 

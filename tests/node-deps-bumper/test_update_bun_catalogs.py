@@ -66,6 +66,27 @@ class UpdateBunCatalogsTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(package.read_bytes(), before)
 
+    def test_top_level_catalogs_are_updated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package.json"
+            package.write_text(json.dumps({
+                "catalog": {"react": "^18.2.0"},
+                "catalogs": {"testing": {"jest": "~29.0.0"}},
+                "workspaces": ["packages/*"],
+            }), encoding="utf-8")
+            plan = root / "plan.json"
+            plan.write_text(json.dumps({"updates": [
+                {"package": "react", "current": "18.2.0", "available": "19.0.0"},
+                {"package": "jest", "current": "29.0.0", "available": "30.0.0"},
+            ]}), encoding="utf-8")
+
+            written = json.loads(self.run_helper(root, plan, "--write").stdout)
+            self.assertTrue(written["wrote"])
+            updated = json.loads(package.read_text())
+            self.assertEqual(updated["catalog"]["react"], "^19.0.0")
+            self.assertEqual(updated["catalogs"]["testing"]["jest"], "~30.0.0")
+
 
 if __name__ == "__main__":
     unittest.main()

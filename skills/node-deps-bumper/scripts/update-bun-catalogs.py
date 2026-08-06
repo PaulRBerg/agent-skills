@@ -56,21 +56,27 @@ def plan_updates(plan: dict[str, Any], names: list[str]) -> dict[str, dict[str, 
 
 def catalog_maps(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     workspaces = document.get("workspaces")
-    if not isinstance(workspaces, dict):
-        raise CatalogError("package.json has no object-valued workspaces catalog configuration")
+    if isinstance(workspaces, dict) and ("catalog" in workspaces or "catalogs" in workspaces):
+        location = workspaces
+        label = "workspaces."
+    elif "catalog" in document or "catalogs" in document:
+        location = document
+        label = ""
+    else:
+        raise CatalogError("package.json has no Bun catalog configuration")
     maps: list[tuple[str, dict[str, Any]]] = []
-    default = workspaces.get("catalog")
+    default = location.get("catalog")
     if default is not None:
         if not isinstance(default, dict):
-            raise CatalogError("workspaces.catalog must be an object")
+            raise CatalogError(f"{label}catalog must be an object")
         maps.append(("default", default))
-    named = workspaces.get("catalogs")
+    named = location.get("catalogs")
     if named is not None:
         if not isinstance(named, dict):
-            raise CatalogError("workspaces.catalogs must be an object")
+            raise CatalogError(f"{label}catalogs must be an object")
         for catalog_name, catalog in sorted(named.items()):
             if not isinstance(catalog, dict):
-                raise CatalogError(f"workspaces.catalogs.{catalog_name} must be an object")
+                raise CatalogError(f"{label}catalogs.{catalog_name} must be an object")
             maps.append((catalog_name, catalog))
     return maps
 
