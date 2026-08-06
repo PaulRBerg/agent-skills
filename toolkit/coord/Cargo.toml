@@ -1,0 +1,33 @@
+[package]
+authors = ["Paul Razvan Berg"]
+description = "Coordinate parallel Codex and Claude Code agents in shared working trees"
+edition = "2024"
+homepage = "https://github.com/PaulRBerg/ai-coord"
+license = "MIT"
+name = "ai-coord"
+repository = "https://github.com/PaulRBerg/ai-coord"
+version = "0.3.0"
+
+[dependencies]
+axum = "0.8"
+clap = { version = "4.6", features = ["derive"] }
+rand = "0.10"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.11"
+tempfile = "3.20"
+thiserror = "2.0"
+tokio = { version = "1.47", features = ["full"] }
+unicode-segmentation = "1.12"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+nix = { version = "0.31", features = ["fs", "process", "signal", "user"] }
+
+[dev-dependencies]
+proptest = "1.7"
+
+[profile.release]
+lto = "thin"
+strip = true
