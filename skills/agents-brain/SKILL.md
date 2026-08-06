@@ -53,9 +53,9 @@ Choose exactly one workflow and read only its reference.
 
 | User intent                                                     | Workflow                     | Reference                                 |
 | --------------------------------------------------------------- | ---------------------------- | ----------------------------------------- |
-| Update, refresh, sync, prune, polish, repair, or fix context    | `polish`                     | `references/brain-polish.md`              |
+| Update, refresh, sync, prune, polish, repair, or fix context    | `polish`                     | `references/polish.md`                    |
 | Create, initialize, generate, or regenerate context files       | `create`                     | `references/create-docs.md`               |
-| Audit, check, review, inspect, or suggest changes without edits | `polish` in `--dry-run` mode | `references/brain-polish.md`              |
+| Audit, check, review, inspect, or suggest changes without edits | `polish` in `--dry-run` mode | `references/polish.md`                    |
 | Create or scaffold a skill                                      | Stop                         | Refer to `skills/skill-writing`           |
 | Install, discover, remove, or rename a skill                    | Stop                         | Use a dedicated skill-management workflow |
 
@@ -161,5 +161,5 @@ detail and stop once the selected targets meet the completion bar.
 
 ## References
 
-- `polish`: read `references/brain-polish.md`.
+- `polish`: read `references/polish.md`.
 - `create`: read `references/create-docs.md`.
