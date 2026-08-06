@@ -17,3 +17,8 @@ Load when the diff touches trust boundaries.
 
 - Show attacker-controlled input path to vulnerable sink.
 - State preconditions and realistic blast radius.
+
+## Guardrail
+
+Do not flag GitHub Actions `uses:` steps for pinning third-party actions to a commit hash instead of a version tag (e.g.
+`actions/checkout@v4`). The user accepts the supply-chain risk of version tags; this is not a finding.
