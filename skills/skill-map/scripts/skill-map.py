@@ -5,18 +5,20 @@
 """Map agent skill installs, dependencies, and references.
 
 Usage:
-  uv run scripts/skill-map.py [--root PATH ...] [--skill NAME ...]
-      [--format text|json|dot] [--include-catalog-sources]
-      [--include-self] [--include-snippets] [--show-skipped]
+  uv run scripts/skill-map.py [--root PATH ... | --portfolio-root PATH] [--skill NAME ...]
+      [--format text|json|dot] [--include-catalog-sources] [--include-self] [--include-snippets] [--show-skipped]
 """
 
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -97,6 +99,17 @@ ALWAYS_IGNORED_HOME_PATHS = (
     "~/.local/state/skills",
 )
 
+USER_SKILL_ROOTS = ((".agents/skills", "codex"), (".claude/skills", "claude-code"))
+
+PORTFOLIO_SKILL_ROOTS = (
+    "skills",
+    ".agents/skills",
+    ".claude/skills",
+    ".codex/skills",
+)
+
+ALL_CLIENTS = ("claude-code", "codex")
+
 BROAD_SCAN_CACHE_PATHS = (
     "~/.cache",
     "~/.npm",
@@ -117,6 +130,7 @@ BROAD_SCAN_CACHE_PATHS = (
 SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", re.DOTALL)
 NAME_FIELD_RE = re.compile(r"^name:\s*['\"]?([^'\"\n#]+?)['\"]?\s*(?:#.*)?$", re.MULTILINE)
+INSTALL_TARGETS_RE = re.compile(r"^[ \t]+install-targets:\s*['\"]?([^'\"\n#]+?)['\"]?\s*(?:#.*)?$", re.MULTILINE)
 UNRESOLVED_TOKEN_RE = re.compile(
     r"(?<![\w./-])\$(?P<dollar>[a-z0-9]+(?:-[a-z0-9]+)+)\b"
     r"|(?:^|[\s`'\"(])/(?P<slash>[a-z0-9]+(?:-[a-z0-9]+)+)\b"
@@ -131,6 +145,32 @@ class Skill:
     directory: str
     real_directory: str
     scope: str
+    exposure_path: str | None = None
+    directory_name: str | None = None
+    location: str | None = None
+    kind: str | None = None
+    clients: tuple[str, ...] | None = None
+    is_symlink: bool | None = None
+    symlink_target: str | None = None
+    skill_sha256: str | None = None
+    tree_sha256: str | None = None
+
+
+@dataclass(frozen=True)
+class UserSkillRoot:
+    path: Path
+    client: str
+    present: bool
+
+
+@dataclass(frozen=True)
+class Portfolio:
+    repository_root: Path
+    user_roots: tuple[UserSkillRoot, ...]
+
+    @property
+    def scan_roots(self) -> list[Path]:
+        return [self.repository_root] + [root.path for root in self.user_roots if root.present]
 
 
 def fail(message: str, code: int = 2) -> None:
@@ -190,6 +230,37 @@ def normalize_roots(raw_roots: list[str]) -> list[Path]:
     return existing
 
 
+def resolve_portfolio(raw_root: str) -> Portfolio:
+    if shutil.which("git") is None:
+        fail("Git is required for --portfolio-root")
+
+    requested = Path(os.path.expanduser(raw_root)).absolute()
+    if not requested.exists():
+        fail(f"portfolio root does not exist: {requested}")
+    if not requested.is_dir():
+        fail(f"portfolio root is not a directory: {requested}")
+
+    result = subprocess.run(
+        ["git", "-C", str(requested), "rev-parse", "--show-toplevel"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        fail(f"portfolio root is not inside a Git repository: {requested}")
+
+    repository_root = Path(result.stdout.strip()).resolve()
+    user_roots = []
+    for relative, client in USER_SKILL_ROOTS:
+        path = (Path.home() / relative).absolute()
+        present = path.exists()
+        if present and not path.is_dir():
+            fail(f"user skill root is not a directory: {path}")
+        user_roots.append(UserSkillRoot(path=path, client=client, present=present))
+    return Portfolio(repository_root=repository_root, user_roots=tuple(user_roots))
+
+
 def catalog_source_roots() -> list[Path]:
     return [Path(os.path.expanduser(path)).resolve() for path in CATALOG_SOURCE_PATHS]
 
@@ -229,16 +300,28 @@ def read_text(path: Path) -> str:
         return ""
 
 
+def frontmatter(path: Path) -> str:
+    match = FRONTMATTER_RE.match(read_text(path))
+    return match.group(1) if match else ""
+
+
 def parse_skill_name(path: Path) -> str:
-    text = read_text(path)
-    match = FRONTMATTER_RE.match(text)
-    if match:
-        name_match = NAME_FIELD_RE.search(match.group(1))
+    metadata = frontmatter(path)
+    if metadata:
+        name_match = NAME_FIELD_RE.search(metadata)
         if name_match:
             value = name_match.group(1).strip()
             if SKILL_NAME_RE.match(value):
                 return value
     return path.parent.name
+
+
+def declared_clients(path: Path) -> tuple[str, ...]:
+    match = INSTALL_TARGETS_RE.search(frontmatter(path))
+    if not match:
+        return ALL_CLIENTS
+    values = tuple(value for value in ALL_CLIENTS if value in match.group(1).split())
+    return values or ALL_CLIENTS
 
 
 def classify_scope(path: Path) -> str:
@@ -255,9 +338,174 @@ def classify_scope(path: Path) -> str:
     return "unknown"
 
 
-def discover_skills(roots: list[Path], include_catalog_sources: bool) -> list[Skill]:
+def portfolio_location(path: Path, portfolio: Portfolio) -> str:
+    if any(path.is_relative_to(root.path) for root in portfolio.user_roots):
+        return "user"
+    return "repository"
+
+
+def applicable_clients(path: Path, kind: str) -> tuple[str, ...]:
+    scope = classify_scope(path)
+    if kind == "install":
+        if scope == "claude":
+            return ("claude-code",)
+        if scope in ("agents", "codex"):
+            return ("codex",)
+    return declared_clients(path)
+
+
+def tree_path_is_ignored(relative: Path) -> bool:
+    if any(part in DEFAULT_DIR_IGNORES for part in relative.parts):
+        return True
+
+    value = relative.as_posix()
+    for pattern in AGENT_STATE_DIR_GLOBS:
+        marker = pattern.removeprefix("**/").removesuffix("/**")
+        if value == marker or value.startswith(marker + "/") or f"/{marker}/" in f"/{value}/":
+            return True
+    for pattern in AGENT_STATE_FILE_GLOBS:
+        local_pattern = pattern.removeprefix("**/")
+        if fnmatch.fnmatch(value, pattern) or fnmatch.fnmatch(value, local_pattern):
+            return True
+        if fnmatch.fnmatch(value, f"*/{local_pattern}"):
+            return True
+    return False
+
+
+def hash_field(digest: Any, value: bytes) -> None:
+    digest.update(len(value).to_bytes(8, "big"))
+    digest.update(value)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as error:
+        fail(f"cannot hash {path}: {error}")
+    return digest.hexdigest()
+
+
+def sha256_tree(directory: Path) -> str:
+    entries: list[tuple[str, Path, int]] = []
+    pending = [Path()]
+    try:
+        while pending:
+            relative_directory = pending.pop()
+            current = directory / relative_directory
+            with os.scandir(current) as children:
+                for child in children:
+                    relative = relative_directory / child.name
+                    if tree_path_is_ignored(relative):
+                        continue
+                    mode = child.stat(follow_symlinks=False).st_mode
+                    entries.append((relative.as_posix(), Path(child.path), mode))
+                    if stat.S_ISDIR(mode):
+                        pending.append(relative)
+    except OSError as error:
+        fail(f"cannot hash skill tree {directory}: {error}")
+
+    digest = hashlib.sha256()
+    for relative, path, mode in sorted(entries):
+        if stat.S_ISREG(mode):
+            entry_type = b"file"
+        elif stat.S_ISDIR(mode):
+            entry_type = b"directory"
+        elif stat.S_ISLNK(mode):
+            entry_type = b"symlink"
+        else:
+            entry_type = b"other"
+
+        hash_field(digest, relative.encode("utf-8", errors="surrogateescape"))
+        hash_field(digest, entry_type)
+        executable = mode & 0o111 if stat.S_ISREG(mode) else 0
+        hash_field(digest, f"{executable:03o}".encode())
+
+        if stat.S_ISREG(mode):
+            try:
+                size = path.stat().st_size
+                hash_field(digest, size.to_bytes(8, "big"))
+                with path.open("rb") as handle:
+                    while chunk := handle.read(1024 * 1024):
+                        digest.update(chunk)
+            except OSError as error:
+                fail(f"cannot hash {path}: {error}")
+        elif stat.S_ISLNK(mode):
+            try:
+                hash_field(digest, os.fsencode(os.readlink(path)))
+            except OSError as error:
+                fail(f"cannot hash symlink {path}: {error}")
+    return digest.hexdigest()
+
+
+def make_skill(path: Path, portfolio: Portfolio | None) -> Skill | None:
+    name = parse_skill_name(path)
+    if not SKILL_NAME_RE.match(name):
+        return None
+
+    directory = path.parent
+    values: dict[str, Any] = {
+        "name": name,
+        "path": str(path),
+        "realpath": str(path.resolve()),
+        "directory": str(directory),
+        "real_directory": str(directory.resolve()),
+        "scope": classify_scope(path),
+    }
+    if portfolio is not None:
+        location = portfolio_location(path, portfolio)
+        kind = "install" if location == "user" or classify_scope(path) in ("agents", "claude", "codex") else "catalog"
+        is_symlink = directory.is_symlink()
+        values.update(
+            exposure_path=str(path),
+            directory_name=directory.name,
+            location=location,
+            kind=kind,
+            clients=applicable_clients(path, kind),
+            is_symlink=is_symlink,
+            symlink_target=os.readlink(directory) if is_symlink else None,
+            skill_sha256=sha256_file(path.resolve()),
+            tree_sha256=sha256_tree(directory.resolve()),
+        )
+    return Skill(**values)
+
+
+def recognized_symlink_skills(portfolio: Portfolio) -> Iterator[Path]:
+    skill_roots = [portfolio.repository_root / relative for relative in PORTFOLIO_SKILL_ROOTS]
+    skill_roots.extend(root.path for root in portfolio.user_roots if root.present)
+    for skill_root in skill_roots:
+        if not skill_root.is_dir():
+            continue
+        try:
+            entries = sorted(skill_root.iterdir(), key=lambda entry: entry.name)
+        except OSError as error:
+            fail(f"cannot inspect skill root {skill_root}: {error}")
+        for entry in entries:
+            if not entry.is_symlink():
+                continue
+            skill_path = entry / "SKILL.md"
+            if skill_path.is_file():
+                yield Path(os.path.abspath(skill_path))
+
+
+def discover_skills(
+    roots: list[Path], include_catalog_sources: bool, portfolio: Portfolio | None = None
+) -> list[Skill]:
     skills: list[Skill] = []
     seen_paths: set[str] = set()
+
+    def add(path: Path) -> None:
+        marker = str(path)
+        if marker in seen_paths or path.name != "SKILL.md":
+            return
+        skill = make_skill(path, portfolio)
+        if skill is None:
+            return
+        seen_paths.add(marker)
+        skills.append(skill)
+
     for root in roots:
         cmd = rg_base_args(root, include_catalog_sources) + ["--files", "-g", "SKILL.md", "."]
         result = run_rg(cmd, cwd=root)
@@ -265,26 +513,29 @@ def discover_skills(roots: list[Path], include_catalog_sources: bool) -> list[Sk
             fail(f"rg skill discovery failed for {root}:\n{result.stderr.strip()}")
 
         for line in result.stdout.splitlines():
-            path = (root / line).resolve()
+            path = Path(os.path.abspath(root / line))
             if not path_is_scannable(path, roots, include_catalog_sources):
                 continue
-            if str(path) in seen_paths or path.name != "SKILL.md":
-                continue
-            seen_paths.add(str(path))
-            name = parse_skill_name(path)
-            if not SKILL_NAME_RE.match(name):
-                continue
-            skills.append(
-                Skill(
-                    name=name,
-                    path=str(path),
-                    realpath=str(path.resolve()),
-                    directory=str(path.parent),
-                    real_directory=str(path.parent.resolve()),
-                    scope=classify_scope(path),
-                )
-            )
+            add(path)
+
+    if portfolio is not None:
+        for path in recognized_symlink_skills(portfolio):
+            add(path)
     return sorted(skills, key=lambda skill: (skill.name, skill.path))
+
+
+def reference_scan_roots(roots: list[Path], skills: list[Skill]) -> list[Path]:
+    scan_roots = list(roots)
+    covered = [root.resolve() for root in roots]
+    for skill in skills:
+        if not skill.is_symlink:
+            continue
+        target = Path(skill.real_directory)
+        if any(target.is_relative_to(root) for root in covered):
+            continue
+        scan_roots.append(target)
+        covered.append(target)
+    return scan_roots
 
 
 def skill_for_file(path: str, skills: list[Skill]) -> Skill | None:
@@ -509,8 +760,8 @@ def duplicate_installs(skills: list[Skill], selected: set[str]) -> list[dict[str
         by_name[skill.name].append(skill)
     duplicates = []
     for name, entries in sorted(by_name.items()):
-        realpaths = sorted({entry.realpath for entry in entries})
-        if len(realpaths) <= 1:
+        real_directories = sorted({entry.real_directory for entry in entries})
+        if len(real_directories) <= 1:
             continue
         if selected and name not in selected:
             continue
@@ -541,6 +792,42 @@ def skipped_summary() -> dict[str, list[str]]:
     }
 
 
+def skill_as_dict(skill: Skill, portfolio: Portfolio | None) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "name": skill.name,
+        "path": skill.path,
+        "realpath": skill.realpath,
+        "directory": skill.directory,
+        "real_directory": skill.real_directory,
+        "scope": skill.scope,
+    }
+    if portfolio is not None:
+        data.update(
+            exposure_path=skill.exposure_path,
+            directory_name=skill.directory_name,
+            location=skill.location,
+            kind=skill.kind,
+            clients=list(skill.clients or ()),
+            is_symlink=skill.is_symlink,
+            symlink_target=skill.symlink_target,
+            skill_sha256=skill.skill_sha256,
+            tree_sha256=skill.tree_sha256,
+        )
+    return data
+
+
+def portfolio_as_dict(portfolio: Portfolio) -> dict[str, Any]:
+    present = []
+    missing = []
+    for root in portfolio.user_roots:
+        entry = {"path": str(root.path), "client": root.client}
+        (present if root.present else missing).append(entry)
+    return {
+        "repository_root": str(portfolio.repository_root),
+        "user_roots": {"present": present, "missing": missing},
+    }
+
+
 def as_json(
     roots: list[Path],
     skills: list[Skill],
@@ -548,10 +835,11 @@ def as_json(
     unresolved: list[dict[str, Any]],
     duplicates: list[dict[str, Any]],
     show_skipped: bool,
+    portfolio: Portfolio | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "roots": [str(root) for root in roots],
-        "skills": [skill.__dict__ for skill in skills],
+        "skills": [skill_as_dict(skill, portfolio) for skill in skills],
         "edges": edges,
         "duplicates": duplicates,
         "unresolved": unresolved,
@@ -562,6 +850,8 @@ def as_json(
             "unresolved": len(unresolved),
         },
     }
+    if portfolio is not None:
+        payload["portfolio"] = portfolio_as_dict(portfolio)
     if show_skipped:
         payload["skipped"] = skipped_summary()
     print(json.dumps(payload, indent=2, sort_keys=True))
@@ -651,7 +941,12 @@ def as_text(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", action="append", default=[], help="root to scan; repeatable (default: ~)")
+    roots = parser.add_mutually_exclusive_group()
+    roots.add_argument("--root", action="append", default=[], help="root to scan; repeatable (default: ~)")
+    roots.add_argument(
+        "--portfolio-root",
+        help="Git worktree whose repository skills should be mapped with user skill installs",
+    )
     parser.add_argument("--skill", action="append", default=[], help="skill name filter; repeatable")
     parser.add_argument("--format", choices=("text", "json", "dot"), default="text")
     parser.add_argument(
@@ -667,31 +962,33 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    roots = normalize_roots(args.root or [str(Path.home())])
+    portfolio = resolve_portfolio(args.portfolio_root) if args.portfolio_root else None
+    roots = portfolio.scan_roots if portfolio is not None else normalize_roots(args.root or [str(Path.home())])
+    include_catalog_sources = args.include_catalog_sources or portfolio is not None
     selected = set(args.skill)
     invalid = sorted(name for name in selected if not SKILL_NAME_RE.match(name))
     if invalid:
         fail(f"invalid skill name filter: {', '.join(invalid)}")
 
-    discovered = discover_skills(roots, args.include_catalog_sources)
+    discovered = discover_skills(roots, include_catalog_sources, portfolio)
     known_counts = Counter(skill.name for skill in discovered)
     missing_filters = sorted(name for name in selected if known_counts[name] == 0)
     if missing_filters:
         print(f"skill-map: warning: no discovered skill named {', '.join(missing_filters)}", file=sys.stderr)
 
     edges, unresolved = collect_edges(
-        roots,
+        reference_scan_roots(roots, discovered) if portfolio is not None else roots,
         discovered,
         selected,
         args.include_self,
         args.include_snippets,
-        args.include_catalog_sources,
+        include_catalog_sources,
     )
     duplicates = duplicate_installs(discovered, selected)
     displayed_skills = filter_skills(discovered, selected)
 
     if args.format == "json":
-        as_json(roots, displayed_skills, edges, unresolved, duplicates, args.show_skipped)
+        as_json(roots, displayed_skills, edges, unresolved, duplicates, args.show_skipped, portfolio)
     elif args.format == "dot":
         as_dot(edges, duplicates)
     else:

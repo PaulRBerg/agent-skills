@@ -46,6 +46,7 @@ bunx skills add PaulRBerg/agent-skills
 | repo-harmonization   | Audit and align multiple interdependent repositories                     |
 | repo-rename          | Rename GitHub repo, folder, and agent thread references                  |
 | skill-doctor         | Audit Agent Skills catalogs and installed skill roots                    |
+| skill-harmonization  | Harmonize repository and user-installed skill portfolios                 |
 | skill-map            | Find skill dependencies and references across machine                    |
 | spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS                              |
 | stale-comments-audit | Audit and fix stale comments in JavaScript, TypeScript, and Go           |

@@ -30,6 +30,19 @@ they are noise relative to authored sources and project references. Pass one exp
 `--root ~/.agents`) to audit installs there; an explicit root is never self-ignored, matching how `~/Library` and
 catalog source checkouts behave.
 
+## Portfolio Roots and Symlinks
+
+`--portfolio-root PATH` resolves `PATH` to its Git root and selects only that repository plus existing
+`~/.agents/skills` and `~/.claude/skills` roots. These automatically selected user roots are equivalent to passing the
+same paths explicitly: the broad-home agent-root exclusions do not suppress an explicit child root, while dependency,
+build, cache, and agent-state exclusions still apply.
+
+Portfolio discovery preserves each lexical exposure and follows a symlink only when it is a direct skill-directory entry
+under the repository's `skills`, `.agents/skills`, `.claude/skills`, or `.codex/skills` root, or under one of the two
+selected user roots. It does not enable ripgrep's general symlink traversal. Tree hashing likewise records nested
+symlink targets without following them and excludes the same dependency, build, cache, and agent-state paths as the
+inventory scan.
+
 ## Claude Code State
 
 Claude Code documents `~/.claude` as containing authored configuration and application data. Authored skills live under

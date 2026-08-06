@@ -1,14 +1,14 @@
 ---
 argument-hint:
-  "[--skill NAME] [--root PATH] [--format text|json|dot] [--include-catalog-sources] [--include-self]
-  [--include-snippets] [--show-skipped]"
+  "[--skill NAME] [--root PATH | --portfolio-root PATH] [--format text|json|dot] [--include-catalog-sources]
+  [--include-self] [--include-snippets] [--show-skipped]"
 coordination: exempt
 disable-model-invocation: false
 name: skill-map
 user-invocable: true
 description:
-  "Use to find agent skill installs, duplicate skills, cross-dependencies, invocations, and cross-references across the
-  local machine."
+  "Use to find agent skill installs, repository skill portfolios, duplicate skills, cross-dependencies, invocations, and
+  cross-references across the local machine."
 ---
 
 # Skill Map
@@ -22,6 +22,8 @@ cache, dependency, and backup noise.
 ## Arguments
 
 - `--root PATH`: Scan this root. Repeatable. Default: `~`.
+- `--portfolio-root PATH`: Resolve `PATH` to its Git root, then scan that repository plus existing `~/.agents/skills`
+  and `~/.claude/skills`. Mutually exclusive with `--root`.
 - `--skill NAME`: Restrict the report to one skill name. Repeatable.
 - `--format text|json|dot`: Select report format. Default: `text`.
 - `--include-catalog-sources`: Include known local source checkouts such as `~/projects/agent-skills`,
@@ -48,11 +50,14 @@ cache, dependency, and backup noise.
 
 3. Use `--format json` when another command or agent will consume the result.
 
-4. Use `--format dot` when the user asks for a graph, Graphviz input, or dependency visualization.
+4. Use `--portfolio-root <repo> --format json` when comparing repository skills with user-installed Codex and Claude
+   Code exposures. Do not add broader home roots.
 
-5. Use `--include-snippets` only when the user asks to see exact matching lines.
+5. Use `--format dot` when the user asks for a graph, Graphviz input, or dependency visualization.
 
-6. Read [references/ignore-policy.md](references/ignore-policy.md) only when explaining, auditing, or changing the
+6. Use `--include-snippets` only when the user asks to see exact matching lines.
+
+7. Read [references/ignore-policy.md](references/ignore-policy.md) only when explaining, auditing, or changing the
    ignore policy.
 
 ## User-Facing Output
@@ -71,10 +76,26 @@ labels sparingly and keep snippets, private paths, exact edges, commands, and di
 - `duplicate-install`: multiple discovered `SKILL.md` files declare or resolve to the same skill name.
 - `unresolved-like-reference`: explicit `$kebab-name` or `/kebab-name` tokens that do not match a discovered skill.
 
+Portfolio JSON preserves those fields and adds:
+
+- `portfolio.repository_root` and present/missing user roots, including the client exposed by each root.
+- Per-skill lexical `exposure_path` beside resolved `realpath`; `directory_name`; repository/user `location`;
+  install/catalog `kind`; and applicable `clients`.
+- `is_symlink` and the lexical `symlink_target` for recognized skill-directory symlinks. Exposures that resolve to one
+  real directory remain separate skill entries, while duplicate installs still require distinct real directories.
+- `skill_sha256` for `SKILL.md` bytes and `tree_sha256` for the complete filtered skill tree. Tree hashes cover sorted
+  relative paths, entry types, regular-file executable bits, streamed file bytes, and un-followed symlink targets.
+
+The automatically selected user roots behave like explicit roots: the broad-home ignore policy does not suppress an
+explicit `~/.agents/skills` or `~/.claude/skills` root. Portfolio traversal follows symlinks only when the symlink is a
+direct child of a recognized repository or user skill root; other repository symlinks remain untraversed.
+
 ## Related Skills
 
 - `skill-map` only locates and cross-references skills; it does not validate them. To audit a catalog or installed root
   for metadata and doc-link issues, use the `skill-doctor` skill when it is installed.
+- To evaluate the mapped repository-centered portfolio for conflicts, drift, consolidation, or missing workflows, use
+  the manually invoked `skill-harmonization` skill.
 
 ## Guard Rails
 

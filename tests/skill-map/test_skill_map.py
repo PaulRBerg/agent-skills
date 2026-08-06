@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -18,6 +21,15 @@ assert SPEC is not None and SPEC.loader is not None
 skill_map = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = skill_map
 SPEC.loader.exec_module(skill_map)
+
+
+def write_skill(directory: Path, name: str, install_targets: str | None = None) -> None:
+    directory.mkdir(parents=True)
+    metadata = f"metadata:\n  install-targets: {install_targets}\n" if install_targets else ""
+    (directory / "SKILL.md").write_text(
+        f"---\n{metadata}name: {name}\ndescription: Test skill.\n---\n\n# {name}\n",
+        encoding="utf-8",
+    )
 
 
 class ParseRgMatchesTest(unittest.TestCase):
@@ -111,6 +123,160 @@ class QueryPlanningTest(unittest.TestCase):
         search.assert_called_once()
         self.assertIn("missing\\-skill", search.call_args.args[1])
         self.assertNotIn("[a-z0-9]+", search.call_args.args[1])
+
+
+class PortfolioResolutionTest(unittest.TestCase):
+    def test_expands_git_root_and_records_missing_optional_user_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            home = base / "home"
+            repository = base / "repository"
+            nested = repository / "nested"
+            nested.mkdir(parents=True)
+            agents_root = home / ".agents" / "skills"
+            agents_root.mkdir(parents=True)
+            subprocess.run(
+                ["git", "init", "-q", str(repository)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            with mock.patch.object(skill_map.Path, "home", return_value=home):
+                portfolio = skill_map.resolve_portfolio(str(nested))
+                summary = skill_map.portfolio_as_dict(portfolio)
+
+        self.assertEqual(portfolio.repository_root, repository.resolve())
+        self.assertEqual(portfolio.scan_roots, [repository.resolve(), agents_root])
+        self.assertEqual(
+            [(root.client, root.present) for root in portfolio.user_roots],
+            [("codex", True), ("claude-code", False)],
+        )
+        self.assertEqual(summary["repository_root"], str(repository.resolve()))
+        self.assertEqual(summary["user_roots"]["present"], [{"path": str(agents_root), "client": "codex"}])
+        self.assertEqual(
+            summary["user_roots"]["missing"],
+            [{"path": str(home / ".claude" / "skills"), "client": "claude-code"}],
+        )
+
+    def test_root_and_portfolio_root_are_mutually_exclusive(self) -> None:
+        argv = ["skill-map.py", "--root", ".", "--portfolio-root", "."]
+        with mock.patch.object(sys, "argv", argv), redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, "2"):
+                skill_map.parse_args()
+
+
+class PortfolioInventoryTest(unittest.TestCase):
+    def test_classifies_repository_user_and_client_exposures(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            repository = base / "repository"
+            agents_root = base / "home" / ".agents" / "skills"
+            claude_root = base / "home" / ".claude" / "skills"
+            write_skill(repository / "skills" / "repo-skill", "repo-skill", "claude-code")
+            write_skill(agents_root / "codex-user", "codex-user")
+            write_skill(claude_root / "claude-user", "claude-user")
+            portfolio = skill_map.Portfolio(
+                repository_root=repository,
+                user_roots=(
+                    skill_map.UserSkillRoot(agents_root, "codex", True),
+                    skill_map.UserSkillRoot(claude_root, "claude-code", True),
+                ),
+            )
+
+            skills = skill_map.discover_skills(portfolio.scan_roots, True, portfolio)
+
+        by_name = {skill.name: skill for skill in skills}
+        self.assertEqual(by_name["repo-skill"].location, "repository")
+        self.assertEqual(by_name["repo-skill"].kind, "catalog")
+        self.assertEqual(by_name["repo-skill"].clients, ("claude-code",))
+        self.assertEqual(by_name["codex-user"].location, "user")
+        self.assertEqual(by_name["codex-user"].kind, "install")
+        self.assertEqual(by_name["codex-user"].clients, ("codex",))
+        self.assertEqual(by_name["claude-user"].clients, ("claude-code",))
+
+    def test_keeps_lexical_symlink_exposures_for_one_real_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            repository = base / "repository"
+            source = repository / "skills" / "shared-skill"
+            agents_root = base / "home" / ".agents" / "skills"
+            claude_root = base / "home" / ".claude" / "skills"
+            write_skill(source, "shared-skill")
+            agents_root.mkdir(parents=True)
+            claude_root.mkdir(parents=True)
+            (agents_root / "shared-skill").symlink_to(source, target_is_directory=True)
+            (claude_root / "shared-skill").symlink_to(source, target_is_directory=True)
+            portfolio = skill_map.Portfolio(
+                repository_root=repository,
+                user_roots=(
+                    skill_map.UserSkillRoot(agents_root, "codex", True),
+                    skill_map.UserSkillRoot(claude_root, "claude-code", True),
+                ),
+            )
+
+            skills = skill_map.discover_skills(portfolio.scan_roots, True, portfolio)
+            shared = [skill for skill in skills if skill.name == "shared-skill"]
+
+        self.assertEqual(len(shared), 3)
+        self.assertEqual(len({skill.path for skill in shared}), 3)
+        self.assertEqual({skill.real_directory for skill in shared}, {str(source.resolve())})
+        self.assertEqual(sum(bool(skill.is_symlink) for skill in shared), 2)
+        self.assertEqual({skill.exposure_path for skill in shared}, {skill.path for skill in shared})
+        self.assertTrue(all(skill.symlink_target for skill in shared if skill.is_symlink))
+        self.assertEqual(skill_map.duplicate_installs(shared, set()), [])
+
+    def test_hashes_are_stable_and_cover_support_content_and_executable_bits(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            first = base / "first"
+            second = base / "second"
+            write_skill(first, "hash-skill")
+            write_skill(second, "hash-skill")
+            first_support = first / "scripts" / "helper.sh"
+            second_support = second / "scripts" / "helper.sh"
+            first_support.parent.mkdir()
+            second_support.parent.mkdir()
+            first_support.write_text("#!/bin/sh\necho test\n", encoding="utf-8")
+            second_support.write_text("#!/bin/sh\necho test\n", encoding="utf-8")
+            first_support.chmod(0o644)
+            second_support.chmod(0o644)
+
+            skill_hash = skill_map.sha256_file(first / "SKILL.md")
+            initial = skill_map.sha256_tree(first)
+
+            self.assertEqual(skill_hash, skill_map.sha256_file(second / "SKILL.md"))
+            self.assertEqual(initial, skill_map.sha256_tree(second))
+
+            second_support.write_text("#!/bin/sh\necho changed\n", encoding="utf-8")
+            self.assertNotEqual(initial, skill_map.sha256_tree(second))
+            self.assertEqual(skill_hash, skill_map.sha256_file(second / "SKILL.md"))
+
+            second_support.write_text("#!/bin/sh\necho test\n", encoding="utf-8")
+            second_support.chmod(os.stat(second_support).st_mode | 0o100)
+            self.assertNotEqual(initial, skill_map.sha256_tree(second))
+
+
+class ExistingJsonCompatibilityTest(unittest.TestCase):
+    def test_root_json_fields_and_distinct_location_duplicates_are_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_skill(root / "one", "same-skill")
+            write_skill(root / "two", "same-skill")
+            skills = skill_map.discover_skills([root], False)
+            duplicates = skill_map.duplicate_installs(skills, set())
+            output = io.StringIO()
+            with redirect_stdout(output):
+                skill_map.as_json([root], skills, [], [], duplicates, False)
+
+        payload = json.loads(output.getvalue())
+        self.assertNotIn("portfolio", payload)
+        self.assertEqual(
+            set(payload["skills"][0]),
+            {"name", "path", "realpath", "directory", "real_directory", "scope"},
+        )
+        self.assertEqual(len(payload["duplicates"]), 1)
+        self.assertEqual(len(payload["duplicates"][0]["paths"]), 2)
 
 
 if __name__ == "__main__":
