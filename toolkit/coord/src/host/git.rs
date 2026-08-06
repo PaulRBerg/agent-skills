@@ -232,11 +232,11 @@ pub(crate) fn git_dirty_paths(root: &Path) -> Result<Vec<String>> {
         }
         let status = &entry[..2];
         push_git_path(&mut dirty, &entry[3..]);
-        if status.contains(&b'R') || status.contains(&b'C') {
-            if let Some(other) = parts.get(index) {
-                push_git_path(&mut dirty, other);
-                index += 1;
-            }
+        if (status.contains(&b'R') || status.contains(&b'C')) &&
+            let Some(other) = parts.get(index)
+        {
+            push_git_path(&mut dirty, other);
+            index += 1;
         }
     }
     Ok(dirty)
@@ -287,10 +287,10 @@ fn expand_user(path: &Path) -> PathBuf {
     if value == "~" {
         return home_dir().unwrap_or_else(|| path.to_owned());
     }
-    if let Some(suffix) = value.strip_prefix("~/") {
-        if let Some(home) = home_dir() {
-            return home.join(suffix);
-        }
+    if let Some(suffix) = value.strip_prefix("~/") &&
+        let Some(home) = home_dir()
+    {
+        return home.join(suffix);
     }
     path.to_owned()
 }

@@ -1,7 +1,7 @@
 use std::{env, ffi::OsString};
 
 use crate::{
-    domain::{Client, Identity, ProcessFingerprint, ProcessProbe},
+    domain::{Client, Identity, ProcessFingerprint},
     error::Result,
 };
 
@@ -46,10 +46,6 @@ fn host_environment(get: &mut impl FnMut(&str) -> Option<OsString>) -> Option<Id
 
 fn nonempty_utf8(value: OsString) -> Option<String> {
     value.into_string().ok().filter(|value| !value.is_empty())
-}
-
-pub(crate) fn process_reference(pid: u32) -> Option<ProcessFingerprint> {
-    NativeProcessProbe::new().fingerprint(pid).ok()
 }
 
 /// Return the starting process and at most fifteen ancestors.

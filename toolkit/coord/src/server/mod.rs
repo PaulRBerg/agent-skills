@@ -134,7 +134,15 @@ pub(crate) fn router<S: SnapshotSource>(service: SnapshotService<S>) -> Router {
 /// Bind and serve the standard local-only dashboard endpoint.
 pub(crate) async fn serve<S: SnapshotSource>(source: S, host: &str, port: u16) -> Result<()> {
     let listener = TcpListener::bind((host, port)).await.map_err(AppError::from)?;
-    axum::serve(listener, router(SnapshotService::new(source))).await.map_err(AppError::from)
+    println!("Serving dashboard API at http://{host}:{port}");
+    axum::serve(listener, router(SnapshotService::new(source)))
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(AppError::from)
+}
+
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 async fn snapshot<S: SnapshotSource>(
@@ -156,15 +164,15 @@ async fn events<S: SnapshotSource>(State(service): State<Arc<SnapshotService<S>>
                 Ok(generation) => generation,
                 Err(_) => continue,
             };
-            if should_send(last_generation, generation, last_sent.elapsed()) {
-                if let Ok(payload) = service.snapshot() {
-                    match sse_snapshot_event(&payload) {
-                        Ok(event) => yield Ok::<Event, Infallible>(event),
-                        Err(_) => continue,
-                    }
-                    last_generation = Some(generation);
-                    last_sent = Instant::now();
+            if should_send(last_generation, generation, last_sent.elapsed()) &&
+                let Ok(payload) = service.snapshot()
+            {
+                match sse_snapshot_event(&payload) {
+                    Ok(event) => yield Ok::<Event, Infallible>(event),
+                    Err(_) => continue,
                 }
+                last_generation = Some(generation);
+                last_sent = Instant::now();
             }
         }
     };
@@ -176,6 +184,7 @@ fn should_send(last_generation: Option<u64>, generation: u64, since_last_send: D
 }
 
 /// Encode the exact named event framing used by the dashboard EventSource.
+#[cfg(test)]
 pub(crate) fn sse_snapshot_frame(payload: &impl Serialize) -> Result<String> {
     Ok(format!("event: snapshot\ndata: {}\n\n", compact_json(payload)?))
 }
@@ -185,8 +194,7 @@ fn sse_snapshot_event(payload: &impl Serialize) -> Result<Event> {
 }
 
 fn compact_json(payload: &impl Serialize) -> Result<String> {
-    // Going through Value preserves the deterministic lexical object ordering
-    // that the former Python implementation exposed with sort_keys=True.
+    // Going through Value preserves deterministic lexical object ordering.
     Ok(serde_json::to_string(&serde_json::to_value(payload)?)?)
 }
 

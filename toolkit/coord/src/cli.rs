@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -15,9 +13,16 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Assign this session an emoji-bearing callsign.
     Name(NameArgs),
-    /// Acquire exact file scopes or record pathless intent.
+    /// Return READY after acquiring exact file PATHS, or queue the claim.
+    ///
+    /// Use --recursive DIR for intentional directory-prefix ownership. With no
+    /// PATHS or recursive directories, record LABEL as a pathless,
+    /// non-exclusive intent.
     Start(StartArgs),
-    /// Wait for queued work or another coordination event.
+    /// Return when queued work is ready or another wake event occurs.
+    ///
+    /// Messages, notes, unknown coverage, claim release, and timeout are
+    /// non-readiness wake events.
     Wait(WaitArgs),
     /// Release this session's active, queued, or intent work.
     Done,
@@ -27,7 +32,9 @@ pub(crate) enum Command {
     Status(StatusArgs),
     /// Serve the local dashboard HTTP interface.
     Serve(ServeArgs),
-    /// Send bounded peer data to one session or repository peers.
+    /// Send bounded peer data to one session or current-repository peers.
+    ///
+    /// TARGET=repo selects live peers in the current Git worktree.
     Msg(MessageArgs),
     /// List or acknowledge recipient-only messages.
     Inbox(InboxArgs),
@@ -88,10 +95,14 @@ pub(crate) struct StatusArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ServeArgs {
-    #[arg(long, default_value = "127.0.0.1")]
+    #[arg(long, default_value = crate::server::DEFAULT_HOST)]
     pub(crate) host: String,
 
-    #[arg(long, default_value_t = 4477, value_parser = clap::value_parser!(u16).range(1..))]
+    #[arg(
+        long,
+        default_value_t = crate::server::DEFAULT_PORT,
+        value_parser = clap::value_parser!(u16).range(1..)
+    )]
     pub(crate) port: u16,
 }
 
@@ -104,21 +115,20 @@ pub(crate) struct MessageArgs {
 #[derive(Debug, Args)]
 pub(crate) struct InboxArgs {
     /// Acknowledge one message ID.
-    #[arg(long = "ack", value_name = "ID", conflicts_with = "ack_all")]
+    #[arg(long = "ack", value_name = "ID")]
     pub(crate) message_id: Option<String>,
 
     /// Acknowledge all pending messages.
-    #[arg(long = "ack-all", conflicts_with = "message_id")]
+    #[arg(long = "ack-all")]
     pub(crate) ack_all: bool,
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct NoteArgs {
-    #[arg(required_unless_present = "note_id", conflicts_with = "note_id")]
     pub(crate) text: Option<String>,
 
     /// Resolve one repository note.
-    #[arg(long = "done", value_name = "ID", required_unless_present = "text", conflicts_with = "text")]
+    #[arg(long = "done", value_name = "ID")]
     pub(crate) note_id: Option<String>,
 }
 
@@ -144,7 +154,7 @@ pub(crate) enum ClaudeClient {
     Claude,
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub(crate) enum LinkClient {
     Codex,
     Claude,
@@ -155,7 +165,7 @@ pub(crate) enum LinkClient {
 pub(crate) struct LinkArgs {
     pub(crate) client: LinkClient,
 
-    /// Use one alternate Claude settings file.
+    /// Codex: active hooks file only; Claude: one alternate settings file.
     #[arg(long, value_name = "PATH")]
     pub(crate) path: Option<PathBuf>,
 

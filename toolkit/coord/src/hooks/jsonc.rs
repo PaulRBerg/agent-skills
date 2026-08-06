@@ -100,6 +100,7 @@ impl JsoncDocument {
         Ok(Self { text, root })
     }
 
+    #[cfg(test)]
     pub(crate) fn value(&self) -> Value {
         self.root.value()
     }

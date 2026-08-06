@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use thiserror::Error;
 
 pub(crate) type Result<T> = std::result::Result<T, AppError>;
@@ -15,7 +13,7 @@ impl ErrorKind {
     pub(crate) const fn code(self) -> u8 {
         match self {
             Self::Operational => 1,
-            Self::Usage => 2,
+            Self::Usage => 64,
             Self::Retry => 3,
         }
     }

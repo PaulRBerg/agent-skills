@@ -12,7 +12,7 @@ use crate::domain::{
     Client, Identity, InventoryResult, ProcessFingerprint, ProcessProbe, ProviderReport, SessionState,
 };
 
-use super::{NativeProcessProbe, git_root, run_output_timeout};
+use super::{git_root, run_output_timeout};
 
 pub(crate) const INVENTORY_CACHE_SECONDS: f64 = 2.0;
 pub(crate) const CLAUDE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -65,10 +65,6 @@ impl ProviderContext {
 
     pub(crate) fn codex_hooks_path(&self) -> PathBuf {
         self.codex_home.join("hooks.json")
-    }
-
-    pub(crate) fn claude_settings_path(&self) -> PathBuf {
-        self.claude_config_dir.join("settings.json")
     }
 }
 
@@ -156,24 +152,6 @@ pub(crate) struct ClaudeInventoryObservation {
     pub(crate) sessions: Vec<ClaudeSessionObservation>,
     /// Only an authoritative observation may replace the ledger's Claude rows.
     pub(crate) authoritative: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct HostInventoryObservation {
-    pub(crate) result: InventoryResult,
-    pub(crate) claude_sessions: Vec<ClaudeSessionObservation>,
-    pub(crate) claude_authoritative: bool,
-}
-
-/// Collect provider evidence without reading or writing provider caches.
-pub(crate) fn observe_host_inventory(
-    context: &ProviderContext,
-    codex_evidence: &CodexHookLedgerEvidence,
-) -> HostInventoryObservation {
-    let codex = codex_provider_report(context.codex_executable.as_deref(), codex_evidence);
-    let claude = collect_claude_inventory(context.claude_executable.as_deref(), &NativeProcessProbe::new());
-    let result = inventory_result(vec![codex, claude.report.clone()]);
-    HostInventoryObservation { result, claude_sessions: claude.sessions, claude_authoritative: claude.authoritative }
 }
 
 pub(crate) fn collect_claude_inventory(

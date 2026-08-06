@@ -86,16 +86,6 @@ impl Store {
         })
     }
 
-    pub(crate) fn set_session_label(&mut self, identity: &Identity, label: Option<&str>) -> Result<()> {
-        self.immediate(|transaction| {
-            transaction.execute(
-                "UPDATE sessions SET label = ?1 WHERE client = ?2 AND session_id = ?3",
-                params![label, client_name(identity.client), identity.session_id],
-            )?;
-            Ok(())
-        })
-    }
-
     pub(crate) fn set_session_callsign(&mut self, identity: &Identity, callsign: &str) -> Result<()> {
         let key = callsign_key(callsign);
         self.immediate(|transaction| {
@@ -187,34 +177,6 @@ impl Store {
     pub(crate) fn sessions(&self) -> Result<Vec<SessionRow>> {
         let mut statement = self.connection.prepare(&session_select("ORDER BY client, started_at, session_id"))?;
         Ok(statement.query_map([], session_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?)
-    }
-
-    pub(crate) fn identities_for_processes(&self, references: &[ProcessFingerprint]) -> Result<Vec<Identity>> {
-        if references.is_empty() {
-            return Ok(Vec::new());
-        }
-        let sessions = self.sessions()?;
-        let exact = sessions
-            .iter()
-            .filter_map(|session| {
-                let fingerprint = session.fingerprint.as_ref()?;
-                fingerprint.start_token.as_ref()?;
-                references.iter().any(|reference| reference == fingerprint).then(|| session.identity.clone())
-            })
-            .collect::<Vec<_>>();
-        if !exact.is_empty() {
-            return Ok(exact);
-        }
-        Ok(sessions
-            .into_iter()
-            .filter(|session| {
-                session.fingerprint.as_ref().is_some_and(|fingerprint| {
-                    fingerprint.start_token.is_none() &&
-                        references.iter().any(|reference| reference.pid == fingerprint.pid)
-                })
-            })
-            .map(|session| session.identity)
-            .collect())
     }
 
     pub(crate) fn identities_for_exact_processes(&self, references: &[ProcessFingerprint]) -> Result<Vec<Identity>> {
@@ -355,9 +317,4 @@ fn callsign_key(callsign: &str) -> String {
         .nfc()
         .filter(|character| !matches!(character, '\u{fe0e}' | '\u{fe0f}'))
         .collect()
-}
-
-#[cfg(test)]
-pub(super) fn codex_identity(session_id: &str) -> Identity {
-    Identity { client: crate::domain::Client::Codex, session_id: session_id.to_owned() }
 }

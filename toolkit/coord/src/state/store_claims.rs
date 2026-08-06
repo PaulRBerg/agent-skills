@@ -93,6 +93,7 @@ impl Store {
         claims_from(&self.connection, repo_root)
     }
 
+    #[cfg(test)]
     pub(crate) fn residual_owners(&self, repo_root: &str) -> Result<Vec<ResidualOwnerRow>> {
         residual_owners_from(&self.connection, repo_root)
     }
@@ -154,10 +155,6 @@ impl Store {
             }
             dirt_observations_from(transaction, repo_root)
         })
-    }
-
-    pub(crate) fn dirt_observations(&self, repo_root: &str) -> Result<Vec<DirtObservationRow>> {
-        dirt_observations_from(&self.connection, repo_root)
     }
 
     pub(crate) fn record_residual_owners(

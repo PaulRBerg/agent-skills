@@ -132,6 +132,15 @@ pub(crate) fn link_hooks(client: Client, path: &Path, dry_run: bool, force: bool
 }
 
 pub(crate) fn inspect_hooks(client: Client, path: &Path) -> HooksCheck {
+    if !path.exists() {
+        return HooksCheck {
+            client,
+            path: path.to_path_buf(),
+            ok: false,
+            missing: hook_specs(client).iter().map(|spec| spec.event.to_owned()).collect(),
+            error: None,
+        };
+    }
     let document = match read_document(path) {
         Ok(document) => document,
         Err(ConfigError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -196,10 +205,10 @@ fn claude_link_path(runtime: PathBuf) -> PathBuf {
 
 fn expand_tilde(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
-    if text == "~" || text.starts_with("~/") {
-        if let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty()) {
-            return PathBuf::from(home).join(text.trim_start_matches("~/"));
-        }
+    if (text == "~" || text.starts_with("~/")) &&
+        let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty())
+    {
+        return PathBuf::from(home).join(text.trim_start_matches("~/"));
     }
     path
 }

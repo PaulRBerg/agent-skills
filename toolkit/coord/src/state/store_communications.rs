@@ -119,6 +119,7 @@ impl Store {
         Ok(rows)
     }
 
+    #[cfg(test)]
     pub(crate) fn all_notes(&self) -> Result<Vec<NoteRow>> {
         let mut statement = self.connection.prepare(
             "SELECT id, repo_root, author_client, author_session_id, text,

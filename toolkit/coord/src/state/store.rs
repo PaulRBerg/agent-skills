@@ -2,7 +2,7 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
@@ -193,10 +193,6 @@ fn invalid_value(message: String) -> rusqlite::Error {
         rusqlite::types::Type::Text,
         Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, message)),
     )
-}
-
-pub(super) fn now() -> f64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64()
 }
 
 pub(super) fn new_id() -> String {

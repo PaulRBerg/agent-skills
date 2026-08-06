@@ -7,8 +7,6 @@ use crate::{
     error::Result,
 };
 
-const STALE_AFTER_SECONDS: f64 = 30.0 * 60.0;
-
 /// Serialize the public status schema.  Keep this separate from dashboard-only
 /// fields such as messages, generation, and generated_at.
 pub(crate) fn snapshot_json(snapshot: &SnapshotV1) -> Result<String> {
@@ -67,7 +65,7 @@ fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
         let note_scope = if machine_wide { "machine-wide" } else { snapshot.scope.repo_root.as_deref().unwrap_or("") };
         lines.push(format!("Notes ({note_scope}):"));
         for note in &snapshot.notes {
-            let prefix = machine_wide.then(|| format!("{}  ", note.repo_root)).unwrap_or_default();
+            let prefix = if machine_wide { format!("{}  ", note.repo_root) } else { String::new() };
             lines.push(format!("{prefix}{}  {}  {}", note.id, age_label(note.created_at, now), note.text));
         }
         lines.push("(note --done <id> closes a note)".to_owned());
@@ -76,15 +74,12 @@ fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
     let states = snapshot.sessions.iter().map(|session| session.state).collect::<Vec<_>>();
     let partial = !snapshot.complete ||
         snapshot.providers.iter().any(|provider| !provider.enabled || !provider.ok || provider.dropped > 0);
-    let stale = snapshot.sessions.iter().any(|session| {
-        session.last_seen < now - STALE_AFTER_SECONDS &&
-            matches!(session.state, SessionState::Working | SessionState::InFlight)
-    });
-
     for (line, present) in [
-        ("Idle: user prompt; dirt may remain in flight (Codex ~4h).", states.contains(&SessionState::Idle)),
+        (
+            "Idle: user prompt; process liveness is reconciled on every coordination read.",
+            states.contains(&SessionState::Idle),
+        ),
         ("Waiting: host/human wait; claim=queued means coordination queue.", states.contains(&SessionState::Waiting)),
-        ("Working/in_flight older than ~30m: likely stale.", stale),
         ("Names/labels: hints; only 'ai-coord start' returning READY grants an edit scope.", true),
         ("Partial coverage: sessions may be missing; absence does not mean no conflicts.", partial),
     ] {
