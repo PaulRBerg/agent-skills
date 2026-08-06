@@ -1,6 +1,11 @@
 mod cli;
 mod domain;
 mod error;
+mod hooks;
+mod host;
+mod server;
+mod state;
+mod status;
 
 use std::process::ExitCode;
 
