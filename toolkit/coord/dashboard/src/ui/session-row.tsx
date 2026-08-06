@@ -10,7 +10,7 @@ import {
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
 import type { Delegate, LaneSession } from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
-import { ClaimChips } from "@/ui/claim-chips";
+import { WorkChips } from "@/ui/work-chips";
 
 const clientBadge = tv({
   base: "inline-flex border px-1.5 py-0.5 font-mono text-[11px]/4 font-semibold uppercase tracking-wide",
@@ -84,11 +84,14 @@ interface SessionRowProps {
 }
 
 export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
-  const { session, claim, delegates } = row;
-  const label = sessionDisplayName(session);
-  const secondaryNames = [session.label, session.name].filter(
+  const { session, work, delegates } = row;
+  const label = sessionDisplayName(session, work?.label);
+  const secondaryNames = [work?.label, session.name].filter(
     (value, index, values): value is string =>
-      value !== null && value !== label && values.indexOf(value) === index,
+      value !== null &&
+      value !== undefined &&
+      value !== label &&
+      values.indexOf(value) === index,
   );
   const client =
     session.client === "codex" || session.client === "claude"
@@ -157,19 +160,19 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
 
         <div className="min-w-0 pl-4 sm:pl-0">
           <AnimatePresence initial={false} mode="wait">
-            {claim ? (
+            {work ? (
               <motion.div
                 animate={{ opacity: 1, y: 0 }}
                 data-motion-item
                 exit={{ opacity: 0, y: -3 }}
                 initial={{ opacity: 0, y: 3 }}
-                key={`claim-${claim.id}`}
+                key={`work-${work.id}`}
                 transition={{
                   duration: MOTION_DURATION.field,
                   ease: MOTION_EASE,
                 }}
               >
-                <ClaimChips claim={claim} />
+                <WorkChips work={work} />
               </motion.div>
             ) : (
               <motion.span
@@ -178,10 +181,10 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
                 data-motion-item
                 exit={{ opacity: 0 }}
                 initial={{ opacity: 0 }}
-                key="no-claim"
+                key="no-work"
                 transition={{ duration: MOTION_DURATION.field }}
               >
-                No claim
+                No work
               </motion.span>
             )}
           </AnimatePresence>

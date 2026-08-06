@@ -31,9 +31,9 @@
   --color-queued-ink-base: oklch(0.42 0.11 75);
   --color-queued-line-base: oklch(0.75 0.09 80);
   --color-queued-subtle-base: oklch(0.95 0.03 85);
-  --color-intent-ink-base: oklch(0.43 0.1 260);
-  --color-intent-line-base: oklch(0.74 0.08 260);
-  --color-intent-subtle-base: oklch(0.94 0.025 260);
+  --color-draft-ink-base: oklch(0.43 0.1 260);
+  --color-draft-line-base: oklch(0.74 0.08 260);
+  --color-draft-subtle-base: oklch(0.94 0.025 260);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -67,9 +67,9 @@
     --color-queued-ink-base: oklch(0.8 0.12 80);
     --color-queued-line-base: oklch(0.5 0.08 80);
     --color-queued-subtle-base: oklch(0.28 0.04 80);
-    --color-intent-ink-base: oklch(0.76 0.1 260);
-    --color-intent-line-base: oklch(0.48 0.07 260);
-    --color-intent-subtle-base: oklch(0.27 0.035 260);
+    --color-draft-ink-base: oklch(0.76 0.1 260);
+    --color-draft-line-base: oklch(0.48 0.07 260);
+    --color-draft-subtle-base: oklch(0.27 0.035 260);
   }
 }
 
@@ -103,9 +103,9 @@
   --color-queued-ink: var(--color-queued-ink-base);
   --color-queued-line: var(--color-queued-line-base);
   --color-queued-subtle: var(--color-queued-subtle-base);
-  --color-intent-ink: var(--color-intent-ink-base);
-  --color-intent-line: var(--color-intent-line-base);
-  --color-intent-subtle: var(--color-intent-subtle-base);
+  --color-draft-ink: var(--color-draft-ink-base);
+  --color-draft-line: var(--color-draft-line-base);
+  --color-draft-subtle: var(--color-draft-subtle-base);
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;

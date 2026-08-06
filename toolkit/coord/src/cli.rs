@@ -13,22 +13,23 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Assign this session an emoji-bearing callsign.
     Name(NameArgs),
-    /// Return READY after acquiring exact file PATHS, or queue the claim.
+    /// Store exact planned scopes without reserving them.
+    Draft(DraftArgs),
+    /// Return READY after acquiring exact file PATHS, or queue the work.
     ///
-    /// Use --recursive DIR for intentional directory-prefix ownership. With no
-    /// PATHS or recursive directories, record LABEL as a pathless,
-    /// non-exclusive intent.
+    /// Use --draft to submit the stored draft, or pass LABEL and scopes for a
+    /// direct submission. Use --recursive DIR for directory-prefix ownership.
     Start(StartArgs),
     /// Return when queued work is ready or another wake event occurs.
     ///
-    /// Messages, notes, unknown coverage, claim release, and timeout are
+    /// Messages, notes, unknown coverage, work release, and timeout are
     /// non-readiness wake events.
     Wait(WaitArgs),
-    /// Release this session's active, queued, or intent work.
+    /// Release this session's draft, active, or queued work.
     Done,
-    /// Print Git blob baselines for this session's active claim.
+    /// Print Git blob baselines for this session's active work.
     Baseline,
-    /// Show sessions, claims, provider coverage, and repository notes.
+    /// Show sessions, work, provider coverage, and repository notes.
     Status(StatusArgs),
     /// Serve the local dashboard HTTP interface.
     Serve(ServeArgs),
@@ -60,14 +61,31 @@ pub(crate) struct NameArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct StartArgs {
-    /// Explicitly claim a directory prefix; repeat for multiple directories.
+pub(crate) struct DraftArgs {
+    /// Explicitly remember a directory prefix; repeat for multiple directories.
     #[arg(long = "recursive", value_name = "DIR")]
     pub(crate) recursive_paths: Vec<PathBuf>,
 
     pub(crate) label: String,
 
     #[arg(value_name = "PATH")]
+    pub(crate) paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct StartArgs {
+    /// Submit the stored draft for normal arbitration.
+    #[arg(long, conflicts_with_all = ["recursive_paths", "label", "paths"])]
+    pub(crate) draft: bool,
+
+    /// Explicitly reserve a directory prefix; repeat for multiple directories.
+    #[arg(long = "recursive", value_name = "DIR", conflicts_with = "draft")]
+    pub(crate) recursive_paths: Vec<PathBuf>,
+
+    #[arg(required_unless_present = "draft", conflicts_with = "draft")]
+    pub(crate) label: Option<String>,
+
+    #[arg(value_name = "PATH", conflicts_with = "draft")]
     pub(crate) paths: Vec<PathBuf>,
 }
 

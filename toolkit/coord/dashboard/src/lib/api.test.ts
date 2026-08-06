@@ -20,15 +20,15 @@ describe("parseSnapshot", () => {
     );
   });
 
-  test("rejects unsupported claim states", () => {
+  test("rejects unsupported work states", () => {
     const malformed = structuredClone(sampleSnapshot) as Record<
       string,
       unknown
     >;
-    const claims = malformed.claims as Array<Record<string, unknown>>;
-    claims[0] = { ...claims[0], state: "blocked" };
+    const work = malformed.work as Array<Record<string, unknown>>;
+    work[0] = { ...work[0], state: "blocked" };
 
-    expect(() => parseSnapshot(malformed)).toThrow("snapshot.claims[0].state");
+    expect(() => parseSnapshot(malformed)).toThrow("snapshot.work[0].state");
   });
 
   test("allows additive API fields", () => {
@@ -36,17 +36,47 @@ describe("parseSnapshot", () => {
     expect(parseSnapshot(extended)).toBe(extended);
   });
 
-  test("accepts older schema-v1 snapshots without callsign fields", () => {
-    const legacy = structuredClone(sampleSnapshot) as Record<string, unknown>;
-    for (const session of legacy.sessions as Array<Record<string, unknown>>) {
+  test("rejects the pre-break status schema", () => {
+    const legacy = { ...sampleSnapshot, schema_version: 1 };
+    expect(() => parseSnapshot(legacy)).toThrow(
+      "snapshot.schema_version must be 2",
+    );
+  });
+
+  test("allows absent additive callsign fields", () => {
+    const withoutCallsigns = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    for (const session of withoutCallsigns.sessions as Array<
+      Record<string, unknown>
+    >) {
       delete session.callsign;
     }
-    for (const message of legacy.messages as Array<Record<string, unknown>>) {
+    for (const message of withoutCallsigns.messages as Array<
+      Record<string, unknown>
+    >) {
       delete message.sender_callsign;
       delete message.recipient_callsign;
     }
 
-    expect(parseSnapshot(legacy)).toBe(legacy);
+    expect(parseSnapshot(withoutCallsigns)).toBe(withoutCallsigns);
+  });
+
+  test("requires draft counts without exposing literal scopes", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const work = malformed.work as Array<Record<string, unknown>>;
+    work[0] = {
+      ...work[0],
+      scopes: [{ path: "private/file", kind: "exact" }],
+    };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.work[0].scopes must be omitted for draft work",
+    );
   });
 
   test("validates additive callsign fields when present", () => {

@@ -434,6 +434,24 @@ mod tests {
     }
 
     #[test]
+    fn claude_link_removes_only_the_obsolete_exit_plan_handler() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        fs::write(
+            &path,
+            r#"{"hooks":{"PostToolUse":[{"matcher":"ExitPlanMode","hooks":[{"type":"command","command":"ai-coord hook claude","timeout":5}]},{"matcher":"OtherTool","hooks":[{"type":"command","command":"other"}]}]}}"#,
+        )
+        .unwrap();
+
+        link_hooks(Client::Claude, &path, false, false).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+
+        assert!(!text.contains("ExitPlanMode"));
+        assert!(text.contains("\"command\":\"other\""));
+        assert!(inspect_hooks(Client::Claude, &path).ok);
+    }
+
+    #[test]
     fn dry_run_does_not_write_and_force_replaces_only_owned_containers() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("hooks.json");

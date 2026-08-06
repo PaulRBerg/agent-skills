@@ -1,31 +1,39 @@
 //! Versioned status JSON and its compact terminal rendering.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
-    domain::{Client, SessionState, SnapshotScopeKindV1, SnapshotSessionV1, SnapshotV1},
+    domain::{
+        Client, Identity, SessionState, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
+    },
     error::Result,
 };
 
-/// Serialize the public status schema.  Keep this separate from dashboard-only
+/// Serialize the public status schema. Keep this separate from dashboard-only
 /// fields such as messages, generation, and generated_at.
-pub(crate) fn snapshot_json(snapshot: &SnapshotV1) -> Result<String> {
+pub(crate) fn snapshot_json(snapshot: &SnapshotV2) -> Result<String> {
     Ok(serde_json::to_string_pretty(snapshot)?)
 }
 
 /// Render the same snapshot as the tab-separated status command output.
-pub(crate) fn render_status(snapshot: &SnapshotV1) -> String {
+pub(crate) fn render_status(snapshot: &SnapshotV2) -> String {
     render_status_at(snapshot, unix_now())
 }
 
-fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
+fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
     let mut lines = vec!["CLIENT\tSTATE\tAGE\tCALLSIGN\tNAME/LABEL\tSESSION\tCWD\tDETAIL".to_owned()];
+    let work_by_identity =
+        snapshot.work.iter().map(|work| (work.identity.clone(), work)).collect::<HashMap<Identity, &SnapshotWorkV2>>();
     let mut named = Vec::new();
     let mut anonymous: Vec<AnonymousGroup<'_>> = Vec::new();
 
     for session in &snapshot.sessions {
-        if is_named(session) {
-            named.push(session);
+        let work = work_by_identity.get(&session.identity).copied();
+        if is_named(session, work) {
+            named.push((session, work));
             continue;
         }
 
@@ -37,12 +45,12 @@ fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
         }
     }
 
-    for session in named {
-        lines.push(session_line(session, now, None));
+    for (session, work) in named {
+        lines.push(session_line(session, work, now, None));
     }
     for group in anonymous {
         let count = group.rows.len();
-        lines.push(session_line(group.rows[0], now, (count > 1).then(|| format!("count={count}"))));
+        lines.push(session_line(group.rows[0], None, now, (count > 1).then(|| format!("count={count}"))));
     }
 
     let coverage = snapshot
@@ -61,7 +69,7 @@ fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
     }
 
     if !snapshot.notes.is_empty() {
-        let machine_wide = snapshot.scope.kind == SnapshotScopeKindV1::Machine;
+        let machine_wide = snapshot.scope.kind == SnapshotScopeKindV2::Machine;
         let note_scope = if machine_wide { "machine-wide" } else { snapshot.scope.repo_root.as_deref().unwrap_or("") };
         lines.push(format!("Notes ({note_scope}):"));
         for note in &snapshot.notes {
@@ -79,7 +87,11 @@ fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
             "Idle: user prompt; fresh status and authorization reads reconcile process liveness.",
             states.contains(&SessionState::Idle),
         ),
-        ("Waiting: host/human wait; claim=queued means coordination queue.", states.contains(&SessionState::Waiting)),
+        ("Waiting: host/human wait; work=queued means coordination queue.", states.contains(&SessionState::Waiting)),
+        (
+            "Drafts: non-authoritative temporary memory; submit with 'ai-coord start --draft'.",
+            snapshot.work.iter().any(|work| work.state == WorkState::Draft),
+        ),
         ("Names/labels: hints; only 'ai-coord start' returning READY grants an edit scope.", true),
         ("Partial coverage: sessions may be missing; absence does not mean no conflicts.", partial),
     ] {
@@ -93,18 +105,23 @@ fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
 
 struct AnonymousGroup<'a> {
     key: (&'static str, &'static str, &'a str),
-    rows: Vec<&'a SnapshotSessionV1>,
+    rows: Vec<&'a SnapshotSessionV2>,
 }
 
-fn is_named(session: &SnapshotSessionV1) -> bool {
+fn is_named(session: &SnapshotSessionV2, work: Option<&SnapshotWorkV2>) -> bool {
     session.callsign.is_some() ||
         session.name.is_some() ||
-        session.label.is_some() ||
+        work.is_some() ||
         session.permission_mode.as_deref() == Some("plan") ||
         session.delegate_count.unwrap_or_default() > 0
 }
 
-fn session_line(session: &SnapshotSessionV1, now: f64, session_id: Option<String>) -> String {
+fn session_line(
+    session: &SnapshotSessionV2,
+    work: Option<&SnapshotWorkV2>,
+    now: f64,
+    session_id: Option<String>,
+) -> String {
     let mut detail = Vec::new();
     if session.permission_mode.as_deref() == Some("plan") {
         detail.push("planning".to_owned());
@@ -112,21 +129,28 @@ fn session_line(session: &SnapshotSessionV1, now: f64, session_id: Option<String
     if let Some(count) = session.delegate_count.filter(|count| *count > 0) {
         detail.push(format!("delegates={count}"));
     }
-    if session.claim_state.is_some_and(|state| state == crate::domain::ClaimState::Queued) {
-        detail.push("claim=queued".to_owned());
+    if let Some(work) = work {
+        match work.state {
+            WorkState::Draft => detail.push(format!("draft · {} scopes", work.scope_count.unwrap_or_default())),
+            WorkState::Queued => detail.push("work=queued".to_owned()),
+            WorkState::Active => detail.push("work=active".to_owned()),
+        }
+        if let Some(scopes) = &work.scopes {
+            detail.push(format!(
+                "paths={}",
+                scopes.iter().map(|scope| scope.path.as_str()).collect::<Vec<_>>().join(",")
+            ));
+        }
     }
     if let Some(waiting_for) = &session.waiting_for {
         detail.push(format!("waiting={waiting_for}"));
-    }
-    if !session.paths.is_empty() {
-        detail.push(format!("paths={}", session.paths.join(",")));
     }
     [
         client_name(session.identity.client).to_owned(),
         state_name(session.state).to_owned(),
         age_label(session.last_seen, now),
         session.callsign.clone().unwrap_or_default(),
-        session.label.clone().or_else(|| session.name.clone()).unwrap_or_default(),
+        work.map(|work| work.label.clone()).or_else(|| session.name.clone()).unwrap_or_default(),
         session_id.unwrap_or_else(|| session.identity.session_id.clone()),
         session.cwd.clone(),
         detail.join(" "),
@@ -181,13 +205,13 @@ fn unix_now() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Identity, OutsideScopeV1, ProviderReport, SnapshotScopeV1};
+    use crate::domain::{OutsideScopeV2, ProviderReport, Scope, ScopeKind, SnapshotScopeV2, SnapshotWorkV2};
 
-    fn snapshot(sessions: Vec<SnapshotSessionV1>) -> SnapshotV1 {
-        SnapshotV1 {
-            schema_version: 1,
+    fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {
+        SnapshotV2 {
+            schema_version: 2,
             complete: true,
-            scope: SnapshotScopeV1 { kind: SnapshotScopeKindV1::Repo, repo_root: Some("/repo".into()) },
+            scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Repo, repo_root: Some("/repo".into()) },
             self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
             providers: vec![ProviderReport {
                 client: Client::Codex,
@@ -198,22 +222,21 @@ mod tests {
                 error: None,
             }],
             sessions,
-            claims: vec![],
+            work,
             notes: vec![],
             delegates: vec![],
-            outside_scope: OutsideScopeV1 { sessions: 0, directories: 0 },
+            outside_scope: OutsideScopeV2 { sessions: 0, directories: 0 },
         }
     }
 
-    fn session(id: &str) -> SnapshotSessionV1 {
-        SnapshotSessionV1 {
+    fn session(id: &str) -> SnapshotSessionV2 {
+        SnapshotSessionV2 {
             identity: Identity { client: Client::Codex, session_id: id.into() },
             cwd: "/repo".into(),
             repo_root: Some("/repo".into()),
             state: SessionState::Working,
             callsign: None,
             name: None,
-            label: None,
             waiting_for: None,
             permission_mode: None,
             delegate_count: None,
@@ -221,28 +244,50 @@ mod tests {
             source: "test".into(),
             started_at: 1.0,
             last_seen: 1_000.0,
-            claim_state: None,
-            paths: vec![],
+        }
+    }
+
+    fn work(id: &str, state: WorkState) -> SnapshotWorkV2 {
+        SnapshotWorkV2 {
+            id: 1,
+            identity: Identity { client: Client::Codex, session_id: id.into() },
+            repo_root: "/repo".into(),
+            label: "exact files".into(),
+            state,
+            blocked_reason: None,
+            scope_count: (state == WorkState::Draft).then_some(1),
+            scopes: (state != WorkState::Draft)
+                .then_some(vec![Scope { path: "src/lib.rs".into(), kind: ScopeKind::Exact }]),
+            draft_created_at: (state == WorkState::Draft).then_some(900.0),
+            submitted_at: (state != WorkState::Draft).then_some(950.0),
+            updated_at: 1_000.0,
         }
     }
 
     #[test]
-    fn json_keeps_the_v1_schema() {
-        let payload: serde_json::Value = serde_json::from_str(&snapshot_json(&snapshot(vec![])).unwrap()).unwrap();
-        assert_eq!(payload["schema_version"], 1);
+    fn json_keeps_the_v2_schema_and_omits_draft_paths() {
+        let payload: serde_json::Value = serde_json::from_str(
+            &snapshot_json(&snapshot(vec![session("self")], vec![work("self", WorkState::Draft)])).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(payload["schema_version"], 2);
         assert_eq!(payload["self"]["session_id"], "self");
+        assert_eq!(payload["work"][0]["scope_count"], 1);
+        assert!(payload["work"][0].get("scopes").is_none());
+        assert!(payload["work"][0].get("blocked_reason").is_none());
         assert!(payload.get("messages").is_none());
     }
 
     #[test]
-    fn rendering_groups_anonymous_but_keeps_named_rows() {
+    fn rendering_groups_anonymous_but_keeps_work_rows_and_hides_draft_paths() {
         let mut named = session("named");
         named.callsign = Some("🦊 Fox".into());
-        named.label = Some("exact files".into());
-        let rendered = render_status_at(&snapshot(vec![session("one"), session("two"), named]), 2_000.0);
-        assert!(rendered.contains("\t🦊 Fox\texact files\tnamed\t/repo\t"));
+        let rendered = render_status_at(
+            &snapshot(vec![session("one"), session("two"), named], vec![work("named", WorkState::Draft)]),
+            2_000.0,
+        );
+        assert!(rendered.contains("\t🦊 Fox\texact files\tnamed\t/repo\tdraft · 1 scopes"));
         assert!(rendered.contains("\tcount=2\t/repo\t"));
-        assert!(!rendered.contains("\tone\t"));
-        assert!(!rendered.contains("\ttwo\t"));
+        assert!(!rendered.contains("src/lib.rs"));
     }
 }

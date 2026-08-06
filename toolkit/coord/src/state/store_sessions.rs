@@ -213,18 +213,17 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
     let (pid, start_token) = fingerprint_values(update.fingerprint.as_ref());
     transaction.execute(
         "INSERT INTO sessions(
-                    client, session_id, cwd, repo_root, state, name, label, waiting_for,
+                    client, session_id, cwd, repo_root, state, name, waiting_for,
                     permission_mode, pid, process_start_token, source, started_at, last_seen,
                     revision
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 1)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1)
                  ON CONFLICT(client, session_id) DO UPDATE SET
                     cwd = excluded.cwd,
                     repo_root = excluded.repo_root,
                     state = excluded.state,
                     name = COALESCE(excluded.name, sessions.name),
-                    label = COALESCE(excluded.label, sessions.label),
                     waiting_for = excluded.waiting_for,
-                    permission_mode = CASE WHEN ?15 THEN excluded.permission_mode
+                    permission_mode = CASE WHEN ?14 THEN excluded.permission_mode
                                            ELSE sessions.permission_mode END,
                     pid = CASE WHEN excluded.pid IS NULL THEN sessions.pid ELSE excluded.pid END,
                     process_start_token = CASE
@@ -240,7 +239,6 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
             update.repo_root,
             session_state_name(update.state),
             update.name,
-            update.label,
             update.waiting_for,
             update.permission_mode,
             pid,
@@ -262,12 +260,6 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
 }
 
 fn remove_session(transaction: &rusqlite::Transaction<'_>, identity: &Identity) -> Result<()> {
-    let values = params![client_name(identity.client), identity.session_id];
-    transaction.execute("DELETE FROM claims WHERE client = ?1 AND session_id = ?2", values)?;
-    transaction.execute(
-        "DELETE FROM delegates WHERE parent_client = ?1 AND parent_session_id = ?2",
-        params![client_name(identity.client), identity.session_id],
-    )?;
     transaction.execute(
         "DELETE FROM sessions WHERE client = ?1 AND session_id = ?2",
         params![client_name(identity.client), identity.session_id],
@@ -281,7 +273,7 @@ fn fingerprint_values(fingerprint: Option<&ProcessFingerprint>) -> (Option<u32>,
 
 fn session_select(suffix: &str) -> String {
     format!(
-        "SELECT client, session_id, cwd, repo_root, state, callsign, name, label,
+        "SELECT client, session_id, cwd, repo_root, state, callsign, name,
                 waiting_for, permission_mode, pid, process_start_token, source, started_at,
                 last_seen, revision
          FROM sessions {suffix}"
@@ -289,8 +281,8 @@ fn session_select(suffix: &str) -> String {
 }
 
 fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
-    let pid = row.get::<_, Option<u32>>(10)?;
-    let start_token = row.get::<_, Option<String>>(11)?;
+    let pid = row.get::<_, Option<u32>>(9)?;
+    let start_token = row.get::<_, Option<String>>(10)?;
     Ok(SessionRow {
         identity: Identity { client: parse_client(row.get(0)?)?, session_id: row.get(1)? },
         cwd: row.get(2)?,
@@ -298,14 +290,13 @@ fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
         state: parse_session_state(row.get(4)?)?,
         callsign: row.get(5)?,
         name: row.get(6)?,
-        label: row.get(7)?,
-        waiting_for: row.get(8)?,
-        permission_mode: row.get(9)?,
+        waiting_for: row.get(7)?,
+        permission_mode: row.get(8)?,
         fingerprint: pid.map(|pid| ProcessFingerprint { pid, start_token }),
-        source: row.get(12)?,
-        started_at: row.get(13)?,
-        last_seen: row.get(14)?,
-        revision: row.get(15)?,
+        source: row.get(11)?,
+        started_at: row.get(12)?,
+        last_seen: row.get(13)?,
+        revision: row.get(14)?,
     })
 }
 

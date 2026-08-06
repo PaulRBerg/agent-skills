@@ -2,12 +2,19 @@
 
 Local coordination for parallel Codex and Claude Code agents, shipped as one Rust binary.
 
-`ai-coord` replaces scattered hook scripts and multi-command conflict checks with a three-command lifecycle:
+`ai-coord` replaces scattered hook scripts and multi-command conflict checks with one work lifecycle:
 
 ```sh
-ai-coord start 'update importer' 'src/importer'
+ai-coord start 'update importer' 'src/importer.rs'
 ai-coord wait
 ai-coord done
+```
+
+Planning can persist the same exact scopes without reserving them:
+
+```sh
+ai-coord draft 'update importer' 'src/importer.rs'
+ai-coord start --draft
 ```
 
 The coordinator is cooperative rather than an OS lock. It uses a private local SQLite ledger and fails closed when it
@@ -53,7 +60,7 @@ ai-coord start 'regenerate 2025 tax year' \
   'accounting/reports/2025/tax-summary.md'
 ```
 
-Positional paths are exact leaves. Claim a directory prefix only when the work really spans an unknown set of files,
+Positional paths are exact leaves. Reserve a directory prefix only when the work really spans an unknown set of files,
 using a repeatable `--recursive` option:
 
 ```sh
@@ -66,28 +73,39 @@ planned files are valid positional scopes. Existing files and symlinks are rejec
 path is accepted there as an explicitly planned subtree. Scopes remain repository-relative and literal. Globs,
 non-printable paths, normalized scopes over 120 characters, and paths outside the repository are rejected.
 
-With no paths, `start` records the label as pathless, non-exclusive intent. Intent advertises planned work but owns no
-edit scope.
+Both `draft` and direct `start` require at least one scope. `draft` normalizes and atomically remembers the same exact
+scope model as `start`, but performs no provider inventory, Git-dirt arbitration, queue insertion, or peer notification.
+It emits only `DRAFT<TAB><scope-count>`, and status never publishes its literal scopes. Re-running `draft` replaces the
+stored draft. Drafts are non-authoritative temporary memory and never grant an edit scope.
+
+Submit a stored draft from the same repository with `ai-coord start --draft`. Promotion revalidates every stored scope
+and then atomically applies normal arbitration. A validation or repository error leaves the draft unchanged. Once
+submitted, the work becomes queued or active and its literal normalized `{ path, kind }` scopes become visible. Direct
+`start LABEL PATH…` remains available, but it is rejected while a draft exists so execution cannot silently diverge.
+
+Provider permissions must allow the state-only `draft` command during planning. Claude otherwise describes Plan mode as
+read-only in its [permission-mode documentation](https://code.claude.com/docs/en/permission-modes); Codex command write
+capability remains governed by its configured permissions and sandbox according to the
+[Codex manual](https://developers.openai.com/codex/codex-manual.md).
 
 `start` emits one tab-separated result:
 
 | Result                     | Exit | Meaning                                                           |
 | -------------------------- | ---: | ----------------------------------------------------------------- |
-| `READY`                    |    0 | The claim is active; editing may begin.                           |
-| `INTENT`                   |    0 | A pathless, non-exclusive label was recorded.                     |
-| `BLOCKED`                  |    3 | The work is queued behind an active or earlier overlapping claim. |
+| `READY`                    |    0 | The work is active; editing may begin.                            |
+| `BLOCKED`                  |    3 | The work is queued behind active or earlier overlapping work.     |
 | `UNKNOWN coverage`         |    2 | Provider coverage is incomplete; work was not granted.            |
 | `UNKNOWN dirty-settling:…` |    2 | Relevant unattributed dirt is settling; wait and retry.           |
 | `ACTIVE`                   |    3 | A requested active-scope expansion failed; the old scope remains. |
 
-Re-running `start` atomically replaces the session's full desired scope. Narrowing an active claim takes effect
-immediately and wakes queued sessions that no longer overlap. Expanding or moving an active claim succeeds only when
-coverage is complete, relevant dirt is safe, and no active or queued claim intersects the newly requested area;
-otherwise `ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged.
+Re-running direct `start` atomically replaces the session's full desired scope. Narrowing active work takes effect
+immediately and wakes queued sessions that no longer overlap. Expanding or moving active work succeeds only when
+coverage is complete, relevant dirt is safe, and no active or queued work intersects the newly requested area; otherwise
+`ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged.
 
-Blocked work retains its paths. Narrowing a queued claim preserves its original queue age; expanding or moving it, or
-turning pathless intent into a scoped claim, receives a new age so stale broad requests cannot reserve unrelated work.
-Waiting therefore needs no repeated session or path arguments:
+Blocked work retains its paths. Narrowing queued work preserves its original submission age; expanding or moving it
+receives a new age so stale broad requests cannot reserve unrelated work. Draft creation never establishes FIFO age:
+promotion does. Waiting therefore needs no repeated session or path arguments:
 
 ```sh
 ai-coord wait        # waits up to 300 seconds
@@ -97,19 +115,19 @@ ai-coord wait -t 60  # explicit timeout, capped at one hour
 Editing requires `ai-coord start` to return `READY`. `wait` checks the SQLite generation counter each second and
 performs full inventory, Git, and arbitration refreshes only when coordination state changes or every 20 seconds as a
 fallback. `MESSAGE`, `NOTE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN` exits 2. After any
-such wake, inspect the reported state and re-arm as needed. `done` idempotently releases active, queued, or intent-only
-work and notifies overlapping queued holders that their claim may now be ready.
+such wake, inspect the reported state and re-arm as needed. `done` idempotently releases draft, active, or queued work
+and notifies overlapping queued holders that their work may now be ready.
 
-FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. A newly blocked claim
+FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. Newly blocked work
 reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
 recursive holder is blocking a more targeted request; blocked recursive callers receive a matching stderr hint.
 
-In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its claim is
-promoted, a message or note arrives, the claim is released, coverage becomes unknown, or the waker times out. A
-readiness wake still requires `start` to return `READY`; message and note wakes identify `inbox` or `status` as the
-inspection surface and `start` as the ownership recheck. Unknown coverage, timeout, and release state explicitly that no
-edit scope is owned. Repeated `start` calls may launch multiple independent wakers for the same session; each exits on
-the first terminal outcome. Codex sessions use `ai-coord wait` in the foreground.
+In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its work is promoted,
+a message or note arrives, the work is released, coverage becomes unknown, or the waker times out. A readiness wake
+still requires `start` to return `READY`; message and note wakes identify `inbox` or `status` as the inspection surface
+and `start` as the ownership recheck. Unknown coverage, timeout, and release state explicitly that no edit scope is
+owned. Repeated `start` calls may launch multiple independent wakers for the same session; each exits on the first
+terminal outcome. Codex sessions use `ai-coord wait` in the foreground.
 
 Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
 planning presence from active implementation work.
@@ -142,10 +160,11 @@ ai-coord note --done '<note-id>'
 ```
 
 `status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output marks
-queued claims with `claim=queued` and ends with compact, contextual definitions for the states present; `--json` remains
-the versioned JSON schema. Status, dashboard snapshots, and message recipient discovery may reuse complete provider
-inventory for up to two seconds. `start`, wait promotion, and `check` always probe providers freshly before granting
-work or reporting installation health.
+queued work with `work=queued`, renders drafts as `draft · N scopes`, and ends with compact, contextual definitions for
+the states present; `--json` emits public schema v2. Draft records include only their label, state, timestamps, and
+scope count. Submitted work includes literal normalized scope objects. Status, dashboard snapshots, and message
+recipient discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check`
+always probe providers freshly before granting work or reporting installation health.
 
 Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
 number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
@@ -168,12 +187,12 @@ Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
 Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start hooks silently register
 or refresh idle sessions; Codex limits them to startup, resume, and clear so mid-turn compaction cannot mark working
 sessions idle. Prompt hooks inject at most 200 characters of factual state: whether the session is unnamed, plus peer,
-queued-claim, and unread-message counts. Naming removes the unnamed fact. Claude's `PostToolBatch` hook and Codex's
+queued-work, and unread-message counts. Naming removes the unnamed fact. Claude's `PostToolBatch` hook and Codex's
 `PostToolUse` hook report the unread count once, route inspection to `ai-coord inbox`, and identify message text as
 peer-reported data rather than instructions or authority. Peer text, IDs, prompts, and tool payloads are never injected.
 Stop and session-end hooks update or release the corresponding session; subagent hooks add read-only parent/child
-topology. Claude's `ExitPlanMode` hook records only the approved plan's first H1 as a pathless intent label, while its
-filtered `ai-coord waker claude` hook handles blocked starts in the background.
+topology. Claude's filtered `ai-coord waker claude` hook handles blocked starts in the background; planning scopes are
+recorded explicitly with `draft`, not inferred from provider-specific plan hooks.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
@@ -181,22 +200,24 @@ Hook mode is fail-open. Malformed payloads and storage errors never block the ho
 ### Subagents
 
 Both hosts fire `SubagentStart` and `SubagentStop` with the parent `session_id`. `ai-coord` records delegates under that
-parent; it never creates child sessions or claims, and child tool calls refresh the parent session. Coordination is
-therefore session-scoped: the parent's claim covers all delegated work. Subagents must never run lifecycle commands
-(`start`, `wait`, or `done`) themselves because their inherited identity would make those commands act as the parent.
+parent; it never creates child sessions or work items, and child tool calls refresh the parent session. Coordination is
+therefore session-scoped: the parent's work covers all delegated work. Subagents must never run lifecycle commands
+(`draft`, `start`, `wait`, or `done`) themselves because their inherited identity would make those commands act as the
+parent.
 
 ## Storage and privacy
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
 mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v9. Any other nonzero schema, including v8, is rejected without migration, import, deletion, or
-replacement, while the public `status --json` schema remains v1. Close agents and explicitly choose any backup, removal,
+internal schema v10. Any other nonzero schema, including v9, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema is v2. Close agents and explicitly choose any backup, removal,
 installation, and relinking rollout before retrying with incompatible state.
 
-The ledger stores bounded session metadata, callsigns, labels, literal scopes, messages, notes, and complete provider
-health cache rows. Cached provider errors, hook hashes, prompt bodies, plan bodies beyond a sanitized H1, assistant
-output, transcript contents, and arbitrary hook payloads are never stored.
+The ledger stores bounded session metadata, callsigns, work labels, literal scopes, messages, notes, and complete
+provider health cache rows. Cached provider errors, hook hashes, prompt bodies, plan bodies, assistant output,
+transcript contents, and arbitrary hook payloads are never stored. Composite session foreign keys cascade draft and
+submitted work cleanup on authoritative session end, dead-process reconciliation, and session supersession.
 
 Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. On macOS and Linux,
 sessions are bound to a kernel-derived process fingerprint containing both PID and process start identity. Normal
@@ -221,8 +242,8 @@ See [AGENTS.md](AGENTS.md) for architecture, validation, and clean-break rules.
 
 ## Dashboard
 
-The dashboard shows the machine-wide live coordination snapshot: sessions and claims grouped by repository, plus
-messages and notes. Run both local servers from the repository root:
+The dashboard shows the machine-wide live coordination snapshot: sessions and work grouped by repository, plus messages
+and notes. Run both local servers from the repository root:
 
 ```sh
 just dev

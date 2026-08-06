@@ -38,16 +38,29 @@ pub(crate) enum SessionState {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum ClaimState {
+pub(crate) enum WorkState {
     Active,
+    Draft,
     Queued,
-    Intent,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ScopeKind {
+    Exact,
+    Recursive,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct Scope {
     pub(crate) path: String,
-    pub(crate) recursive: bool,
+    pub(crate) kind: ScopeKind,
+}
+
+impl Scope {
+    pub(crate) const fn is_recursive(&self) -> bool {
+        matches!(self.kind, ScopeKind::Recursive)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,7 +68,7 @@ pub(crate) enum OutcomeKind {
     Active,
     Blocked,
     Done,
-    Intent,
+    Draft,
     Message,
     Note,
     Ready,
@@ -100,7 +113,7 @@ impl OutcomeKind {
             Self::Active => "ACTIVE",
             Self::Blocked => "BLOCKED",
             Self::Done => "DONE",
-            Self::Intent => "INTENT",
+            Self::Draft => "DRAFT",
             Self::Message => "MESSAGE",
             Self::Note => "NOTE",
             Self::Ready => "READY",
@@ -129,21 +142,21 @@ pub(crate) struct InventoryResult {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum SnapshotScopeKindV1 {
+pub(crate) enum SnapshotScopeKindV2 {
     Cwd,
     Machine,
     Repo,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct SnapshotScopeV1 {
-    pub(crate) kind: SnapshotScopeKindV1,
+pub(crate) struct SnapshotScopeV2 {
+    pub(crate) kind: SnapshotScopeKindV2,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) repo_root: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct SnapshotSessionV1 {
+pub(crate) struct SnapshotSessionV2 {
     #[serde(flatten)]
     pub(crate) identity: Identity,
     pub(crate) cwd: String,
@@ -151,7 +164,6 @@ pub(crate) struct SnapshotSessionV1 {
     pub(crate) state: SessionState,
     pub(crate) callsign: Option<String>,
     pub(crate) name: Option<String>,
-    pub(crate) label: Option<String>,
     pub(crate) waiting_for: Option<String>,
     pub(crate) permission_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -160,28 +172,31 @@ pub(crate) struct SnapshotSessionV1 {
     pub(crate) source: String,
     pub(crate) started_at: f64,
     pub(crate) last_seen: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) claim_state: Option<ClaimState>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct SnapshotClaimV1 {
+pub(crate) struct SnapshotWorkV2 {
     pub(crate) id: i64,
     #[serde(flatten)]
     pub(crate) identity: Identity,
     pub(crate) repo_root: String,
     pub(crate) label: String,
-    pub(crate) state: ClaimState,
+    pub(crate) state: WorkState,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) blocked_reason: Option<String>,
-    pub(crate) paths: Vec<String>,
-    pub(crate) created_at: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) scope_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) scopes: Option<Vec<Scope>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) draft_created_at: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct SnapshotNoteV1 {
+pub(crate) struct SnapshotNoteV2 {
     pub(crate) id: String,
     pub(crate) repo_root: String,
     pub(crate) author_client: Option<Client>,
@@ -192,7 +207,7 @@ pub(crate) struct SnapshotNoteV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct SnapshotDelegateV1 {
+pub(crate) struct SnapshotDelegateV2 {
     pub(crate) parent_client: Client,
     pub(crate) parent_session_id: String,
     pub(crate) agent_id: String,
@@ -202,22 +217,22 @@ pub(crate) struct SnapshotDelegateV1 {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct OutsideScopeV1 {
+pub(crate) struct OutsideScopeV2 {
     pub(crate) sessions: usize,
     pub(crate) directories: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct SnapshotV1 {
+pub(crate) struct SnapshotV2 {
     pub(crate) schema_version: u32,
     pub(crate) complete: bool,
-    pub(crate) scope: SnapshotScopeV1,
+    pub(crate) scope: SnapshotScopeV2,
     #[serde(rename = "self")]
     pub(crate) self_identity: Option<Identity>,
     pub(crate) providers: Vec<ProviderReport>,
-    pub(crate) sessions: Vec<SnapshotSessionV1>,
-    pub(crate) claims: Vec<SnapshotClaimV1>,
-    pub(crate) notes: Vec<SnapshotNoteV1>,
-    pub(crate) delegates: Vec<SnapshotDelegateV1>,
-    pub(crate) outside_scope: OutsideScopeV1,
+    pub(crate) sessions: Vec<SnapshotSessionV2>,
+    pub(crate) work: Vec<SnapshotWorkV2>,
+    pub(crate) notes: Vec<SnapshotNoteV2>,
+    pub(crate) delegates: Vec<SnapshotDelegateV2>,
+    pub(crate) outside_scope: OutsideScopeV2,
 }

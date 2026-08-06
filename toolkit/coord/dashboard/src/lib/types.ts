@@ -1,4 +1,10 @@
-export type ClaimState = "active" | "queued" | "intent";
+export type WorkState = "active" | "draft" | "queued";
+export type WorkScopeKind = "exact" | "recursive";
+
+export interface WorkScope {
+  path: string;
+  kind: WorkScopeKind;
+}
 
 export interface ProviderCoverage {
   client: string;
@@ -20,7 +26,6 @@ export interface Session extends SessionIdentity {
   state: string;
   callsign?: string | null;
   name: string | null;
-  label: string | null;
   waiting_for: string | null;
   permission_mode?: string | null;
   delegate_count?: number;
@@ -28,18 +33,18 @@ export interface Session extends SessionIdentity {
   source: string;
   started_at: number;
   last_seen: number;
-  claim_state?: ClaimState;
-  paths?: string[];
 }
 
-export interface Claim extends SessionIdentity {
+export interface Work extends SessionIdentity {
   id: number;
   repo_root: string;
   label: string;
-  state: ClaimState;
-  blocked_reason: string | null;
-  paths: string[];
-  created_at: number;
+  state: WorkState;
+  blocked_reason?: string | null;
+  scope_count?: number;
+  scopes?: WorkScope[];
+  draft_created_at?: number;
+  submitted_at?: number;
   updated_at: number;
 }
 
@@ -86,7 +91,7 @@ export interface Snapshot {
   self: SessionIdentity | null;
   providers: ProviderCoverage[];
   sessions: Session[];
-  claims: Claim[];
+  work: Work[];
   notes: Note[];
   delegates: Delegate[];
   outside_scope: {
@@ -98,19 +103,19 @@ export interface Snapshot {
   generation: number;
 }
 
-export interface ClaimWithQueuePosition extends Claim {
+export interface WorkWithQueuePosition extends Work {
   queuePosition?: number;
 }
 
 export interface LaneSession {
   session: Session;
-  claim?: ClaimWithQueuePosition;
+  work?: WorkWithQueuePosition;
   delegates: Delegate[];
 }
 
 export interface RepoLaneModel {
   repoRoot: string;
   sessions: LaneSession[];
-  unmatchedClaims: ClaimWithQueuePosition[];
+  unmatchedWork: WorkWithQueuePosition[];
   lastActivity: number;
 }

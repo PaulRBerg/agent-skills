@@ -78,7 +78,6 @@ fn add_session(store: &mut Store, identity: &Identity, root: &Path, pid: u32, cu
             state: SessionState::Working,
             source: "test".to_owned(),
             name: None,
-            label: None,
             waiting_for: None,
             permission_mode: None,
             update_permission_mode: false,

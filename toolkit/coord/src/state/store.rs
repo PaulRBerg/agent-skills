@@ -8,7 +8,7 @@ use std::{
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 use crate::{
-    domain::{ClaimState, Client, SessionState},
+    domain::{Client, SessionState, WorkState},
     error::{AppError, Result},
 };
 
@@ -170,20 +170,20 @@ pub(super) fn parse_session_state(value: String) -> rusqlite::Result<SessionStat
     }
 }
 
-pub(super) const fn claim_state_name(state: ClaimState) -> &'static str {
+pub(super) const fn work_state_name(state: WorkState) -> &'static str {
     match state {
-        ClaimState::Active => "active",
-        ClaimState::Queued => "queued",
-        ClaimState::Intent => "intent",
+        WorkState::Active => "active",
+        WorkState::Draft => "draft",
+        WorkState::Queued => "queued",
     }
 }
 
-pub(super) fn parse_claim_state(value: String) -> rusqlite::Result<ClaimState> {
+pub(super) fn parse_work_state(value: String) -> rusqlite::Result<WorkState> {
     match value.as_str() {
-        "active" => Ok(ClaimState::Active),
-        "queued" => Ok(ClaimState::Queued),
-        "intent" => Ok(ClaimState::Intent),
-        _ => Err(invalid_value(format!("invalid claim state {value:?}"))),
+        "active" => Ok(WorkState::Active),
+        "draft" => Ok(WorkState::Draft),
+        "queued" => Ok(WorkState::Queued),
+        _ => Err(invalid_value(format!("invalid work state {value:?}"))),
     }
 }
 

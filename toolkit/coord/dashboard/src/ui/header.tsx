@@ -25,8 +25,8 @@ export function Header({
   refreshSequence,
 }: HeaderProps) {
   const blockedCount =
-    snapshot?.claims.filter(
-      (claim) => claim.state === "queued" || claim.blocked_reason !== null,
+    snapshot?.work.filter(
+      (work) => work.state === "queued" || work.blocked_reason != null,
     ).length ?? 0;
   const partialProviders =
     snapshot?.providers.filter(

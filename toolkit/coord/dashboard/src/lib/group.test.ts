@@ -14,19 +14,17 @@ describe("groupSnapshotByRepo", () => {
     expect(lanes[1]?.sessions).toHaveLength(1);
   });
 
-  test("assigns FIFO positions to queued claims within a repository", () => {
+  test("assigns FIFO positions to queued work within a repository", () => {
     const lane = groupSnapshotByRepo(sampleSnapshot)[0];
     const queued = lane?.sessions
-      .map((row) => row.claim)
-      .filter((claim) => claim?.state === "queued")
+      .map((row) => row.work)
+      .filter((work) => work?.state === "queued")
       .sort(
         (left, right) =>
           (left?.queuePosition ?? 0) - (right?.queuePosition ?? 0),
       );
 
-    expect(
-      queued?.map((claim) => [claim?.label, claim?.queuePosition]),
-    ).toEqual([
+    expect(queued?.map((work) => [work?.label, work?.queuePosition])).toEqual([
       ["serve-api", 1],
       ["docs-followup", 2],
     ]);
@@ -45,16 +43,17 @@ describe("groupSnapshotByRepo", () => {
     ]);
   });
 
-  test("retains claims whose session is absent from provider inventory", () => {
+  test("retains work whose session is absent from provider inventory", () => {
     const orphanedSnapshot = {
       ...sampleSnapshot,
       sessions: sampleSnapshot.sessions.filter(
-        (session) => session.label !== "docs-followup",
+        (session) =>
+          session.session_id !== "019fcbf1-1a53-7e20-a682-520d66c5b87f",
       ),
     };
     const lane = groupSnapshotByRepo(orphanedSnapshot)[0];
 
-    expect(lane?.unmatchedClaims.map((claim) => claim.label)).toEqual([
+    expect(lane?.unmatchedWork.map((work) => work.label)).toEqual([
       "docs-followup",
     ]);
   });

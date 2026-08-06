@@ -4,7 +4,7 @@ import { formatRelativeTime, shortSessionId } from "@/lib/format";
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
 import type { RepoLaneModel } from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
-import { ClaimChips } from "@/ui/claim-chips";
+import { WorkChips } from "@/ui/work-chips";
 import { SessionRow } from "@/ui/session-row";
 
 interface RepoLaneProps {
@@ -13,9 +13,9 @@ interface RepoLaneProps {
 }
 
 export function RepoLane({ lane, now }: RepoLaneProps) {
-  const claimCount =
-    lane.sessions.filter((row) => row.claim !== undefined).length +
-    lane.unmatchedClaims.length;
+  const workCount =
+    lane.sessions.filter((row) => row.work !== undefined).length +
+    lane.unmatchedWork.length;
 
   return (
     <motion.section
@@ -55,8 +55,8 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
             {lane.sessions.length === 1 ? "" : "s"}
           </span>
           <span>
-            <AnimatedValue value={claimCount}>{claimCount}</AnimatedValue> claim
-            {claimCount === 1 ? "" : "s"}
+            <AnimatedValue value={workCount}>{workCount}</AnimatedValue> work
+            {workCount === 1 ? " item" : " items"}
           </span>
           <span>active {formatRelativeTime(lane.lastActivity, now)}</span>
         </div>
@@ -65,7 +65,7 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
       <div className="hidden grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] gap-4 border-b border-line-muted px-3 py-1.5 font-mono text-[10px]/4 uppercase tracking-wider text-muted sm:grid">
         <span>Agent</span>
         <span>State</span>
-        <span>Path ownership</span>
+        <span>Work scopes</span>
       </div>
 
       <div className="px-3">
@@ -79,14 +79,14 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
             />
           ))}
 
-          {lane.unmatchedClaims.map((claim) => (
+          {lane.unmatchedWork.map((work) => (
             <motion.div
               animate={{ opacity: 1, y: 0 }}
               className="grid gap-3 border-t border-line-muted py-3 sm:grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] sm:items-center sm:gap-4"
               data-motion-item
               exit={{ opacity: 0, y: -6 }}
               initial={{ opacity: 0, y: 8 }}
-              key={claim.id}
+              key={work.id}
               layout="position"
               transition={{
                 duration: MOTION_DURATION.row,
@@ -102,17 +102,17 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
                   Unreported session
                 </p>
                 <p className="mt-1 font-mono text-[11px]/4 text-muted">
-                  {claim.client}:{shortSessionId(claim.session_id)}
+                  {work.client}:{shortSessionId(work.session_id)}
                 </p>
               </div>
               <AnimatedValue
                 className="pl-4 font-mono text-xs sm:pl-0"
-                value={claim.state}
+                value={work.state}
               >
-                {claim.state}
+                {work.state}
               </AnimatedValue>
               <div className="min-w-0 pl-4 sm:pl-0">
-                <ClaimChips claim={claim} />
+                <WorkChips work={work} />
               </div>
             </motion.div>
           ))}
@@ -120,7 +120,7 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
       </div>
 
       <AnimatePresence initial={false}>
-        {claimCount === 0 ? (
+        {workCount === 0 ? (
           <motion.p
             animate={{ opacity: 1 }}
             className="border-t border-line-muted px-3 py-2 text-xs text-muted"
@@ -129,7 +129,7 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
             initial={{ opacity: 0 }}
             transition={{ duration: MOTION_DURATION.field }}
           >
-            No claims held
+            No work recorded
           </motion.p>
         ) : null}
       </AnimatePresence>

@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 9;
+pub(crate) const SCHEMA_VERSION: i64 = 10;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -16,7 +16,6 @@ const STATEMENTS: &[&str] = &[
         callsign TEXT,
         callsign_key TEXT UNIQUE,
         name TEXT,
-        label TEXT,
         waiting_for TEXT,
         permission_mode TEXT,
         pid INTEGER,
@@ -28,29 +27,41 @@ const STATEMENTS: &[&str] = &[
         PRIMARY KEY (client, session_id),
         CHECK (process_start_token IS NULL OR pid IS NOT NULL)
     )",
-    "CREATE TABLE claims (
+    "CREATE TABLE work_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client TEXT NOT NULL,
         session_id TEXT NOT NULL,
         repo_root TEXT NOT NULL,
         label TEXT NOT NULL,
-        state TEXT NOT NULL CHECK (state IN ('intent', 'queued', 'active')),
+        state TEXT NOT NULL CHECK (state IN ('draft', 'queued', 'active')),
         blocked_reason TEXT,
-        created_at REAL NOT NULL,
+        draft_created_at REAL,
+        submitted_at REAL,
         updated_at REAL NOT NULL,
-        UNIQUE (client, session_id)
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        UNIQUE (client, session_id),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE,
+        CHECK (
+            (state = 'draft' AND draft_created_at IS NOT NULL
+                AND submitted_at IS NULL AND blocked_reason IS NULL)
+            OR (state = 'queued' AND submitted_at IS NOT NULL
+                AND blocked_reason IS NOT NULL)
+            OR (state = 'active' AND submitted_at IS NOT NULL
+                AND blocked_reason IS NULL)
+        )
     )",
-    "CREATE TABLE claim_paths (
-        claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    "CREATE TABLE work_scopes (
+        work_id INTEGER NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
         path TEXT NOT NULL,
-        recursive INTEGER NOT NULL CHECK (recursive IN (0, 1)),
-        PRIMARY KEY (claim_id, path)
+        kind TEXT NOT NULL CHECK (kind IN ('exact', 'recursive')),
+        PRIMARY KEY (work_id, path)
     )",
-    "CREATE TABLE claim_baselines (
-        claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    "CREATE TABLE work_baselines (
+        work_id INTEGER NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
         path TEXT NOT NULL,
         oid TEXT NOT NULL,
-        PRIMARY KEY (claim_id, path)
+        PRIMARY KEY (work_id, path)
     )",
     "CREATE TABLE dirt_observations (
         repo_root TEXT NOT NULL,
@@ -104,7 +115,9 @@ const STATEMENTS: &[&str] = &[
         agent_type TEXT,
         state TEXT NOT NULL,
         last_seen REAL NOT NULL,
-        PRIMARY KEY (parent_client, parent_session_id, agent_id)
+        PRIMARY KEY (parent_client, parent_session_id, agent_id),
+        FOREIGN KEY (parent_client, parent_session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
     )",
     "CREATE TABLE hook_health (
         client TEXT NOT NULL,
@@ -129,6 +142,7 @@ const STATEMENTS: &[&str] = &[
         value INTEGER NOT NULL
     )",
     "INSERT INTO metadata(key, value) VALUES ('generation', 0)",
+    "INSERT INTO metadata(key, value) VALUES ('submission_clock_micros', 0)",
 ];
 
 pub(super) fn initialize(connection: &mut Connection, path: &Path) -> Result<()> {

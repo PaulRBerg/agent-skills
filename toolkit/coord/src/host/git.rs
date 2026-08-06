@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    domain::Scope,
+    domain::{Scope, ScopeKind},
     error::{AppError, Result},
 };
 
@@ -129,7 +129,7 @@ pub(crate) fn normalize_scopes(raw_scopes: &[PathBuf], cwd: &Path, root: &Path) 
     Ok(normalized)
 }
 
-pub(crate) fn normalize_claim_scopes(
+pub(crate) fn normalize_work_scopes(
     files: &[PathBuf],
     recursive: &[PathBuf],
     cwd: &Path,
@@ -158,14 +158,15 @@ pub(crate) fn normalize_claim_scopes(
     }
     Ok(files
         .into_iter()
-        .map(|path| Scope { path, recursive: false })
-        .chain(recursive.into_iter().map(|path| Scope { path, recursive: true }))
+        .map(|path| Scope { path, kind: ScopeKind::Exact })
+        .chain(recursive.into_iter().map(|path| Scope { path, kind: ScopeKind::Recursive }))
         .collect())
 }
 
 pub(crate) fn scope_covers(covering: &Scope, covered: &Scope) -> bool {
     covering.path == covered.path ||
-        (covering.recursive && (covering.path == "." || covered.path.starts_with(&format!("{}/", covering.path))))
+        (covering.is_recursive() &&
+            (covering.path == "." || covered.path.starts_with(&format!("{}/", covering.path))))
 }
 
 pub(crate) fn scopes_cover(covering: &[Scope], covered: &[Scope]) -> bool {
@@ -174,8 +175,8 @@ pub(crate) fn scopes_cover(covering: &[Scope], covered: &[Scope]) -> bool {
 
 pub(crate) fn scopes_overlap(left: &Scope, right: &Scope) -> bool {
     left.path == right.path ||
-        (left.recursive && (left.path == "." || right.path.starts_with(&format!("{}/", left.path)))) ||
-        (right.recursive && (right.path == "." || left.path.starts_with(&format!("{}/", right.path))))
+        (left.is_recursive() && (left.path == "." || right.path.starts_with(&format!("{}/", left.path)))) ||
+        (right.is_recursive() && (right.path == "." || left.path.starts_with(&format!("{}/", right.path))))
 }
 
 pub(crate) fn any_overlap(left: &[Scope], right: &[Scope]) -> bool {
@@ -203,7 +204,7 @@ pub(crate) fn overlaps_outside_coverage(requested: &[Scope], contender: &[Scope]
     overlapping_paths(requested, contender)
         .into_iter()
         .filter(|path| {
-            let intersection = Scope { path: path.clone(), recursive: false };
+            let intersection = Scope { path: path.clone(), kind: ScopeKind::Exact };
             !scopes_cover(existing, &[intersection])
         })
         .collect()
@@ -263,7 +264,7 @@ pub(crate) fn relevant_dirty(scopes: &[Scope], dirty_paths: &[String]) -> Vec<St
     dirty_paths
         .iter()
         .filter(|path| {
-            let dirty = Scope { path: (*path).clone(), recursive: false };
+            let dirty = Scope { path: (*path).clone(), kind: ScopeKind::Exact };
             scopes.iter().any(|scope| scopes_overlap(scope, &dirty))
         })
         .cloned()
@@ -334,7 +335,7 @@ mod tests {
     use super::*;
 
     fn scope(path: &str, recursive: bool) -> Scope {
-        Scope { path: path.to_owned(), recursive }
+        Scope { path: path.to_owned(), kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }
     }
 
     #[test]
@@ -345,13 +346,12 @@ mod tests {
         fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
 
         let scopes =
-            normalize_claim_scopes(&[PathBuf::from("src/lib.rs")], &[PathBuf::from("src")], root, root).unwrap();
+            normalize_work_scopes(&[PathBuf::from("src/lib.rs")], &[PathBuf::from("src")], root, root).unwrap();
         assert_eq!(scopes, vec![scope("src/lib.rs", false), scope("src", true)]);
         assert!(
-            normalize_claim_scopes(&[PathBuf::from("src/lib.rs")], &[PathBuf::from("src/lib.rs")], root, root,)
-                .is_err()
+            normalize_work_scopes(&[PathBuf::from("src/lib.rs")], &[PathBuf::from("src/lib.rs")], root, root,).is_err()
         );
-        assert!(normalize_claim_scopes(&[PathBuf::from("src")], &[], root, root).is_err());
+        assert!(normalize_work_scopes(&[PathBuf::from("src")], &[], root, root).is_err());
     }
 
     #[test]
@@ -370,10 +370,10 @@ mod tests {
         fs::create_dir(temp.path().join("real")).unwrap();
         symlink(temp.path().join("real"), temp.path().join("link")).unwrap();
         assert_eq!(
-            normalize_claim_scopes(&[PathBuf::from("link")], &[], temp.path(), temp.path()).unwrap(),
+            normalize_work_scopes(&[PathBuf::from("link")], &[], temp.path(), temp.path()).unwrap(),
             vec![scope("link", false)]
         );
-        assert!(normalize_claim_scopes(&[], &[PathBuf::from("link")], temp.path(), temp.path()).is_err());
+        assert!(normalize_work_scopes(&[], &[PathBuf::from("link")], temp.path(), temp.path()).is_err());
     }
 
     #[test]

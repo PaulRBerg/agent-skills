@@ -45,11 +45,12 @@ export function shortSessionId(sessionId: string): string {
 }
 
 export function sessionDisplayName(
-  session: Pick<Session, "callsign" | "label" | "name" | "session_id">,
+  session: Pick<Session, "callsign" | "name" | "session_id">,
+  workLabel?: string,
 ): string {
   return (
     session.callsign ??
-    session.label ??
+    workLabel ??
     session.name ??
     shortSessionId(session.session_id)
   );

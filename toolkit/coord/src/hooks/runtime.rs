@@ -1,15 +1,12 @@
 //! Fail-open lifecycle ingestion and Claude async-rewake behavior.
 
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
 use crate::{
     coordinator::Coordinator,
-    domain::{ClaimState, Client, Identity, Outcome, SessionState},
+    domain::{Client, Identity, Outcome, SessionState, WorkState},
     error::{AppError, Result},
     host::{git_root, host_process_reference},
     state::SessionUpdate,
@@ -17,7 +14,6 @@ use crate::{
 
 use super::specs::{Client as HookClient, hook_specs};
 
-const MAX_LABEL_CHARS: usize = 80;
 const MAX_PRESENCE_CHARS: usize = 200;
 const WAKER_TIMEOUT_SECONDS: u64 = 3_480;
 const WAKER_POLL_SECONDS: f64 = 1.0;
@@ -91,7 +87,6 @@ impl<'a> HookRuntime<'a> {
             state: if matches!(event, "SessionStart" | "Stop") { SessionState::Idle } else { SessionState::Working },
             source: "hook".to_owned(),
             name: existing.as_ref().and_then(|row| row.name.clone()),
-            label: existing.as_ref().and_then(|row| row.label.clone()),
             waiting_for: None,
             permission_mode,
             update_permission_mode,
@@ -119,10 +114,6 @@ impl<'a> HookRuntime<'a> {
                 if event == "SubagentStart" { "active" } else { "ended" },
                 self.coordinator.now(),
             )?;
-        } else if client == Client::Claude && event == "PostToolUse" {
-            drop(store);
-            self.ingest_claude_plan(&identity, payload, root.as_deref())?;
-            store = self.coordinator.store()?;
         }
 
         if is_nudge_event(client, event) {
@@ -161,7 +152,7 @@ impl<'a> HookRuntime<'a> {
                 .ok_or_else(|| AppError::usage("missing session id"))?;
             let identity = Identity { client: Client::Claude, session_id: session_id.to_owned() };
             let mut store = self.coordinator.store()?;
-            let queued = store.claim(&identity)?.is_some_and(|claim| claim.state == ClaimState::Queued);
+            let queued = store.work(&identity)?.is_some_and(|work| work.state == WorkState::Queued);
             if !queued {
                 store.hook_success(Client::Claude, event, self.coordinator.now())?;
                 return Ok(None);
@@ -180,21 +171,6 @@ impl<'a> HookRuntime<'a> {
                 None
             }
         }
-    }
-
-    fn ingest_claude_plan(&self, identity: &Identity, payload: &Value, root: Option<&Path>) -> Result<()> {
-        if payload.get("tool_name").and_then(Value::as_str) != Some("ExitPlanMode") {
-            return Ok(());
-        }
-        let markdown = plan_from_payload(payload).or_else(|| claude_plan_from_disk(&identity.session_id));
-        let Some(label) = markdown.as_deref().and_then(first_heading) else {
-            return Ok(());
-        };
-        let Some(root) = root else {
-            return Ok(());
-        };
-        self.coordinator.start_for(identity.clone(), &label, &[], &[], root)?;
-        Ok(())
     }
 }
 
@@ -234,53 +210,13 @@ fn prompt_context(store: &crate::state::Store, identity: &Identity, root: Option
             .filter(|row| row.repo_root.as_deref() == Some(&root) && row.identity != *identity)
             .count();
         let unread = store.inbox(identity, true)?.len();
-        let queued = store.claims(Some(&root))?.into_iter().filter(|claim| claim.state == ClaimState::Queued).count();
+        let queued = store.works(Some(&root))?.into_iter().filter(|work| work.state == WorkState::Queued).count();
         if peers > 0 || unread > 0 || queued > 0 {
-            let presence = format!("Peers: {peers}; queued claims: {queued}; unread messages: {unread}.");
+            let presence = format!("Peers: {peers}; queued work: {queued}; unread messages: {unread}.");
             parts.push(if parts.is_empty() { format!("ai-coord: {presence}") } else { presence });
         }
     }
     Ok(sanitize(&parts.join(" "), MAX_PRESENCE_CHARS))
-}
-
-fn plan_from_payload(payload: &Value) -> Option<String> {
-    for key in ["tool_response", "tool_input"] {
-        if let Some(plan) =
-            payload.get(key).and_then(Value::as_object).and_then(|value| value.get("plan")).and_then(Value::as_str)
-        {
-            return Some(plan.to_owned());
-        }
-    }
-    payload.get("plan_file_path").and_then(Value::as_str).and_then(|path| fs::read_to_string(path).ok())
-}
-
-fn claude_plan_from_disk(session_id: &str) -> Option<String> {
-    let root = env::var_os("CLAUDE_CONFIG_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".claude")))?;
-    let entries = fs::read_dir(root.join("plans")).ok()?;
-    let marker = format!("session_id: \"{session_id}\"");
-    entries
-        .filter_map(std::result::Result::ok)
-        .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("md"))
-        .filter_map(|entry| {
-            let text = fs::read_to_string(entry.path()).ok()?;
-            let end = text.starts_with("---").then(|| text[3..].find("\n---").map(|index| index + 3)).flatten()?;
-            if !text[..end].lines().any(|line| line.trim() == marker) {
-                return None;
-            }
-            let modified = entry.metadata().ok()?.modified().ok()?;
-            Some((modified, text))
-        })
-        .max_by_key(|(modified, _)| *modified)
-        .map(|(_, text)| text)
-}
-
-fn first_heading(markdown: &str) -> Option<String> {
-    markdown.lines().find_map(|line| {
-        line.strip_prefix("# ").map(|value| sanitize(value, MAX_LABEL_CHARS)).filter(|value| !value.is_empty())
-    })
 }
 
 fn noop_stdout(client: &str, event: &str) -> String {

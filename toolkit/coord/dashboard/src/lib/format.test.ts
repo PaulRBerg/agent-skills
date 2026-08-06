@@ -38,24 +38,22 @@ describe("getLivenessTier", () => {
 describe("identity display", () => {
   const session = {
     callsign: "👩‍💻 Baroness Byte",
-    label: "dashboard work",
     name: "provider-name",
     session_id: "019fcbf9-d75c-7ba3-a481-18068ea954eb",
   };
 
   test("prefers callsign, task label, provider name, then short ID", () => {
     expect(sessionDisplayName(session)).toBe("👩‍💻 Baroness Byte");
-    expect(sessionDisplayName({ ...session, callsign: null })).toBe(
-      "dashboard work",
-    );
     expect(
-      sessionDisplayName({ ...session, callsign: null, label: null }),
-    ).toBe("provider-name");
+      sessionDisplayName({ ...session, callsign: null }, "dashboard work"),
+    ).toBe("dashboard work");
+    expect(sessionDisplayName({ ...session, callsign: null })).toBe(
+      "provider-name",
+    );
     expect(
       sessionDisplayName({
         ...session,
         callsign: undefined,
-        label: null,
         name: null,
       }),
     ).toBe("019fcbf9");

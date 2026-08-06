@@ -1,4 +1,4 @@
-import type { ClaimState, Snapshot } from "@/lib/types";
+import type { Snapshot, WorkScopeKind, WorkState } from "@/lib/types";
 
 export type ConnectionState =
   "connecting" | "live" | "polling" | "disconnected";
@@ -49,9 +49,16 @@ function boolean(value: unknown, path: string): boolean {
   return value;
 }
 
-function claimState(value: unknown, path: string): ClaimState {
-  if (value !== "active" && value !== "queued" && value !== "intent") {
-    throw new Error(`${path} must be active, queued, or intent`);
+function workState(value: unknown, path: string): WorkState {
+  if (value !== "active" && value !== "draft" && value !== "queued") {
+    throw new Error(`${path} must be active, draft, or queued`);
+  }
+  return value;
+}
+
+function workScopeKind(value: unknown, path: string): WorkScopeKind {
+  if (value !== "exact" && value !== "recursive") {
+    throw new Error(`${path} must be exact or recursive`);
   }
   return value;
 }
@@ -66,7 +73,6 @@ function validateSession(value: unknown, path: string): void {
   if (row.callsign !== undefined)
     nullableString(row.callsign, `${path}.callsign`);
   nullableString(row.name, `${path}.name`);
-  nullableString(row.label, `${path}.label`);
   nullableString(row.waiting_for, `${path}.waiting_for`);
   if (row.permission_mode !== undefined)
     nullableString(row.permission_mode, `${path}.permission_mode`);
@@ -76,28 +82,43 @@ function validateSession(value: unknown, path: string): void {
   string(row.source, `${path}.source`);
   number(row.started_at, `${path}.started_at`);
   number(row.last_seen, `${path}.last_seen`);
-  if (row.claim_state !== undefined)
-    claimState(row.claim_state, `${path}.claim_state`);
-  if (row.paths !== undefined) {
-    array(row.paths, `${path}.paths`).forEach((item, index) =>
-      string(item, `${path}.paths[${index}]`),
-    );
-  }
 }
 
-function validateClaim(value: unknown, path: string): void {
+function validateWork(value: unknown, path: string): void {
   const row = record(value, path);
   integer(row.id, `${path}.id`);
   string(row.client, `${path}.client`);
   string(row.session_id, `${path}.session_id`);
   string(row.repo_root, `${path}.repo_root`);
   string(row.label, `${path}.label`);
-  claimState(row.state, `${path}.state`);
-  nullableString(row.blocked_reason, `${path}.blocked_reason`);
-  array(row.paths, `${path}.paths`).forEach((item, index) =>
-    string(item, `${path}.paths[${index}]`),
-  );
-  number(row.created_at, `${path}.created_at`);
+  const state = workState(row.state, `${path}.state`);
+  if (row.blocked_reason !== undefined)
+    nullableString(row.blocked_reason, `${path}.blocked_reason`);
+  if (state === "queued" && typeof row.blocked_reason !== "string") {
+    throw new Error(`${path}.blocked_reason must describe queued work`);
+  }
+  if (state === "draft") {
+    const scopeCount = integer(row.scope_count, `${path}.scope_count`);
+    if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
+    if (row.scopes !== undefined)
+      throw new Error(`${path}.scopes must be omitted for draft work`);
+    number(row.draft_created_at, `${path}.draft_created_at`);
+    if (row.submitted_at !== undefined)
+      throw new Error(`${path}.submitted_at must be omitted for draft work`);
+  } else {
+    const scopes = array(row.scopes, `${path}.scopes`);
+    if (scopes.length < 1) throw new Error(`${path}.scopes must not be empty`);
+    scopes.forEach((item, index) => {
+      const scope = record(item, `${path}.scopes[${index}]`);
+      string(scope.path, `${path}.scopes[${index}].path`);
+      workScopeKind(scope.kind, `${path}.scopes[${index}].kind`);
+    });
+    if (row.scope_count !== undefined)
+      throw new Error(`${path}.scope_count is draft-only`);
+    if (row.draft_created_at !== undefined)
+      number(row.draft_created_at, `${path}.draft_created_at`);
+    number(row.submitted_at, `${path}.submitted_at`);
+  }
   number(row.updated_at, `${path}.updated_at`);
 }
 
@@ -152,7 +173,9 @@ function validateMessage(value: unknown, path: string): void {
 
 export function parseSnapshot(value: unknown): Snapshot {
   const snapshot = record(value, "snapshot");
-  integer(snapshot.schema_version, "snapshot.schema_version");
+  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 2) {
+    throw new Error("snapshot.schema_version must be 2");
+  }
   boolean(snapshot.complete, "snapshot.complete");
 
   const scope = record(snapshot.scope, "snapshot.scope");
@@ -172,8 +195,8 @@ export function parseSnapshot(value: unknown): Snapshot {
   array(snapshot.sessions, "snapshot.sessions").forEach((row, index) =>
     validateSession(row, `snapshot.sessions[${index}]`),
   );
-  array(snapshot.claims, "snapshot.claims").forEach((row, index) =>
-    validateClaim(row, `snapshot.claims[${index}]`),
+  array(snapshot.work, "snapshot.work").forEach((row, index) =>
+    validateWork(row, `snapshot.work[${index}]`),
   );
   array(snapshot.notes, "snapshot.notes").forEach((row, index) =>
     validateNote(row, `snapshot.notes[${index}]`),

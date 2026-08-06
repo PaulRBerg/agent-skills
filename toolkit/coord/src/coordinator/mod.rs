@@ -12,20 +12,20 @@ use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::{
-    claim::ClaimArbiter,
     domain::{
-        ClaimState, Client, Identity, InventoryResult, Outcome, OutcomeKind, OutsideScopeV1, ProcessLiveness,
-        ProcessProbe, ProviderReport, SessionState, SnapshotClaimV1, SnapshotDelegateV1, SnapshotNoteV1,
-        SnapshotScopeKindV1, SnapshotScopeV1, SnapshotSessionV1, SnapshotV1,
+        Client, Identity, InventoryResult, Outcome, OutcomeKind, OutsideScopeV2, ProcessLiveness, ProcessProbe,
+        ProviderReport, Scope, ScopeKind, SessionState, SnapshotDelegateV2, SnapshotNoteV2, SnapshotScopeKindV2,
+        SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
     },
     error::{AppError, Result},
     host::{
         INVENTORY_CACHE_SECONDS, NativeProcessProbe, any_overlap, from_environment, git_blob_hash, git_dirty_paths,
-        git_root, host_process_reference, identity_key, normalize_claim_scopes, process_ancestors, process_sweep,
+        git_root, host_process_reference, identity_key, normalize_work_scopes, process_ancestors, process_sweep,
         relevant_dirty,
     },
     server::{SnapshotMessageV1, SnapshotSource},
-    state::{BaselineRow, EndedObservation, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store},
+    state::{BaselineRow, EndedObservation, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow},
+    work::WorkCoordinator,
 };
 
 #[cfg(test)]
@@ -143,17 +143,86 @@ impl Coordinator {
         if label.is_empty() {
             return Err(AppError::usage("label must contain printable text"));
         }
-        let scopes = normalize_claim_scopes(files, recursive, &cwd, &root)?;
+        let scopes = normalize_work_scopes(files, recursive, &cwd, &root)?;
+        if scopes.is_empty() {
+            return Err(AppError::usage("at least one scope is required"));
+        }
         let mut store = self.store()?;
-        if let Some(existing) = store.claim(&identity)? &&
-            existing.repo_root != path_text(&root)?
-        {
-            return Ok(Outcome::new(OutcomeKind::Active, 3, "active claim belongs to another repository")
-                .with_paths(existing.scopes.into_iter().map(|scope| scope.path).collect()));
+        if let Some(existing) = store.work(&identity)? {
+            if existing.state == WorkState::Draft {
+                return Err(AppError::operational(
+                    "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
+                ));
+            }
+            if existing.repo_root != path_text(&root)? {
+                return Ok(Outcome::new(OutcomeKind::Active, 3, "active work belongs to another repository")
+                    .with_paths(existing.scopes.into_iter().map(|scope| scope.path).collect()));
+            }
         }
         self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         let inventory = self.refresh_inventory(&mut store, false)?;
-        ClaimArbiter { store: &mut store }.start(&identity, &root, &label, scopes, &inventory, self.clock.wall())
+        WorkCoordinator { store: &mut store }.start_direct(
+            &identity,
+            &root,
+            &label,
+            scopes,
+            &inventory,
+            self.clock.wall(),
+        )
+    }
+
+    pub(crate) fn draft(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf], cwd: &Path) -> Result<Outcome> {
+        let identity = self.identity(true)?.expect("required identity");
+        self.draft_for(identity, label, files, recursive, cwd)
+    }
+
+    pub(crate) fn draft_for(
+        &self,
+        identity: Identity,
+        label: &str,
+        files: &[PathBuf],
+        recursive: &[PathBuf],
+        cwd: &Path,
+    ) -> Result<Outcome> {
+        let cwd = resolved(cwd);
+        let root = git_root(&cwd).ok_or_else(|| AppError::operational("draft requires a Git worktree"))?;
+        let label = sanitize(label, MAX_LABEL_CHARS);
+        if label.is_empty() {
+            return Err(AppError::usage("label must contain printable text"));
+        }
+        let scopes = normalize_work_scopes(files, recursive, &cwd, &root)?;
+        if scopes.is_empty() {
+            return Err(AppError::usage("at least one scope is required"));
+        }
+        let mut store = self.store()?;
+        if store.work(&identity)?.is_some_and(|work| work.state != WorkState::Draft) {
+            return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
+        }
+        self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
+        store.save_draft(&identity, &path_text(&root)?, &label, &scopes, self.clock.wall())?;
+        Ok(Outcome::new(OutcomeKind::Draft, 0, scopes.len().to_string()))
+    }
+
+    pub(crate) fn promote_draft(&self, cwd: &Path) -> Result<Outcome> {
+        let identity = self.identity(true)?.expect("required identity");
+        self.promote_draft_for(&identity, cwd)
+    }
+
+    pub(crate) fn promote_draft_for(&self, identity: &Identity, cwd: &Path) -> Result<Outcome> {
+        let cwd = resolved(cwd);
+        let root = git_root(&cwd).ok_or_else(|| AppError::operational("start --draft requires a Git worktree"))?;
+        let mut store = self.store()?;
+        let draft = store
+            .work(identity)?
+            .filter(|work| work.state == WorkState::Draft)
+            .ok_or_else(|| AppError::operational("no draft work for this session"))?;
+        if draft.repo_root != path_text(&root)? {
+            return Err(AppError::operational("draft belongs to another repository"));
+        }
+        revalidate_draft_scopes(&draft.scopes, &root)?;
+        self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
+        let inventory = self.refresh_inventory(&mut store, false)?;
+        WorkCoordinator { store: &mut store }.promote_draft(identity, &root, draft, &inventory, self.clock.wall())
     }
 
     pub(crate) fn wait(&self, timeout_seconds: u64, poll_seconds: f64) -> Result<Outcome> {
@@ -178,19 +247,21 @@ impl Coordinator {
         loop {
             let mut store = self.store()?;
             let process_complete = self.reconcile_processes(&mut store)?.is_empty();
-            let Some(claim) = store.claim(identity)? else {
+            let Some(work) = store.work(identity)? else {
                 return if released_if_missing {
                     Ok(Outcome::new(OutcomeKind::Released, 3, ""))
                 } else {
                     Err(AppError::operational("no active or queued work for this session"))
                 };
             };
-            if claim.state == ClaimState::Active {
+            if work.state == WorkState::Active {
                 return Ok(Outcome::new(OutcomeKind::Ready, 0, "")
-                    .with_paths(claim.scopes.into_iter().map(|scope| scope.path).collect()));
+                    .with_paths(work.scopes.into_iter().map(|scope| scope.path).collect()));
             }
-            if claim.state == ClaimState::Intent {
-                return Err(AppError::operational("intent-only work has no exclusive scope to wait for"));
+            if work.state == WorkState::Draft {
+                return Err(AppError::operational(
+                    "draft work must be submitted with ai-coord start --draft before waiting",
+                ));
             }
             let pending = store.inbox(identity, true)?;
             if !pending.is_empty() {
@@ -200,18 +271,18 @@ impl Coordinator {
             let generation = store.generation()?;
             let now = self.clock.monotonic();
             let refresh_seconds =
-                if claim.blocked_reason.as_deref() == Some("dirty") { 1.0 } else { FULL_REFRESH_SECONDS };
+                if work.blocked_reason.as_deref() == Some("dirty") { 1.0 } else { FULL_REFRESH_SECONDS };
             let due =
                 last_full_check.is_none_or(|last| now - last >= refresh_seconds) || last_generation != Some(generation);
             if due {
                 let mut inventory = self.refresh_inventory(&mut store, false)?;
                 inventory.complete &= process_complete;
-                let root = PathBuf::from(&claim.repo_root);
-                let outcome = ClaimArbiter { store: &mut store }.start(
+                let root = PathBuf::from(&work.repo_root);
+                let outcome = WorkCoordinator { store: &mut store }.start_direct(
                     identity,
                     &root,
-                    &claim.label,
-                    claim.scopes.clone(),
+                    &work.label,
+                    work.scopes.clone(),
                     &inventory,
                     self.clock.wall(),
                 )?;
@@ -221,7 +292,7 @@ impl Coordinator {
                     return Ok(outcome);
                 }
             }
-            let notes = store.notes(&claim.repo_root, Some(note_baseline))?;
+            let notes = store.notes(&work.repo_root, Some(note_baseline))?;
             if !notes.is_empty() {
                 return Ok(Outcome::new(OutcomeKind::Note, 3, notes.len().to_string()));
             }
@@ -240,33 +311,31 @@ impl Coordinator {
 
     pub(crate) fn done_for(&self, identity: &Identity) -> Result<Outcome> {
         let mut store = self.store()?;
-        let claim = store.claim(identity)?;
+        let work = store.work(identity)?;
         let mut waiters = Vec::new();
-        if let Some(claim) =
-            claim.as_ref().filter(|claim| claim.state == ClaimState::Active && !claim.scopes.is_empty())
-        {
-            let root = PathBuf::from(&claim.repo_root);
+        if let Some(work) = work.as_ref().filter(|work| work.state == WorkState::Active && !work.scopes.is_empty()) {
+            let root = PathBuf::from(&work.repo_root);
             let dirty = git_dirty_paths(&root).unwrap_or_default();
             let hashes = dirty.iter().map(|path| (path.clone(), git_blob_hash(&root, path, false))).collect::<Vec<_>>();
-            let _ = store.observe_dirt(&claim.repo_root, &hashes, self.clock.wall());
-            let residual = relevant_dirty(&claim.scopes, &dirty);
-            store.record_residual_owners(&claim.repo_root, &residual, identity, self.clock.wall())?;
+            let _ = store.observe_dirt(&work.repo_root, &hashes, self.clock.wall());
+            let residual = relevant_dirty(&work.scopes, &dirty);
+            store.record_residual_owners(&work.repo_root, &residual, identity, self.clock.wall())?;
             waiters = store
-                .claims(Some(&claim.repo_root))?
+                .works(Some(&work.repo_root))?
                 .into_iter()
                 .filter(|candidate| {
-                    candidate.state == ClaimState::Queued && any_overlap(&claim.scopes, &candidate.scopes)
+                    candidate.state == WorkState::Queued && any_overlap(&work.scopes, &candidate.scopes)
                 })
-                .map(|claim| claim.identity)
+                .map(|work| work.identity)
                 .collect();
         }
-        let removed = store.delete_claim(identity)?;
+        let removed = store.delete_work(identity)?;
         if removed &&
             !waiters.is_empty() &&
-            let Some(claim) = claim
+            let Some(work) = work
         {
-            let text = format!("Released claim '{}'; your queued claim may now be ready.", claim.label);
-            store.send_message(identity, &waiters, &text, Some(&claim.repo_root), self.clock.wall())?;
+            let text = format!("Released work '{}'; your queued work may now be ready.", work.label);
+            store.send_message(identity, &waiters, &text, Some(&work.repo_root), self.clock.wall())?;
         }
         Ok(Outcome::new(OutcomeKind::Done, 0, if removed { "released" } else { "already clear" }))
     }
@@ -274,25 +343,25 @@ impl Coordinator {
     pub(crate) fn baselines(&self) -> Result<Vec<BaselineRow>> {
         let identity = self.identity(true)?.expect("required identity");
         let store = self.store()?;
-        Ok(if store.claim(&identity)?.is_some_and(|claim| claim.state == ClaimState::Active) {
+        Ok(if store.work(&identity)?.is_some_and(|work| work.state == WorkState::Active) {
             store.baselines(&identity)?
         } else {
             Vec::new()
         })
     }
 
-    pub(crate) fn snapshot(&self, machine_wide: bool, cwd: &Path, allow_cached: bool) -> Result<SnapshotV1> {
+    pub(crate) fn snapshot(&self, machine_wide: bool, cwd: &Path, allow_cached: bool) -> Result<SnapshotV2> {
         let mut store = self.store()?;
         let inventory = self.refresh_inventory(&mut store, allow_cached)?;
         let self_identity = self.identity(false)?;
         let cwd = resolved(cwd);
         let root = git_root(&cwd);
         let sessions = store.sessions()?;
-        let claims = store.claims(None)?;
+        let work = store.works(None)?;
         let roots = sessions
             .iter()
             .filter_map(|row| row.repo_root.clone())
-            .chain(claims.iter().map(|claim| claim.repo_root.clone()))
+            .chain(work.iter().map(|work| work.repo_root.clone()))
             .collect::<HashSet<_>>();
         let observation_roots = if machine_wide {
             roots.clone()
@@ -307,7 +376,7 @@ impl Coordinator {
                 let _ = store.observe_dirt(&value, &hashes, self.clock.wall());
             }
         }
-        build_snapshot(&store, inventory, self_identity, machine_wide, &cwd, root.as_deref(), sessions, claims, roots)
+        build_snapshot(&store, inventory, self_identity, machine_wide, &cwd, root.as_deref(), sessions, work, roots)
     }
 
     pub(crate) fn name(&self, callsign: &str, cwd: &Path) -> Result<String> {
@@ -330,7 +399,7 @@ impl Coordinator {
         let mut store = self.store()?;
         let _ = self.refresh_inventory(&mut store, true)?;
         let root = git_root(&resolved(cwd));
-        let recipients = resolve_targets(target, &store.sessions()?, root.as_deref(), &sender)?;
+        let recipients = resolve_targets(target, &store.sessions()?, &store.works(None)?, root.as_deref(), &sender)?;
         let ids = store.send_message(
             &sender,
             &recipients,
@@ -391,7 +460,6 @@ impl Coordinator {
             state: existing.as_ref().map(|row| row.state).unwrap_or(SessionState::Working),
             source: existing.as_ref().map(|row| row.source.clone()).unwrap_or_else(|| "cli".to_owned()),
             name: existing.as_ref().and_then(|row| row.name.clone()),
-            label: existing.as_ref().and_then(|row| row.label.clone()),
             waiting_for: existing.as_ref().and_then(|row| row.waiting_for.clone()),
             permission_mode: None,
             update_permission_mode: false,
@@ -446,7 +514,6 @@ impl Coordinator {
                         state: row.state,
                         source: "observer".to_owned(),
                         name: row.name,
-                        label: None,
                         waiting_for: row.waiting_for,
                         permission_mode: None,
                         update_permission_mode: false,
@@ -494,7 +561,7 @@ impl Coordinator {
 }
 
 impl SnapshotSource for Coordinator {
-    fn snapshot(&self) -> Result<SnapshotV1> {
+    fn snapshot(&self) -> Result<SnapshotV2> {
         self.snapshot(true, &std::env::current_dir()?, true)
     }
     fn messages(&self) -> Result<Vec<SnapshotMessageV1>> {
@@ -514,10 +581,10 @@ fn build_snapshot(
     cwd: &Path,
     root: Option<&Path>,
     sessions: Vec<SessionRow>,
-    claims: Vec<crate::state::ClaimRow>,
+    work: Vec<WorkRow>,
     roots: HashSet<String>,
-) -> Result<SnapshotV1> {
-    let claim_by_identity = claims.iter().map(|claim| (claim.identity.clone(), claim)).collect::<HashMap<_, _>>();
+) -> Result<SnapshotV2> {
+    let work_by_identity = work.iter().map(|work| (work.identity.clone(), work)).collect::<HashMap<_, _>>();
     let delegates = store.delegates()?;
     let delegate_counts = delegates.iter().fold(HashMap::<Identity, usize>::new(), |mut counts, row| {
         *counts.entry(row.parent.clone()).or_default() += 1;
@@ -527,20 +594,19 @@ fn build_snapshot(
     let mut scoped = Vec::new();
     let mut outside = Vec::new();
     for row in sessions {
-        let claim = claim_by_identity.get(&row.identity).copied();
+        let session_work = work_by_identity.get(&row.identity).copied();
         let in_scope = machine || root_text.as_ref().is_some_and(|root| row.repo_root.as_ref() == Some(root));
-        let snapshot = SnapshotSessionV1 {
+        let snapshot = SnapshotSessionV2 {
             identity: row.identity.clone(),
             cwd: row.cwd,
             repo_root: row.repo_root,
-            state: if claim.is_some_and(|claim| claim.state == ClaimState::Queued) {
+            state: if session_work.is_some_and(|work| work.state == WorkState::Queued) {
                 SessionState::Waiting
             } else {
                 row.state
             },
             callsign: row.callsign,
             name: row.name,
-            label: claim.map(|claim| claim.label.clone()).or(row.label),
             waiting_for: row.waiting_for,
             permission_mode: row.permission_mode,
             delegate_count: delegate_counts.get(&row.identity).copied().filter(|count| *count > 0),
@@ -548,24 +614,27 @@ fn build_snapshot(
             source: row.source,
             started_at: row.started_at,
             last_seen: row.last_seen,
-            claim_state: claim.map(|claim| claim.state),
-            paths: claim.map(|claim| claim.scopes.iter().map(|scope| scope.path.clone()).collect()).unwrap_or_default(),
         };
         (if in_scope { &mut scoped } else { &mut outside }).push(snapshot);
     }
-    let scoped_claims = claims
+    let scoped_work = work
         .into_iter()
-        .filter(|claim| machine || root_text.as_ref() == Some(&claim.repo_root))
-        .map(|claim| SnapshotClaimV1 {
-            id: claim.id,
-            identity: claim.identity,
-            repo_root: claim.repo_root,
-            label: claim.label,
-            state: claim.state,
-            blocked_reason: claim.blocked_reason,
-            paths: claim.scopes.into_iter().map(|scope| scope.path).collect(),
-            created_at: claim.created_at,
-            updated_at: claim.updated_at,
+        .filter(|work| machine || root_text.as_ref() == Some(&work.repo_root))
+        .map(|work| {
+            let draft = work.state == WorkState::Draft;
+            SnapshotWorkV2 {
+                id: work.id,
+                identity: work.identity,
+                repo_root: work.repo_root,
+                label: work.label,
+                state: work.state,
+                blocked_reason: work.blocked_reason,
+                scope_count: draft.then_some(work.scopes.len()),
+                scopes: (!draft).then_some(work.scopes),
+                draft_created_at: work.draft_created_at,
+                submitted_at: work.submitted_at,
+                updated_at: work.updated_at,
+            }
         })
         .collect();
     let notes = if machine {
@@ -583,7 +652,7 @@ fn build_snapshot(
     let delegates = delegates
         .into_iter()
         .filter(|row| machine || parent_scope.contains(&row.parent))
-        .map(|row| SnapshotDelegateV1 {
+        .map(|row| SnapshotDelegateV2 {
             parent_client: row.parent.client,
             parent_session_id: row.parent.session_id,
             agent_id: row.agent_id,
@@ -593,24 +662,24 @@ fn build_snapshot(
         })
         .collect();
     let outside_directories = outside.iter().map(|row| row.cwd.clone()).collect::<HashSet<_>>().len();
-    Ok(SnapshotV1 {
-        schema_version: 1,
+    Ok(SnapshotV2 {
+        schema_version: 2,
         complete: inventory.complete,
         scope: if machine {
-            SnapshotScopeV1 { kind: SnapshotScopeKindV1::Machine, repo_root: None }
+            SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None }
         } else {
-            SnapshotScopeV1 {
-                kind: if root.is_some() { SnapshotScopeKindV1::Repo } else { SnapshotScopeKindV1::Cwd },
+            SnapshotScopeV2 {
+                kind: if root.is_some() { SnapshotScopeKindV2::Repo } else { SnapshotScopeKindV2::Cwd },
                 repo_root: Some(root_text.unwrap_or_else(|| cwd.to_string_lossy().into_owned())),
             }
         },
         self_identity,
         providers: inventory.providers,
         sessions: scoped,
-        claims: scoped_claims,
+        work: scoped_work,
         notes: notes
             .into_iter()
-            .map(|row| SnapshotNoteV1 {
+            .map(|row| SnapshotNoteV2 {
                 id: row.id,
                 repo_root: row.repo_root,
                 author_client: row.author.as_ref().map(|identity| identity.client),
@@ -621,7 +690,7 @@ fn build_snapshot(
             })
             .collect(),
         delegates,
-        outside_scope: OutsideScopeV1 { sessions: outside.len(), directories: outside_directories },
+        outside_scope: OutsideScopeV2 { sessions: outside.len(), directories: outside_directories },
     })
 }
 
@@ -655,6 +724,7 @@ fn cached_inventory(store: &Store, key: &str, current: f64) -> Result<Option<Inv
 fn resolve_targets(
     target: &str,
     sessions: &[SessionRow],
+    work: &[WorkRow],
     root: Option<&Path>,
     sender: &Identity,
 ) -> Result<Vec<Identity>> {
@@ -681,11 +751,13 @@ fn resolve_targets(
     } else {
         Vec::new()
     };
+    let work_labels = work.iter().map(|work| (&work.identity, work.label.as_str())).collect::<HashMap<_, _>>();
     let substring = sessions
         .iter()
         .filter(|row| {
+            let work_label = work_labels.get(&row.identity).copied();
             let haystack = callsign_key(
-                &[row.callsign.as_deref(), row.label.as_deref(), row.name.as_deref()]
+                &[row.callsign.as_deref(), work_label, row.name.as_deref()]
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>()
@@ -773,6 +845,24 @@ fn sanitize(text: &str, limit: usize) -> String {
 }
 fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
+}
+
+fn revalidate_draft_scopes(scopes: &[Scope], root: &Path) -> Result<()> {
+    let files = scopes
+        .iter()
+        .filter(|scope| scope.kind == ScopeKind::Exact)
+        .map(|scope| PathBuf::from(&scope.path))
+        .collect::<Vec<_>>();
+    let recursive = scopes
+        .iter()
+        .filter(|scope| scope.kind == ScopeKind::Recursive)
+        .map(|scope| PathBuf::from(&scope.path))
+        .collect::<Vec<_>>();
+    let normalized = normalize_work_scopes(&files, &recursive, root, root)?;
+    if normalized.len() != scopes.len() || normalized.iter().any(|scope| !scopes.contains(scope)) {
+        return Err(AppError::usage("stored draft scopes no longer normalize to the same paths"));
+    }
+    Ok(())
 }
 fn resolved(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())

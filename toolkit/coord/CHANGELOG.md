@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Replace pathless intents with provider-neutral `draft → queued | active` work items. Drafts retain exact normalized
+  scopes without arbitration or ownership, and `start --draft` establishes FIFO age only when the draft is promoted.
+- Break the internal ledger at schema v10 with session-cascaded `work_items`, `work_scopes`, and `work_baselines`;
+  reject schema v9 without migration or import.
+- Break public status at schema v2: publish top-level `work`, omit draft paths in favor of counts, and expose submitted
+  scopes as `{ path, kind }` objects without duplicating work fields on sessions.
+- Remove the obsolete Claude `ExitPlanMode` hook and use the source-preserving linker to prune its owned handler while
+  retaining unrelated hooks.
+
 ## 0.3.0
 
 - Rewrite the CLI, hook runtime, SQLite ledger, provider inventory, and dashboard API as one Rust binary; retain the

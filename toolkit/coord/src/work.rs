@@ -1,4 +1,4 @@
-//! Atomic claim arbitration over provider, process, and Git evidence.
+//! Atomic work arbitration over provider, process, and Git evidence.
 
 use std::{
     collections::HashSet,
@@ -7,24 +7,24 @@ use std::{
 };
 
 use crate::{
-    domain::{ClaimState, Identity, InventoryResult, Outcome, OutcomeKind, Scope},
+    domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, ScopeKind, WorkState},
     error::{AppError, Result},
     host::{
         UNHASHABLE_BLOB_HASH, any_overlap, git_blob_hash, git_dirty_paths, normalize_scopes, overlapping_paths,
         overlaps_outside_coverage, relevant_dirty, scopes_cover, scopes_overlap,
     },
-    state::{BaselineRow, ClaimRow, ClaimUpdate, DirtObservationRow, ResidualOwnerRow, Store},
+    state::{BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkRow, WorkUpdate},
 };
 
 pub(crate) const DIRT_HOLD_SECONDS: f64 = 90.0;
 const MAX_MESSAGE_CHARS: usize = 240;
 
-pub(crate) struct ClaimArbiter<'a> {
+pub(crate) struct WorkCoordinator<'a> {
     pub(crate) store: &'a mut Store,
 }
 
-impl ClaimArbiter<'_> {
-    pub(crate) fn start(
+impl WorkCoordinator<'_> {
+    pub(crate) fn start_direct(
         &mut self,
         identity: &Identity,
         root: &Path,
@@ -33,55 +33,125 @@ impl ClaimArbiter<'_> {
         inventory: &InventoryResult,
         current: f64,
     ) -> Result<Outcome> {
-        let repo_root = path_text(root)?;
-        let existing = self.store.claim(identity)?;
-        if scopes.is_empty() {
-            return self.save_intent(identity, &repo_root, label, existing.as_ref(), current);
+        let existing = self.store.work(identity)?;
+        if existing.as_ref().is_some_and(|work| work.state == WorkState::Draft) {
+            return Err(AppError::operational(
+                "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
+            ));
         }
-        if let Some(active) = existing.as_ref().filter(|claim| claim.state == ClaimState::Active) {
+        self.submit(identity, root, label, scopes, inventory, existing, None, current)
+    }
+
+    pub(crate) fn promote_draft(
+        &mut self,
+        identity: &Identity,
+        root: &Path,
+        draft: WorkRow,
+        inventory: &InventoryResult,
+        current: f64,
+    ) -> Result<Outcome> {
+        if draft.state != WorkState::Draft {
+            return Err(AppError::operational("no draft work for this session"));
+        }
+        let revision = draft.revision;
+        let label = draft.label.clone();
+        self.submit(identity, root, &label, draft.scopes.clone(), inventory, Some(draft), Some(revision), current)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn submit(
+        &mut self,
+        identity: &Identity,
+        root: &Path,
+        label: &str,
+        scopes: Vec<Scope>,
+        inventory: &InventoryResult,
+        existing: Option<WorkRow>,
+        draft_revision: Option<i64>,
+        current: f64,
+    ) -> Result<Outcome> {
+        if scopes.is_empty() {
+            return Err(AppError::usage("at least one scope is required"));
+        }
+        let repo_root = path_text(root)?;
+        if let Some(active) = existing.as_ref().filter(|work| work.state == WorkState::Active) {
             return self.update_active(identity, root, &repo_root, label, scopes, inventory, active.clone(), current);
         }
 
         let (dirty, observations) = observe_git_dirt(self.store, root, current)?;
         let relevant = relevant_dirty(&scopes, &dirty);
         let benign = benign_dirt_scopes(root);
-        let existing_scopes = existing.as_ref().map(|claim| claim.scopes.as_slice()).unwrap_or_default();
-        let created_at = existing
-            .as_ref()
-            .filter(|claim| claim.state == ClaimState::Queued && scopes_cover(&claim.scopes, &scopes))
-            .map_or(current, |claim| claim.created_at);
+        let existing_scopes = existing.as_ref().map(|work| work.scopes.as_slice()).unwrap_or_default();
+        let preserved_submission = if draft_revision.is_some() {
+            None
+        } else {
+            existing
+                .as_ref()
+                .filter(|work| work.state == WorkState::Queued && scopes_cover(&work.scopes, &scopes))
+                .and_then(|work| work.submitted_at)
+        };
 
         let mut advisory = Vec::new();
-        let outcome = self.store.with_claim_transaction(|transaction| {
-            let claims = transaction.claims(&repo_root)?;
+        let outcome = self.store.with_work_transaction(|transaction| {
+            let current_work = transaction.work(identity)?;
+            match draft_revision {
+                Some(revision) => {
+                    let Some(work) = current_work
+                        .as_ref()
+                        .filter(|work| work.state == WorkState::Draft && work.revision == revision)
+                    else {
+                        return Err(AppError::retry("draft changed during promotion"));
+                    };
+                    if work.repo_root != repo_root {
+                        return Err(AppError::retry("draft repository changed during promotion"));
+                    }
+                }
+                None => {
+                    if current_work.as_ref().is_some_and(|work| work.state == WorkState::Draft) {
+                        return Err(AppError::operational(
+                            "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
+                        ));
+                    }
+                    if current_work.as_ref().map(|work| work.revision) != existing.as_ref().map(|work| work.revision) {
+                        return Err(AppError::retry("work item changed during arbitration"));
+                    }
+                }
+            }
+
+            let submitted_at = match preserved_submission {
+                Some(submitted_at) => submitted_at,
+                None => transaction.next_submission_time(current)?,
+            };
+            let work = transaction.works(&repo_root)?;
             let residuals = transaction.residual_owners(&repo_root)?;
-            let active = blockers(&claims, identity, &scopes, ClaimState::Active, None);
-            let earlier = blockers(&claims, identity, &scopes, ClaimState::Queued, Some(created_at));
-            let unattributed = unattributed_dirty(&relevant, &claims);
+            let active = blockers(&work, identity, &scopes, WorkState::Active, None);
+            let earlier = blockers(&work, identity, &scopes, WorkState::Queued, Some(submitted_at));
+            let unattributed = unattributed_dirty(&relevant, &work);
             let (fresh, stale) = partition_dirty(&unattributed, &observations, &residuals, &benign, identity, current);
             advisory = stale;
             let (state, blocked_reason, decision) = if !inventory.complete {
-                (ClaimState::Queued, Some("coverage".to_owned()), Outcome::new(OutcomeKind::Unknown, 2, "coverage"))
+                (WorkState::Queued, Some("coverage".to_owned()), Outcome::new(OutcomeKind::Unknown, 2, "coverage"))
             } else if !fresh.is_empty() {
                 (
-                    ClaimState::Queued,
+                    WorkState::Queued,
                     Some("dirty".to_owned()),
                     Outcome::new(OutcomeKind::Unknown, 2, format!("dirty-settling:{}", fresh.join(","))),
                 )
             } else if !active.is_empty() || !earlier.is_empty() {
                 let contenders = if active.is_empty() { &earlier } else { &active };
                 let reason = if active.is_empty() { "waiter" } else { "overlap" };
-                (ClaimState::Queued, Some(reason.to_owned()), blocked_outcome(&scopes, contenders, transaction)?)
+                (WorkState::Queued, Some(reason.to_owned()), blocked_outcome(&scopes, contenders, transaction)?)
             } else {
                 let detail =
                     if advisory.is_empty() { String::new() } else { format!("stale-dirt:{}", advisory.join(",")) };
-                (ClaimState::Active, None, Outcome::new(OutcomeKind::Ready, 0, detail).with_paths(scope_paths(&scopes)))
+                (WorkState::Active, None, Outcome::new(OutcomeKind::Ready, 0, detail).with_paths(scope_paths(&scopes)))
             };
 
-            let should_notify = existing.as_ref().is_none_or(|claim| {
-                claim.blocked_reason.as_deref() != Some("overlap") || !same_scopes(existing_scopes, &scopes)
+            let should_notify = existing.as_ref().is_none_or(|work| {
+                work.blocked_reason.as_deref() != Some("overlap") || !same_scopes(existing_scopes, &scopes)
             });
-            transaction.save_claim(&ClaimUpdate {
+            let expected_revision = current_work.as_ref().map(|work| work.revision);
+            transaction.save_work(&WorkUpdate {
                 identity: identity.clone(),
                 repo_root: repo_root.clone(),
                 label: label.to_owned(),
@@ -90,8 +160,10 @@ impl ClaimArbiter<'_> {
                 scopes: scopes.clone(),
                 baselines: None,
                 residual_paths: Vec::new(),
-                created_at,
+                draft_created_at: current_work.as_ref().and_then(|work| work.draft_created_at),
+                submitted_at: Some(submitted_at),
                 updated_at: current,
+                expected_revision,
             })?;
             if should_notify {
                 for holder in &active {
@@ -122,22 +194,24 @@ impl ClaimArbiter<'_> {
         label: &str,
         scopes: Vec<Scope>,
         inventory: &InventoryResult,
-        existing: ClaimRow,
+        existing: WorkRow,
         current: f64,
     ) -> Result<Outcome> {
         if same_scopes(&existing.scopes, &scopes) {
             if existing.label != label {
-                self.store.save_claim(&ClaimUpdate {
+                self.store.save_work(&WorkUpdate {
                     identity: identity.clone(),
                     repo_root: repo_root.to_owned(),
                     label: label.to_owned(),
-                    state: ClaimState::Active,
+                    state: WorkState::Active,
                     blocked_reason: None,
                     scopes: scopes.clone(),
                     baselines: None,
                     residual_paths: Vec::new(),
-                    created_at: existing.created_at,
+                    draft_created_at: existing.draft_created_at,
+                    submitted_at: existing.submitted_at,
                     updated_at: current,
+                    expected_revision: Some(existing.revision),
                 })?;
             }
             return Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes)));
@@ -148,19 +222,21 @@ impl ClaimArbiter<'_> {
         let relevant = relevant_dirty(&scopes, &dirty);
         let benign = benign_dirt_scopes(root);
         let mut advisory = Vec::new();
-        let outcome = self.store.with_claim_transaction(|transaction| {
-            let current_claim = transaction.claim(identity)?;
-            let Some(current_claim) = current_claim
-                .filter(|claim| claim.state == ClaimState::Active && same_scopes(&claim.scopes, &existing.scopes))
-            else {
-                return Err(AppError::retry("active claim changed during scope update"));
+        let outcome = self.store.with_work_transaction(|transaction| {
+            let current_work = transaction.work(identity)?;
+            let Some(current_work) = current_work.filter(|work| {
+                work.state == WorkState::Active &&
+                    work.revision == existing.revision &&
+                    same_scopes(&work.scopes, &existing.scopes)
+            }) else {
+                return Err(AppError::retry("active work changed during scope update"));
             };
 
-            let claims = transaction.claims(repo_root)?;
+            let work = transaction.works(repo_root)?;
             let residuals = transaction.residual_owners(repo_root)?;
-            let active = expansion_blockers(&claims, identity, &scopes, &existing.scopes, ClaimState::Active);
-            let queued = expansion_blockers(&claims, identity, &scopes, &existing.scopes, ClaimState::Queued);
-            let unattributed = unattributed_dirty(&relevant, &claims);
+            let active = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Active);
+            let queued = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Queued);
+            let unattributed = unattributed_dirty(&relevant, &work);
             let (fresh, stale) = partition_dirty(&unattributed, &observations, &residuals, &benign, identity, current);
             advisory = stale;
 
@@ -196,29 +272,31 @@ impl ClaimArbiter<'_> {
                 .filter(|row| !relevant_dirty(&scopes, std::slice::from_ref(&row.path)).is_empty())
                 .collect::<Vec<_>>();
             merge_baselines(&mut baselines, write_baselines(root, &advisory));
-            let waiters = claims
+            let waiters = work
                 .iter()
-                .filter(|claim| {
-                    claim.state == ClaimState::Queued &&
-                        any_overlap(&existing.scopes, &claim.scopes) &&
-                        !any_overlap(&scopes, &claim.scopes)
+                .filter(|work| {
+                    work.state == WorkState::Queued &&
+                        any_overlap(&existing.scopes, &work.scopes) &&
+                        !any_overlap(&scopes, &work.scopes)
                 })
                 .cloned()
                 .collect::<Vec<_>>();
-            transaction.save_claim(&ClaimUpdate {
+            transaction.save_work(&WorkUpdate {
                 identity: identity.clone(),
                 repo_root: repo_root.to_owned(),
                 label: label.to_owned(),
-                state: ClaimState::Active,
+                state: WorkState::Active,
                 blocked_reason: None,
                 scopes: scopes.clone(),
                 baselines: Some(baselines),
                 residual_paths: released,
-                created_at: current_claim.created_at,
+                draft_created_at: current_work.draft_created_at,
+                submitted_at: current_work.submitted_at,
                 updated_at: current,
+                expected_revision: Some(current_work.revision),
             })?;
             let message = sanitize(
-                &format!("Narrowed claim '{}'; your queued claim may now be ready.", existing.label),
+                &format!("Narrowed work '{}'; your queued work may now be ready.", existing.label),
                 MAX_MESSAGE_CHARS,
             );
             for waiter in waiters {
@@ -227,37 +305,6 @@ impl ClaimArbiter<'_> {
             Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes)))
         })?;
         Ok(outcome)
-    }
-
-    fn save_intent(
-        &mut self,
-        identity: &Identity,
-        repo_root: &str,
-        label: &str,
-        existing: Option<&ClaimRow>,
-        current: f64,
-    ) -> Result<Outcome> {
-        let state = existing.map(|claim| claim.state).unwrap_or(ClaimState::Intent);
-        let scopes = existing.map(|claim| claim.scopes.clone()).unwrap_or_default();
-        self.store.save_claim(&ClaimUpdate {
-            identity: identity.clone(),
-            repo_root: repo_root.to_owned(),
-            label: label.to_owned(),
-            state,
-            blocked_reason: existing.and_then(|claim| claim.blocked_reason.clone()),
-            scopes: scopes.clone(),
-            baselines: None,
-            residual_paths: Vec::new(),
-            created_at: existing.map(|claim| claim.created_at).unwrap_or(current),
-            updated_at: current,
-        })?;
-        Ok(match state {
-            ClaimState::Active => Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes)),
-            ClaimState::Queued => {
-                Outcome::new(OutcomeKind::Blocked, 3, "intent updated").with_paths(scope_paths(&scopes))
-            }
-            ClaimState::Intent => Outcome::new(OutcomeKind::Intent, 0, label),
-        })
     }
 }
 
@@ -269,52 +316,50 @@ fn observe_git_dirt(store: &mut Store, root: &Path, current: f64) -> Result<(Vec
 }
 
 fn blockers(
-    claims: &[ClaimRow],
+    work: &[WorkRow],
     identity: &Identity,
     scopes: &[Scope],
-    state: ClaimState,
+    state: WorkState,
     before: Option<f64>,
-) -> Vec<ClaimRow> {
-    claims
-        .iter()
-        .filter(|claim| {
-            claim.state == state &&
-                claim.identity != *identity &&
-                before.is_none_or(|created| claim.created_at < created) &&
-                any_overlap(scopes, &claim.scopes)
+) -> Vec<WorkRow> {
+    work.iter()
+        .filter(|work| {
+            work.state == state &&
+                work.identity != *identity &&
+                before.is_none_or(|submitted| work.submitted_at.is_some_and(|age| age < submitted)) &&
+                any_overlap(scopes, &work.scopes)
         })
         .cloned()
         .collect()
 }
 
 fn expansion_blockers(
-    claims: &[ClaimRow],
+    work: &[WorkRow],
     identity: &Identity,
     requested: &[Scope],
     existing: &[Scope],
-    state: ClaimState,
-) -> Vec<ClaimRow> {
-    claims
-        .iter()
-        .filter(|claim| {
-            claim.state == state &&
-                claim.identity != *identity &&
-                !overlaps_outside_coverage(requested, &claim.scopes, existing).is_empty()
+    state: WorkState,
+) -> Vec<WorkRow> {
+    work.iter()
+        .filter(|work| {
+            work.state == state &&
+                work.identity != *identity &&
+                !overlaps_outside_coverage(requested, &work.scopes, existing).is_empty()
         })
         .cloned()
         .collect()
 }
 
-fn unattributed_dirty(dirty: &[String], claims: &[ClaimRow]) -> Vec<String> {
-    let owned = claims
+fn unattributed_dirty(dirty: &[String], work: &[WorkRow]) -> Vec<String> {
+    let owned = work
         .iter()
-        .filter(|claim| claim.state == ClaimState::Active)
-        .flat_map(|claim| claim.scopes.iter())
+        .filter(|work| work.state == WorkState::Active)
+        .flat_map(|work| work.scopes.iter())
         .collect::<Vec<_>>();
     dirty
         .iter()
         .filter(|path| {
-            let leaf = Scope { path: (*path).clone(), recursive: false };
+            let leaf = Scope { path: (*path).clone(), kind: ScopeKind::Exact };
             !owned.iter().any(|scope| scopes_overlap(scope, &leaf))
         })
         .cloned()
@@ -332,7 +377,7 @@ fn partition_dirty(
     let mut fresh = Vec::new();
     let mut advisory = Vec::new();
     for path in dirty {
-        let leaf = Scope { path: path.clone(), recursive: false };
+        let leaf = Scope { path: path.clone(), kind: ScopeKind::Exact };
         let benign = benign.iter().any(|scope| scopes_overlap(scope, &leaf));
         let residual_own = residuals.iter().any(|row| row.path == *path && row.identity == *identity);
         let stale = observations
@@ -350,22 +395,22 @@ fn partition_dirty(
 
 fn blocked_outcome(
     requested: &[Scope],
-    blockers: &[ClaimRow],
-    transaction: &crate::state::ClaimTransaction<'_>,
+    blockers: &[WorkRow],
+    transaction: &crate::state::WorkTransaction<'_>,
 ) -> Result<Outcome> {
     let holders =
-        blockers.iter().map(|claim| identity_display(&claim.identity, transaction)).collect::<Result<Vec<_>>>()?;
-    let mut paths = blockers.iter().flat_map(|claim| overlapping_paths(requested, &claim.scopes)).collect::<Vec<_>>();
+        blockers.iter().map(|work| identity_display(&work.identity, transaction)).collect::<Result<Vec<_>>>()?;
+    let mut paths = blockers.iter().flat_map(|work| overlapping_paths(requested, &work.scopes)).collect::<Vec<_>>();
     paths.sort();
     paths.dedup();
     let broad_paths = blockers
         .iter()
-        .flat_map(|claim| {
+        .flat_map(|work| {
             requested
                 .iter()
                 .filter(|requested| {
-                    claim.scopes.iter().any(|owned| {
-                        requested.recursive &&
+                    work.scopes.iter().any(|owned| {
+                        requested.is_recursive() &&
                             (requested.path == "." || owned.path.starts_with(&format!("{}/", requested.path)))
                     })
                 })
@@ -383,7 +428,7 @@ fn blocked_outcome(
     })
 }
 
-fn identity_display(identity: &Identity, transaction: &crate::state::ClaimTransaction<'_>) -> Result<String> {
+fn identity_display(identity: &Identity, transaction: &crate::state::WorkTransaction<'_>) -> Result<String> {
     if let Some(callsign) = transaction.callsign(identity)? {
         return Ok(callsign);
     }
@@ -391,23 +436,23 @@ fn identity_display(identity: &Identity, transaction: &crate::state::ClaimTransa
     Ok(format!("{}/{prefix}", client_name(identity)))
 }
 
-fn blocked_message(label: &str, requested: &[Scope], blocker: &ClaimRow) -> String {
+fn blocked_message(label: &str, requested: &[Scope], blocker: &WorkRow) -> String {
     let overlaps = overlapping_paths(requested, &blocker.scopes);
     let broad = blocker
         .scopes
         .iter()
         .filter(|owned| {
             requested.iter().any(|requested| {
-                owned.recursive && (owned.path == "." || requested.path.starts_with(&format!("{}/", owned.path)))
+                owned.is_recursive() && (owned.path == "." || requested.path.starts_with(&format!("{}/", owned.path)))
             })
         })
         .map(|scope| scope.path.clone())
         .collect::<Vec<_>>();
     let message = if broad.is_empty() {
-        format!("Queued behind your claim: {label}; overlaps: {}.", overlaps.join(", "))
+        format!("Queued behind your work: {label}; overlaps: {}.", overlaps.join(", "))
     } else {
         format!(
-            "Narrow broad claim {} with ai-coord start if unrelated; queued work '{label}' overlaps: {}.",
+            "Narrow broad work {} with ai-coord start if unrelated; queued work '{label}' overlaps: {}.",
             broad.join(", "),
             overlaps.join(", ")
         )
@@ -449,7 +494,7 @@ fn benign_dirt_scopes(root: &Path) -> Vec<Scope> {
     normalize_scopes(&paths, root, root)
         .unwrap_or_default()
         .into_iter()
-        .map(|path| Scope { path, recursive: true })
+        .map(|path| Scope { path, kind: ScopeKind::Recursive })
         .collect()
 }
 
@@ -510,6 +555,10 @@ mod tests {
 
     use super::*;
 
+    fn scope(path: String, recursive: bool) -> Scope {
+        Scope { path, kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }
+    }
+
     proptest! {
         #[test]
         fn overlap_is_symmetric_for_exact_and_recursive_scopes(
@@ -518,16 +567,16 @@ mod tests {
             left_recursive in any::<bool>(),
             right_recursive in any::<bool>(),
         ) {
-            let left = Scope { path: left, recursive: left_recursive };
-            let right = Scope { path: right, recursive: right_recursive };
+            let left = scope(left, left_recursive);
+            let right = scope(right, right_recursive);
             prop_assert_eq!(scopes_overlap(&left, &right), scopes_overlap(&right, &left));
         }
     }
 
     #[test]
     fn exact_parent_does_not_cover_child_but_recursive_parent_does() {
-        let child = Scope { path: "src/lib.rs".to_owned(), recursive: false };
-        assert!(!scopes_overlap(&Scope { path: "src".to_owned(), recursive: false }, &child));
-        assert!(scopes_overlap(&Scope { path: "src".to_owned(), recursive: true }, &child));
+        let child = scope("src/lib.rs".to_owned(), false);
+        assert!(!scopes_overlap(&scope("src".to_owned(), false), &child));
+        assert!(scopes_overlap(&scope("src".to_owned(), true), &child));
     }
 }

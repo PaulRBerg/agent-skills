@@ -25,7 +25,7 @@ use tokio::{
 };
 
 use crate::{
-    domain::{Client, SnapshotV1},
+    domain::{Client, SnapshotV2},
     error::{AppError, Result},
 };
 
@@ -54,9 +54,9 @@ pub(crate) struct SnapshotMessageV1 {
 
 /// The dashboard's complete runtime shape, including its server metadata.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct DashboardSnapshotV1 {
+pub(crate) struct DashboardSnapshotV2 {
     #[serde(flatten)]
-    pub(crate) snapshot: SnapshotV1,
+    pub(crate) snapshot: SnapshotV2,
     pub(crate) messages: Vec<SnapshotMessageV1>,
     pub(crate) generated_at: String,
     pub(crate) generation: u64,
@@ -68,7 +68,7 @@ pub(crate) struct DashboardSnapshotV1 {
 /// second so its implementation can cheaply reconcile process state and bump
 /// the counter before deciding whether clients need a new snapshot.
 pub(crate) trait SnapshotSource: Send + Sync + 'static {
-    fn snapshot(&self) -> Result<SnapshotV1>;
+    fn snapshot(&self) -> Result<SnapshotV2>;
     fn messages(&self) -> Result<Vec<SnapshotMessageV1>>;
     fn generation(&self) -> Result<u64>;
 }
@@ -82,7 +82,7 @@ pub(crate) struct SnapshotService<S> {
 
 struct CachedSnapshot {
     refreshed_at: Instant,
-    payload: DashboardSnapshotV1,
+    payload: DashboardSnapshotV2,
 }
 
 impl<S: SnapshotSource> SnapshotService<S> {
@@ -96,7 +96,7 @@ impl<S: SnapshotSource> SnapshotService<S> {
 
     /// Return the process-wide cached snapshot, refreshing at most once per two
     /// seconds in the normal constructor.
-    pub(crate) fn snapshot(&self) -> Result<DashboardSnapshotV1> {
+    pub(crate) fn snapshot(&self) -> Result<DashboardSnapshotV2> {
         let mut cache = self.cache.lock().expect("snapshot cache lock poisoned");
         if let Some(cached) = cache.as_ref() &&
             cached.refreshed_at.elapsed() < self.cache_ttl
@@ -104,7 +104,7 @@ impl<S: SnapshotSource> SnapshotService<S> {
             return Ok(cached.payload.clone());
         }
 
-        let payload = DashboardSnapshotV1 {
+        let payload = DashboardSnapshotV2 {
             snapshot: self.source.snapshot()?,
             messages: self.source.messages()?,
             generated_at: rfc3339_utc((self.now)()),
@@ -147,7 +147,7 @@ async fn shutdown_signal() {
 
 async fn snapshot<S: SnapshotSource>(
     State(service): State<Arc<SnapshotService<S>>>,
-) -> std::result::Result<Json<DashboardSnapshotV1>, ApiError> {
+) -> std::result::Result<Json<DashboardSnapshotV2>, ApiError> {
     Ok(Json(service.snapshot()?))
 }
 
@@ -246,7 +246,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
     use super::*;
-    use crate::domain::{Identity, OutsideScopeV1, ProviderReport, SnapshotScopeKindV1, SnapshotScopeV1};
+    use crate::domain::{Identity, OutsideScopeV2, ProviderReport, SnapshotScopeKindV2, SnapshotScopeV2};
 
     struct Source {
         generation: AtomicU64,
@@ -265,12 +265,12 @@ mod tests {
     }
 
     impl SnapshotSource for Source {
-        fn snapshot(&self) -> Result<SnapshotV1> {
+        fn snapshot(&self) -> Result<SnapshotV2> {
             self.snapshots.fetch_add(1, Ordering::SeqCst);
-            Ok(SnapshotV1 {
-                schema_version: 1,
+            Ok(SnapshotV2 {
+                schema_version: 2,
                 complete: true,
-                scope: SnapshotScopeV1 { kind: SnapshotScopeKindV1::Machine, repo_root: None },
+                scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None },
                 self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
                 providers: vec![ProviderReport {
                     client: Client::Codex,
@@ -281,10 +281,10 @@ mod tests {
                     error: None,
                 }],
                 sessions: vec![],
-                claims: vec![],
+                work: vec![],
                 notes: vec![],
                 delegates: vec![],
-                outside_scope: OutsideScopeV1 { sessions: 0, directories: 0 },
+                outside_scope: OutsideScopeV2 { sessions: 0, directories: 0 },
             })
         }
         fn messages(&self) -> Result<Vec<SnapshotMessageV1>> {
@@ -299,7 +299,7 @@ mod tests {
     struct BrokenSource;
 
     impl SnapshotSource for BrokenSource {
-        fn snapshot(&self) -> Result<SnapshotV1> {
+        fn snapshot(&self) -> Result<SnapshotV2> {
             Err(AppError::operational("snapshot unavailable"))
         }
 
@@ -360,7 +360,7 @@ mod tests {
         let mut response = String::new();
         stream.read_to_string(&mut response).await.unwrap();
         assert!(response.starts_with("HTTP/1.1 200"));
-        assert!(response.contains("\"schema_version\":1"));
+        assert!(response.contains("\"schema_version\":2"));
 
         let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
         stream.write_all(b"GET /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").await.unwrap();

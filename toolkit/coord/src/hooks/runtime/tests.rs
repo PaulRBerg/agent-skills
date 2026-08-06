@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 
 use serde_json::json;
 use tempfile::TempDir;
@@ -156,7 +156,7 @@ fn prompt_presence_is_counts_only() {
 }
 
 #[test]
-fn claude_exit_plan_records_only_first_h1_as_intent() {
+fn claude_exit_plan_hook_is_obsolete_and_creates_no_work() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);
     HookRuntime::new(&coordinator).ingest(
@@ -166,33 +166,7 @@ fn claude_exit_plan_records_only_first_h1_as_intent() {
             "tool_response":{"plan":"private preface\n# Ship safe coordinator\nsecret body"}
         }),
     );
-    let claim = coordinator
-        .store()
-        .unwrap()
-        .claim(&Identity { client: Client::Claude, session_id: "planner".into() })
-        .unwrap()
-        .unwrap();
-    assert_eq!(claim.label, "Ship safe coordinator");
-    assert_eq!(claim.state, ClaimState::Intent);
-    assert!(!claim.label.contains("secret"));
-}
-
-#[test]
-fn exit_plan_intent_never_authorizes_scoped_work_under_incomplete_coverage() {
-    let temp = TempDir::new().unwrap();
-    let (coordinator, repo) = runtime_with_coverage(&temp, false);
     let identity = Identity { client: Client::Claude, session_id: "planner".into() };
-    HookRuntime::new(&coordinator).ingest(
-        "claude",
-        &json!({
-            "session_id":"planner", "cwd":repo, "hook_event_name":"PostToolUse", "tool_name":"ExitPlanMode",
-            "tool_response":{"plan":"# Scoped work must wait\nprivate body"}
-        }),
-    );
-    let intent = coordinator.store().unwrap().claim(&identity).unwrap().unwrap();
-    assert_eq!(intent.state, ClaimState::Intent);
-    assert!(intent.scopes.is_empty());
-
-    let scoped = coordinator.start_for(identity, "Scoped work must wait", &["src/lib.rs".into()], &[], &repo).unwrap();
-    assert_eq!((scoped.kind, scoped.detail.as_str()), (crate::domain::OutcomeKind::Unknown, "coverage"));
+    assert!(coordinator.store().unwrap().work(&identity).unwrap().is_none());
+    assert!(coordinator.store().unwrap().session(&identity).unwrap().is_none());
 }

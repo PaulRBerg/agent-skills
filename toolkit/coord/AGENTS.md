@@ -33,7 +33,7 @@ schema migration ladders, old-format importers, deprecated CLI aliases, dual rea
 or transitional hook recognition by default. Rejecting an incompatible persisted version with an actionable error is
 required safety behavior, not backward compatibility.
 
-Schema v9 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
+Schema v10 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
 based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced process is removed without
 an age grace period, while unknown liveness fails closed and never deletes the record.
 

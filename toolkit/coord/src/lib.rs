@@ -1,4 +1,3 @@
-mod claim;
 mod cli;
 mod coordinator;
 mod domain;
@@ -8,6 +7,7 @@ mod host;
 mod server;
 mod state;
 mod status;
+mod work;
 
 use std::{
     ffi::OsString,
@@ -71,15 +71,29 @@ async fn execute(cli: Cli) -> Result<u8> {
             println!("NAMED\t{}", coordinator.name(&arguments.callsign, &std::env::current_dir()?)?);
             Ok(0)
         }
-        Command::Start(arguments) => {
-            validate_start_paths(&arguments.paths, &arguments.recursive_paths)?;
-            let coordinator = Coordinator::open_default()?;
-            let outcome = coordinator.start(
+        Command::Draft(arguments) => {
+            validate_scopes(&arguments.paths, &arguments.recursive_paths, "draft")?;
+            let outcome = Coordinator::open_default()?.draft(
                 &arguments.label,
                 &arguments.paths,
                 &arguments.recursive_paths,
                 &std::env::current_dir()?,
             )?;
+            println!("{}", outcome.line());
+            Ok(outcome.code)
+        }
+        Command::Start(arguments) => {
+            let outcome = if arguments.draft {
+                Coordinator::open_default()?.promote_draft(&std::env::current_dir()?)?
+            } else {
+                validate_scopes(&arguments.paths, &arguments.recursive_paths, "start")?;
+                Coordinator::open_default()?.start(
+                    arguments.label.as_deref().expect("clap requires a direct-start label"),
+                    &arguments.paths,
+                    &arguments.recursive_paths,
+                    &std::env::current_dir()?,
+                )?
+            };
             println!("{}", outcome.line());
             if outcome.kind == OutcomeKind::Blocked && !outcome.broad_paths.is_empty() {
                 eprintln!(
@@ -175,10 +189,14 @@ async fn execute(cli: Cli) -> Result<u8> {
     }
 }
 
-fn validate_start_paths(files: &[PathBuf], recursive: &[PathBuf]) -> Result<()> {
+fn validate_scopes(files: &[PathBuf], recursive: &[PathBuf], operation: &str) -> Result<()> {
+    if files.is_empty() && recursive.is_empty() {
+        return Err(AppError::usage("at least one scope is required"));
+    }
     let cwd = std::env::current_dir()?;
-    let root = host::git_root(&cwd).ok_or_else(|| AppError::operational("start requires a Git worktree"))?;
-    host::normalize_claim_scopes(files, recursive, &cwd, &root).map(|_| ())
+    let root =
+        host::git_root(&cwd).ok_or_else(|| AppError::operational(format!("{operation} requires a Git worktree")))?;
+    host::normalize_work_scopes(files, recursive, &cwd, &root).map(|_| ())
 }
 
 fn run_hook(client: HookClient) {
@@ -386,7 +404,7 @@ fn waker_feedback(outcome: &Outcome) -> String {
     let ownership_recheck = "`ai-coord start <label> <paths>` is the ownership recheck.";
     match outcome.kind {
         OutcomeKind::Ready => concat!(
-            "ai-coord: Background recheck found the claim ready; editing still requires ",
+            "ai-coord: Background recheck found the work ready; editing still requires ",
             "`ai-coord start <label> <paths>` to return READY."
         )
         .to_owned(),
@@ -407,10 +425,10 @@ fn waker_feedback(outcome: &Outcome) -> String {
             format!("ai-coord: Coordination state is UNKNOWN ({}); no edit scope is owned.", outcome.detail)
         }
         OutcomeKind::Timeout => format!(
-            "ai-coord: Background wait timed out after {} seconds; the claim remains queued and no edit scope is owned.",
+            "ai-coord: Background wait timed out after {} seconds; the work remains queued and no edit scope is owned.",
             outcome.detail
         ),
-        OutcomeKind::Released => "ai-coord: The queued claim was released; no edit scope is owned.".to_owned(),
+        OutcomeKind::Released => "ai-coord: The queued work was released; no edit scope is owned.".to_owned(),
         _ => format!("ai-coord: {}; no edit scope is owned.", outcome.kind.name()),
     }
 }

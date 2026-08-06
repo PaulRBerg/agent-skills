@@ -162,16 +162,6 @@ const CLAUDE_HOOK_SPECS: &[HookSpec] = &[
         async_rewake: None,
     },
     HookSpec {
-        event: "PostToolUse",
-        command: "ai-coord hook claude",
-        matcher: Some("ExitPlanMode"),
-        timeout: Some(5),
-        additional_context_limit: None,
-        if_filter: None,
-        async_: None,
-        async_rewake: None,
-    },
-    HookSpec {
         event: "PostToolBatch",
         command: "ai-coord hook claude",
         matcher: None,
@@ -210,13 +200,11 @@ mod tests {
         let claude = hook_specs(Client::Claude);
 
         assert_eq!(codex.len(), 7);
-        assert_eq!(claude.len(), 9);
+        assert_eq!(claude.len(), 8);
         assert_eq!(codex[0].matcher, Some("startup|resume|clear"));
         assert_eq!(codex[1].additional_context_limit, Some(200));
-        assert_eq!(claude[6].event, "PostToolUse");
-        assert_eq!(claude[6].matcher, Some("ExitPlanMode"));
-        assert_eq!(claude[8].if_filter, Some("Bash(ai-coord start *)"));
-        assert_eq!(claude[8].async_, Some(true));
-        assert_eq!(claude[8].async_rewake, Some(true));
+        assert_eq!(claude[7].if_filter, Some("Bash(ai-coord start *)"));
+        assert_eq!(claude[7].async_, Some(true));
+        assert_eq!(claude[7].async_rewake, Some(true));
     }
 }

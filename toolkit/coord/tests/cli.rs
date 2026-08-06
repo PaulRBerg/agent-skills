@@ -70,6 +70,19 @@ impl Fixture {
         self.command().env("AI_COORD_SESSION_ID", session_id).args(arguments).output().expect("run ai-coord as session")
     }
 
+    fn output_as_in(&self, session_id: &str, cwd: &std::path::Path, arguments: &[&str]) -> Output {
+        self.command()
+            .current_dir(cwd)
+            .env("AI_COORD_SESSION_ID", session_id)
+            .args(arguments)
+            .output()
+            .expect("run ai-coord as session in directory")
+    }
+
+    fn output_with_path(&self, arguments: &[&str], executable_path: &std::path::Path) -> Output {
+        self.command().env("PATH", executable_path).args(arguments).output().expect("run ai-coord with PATH")
+    }
+
     fn json_status(&self) -> (i32, Value) {
         let output = self.output(&["status", "--all", "--json"]);
         let payload = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
@@ -127,7 +140,7 @@ fn identity_commands_and_state_are_fully_isolated() {
         matches!(code, 0 | 2),
         "status is complete under a detectable Codex ancestor and partial when the test host is unknown"
     );
-    assert_eq!(status["schema_version"], 1);
+    assert_eq!(status["schema_version"], 2);
     assert_eq!(status["scope"]["kind"], "machine");
     assert_eq!(status["sessions"][0]["callsign"], "🦀 Ferris Test");
     assert!(fixture.state.join("state.db").is_file());
@@ -208,13 +221,175 @@ fn coordination_commands_preserve_tsv_outputs_and_embedded_codes() {
     assert_eq!(String::from_utf8_lossy(&done.stdout), "DONE\treleased\n");
     let repeated = fixture.output_as("sender-host", &["done"]);
     assert_eq!(String::from_utf8_lossy(&repeated.stdout), "DONE\talready clear\n");
-    let intent = fixture.output_as("sender-host", &["start", "planning only"]);
-    assert_eq!(String::from_utf8_lossy(&intent.stdout), "INTENT\tplanning only\n");
+    let draft = fixture.output_as("sender-host", &["draft", "planning only", "src/planned.rs"]);
+    assert_eq!(String::from_utf8_lossy(&draft.stdout), "DRAFT\t1\n");
 
     let _ = sender.kill();
     let _ = sender.wait();
     let _ = recipient.kill();
     let _ = recipient.wait();
+}
+
+#[test]
+fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
+    let fixture = Fixture::new();
+    let mut host = spawn_synthetic_host(&fixture, "draft-host");
+    assert_strong_session(&fixture, "draft-host");
+
+    let created = fixture.output_as("draft-host", &["draft", "private plan", "src/private.rs", "docs/private.md"]);
+    assert_eq!(created.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&created.stdout), "DRAFT\t2\n");
+
+    let (_, snapshot) = fixture.json_status();
+    let draft = snapshot["work"].as_array().unwrap().iter().find(|work| work["session_id"] == "draft-host").unwrap();
+    assert_eq!(draft["state"], "draft");
+    assert_eq!(draft["scope_count"], 2);
+    assert!(draft.get("scopes").is_none());
+    assert!(!serde_json::to_string(draft).unwrap().contains("private.rs"));
+
+    let replaced = fixture.output_as("draft-host", &["draft", "revised plan", "--recursive", "src"]);
+    assert_eq!(String::from_utf8_lossy(&replaced.stdout), "DRAFT\t1\n");
+    let bypass = fixture.output_as("draft-host", &["start", "drifted execution", "src/other.rs"]);
+    assert_eq!(bypass.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&bypass.stderr).contains("a draft exists"));
+
+    let promoted = fixture.output_as("draft-host", &["start", "--draft"]);
+    assert_eq!(promoted.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&promoted.stdout), "READY\tsrc\n");
+    let (_, snapshot) = fixture.json_status();
+    let active = snapshot["work"].as_array().unwrap().iter().find(|work| work["session_id"] == "draft-host").unwrap();
+    assert_eq!(active["state"], "active");
+    assert_eq!(active["scopes"], json!([{"path":"src", "kind":"recursive"}]));
+    assert!(active.get("scope_count").is_none());
+
+    let rejected = fixture.output_as("draft-host", &["draft", "must release", "src/new.rs"]);
+    assert_eq!(rejected.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("run ai-coord done"));
+    assert_eq!(String::from_utf8_lossy(&fixture.output_as("draft-host", &["done"]).stdout), "DONE\treleased\n");
+    assert!(fixture.json_status().1["work"].as_array().unwrap().is_empty());
+
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
+#[test]
+fn draft_and_direct_start_require_scopes_and_draft_promotion_is_exclusive() {
+    let fixture = Fixture::new();
+    for arguments in [["draft", "empty"].as_slice(), ["start", "empty"].as_slice()] {
+        let output = fixture.output(arguments);
+        assert_eq!(output.status.code(), Some(64));
+        assert_eq!(String::from_utf8_lossy(&output.stderr), "error: at least one scope is required\n");
+    }
+
+    let conflict = fixture.output(&["start", "--draft", "label"]);
+    assert_eq!(conflict.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("--draft"));
+}
+
+#[test]
+fn promotion_revalidates_paths_and_repository_without_consuming_the_draft() {
+    let fixture = Fixture::new();
+    let mut host = spawn_synthetic_host(&fixture, "revalidate-host");
+    assert_strong_session(&fixture, "revalidate-host");
+
+    let drafted = fixture.output_as("revalidate-host", &["draft", "revalidate me", "--recursive", "planned"]);
+    assert_eq!(String::from_utf8_lossy(&drafted.stdout), "DRAFT\t1\n");
+    fs::write(fixture.root.join("planned"), "now a file\n").unwrap();
+    let invalid = fixture.output_as("revalidate-host", &["start", "--draft"]);
+    assert_eq!(invalid.status.code(), Some(64));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("recursive scope is not a directory: planned"));
+    assert_eq!(work_state(&fixture, "revalidate-host"), Some("draft".to_owned()));
+
+    fs::remove_file(fixture.root.join("planned")).unwrap();
+    let other = fixture._temporary.path().join("other-repo");
+    fs::create_dir(&other).unwrap();
+    assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&other).status().unwrap().success());
+    let mismatch = fixture.output_as_in("revalidate-host", &other, &["start", "--draft"]);
+    assert_eq!(mismatch.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&mismatch.stderr).contains("draft belongs to another repository"));
+    assert_eq!(work_state(&fixture, "revalidate-host"), Some("draft".to_owned()));
+
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
+#[test]
+fn promotion_queues_on_unknown_coverage_and_wait_preserves_submitted_work() {
+    let fixture = Fixture::new();
+    let bin = fixture._temporary.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let codex = bin.join("codex");
+    fs::write(&codex, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&codex, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let executable_path = format!("{}:/usr/bin:/bin", bin.display());
+    assert_eq!(
+        String::from_utf8_lossy(&fixture.output(&["draft", "unknown work", "src/unknown.rs"]).stdout),
+        "DRAFT\t1\n"
+    );
+
+    let promoted = fixture.output_with_path(&["start", "--draft"], std::path::Path::new(&executable_path));
+    assert_eq!(promoted.status.code(), Some(2));
+    assert_eq!(String::from_utf8_lossy(&promoted.stdout), "UNKNOWN\tcoverage\n");
+    assert_eq!(work_state(&fixture, "cli-test"), Some("queued".to_owned()));
+    let work = work_item(&fixture, "cli-test").unwrap();
+    assert!(work.get("scope_count").is_none());
+    assert_eq!(work["scopes"], json!([{"path":"src/unknown.rs", "kind":"exact"}]));
+
+    let waited = fixture.output_with_path(&["wait", "-t", "1"], std::path::Path::new(&executable_path));
+    assert_eq!(waited.status.code(), Some(2));
+    assert_eq!(String::from_utf8_lossy(&waited.stdout), "UNKNOWN\tcoverage\n");
+    assert_eq!(String::from_utf8_lossy(&fixture.output(&["done"]).stdout), "DONE\treleased\n");
+}
+
+#[test]
+fn fifo_age_begins_at_draft_promotion_not_draft_creation() {
+    let fixture = Fixture::new();
+    let mut holder = spawn_synthetic_host(&fixture, "fifo-holder");
+    let mut drafted = spawn_synthetic_host(&fixture, "fifo-drafted");
+    let mut direct = spawn_synthetic_host(&fixture, "fifo-direct");
+    for session in ["fifo-holder", "fifo-drafted", "fifo-direct"] {
+        assert_strong_session(&fixture, session);
+    }
+    let scope = "src/fifo.rs";
+    assert_eq!(
+        String::from_utf8_lossy(&fixture.output_as("fifo-holder", &["start", "holder", scope]).stdout),
+        format!("READY\t{scope}\n")
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&fixture.output_as("fifo-drafted", &["draft", "drafted", scope]).stdout),
+        "DRAFT\t1\n"
+    );
+    thread::sleep(Duration::from_millis(20));
+    assert_eq!(fixture.output_as("fifo-direct", &["start", "direct", scope]).status.code(), Some(3));
+    thread::sleep(Duration::from_millis(20));
+    assert_eq!(fixture.output_as("fifo-drafted", &["start", "--draft"]).status.code(), Some(3));
+
+    let direct_work = work_item(&fixture, "fifo-direct").unwrap();
+    let drafted_work = work_item(&fixture, "fifo-drafted").unwrap();
+    assert!(
+        direct_work["submitted_at"].as_f64().unwrap() < drafted_work["submitted_at"].as_f64().unwrap(),
+        "draft creation must not establish FIFO age"
+    );
+    assert!(drafted_work["draft_created_at"].as_f64().unwrap() < drafted_work["submitted_at"].as_f64().unwrap());
+
+    fixture.output_as("fifo-holder", &["done"]);
+    assert_eq!(
+        fixture.output_as("fifo-direct", &["start", "direct", scope]).status.code(),
+        Some(0),
+        "the earlier submitted direct work should promote first"
+    );
+    fixture.output_as("fifo-drafted", &["inbox", "--ack-all"]);
+    let still_queued = fixture.output_as("fifo-drafted", &["start", "drafted", scope]);
+    assert_eq!(still_queued.status.code(), Some(3));
+
+    for child in [&mut holder, &mut drafted, &mut direct] {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
 
 #[test]
@@ -253,7 +428,7 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     assert_eq!(check.status.code(), Some(2));
     let reports: Vec<Value> = serde_json::from_slice(&check.stdout).expect("check JSON");
     let state = reports.iter().find(|report| report["component"] == "state").expect("state report");
-    assert_eq!(state["schema_version"], 9);
+    assert_eq!(state["schema_version"], 10);
     assert_eq!(state["path"], fixture.state.join("state.db").to_string_lossy().as_ref());
     let codex_hooks = reports.iter().find(|report| report["component"] == "hooks:codex").expect("hook report");
     assert!(codex_hooks["error"].is_null());
@@ -283,7 +458,7 @@ fn dashboard_snapshot_matches_the_frontend_shape_and_ctrl_c_is_graceful() {
         "self",
         "providers",
         "sessions",
-        "claims",
+        "work",
         "notes",
         "delegates",
         "outside_scope",
@@ -449,4 +624,12 @@ fn wait_for_status(fixture: &Fixture, timeout: Duration, predicate: impl Fn(&Val
         }
         thread::sleep(Duration::from_millis(20));
     }
+}
+
+fn work_item(fixture: &Fixture, session_id: &str) -> Option<Value> {
+    fixture.json_status().1.get("work")?.as_array()?.iter().find(|work| work["session_id"] == session_id).cloned()
+}
+
+fn work_state(fixture: &Fixture, session_id: &str) -> Option<String> {
+    work_item(fixture, session_id)?.get("state")?.as_str().map(str::to_owned)
 }

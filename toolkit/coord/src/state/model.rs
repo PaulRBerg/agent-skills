@@ -1,4 +1,4 @@
-use crate::domain::{ClaimState, Client, Identity, ProcessFingerprint, Scope, SessionState};
+use crate::domain::{Client, Identity, ProcessFingerprint, Scope, SessionState, WorkState};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SessionRow {
@@ -8,7 +8,6 @@ pub(crate) struct SessionRow {
     pub(crate) state: SessionState,
     pub(crate) callsign: Option<String>,
     pub(crate) name: Option<String>,
-    pub(crate) label: Option<String>,
     pub(crate) waiting_for: Option<String>,
     pub(crate) permission_mode: Option<String>,
     pub(crate) fingerprint: Option<ProcessFingerprint>,
@@ -26,7 +25,6 @@ pub(crate) struct SessionUpdate {
     pub(crate) state: SessionState,
     pub(crate) source: String,
     pub(crate) name: Option<String>,
-    pub(crate) label: Option<String>,
     pub(crate) waiting_for: Option<String>,
     pub(crate) permission_mode: Option<String>,
     pub(crate) update_permission_mode: bool,
@@ -43,31 +41,36 @@ pub(crate) struct EndedObservation {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ClaimRow {
+pub(crate) struct WorkRow {
     pub(crate) id: i64,
     pub(crate) identity: Identity,
     pub(crate) repo_root: String,
     pub(crate) label: String,
-    pub(crate) state: ClaimState,
+    pub(crate) state: WorkState,
     pub(crate) blocked_reason: Option<String>,
     pub(crate) scopes: Vec<Scope>,
-    pub(crate) created_at: f64,
+    pub(crate) draft_created_at: Option<f64>,
+    pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
+    pub(crate) revision: i64,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ClaimUpdate {
+pub(crate) struct WorkUpdate {
     pub(crate) identity: Identity,
     pub(crate) repo_root: String,
     pub(crate) label: String,
-    pub(crate) state: ClaimState,
+    pub(crate) state: WorkState,
     pub(crate) blocked_reason: Option<String>,
     pub(crate) scopes: Vec<Scope>,
     /// `None` preserves existing baselines; `Some` replaces all of them.
     pub(crate) baselines: Option<Vec<BaselineRow>>,
     pub(crate) residual_paths: Vec<String>,
-    pub(crate) created_at: f64,
+    pub(crate) draft_created_at: Option<f64>,
+    pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
+    /// Compare-and-swap guard for an existing work item.
+    pub(crate) expected_revision: Option<i64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
