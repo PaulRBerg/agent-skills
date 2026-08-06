@@ -10,6 +10,7 @@ pub(crate) use model::*;
 pub(crate) use schema::SCHEMA_VERSION;
 #[allow(unused_imports)]
 pub(crate) use store::{MAX_INBOX_MESSAGES, MESSAGE_TTL, NOTE_TTL, Store, private_state_dir};
+pub(crate) use store_claims::ClaimTransaction;
 
 #[cfg(test)]
 mod tests;

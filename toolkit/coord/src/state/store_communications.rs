@@ -285,7 +285,7 @@ impl Store {
     }
 }
 
-fn add_message(
+pub(super) fn add_message(
     transaction: &Transaction<'_>,
     sender: &Identity,
     recipient: &Identity,

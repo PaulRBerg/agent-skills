@@ -83,6 +83,45 @@ pub(crate) struct Outcome {
     pub(crate) code: u8,
     pub(crate) detail: String,
     pub(crate) paths: Vec<String>,
+    pub(crate) holders: Vec<String>,
+    pub(crate) broad_paths: Vec<String>,
+}
+
+impl Outcome {
+    pub(crate) fn new(kind: OutcomeKind, code: u8, detail: impl Into<String>) -> Self {
+        Self { kind, code, detail: detail.into(), paths: Vec::new(), holders: Vec::new(), broad_paths: Vec::new() }
+    }
+
+    pub(crate) fn with_paths(mut self, paths: Vec<String>) -> Self {
+        self.paths = paths;
+        self
+    }
+
+    pub(crate) fn line(&self) -> String {
+        let mut fields = vec![self.kind.name().to_owned()];
+        if !self.detail.is_empty() {
+            fields.push(self.detail.clone());
+        }
+        fields.extend(self.paths.iter().cloned());
+        fields.join("\t")
+    }
+}
+
+impl OutcomeKind {
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Active => "ACTIVE",
+            Self::Blocked => "BLOCKED",
+            Self::Done => "DONE",
+            Self::Intent => "INTENT",
+            Self::Message => "MESSAGE",
+            Self::Note => "NOTE",
+            Self::Ready => "READY",
+            Self::Released => "RELEASED",
+            Self::Timeout => "TIMEOUT",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

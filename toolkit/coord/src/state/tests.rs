@@ -228,6 +228,26 @@ fn reconcile_requires_the_exact_fingerprint_even_at_the_same_revision() {
 }
 
 #[test]
+fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_state() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let stale = identity(Client::Codex, "stale");
+    let fresh = identity(Client::Codex, "fresh");
+    store.upsert_session(&session_update(&stale, 1.0)).unwrap();
+    store.save_claim(&claim_update(&stale)).unwrap();
+    store.update_delegate(&stale, "child", Some("explorer"), "active", 1.0).unwrap();
+
+    let mut replacement = session_update(&fresh, 2.0);
+    replacement.fingerprint = Some(ProcessFingerprint { pid: 42, start_token: Some("boot:42".to_owned()) });
+    store.upsert_session_superseding(&replacement).unwrap();
+
+    assert!(store.session(&stale).unwrap().is_none());
+    assert!(store.claim(&stale).unwrap().is_none());
+    assert!(store.delegates().unwrap().is_empty());
+    assert!(store.session(&fresh).unwrap().is_some());
+}
+
+#[test]
 fn pruning_expires_messages_and_notes_but_never_sessions() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();

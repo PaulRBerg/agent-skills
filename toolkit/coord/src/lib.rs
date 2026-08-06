@@ -1,4 +1,6 @@
+mod claim;
 mod cli;
+mod coordinator;
 mod domain;
 mod error;
 mod hooks;
