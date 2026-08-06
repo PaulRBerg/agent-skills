@@ -1,7 +1,5 @@
 # Changelog
 
-## Unreleased
-
 ## 0.3.0
 
 - Rewrite the CLI, hook runtime, SQLite ledger, provider inventory, and dashboard API as one Rust binary; retain the

@@ -6,10 +6,10 @@ mod store_communications;
 mod store_sessions;
 
 pub(crate) use model::*;
-#[allow(unused_imports)]
 pub(crate) use schema::SCHEMA_VERSION;
-#[allow(unused_imports)]
-pub(crate) use store::{MAX_INBOX_MESSAGES, MESSAGE_TTL, NOTE_TTL, Store, private_state_dir};
+pub(crate) use store::Store;
+#[cfg(test)]
+pub(crate) use store::{MAX_INBOX_MESSAGES, NOTE_TTL};
 pub(crate) use store_claims::ClaimTransaction;
 
 #[cfg(test)]

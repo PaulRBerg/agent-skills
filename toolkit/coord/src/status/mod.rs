@@ -76,7 +76,7 @@ fn render_status_at(snapshot: &SnapshotV1, now: f64) -> String {
         snapshot.providers.iter().any(|provider| !provider.enabled || !provider.ok || provider.dropped > 0);
     for (line, present) in [
         (
-            "Idle: user prompt; process liveness is reconciled on every coordination read.",
+            "Idle: user prompt; fresh status and authorization reads reconcile process liveness.",
             states.contains(&SessionState::Idle),
         ),
         ("Waiting: host/human wait; claim=queued means coordination queue.", states.contains(&SessionState::Waiting)),

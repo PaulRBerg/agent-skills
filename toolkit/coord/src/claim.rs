@@ -38,31 +38,18 @@ impl ClaimArbiter<'_> {
         if scopes.is_empty() {
             return self.save_intent(identity, &repo_root, label, existing.as_ref(), current);
         }
-        if existing.as_ref().is_some_and(|claim| claim.state == ClaimState::Active) {
-            return self.update_active(
-                identity,
-                root,
-                &repo_root,
-                label,
-                scopes,
-                inventory,
-                existing.unwrap(),
-                current,
-            );
+        if let Some(active) = existing.as_ref().filter(|claim| claim.state == ClaimState::Active) {
+            return self.update_active(identity, root, &repo_root, label, scopes, inventory, active.clone(), current);
         }
 
         let (dirty, observations) = observe_git_dirt(self.store, root, current)?;
         let relevant = relevant_dirty(&scopes, &dirty);
         let benign = benign_dirt_scopes(root);
         let existing_scopes = existing.as_ref().map(|claim| claim.scopes.as_slice()).unwrap_or_default();
-        let created_at = if existing
+        let created_at = existing
             .as_ref()
-            .is_some_and(|claim| claim.state == ClaimState::Queued && scopes_cover(&claim.scopes, &scopes))
-        {
-            existing.as_ref().unwrap().created_at
-        } else {
-            current
-        };
+            .filter(|claim| claim.state == ClaimState::Queued && scopes_cover(&claim.scopes, &scopes))
+            .map_or(current, |claim| claim.created_at);
 
         let mut advisory = Vec::new();
         let outcome = self.store.with_claim_transaction(|transaction| {

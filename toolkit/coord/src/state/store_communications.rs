@@ -321,7 +321,7 @@ pub(super) fn add_message(
             WHERE recipient_client = ?1 AND recipient_session_id = ?2
             ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?3
          )",
-        params![client_name(recipient.client), recipient.session_id, super::MAX_INBOX_MESSAGES as i64],
+        params![client_name(recipient.client), recipient.session_id, super::store::MAX_INBOX_MESSAGES as i64],
     )?;
     bump_generation(transaction)?;
     Ok(id)

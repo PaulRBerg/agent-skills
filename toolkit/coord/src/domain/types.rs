@@ -50,19 +50,6 @@ pub(crate) struct Scope {
     pub(crate) recursive: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct Claim {
-    #[serde(flatten)]
-    pub(crate) identity: Identity,
-    pub(crate) repo_root: String,
-    pub(crate) label: String,
-    pub(crate) state: ClaimState,
-    pub(crate) blocked_reason: Option<String>,
-    pub(crate) scopes: Vec<Scope>,
-    pub(crate) created_at: f64,
-    pub(crate) updated_at: f64,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OutcomeKind {
     Active,

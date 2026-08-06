@@ -239,7 +239,7 @@ fn host_matches(name: &str, client: &str) -> bool {
         normalized.split(['/', '\\']).any(|part| {
             part == client ||
                 part.starts_with(&format!("{client}@")) ||
-                (client == "claude" && part.starts_with("claude-code"))
+                (client == "claude" && (part == "claude-code" || part.starts_with("claude-code@")))
         })
 }
 
@@ -689,7 +689,9 @@ mod tests {
     fn host_name_matching_is_exact_enough_for_wrappers() {
         assert!(host_matches("/usr/local/bin/codex", "codex"));
         assert!(host_matches("/packages/claude@1.2.3/cli.js", "claude"));
+        assert!(host_matches("/packages/claude-code@1.2.3/cli.js", "claude"));
         assert!(!host_matches("ai-coord", "codex"));
         assert!(!host_matches("codex-helper", "codex"));
+        assert!(!host_matches("claude-code-transcripts", "claude"));
     }
 }
