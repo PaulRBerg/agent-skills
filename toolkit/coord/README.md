@@ -1,6 +1,6 @@
 # ai-coord
 
-Local coordination for parallel Codex and Claude Code agents.
+Local coordination for parallel Codex and Claude Code agents, shipped as one Rust binary.
 
 `ai-coord` replaces scattered hook scripts and multi-command conflict checks with a three-command lifecycle:
 
@@ -16,15 +16,17 @@ proceed with a stale-dirt advisory and a captured baseline.
 
 ## Installation
 
-Requirements: Python 3.13+ and [uv](https://docs.astral.sh/uv/). Automatic Codex hook trust requires Codex CLI 0.146.0
-or newer; compatible later versions are accepted only when the required app-server protocol and trust semantics still
-validate.
+Requirements: Rust (the repository pins its development toolchain in `rust-toolchain.toml`) and Cargo. The dashboard
+additionally requires Bun. Automatic Codex hook trust requires Codex CLI 0.146.0 or newer; compatible later versions are
+accepted only when the required app-server protocol and trust semantics still validate.
 
 ```sh
-uv tool install 'git+https://github.com/PaulRBerg/ai-coord.git'
+cargo install --locked --git 'https://github.com/PaulRBerg/ai-coord.git' ai-coord
 ai-coord link all
 ai-coord check
 ```
+
+From a source checkout, `just install-cli` builds and installs the release binary, then links the host hooks.
 
 `link` merges owned hooks into `~/.codex/hooks.json` and `~/.claude/settings.json`. It preserves unrelated settings and
 hook commands. Successful Codex links also automatically trust only the exact `ai-coord` hook definitions they own; they
@@ -123,8 +125,7 @@ Repositories may list harness churn in a tracked `.ai-coord.toml`:
 benign = ["config.toml"]
 ```
 
-Benign prefixes never hold. The CLI writes `runner.json` in the state directory; an older CLI encountering a newer state
-schema re-execs the newer runner automatically.
+Benign prefixes never hold.
 
 ## Inventory and communication
 
@@ -189,23 +190,34 @@ therefore session-scoped: the parent's claim covers all delegated work. Subagent
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
 mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v8. Any other nonzero schema is rejected without migration, deletion, or replacement, while the public
-`status --json` schema remains v1. Close agents and explicitly choose any backup, removal, installation, and relinking
-rollout before retrying with incompatible state.
+internal schema v9. Any other nonzero schema, including v8, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema remains v1. Close agents and explicitly choose any backup, removal,
+installation, and relinking rollout before retrying with incompatible state.
 
 The ledger stores bounded session metadata, callsigns, labels, literal scopes, messages, notes, and complete provider
 health cache rows. Cached provider errors, hook hashes, prompt bodies, plan bodies beyond a sanitized H1, assistant
 output, transcript contents, and arbitrary hook payloads are never stored.
 
-Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. Session processes are
-identified by PID and creation time when available, so PID reuse cannot attach ancestry or orphan cleanup to a newer
-process. Codex sessions whose exact recorded process is confirmed gone expire after a 30-minute grace period; records
-whose process creation time is unavailable retain conservative PID-only matching until a later hook or provider refresh
-obtains a fingerprint. Other idle Codex sessions expire after four hours.
+Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. On macOS and Linux,
+sessions are bound to a kernel-derived process fingerprint containing both PID and process start identity. Normal
+`SessionEnd` hooks release immediately; after terminal closure, Ctrl+C, host crash, or another missed hook, the next
+fresh coordination probe removes a session as soon as that exact process is confirmed gone. PID reuse is treated as a
+different process. An unavailable or ambiguous liveness result fails closed: coverage becomes unknown and the session is
+retained. Sessions are never deleted merely because they are old.
 
 ## Development
 
-See [AGENTS.md](AGENTS.md) and [cli/AGENTS.md](cli/AGENTS.md) for development commands, architecture, and validation.
+The CLI, hooks, SQLite state, and dashboard API are a single Rust crate; the React dashboard remains a Bun-managed Vite
+package. Common source-checkout workflows are:
+
+```sh
+cargo test --locked
+just check
+just install-cli
+just dev
+```
+
+See [AGENTS.md](AGENTS.md) for architecture, validation, and clean-break rules.
 
 ## Dashboard
 
@@ -219,7 +231,7 @@ just dev
 Or run the API and Vite server separately:
 
 ```sh
-cd cli && uv run ai-coord serve
+ai-coord serve
 cd dashboard && bun run dev
 ```
 

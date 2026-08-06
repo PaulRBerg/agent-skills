@@ -8,9 +8,6 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 #                                   PACKAGES                                   #
 # ---------------------------------------------------------------------------- #
 
-# Python CLI package recipes
-mod cli
-
 # Vite dashboard package recipes
 mod dashboard
 
@@ -20,18 +17,33 @@ mod dashboard
 
 # Install CLI globally and link host hooks
 @install-cli:
-    uv tool install --force ./cli
+    cargo install --locked --path . --force
     ai-coord link all
 alias ic := install-cli
 
 # Run the local dashboard API and Vite development server
-@dev:
-    just dashboard::dev
+[script("bash")]
+dev:
+    set -euo pipefail
+
+    (
+        cd dashboard
+        exec bun run dev
+    ) &
+    dashboard_pid=$!
+
+    cleanup() {
+        kill "$dashboard_pid" 2>/dev/null || true
+        wait "$dashboard_pid" 2>/dev/null || true
+    }
+
+    trap cleanup EXIT INT TERM
+    cargo run --locked -- serve
 alias d := dev
 
-# Run CLI tests with pytest
+# Run Rust tests
 @test *args:
-    just cli::test {{ args }}
+    cargo test --locked {{ args }}
 alias t := test
 
 # ---------------------------------------------------------------------------- #
@@ -41,8 +53,11 @@ alias t := test
 # Run all local checks and tests
 [group("checks")]
 @check:
-    just _run-with-status full-check
-    just _run-with-status cli::test
+    just _run-with-status cargo-fmt-check
+    just _run-with-status cargo-clippy-check
+    just _run-with-status test
+    just _run-with-status prettier-check
+    just _run-with-status dashboard::tsc-check
     just _run-with-status dashboard::test
     just _run-with-status dashboard::build
     echo ""
@@ -52,9 +67,9 @@ alias c := check
 # Run all code checks
 [group("checks")]
 @full-check:
+    just _run-with-status cargo-fmt-check
+    just _run-with-status cargo-clippy-check
     just _run-with-status prettier-check
-    just _run-with-status cli::ruff-check
-    just _run-with-status cli::pyright-check
     just _run-with-status dashboard::tsc-check
     echo ""
     echo -e '{{ GREEN }}All code checks passed!{{ NORMAL }}'
@@ -63,27 +78,41 @@ alias fc := full-check
 # Run all code fixes
 [group("checks")]
 @full-write:
+    just _run-with-status cargo-fmt-write
     just _run-with-status prettier-write
-    just _run-with-status cli::ruff-write
     echo ""
     echo -e '{{ GREEN }}All code fixes applied!{{ NORMAL }}'
 alias fw := full-write
 
+# Check Rust formatting
+[group("checks")]
+@cargo-fmt-check:
+    cargo fmt --all -- --check
+alias cfc := cargo-fmt-check
+
+# Format Rust sources
+[group("checks")]
+@cargo-fmt-write:
+    cargo fmt --all
+alias cfw := cargo-fmt-write
+
+# Lint all Rust targets and reject warnings
+[group("checks")]
+@cargo-clippy-check:
+    cargo clippy --all-targets --locked -- -D warnings
+alias ccc := cargo-clippy-check
+
 # Check Markdown, JSON, and dashboard source formatting with Prettier
 [group("checks")]
 @prettier-check:
-    npx prettier --check "**/*.{json,jsonc,md,ts,tsx,css}"
+    npx --yes prettier@3.9.6 --check "**/*.{json,jsonc,md,ts,tsx,css}"
 alias pc := prettier-check
 
 # Format Markdown, JSON, and dashboard sources with Prettier
 [group("checks")]
 @prettier-write:
-    npx prettier --write --log-level warn "**/*.{json,jsonc,md,ts,tsx,css}"
+    npx --yes prettier@3.9.6 --write --log-level warn "**/*.{json,jsonc,md,ts,tsx,css}"
 alias pw := prettier-write
-
-alias rc := cli::ruff-check
-alias rw := cli::ruff-write
-alias pyc := cli::pyright-check
 
 # ---------------------------------------------------------------------------- #
 #                                   UTILITIES                                  #

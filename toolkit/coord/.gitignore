@@ -1,11 +1,2 @@
-__pycache__/
-htmlcov/
-*.egg-info/
-.pytest_cache/
-.hypothesis/
-.ruff_cache/
-.venv/
-
-.coverage
-*.log
-*.pyc
+/target/
+*.profraw

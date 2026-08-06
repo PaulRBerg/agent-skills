@@ -5,18 +5,23 @@ security boundary or an OS file lock.
 
 ## Packages
 
-- [`cli/`](cli/AGENTS.md) is the Python CLI, hook integration, SQLite ledger, and local dashboard API.
+- [`src/`](src/) is the single Rust crate for the CLI, hook integration, provider inventory, SQLite ledger, coordination
+  runtime, and local dashboard API.
 - [`dashboard/`](dashboard/AGENTS.md) is the Bun-managed Vite and React dashboard for the live coordination state.
 
 ## Shared workflow
 
 Run repository-wide tasks from the root `justfile`:
 
-- `just check` runs the supported local validation gate; `just full-check` and `just full-write` run checks or fixes
-  without tests.
-- `just test` runs the CLI test suite, and `just install-cli` performs the global-install acceptance flow.
+- `just check` runs the supported Rust and dashboard validation gate; `just full-check` and `just full-write` run checks
+  or fixes without tests.
+- `just test` runs the Rust test suite, and `just install-cli` builds and installs the release binary before linking
+  hooks.
 - `just prettier-check` and `just prettier-write` check or format Markdown, JSON, and dashboard source files.
 - `just dev` starts the local API and dashboard development servers together.
+
+Use Cargo directly when isolating a Rust failure: `cargo test --locked`, `cargo fmt --all -- --check`, and
+`cargo clippy --all-targets --locked -- --deny warnings` are the underlying checks.
 
 Keep modules below 1000 lines and test modules below 2000 lines.
 
@@ -27,6 +32,10 @@ replace obsolete behavior in one change and remove its production paths, tests, 
 schema migration ladders, old-format importers, deprecated CLI aliases, dual reads or writes, retired protocol parsers,
 or transitional hook recognition by default. Rejecting an incompatible persisted version with an actionable error is
 required safety behavior, not backward compatibility.
+
+Schema v9 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
+based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced process is removed without
+an age grace period, while unknown liveness fails closed and never deletes the record.
 
 Before work that can invalidate live chats, their ledger, hooks, or coordination CLI, require the user to close other
 agents and explicitly authorize the break, then implement it from one fresh session. Use an isolated
