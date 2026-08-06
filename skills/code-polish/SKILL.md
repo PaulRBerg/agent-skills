@@ -28,8 +28,8 @@ state.
    untracked files.
 3. Exclude lockfiles, generated outputs, vendored code, minified bundles, and large data snapshots from manual review
    unless explicitly requested. Validate relevant excluded outputs through their generator, schema, or invariants.
-4. Emit one authoritative `resolved-scope` block and optional `excluded-scope` block. Do not broaden or recompute scope
-   later. Stop if it is empty.
+4. Resolve and retain one authoritative scope set and optional exclusions for execution. Do not broaden or recompute
+   scope later. Stop if it is empty.
 
 ## Simplify
 
@@ -81,16 +81,18 @@ Run the narrowest formatter/lint, targeted tests, typecheck, and invariant check
 Broaden only for shared contracts. Name skipped checks and why.
 
 Report `Scope`, `Simplifications` when run, `Review Findings and Fixes` when run, `Verification`, and `Residual Risks`.
-Findings include severity, location, impact, evidence, fix, and confidence. A residual risk states the assumption,
-consequence if wrong, and how to check it. Completion requires fixed scope, traceable edits/findings, and validation
-evidence.
+Summarize scope with the file count and smallest useful repository-relative roots, globs, ranges, or user-supplied
+targets. Do not enumerate every file merely to prove scope; name individual paths only for a small explicit scope or to
+clarify exceptions and findings. Findings include severity, location, impact, evidence, fix, and confidence. A residual
+risk states the assumption, consequence if wrong, and how to check it. Completion requires fixed scope, traceable
+edits/findings, and validation evidence.
 
-Render a successful report as `### ✨ Code polish — ✅ complete`, a small summary-count table, the exact
-`resolved-scope` block, `### ✨ Simplifications`, `### 🔎 Review findings and fixes`, `### 🧪 Verification`, and
+Render a successful report as `### ✨ Code polish — ✅ complete`, a small summary-count table, a compact `Scope`
+summary, `### ✨ Simplifications`, `### 🔎 Review findings and fixes`, `### 🧪 Verification`, and
 `### ⚠️ Residual risks`, omitting inapplicable sections. When review is clean, state `✅ No verified review findings.`
 If a stop condition below prevents completion, lead with `### ✨ Code polish — ⛔ blocked` and report the evidence and
-required decision. Keep severity tokens, profile IDs, scope block names, commands, locations, reproduction inputs, and
-security evidence exact and undecorated.
+required decision. Keep severity tokens, profile IDs, commands, locations, reproduction inputs, and security evidence
+exact and undecorated.
 
 Stop when behavior parity or required high-risk validation cannot be established, or a fix requires an unrequested
 public-contract change or larger redesign.
