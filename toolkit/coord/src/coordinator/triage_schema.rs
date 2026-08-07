@@ -2,7 +2,6 @@ use serde_json::{Value, json};
 
 pub(super) fn result_schema() -> Value {
     json!({
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "additionalProperties": false,
         "required": ["results"],
@@ -17,13 +16,13 @@ pub(super) fn result_schema() -> Value {
                         "commit_oid", "canonical_id", "handoff_path"
                     ],
                     "properties": {
-                        "finding_id": { "type": "string", "minLength": 1 },
+                        "finding_id": { "type": "string" },
                         "status": {
                             "enum": ["fixed", "stale", "rejected", "duplicate", "handed_off", "deferred"]
                         },
-                        "evidence": { "type": "string", "minLength": 1 },
+                        "evidence": { "type": "string" },
                         "changed_paths": {
-                            "type": "array", "items": { "type": "string" }, "uniqueItems": true
+                            "type": "array", "items": { "type": "string" }
                         },
                         "validation": { "type": "array", "items": { "type": "string" } },
                         "commit_oid": { "type": ["string", "null"] },
@@ -34,4 +33,18 @@ pub(super) fn result_schema() -> Value {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uses_only_supported_structured_output_keywords() {
+        let schema = result_schema();
+        let encoded = serde_json::to_string(&schema).unwrap();
+        for unsupported in ["\"$schema\"", "\"minLength\"", "\"uniqueItems\""] {
+            assert!(!encoded.contains(unsupported), "unsupported keyword {unsupported}: {encoded}");
+        }
+    }
 }
