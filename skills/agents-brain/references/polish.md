@@ -114,6 +114,13 @@ purpose or structure.
 For each selected skill:
 
 - Confirm frontmatter parses and `name` matches the directory. Fix only mechanical, unambiguous drift.
+- Classify its declared write boundary. If it can never write repository files — it is read-only or reporting, writes
+  only external or out-of-repository state, or writes only repository-local metadata — add `coordination: exempt` when
+  absent. Add the standard body sentence near the top: `This skill is coordination-exempt: skip the ai-coord gate (\`git
+  status\` / \`ai-coord status\` / \`ai-coord start\`) for this skill's own work.`
+- If the skill may write repository files, omit `coordination`; remove a stale `coordination: exempt` field and its
+  matching standard body sentence when repository evidence establishes that the exemption is unsafe. Do not invent
+  another `coordination` value. Keep frontmatter fields alphabetized, with `description` last.
 - Verify referenced `references/`, `scripts/`, `assets/`, and `examples/` paths relative to the skill directory.
 - Read only the bundled files needed to verify paths, commands, flags, environment variables, versions, symbols,
   ownership, and repository conventions.

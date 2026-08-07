@@ -131,8 +131,10 @@ README.md, AGENTS.md, CLAUDE.md, and project-skill behavior; do not repeat or br
 ## Discovery and Tool Routing
 
 Use git-aware discovery, canonicalize every candidate beneath `repo_root`, and exclude VCS, dependency, environment, and
-build outputs. Deliberately include ignored `.agents/skills/*/SKILL.md` only when project skills are selected. Prefer
-`fd`, fall back once on suspiciously narrow results, and synthesize independent repository evidence before writing.
+build outputs. Deliberately include ignored `.agents/skills/*/SKILL.md` only when project skills are selected. Parse
+each selected skill's YAML frontmatter and inspect its declared write boundary before deciding whether it qualifies for
+a coordination exemption. Prefer `fd`, fall back once on suspiciously narrow results, and synthesize independent
+repository evidence before writing.
 
 Discover context docs by following Markdown links from README.md, AGENTS.md, CLAUDE.md, and SKILL.md files, then by
 scanning remaining tracked Markdown whose content qualifies. Classify by content, never by file name or location.
