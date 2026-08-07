@@ -139,6 +139,22 @@ deploy:
     ./deploy.sh
 ```
 
+### Timestamps
+
+The `[timestamp]` attribute (v1.58.0+) prints a timestamp before each command in the recipe, without passing
+`--timestamp` on every invocation. Default format is `HH:MM:SS`; `[timestamp(FORMAT)]` takes a `strftime`-style format
+expression to override it.
+
+```just
+[timestamp]
+foo:
+    echo hello
+
+[timestamp('%H:%M:%S%.3f')]
+bar:
+    echo hello
+```
+
 ### Per-Recipe Environment Variables
 
 The `[env(NAME, VALUE)]` attribute (v1.47.0+) sets environment variables scoped to one recipe — narrower than `export`

@@ -344,38 +344,38 @@ files := ```
 
 ## Just CLI Options
 
-| Option                        | Description                                                                              |
-| ----------------------------- | ---------------------------------------------------------------------------------------- |
-| `just --list`                 | List available recipes                                                                   |
-| `just --list MODULE::PATH`    | List recipes in a submodule                                                              |
-| `just --list --unsorted`      | List in source order                                                                     |
-| `just --list --group NAME`    | Filter `--list` to one group (v1.47.0+)                                                  |
-| `just --default-list`         | Make bare `just` list recipes instead of running the default (v1.52.0+)                  |
-| `just --summary`              | Brief recipe list                                                                        |
-| `just --show RECIPE`          | Show recipe source                                                                       |
-| `just --usage RECIPE`         | Show recipe argument usage (v1.46.0+)                                                    |
-| `just --dry-run RECIPE`       | Print commands without running                                                           |
-| `just --time RECIPE`          | Print recipe execution time (v1.49.0+)                                                   |
-| `just --evaluate`             | Print all variables                                                                      |
-| `just --evaluate-format FMT`  | Format `--evaluate` output (`json`, `shell`; v1.49.0+)                                   |
-| `just --evaluate VAR`         | Evaluate a single variable/module path (v1.49.0+)                                        |
-| `just --json`                 | Dump justfile metadata as JSON (v1.48.0+; alias of `--dump --dump-format json`)          |
-| `just --fmt`                  | Format justfile (do not use — see SKILL.md)                                              |
-| `just --fmt --check`          | Check formatting                                                                         |
-| `just --choose`               | Interactive recipe selection (fzf)                                                       |
-| `just --choose --group NAME`  | Restrict `--choose` to one group (v1.50.0+)                                              |
-| `just -f PATH`                | Use specific justfile (`-f -` reads stdin as of v1.51.0)                                 |
-| `just -f FILE.md RECIPE`      | Extract & run ` ```just ` blocks from a markdown file (v1.53.0+)                         |
-| (auto-discovery)              | Markdown justfiles (`justfile.md`, etc.) are found by name, not just via `-f` (v1.57.0+) |
-| `just --justfile-name NAME`   | Override justfile filename for auto-discovery (v1.49.0+)                                 |
-| `just --dotenv-path P …`      | Load dotenv file(s); repeatable to load several (v1.53.0+)                               |
-| `just --dotenv-filename N …`  | Dotenv filename(s) to search for; repeatable (v1.53.0+)                                  |
-| `just --dotenv-command CMD …` | Load env from a command's stdout; repeatable, later wins (v1.54.0+)                      |
-| `just -d DIR`                 | Set working directory                                                                    |
-| `just --jobs N`               | Cap `[parallel]` recipes to N concurrent (env `JUST_JOBS`; v1.56.0+)                     |
-| `just --indentation STR`      | Use STR for recipe indentation when formatting (v1.49.0+)                                |
-| `just --no-cache`             | Bypass the recipe cache for this run (v1.54.0+)                                          |
-| `just --clean [RECIPE]`       | Clear cached recipe entries, optionally filtered by recipe/module (v1.54.0+)             |
+| Option                        | Description                                                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `just --list`                 | List available recipes                                                                                                              |
+| `just --list MODULE::PATH`    | List recipes in a submodule                                                                                                         |
+| `just --list --unsorted`      | List in source order                                                                                                                |
+| `just --list --group NAME`    | Filter `--list` to one group (v1.47.0+)                                                                                             |
+| `just --default-list`         | Make bare `just` list recipes instead of running the default (v1.52.0+)                                                             |
+| `just --summary`              | Brief recipe list                                                                                                                   |
+| `just --show RECIPE`          | Show recipe source                                                                                                                  |
+| `just --usage RECIPE`         | Show recipe argument usage (v1.46.0+)                                                                                               |
+| `just --dry-run RECIPE`       | Print commands without running                                                                                                      |
+| `just --time RECIPE`          | Print recipe execution time (v1.49.0+)                                                                                              |
+| `just --evaluate`             | Print all variables                                                                                                                 |
+| `just --evaluate-format FMT`  | Format `--evaluate` output (`json`, `shell`; v1.49.0+)                                                                              |
+| `just --evaluate VAR`         | Evaluate a single variable/module path (v1.49.0+)                                                                                   |
+| `just --json`                 | Dump justfile metadata as JSON (v1.48.0+; alias of `--dump --dump-format json`)                                                     |
+| `just --fmt`                  | Format justfile (do not use — see SKILL.md)                                                                                         |
+| `just --fmt --check`          | Check formatting                                                                                                                    |
+| `just --choose`               | Interactive recipe selection (fzf)                                                                                                  |
+| `just --choose --group NAME`  | Restrict `--choose` to one group (v1.50.0+)                                                                                         |
+| `just -f PATH`                | Use specific justfile (`-f -` reads stdin as of v1.51.0)                                                                            |
+| `just -f FILE.md RECIPE`      | Extract & run ` ```just ` blocks from a markdown file (v1.53.0+)                                                                    |
+| (auto-discovery)              | Markdown justfiles (`justfile.md`, etc.) are found by name, not just via `-f` (v1.57.0+)                                            |
+| `just --justfile-name NAME`   | Override justfile filename(s) for auto-discovery; accepts `,`-separated values and may be repeated (v1.49.0+, multi-value v1.58.0+) |
+| `just --dotenv-path P …`      | Load dotenv file(s); repeatable to load several (v1.53.0+)                                                                          |
+| `just --dotenv-filename N …`  | Dotenv filename(s) to search for; repeatable (v1.53.0+)                                                                             |
+| `just --dotenv-command CMD …` | Load env from a command's stdout; repeatable, later wins (v1.54.0+)                                                                 |
+| `just -d DIR`                 | Set working directory                                                                                                               |
+| `just --jobs N`               | Cap `[parallel]` recipes to N concurrent (env `JUST_JOBS`; v1.56.0+)                                                                |
+| `just --indentation STR`      | Use STR for recipe indentation when formatting (v1.49.0+)                                                                           |
+| `just --no-cache`             | Bypass the recipe cache for this run (v1.54.0+)                                                                                     |
+| `just --clean [RECIPE]`       | Clear cached recipe entries, optionally filtered by recipe/module (v1.54.0+)                                                        |
 
 ## Glob Patterns
 
