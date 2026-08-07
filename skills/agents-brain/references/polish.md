@@ -63,8 +63,8 @@ placement.
 Keep AGENTS.md terse, imperative, repository-specific, and scoped to its directory tree:
 
 - Preserve commands when their preferred order, runner, side effects, environment, or failure behavior matters.
-- Preserve non-obvious architecture, style, naming, review, generated-file, safety, privacy, credential, deployment,
-  financial, and data-handling constraints.
+- Preserve non-obvious architecture, style, naming, review, generated-file, safety, external-disclosure, credential,
+  deployment, financial, and recipient-scoped data-handling constraints.
 - Preserve speed traps, flaky checks, shell quirks, migration constraints, and external-system notes that prevent
   observed mistakes.
 - Remove generic tutorials, historical authoring notes, file inventories, lists of installed skills, and command lists

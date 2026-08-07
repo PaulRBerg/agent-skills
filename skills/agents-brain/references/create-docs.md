@@ -60,8 +60,8 @@ Keep AGENTS.md concise, imperative, and scoped:
 
 - Name the stack and preferred package manager only when useful for choosing commands.
 - Include commands whose runner, order, side effects, environment, or failure behavior matters.
-- Include non-obvious architecture, style, naming, generated-file, ownership, safety, privacy, credential, deployment,
-  financial, data-handling, and review constraints supported by evidence.
+- Include non-obvious architecture, style, naming, generated-file, ownership, safety, external-disclosure, credential,
+  deployment, financial, recipient-scoped data-handling, and review constraints supported by evidence.
 - Exclude generic tool tutorials, long directory trees, and package-script inventories that add no preference or
   warning.
 

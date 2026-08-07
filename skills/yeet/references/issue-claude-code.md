@@ -16,14 +16,14 @@ working directory.
    useful. Infer Anthropic API, Bedrock, or Vertex only from environment/user evidence.
 5. Mark a required checkbox true only when its attestation is verified. Render through `issue-form.py render`; resolve
    every reported missing/invalid answer before posting.
-6. Privacy-review the agent-authored answers and rendered body. Compose a concise title after the live prefix. Use live
-   template labels/type only when cached permission allows them.
+6. Run an external-disclosure review on the agent-authored answers and rendered body. Compose a concise title after the
+   live prefix. Use live template labels/type only when cached permission allows them.
 7. Post with `gh issue create --repo anthropics/claude-code --title ... --body-file ...`, adding permitted labels and
    issue type from rendered metadata. On label permission failure, run the posting idempotency check, then retry once
    without labels.
 
 The helper owns form parsing and exact body structure. The agent owns template selection, environment interpretation,
-answer/title writing, privacy, and posting.
+answer/title writing, the external-disclosure review, and posting.
 
 For a comment on an existing issue, use `posting.md > Comment on Existing Issue` with this fixed repository. Finish a
 successful creation with the verified URL and the `### 🚀 Issue created` receipt.

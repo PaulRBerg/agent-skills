@@ -43,8 +43,8 @@ authenticated viewer or `sablier-labs` unless the user explicitly asks; preserve
 ## Image Uploads
 
 This workflow applies to issue and discussion creation and updates. Parse repeated `--image <path>` arguments and the
-optional `--image-release` flag. Resolve every path to a readable local file, preserve argument order, and
-privacy-review the files before uploading them.
+optional `--image-release` flag. Resolve every path to a readable local file, preserve argument order, and run an
+external-disclosure review on the files before uploading them.
 
 GitHub has no public attachment upload API. Try these paths in order:
 

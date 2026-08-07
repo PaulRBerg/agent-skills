@@ -30,8 +30,8 @@ cache, dependency, and backup noise.
   `~/sablier/sablier-skills`, and `~/sablier/agent-skills` during broad scans. Explicit `--root` values inside those
   trees are always scanned.
 - `--include-self`: Include self-references in dependency output.
-- `--include-snippets`: Include matched reference text. Default output omits snippets to avoid leaking transcript or
-  secret-adjacent content.
+- `--include-snippets`: Include matched reference text when exact lines materially improve the result. Default output
+  omits snippets for concise, high-signal reports.
 - `--show-skipped`: Include ignored path summaries in text or JSON output.
 
 ## Workflow
@@ -55,7 +55,8 @@ cache, dependency, and backup noise.
 
 5. Use `--format dot` when the user asks for a graph, Graphviz input, or dependency visualization.
 
-6. Use `--include-snippets` only when the user asks to see exact matching lines.
+6. Use `--include-snippets` when exact matching lines materially improve the result, including when the user asks to see
+   them.
 
 7. Read [references/ignore-policy.md](references/ignore-policy.md) only when explaining, auditing, or changing the
    ignore policy.
@@ -67,7 +68,7 @@ Keep JSON and DOT byte-valid and undecorated. For human output, lead with
 skills/dependencies/duplicates/unresolved summary table. Always state the effective roots and material exclusions; for
 the default broad scan, explicitly say that standard agent homes and catalog source checkouts were excluded. Make a
 missing explicit `--skill` filter a visible `⚠️ Not found` result rather than a clean-looking empty map. Use section
-labels sparingly and keep snippets, private paths, exact edges, commands, and diagnostics undecorated.
+labels sparingly and keep snippets, local paths, exact edges, commands, and diagnostics undecorated.
 
 ## Output Semantics
 
@@ -105,6 +106,7 @@ direct child of a recognized repository or user skill root; other repository sym
   explicit roots instead when a broad scan needs more coverage.
 - Treat local skill catalog source checkouts as false positives during broad machine scans; pass them explicitly as
   `--root` when auditing catalog contents.
-- Treat output paths as local private context. Do not paste snippets unless `--include-snippets` was intentionally used.
+- Keep reports high-signal: include snippets only when exact evidence materially helps or the user explicitly requests
+  it. Before copying output into a public or third-party artifact, perform an external-disclosure review.
 - Prefer adding ignore rules in the helper and documenting the rationale in `references/ignore-policy.md` instead of ad
   hoc shell filters.

@@ -10,7 +10,8 @@ description:
 
 # Spreadsheets
 
-Handle tabular data with exact values, minimal diffs, local privacy, atomic writes, and structural validation.
+Handle tabular data with exact values, minimal diffs, recipient-scoped data handling, atomic writes, and structural
+validation.
 
 ## Invariants
 
@@ -23,14 +24,15 @@ Handle tabular data with exact values, minimal diffs, local privacy, atomic writ
 5. Write in place atomically through a sibling temporary file, validate it, then replace the target.
 6. Escape external cells beginning with `=`, `+`, or `@`; a bare `-` null is exempt. Formula-prefix cells in trusted
    authored data are observations, not proof of injection.
-7. Keep transaction, bank, exchange, and tax data local. Redact samples unless raw rows were explicitly requested.
+7. Treat transaction, bank, exchange, and tax data as user-owned. Use unredacted samples in internal agent reports when
+   materially useful; use `--redact-samples` for public or third-party disclosures or when the user asks.
 
 ## Factual Profiling
 
 Resolve helper paths from this `SKILL.md`. Profile unknown data before choosing a transformation tool:
 
 ```sh
-uv run "<skill-dir>/scripts/profile.py" <file> --redact-samples
+uv run "<skill-dir>/scripts/profile.py" <file>
 ```
 
 The JSON output has `schema_version: 2`. It reports structural facts, header quality, cardinality/statistics when qsv is
@@ -44,24 +46,24 @@ formula-capable consumer. With that flag, formula-prefix cells affect `status`; 
 
 ## Tool Routing
 
-| Need                                       | Tool                                                |
-| ------------------------------------------ | --------------------------------------------------- |
-| Fast structural preview/validation         | `uv run scripts/peek.py <file> --redact-samples`    |
-| Factual local quality profile              | `uv run scripts/profile.py <file> --redact-samples` |
-| Counts, stats, frequencies, select, dedupe | `qsv`                                               |
-| Joins, pivots, aggregation, conversion     | DuckDB with `all_varchar = true`                    |
-| Exact custom transforms                    | `uv run` Python, stdlib `csv`, `decimal.Decimal`    |
-| Any `.xlsx`/`.xlsm` input or output        | Read `references/xlsx.md` first                     |
-| Exact transformation/validation recipes    | Read `references/recipes.md` only when needed       |
+| Need                                       | Tool                                             |
+| ------------------------------------------ | ------------------------------------------------ |
+| Fast structural preview/validation         | `uv run scripts/peek.py <file>`                  |
+| Factual local quality profile              | `uv run scripts/profile.py <file>`               |
+| Counts, stats, frequencies, select, dedupe | `qsv`                                            |
+| Joins, pivots, aggregation, conversion     | DuckDB with `all_varchar = true`                 |
+| Exact custom transforms                    | `uv run` Python, stdlib `csv`, `decimal.Decimal` |
+| Any `.xlsx`/`.xlsm` input or output        | Read `references/xlsx.md` first                  |
+| Exact transformation/validation recipes    | Read `references/recipes.md` only when needed    |
 
 Prefer `qsv --cache-threshold 0` where supported. When qsv stdout must remain TSV, use `-o out.tsv`; stdout otherwise
 defaults to CSV.
 
 ## Workflow
 
-1. Inspect with `peek.py --redact-samples`; add `profile.py` when cardinality, formula prefixes, metadata, or available
-   tooling matters. For a no-shape-change edit, save the peek JSON. For intentional row/schema changes, record the
-   expected width and invariants.
+1. Inspect with `peek.py`; add `profile.py` when cardinality, formula prefixes, metadata, or available tooling matters.
+   For a no-shape-change edit, save the peek JSON. For intentional row/schema changes, record the expected width and
+   invariants.
 2. Decide whether formula-prefix cells are dangerous from provenance and output context. Decide the smallest tool that
    preserves values and formatting. Avoid pandas unless necessary; if used, load every column as strings.
 3. Apply the transformation atomically. For idempotent appends with legitimate duplicate rows, use multiset difference
@@ -75,13 +77,15 @@ defaults to CSV.
 
 For human output, lead with `### 📊 Spreadsheet — ✅ updated` only after the write and required validation pass, or
 `### 📊 Spreadsheet — 🔎 inspected, no files written` for read-only work. On required validation failure, use
-`### 📊 Spreadsheet — ⛔ not deliverable`. Do not paste private profile JSON or decorate cells, headers, formulas,
-paths, commands, or diagnostics.
+`### 📊 Spreadsheet — ⛔ not deliverable`. Include profile JSON only when it materially supports the report, and keep
+JSON, cells, headers, formulas, paths, commands, and diagnostics undecorated.
 
 ## prb-finance
 
 Never hand-edit generated `.pool.tsv`, `.annual.tsv`, or Markdown reports. After source edits, run `just tsv-check`,
-then `just cli::write-changed`. Cap private output to counts and file references unless raw rows were requested.
+then `just cli::write-changed`. Cap financial output to counts and file references unless raw rows materially support
+the task or were requested. Perform an external-disclosure review before sending financial data outside the agent
+workspace.
 
 Completion requires the requested artifact, an intentional diff, atomic replacement where applicable, and structural
 plus domain validation evidence.

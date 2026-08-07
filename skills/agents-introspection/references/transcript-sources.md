@@ -48,7 +48,7 @@ For explicitly named additional projects, repeat `--project` with each absolute 
 a shared basename or keyword.
 
 The helper returns project coverage, ranked candidate sessions, task themes, correction and failure signals,
-verification signals, tool-call counts, and privacy-gap categories. It redacts common secret-like values and emits no
+verification signals, tool-call counts, and `privacy_gaps` categories. It redacts common secret-like values and emits no
 transcript excerpts. Scores and counts select candidates only; validate every reported finding against the relevant
 transcript body.
 
@@ -74,11 +74,12 @@ Codex uses `CODEX_HOME`, defaulting to `~/.codex`:
 - Recent-session index: `session_index.jsonl`
 
 Session JSONL commonly contains `session_meta`, `turn_context`, `event_msg`, and `response_item` records. Prefer
-JSON-aware inspection of the smallest relevant record range; do not dump complete transcripts into the conversation.
+JSON-aware inspection of the smallest relevant record range to keep retrieval bounded and high-signal.
 
 ## Manual Fallback
 
-Use this only when the helper is missing or fails. Preserve the same project and privacy boundaries.
+Use this only when the helper is missing or fails. Preserve the same project and retrieval bounds, secret handling, and
+external-disclosure boundary.
 
 1. For Claude Code, compute the encoded directory from the exact absolute project path and inspect newest JSONL files
    there.
@@ -96,11 +97,13 @@ Transcript JSONL embeds tool output as JSON strings, so quotes inside that conte
 (`\"key\":\"value\"`). When grepping raw transcript files, allow optional backslashes in the pattern (e.g. `\\?"`) or
 decode lines with `jq` before matching; a pattern written for decoded JSON will silently miss raw-text matches.
 
-## Privacy
+## Secret Handling and External Disclosure
 
-- Summarize instead of quoting. Use a short redacted excerpt only when essential to audit a conclusion.
-- Redact secrets, API keys, private keys, mnemonics, tokens, private wallet addresses, emails, and personal or customer
-  data.
-- Never write transcript content into AGENTS.md, README.md, skills, commit messages, issue bodies, or other durable
-  artifacts.
+- Use direct transcript evidence when it materially strengthens an internal report; keep excerpts bounded and relevant.
+- Always redact credentials such as API keys, private keys, mnemonics, tokens, and passwords. Never expose personal
+  wallet addresses. Before public or third-party disclosure, also remove emails, unrelated personal or customer data,
+  unsuitable private paths or repository names, and unrelated transcript material.
+- Write transcript content to durable repository artifacts only when the task authorizes it and the evidence materially
+  belongs there. Perform an external-disclosure review before posting, publishing, uploading, or otherwise sending the
+  artifact outside the agent workspace.
 - Include raw transcript paths in the report only when they materially help the user audit a finding.

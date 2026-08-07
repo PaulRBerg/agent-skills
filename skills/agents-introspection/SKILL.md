@@ -32,12 +32,14 @@ consistent evidence bar, and either proposes a concrete prevention step or expla
 
 - Inspect only Codex and Claude Code transcripts whose metadata or cwd resolves to the current project. Include another
   project only when the user explicitly names its path.
-- Treat every transcript as sensitive plaintext. Summarize instead of quoting; redact secrets, private addresses,
-  tokens, emails, and personal or customer data.
+- Treat current-project transcripts as internal working evidence. Include direct excerpts when they materially improve
+  the report; do not summarize or redact solely because the model provider can see them. Never expose credentials,
+  security secrets, or personal wallet addresses.
 - Inspect and report by default. Edit AGENTS.md or skills only when the user explicitly asks to apply or implement
   fixes, then make the smallest in-scope local change and validate it.
-- Never modify transcript stores, write transcript excerpts or derived private data into repository files, or perform
-  external writes.
+- Never modify transcript stores. Before placing transcript evidence in a public or third-party artifact, perform an
+  external-disclosure review and remove unrelated personal or customer data, unsuitable private paths or repository
+  names, and unrelated transcript material. Perform external writes only when authorized.
 
 ## Bounded Retrieval
 
@@ -46,8 +48,8 @@ keywords from relevant filenames, commands, tools, errors, package names, issue 
 
 1. Run the bundled miner for the current project, unarchived sessions only, with the chosen keywords and
    `--max-sessions 8`.
-2. Treat miner scores, themes, and correction, failure, verification, tool, or privacy counts only as candidate-ranking
-   signals. They are heuristic and are never evidence by themselves.
+2. Treat miner scores, themes, and correction, failure, verification, tool, or `privacy_gaps` counts only as
+   candidate-ranking signals. They are heuristic and are never evidence by themselves.
 3. Validate project metadata or cwd before opening a candidate. Inspect up to five highest-relevance transcript bodies,
    stopping earlier when the evidence bar is met. Include a comparable successful session when available.
 4. If evidence is insufficient, retry once with broader keywords. If unarchived history still lacks signal, retry once
@@ -112,7 +114,7 @@ Lead with `### 🔎 Introspection complete — <intervention or coverage-gap out
 2. `🔎 Findings`: a compact table with confidence, observed evidence, inference, relevance, and intervention. Keep
    confidence visibly separate from severity or impact.
 3. `🛡 Durable recommendations`: apply now, consider later, or no change, with the target and prevention mechanism.
-4. `🧪 Validation and gaps`: commands run, checks performed, privacy limitations, and missing evidence.
+4. `🧪 Validation and gaps`: commands run, checks performed, external-disclosure constraints, and missing evidence.
 
 When fixes were explicitly requested, include exact files changed and validation outcomes. Stop after the current task
 has an evidence-backed recommendation or an explicit coverage gap; do not mine additional history merely to add examples

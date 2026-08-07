@@ -36,6 +36,16 @@ Treat visual structure as information architecture, not decoration.
   artifacts, product UI copy, GitHub contributions, spreadsheet data, or user-authored content unless the task itself
   calls for it.
 
+## Evidence and Disclosure
+
+- Internal agent communication includes task reports, tool output, current-project transcript inspection, and material
+  evidence sent to the configured model provider. Prefer efficient, complete, direct evidence; do not require redaction,
+  local-only handling, or excerpt suppression solely because the provider can see it.
+- Before posting, uploading, publishing, emailing, releasing, or otherwise sending data outside the agent workspace,
+  perform an external-disclosure review. Remove credentials and secrets, unrelated personal or customer data, unsuitable
+  private paths or repository names, and unrelated transcript material.
+- This distinction never relaxes secret handling or the no-personal-EVM-address rule under **Rules**.
+
 ## Structure
 
 - `skills/<name>/SKILL.md` is the skill entrypoint.

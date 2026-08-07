@@ -1,6 +1,6 @@
 # Spreadsheet Recipes
 
-Use these as starting points. Keep data local, keep amounts as strings, and validate the output with `peek.py`.
+Use these as starting points. Keep amounts as strings, preserve source data, and validate the output with `peek.py`.
 
 ## Exact Decimal Transform
 
@@ -80,9 +80,10 @@ qsv diff --key tx_id --delimiter-output '\t' -o txs.diff.tsv before.tsv after.ts
 bunx daff before.tsv after.tsv
 ```
 
-## Private-Safe Profile
+## External-Disclosure Profile
 
-Use redaction when a report may be pasted into chat or an issue.
+Use redaction when a report will be posted, published, or sent to a third party, or when the user asks. Internal agent
+reports may include relevant unredacted samples.
 
 ```sh
 uv run ~/.agents/skills/spreadsheets/scripts/profile.py txs.tsv --markdown --redact-samples

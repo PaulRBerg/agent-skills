@@ -40,8 +40,8 @@ uv run "<skill-dir>/scripts/issue-form.py" render \
 ```
 
 The renderer rejects missing required values, invalid dropdowns, unknown IDs, and unverified required checkboxes. Use
-its body and posting metadata exactly. The agent still owns answer wording, privacy review, title text after the live
-prefix, semantic labels, and the external post.
+its body and posting metadata exactly. The agent still owns answer wording, the external-disclosure review, title text
+after the live prefix, semantic labels, and the external post.
 
 For a selected Markdown template, fetch it live and populate its existing structure. If no template applies, use the
 smallest useful `Problem`, `Solution`, and optional affected-files structure. Do not use `gh issue create --template`
@@ -63,8 +63,8 @@ template labels with agent-selected semantic labels and deduplicate. Write a con
 
 If images were requested, complete `context.md > Image Uploads` before creating the issue.
 
-Privacy-review the title, rendered body, labels, type, and attachments. Then post with `gh issue create --repo`,
-`--title`, and `--body-file`, adding `--label` and `--type` only when applicable. Post directly because creation was
-requested. On failure, follow `posting.md` idempotency handling before any retry.
+Run an external-disclosure review on the title, rendered body, labels, type, and attachments. Then post with
+`gh issue create --repo`, `--title`, and `--body-file`, adding `--label` and `--type` only when applicable. Post
+directly because creation was requested. On failure, follow `posting.md` idempotency handling before any retry.
 
 Finish with the verified URL and the `### 🚀 Issue created` receipt from `SKILL.md`.

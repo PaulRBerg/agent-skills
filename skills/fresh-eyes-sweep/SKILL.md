@@ -72,9 +72,9 @@ reimplement ledger arithmetic.
    generators and derived artifacts, external and persisted-data seams, and the owner of each material invariant. Trace
    the highest-risk workflows end to end before choosing slices.
 5. Inspect recent history and diffs, especially the newest changes, to find affected callers, dependencies, tests,
-   configuration, and docs. Rank slices and fixes by evidenced impact: correctness, data loss, and security or privacy
-   first; then reliability, maintainability, measured performance, and developer experience. Treat recency as one
-   prioritization signal, never as a substitute for coverage.
+   configuration, and docs. Rank slices and fixes by evidenced impact: correctness, data loss, security, and externally
+   exposed personal-data or disclosure risk first; then reliability, maintainability, measured performance, and
+   developer experience. Treat recency as one prioritization signal, never as a substitute for coverage.
 6. Discover build, test, lint, typecheck, format, and codegen checks.
 7. Establish a baseline for every safe, relevant check before the first fix. If it is red, prioritize reproducible
    failures before discretionary work; defer failures that need an unclear or prohibited action while continuing with
@@ -161,8 +161,8 @@ when helper `complete` is true; otherwise use `### ⛔ Sweep incomplete`. Summar
 counts. Include a compact `Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results.
 When non-empty, also include reverted experiments with the failed evidence, unresolved findings with their evidence,
 risk, and required decision, and residual risk with its next proving check. On `### ⛔ Sweep incomplete`, name the
-ledger path so the next session can resume from `pending`. Do not expose the scratch ledger's contents, pre-existing
-changes, or private/bulk data.
+ledger path so the next session can resume from `pending`. Do not dump the scratch ledger's contents, unrelated
+pre-existing changes, or bulk data; include task-relevant evidence when it materially supports the report.
 
 Completion requires every mapped path accounted for, every finding fixed and verified or reported with evidence, and
 every relevant check passing or its failure attributed.

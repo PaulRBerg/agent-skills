@@ -96,8 +96,8 @@ authority boundaries, observability, and rollback or recovery.
 
 For cross-repository or coordinated handoffs, also name every canonical root, its role and exact write scope, dependency
 and execution order, repository-local validation, combined acceptance criteria, and repository-relative related-handoff
-paths. Summarize relevant context instead of quoting the transcript. Leave no placeholders, open task choices, or
-references that require the old chat.
+paths. Use direct transcript excerpts when exact wording is material; otherwise summarize relevant context to keep the
+handoff compact. Leave no placeholders, open task choices, or references that require the old chat.
 
 ## Finalize or cancel
 
