@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     ffi::OsString,
     fs::{self, OpenOptions},
     io::Write,
@@ -12,10 +12,13 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::{Client, FindingState, Identity, ProcessFingerprint, ProcessLiveness, ProcessProbe},
+    domain::{
+        Client, FindingState, FindingSummary, Identity, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe,
+        SessionState,
+    },
     error::{AppError, Result},
     host::{DetachedProcessRunner, DetachedProcessSpec, NativeDetachedProcessRunner, git_head_oid},
-    state::{FindingResolution, Store, TriageRun},
+    state::{FindingResolution, SessionUpdate, Store, TriageRun},
 };
 
 use super::{
@@ -46,6 +49,8 @@ struct RunMetadata {
     state_dir: String,
     start_head: String,
     finding_ids: Vec<String>,
+    #[serde(default)]
+    authorized_paths: Vec<String>,
     started_at: f64,
     heartbeat_at: f64,
     finished_at: Option<f64>,
@@ -148,6 +153,9 @@ impl Coordinator {
 
         let mut store = self.store()?;
         store.release_orphaned_claims(now)?;
+        if !self.refresh_inventory(&mut store, false)?.complete {
+            return Ok(TriageSchedule::Skipped("coverage"));
+        }
         let Some(start) = store.begin_triage_run(&path_text(&root)?, origin, now)? else {
             return Ok(TriageSchedule::Skipped("ineligible"));
         };
@@ -166,6 +174,7 @@ impl Coordinator {
             state_dir: path_text(&state_dir)?,
             start_head,
             finding_ids: start.claims.iter().map(|claim| claim.finding_id.clone()).collect(),
+            authorized_paths: Vec::new(),
             started_at: now,
             heartbeat_at: now,
             finished_at: None,
@@ -188,6 +197,8 @@ impl Coordinator {
                 (OsString::from("AI_COORD_STATE_DIR"), state_dir.as_os_str().to_owned()),
                 (OsString::from("AI_COORD_TRIAGE_RUN_ID"), OsString::from(&start.run.id)),
                 (OsString::from("AI_COORD_TRIAGE_ROLE"), OsString::from("triager")),
+                (OsString::from("AI_COORD_CLIENT"), OsString::from("codex")),
+                (OsString::from("AI_COORD_SESSION_ID"), OsString::from(format!("triage:{}", start.run.id))),
             ],
             stdout_path: run_dir.join("worker.stdout.log"),
             stderr_path: run_dir.join("worker.stderr.log"),
@@ -219,7 +230,9 @@ impl Coordinator {
             if let Some(metadata) = metadata.as_ref() {
                 let _ = reconcile_artifacts(self, &run, metadata, root);
             }
-            let _ = self.store()?.finish_triage_run(&run.id, "worker-lost", current);
+            let mut store = self.store()?;
+            let _ = store.end_session(&triager_identity(&run.id));
+            let _ = store.finish_triage_run(&run.id, "worker-lost", current);
             if let Some(mut metadata) = metadata {
                 metadata.finished_at = Some(current);
                 metadata.heartbeat_at = current;
@@ -268,7 +281,26 @@ impl Coordinator {
                     .ok_or_else(|| AppError::operational(format!("claimed finding disappeared: {id}")))
             })
             .collect::<Result<Vec<_>>>()?;
-        let prompt = triage_prompt(&metadata.start_head, &findings)?;
+        let actor = triager_identity(run_id);
+        register_triager_session(&mut store, &actor, &metadata, &root, self.clock.wall())?;
+        let authorized_paths = safe_document_paths(&root, &findings)?;
+        if !authorized_paths.is_empty() {
+            let paths = authorized_paths.iter().map(PathBuf::from).collect::<Vec<_>>();
+            let outcome = match self.start_for(actor, &format!("triage findings {run_id}"), &paths, &[], &root) {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    finish_worker(&mut store, &run_dir, &mut metadata, "scope-failed", self.clock.wall())?;
+                    return Err(error);
+                }
+            };
+            if outcome.kind != OutcomeKind::Ready {
+                finish_worker(&mut store, &run_dir, &mut metadata, "scope-unavailable", self.clock.wall())?;
+                return Ok(());
+            }
+        }
+        metadata.authorized_paths = authorized_paths;
+        write_metadata(&run_dir, &metadata)?;
+        let prompt = triage_prompt(&metadata.start_head, &findings, &metadata.authorized_paths)?;
         write_private(&run_dir.join(SCHEMA_FILE), serde_json::to_vec_pretty(&result_schema())?.as_slice())?;
         write_private(&run_dir.join("prompt.txt"), prompt.as_bytes())?;
 
@@ -335,6 +367,45 @@ impl TriageRunner for CodexTriageRunner {
             thread::sleep(Duration::from_secs_f64(HEARTBEAT_SECONDS));
         }
     }
+}
+
+fn register_triager_session(
+    store: &mut Store,
+    actor: &Identity,
+    metadata: &RunMetadata,
+    root: &Path,
+    current: f64,
+) -> Result<()> {
+    let fingerprint =
+        metadata.worker.clone().ok_or_else(|| AppError::operational("triage worker process evidence is missing"))?;
+    store.upsert_session(&SessionUpdate {
+        identity: actor.clone(),
+        cwd: path_text(root)?,
+        repo_root: Some(metadata.repo_root.clone()),
+        state: SessionState::Working,
+        source: "triage-worker".to_owned(),
+        name: None,
+        waiting_for: None,
+        permission_mode: None,
+        update_permission_mode: false,
+        fingerprint: Some(fingerprint),
+        started_at: Some(metadata.started_at),
+        current,
+    })?;
+    Ok(())
+}
+
+fn safe_document_paths(root: &Path, findings: &[FindingSummary]) -> Result<Vec<String>> {
+    let mut paths = BTreeSet::new();
+    for path in findings.iter().flat_map(|finding| &finding.paths) {
+        if !safe_document_path(path) || !root.join(path).is_file() {
+            continue;
+        }
+        if git_text(root, &["ls-tree", "--name-only", "HEAD", "--", path])?.lines().any(|tracked| tracked == path) {
+            paths.insert(path.clone());
+        }
+    }
+    Ok(paths.into_iter().collect())
 }
 
 fn run_is_live(run: &TriageRun, metadata: Option<&RunMetadata>, probe: &dyn ProcessProbe, current: f64) -> bool {
@@ -418,6 +489,10 @@ fn apply_finding_result(
             }
             if result.changed_paths.iter().any(|path| !safe_document_path(path)) {
                 return Err(AppError::operational("fixed result changes a path outside the safe documentation tier"));
+            }
+            let authorized = metadata.authorized_paths.iter().map(String::as_str).collect::<HashSet<_>>();
+            if result.changed_paths.iter().any(|path| !authorized.contains(path.as_str())) {
+                return Err(AppError::operational("fixed result changes a path outside the pre-authorized scope"));
             }
             coordinator.store()?.resolve_finding(
                 &run.repo_root,
@@ -513,6 +588,7 @@ fn reconcile_artifacts(
     let actor = triager_identity(&run.id);
     let current = coordinator.clock.wall();
     let mut reconciled = HashSet::new();
+    let authorized = metadata.authorized_paths.iter().map(String::as_str).collect::<HashSet<_>>();
     for finding_id in &metadata.finding_ids {
         let Some(finding) = coordinator.store()?.finding(&run.repo_root, finding_id, current)? else {
             continue;
@@ -522,8 +598,9 @@ fn reconcile_artifacts(
             continue;
         }
         if let Ok(Some(oid)) = commit_for_finding(root, &metadata.start_head, finding_id) &&
-            validate_commit(root, &metadata.start_head, finding_id, &oid)
-                .is_ok_and(|changed| changed.iter().all(|path| safe_document_path(path))) &&
+            validate_commit(root, &metadata.start_head, finding_id, &oid).is_ok_and(|changed| {
+                changed.iter().all(|path| safe_document_path(path) && authorized.contains(path.as_str()))
+            }) &&
             coordinator
                 .store()?
                 .resolve_finding(
@@ -668,11 +745,12 @@ fn finish_worker(
     metadata.finished_at = Some(current);
     metadata.heartbeat_at = current;
     write_metadata(run_dir, metadata)?;
+    store.end_session(&triager_identity(&metadata.run_id))?;
     store.finish_triage_run(&metadata.run_id, outcome, current)?;
     Ok(())
 }
 
-fn triager_identity(run_id: &str) -> Identity {
+pub(super) fn triager_identity(run_id: &str) -> Identity {
     Identity { client: Client::Codex, session_id: format!("triage:{run_id}") }
 }
 
@@ -751,252 +829,5 @@ fn prune_run_logs(run_root: &Path, current: f64) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{os::unix::process::ExitStatusExt, sync::Mutex};
-
-    use serde_json::{Value, json};
-    use tempfile::TempDir;
-
-    use crate::{
-        coordinator::{Clock, inventory::StaticInventory},
-        domain::{FindingKind, ProcessFingerprint},
-        host::NativeProcessProbe,
-        state::{FindingAdd, FindingPathObservation},
-    };
-
-    use super::*;
-
-    #[derive(Default)]
-    struct FakeLauncher {
-        specs: Mutex<Vec<DetachedProcessSpec>>,
-    }
-
-    impl DetachedProcessRunner for FakeLauncher {
-        fn spawn(&self, spec: &DetachedProcessSpec) -> Result<ProcessFingerprint> {
-            self.specs.lock().unwrap().push(spec.clone());
-            Ok(ProcessFingerprint { pid: 42, start_token: Some("fake".to_owned()) })
-        }
-    }
-
-    struct FakeClock(f64);
-    impl Clock for FakeClock {
-        fn wall(&self) -> f64 {
-            self.0
-        }
-        fn monotonic(&self) -> f64 {
-            self.0
-        }
-        fn sleep(&self, _: Duration) {}
-    }
-
-    struct FakeRunner {
-        result: Value,
-    }
-    impl TriageRunner for FakeRunner {
-        fn run(&self, request: &TriageRequest<'_>, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
-            heartbeat()?;
-            write_private(&request.run_dir.join(RESULT_FILE), serde_json::to_vec(&self.result)?.as_slice())?;
-            Ok(ExitStatus::from_raw(0))
-        }
-    }
-
-    struct FailingRunner;
-    impl TriageRunner for FailingRunner {
-        fn run(&self, _: &TriageRequest<'_>, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
-            heartbeat()?;
-            Err(AppError::operational("simulated deadline"))
-        }
-    }
-
-    fn repository(auto_triage: bool) -> TempDir {
-        let temp = tempfile::tempdir().unwrap();
-        assert!(
-            Command::new("git").args(["init", "-q", "-b", "main"]).current_dir(temp.path()).status().unwrap().success()
-        );
-        fs::write(temp.path().join(CONFIG_PATH), format!("[findings]\nauto_triage = {auto_triage}\n")).unwrap();
-        fs::write(temp.path().join("README.md"), "old prose\n").unwrap();
-        assert!(Command::new("git").args(["add", "."]).current_dir(temp.path()).status().unwrap().success());
-        assert!(
-            Command::new("git")
-                .args(["-c", "user.name=test", "-c", "user.email=test@invalid", "commit", "-qm", "base"])
-                .current_dir(temp.path())
-                .status()
-                .unwrap()
-                .success()
-        );
-        temp
-    }
-
-    fn fixture(repo: &Path, now: f64) -> (Coordinator, Identity) {
-        let state = repo.join("state");
-        let store = Store::open(state.join("state.db")).unwrap();
-        let coordinator = Coordinator::with_components(
-            store,
-            Box::new(StaticInventory { complete: true, refreshes: Default::default() }),
-            std::sync::Arc::new(NativeProcessProbe::new()),
-            std::sync::Arc::new(FakeClock(now)),
-        );
-        (coordinator, Identity { client: Client::Codex, session_id: "origin".to_owned() })
-    }
-
-    fn add_finding(coordinator: &Coordinator, repo: &Path, summary: &str, current: f64) -> String {
-        let repo = crate::host::git_root(repo).unwrap();
-        coordinator
-            .store()
-            .unwrap()
-            .add_finding(&FindingAdd {
-                repo_root: path_text(&repo).unwrap(),
-                summary: summary.to_owned(),
-                normalized_summary: summary.to_owned(),
-                kind: Some(FindingKind::Docs),
-                paths: vec!["README.md".to_owned()],
-                head_oid: git_head_oid(&repo),
-                observations: vec![FindingPathObservation { path: "README.md".to_owned(), content_sha256: None }],
-                author: Identity { client: Client::Codex, session_id: "source".to_owned() },
-                turn_id: None,
-                current,
-            })
-            .unwrap()
-            .finding
-            .id
-    }
-
-    #[test]
-    fn exact_opt_in_branch_and_work_guards_control_launch() {
-        let repo = repository(true);
-        let (coordinator, origin) = fixture(repo.path(), 100.0);
-        add_finding(&coordinator, repo.path(), "stale prose", 1.0);
-        let launcher = FakeLauncher::default();
-        let scheduled = coordinator.schedule_findings_triage_for(repo.path(), &origin, &launcher).unwrap();
-        assert!(matches!(scheduled, TriageSchedule::Launched { finding_count: 1, .. }), "{scheduled:?}");
-        assert_eq!(launcher.specs.lock().unwrap().len(), 1);
-
-        let other = repository(false);
-        let (disabled, disabled_origin) = fixture(other.path(), 100.0);
-        add_finding(&disabled, other.path(), "pending", 1.0);
-        assert_eq!(
-            disabled.schedule_findings_triage_for(other.path(), &disabled_origin, &launcher).unwrap(),
-            TriageSchedule::Skipped("disabled")
-        );
-    }
-
-    #[test]
-    fn codex_command_is_ephemeral_sandboxed_offline_and_agentless() {
-        let repo = Path::new("/repo");
-        let state = Path::new("/state");
-        let run = Path::new("/state/triage-runs/a");
-        let request = TriageRequest { repo_root: repo, state_dir: state, run_dir: run, prompt: "prompt" };
-        let args = codex_args(request.repo_root, request.state_dir, request.run_dir)
-            .into_iter()
-            .map(|arg| arg.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        for expected in [
-            "gpt-5.6-luna",
-            "model_reasoning_effort=\"xhigh\"",
-            "/state",
-            "sandbox_workspace_write.network_access=false",
-            "web_search=\"disabled\"",
-            "agents.enabled=false",
-            "--approve-for-me",
-            "--ephemeral",
-            "--output-schema",
-            "--output-last-message",
-        ] {
-            assert!(args.iter().any(|arg| arg == expected), "missing {expected}: {args:?}");
-        }
-        assert!(!args.iter().any(|arg| arg == "--sandbox"), "--approve-for-me selects workspace-write: {args:?}");
-        assert!(
-            !args.iter().any(|arg| arg == "--ignore-user-config"),
-            "user config must load the trusted lifecycle hooks: {args:?}"
-        );
-    }
-
-    #[test]
-    fn structured_handoff_is_validated_and_reconciled() {
-        let repo = repository(true);
-        let (coordinator, origin) = fixture(repo.path(), 100.0);
-        let finding_id = add_finding(&coordinator, repo.path(), "needs broad work", 1.0);
-        let launcher = FakeLauncher::default();
-        let TriageSchedule::Launched { run_id, .. } =
-            coordinator.schedule_findings_triage_for(repo.path(), &origin, &launcher).unwrap()
-        else {
-            panic!()
-        };
-        let handoff = deterministic_handoff(&finding_id);
-        fs::create_dir_all(repo.path().join(".ai/task-handoffs")).unwrap();
-        fs::write(repo.path().join(&handoff), format!("# Handoff\n\nSource finding: {finding_id}\n")).unwrap();
-        let runner = FakeRunner {
-            result: json!({ "results": [{
-            "finding_id": finding_id, "status": "handed_off", "evidence": "verified broad scope",
-            "changed_paths": [handoff], "validation": ["marker checked"], "commit_oid": null,
-            "canonical_id": null, "handoff_path": handoff
-        }] }),
-        };
-        coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
-        let finding = coordinator
-            .store()
-            .unwrap()
-            .finding(&path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap(), &finding_id, 101.0)
-            .unwrap()
-            .unwrap();
-        assert_eq!(finding.state, FindingState::HandedOff);
-    }
-
-    #[test]
-    fn runner_failure_finishes_run_and_releases_claims() {
-        let repo = repository(true);
-        let (coordinator, origin) = fixture(repo.path(), 100.0);
-        add_finding(&coordinator, repo.path(), "retry later", 1.0);
-        let launcher = FakeLauncher::default();
-        let TriageSchedule::Launched { run_id, .. } =
-            coordinator.schedule_findings_triage_for(repo.path(), &origin, &launcher).unwrap()
-        else {
-            panic!()
-        };
-        coordinator.run_findings_triage_with(&run_id, repo.path(), &FailingRunner).unwrap();
-        let store = coordinator.store().unwrap();
-        assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("runner-failed"));
-        assert!(store.triage_claims(&run_id).unwrap().is_empty());
-    }
-
-    #[test]
-    fn commit_trailer_is_reconciled_before_retrying_runner() {
-        let repo = repository(true);
-        let (coordinator, origin) = fixture(repo.path(), 100.0);
-        let finding_id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
-        let launcher = FakeLauncher::default();
-        let TriageSchedule::Launched { run_id, .. } =
-            coordinator.schedule_findings_triage_for(repo.path(), &origin, &launcher).unwrap()
-        else {
-            panic!()
-        };
-        fs::write(repo.path().join("README.md"), "current prose\n").unwrap();
-        assert!(Command::new("git").args(["add", "README.md"]).current_dir(repo.path()).status().unwrap().success());
-        assert!(
-            Command::new("git")
-                .args(["-c", "user.name=test", "-c", "user.email=test@invalid", "commit", "-qm"])
-                .arg(format!("docs: refresh prose\n\nFinding-ID: {finding_id}"))
-                .current_dir(repo.path())
-                .status()
-                .unwrap()
-                .success()
-        );
-        coordinator.run_findings_triage_with(&run_id, repo.path(), &FailingRunner).unwrap();
-        let store = coordinator.store().unwrap();
-        assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("reconciled"));
-        let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
-        assert_eq!(store.finding(&root, &finding_id, 101.0).unwrap().unwrap().state, FindingState::Fixed);
-    }
-
-    #[test]
-    fn recursion_marker_suppresses_public_scheduler() {
-        unsafe { std::env::set_var("AI_COORD_TRIAGE_ROLE", "triager") };
-        let repo = repository(true);
-        let (coordinator, _) = fixture(repo.path(), 100.0);
-        assert_eq!(
-            coordinator.schedule_findings_triage(repo.path()).unwrap(),
-            TriageSchedule::Skipped("triager-lifecycle")
-        );
-        unsafe { std::env::remove_var("AI_COORD_TRIAGE_ROLE") };
-    }
-}
+#[path = "triage_tests.rs"]
+mod tests;

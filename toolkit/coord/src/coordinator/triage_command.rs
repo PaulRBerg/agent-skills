@@ -4,6 +4,7 @@ pub(super) fn codex_args(repo_root: &Path, state_dir: &Path, run_dir: &Path) -> 
     [
         OsString::from("exec"),
         OsString::from("--ephemeral"),
+        OsString::from("--ignore-user-config"),
         OsString::from("--model"),
         OsString::from("gpt-5.6-luna"),
         OsString::from("-c"),
