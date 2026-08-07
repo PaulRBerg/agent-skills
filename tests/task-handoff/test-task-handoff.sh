@@ -72,12 +72,12 @@ parse_record() {
 }
 
 run_helper() {
-  TASK_HANDOFF_TEST_PBCOPY=$fake_bin/pbcopy \
-    TASK_HANDOFF_TEST_PBPASTE=$fake_bin/pbpaste \
-    TASK_HANDOFF_TEST_TRASH=$fake_bin/trash \
-    TASK_HANDOFF_TEST_HOOK=$fake_bin/hook \
-    TASK_HANDOFF_TEST_TMPDIR=$runs_dir \
-    TASK_HANDOFF_TEST_CLIPBOARD=$clipboard_file \
+  TASK_HANDOFF_TEST_PBCOPY=${TASK_HANDOFF_TEST_PBCOPY:-$fake_bin/pbcopy} \
+    TASK_HANDOFF_TEST_PBPASTE=${TASK_HANDOFF_TEST_PBPASTE:-$fake_bin/pbpaste} \
+    TASK_HANDOFF_TEST_TRASH=${TASK_HANDOFF_TEST_TRASH:-$fake_bin/trash} \
+    TASK_HANDOFF_TEST_HOOK=${TASK_HANDOFF_TEST_HOOK:-$fake_bin/hook} \
+    TASK_HANDOFF_TEST_TMPDIR=${TASK_HANDOFF_TEST_TMPDIR:-$runs_dir} \
+    TASK_HANDOFF_TEST_CLIPBOARD=${TASK_HANDOFF_TEST_CLIPBOARD:-$clipboard_file} \
     TASK_HANDOFF_TEST_CLIPBOARD_FAIL=${TASK_HANDOFF_TEST_CLIPBOARD_FAIL:-} \
     TASK_HANDOFF_TEST_HOOK_MODE=${TASK_HANDOFF_TEST_HOOK_MODE:-} \
     /bin/bash "$helper" "$@"
@@ -216,6 +216,31 @@ case $legacy_result in
   "$legacy_prefix"*) ;;
   *) fail 'legacy run did not default to the implementation category' ;;
 esac
+
+# Automated findings triage uppercases only the filename ID and can retry without clipboard tools.
+finding_prepare=$(run_helper prepare \
+  --repo "$repo_one" \
+  --plan "$repo_one" FINDING_DEADBEEF.md audit 'triage finding deadbeef')
+finding_run=$(extract_run_dir "$finding_prepare")
+printf '# RouteMesh finding\n\n## Handoff cleanup\n' >"$finding_run/plans/0001/draft.md"
+missing_pbcopy=$fake_bin/missing-pbcopy
+missing_pbpaste=$fake_bin/missing-pbpaste
+TASK_HANDOFF_TEST_PBCOPY=$missing_pbcopy TASK_HANDOFF_TEST_PBPASTE=$missing_pbpaste \
+  expect_failure 'reserved heading' run_helper finalize --no-clipboard "$finding_run"
+finding_target=$repo_one_root/.ai/task-handoffs/FINDING_DEADBEEF.md
+assert_absent "$finding_target" 'failed findings triage publication'
+printf '# Finding\n\nSource finding: deadbeef\n\nTriage and validate the evidence.\n' \
+  >"$finding_run/plans/0001/draft.md"
+finding_result=$(TASK_HANDOFF_TEST_PBCOPY=$missing_pbcopy TASK_HANDOFF_TEST_PBPASTE=$missing_pbpaste \
+  run_helper finalize --no-clipboard "$finding_run")
+finding_prefix="plan relative=$(shell_quote '.ai/task-handoffs/FINDING_DEADBEEF.md') owner=$(shell_quote "$repo_one_root") category=$(shell_quote audit) command="
+case $finding_result in
+  "$finding_prefix"*) ;;
+  *) fail 'no-clipboard findings finalize omitted its plan record' ;;
+esac
+assert_exists "$finding_target" 'findings triage publication'
+assert_file_contains 'Source finding: deadbeef' "$finding_target" 'finding provenance'
+assert_absent "$finding_run" 'successful no-clipboard finalize run cleanup'
 
 # A multi-repository run preserves plan order and exact newline-delimited clipboard bytes.
 multi_prepare=$(run_helper prepare \

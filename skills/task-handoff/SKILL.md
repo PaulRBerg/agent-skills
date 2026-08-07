@@ -1,8 +1,8 @@
 ---
 argument-hint: "[task-to-handoff]"
 compatibility:
-  Requires Bash 3.2, Git, local file-write access, and macOS pbcopy, pbpaste, and trash. The generated launch command
-  requires an authenticated Codex CLI.
+  Requires Bash 3.2, Git, local file-write access, and macOS trash. Default finalization also requires macOS pbcopy and
+  pbpaste; `finalize --no-clipboard` does not. The generated launch command requires an authenticated Codex CLI.
 coordination: exempt
 disable-model-invocation: true
 name: task-handoff
@@ -112,6 +112,19 @@ and per-handoff cleanup contracts, validates the complete structures, publishes 
 and copies and byte-verifies the ordered Codex commands. It rolls back helper-created targets and now-empty directories
 on handled errors, `INT`, or `TERM`; it cannot make publication atomic across filesystems or survive power loss or
 `SIGKILL`.
+
+For noninteractive ai-coord findings triage, uppercase the finding ID only in the deterministic filename
+`FINDING_<UPPERCASE_ID>.md`. Preserve the ledger ID's original spelling in the exact machine-readable line
+`Source finding: <ID>` in the semantic draft body, then finalize without clipboard access:
+
+```sh
+bash <skill-dir>/scripts/task-handoff.sh finalize --no-clipboard '<run-dir>'
+```
+
+This mode keeps the same publication, structural validation, rollback, cleanup, and final `plan` records, but skips all
+`pbcopy` and `pbpaste` checks, copying, and readback verification. On a handled failure, correct the retained draft and
+retry the same finalize command; if abandoning the handoff, use `cancel` to remove only its temporary run state. Never
+overwrite an existing deterministic finding handoff: resolve the existing handoff before preparing another run.
 
 Each final `plan` record contains `relative=`, canonical `owner=`, `category=`, and the exact command after `command=`.
 Never execute the command. If a correctable draft error occurs, edit the draft and retry. If abandoning or blocking

@@ -10,7 +10,7 @@ Usage:
   bash <skill-dir>/scripts/task-handoff.sh prepare \
     --repo <candidate-repository> [--repo <candidate-repository> ...] \
     --plan <owner-candidate> <HANDOFF_NAME.md> <task-category> <concise-task> [--plan ...]
-  bash <skill-dir>/scripts/task-handoff.sh finalize <run-dir>
+  bash <skill-dir>/scripts/task-handoff.sh finalize [--no-clipboard] <run-dir>
   bash <skill-dir>/scripts/task-handoff.sh cancel <run-dir>
 EOF
 }
@@ -95,15 +95,20 @@ write_state_value() {
 }
 
 resolve_tools() {
-  pbcopy_bin=${TASK_HANDOFF_TEST_PBCOPY:-/usr/bin/pbcopy}
-  pbpaste_bin=${TASK_HANDOFF_TEST_PBPASTE:-/usr/bin/pbpaste}
+  _use_clipboard=$1
   trash_bin=${TASK_HANDOFF_TEST_TRASH:-/usr/bin/trash}
   test_hook=${TASK_HANDOFF_TEST_HOOK:-}
 
-  for _tool in "$pbcopy_bin" "$pbpaste_bin" "$trash_bin"; do
-    has_line_break "$_tool" && die 'tool paths must not contain line breaks'
-    [ -x "$_tool" ] || die "required executable is unavailable: $_tool"
-  done
+  if [ "$_use_clipboard" = true ]; then
+    pbcopy_bin=${TASK_HANDOFF_TEST_PBCOPY:-/usr/bin/pbcopy}
+    pbpaste_bin=${TASK_HANDOFF_TEST_PBPASTE:-/usr/bin/pbpaste}
+    for _tool in "$pbcopy_bin" "$pbpaste_bin"; do
+      has_line_break "$_tool" && die 'tool paths must not contain line breaks'
+      [ -x "$_tool" ] || die "required executable is unavailable: $_tool"
+    done
+  fi
+  has_line_break "$trash_bin" && die 'tool paths must not contain line breaks'
+  [ -x "$trash_bin" ] || die "required executable is unavailable: $trash_bin"
   if [ -n "$test_hook" ]; then
     has_line_break "$test_hook" && die 'test hook path must not contain line breaks'
     [ -x "$test_hook" ] || die "test hook is not executable: $test_hook"
@@ -158,8 +163,9 @@ validate_plan_metadata() {
 }
 
 preflight_plan_set() {
+  _use_clipboard=${1:-true}
   validate_plan_metadata
-  resolve_tools
+  resolve_tools "$_use_clipboard"
 
   _index=0
   while [ "$_index" -lt "${#plan_owners[@]}" ]; do
@@ -677,20 +683,35 @@ copy_and_verify_commands() {
 }
 
 finalize() {
-  [ "$#" -eq 1 ] || usage_error 'finalize requires exactly one run directory'
-  validate_run_dir "$1" false
+  _use_clipboard=true
+  _finalize_run_dir=
+  while [ "$#" -gt 0 ]; do
+    case $1 in
+      --no-clipboard)
+        [ "$_use_clipboard" = true ] || usage_error 'finalize received duplicate --no-clipboard'
+        _use_clipboard=false
+        ;;
+      *)
+        [ -z "$_finalize_run_dir" ] || usage_error 'finalize requires exactly one run directory'
+        _finalize_run_dir=$1
+        ;;
+    esac
+    shift
+  done
+  [ -n "$_finalize_run_dir" ] || usage_error 'finalize requires exactly one run directory'
+  validate_run_dir "$_finalize_run_dir" false
   trap cleanup_operation EXIT
   trap 'handle_signal INT' INT
   trap 'handle_signal TERM' TERM
   acquire_run_lock
 
-  preflight_plan_set
+  preflight_plan_set "$_use_clipboard"
   validate_drafts
   rollback_required=true
   build_staged_plans
   publish_staged_plans
   build_commands
-  copy_and_verify_commands
+  [ "$_use_clipboard" = true ] && copy_and_verify_commands
 
   for _temporary in "${run_temp_files[@]}"; do
     [ -n "$_temporary" ] && rm -f "$_temporary" || :
