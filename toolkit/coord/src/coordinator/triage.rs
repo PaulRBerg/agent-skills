@@ -100,9 +100,21 @@ trait TriageRunner {
 
 struct CodexTriageRunner;
 
+/// True while running as (or nested under) a detached triager worker.
+/// Checked ahead of identity resolution: it is a cheap, self-contained
+/// recursion guard that must suppress rescheduling even when the ambient
+/// process environment doesn't yield a resolvable origin identity.
+fn triager_lifecycle_active() -> bool {
+    std::env::var_os("AI_COORD_TRIAGE_RUN_ID").is_some() ||
+        std::env::var_os("AI_COORD_TRIAGE_ROLE").as_deref() == Some(std::ffi::OsStr::new("triager"))
+}
+
 impl Coordinator {
     /// Fail-open scheduling; transactional gates keep concurrent lifecycle hooks idempotent.
     pub(crate) fn schedule_findings_triage(&self, cwd: &Path) -> Result<TriageSchedule> {
+        if triager_lifecycle_active() {
+            return Ok(TriageSchedule::Skipped("triager-lifecycle"));
+        }
         let Some(origin) = self.identity(false)? else {
             return Ok(TriageSchedule::Skipped("missing-origin"));
         };
@@ -116,9 +128,7 @@ impl Coordinator {
         cwd: &Path,
         origin: &Identity,
     ) -> Result<TriageSchedule> {
-        if std::env::var_os("AI_COORD_TRIAGE_RUN_ID").is_some() ||
-            std::env::var_os("AI_COORD_TRIAGE_ROLE").as_deref() == Some(std::ffi::OsStr::new("triager"))
-        {
+        if triager_lifecycle_active() {
             return Ok(TriageSchedule::Skipped("triager-lifecycle"));
         }
         self.schedule_findings_triage_for(cwd, origin, &NativeDetachedProcessRunner)
