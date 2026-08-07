@@ -7,11 +7,13 @@ use std::{
 use rusqlite::Connection;
 use tempfile::tempdir;
 
-use crate::domain::{Client, Identity, ProcessFingerprint, Scope, ScopeKind, SessionState, WorkState};
+use crate::domain::{
+    Client, FindingKind, FindingState, Identity, ProcessFingerprint, Scope, ScopeKind, SessionState, WorkState,
+};
 
 use super::{
-    BaselineRow, EndedObservation, MAX_INBOX_MESSAGES, NOTE_TTL, ProviderCacheRow, SCHEMA_VERSION, SessionUpdate,
-    Store, WorkUpdate,
+    BaselineRow, EndedObservation, FindingAdd, FindingCounts, FindingPathObservation, FindingResolution,
+    MAX_INBOX_MESSAGES, ProviderCacheRow, SCHEMA_VERSION, SessionUpdate, Store, WorkUpdate,
 };
 
 fn identity(client: Client, session_id: &str) -> Identity {
@@ -53,7 +55,7 @@ fn work_update(identity: &Identity) -> WorkUpdate {
 }
 
 #[test]
-fn new_store_has_exact_v10_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v11_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -85,9 +87,28 @@ fn new_store_has_exact_v10_schema_and_runtime_pragmas() {
     assert!(tables.contains("work_items"));
     assert!(tables.contains("work_scopes"));
     assert!(tables.contains("work_baselines"));
+    assert!(tables.contains("current_turns"));
+    assert!(tables.contains("findings"));
+    assert!(tables.contains("finding_paths"));
+    assert!(tables.contains("finding_observations"));
+    assert!(tables.contains("finding_sightings"));
+    assert!(tables.contains("finding_events"));
+    assert!(tables.contains("triage_runs"));
+    assert!(tables.contains("finding_claims"));
+    assert!(!tables.contains("notes"));
     assert!(!tables.contains("claims"));
     assert!(!tables.contains("claim_paths"));
     assert!(!tables.contains("claim_baselines"));
+
+    let sighting_columns = store
+        .connection
+        .prepare("PRAGMA table_info(finding_sightings)")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(1))
+        .unwrap()
+        .collect::<rusqlite::Result<HashSet<_>>>()
+        .unwrap();
+    assert!(sighting_columns.contains("surfaced_at"));
 
     #[cfg(unix)]
     {
@@ -121,21 +142,21 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let connection = Connection::open(&path).unwrap();
     connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)", []).unwrap();
     connection.execute("INSERT INTO sentinel VALUES ('preserved')", []).unwrap();
-    connection.pragma_update(None, "user_version", 9).unwrap();
+    connection.pragma_update(None, "user_version", 10).unwrap();
     drop(connection);
 
     let error = Store::open(&path).err().unwrap();
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 9 is incompatible with required schema 10 at {}; \
+            "state schema 10 is incompatible with required schema 11 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
     );
 
     let connection = Connection::open(path).unwrap();
-    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 9);
+    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 10);
     assert_eq!(
         connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
         "preserved"
@@ -279,20 +300,248 @@ fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_sta
 }
 
 #[test]
-fn pruning_expires_messages_and_notes_but_never_sessions() {
+fn pruning_expires_messages_but_never_findings_or_sessions() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let sender = identity(Client::Codex, "sender");
     let recipient = identity(Client::Claude, "recipient");
     store.upsert_session(&session_update(&sender, 0.0)).unwrap();
     store.send_message(&sender, std::slice::from_ref(&recipient), "old", None, 0.0).unwrap();
-    store.add_note(&sender, "/repo", "old", 0.0).unwrap();
+    store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "old finding".into(),
+            normalized_summary: "old finding".into(),
+            kind: None,
+            paths: vec![],
+            head_oid: None,
+            observations: vec![],
+            author: sender.clone(),
+            turn_id: Some("turn".into()),
+            current: 0.0,
+        })
+        .unwrap();
 
-    store.prune(NOTE_TTL + 1.0).unwrap();
+    store.prune(super::store::MESSAGE_TTL + 1.0).unwrap();
 
     assert!(store.inbox(&recipient, false).unwrap().is_empty());
-    assert!(store.all_notes().unwrap().is_empty());
+    assert_eq!(store.findings("/repo", None, true, f64::MAX).unwrap().len(), 1);
     assert!(store.session(&sender).unwrap().is_some());
+}
+
+#[test]
+fn findings_deduplicate_exact_open_records_and_preserve_terminal_recurrence() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Codex, "author");
+    let mut input = FindingAdd {
+        repo_root: "/repo".into(),
+        summary: "same finding".into(),
+        normalized_summary: "same finding".into(),
+        kind: Some(FindingKind::Bug),
+        paths: vec!["docs/a.md".into(), "src/a.rs".into()],
+        head_oid: Some("head-one".into()),
+        observations: vec![FindingPathObservation {
+            path: "src/a.rs".into(),
+            content_sha256: Some("content-one".into()),
+        }],
+        author: author.clone(),
+        turn_id: Some("turn-one".into()),
+        current: 1.0,
+    };
+    let first = store.add_finding(&input).unwrap();
+    assert!(!first.deduplicated);
+    input.kind = Some(FindingKind::Docs);
+    input.turn_id = Some("turn-two".into());
+    input.current = 2.0;
+    let duplicate = store.add_finding(&input).unwrap();
+    assert!(duplicate.deduplicated);
+    assert_eq!(duplicate.finding.id, first.finding.id);
+    assert_eq!(duplicate.finding.kind, Some(FindingKind::Bug));
+    assert_eq!(duplicate.finding.sighting_count, 2);
+
+    store
+        .resolve_finding(
+            "/repo",
+            &first.finding.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: Some("abcdef0".into()),
+                canonical_id: None,
+                actor: author.clone(),
+                current: 3.0,
+            },
+        )
+        .unwrap();
+    input.current = 4.0;
+    let recurrence = store.add_finding(&input).unwrap();
+    assert!(!recurrence.deduplicated);
+    assert_ne!(recurrence.finding.id, first.finding.id);
+}
+
+#[test]
+fn current_turn_inherits_missing_sighting_ids_and_surfaces_duplicate_sightings_together() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Claude, "author");
+    store.upsert_session(&session_update(&author, 1.0)).unwrap();
+    let turn_id = store.begin_turn(&author, None, 2.0).unwrap();
+    assert!(turn_id.starts_with("local-"));
+    let input = FindingAdd {
+        repo_root: "/repo".into(),
+        summary: "same finding".into(),
+        normalized_summary: "same finding".into(),
+        kind: Some(FindingKind::Bug),
+        paths: vec!["src/lib.rs".into()],
+        head_oid: None,
+        observations: vec![],
+        author: author.clone(),
+        turn_id: None,
+        current: 3.0,
+    };
+    let first = store.add_finding(&input).unwrap();
+    let duplicate = store.add_finding(&input).unwrap();
+    assert!(duplicate.deduplicated);
+    assert_eq!(store.current_turn_findings(&author).unwrap().len(), 1);
+    assert_eq!(store.current_turn_findings(&author).unwrap()[0].id, first.finding.id);
+    assert_eq!(
+        store
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM finding_sightings WHERE turn_id = ?1 AND surfaced_at IS NULL",
+                [&turn_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        2
+    );
+    assert_eq!(store.mark_current_turn_findings_surfaced(&author, 4.0).unwrap(), 2);
+    assert!(store.current_turn_findings(&author).unwrap().is_empty());
+}
+
+#[test]
+fn explicit_sighting_turn_id_overrides_the_persisted_current_turn() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Codex, "author");
+    store.upsert_session(&session_update(&author, 1.0)).unwrap();
+    store.begin_turn(&author, Some("provider-turn"), 2.0).unwrap();
+    store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "different turn".into(),
+            normalized_summary: "different turn".into(),
+            kind: None,
+            paths: vec![],
+            head_oid: None,
+            observations: vec![],
+            author: author.clone(),
+            turn_id: Some("explicit-turn".into()),
+            current: 3.0,
+        })
+        .unwrap();
+    assert!(store.current_turn_findings(&author).unwrap().is_empty());
+}
+
+#[test]
+fn finding_creation_does_not_create_a_wait_wake_message() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Codex, "author");
+    store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "durable only".into(),
+            normalized_summary: "durable only".into(),
+            kind: None,
+            paths: vec![],
+            head_oid: None,
+            observations: vec![],
+            author,
+            turn_id: None,
+            current: 1.0,
+        })
+        .unwrap();
+    assert_eq!(store.connection.query_row("SELECT COUNT(*) FROM messages", [], |row| row.get::<_, i64>(0)).unwrap(), 0);
+}
+
+#[test]
+fn finding_candidates_and_lifecycle_transitions_are_bounded_and_explicit() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Claude, "author");
+    for index in 0..7 {
+        store
+            .add_finding(&FindingAdd {
+                repo_root: "/repo".into(),
+                summary: format!("candidate {index}"),
+                normalized_summary: format!("candidate {index}"),
+                kind: None,
+                paths: vec!["src/shared.rs".into()],
+                head_oid: None,
+                observations: vec![],
+                author: author.clone(),
+                turn_id: None,
+                current: index as f64,
+            })
+            .unwrap();
+    }
+    let added = store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "new report".into(),
+            normalized_summary: "new report".into(),
+            kind: Some(FindingKind::Improvement),
+            paths: vec!["src/shared.rs".into()],
+            head_oid: None,
+            observations: vec![],
+            author: author.clone(),
+            turn_id: None,
+            current: 10.0,
+        })
+        .unwrap();
+    assert_eq!(added.candidates.len(), 5);
+    store
+        .connection
+        .execute(
+            "INSERT INTO triage_runs(
+                id, repo_root, runner_client, runner_session_id, started_at
+             ) VALUES ('run-one', '/repo', 'claude', 'author', 10.0)",
+            [],
+        )
+        .unwrap();
+    store
+        .connection
+        .execute(
+            "INSERT INTO finding_claims(finding_id, triage_run_id, claimed_at, lease_expires_at)
+             VALUES (?1, 'run-one', 10.0, 20.0)",
+            [&added.finding.id],
+        )
+        .unwrap();
+    assert!(store.finding("/repo", &added.finding.id, 15.0).unwrap().unwrap().triaging);
+    assert!(!store.finding("/repo", &added.finding.id, 20.0).unwrap().unwrap().triaging);
+    assert_eq!(store.finding_counts("/repo", 15.0).unwrap(), FindingCounts { pending: 8, triaging: 1, handed_off: 0 });
+    let handed_off = store.handoff_finding("/repo", &added.finding.id, "src/shared.rs", &author, 11.0).unwrap();
+    assert_eq!(handed_off.state, FindingState::HandedOff);
+    assert_eq!(store.finding_counts("/repo", 15.0).unwrap(), FindingCounts { pending: 7, triaging: 1, handed_off: 1 });
+    let resolved = store
+        .resolve_finding(
+            "/repo",
+            &added.finding.id,
+            &FindingResolution {
+                state: FindingState::Rejected,
+                commit_oid: None,
+                canonical_id: None,
+                actor: author.clone(),
+                current: 12.0,
+            },
+        )
+        .unwrap();
+    assert_eq!(resolved.terminal_at, Some(12.0));
+    let reopened = store.reopen_finding("/repo", &added.finding.id, &author, 13.0).unwrap();
+    assert_eq!(reopened.state, FindingState::Pending);
+    assert_eq!(reopened.handoff_path, None);
+    assert_eq!(reopened.terminal_at, None);
 }
 
 #[test]

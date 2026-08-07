@@ -1,4 +1,11 @@
+mod findings;
 mod inventory;
+mod triage;
+mod triage_command;
+mod triage_config;
+mod triage_paths;
+mod triage_prompt;
+mod triage_schema;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -14,8 +21,8 @@ use unicode_normalization::UnicodeNormalization;
 use crate::{
     domain::{
         Client, Identity, InventoryResult, Outcome, OutcomeKind, OutsideScopeV2, ProcessLiveness, ProcessProbe,
-        ProviderReport, Scope, ScopeKind, SessionState, SnapshotDelegateV2, SnapshotNoteV2, SnapshotScopeKindV2,
-        SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
+        ProviderReport, Scope, ScopeKind, SessionState, SnapshotDelegateV2, SnapshotScopeKindV2, SnapshotScopeV2,
+        SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
     },
     error::{AppError, Result},
     host::{
@@ -241,7 +248,6 @@ impl Coordinator {
             return Err(AppError::usage("timeout must be between 1 and 3600 seconds"));
         }
         let started = self.clock.monotonic();
-        let note_baseline = self.clock.wall();
         let mut last_generation = None;
         let mut last_full_check = None;
         loop {
@@ -292,10 +298,6 @@ impl Coordinator {
                     return Ok(outcome);
                 }
             }
-            let notes = store.notes(&work.repo_root, Some(note_baseline))?;
-            if !notes.is_empty() {
-                return Ok(Outcome::new(OutcomeKind::Note, 3, notes.len().to_string()));
-            }
             let elapsed = self.clock.monotonic() - started;
             if elapsed >= timeout_seconds as f64 {
                 return Ok(Outcome::new(OutcomeKind::Timeout, 3, timeout_seconds.to_string()));
@@ -306,7 +308,11 @@ impl Coordinator {
 
     pub(crate) fn done(&self) -> Result<Outcome> {
         let identity = self.identity(true)?.expect("required identity");
-        self.done_for(&identity)
+        let outcome = self.done_for(&identity)?;
+        if let Ok(cwd) = std::env::current_dir() {
+            let _ = self.schedule_findings_triage(&cwd);
+        }
+        Ok(outcome)
     }
 
     pub(crate) fn done_for(&self, identity: &Identity) -> Result<Outcome> {
@@ -332,7 +338,7 @@ impl Coordinator {
         let removed = store.delete_work(identity)?;
         if removed &&
             !waiters.is_empty() &&
-            let Some(work) = work
+            let Some(work) = work.as_ref()
         {
             let text = format!("Released work '{}'; your queued work may now be ready.", work.label);
             store.send_message(identity, &waiters, &text, Some(&work.repo_root), self.clock.wall())?;
@@ -376,7 +382,17 @@ impl Coordinator {
                 let _ = store.observe_dirt(&value, &hashes, self.clock.wall());
             }
         }
-        build_snapshot(&store, inventory, self_identity, machine_wide, &cwd, root.as_deref(), sessions, work, roots)
+        build_snapshot(
+            &store,
+            inventory,
+            self_identity,
+            machine_wide,
+            &cwd,
+            root.as_deref(),
+            sessions,
+            work,
+            self.clock.wall(),
+        )
     }
 
     pub(crate) fn name(&self, callsign: &str, cwd: &Path) -> Result<String> {
@@ -419,21 +435,6 @@ impl Coordinator {
     pub(crate) fn acknowledge(&self, message_id: Option<&str>) -> Result<usize> {
         let identity = self.identity(true)?.expect("required identity");
         self.store()?.acknowledge(&identity, message_id, self.clock.wall())
-    }
-
-    pub(crate) fn add_note(&self, text: &str, cwd: &Path) -> Result<String> {
-        let identity = self.identity(true)?.expect("required identity");
-        let root = git_root(&resolved(cwd)).ok_or_else(|| AppError::operational("note requires a Git worktree"))?;
-        let text = sanitize(text, MAX_MESSAGE_CHARS);
-        if text.is_empty() {
-            return Err(AppError::usage("note must contain printable text"));
-        }
-        self.store()?.add_note(&identity, &path_text(&root)?, &text, self.clock.wall())
-    }
-
-    pub(crate) fn resolve_note(&self, note_id: &str, cwd: &Path) -> Result<bool> {
-        let root = git_root(&resolved(cwd)).ok_or_else(|| AppError::operational("note requires a Git worktree"))?;
-        self.store()?.resolve_note(&path_text(&root)?, note_id, self.clock.wall())
     }
 
     pub(crate) fn trailer(&self) -> Result<String> {
@@ -582,7 +583,7 @@ fn build_snapshot(
     root: Option<&Path>,
     sessions: Vec<SessionRow>,
     work: Vec<WorkRow>,
-    roots: HashSet<String>,
+    current: f64,
 ) -> Result<SnapshotV2> {
     let work_by_identity = work.iter().map(|work| (work.identity.clone(), work)).collect::<HashMap<_, _>>();
     let delegates = store.delegates()?;
@@ -637,16 +638,10 @@ fn build_snapshot(
             }
         })
         .collect();
-    let notes = if machine {
-        roots
-            .into_iter()
-            .map(|root| store.notes(&root, None))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect()
+    let findings = if machine {
+        store.all_findings(current)?
     } else {
-        root_text.as_ref().map(|root| store.notes(root, None)).transpose()?.unwrap_or_default()
+        root_text.as_ref().map(|root| store.findings(root, None, true, current)).transpose()?.unwrap_or_default()
     };
     let parent_scope = scoped.iter().map(|row| row.identity.clone()).collect::<HashSet<_>>();
     let delegates = delegates
@@ -663,7 +658,7 @@ fn build_snapshot(
         .collect();
     let outside_directories = outside.iter().map(|row| row.cwd.clone()).collect::<HashSet<_>>().len();
     Ok(SnapshotV2 {
-        schema_version: 2,
+        schema_version: 3,
         complete: inventory.complete,
         scope: if machine {
             SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None }
@@ -677,18 +672,7 @@ fn build_snapshot(
         providers: inventory.providers,
         sessions: scoped,
         work: scoped_work,
-        notes: notes
-            .into_iter()
-            .map(|row| SnapshotNoteV2 {
-                id: row.id,
-                repo_root: row.repo_root,
-                author_client: row.author.as_ref().map(|identity| identity.client),
-                author_session_id: row.author.map(|identity| identity.session_id),
-                text: row.text,
-                created_at: row.created_at,
-                resolved_at: row.resolved_at,
-            })
-            .collect(),
+        findings,
         delegates,
         outside_scope: OutsideScopeV2 { sessions: outside.len(), directories: outside_directories },
     })
@@ -846,6 +830,7 @@ fn sanitize(text: &str, limit: usize) -> String {
         result
     }
 }
+
 fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
 }

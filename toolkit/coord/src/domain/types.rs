@@ -70,7 +70,6 @@ pub(crate) enum OutcomeKind {
     Done,
     Draft,
     Message,
-    Note,
     Ready,
     Released,
     Timeout,
@@ -115,13 +114,55 @@ impl OutcomeKind {
             Self::Done => "DONE",
             Self::Draft => "DRAFT",
             Self::Message => "MESSAGE",
-            Self::Note => "NOTE",
             Self::Ready => "READY",
             Self::Released => "RELEASED",
             Self::Timeout => "TIMEOUT",
             Self::Unknown => "UNKNOWN",
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum FindingKind {
+    Bug,
+    Docs,
+    Improvement,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum FindingState {
+    Pending,
+    HandedOff,
+    Fixed,
+    Stale,
+    Rejected,
+    Duplicate,
+}
+
+impl FindingState {
+    pub(crate) const fn is_terminal(self) -> bool {
+        matches!(self, Self::Fixed | Self::Stale | Self::Rejected | Self::Duplicate)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct FindingSummary {
+    pub(crate) id: String,
+    pub(crate) repo_root: String,
+    pub(crate) summary: String,
+    pub(crate) kind: Option<FindingKind>,
+    pub(crate) state: FindingState,
+    pub(crate) paths: Vec<String>,
+    pub(crate) created_at: f64,
+    pub(crate) updated_at: f64,
+    pub(crate) terminal_at: Option<f64>,
+    pub(crate) handoff_path: Option<String>,
+    pub(crate) commit_oid: Option<String>,
+    pub(crate) canonical_id: Option<String>,
+    pub(crate) sighting_count: usize,
+    pub(crate) triaging: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -196,17 +237,6 @@ pub(crate) struct SnapshotWorkV2 {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct SnapshotNoteV2 {
-    pub(crate) id: String,
-    pub(crate) repo_root: String,
-    pub(crate) author_client: Option<Client>,
-    pub(crate) author_session_id: Option<String>,
-    pub(crate) text: String,
-    pub(crate) created_at: f64,
-    pub(crate) resolved_at: Option<f64>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct SnapshotDelegateV2 {
     pub(crate) parent_client: Client,
     pub(crate) parent_session_id: String,
@@ -232,7 +262,7 @@ pub(crate) struct SnapshotV2 {
     pub(crate) providers: Vec<ProviderReport>,
     pub(crate) sessions: Vec<SnapshotSessionV2>,
     pub(crate) work: Vec<SnapshotWorkV2>,
-    pub(crate) notes: Vec<SnapshotNoteV2>,
+    pub(crate) findings: Vec<FindingSummary>,
     pub(crate) delegates: Vec<SnapshotDelegateV2>,
     pub(crate) outside_scope: OutsideScopeV2,
 }

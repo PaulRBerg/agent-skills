@@ -73,7 +73,7 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
 
   snapshot.sessions.forEach((session) => roots.add(sessionRepo(session)));
   work.forEach((item) => roots.add(item.repo_root));
-  snapshot.notes.forEach((note) => roots.add(note.repo_root));
+  snapshot.findings.forEach((finding) => roots.add(finding.repo_root));
   snapshot.messages.forEach((message) => {
     if (message.repo_root) roots.add(message.repo_root);
   });
@@ -116,9 +116,9 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
               item.updated_at,
             ),
           ),
-        ...snapshot.notes
-          .filter((note) => note.repo_root === repoRoot)
-          .map((note) => note.resolved_at ?? note.created_at),
+        ...snapshot.findings
+          .filter((finding) => finding.repo_root === repoRoot)
+          .map((finding) => finding.updated_at),
         ...snapshot.messages
           .filter((message) => message.repo_root === repoRoot)
           .map((message) => message.created_at),

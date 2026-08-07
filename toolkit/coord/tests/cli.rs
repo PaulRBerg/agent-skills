@@ -10,6 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use rusqlite::Connection;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -109,10 +110,14 @@ fn parser_and_semantic_usage_keep_distinct_exit_codes() {
     assert!(parser_error.stdout.is_empty());
     assert!(String::from_utf8_lossy(&parser_error.stderr).starts_with("error: invalid value '0'"));
 
-    let semantic_error = fixture.output(&["note"]);
+    let semantic_error = fixture.output(&["finding", "add", "   "]);
     assert_eq!(semantic_error.status.code(), Some(64));
     assert!(semantic_error.stdout.is_empty());
-    assert_eq!(String::from_utf8_lossy(&semantic_error.stderr), "error: provide note text or --done ID\n");
+    assert_eq!(String::from_utf8_lossy(&semantic_error.stderr), "error: finding summary must contain text\n");
+
+    let removed_note = fixture.output(&["note", "old"]);
+    assert_eq!(removed_note.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&removed_note.stderr).contains("unrecognized subcommand 'note'"));
 
     let conflicting_inbox = fixture.output(&["inbox", "--ack", "abc", "--ack-all"]);
     assert_eq!(conflicting_inbox.status.code(), Some(64));
@@ -131,16 +136,16 @@ fn identity_commands_and_state_are_fully_isolated() {
     assert_eq!(trailer.status.code(), Some(0));
     assert_eq!(String::from_utf8_lossy(&trailer.stdout), "Agent-Session: codex/cli-test\n");
 
-    let note = fixture.output(&["note", "integration finding"]);
-    assert_eq!(note.status.code(), Some(0));
-    assert!(String::from_utf8_lossy(&note.stdout).starts_with("NOTE\t"));
+    let finding = fixture.output(&["finding", "add", "--kind", "bug", "--path", "src/lib.rs", "integration finding"]);
+    assert_eq!(finding.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&finding.stdout).starts_with("ADDED\t"));
 
     let (code, status) = fixture.json_status();
     assert!(
         matches!(code, 0 | 2),
         "status is complete under a detectable Codex ancestor and partial when the test host is unknown"
     );
-    assert_eq!(status["schema_version"], 2);
+    assert_eq!(status["schema_version"], 3);
     assert_eq!(status["scope"]["kind"], "machine");
     assert_eq!(status["sessions"][0]["callsign"], "🦀 Ferris Test");
     assert!(fixture.state.join("state.db").is_file());
@@ -212,10 +217,10 @@ fn coordination_commands_preserve_tsv_outputs_and_embedded_codes() {
     let acknowledged = fixture.output_as("recipient-host", &["inbox", "--ack-all"]);
     assert_eq!(String::from_utf8_lossy(&acknowledged.stdout), "ACK\t1\n");
 
-    let note = fixture.output_as("sender-host", &["note", "durable finding"]);
-    let note_id = String::from_utf8_lossy(&note.stdout).trim().strip_prefix("NOTE\t").unwrap().to_owned();
-    let resolved = fixture.output_as("sender-host", &["note", "--done", &note_id]);
-    assert_eq!(String::from_utf8_lossy(&resolved.stdout), format!("DONE\t{note_id}\n"));
+    let finding = fixture.output_as("sender-host", &["finding", "add", "durable finding"]);
+    let finding_id = String::from_utf8_lossy(&finding.stdout).trim().strip_prefix("ADDED\t").unwrap().to_owned();
+    let resolved = fixture.output_as("sender-host", &["finding", "resolve", &finding_id, "--as", "fixed"]);
+    assert_eq!(String::from_utf8_lossy(&resolved.stdout), format!("RESOLVED\t{finding_id}\tfixed\n"));
 
     let done = fixture.output_as("sender-host", &["done"]);
     assert_eq!(String::from_utf8_lossy(&done.stdout), "DONE\treleased\n");
@@ -228,6 +233,99 @@ fn coordination_commands_preserve_tsv_outputs_and_embedded_codes() {
     let _ = sender.wait();
     let _ = recipient.kill();
     let _ = recipient.wait();
+}
+
+#[test]
+fn finding_commands_deduplicate_sightings_and_enforce_lifecycle_evidence() {
+    let fixture = Fixture::new();
+    fs::create_dir(fixture.root.join("docs")).unwrap();
+    fs::write(fixture.root.join("src/a.rs"), "fn a() {}\n").unwrap();
+    fs::write(fixture.root.join("docs/a.md"), "# A\n").unwrap();
+    let absolute = fixture.root.join("src/a.rs").to_string_lossy().into_owned();
+
+    let first = fixture.output(&[
+        "finding",
+        "add",
+        "--kind",
+        "bug",
+        "--path",
+        "src/a.rs",
+        "--path",
+        "docs/a.md",
+        "shared failure",
+    ]);
+    assert_eq!(first.status.code(), Some(0));
+    let first_id = String::from_utf8_lossy(&first.stdout).trim().strip_prefix("ADDED\t").unwrap().to_owned();
+
+    let duplicate = fixture.output(&[
+        "finding",
+        "add",
+        "--kind",
+        "docs",
+        "--path",
+        "docs/a.md",
+        "--path",
+        &absolute,
+        "shared   failure",
+    ]);
+    assert_eq!(String::from_utf8_lossy(&duplicate.stdout), format!("SIGHTING\t{first_id}\n"));
+
+    let related = fixture.output(&["finding", "add", "--path", "src/a.rs", "related failure"]);
+    let related_output = String::from_utf8_lossy(&related.stdout);
+    assert!(related_output.starts_with("ADDED\t"));
+    assert!(related_output.contains(&format!("CANDIDATE\t{first_id}\tshared failure\n")));
+
+    let shown = fixture.output(&["finding", "show", &first_id, "--json"]);
+    let shown: Value = serde_json::from_slice(&shown.stdout).unwrap();
+    assert_eq!(shown["kind"], "bug", "exact dedup ignores and preserves kind");
+    assert_eq!(shown["state"], "pending");
+    assert_eq!(shown["paths"], json!(["docs/a.md", "src/a.rs"]));
+    assert_eq!(shown["sighting_count"], 2);
+    assert_eq!(shown["triaging"], false);
+
+    let handed_off = fixture.output(&["finding", "handoff", &first_id, "--path", &absolute]);
+    assert_eq!(String::from_utf8_lossy(&handed_off.stdout), format!("HANDED_OFF\t{first_id}\tsrc/a.rs\n"));
+    let resolved = fixture.output(&["finding", "resolve", &first_id, "--as", "fixed", "--commit", "abcdef0"]);
+    assert_eq!(String::from_utf8_lossy(&resolved.stdout), format!("RESOLVED\t{first_id}\tfixed\n"));
+
+    let open: Value = serde_json::from_slice(&fixture.output(&["finding", "list", "--json"]).stdout).unwrap();
+    assert!(open.as_array().unwrap().iter().all(|finding| finding["id"] != first_id));
+    let all: Value = serde_json::from_slice(&fixture.output(&["finding", "list", "--all", "--json"]).stdout).unwrap();
+    assert!(all.as_array().unwrap().iter().any(|finding| finding["id"] == first_id));
+
+    let recurrence = fixture.output(&["finding", "add", "--path", "src/a.rs", "--path", "docs/a.md", "shared failure"]);
+    let recurrence_id =
+        String::from_utf8_lossy(&recurrence.stdout).lines().next().unwrap().strip_prefix("ADDED\t").unwrap().to_owned();
+    assert_ne!(recurrence_id, first_id);
+    let missing_canonical = fixture.output(&["finding", "resolve", &recurrence_id, "--as", "duplicate"]);
+    assert_eq!(missing_canonical.status.code(), Some(64));
+    assert!(String::from_utf8_lossy(&missing_canonical.stderr).contains("--canonical is required"));
+    let marked_duplicate =
+        fixture.output(&["finding", "resolve", &recurrence_id, "--as", "duplicate", "--canonical", &first_id]);
+    assert_eq!(marked_duplicate.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8_lossy(&fixture.output(&["finding", "reopen", &first_id]).stdout),
+        format!("REOPENED\t{first_id}\n")
+    );
+
+    let outside = fixture._temporary.path().join("outside.txt");
+    fs::write(&outside, "outside\n").unwrap();
+    std::os::unix::fs::symlink(&outside, fixture.root.join("outside-link")).unwrap();
+    let escaped = fixture.output(&["finding", "add", "--path", "outside-link", "must reject escape"]);
+    assert_eq!(escaped.status.code(), Some(64));
+    assert!(String::from_utf8_lossy(&escaped.stderr).contains("finding path escapes repository"));
+
+    let connection = Connection::open(fixture.state.join("state.db")).unwrap();
+    let observations: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM finding_observations o
+             JOIN finding_sightings s ON s.id = o.sighting_id
+             WHERE s.finding_id = ?1 AND o.content_sha256 IS NOT NULL",
+            [&first_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(observations, 4, "both paths are observed for both exact sightings");
 }
 
 #[test]
@@ -428,7 +526,7 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     assert_eq!(check.status.code(), Some(2));
     let reports: Vec<Value> = serde_json::from_slice(&check.stdout).expect("check JSON");
     let state = reports.iter().find(|report| report["component"] == "state").expect("state report");
-    assert_eq!(state["schema_version"], 10);
+    assert_eq!(state["schema_version"], 11);
     assert_eq!(state["path"], fixture.state.join("state.db").to_string_lossy().as_ref());
     let codex_hooks = reports.iter().find(|report| report["component"] == "hooks:codex").expect("hook report");
     assert!(codex_hooks["error"].is_null());
@@ -439,6 +537,8 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
 #[test]
 fn dashboard_snapshot_matches_the_frontend_shape_and_ctrl_c_is_graceful() {
     let fixture = Fixture::new();
+    let added = fixture.output(&["finding", "add", "--path", "docs/api.md", "SSE fixture finding"]);
+    let finding_id = String::from_utf8_lossy(&added.stdout).trim().strip_prefix("ADDED\t").unwrap().to_owned();
     let port = unused_port();
     let mut server = fixture.command();
     let mut child = server
@@ -459,7 +559,7 @@ fn dashboard_snapshot_matches_the_frontend_shape_and_ctrl_c_is_graceful() {
         "providers",
         "sessions",
         "work",
-        "notes",
+        "findings",
         "delegates",
         "outside_scope",
         "messages",
@@ -468,6 +568,37 @@ fn dashboard_snapshot_matches_the_frontend_shape_and_ctrl_c_is_graceful() {
     ] {
         assert!(payload.get(key).is_some(), "missing dashboard field {key}");
     }
+    let finding = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["id"] == finding_id)
+        .expect("snapshot finding");
+    for key in [
+        "id",
+        "repo_root",
+        "summary",
+        "kind",
+        "state",
+        "paths",
+        "created_at",
+        "updated_at",
+        "terminal_at",
+        "handoff_path",
+        "commit_oid",
+        "canonical_id",
+        "sighting_count",
+        "triaging",
+    ] {
+        assert!(finding.get(key).is_some(), "missing dashboard finding field {key}");
+    }
+    assert!(finding["kind"].is_null());
+    assert!(finding["terminal_at"].is_null());
+    assert!(finding["handoff_path"].is_null());
+    assert!(finding["commit_oid"].is_null());
+    assert!(finding["canonical_id"].is_null());
+    assert_eq!(finding["sighting_count"], 1);
+    assert_eq!(finding["triaging"], false);
 
     send_signal(&child, libc::SIGINT);
     wait_for_exit(&mut child, Duration::from_secs(5));

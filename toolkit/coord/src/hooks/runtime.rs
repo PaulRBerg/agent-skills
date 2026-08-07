@@ -15,19 +15,41 @@ use crate::{
 use super::specs::{Client as HookClient, hook_specs};
 
 const MAX_PRESENCE_CHARS: usize = 200;
+const MAX_FINDING_REASON_CHARS: usize = 8_000;
+const MAX_FINDING_SUMMARY_CHARS: usize = 160;
 const WAKER_TIMEOUT_SECONDS: u64 = 3_480;
 const WAKER_POLL_SECONDS: f64 = 1.0;
 const CALLSIGN_NUDGE: &str =
     "ai-coord: Session unnamed; `ai-coord name '<callsign>'` assigns a short, funny callsign containing an emoji.";
 const PERMISSION_MODES: &[&str] = &["default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"];
 
+trait LifecycleTriageScheduler: Sync {
+    fn schedule(&self, coordinator: &Coordinator, cwd: &Path, identity: &Identity);
+}
+
+struct CoordinatorTriageScheduler;
+
+impl LifecycleTriageScheduler for CoordinatorTriageScheduler {
+    fn schedule(&self, coordinator: &Coordinator, cwd: &Path, identity: &Identity) {
+        let _ = coordinator.schedule_findings_triage_for_identity(cwd, identity);
+    }
+}
+
+static COORDINATOR_TRIAGE_SCHEDULER: CoordinatorTriageScheduler = CoordinatorTriageScheduler;
+
 pub(crate) struct HookRuntime<'a> {
     coordinator: &'a Coordinator,
+    scheduler: &'a dyn LifecycleTriageScheduler,
 }
 
 impl<'a> HookRuntime<'a> {
     pub(crate) fn new(coordinator: &'a Coordinator) -> Self {
-        Self { coordinator }
+        Self { coordinator, scheduler: &COORDINATOR_TRIAGE_SCHEDULER }
+    }
+
+    #[cfg(test)]
+    fn with_scheduler(coordinator: &'a Coordinator, scheduler: &'a dyn LifecycleTriageScheduler) -> Self {
+        Self { coordinator, scheduler }
     }
 
     /// Apply one supported lifecycle event and return only bounded, host-safe stdout.
@@ -71,6 +93,11 @@ impl<'a> HookRuntime<'a> {
         if event == "SessionEnd" {
             store.end_session(&identity)?;
             store.hook_success(client, event, self.coordinator.now())?;
+            drop(store);
+            // A session end may have made a repository quiescent. The
+            // scheduler owns all config, branch, cooldown, and lease guards;
+            // lifecycle hooks must remain fail-open if it cannot run.
+            self.scheduler.schedule(self.coordinator, &cwd, &identity);
             return Ok(noop_stdout(client_name(client), event));
         }
 
@@ -100,6 +127,10 @@ impl<'a> HookRuntime<'a> {
             store.upsert_session(&update)?;
         }
 
+        if event == "UserPromptSubmit" {
+            store.begin_turn(&identity, payload.get("turn_id").and_then(Value::as_str), self.coordinator.now())?;
+        }
+
         if matches!(event, "SubagentStart" | "SubagentStop") {
             let agent_id = payload
                 .get("agent_id")
@@ -114,6 +145,33 @@ impl<'a> HookRuntime<'a> {
                 if event == "SubagentStart" { "active" } else { "ended" },
                 self.coordinator.now(),
             )?;
+        }
+
+        if matches!(event, "Stop" | "SubagentStop") {
+            let findings = store.current_turn_findings(&identity)?;
+            let message = payload.get("last_assistant_message").and_then(Value::as_str).unwrap_or_default();
+            let all_present = findings.iter().all(|finding| contains_exact_id(message, &finding.id));
+            let stop_allowed = findings.is_empty() ||
+                all_present ||
+                payload.get("stop_hook_active").and_then(Value::as_bool).unwrap_or(false);
+            let output = if findings.is_empty() || all_present {
+                if event == "Stop" && !findings.is_empty() {
+                    store.mark_current_turn_findings_surfaced(&identity, self.coordinator.now())?;
+                }
+                noop_stdout(client_name(client), event)
+            } else if payload.get("stop_hook_active").and_then(Value::as_bool).unwrap_or(false) {
+                noop_stdout(client_name(client), event)
+            } else {
+                finding_continuation(event, &findings)
+            };
+            store.hook_success(client, event, self.coordinator.now())?;
+            drop(store);
+            // Do not start triage while the first finding-reporting
+            // continuation is blocking the turn, or from subagent stops.
+            if event == "Stop" && stop_allowed {
+                self.scheduler.schedule(self.coordinator, &cwd, &identity);
+            }
+            return Ok(output);
         }
 
         if is_nudge_event(client, event) {
@@ -134,7 +192,7 @@ impl<'a> HookRuntime<'a> {
 
         store.hook_success(client, event, self.coordinator.now())?;
         if event == "UserPromptSubmit" {
-            return prompt_context(&store, &identity, root.as_deref());
+            return prompt_context(&store, &identity, root.as_deref(), self.coordinator.now());
         }
         Ok(noop_stdout(client_name(client), event))
     }
@@ -197,7 +255,12 @@ fn permission_mode(payload: &Value) -> (bool, Option<String>) {
     (true, value)
 }
 
-fn prompt_context(store: &crate::state::Store, identity: &Identity, root: Option<&Path>) -> Result<String> {
+fn prompt_context(
+    store: &crate::state::Store,
+    identity: &Identity,
+    root: Option<&Path>,
+    current: f64,
+) -> Result<String> {
     let mut parts = Vec::new();
     if store.session(identity)?.is_none_or(|row| row.callsign.is_none()) {
         parts.push(CALLSIGN_NUDGE.to_owned());
@@ -211,8 +274,19 @@ fn prompt_context(store: &crate::state::Store, identity: &Identity, root: Option
             .count();
         let unread = store.inbox(identity, true)?.len();
         let queued = store.works(Some(&root))?.into_iter().filter(|work| work.state == WorkState::Queued).count();
-        if peers > 0 || unread > 0 || queued > 0 {
-            let presence = format!("Peers: {peers}; queued work: {queued}; unread messages: {unread}.");
+        let findings = store.finding_counts(&root, current)?;
+        if peers > 0 || unread > 0 || queued > 0 || findings != Default::default() {
+            let mut presence = Vec::new();
+            if findings != Default::default() {
+                presence.push(format!(
+                    "Findings: pending={}; triaging={}; handed-off={}.",
+                    findings.pending, findings.triaging, findings.handed_off
+                ));
+            }
+            if peers > 0 || unread > 0 || queued > 0 {
+                presence.push(format!("Peers: {peers}; queued work: {queued}; unread messages: {unread}."));
+            }
+            let presence = presence.join(" ");
             parts.push(if parts.is_empty() { format!("ai-coord: {presence}") } else { presence });
         }
     }
@@ -221,6 +295,33 @@ fn prompt_context(store: &crate::state::Store, identity: &Identity, root: Option
 
 fn noop_stdout(client: &str, event: &str) -> String {
     if client == "codex" && matches!(event, "Stop" | "SubagentStop") { "{}".to_owned() } else { String::new() }
+}
+fn finding_continuation(event: &str, findings: &[crate::state::CurrentTurnFinding]) -> String {
+    let target = if event == "SubagentStop" { "subagent final result" } else { "final response" };
+    let prefix =
+        format!("Add a `Findings recorded` summary to the {target} containing each exact finding ID and summary: ");
+    let record_overhead = findings.iter().map(|finding| finding.id.chars().count() + 2).sum::<usize>() +
+        findings.len().saturating_sub(1) * 2;
+    let summary_limit = MAX_FINDING_REASON_CHARS
+        .saturating_sub(prefix.chars().count() + record_overhead)
+        .checked_div(findings.len().max(1))
+        .unwrap_or_default()
+        .min(MAX_FINDING_SUMMARY_CHARS);
+    let records = findings
+        .iter()
+        .map(|finding| format!("{}: {}", finding.id, sanitize(&finding.summary, summary_limit)))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let reason = format!("{prefix}{records}");
+    json!({ "decision": "block", "reason": reason }).to_string()
+}
+fn contains_exact_id(message: &str, id: &str) -> bool {
+    message.match_indices(id).any(|(start, value)| {
+        let before = message[..start].chars().next_back();
+        let after = message[start + value.len()..].chars().next();
+        before.is_none_or(|character| !character.is_ascii_alphanumeric()) &&
+            after.is_none_or(|character| !character.is_ascii_alphanumeric())
+    })
 }
 fn is_nudge_event(client: Client, event: &str) -> bool {
     matches!((client, event), (Client::Claude, "PostToolBatch") | (Client::Codex, "PostToolUse"))
@@ -242,6 +343,9 @@ fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
 }
 fn sanitize(text: &str, limit: usize) -> String {
+    if limit == 0 {
+        return String::new();
+    }
     let value = text.chars().map(|character| if character.is_control() { ' ' } else { character }).collect::<String>();
     let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
     if value.chars().count() <= limit {

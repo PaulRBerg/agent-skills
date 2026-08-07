@@ -68,15 +68,20 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
         ));
     }
 
-    if !snapshot.notes.is_empty() {
+    let finding_counts = snapshot.findings.iter().fold((0, 0, 0), |counts, finding| {
+        (
+            counts.0 + usize::from(finding.state == crate::domain::FindingState::Pending),
+            counts.1 + usize::from(finding.triaging),
+            counts.2 + usize::from(finding.state == crate::domain::FindingState::HandedOff),
+        )
+    });
+    if finding_counts != (0, 0, 0) {
         let machine_wide = snapshot.scope.kind == SnapshotScopeKindV2::Machine;
-        let note_scope = if machine_wide { "machine-wide" } else { snapshot.scope.repo_root.as_deref().unwrap_or("") };
-        lines.push(format!("Notes ({note_scope}):"));
-        for note in &snapshot.notes {
-            let prefix = if machine_wide { format!("{}  ", note.repo_root) } else { String::new() };
-            lines.push(format!("{prefix}{}  {}  {}", note.id, age_label(note.created_at, now), note.text));
-        }
-        lines.push("(note --done <id> closes a note)".to_owned());
+        let scope = if machine_wide { "machine-wide" } else { snapshot.scope.repo_root.as_deref().unwrap_or("") };
+        lines.push(format!(
+            "Findings ({scope}): pending={}; triaging={}; handed-off={}. `ai-coord finding list` shows details.",
+            finding_counts.0, finding_counts.1, finding_counts.2
+        ));
     }
 
     let states = snapshot.sessions.iter().map(|session| session.state).collect::<Vec<_>>();
@@ -210,11 +215,13 @@ fn unix_now() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{OutsideScopeV2, ProviderReport, Scope, ScopeKind, SnapshotScopeV2, SnapshotWorkV2};
+    use crate::domain::{
+        FindingState, FindingSummary, OutsideScopeV2, ProviderReport, Scope, ScopeKind, SnapshotScopeV2, SnapshotWorkV2,
+    };
 
     fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {
         SnapshotV2 {
-            schema_version: 2,
+            schema_version: 3,
             complete: true,
             scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Repo, repo_root: Some("/repo".into()) },
             self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
@@ -228,7 +235,7 @@ mod tests {
             }],
             sessions,
             work,
-            notes: vec![],
+            findings: vec![],
             delegates: vec![],
             outside_scope: OutsideScopeV2 { sessions: 0, directories: 0 },
         }
@@ -269,13 +276,32 @@ mod tests {
         }
     }
 
+    fn finding(id: &str, summary: &str, state: FindingState, triaging: bool) -> FindingSummary {
+        FindingSummary {
+            id: id.into(),
+            repo_root: "/repo".into(),
+            summary: summary.into(),
+            kind: None,
+            state,
+            paths: vec!["private/path.rs".into()],
+            created_at: 1.0,
+            updated_at: 1_000.0,
+            terminal_at: state.is_terminal().then_some(1_000.0),
+            handoff_path: (state == FindingState::HandedOff).then(|| "private/path.rs".into()),
+            commit_oid: None,
+            canonical_id: None,
+            sighting_count: 1,
+            triaging,
+        }
+    }
+
     #[test]
-    fn json_keeps_the_v2_schema_and_omits_draft_paths() {
+    fn json_keeps_the_v3_schema_and_omits_draft_paths() {
         let payload: serde_json::Value = serde_json::from_str(
             &snapshot_json(&snapshot(vec![session("self")], vec![work("self", WorkState::Draft)])).unwrap(),
         )
         .unwrap();
-        assert_eq!(payload["schema_version"], 2);
+        assert_eq!(payload["schema_version"], 3);
         assert_eq!(payload["self"]["session_id"], "self");
         assert_eq!(payload["work"][0]["scope_count"], 1);
         assert!(payload["work"][0].get("scopes").is_none());
@@ -295,5 +321,20 @@ mod tests {
         assert!(!rendered.contains('\u{1b}'));
         assert!(rendered.contains("\tcount=2\t/repo\t"));
         assert!(!rendered.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn rendering_summarizes_finding_counts_without_dumping_the_backlog() {
+        let mut snapshot = snapshot(vec![session("self")], vec![]);
+        snapshot.findings = vec![
+            finding("pending-id", "private pending summary", FindingState::Pending, true),
+            finding("handoff-id", "private handoff summary", FindingState::HandedOff, false),
+            finding("fixed-id", "private fixed summary", FindingState::Fixed, false),
+        ];
+        let rendered = render_status_at(&snapshot, 2_000.0);
+        assert!(rendered.contains("Findings (/repo): pending=1; triaging=1; handed-off=1."));
+        for private in ["pending-id", "private pending summary", "private/path.rs", "fixed-id"] {
+            assert!(!rendered.contains(private));
+        }
     }
 }

@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{
-    DelegateRow, HookHealthRow, MessageRow, NoteRow, ProviderCacheRow, Store,
+    DelegateRow, HookHealthRow, MessageRow, ProviderCacheRow, Store,
     store::{MAX_ERROR_CODE_CHARS, bump_generation, client_name, new_id, parse_client, sanitize},
 };
 
@@ -73,69 +73,6 @@ impl Store {
                 )?,
             };
             if changed > 0 {
-                bump_generation(transaction)?;
-            }
-            Ok(changed)
-        })
-    }
-
-    pub(crate) fn add_note(&mut self, author: &Identity, repo_root: &str, text: &str, current: f64) -> Result<String> {
-        let id = new_id();
-        self.immediate(|transaction| {
-            transaction.execute(
-                "INSERT INTO notes(
-                    id, repo_root, author_client, author_session_id, text, created_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![id, repo_root, client_name(author.client), author.session_id, text, current],
-            )?;
-            bump_generation(transaction)
-        })?;
-        Ok(id)
-    }
-
-    pub(crate) fn notes(&self, repo_root: &str, since: Option<f64>) -> Result<Vec<NoteRow>> {
-        let rows = match since {
-            Some(since) => {
-                let mut statement = self.connection.prepare(
-                    "SELECT id, repo_root, author_client, author_session_id, text,
-                            created_at, resolved_at
-                     FROM notes
-                     WHERE repo_root = ?1 AND resolved_at IS NULL AND created_at > ?2
-                     ORDER BY created_at, id",
-                )?;
-                statement.query_map(params![repo_root, since], note_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?
-            }
-            None => {
-                let mut statement = self.connection.prepare(
-                    "SELECT id, repo_root, author_client, author_session_id, text,
-                            created_at, resolved_at
-                     FROM notes WHERE repo_root = ?1 AND resolved_at IS NULL
-                     ORDER BY created_at, id",
-                )?;
-                statement.query_map([repo_root], note_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?
-            }
-        };
-        Ok(rows)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn all_notes(&self) -> Result<Vec<NoteRow>> {
-        let mut statement = self.connection.prepare(
-            "SELECT id, repo_root, author_client, author_session_id, text,
-                    created_at, resolved_at
-             FROM notes ORDER BY created_at, id",
-        )?;
-        Ok(statement.query_map([], note_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?)
-    }
-
-    pub(crate) fn resolve_note(&mut self, repo_root: &str, note_id: &str, current: f64) -> Result<bool> {
-        self.immediate(|transaction| {
-            let changed = transaction.execute(
-                "UPDATE notes SET resolved_at = ?1
-                 WHERE repo_root = ?2 AND id = ?3 AND resolved_at IS NULL",
-                params![current, repo_root, note_id],
-            )? > 0;
-            if changed {
                 bump_generation(transaction)?;
             }
             Ok(changed)
@@ -355,23 +292,6 @@ fn message_from_row(row: &Row<'_>) -> rusqlite::Result<MessageRow> {
         created_at: row.get(9)?,
         acknowledged_at: row.get(10)?,
         notified_at: row.get(11)?,
-    })
-}
-
-fn note_from_row(row: &Row<'_>) -> rusqlite::Result<NoteRow> {
-    let author_client = row.get::<_, Option<String>>(2)?;
-    let author_session_id = row.get::<_, Option<String>>(3)?;
-    let author = match (author_client, author_session_id) {
-        (Some(client), Some(session_id)) => Some(Identity { client: parse_client(client)?, session_id }),
-        _ => None,
-    };
-    Ok(NoteRow {
-        id: row.get(0)?,
-        repo_root: row.get(1)?,
-        author,
-        text: row.get(4)?,
-        created_at: row.get(5)?,
-        resolved_at: row.get(6)?,
     })
 }
 

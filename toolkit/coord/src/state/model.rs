@@ -1,4 +1,4 @@
-use crate::domain::{Client, Identity, ProcessFingerprint, Scope, SessionState, WorkState};
+use crate::domain::{Client, FindingKind, Identity, ProcessFingerprint, Scope, SessionState, WorkState};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SessionRow {
@@ -111,13 +111,52 @@ pub(crate) struct MessageRow {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct NoteRow {
-    pub(crate) id: String,
+pub(crate) struct FindingAdd {
     pub(crate) repo_root: String,
-    pub(crate) author: Option<Identity>,
-    pub(crate) text: String,
-    pub(crate) created_at: f64,
-    pub(crate) resolved_at: Option<f64>,
+    pub(crate) summary: String,
+    pub(crate) normalized_summary: String,
+    pub(crate) kind: Option<FindingKind>,
+    pub(crate) paths: Vec<String>,
+    pub(crate) head_oid: Option<String>,
+    pub(crate) observations: Vec<FindingPathObservation>,
+    pub(crate) author: Identity,
+    pub(crate) turn_id: Option<String>,
+    pub(crate) current: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FindingPathObservation {
+    pub(crate) path: String,
+    pub(crate) content_sha256: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FindingAddResult {
+    pub(crate) finding: crate::domain::FindingSummary,
+    pub(crate) deduplicated: bool,
+    pub(crate) candidates: Vec<crate::domain::FindingSummary>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CurrentTurnFinding {
+    pub(crate) id: String,
+    pub(crate) summary: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct FindingCounts {
+    pub(crate) pending: usize,
+    pub(crate) triaging: usize,
+    pub(crate) handed_off: usize,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FindingResolution {
+    pub(crate) state: crate::domain::FindingState,
+    pub(crate) commit_oid: Option<String>,
+    pub(crate) canonical_id: Option<String>,
+    pub(crate) actor: Identity,
+    pub(crate) current: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]

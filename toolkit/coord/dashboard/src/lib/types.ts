@@ -48,14 +48,26 @@ export interface Work extends SessionIdentity {
   updated_at: number;
 }
 
-export interface Note {
+export type FindingState =
+  "pending" | "handed-off" | "fixed" | "stale" | "rejected" | "duplicate";
+
+export type FindingKind = "bug" | "docs" | "improvement";
+
+export interface Finding {
   id: string;
   repo_root: string;
-  author_client: string | null;
-  author_session_id: string | null;
-  text: string;
+  summary: string;
+  kind: FindingKind | null;
+  state: FindingState;
+  paths: string[];
   created_at: number;
-  resolved_at: number | null;
+  updated_at: number;
+  terminal_at: number | null;
+  handoff_path: string | null;
+  commit_oid: string | null;
+  canonical_id: string | null;
+  sighting_count: number;
+  triaging: boolean;
 }
 
 export interface Delegate {
@@ -92,7 +104,7 @@ export interface Snapshot {
   providers: ProviderCoverage[];
   sessions: Session[];
   work: Work[];
-  notes: Note[];
+  findings: Finding[];
   delegates: Delegate[];
   outside_scope: {
     sessions: number;

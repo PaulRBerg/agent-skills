@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Break the internal ledger at schema v11 and the public status snapshot at schema v3. Add durable `finding` lifecycle
+  records, exact open-record deduplication with sightings and evidence, terminal recurrence, triage leases, and a
+  dashboard/SSE finding summary contract; reject v10 without migration or import.
+- Replace user-facing notes with `finding add`, `list`, `show`, `handoff`, `resolve`, and `reopen` commands.
+- Add opt-in autonomous finding triage for tracked `[findings] auto_triage = true` repositories: bounded, main-only,
+  quiescent, cooldown-gated offline Luna/xhigh runs can make safe local documentation commits or deterministic handoffs;
+  they never push or cascade. Main Stop, SessionEnd, and `done` schedule only after their ordinary lifecycle action.
+- Require final responses to report exact current-turn finding IDs before an allowed main Stop, while preserving
+  fail-open hook behavior and compact findings counts in normal presence/status output.
 - Replace pathless intents with provider-neutral `draft → queued | active` work items. Drafts retain exact normalized
   scopes without arbitration or ownership, and `start --draft` establishes FIFO age only when the draft is promoted.
 - Break the internal ledger at schema v10 with session-cascaded `work_items`, `work_scopes`, and `work_baselines`;

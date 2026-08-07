@@ -22,14 +22,14 @@ pub(crate) enum Command {
     Start(StartArgs),
     /// Return when queued work is ready or another wake event occurs.
     ///
-    /// Messages, notes, unknown coverage, work release, and timeout are
+    /// Messages, unknown coverage, work release, and timeout are
     /// non-readiness wake events.
     Wait(WaitArgs),
     /// Release this session's draft, active, or queued work.
     Done,
     /// Print Git blob baselines for this session's active work.
     Baseline,
-    /// Show sessions, work, provider coverage, and repository notes.
+    /// Show sessions, work, provider coverage, and repository findings.
     Status(StatusArgs),
     /// Serve the local dashboard HTTP interface.
     Serve(ServeArgs),
@@ -39,8 +39,8 @@ pub(crate) enum Command {
     Msg(MessageArgs),
     /// List or acknowledge recipient-only messages.
     Inbox(InboxArgs),
-    /// Create or resolve a durable repository note.
-    Note(NoteArgs),
+    /// Record and manage durable repository findings.
+    Finding(FindingArgs),
     /// Print the current agent-session Git trailer.
     Trailer,
     /// Consume one host lifecycle hook payload from standard input.
@@ -49,6 +49,9 @@ pub(crate) enum Command {
     /// Wake a Claude session when queued coordination state changes.
     #[command(hide = true)]
     Waker(WakerArgs),
+    /// Run one previously claimed findings triage batch.
+    #[command(hide = true)]
+    TriageWorker(TriageWorkerArgs),
     /// Install owned lifecycle hooks while preserving unrelated hooks.
     Link(LinkArgs),
     /// Report installation, schema, hook, provider, and hook-health status.
@@ -142,12 +145,111 @@ pub(crate) struct InboxArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct NoteArgs {
-    pub(crate) text: Option<String>,
+pub(crate) struct FindingArgs {
+    #[command(subcommand)]
+    pub(crate) command: FindingCommand,
+}
 
-    /// Resolve one repository note.
-    #[arg(long = "done", value_name = "ID")]
-    pub(crate) note_id: Option<String>,
+#[derive(Debug, Subcommand)]
+pub(crate) enum FindingCommand {
+    /// Record a new finding or another sighting of an exact open match.
+    Add(FindingAddArgs),
+    /// List findings in the current repository.
+    List(FindingListArgs),
+    /// Show one finding.
+    Show(FindingShowArgs),
+    /// Mark a pending finding as handed off to an owned path.
+    Handoff(FindingHandoffArgs),
+    /// Resolve a finding into a terminal state.
+    Resolve(FindingResolveArgs),
+    /// Return a terminal finding to pending.
+    Reopen(FindingReopenArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct FindingAddArgs {
+    #[arg(long, value_enum)]
+    pub(crate) kind: Option<FindingKindArg>,
+
+    #[arg(long = "path", value_name = "PATH")]
+    pub(crate) paths: Vec<PathBuf>,
+
+    pub(crate) text: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct FindingListArgs {
+    #[arg(long, value_enum, conflicts_with = "all")]
+    pub(crate) state: Option<FindingStateArg>,
+
+    /// Include terminal findings.
+    #[arg(long)]
+    pub(crate) all: bool,
+
+    #[arg(long = "json")]
+    pub(crate) as_json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct FindingShowArgs {
+    pub(crate) id: String,
+
+    #[arg(long = "json")]
+    pub(crate) as_json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct FindingHandoffArgs {
+    pub(crate) id: String,
+
+    #[arg(long, value_name = "PATH")]
+    pub(crate) path: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct FindingResolveArgs {
+    pub(crate) id: String,
+
+    #[arg(long = "as", value_enum)]
+    pub(crate) resolution: FindingResolutionArg,
+
+    /// Record a commit object ID as resolution evidence.
+    #[arg(long, value_name = "OID")]
+    pub(crate) commit: Option<String>,
+
+    /// Identify the canonical finding when resolving as duplicate.
+    #[arg(long, value_name = "ID")]
+    pub(crate) canonical: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct FindingReopenArgs {
+    pub(crate) id: String,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum FindingKindArg {
+    Bug,
+    Docs,
+    Improvement,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum FindingStateArg {
+    Pending,
+    HandedOff,
+    Fixed,
+    Stale,
+    Rejected,
+    Duplicate,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum FindingResolutionArg {
+    Fixed,
+    Stale,
+    Rejected,
+    Duplicate,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -165,6 +267,15 @@ pub(crate) struct HookArgs {
 pub(crate) struct WakerArgs {
     #[arg(value_enum)]
     pub(crate) client: ClaudeClient,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TriageWorkerArgs {
+    #[arg(long)]
+    pub(crate) run_id: String,
+
+    #[arg(long)]
+    pub(crate) repo: PathBuf,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]

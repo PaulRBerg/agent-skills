@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 10;
+pub(crate) const SCHEMA_VERSION: i64 = 11;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -97,17 +97,106 @@ const STATEMENTS: &[&str] = &[
     )",
     "CREATE INDEX messages_recipient_idx
         ON messages(recipient_client, recipient_session_id, created_at)",
-    "CREATE TABLE notes (
+    "CREATE TABLE current_turns (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        PRIMARY KEY (client, session_id),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE TABLE findings (
         id TEXT PRIMARY KEY,
         repo_root TEXT NOT NULL,
-        author_client TEXT,
-        author_session_id TEXT,
-        text TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        normalized_summary TEXT NOT NULL,
+        kind TEXT CHECK (kind IS NULL OR kind IN ('bug', 'docs', 'improvement')),
+        state TEXT NOT NULL CHECK (state IN (
+            'pending', 'handed-off', 'fixed', 'stale', 'rejected', 'duplicate'
+        )),
         created_at REAL NOT NULL,
-        resolved_at REAL,
-        CHECK ((author_client IS NULL) = (author_session_id IS NULL))
+        updated_at REAL NOT NULL,
+        terminal_at REAL,
+        handoff_path TEXT,
+        commit_oid TEXT,
+        canonical_id TEXT REFERENCES findings(id),
+        CHECK (
+            (state IN ('pending', 'handed-off') AND terminal_at IS NULL)
+            OR (state IN ('fixed', 'stale', 'rejected', 'duplicate') AND terminal_at IS NOT NULL)
+        ),
+        CHECK (state != 'handed-off' OR handoff_path IS NOT NULL),
+        CHECK ((state = 'duplicate') = (canonical_id IS NOT NULL)),
+        CHECK (canonical_id IS NULL OR canonical_id != id)
     )",
-    "CREATE INDEX notes_repo_idx ON notes(repo_root, created_at)",
+    "CREATE INDEX findings_repo_state_idx
+        ON findings(repo_root, state, updated_at DESC, id)",
+    "CREATE INDEX findings_dedup_idx
+        ON findings(repo_root, normalized_summary, state)",
+    "CREATE TABLE finding_paths (
+        finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        PRIMARY KEY (finding_id, path)
+    )",
+    "CREATE INDEX finding_paths_path_idx ON finding_paths(path, finding_id)",
+    "CREATE TABLE finding_sightings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        author_client TEXT NOT NULL CHECK (author_client IN ('codex', 'claude')),
+        author_session_id TEXT NOT NULL,
+        turn_id TEXT,
+        head_oid TEXT,
+        created_at REAL NOT NULL,
+        surfaced_at REAL
+    )",
+    "CREATE INDEX finding_sightings_finding_idx
+        ON finding_sightings(finding_id, created_at, id)",
+    "CREATE INDEX finding_sightings_turn_idx
+        ON finding_sightings(author_client, author_session_id, turn_id, surfaced_at)",
+    "CREATE TABLE finding_observations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sighting_id INTEGER NOT NULL REFERENCES finding_sightings(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        content_sha256 TEXT,
+        UNIQUE (sighting_id, path)
+    )",
+    "CREATE TABLE finding_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        event TEXT NOT NULL CHECK (event IN ('created', 'handed-off', 'resolved', 'reopened')),
+        from_state TEXT CHECK (from_state IS NULL OR from_state IN (
+            'pending', 'handed-off', 'fixed', 'stale', 'rejected', 'duplicate'
+        )),
+        to_state TEXT NOT NULL CHECK (to_state IN (
+            'pending', 'handed-off', 'fixed', 'stale', 'rejected', 'duplicate'
+        )),
+        actor_client TEXT NOT NULL CHECK (actor_client IN ('codex', 'claude')),
+        actor_session_id TEXT NOT NULL,
+        handoff_path TEXT,
+        commit_oid TEXT,
+        canonical_id TEXT,
+        created_at REAL NOT NULL
+    )",
+    "CREATE INDEX finding_events_finding_idx
+        ON finding_events(finding_id, created_at, id)",
+    "CREATE TABLE triage_runs (
+        id TEXT PRIMARY KEY,
+        repo_root TEXT NOT NULL,
+        runner_client TEXT NOT NULL CHECK (runner_client IN ('codex', 'claude')),
+        runner_session_id TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        finished_at REAL,
+        outcome TEXT
+    )",
+    "CREATE INDEX triage_runs_repo_idx ON triage_runs(repo_root, started_at DESC)",
+    "CREATE TABLE finding_claims (
+        finding_id TEXT PRIMARY KEY REFERENCES findings(id) ON DELETE CASCADE,
+        triage_run_id TEXT NOT NULL REFERENCES triage_runs(id) ON DELETE CASCADE,
+        claimed_at REAL NOT NULL,
+        lease_expires_at REAL NOT NULL,
+        CHECK (lease_expires_at > claimed_at)
+    )",
+    "CREATE INDEX finding_claims_lease_idx ON finding_claims(lease_expires_at)",
     "CREATE TABLE delegates (
         parent_client TEXT NOT NULL,
         parent_session_id TEXT NOT NULL,

@@ -15,7 +15,6 @@ use crate::{
 use super::schema;
 
 pub(crate) const MESSAGE_TTL: f64 = 48.0 * 60.0 * 60.0;
-pub(crate) const NOTE_TTL: f64 = 7.0 * 24.0 * 60.0 * 60.0;
 pub(crate) const MAX_INBOX_MESSAGES: usize = 50;
 pub(super) const MAX_ERROR_CODE_CHARS: usize = 80;
 
@@ -59,7 +58,6 @@ impl Store {
     pub(crate) fn prune(&mut self, current: f64) -> Result<()> {
         self.immediate(|transaction| {
             transaction.execute("DELETE FROM messages WHERE created_at < ?1", [current - MESSAGE_TTL])?;
-            transaction.execute("DELETE FROM notes WHERE created_at < ?1", [current - NOTE_TTL])?;
             Ok(())
         })
     }

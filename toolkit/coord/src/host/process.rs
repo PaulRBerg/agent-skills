@@ -1,4 +1,11 @@
-use std::{fmt, sync::Arc};
+use std::{
+    ffi::OsString,
+    fmt,
+    fs::{File, OpenOptions},
+    path::PathBuf,
+    process::{Command, Stdio},
+    sync::Arc,
+};
 
 use sha2::{Digest, Sha256};
 
@@ -8,6 +15,65 @@ use crate::{
 };
 
 const MAX_ANCESTORS: usize = 16;
+
+#[derive(Clone, Debug)]
+pub(crate) struct DetachedProcessSpec {
+    pub(crate) program: PathBuf,
+    pub(crate) args: Vec<OsString>,
+    pub(crate) current_dir: PathBuf,
+    pub(crate) environment: Vec<(OsString, OsString)>,
+    pub(crate) stdout_path: PathBuf,
+    pub(crate) stderr_path: PathBuf,
+}
+
+pub(crate) trait DetachedProcessRunner: Send + Sync {
+    fn spawn(&self, spec: &DetachedProcessSpec) -> Result<ProcessFingerprint>;
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct NativeDetachedProcessRunner;
+
+impl DetachedProcessRunner for NativeDetachedProcessRunner {
+    fn spawn(&self, spec: &DetachedProcessSpec) -> Result<ProcessFingerprint> {
+        let stdout = private_log_file(&spec.stdout_path)?;
+        let stderr = private_log_file(&spec.stderr_path)?;
+        let mut command = Command::new(&spec.program);
+        command
+            .args(&spec.args)
+            .current_dir(&spec.current_dir)
+            .envs(spec.environment.iter().cloned())
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr));
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        let mut child = command
+            .spawn()
+            .map_err(|error| AppError::operational(format!("could not launch detached triage worker: {error}")))?;
+        match NativeProcessProbe::new().fingerprint(child.id()) {
+            Ok(fingerprint) => Ok(fingerprint),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                Err(error)
+            }
+        }
+    }
+}
+
+fn private_log_file(path: &std::path::Path) -> Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path).map_err(Into::into)
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LivenessObservation {

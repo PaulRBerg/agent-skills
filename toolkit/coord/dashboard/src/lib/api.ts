@@ -1,4 +1,10 @@
-import type { Snapshot, WorkScopeKind, WorkState } from "@/lib/types";
+import type {
+  FindingKind,
+  FindingState,
+  Snapshot,
+  WorkScopeKind,
+  WorkState,
+} from "@/lib/types";
 
 export type ConnectionState =
   "connecting" | "live" | "polling" | "disconnected";
@@ -59,6 +65,30 @@ function workState(value: unknown, path: string): WorkState {
 function workScopeKind(value: unknown, path: string): WorkScopeKind {
   if (value !== "exact" && value !== "recursive") {
     throw new Error(`${path} must be exact or recursive`);
+  }
+  return value;
+}
+
+function findingState(value: unknown, path: string): FindingState {
+  if (
+    value !== "pending" &&
+    value !== "handed-off" &&
+    value !== "fixed" &&
+    value !== "stale" &&
+    value !== "rejected" &&
+    value !== "duplicate"
+  ) {
+    throw new Error(
+      `${path} must be pending, handed-off, fixed, stale, rejected, or duplicate`,
+    );
+  }
+  return value;
+}
+
+function findingKind(value: unknown, path: string): FindingKind | null {
+  if (value === null) return null;
+  if (value !== "bug" && value !== "docs" && value !== "improvement") {
+    throw new Error(`${path} must be bug, docs, improvement, or null`);
   }
   return value;
 }
@@ -132,15 +162,27 @@ function validateProvider(value: unknown, path: string): void {
   nullableString(row.error, `${path}.error`);
 }
 
-function validateNote(value: unknown, path: string): void {
+function validateFinding(value: unknown, path: string): void {
   const row = record(value, path);
   string(row.id, `${path}.id`);
   string(row.repo_root, `${path}.repo_root`);
-  nullableString(row.author_client, `${path}.author_client`);
-  nullableString(row.author_session_id, `${path}.author_session_id`);
-  string(row.text, `${path}.text`);
+  string(row.summary, `${path}.summary`);
+  findingKind(row.kind, `${path}.kind`);
+  findingState(row.state, `${path}.state`);
+  array(row.paths, `${path}.paths`).forEach((item, index) =>
+    string(item, `${path}.paths[${index}]`),
+  );
   number(row.created_at, `${path}.created_at`);
-  if (row.resolved_at !== null) number(row.resolved_at, `${path}.resolved_at`);
+  number(row.updated_at, `${path}.updated_at`);
+  if (row.terminal_at !== null) number(row.terminal_at, `${path}.terminal_at`);
+  nullableString(row.handoff_path, `${path}.handoff_path`);
+  nullableString(row.commit_oid, `${path}.commit_oid`);
+  nullableString(row.canonical_id, `${path}.canonical_id`);
+  const sightingCount = integer(row.sighting_count, `${path}.sighting_count`);
+  if (sightingCount < 1) {
+    throw new Error(`${path}.sighting_count must be positive`);
+  }
+  boolean(row.triaging, `${path}.triaging`);
 }
 
 function validateDelegate(value: unknown, path: string): void {
@@ -173,8 +215,8 @@ function validateMessage(value: unknown, path: string): void {
 
 export function parseSnapshot(value: unknown): Snapshot {
   const snapshot = record(value, "snapshot");
-  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 2) {
-    throw new Error("snapshot.schema_version must be 2");
+  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 3) {
+    throw new Error("snapshot.schema_version must be 3");
   }
   boolean(snapshot.complete, "snapshot.complete");
 
@@ -198,8 +240,8 @@ export function parseSnapshot(value: unknown): Snapshot {
   array(snapshot.work, "snapshot.work").forEach((row, index) =>
     validateWork(row, `snapshot.work[${index}]`),
   );
-  array(snapshot.notes, "snapshot.notes").forEach((row, index) =>
-    validateNote(row, `snapshot.notes[${index}]`),
+  array(snapshot.findings, "snapshot.findings").forEach((row, index) =>
+    validateFinding(row, `snapshot.findings[${index}]`),
   );
   array(snapshot.delegates, "snapshot.delegates").forEach((row, index) =>
     validateDelegate(row, `snapshot.delegates[${index}]`),

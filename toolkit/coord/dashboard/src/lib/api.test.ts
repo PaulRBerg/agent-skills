@@ -39,7 +39,7 @@ describe("parseSnapshot", () => {
   test("rejects the pre-break status schema", () => {
     const legacy = { ...sampleSnapshot, schema_version: 1 };
     expect(() => parseSnapshot(legacy)).toThrow(
-      "snapshot.schema_version must be 2",
+      "snapshot.schema_version must be 3",
     );
   });
 
@@ -89,6 +89,43 @@ describe("parseSnapshot", () => {
 
     expect(() => parseSnapshot(malformed)).toThrow(
       "snapshot.messages[0].sender_callsign",
+    );
+  });
+
+  test("rejects malformed finding state", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const findings = malformed.findings as Array<Record<string, unknown>>;
+    findings[0] = { ...findings[0], state: "open" };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.findings[0].state",
+    );
+  });
+
+  test("rejects malformed finding kind", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const findings = malformed.findings as Array<Record<string, unknown>>;
+    findings[0] = { ...findings[0], kind: "coverage" };
+
+    expect(() => parseSnapshot(malformed)).toThrow("snapshot.findings[0].kind");
+  });
+
+  test("rejects malformed triage overlays", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const findings = malformed.findings as Array<Record<string, unknown>>;
+    findings[0] = { ...findings[0], triaging: "leased" };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.findings[0].triaging",
     );
   });
 });

@@ -1,6 +1,7 @@
 # ai-coord
 
-Local coordination for parallel Codex and Claude Code agents, shipped as one Rust binary.
+Local coordination and durable repository findings for parallel Codex and Claude Code agents, shipped as one Rust
+binary.
 
 `ai-coord` replaces scattered hook scripts and multi-command conflict checks with one work lifecycle:
 
@@ -114,20 +115,20 @@ ai-coord wait -t 60  # explicit timeout, capped at one hour
 
 Editing requires `ai-coord start` to return `READY`. `wait` checks the SQLite generation counter each second and
 performs full inventory, Git, and arbitration refreshes only when coordination state changes or every 20 seconds as a
-fallback. `MESSAGE`, `NOTE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN` exits 2. After any
-such wake, inspect the reported state and re-arm as needed. `done` idempotently releases draft, active, or queued work
-and notifies overlapping queued holders that their work may now be ready.
+fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN` exits 2. After any such
+wake, inspect the reported state and re-arm as needed. `done` idempotently releases draft, active, or queued work and
+notifies overlapping queued holders that their work may now be ready.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. Newly blocked work
 reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
 recursive holder is blocking a more targeted request; blocked recursive callers receive a matching stderr hint.
 
 In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its work is promoted,
-a message or note arrives, the work is released, coverage becomes unknown, or the waker times out. A readiness wake
-still requires `start` to return `READY`; message and note wakes identify `inbox` or `status` as the inspection surface
-and `start` as the ownership recheck. Unknown coverage, timeout, and release state explicitly that no edit scope is
-owned. Repeated `start` calls may launch multiple independent wakers for the same session; each exits on the first
-terminal outcome. Codex sessions use `ai-coord wait` in the foreground.
+a message arrives, the work is released, coverage becomes unknown, or the waker times out. A readiness wake still
+requires `start` to return `READY`; message wakes identify `inbox` as the inspection surface and `start` as the
+ownership recheck. Unknown coverage, timeout, and release state explicitly that no edit scope is owned. Repeated `start`
+calls may launch multiple independent wakers for the same session; each exits on the first terminal outcome. Codex
+sessions use `ai-coord wait` in the foreground.
 
 Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
 planning presence from active implementation work.
@@ -155,16 +156,15 @@ ai-coord name '👩‍💻 Baroness Byte'
 ai-coord msg '019fbf24' 'Changes are committed; your path is clear.'
 ai-coord inbox
 ai-coord inbox --ack '<message-id>'
-ai-coord note 'Verified stale importer assumption.'
-ai-coord note --done '<note-id>'
 ```
 
 `status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output marks
 queued work with `work=queued`, renders drafts as `draft · N scopes`, and ends with compact, contextual definitions for
-the states present; `--json` emits public schema v2. Draft records include only their label, state, timestamps, and
-scope count. Submitted work includes literal normalized scope objects. Status, dashboard snapshots, and message
-recipient discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check`
-always probe providers freshly before granting work or reporting installation health.
+the states present; it reports only finding counts (`pending`, `triaging`, and `handed-off`), never a backlog. `--json`
+emits public schema v3. Draft records include only their label, state, timestamps, and scope count. Submitted work
+includes literal normalized scope objects. Status, dashboard snapshots, and message recipient discovery may reuse
+complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe providers freshly
+before granting work or reporting installation health.
 
 Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
 number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
@@ -174,7 +174,49 @@ fallback everywhere.
 Message targets resolve an exact `client/session` or session ID first, then an exact callsign, a unique ID prefix of at
 least four characters, or a unique callsign/label/provider-name substring. `repo` expands to the currently live peers in
 the Git worktree. Messages are recipient-scoped and snapshot both endpoint callsigns when sent, so later renames do not
-rewrite history; notes are durable, repo-scoped records visible to future sessions.
+rewrite history.
+
+## Findings and autonomous triage
+
+Findings are durable, repository-scoped follow-ups. Add one when work reveals a real issue outside the active scope;
+inspect details with the finding commands or dashboard rather than waking blocked work.
+
+```sh
+ai-coord finding add --kind bug --path src/importer.rs 'CSV importer rejects empty optional fields'
+ai-coord finding list
+ai-coord finding list --all --json
+ai-coord finding show '<finding-id>' --json
+ai-coord finding handoff '<finding-id>' --path '.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md'
+ai-coord finding resolve '<finding-id>' --as fixed --commit '<commit-oid>'
+ai-coord finding resolve '<finding-id>' --as duplicate --canonical '<finding-id>'
+ai-coord finding reopen '<finding-id>'
+```
+
+`add` NFC-normalizes whitespace and records a sighting, Git HEAD, and per-path content hashes. It increments the same
+open record only when repository, normalized summary, and the complete normalized path set match exactly; it preserves
+kind from the original record. Same-path non-exact matches are printed as candidates. Terminal records never deduplicate
+a later recurrence. `handoff` moves a pending record to `handed-off`; `resolve` records `fixed`, `stale`, `rejected`, or
+`duplicate` (which requires a canonical ID); `reopen` returns a terminal record to pending. All JSON forms expose the
+same finding summary: `id`, `repo_root`, `summary`, nullable `kind`, `state`, `paths`, timestamps, nullable terminal
+evidence, `sighting_count`, and live `triaging`.
+
+Autonomous triage is disabled unless the repository-root `.ai-coord.toml` is committed at `HEAD` and sets:
+
+```toml
+[findings]
+auto_triage = true
+```
+
+After `done`, an allowed main-session Stop, or SessionEnd, ai-coord may start one detached batch only when `main` is
+checked out, no normal work is active or queued, pending findings exist, and the 24-hour repository cooldown has
+expired. A batch claims at most 20 findings and expires stale/dead leases. It runs an ephemeral offline, agentless Codex
+Luna/xhigh process for at most 30 minutes with workspace-write access plus the state directory. It never pushes.
+
+The safe tier may make only unambiguous documentation fixes and records a local `Finding-ID` commit. Everything else is
+validated into the deterministic `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md` handoff tier while preserving the exact
+ledger ID in its `Source finding:` marker. Structured output, artifacts, commit trailers, and paths are reconciled
+before state changes. Triagers do not schedule another triager. Run metadata and stdout/stderr live under
+`$XDG_STATE_HOME/ai-coord/triage-runs/` (or `AI_COORD_STATE_DIR`) and are retained for 30 days.
 
 `ai-coord trailer` prints the current Git attribution line:
 
@@ -190,9 +232,11 @@ sessions idle. Prompt hooks inject at most 200 characters of factual state: whet
 queued-work, and unread-message counts. Naming removes the unnamed fact. Claude's `PostToolBatch` hook and Codex's
 `PostToolUse` hook report the unread count once, route inspection to `ai-coord inbox`, and identify message text as
 peer-reported data rather than instructions or authority. Peer text, IDs, prompts, and tool payloads are never injected.
-Stop and session-end hooks update or release the corresponding session; subagent hooks add read-only parent/child
-topology. Claude's filtered `ai-coord waker claude` hook handles blocked starts in the background; planning scopes are
-recorded explicitly with `draft`, not inferred from provider-specific plan hooks.
+Stop hooks require a final `Findings recorded` summary with exact IDs for findings added in that turn; they request one
+bounded continuation when it is absent, then remain fail-open. After an allowed main Stop or SessionEnd, autonomous
+triage may run under its opt-in guards. Subagent hooks add read-only parent/child topology and never schedule triage.
+Claude's filtered `ai-coord waker claude` hook handles blocked starts in the background; planning scopes are recorded
+explicitly with `draft`, not inferred from provider-specific plan hooks.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
@@ -210,21 +254,22 @@ parent.
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
 mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v10. Any other nonzero schema, including v9, is rejected without migration, import, deletion, or
-replacement, while the public `status --json` schema is v2. Close agents and explicitly choose any backup, removal,
+internal schema v11. Any other nonzero schema, including v10, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema is v3. Close agents and explicitly choose any backup, removal,
 installation, and relinking rollout before retrying with incompatible state.
 
-The ledger stores bounded session metadata, callsigns, work labels, literal scopes, messages, notes, and complete
-provider health cache rows. Cached provider errors, hook hashes, prompt bodies, plan bodies, assistant output,
-transcript contents, and arbitrary hook payloads are never stored. Composite session foreign keys cascade draft and
-submitted work cleanup on authoritative session end, dead-process reconciliation, and session supersession.
+The SQLite ledger stores bounded session metadata, callsigns, work labels, literal scopes, messages, finding lifecycle
+events, sightings, and complete provider health cache rows. It never stores cached provider errors, hook hashes, plan
+bodies, transcript contents, or arbitrary hook payloads; opt-in triage prompts and model output exist only in the 30-day
+run artifacts described above. Composite session foreign keys cascade draft and submitted work cleanup on authoritative
+session end, dead-process reconciliation, and session supersession.
 
-Messages expire after 48 hours and are capped at 50 per inbox; notes expire after seven days. On macOS and Linux,
-sessions are bound to a kernel-derived process fingerprint containing both PID and process start identity. Normal
-`SessionEnd` hooks release immediately; after terminal closure, Ctrl+C, host crash, or another missed hook, the next
-fresh coordination probe removes a session as soon as that exact process is confirmed gone. PID reuse is treated as a
-different process. An unavailable or ambiguous liveness result fails closed: coverage becomes unknown and the session is
-retained. Sessions are never deleted merely because they are old.
+Messages expire after 48 hours and are capped at 50 per inbox. On macOS and Linux, sessions are bound to a
+kernel-derived process fingerprint containing both PID and process start identity. Normal `SessionEnd` hooks release
+immediately; after terminal closure, Ctrl+C, host crash, or another missed hook, the next fresh coordination probe
+removes a session as soon as that exact process is confirmed gone. PID reuse is treated as a different process. An
+unavailable or ambiguous liveness result fails closed: coverage becomes unknown and the session is retained. Sessions
+are never deleted merely because they are old.
 
 ## Development
 
@@ -243,7 +288,7 @@ See [AGENTS.md](AGENTS.md) for architecture, validation, and clean-break rules.
 ## Dashboard
 
 The dashboard shows the machine-wide live coordination snapshot: sessions and work grouped by repository, plus messages
-and notes. Run both local servers from the repository root:
+and durable findings. Run both local servers from the repository root:
 
 ```sh
 just dev

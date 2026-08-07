@@ -6,7 +6,7 @@ import type { Snapshot } from "@/lib/types";
 import { ApiErrorState, EmptySessions } from "@/ui/empty-error-states";
 import { Header } from "@/ui/header";
 import { MessagesFeed } from "@/ui/messages-feed";
-import { NotesPanel } from "@/ui/notes-panel";
+import { FindingsPanel } from "@/ui/findings-panel";
 import { RepoLane } from "@/ui/repo-lane";
 
 export function App() {
@@ -90,7 +90,7 @@ export function App() {
 
                 <aside className="flex min-w-0 flex-col gap-8">
                   <MessagesFeed messages={snapshot.messages} now={now} />
-                  <NotesPanel notes={snapshot.notes} now={now} />
+                  <FindingsPanel findings={snapshot.findings} now={now} />
                 </aside>
               </div>
             )}

@@ -318,6 +318,19 @@ pub(crate) fn git_blob_hash(root: &Path, path: &str, write: bool) -> String {
     if value.is_empty() { UNHASHABLE_BLOB_HASH.to_owned() } else { value }
 }
 
+pub(crate) fn git_head_oid(root: &Path) -> Option<String> {
+    let output = run_output_timeout(
+        Command::new("git").args(["-C"]).arg(root).args(["rev-parse", "--verify", "HEAD"]),
+        GIT_INSPECTION_TIMEOUT,
+    )
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let oid = std::str::from_utf8(&output.stdout).ok()?.trim();
+    (!oid.is_empty()).then(|| oid.to_owned())
+}
+
 pub(crate) fn relevant_dirty(scopes: &[Scope], dirty_paths: &[String]) -> Vec<String> {
     dirty_paths
         .iter()
