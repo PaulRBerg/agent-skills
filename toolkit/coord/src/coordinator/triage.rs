@@ -905,6 +905,10 @@ mod tests {
             assert!(args.iter().any(|arg| arg == expected), "missing {expected}: {args:?}");
         }
         assert!(!args.iter().any(|arg| arg == "--sandbox"), "--approve-for-me selects workspace-write: {args:?}");
+        assert!(
+            !args.iter().any(|arg| arg == "--ignore-user-config"),
+            "user config must load the trusted lifecycle hooks: {args:?}"
+        );
     }
 
     #[test]
