@@ -15,6 +15,11 @@ description: >-
 This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
 
+## Supported Chat Hosts
+
+Before doing any work, identify the current chat host. If it is not Claude Code or Codex CLI, stop with this error:
+`This skill only works in Claude Code or Codex CLI.`
+
 Answer Codex and Claude Code product questions from the narrowest relevant live official documentation.
 
 ## Classify the request

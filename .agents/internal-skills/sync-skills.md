@@ -18,6 +18,17 @@ Work only in the files listed for the selected groups.
 
 ## Sync Groups
 
+### Supported Chat Hosts
+
+Files:
+
+- `skills/agents-docs/SKILL.md`
+- `skills/agents-introspection/SKILL.md`
+- `skills/copy-transcript-path/SKILL.md`
+
+Keep each `## Supported Chat Hosts` block textually identical. The block requires detecting the current chat host before
+any work and stopping unsupported harnesses with `This skill only works in Claude Code or Codex CLI.`
+
 ### Commit Workflow Semantics
 
 Files:
