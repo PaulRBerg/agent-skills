@@ -17,7 +17,7 @@ ai-coord draft 'update importer' 'src/importer.rs'
 ai-coord start --draft
 ```
 
-The coordinator is cooperative rather than an OS lock. It uses a private local SQLite ledger and fails closed when it
+The coordinator is cooperative rather than an OS lock. It uses a user-owned local SQLite ledger and fails closed when it
 cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
 proceed with a stale-dirt advisory and a captured baseline.
 
@@ -76,7 +76,7 @@ non-printable paths, normalized scopes over 120 characters, and paths outside th
 Both `draft` and direct `start` require at least one scope. `draft` normalizes and atomically remembers the same exact
 scope model as `start`, but performs no provider inventory, Git-dirt arbitration, queue insertion, or peer notification.
 It emits only `DRAFT<TAB><scope-count>`, and status never publishes its literal scopes. Re-running `draft` replaces the
-stored draft. Drafts are non-authoritative temporary memory and never grant an edit scope.
+stored draft. Drafts are non-authoritative temporary coordination state and never grant an edit scope.
 
 Submit a stored draft from the same repository with `ai-coord start --draft`. Promotion revalidates every stored scope
 and then atomically applies normal arbitration. A validation or repository error leaves the draft unchanged. Once
@@ -173,8 +173,8 @@ fallback everywhere.
 
 Message targets resolve an exact `client/session` or session ID first, then an exact callsign, a unique ID prefix of at
 least four characters, or a unique callsign/label/provider-name substring. `repo` expands to the currently live peers in
-the Git worktree. Messages are private to their recipients and snapshot both endpoint callsigns when sent, so later
-renames do not rewrite history; notes are durable, repo-scoped findings visible to future sessions.
+the Git worktree. Messages are recipient-scoped and snapshot both endpoint callsigns when sent, so later renames do not
+rewrite history; notes are durable, repo-scoped records visible to future sessions.
 
 `ai-coord trailer` prints the current Git attribution line:
 
@@ -205,7 +205,7 @@ therefore session-scoped: the parent's work covers all delegated work. Subagents
 (`draft`, `start`, `wait`, or `done`) themselves because their inherited identity would make those commands act as the
 parent.
 
-## Storage and privacy
+## Storage and retention
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
