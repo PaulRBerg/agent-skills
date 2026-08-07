@@ -49,10 +49,7 @@
     },
     "avalanche": {
       "primaryPublicRpc": "https://api.avax.network/ext/bc/C/rpc",
-      "fallbackPublicRpcs": [
-        "https://avalanche-c-chain-rpc.publicnode.com",
-        "https://43114.rpc.thirdweb.com"
-      ],
+      "fallbackPublicRpcs": ["https://avalanche-c-chain-rpc.publicnode.com", "https://43114.rpc.thirdweb.com"],
       "routeMesh": true,
       "etherscan": { "support": "paid" },
       "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
@@ -96,11 +93,7 @@
     },
     "bsc": {
       "primaryPublicRpc": "https://bsc-dataseed1.bnbchain.org",
-      "fallbackPublicRpcs": [
-        "https://bsc-rpc.publicnode.com",
-        "https://bsc.drpc.org",
-        "https://56.rpc.thirdweb.com"
-      ],
+      "fallbackPublicRpcs": ["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://56.rpc.thirdweb.com"],
       "routeMesh": true,
       "etherscan": { "support": "paid" },
       "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" },
@@ -146,11 +139,7 @@
     },
     "mainnet": {
       "primaryPublicRpc": "https://ethereum-rpc.publicnode.com",
-      "fallbackPublicRpcs": [
-        "https://eth.drpc.org",
-        "https://rpc.flashbots.net",
-        "https://1.rpc.thirdweb.com"
-      ],
+      "fallbackPublicRpcs": ["https://eth.drpc.org", "https://rpc.flashbots.net", "https://1.rpc.thirdweb.com"],
       "routeMesh": true,
       "etherscan": { "support": "free", "notes": "Default chain" },
       "blockscout": {
@@ -245,10 +234,7 @@
     },
     "linea": {
       "primaryPublicRpc": "https://rpc.linea.build",
-      "fallbackPublicRpcs": [
-        "https://linea-rpc.publicnode.com",
-        "https://59144.rpc.thirdweb.com"
-      ],
+      "fallbackPublicRpcs": ["https://linea-rpc.publicnode.com", "https://59144.rpc.thirdweb.com"],
       "routeMesh": true,
       "etherscan": { "support": "free" },
       "blockscout": {
@@ -411,10 +397,7 @@
     },
     "unichain": {
       "primaryPublicRpc": "https://mainnet.unichain.org",
-      "fallbackPublicRpcs": [
-        "https://unichain-rpc.publicnode.com",
-        "https://130.rpc.thirdweb.com"
-      ],
+      "fallbackPublicRpcs": ["https://unichain-rpc.publicnode.com", "https://130.rpc.thirdweb.com"],
       "routeMesh": true,
       "etherscan": { "support": "free" },
       "blockscout": {
@@ -442,11 +425,7 @@
     },
     "xdc": {
       "primaryPublicRpc": "https://rpc.xdcrpc.com",
-      "fallbackPublicRpcs": [
-        "https://50.rpc.thirdweb.com",
-        "https://erpc.xdcrpc.com",
-        "https://rpc.xdc.org"
-      ],
+      "fallbackPublicRpcs": ["https://50.rpc.thirdweb.com", "https://erpc.xdcrpc.com", "https://rpc.xdc.org"],
       "routeMesh": true,
       "etherscan": { "support": "free" },
       "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }

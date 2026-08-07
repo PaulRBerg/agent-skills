@@ -3,10 +3,7 @@
     {
       "chainName": "Abstract",
       "chainId": 2741,
-      "fallbackPublicRpcs": [
-        "https://abstract.drpc.org",
-        "https://2741.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://abstract.drpc.org", "https://2741.rpc.thirdweb.com"]
     },
     {
       "chainName": "Arbitrum",
@@ -29,10 +26,7 @@
     {
       "chainName": "Avalanche",
       "chainId": 43114,
-      "fallbackPublicRpcs": [
-        "https://avalanche-c-chain-rpc.publicnode.com",
-        "https://43114.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://avalanche-c-chain-rpc.publicnode.com", "https://43114.rpc.thirdweb.com"]
     },
     {
       "chainName": "Base",
@@ -64,11 +58,7 @@
     {
       "chainName": "BNB Chain",
       "chainId": 56,
-      "fallbackPublicRpcs": [
-        "https://bsc-rpc.publicnode.com",
-        "https://bsc.drpc.org",
-        "https://56.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://56.rpc.thirdweb.com"]
     },
     {
       "chainName": "Celo",
@@ -100,25 +90,17 @@
     {
       "chainName": "Ethereum",
       "chainId": 1,
-      "fallbackPublicRpcs": [
-        "https://eth.drpc.org",
-        "https://rpc.flashbots.net",
-        "https://1.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://eth.drpc.org", "https://rpc.flashbots.net", "https://1.rpc.thirdweb.com"]
     },
     {
       "chainName": "Fantom",
       "chainId": 250,
-      "fallbackPublicRpcs": [
-        "https://rpc2.fantom.network"
-      ]
+      "fallbackPublicRpcs": ["https://rpc2.fantom.network"]
     },
     {
       "chainName": "Filecoin",
       "chainId": 314,
-      "fallbackPublicRpcs": [
-        "https://314.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://314.rpc.thirdweb.com"]
     },
     {
       "chainName": "Fraxtal",
@@ -150,40 +132,27 @@
     {
       "chainName": "IoTeX",
       "chainId": 4689,
-      "fallbackPublicRpcs": [
-        "https://4689.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://4689.rpc.thirdweb.com"]
     },
     {
       "chainName": "Lightlink",
       "chainId": 1890,
-      "fallbackPublicRpcs": [
-        "https://1890.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://1890.rpc.thirdweb.com"]
     },
     {
       "chainName": "Linea",
       "chainId": 59144,
-      "fallbackPublicRpcs": [
-        "https://linea-rpc.publicnode.com",
-        "https://59144.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://linea-rpc.publicnode.com", "https://59144.rpc.thirdweb.com"]
     },
     {
       "chainName": "Mode",
       "chainId": 34443,
-      "fallbackPublicRpcs": [
-        "https://mode.drpc.org",
-        "https://34443.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://mode.drpc.org", "https://34443.rpc.thirdweb.com"]
     },
     {
       "chainName": "Monad",
       "chainId": 143,
-      "fallbackPublicRpcs": [
-        "https://monad.drpc.org",
-        "https://143.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://monad.drpc.org", "https://143.rpc.thirdweb.com"]
     },
     {
       "chainName": "Morph",
@@ -215,33 +184,22 @@
     {
       "chainName": "Robinhood Chain",
       "chainId": 4663,
-      "fallbackPublicRpcs": [
-        "https://robinhoodchain.blockscout.com/api/eth-rpc"
-      ]
+      "fallbackPublicRpcs": ["https://robinhoodchain.blockscout.com/api/eth-rpc"]
     },
     {
       "chainName": "Ronin",
       "chainId": 2020,
-      "fallbackPublicRpcs": [
-        "https://ronin.drpc.org",
-        "https://2020.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://ronin.drpc.org", "https://2020.rpc.thirdweb.com"]
     },
     {
       "chainName": "Scroll",
       "chainId": 534352,
-      "fallbackPublicRpcs": [
-        "https://scroll.drpc.org",
-        "https://534352.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://scroll.drpc.org", "https://534352.rpc.thirdweb.com"]
     },
     {
       "chainName": "Sei",
       "chainId": 1329,
-      "fallbackPublicRpcs": [
-        "https://sei.drpc.org",
-        "https://1329.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://sei.drpc.org", "https://1329.rpc.thirdweb.com"]
     },
     {
       "chainName": "Sonic",
@@ -255,17 +213,12 @@
     {
       "chainName": "Sophon",
       "chainId": 50104,
-      "fallbackPublicRpcs": [
-        "https://50104.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://50104.rpc.thirdweb.com"]
     },
     {
       "chainName": "Superseed",
       "chainId": 5330,
-      "fallbackPublicRpcs": [
-        "https://superseed.drpc.org",
-        "https://5330.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://superseed.drpc.org", "https://5330.rpc.thirdweb.com"]
     },
     {
       "chainName": "Taiko",
@@ -279,10 +232,7 @@
     {
       "chainName": "Unichain",
       "chainId": 130,
-      "fallbackPublicRpcs": [
-        "https://unichain-rpc.publicnode.com",
-        "https://130.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://unichain-rpc.publicnode.com", "https://130.rpc.thirdweb.com"]
     },
     {
       "chainName": "World Chain",
@@ -296,27 +246,17 @@
     {
       "chainName": "XDC",
       "chainId": 50,
-      "fallbackPublicRpcs": [
-        "https://50.rpc.thirdweb.com",
-        "https://erpc.xdcrpc.com",
-        "https://rpc.xdc.org"
-      ]
+      "fallbackPublicRpcs": ["https://50.rpc.thirdweb.com", "https://erpc.xdcrpc.com", "https://rpc.xdc.org"]
     },
     {
       "chainName": "ZKsync Era",
       "chainId": 324,
-      "fallbackPublicRpcs": [
-        "https://zksync.drpc.org",
-        "https://324.rpc.thirdweb.com"
-      ]
+      "fallbackPublicRpcs": ["https://zksync.drpc.org", "https://324.rpc.thirdweb.com"]
     },
     {
       "chainName": "Zora",
       "chainId": 7777777,
-      "fallbackPublicRpcs": [
-        "https://7777777.rpc.thirdweb.com",
-        "https://rpc.zora.energy"
-      ]
+      "fallbackPublicRpcs": ["https://7777777.rpc.thirdweb.com", "https://rpc.zora.energy"]
     }
   ]
 }

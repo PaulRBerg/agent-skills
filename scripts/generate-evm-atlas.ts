@@ -88,15 +88,27 @@ const chains = Object.keys(overlay.chains).map((slug) => {
 const files = new Map([
   [
     path.join(generatedDir, "target-mainnets.json"),
-    `${JSON.stringify({ chains: targetMainnets(chains, overlay) }, null, 2)}\n`,
+    await formatFile(
+      path.join(generatedDir, "target-mainnets.json"),
+      `${JSON.stringify({ chains: targetMainnets(chains, overlay) }, null, 2)}\n`,
+    ),
   ],
   [
     path.join(generatedDir, "target-fallback-rpcs.json"),
-    `${JSON.stringify({ chains: targetFallbackRpcs(chains, overlay) }, null, 2)}\n`,
+    await formatFile(
+      path.join(generatedDir, "target-fallback-rpcs.json"),
+      `${JSON.stringify({ chains: targetFallbackRpcs(chains, overlay) }, null, 2)}\n`,
+    ),
   ],
-  [path.join(generatedDir, "chain-aliases.json"), `${JSON.stringify({ aliases: chainAliases(chains) }, null, 2)}\n`],
-  [etherscanChainsPath, await formatMarkdown(etherscanChainsPath, etherscanChainsMarkdown(chains, overlay))],
-  [blockscoutChainsPath, await formatMarkdown(blockscoutChainsPath, blockscoutChainsMarkdown(chains, overlay))],
+  [
+    path.join(generatedDir, "chain-aliases.json"),
+    await formatFile(
+      path.join(generatedDir, "chain-aliases.json"),
+      `${JSON.stringify({ aliases: chainAliases(chains) }, null, 2)}\n`,
+    ),
+  ],
+  [etherscanChainsPath, await formatFile(etherscanChainsPath, etherscanChainsMarkdown(chains, overlay))],
+  [blockscoutChainsPath, await formatFile(blockscoutChainsPath, blockscoutChainsMarkdown(chains, overlay))],
   [path.join(scriptsDir, "resolve-chain.sh"), resolveChainScript(chains, overlay)],
 ]);
 
@@ -132,7 +144,7 @@ function parseMode(args: string[]): Mode {
   return "discover-routemesh";
 }
 
-async function formatMarkdown(filePath: string, content: string): Promise<string> {
+async function formatFile(filePath: string, content: string): Promise<string> {
   const options = await prettier.resolveConfig(filePath);
   return await prettier.format(content, { ...options, filepath: filePath });
 }

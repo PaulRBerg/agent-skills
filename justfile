@@ -8,7 +8,8 @@ set unstable
 # ---------------------------------------------------------------------------- #
 
 prettier := "bunx --no-install prettier"
-prettier_globs := "\"**/*.md\""
+prettier_cache := ".cache/prettier/.prettier-cache"
+prettier_globs := "\"**/*.{md,json,jsonc,yaml,yml}\""
 evm_atlas_generator := "scripts/generate-evm-atlas.ts"
 skill_invocation_script := "scripts/sync-invocation-policy.ts"
 publish_skills_script := "scripts/publish-skills.ts"
@@ -45,23 +46,25 @@ alias id := install-deps
 #                                    CHECKS                                    #
 # ---------------------------------------------------------------------------- #
 
-# Check Markdown formatting
+# Check documentation and configuration formatting
 [group("checks")]
 @prettier-check +globs=prettier_globs:
     {{ prettier }} \
         --check \
         --cache \
+        --cache-location {{ prettier_cache }} \
         --log-level warn \
         --no-error-on-unmatched-pattern \
         {{ globs }}
 alias pc := prettier-check
 
-# Format Markdown
+# Format documentation and configuration
 [group("checks")]
 @prettier-write +globs=prettier_globs:
     {{ prettier }} \
         --write \
         --cache \
+        --cache-location {{ prettier_cache }} \
         --log-level warn \
         --no-error-on-unmatched-pattern \
         {{ globs }}

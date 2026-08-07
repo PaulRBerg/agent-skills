@@ -2,14 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "status",
-    "summary",
-    "changed_files",
-    "verification",
-    "residual_risks",
-    "blockers"
-  ],
+  "required": ["status", "summary", "changed_files", "verification", "residual_risks", "blockers"],
   "properties": {
     "status": {
       "type": "string",
