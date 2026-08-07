@@ -47,7 +47,36 @@ Re-run the same planner command after the push. Record the exact source HEAD:
 git rev-parse HEAD
 ```
 
-### 3. Apply Once
+### 3. Claim Target Repositories
+
+Use the refreshed planner's non-empty groups to derive every installed skill directory that `apply` can change. Claim
+only those directories, grouped by their containing Git repository:
+
+- `shared`: `~/.agents/skills/<name>` and `~/.claude/skills/<name>`.
+- `claude`: `~/.claude/skills/<name>`.
+- `codex`: `~/.agents/skills/<name>`.
+- `remove`: every existing target directory for the named skill that the planner reports.
+
+For each affected target that is a Git repository, run its normal coordination preflight from that repository root, then
+claim the derived repository-relative directories before applying:
+
+```bash
+git status --short
+ai-coord status
+ai-coord start 'publish-skills targets' \
+  --recursive 'skills/<name-a>' \
+  --recursive 'skills/<name-b>'
+```
+
+Require `READY` for every target claim before `apply`. On a dirty-settling hold or conflict, use the normal
+`ai-coord wait` flow. If the planner changes while waiting, release obsolete claims, re-plan, and claim the refreshed
+target set. The CLI state lock is not a repository scope: its exclusive process lock already serializes it, and it is
+never a commit path.
+
+Keep target claims until the corresponding reported repository changes are committed and pushed, or until that target
+has no Git diff. Release each with `ai-coord done` before re-planning a partial apply or after finalization.
+
+### 4. Apply Once
 
 Run one guarded apply with the recorded full SHA and the same optional filters:
 
@@ -64,13 +93,14 @@ If apply fails after partial progress, preserve its completed-command list. Comm
 paths, then re-plan and retry the remaining drift once with the same expected HEAD. A second failure blocks publication;
 report the failed command, completed groups, and changed paths.
 
-### 4. Commit and Push Reported Global Paths
+### 5. Commit and Push Reported Global Paths
 
 Group `Changed global paths` under `~/.agents` and `~/.claude`. In each repository with a reported diff, invoke
-`$commit --push` and pass only the reported skill paths as session-modified paths, including deletions. Never include
-unreported skills, unrelated dirty paths, or the CLI state lock. Skip repositories with no reported diff.
+`$commit --push` under its already-held target claim and pass only the reported skill paths as session-modified paths,
+including deletions. Never acquire a new claim after `apply`, or include unreported skills, unrelated dirty paths, or
+the CLI state lock. Skip repositories with no reported diff.
 
-### 5. Require a Clean Final Check
+### 6. Require a Clean Final Check
 
 Run the same selected scope through:
 
