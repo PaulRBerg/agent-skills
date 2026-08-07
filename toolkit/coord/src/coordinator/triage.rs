@@ -893,7 +893,6 @@ mod tests {
         for expected in [
             "gpt-5.6-luna",
             "model_reasoning_effort=\"xhigh\"",
-            "workspace-write",
             "/state",
             "sandbox_workspace_write.network_access=false",
             "web_search=\"disabled\"",
@@ -905,6 +904,7 @@ mod tests {
         ] {
             assert!(args.iter().any(|arg| arg == expected), "missing {expected}: {args:?}");
         }
+        assert!(!args.iter().any(|arg| arg == "--sandbox"), "--approve-for-me selects workspace-write: {args:?}");
     }
 
     #[test]

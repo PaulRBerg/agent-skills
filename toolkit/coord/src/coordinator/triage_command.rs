@@ -11,8 +11,6 @@ pub(super) fn codex_args(repo_root: &Path, state_dir: &Path, run_dir: &Path) -> 
         OsString::from("model_reasoning_effort=\"xhigh\""),
         OsString::from("-C"),
         repo_root.as_os_str().to_owned(),
-        OsString::from("--sandbox"),
-        OsString::from("workspace-write"),
         OsString::from("--add-dir"),
         state_dir.as_os_str().to_owned(),
         OsString::from("--approve-for-me"),
