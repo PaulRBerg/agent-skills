@@ -2,63 +2,48 @@
 # /// script
 # requires-python = ">=3.12"
 # ///
-"""Mine project-owned Codex and Claude Code transcripts without emitting excerpts."""
+"""Mine project-owned Codex and Claude Code transcripts, optionally with redacted excerpts."""
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
 import sys
-from collections import Counter, defaultdict, deque
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-
-EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
-API_KEY_RE = re.compile(r"\b(?:sk|pk|rk|ghp|github_pat|xox[baprs])-[A-Za-z0-9_\-]{16,}\b")
-GENERIC_SECRET_RE = re.compile(
-    r"(?i)\b(?:api[_-]?key|access[_-]?token|secret(?:[_-]?key)?|private[_-]?key|password)\b"
-    r"\s*[:=]\s*[\"']?(?![$<{[])([A-Za-z0-9_./+=-]{16,})"
+from transcript_common import (
+    CORRECTION_PATTERNS,
+    THEME_PATTERNS,
+    VERIFICATION_PATTERNS,
+    count_keywords,
+    count_patterns,
+    count_privacy_gaps,
+    deduplicate_messages,
+    extract_record_channels,
+    extract_strings,
+    first_string_shallow,
+    is_within,
+    keyword_alternatives,
+    normalize_path,
+    read_jsonl,
+    read_jsonl_head,
+    read_jsonl_sampled,
+    read_raw_lines_sampled,
+    redact_text,
+    source_title,
+    truncate,
 )
-EVM_ADDRESS_RE = re.compile(r"(?<![0-9a-fA-F])0x[0-9a-fA-F]{40}(?![0-9a-fA-F])")
-HEX_64_RE = re.compile(r"(?<![0-9a-fA-F])0x[0-9a-fA-F]{64}(?![0-9a-fA-F])")
-LONG_SECRETISH_RE = re.compile(r"(?<![A-Za-z0-9_/-])[A-Za-z0-9_+=/-]{48,}(?![A-Za-z0-9_/-])")
 
-CORRECTION_PATTERNS = {
-    "user-correction": re.compile(r"(?i)\b(actually|wrong|instead|i asked|not what|do not|don't|stop|you should)\b"),
-    "instruction-reminder": re.compile(r"(?i)\b(AGENTS\.md|instructions?|follow .*rules?|violat(?:e|ed|ion))\b"),
-}
-VERIFICATION_PATTERNS = {
-    "tests": re.compile(r"(?i)\b(test|pytest|vitest|unit tests?|integration tests?)\b"),
-    "lint-format": re.compile(r"(?i)\b(lint|format|mdformat|prettier|ruff|eslint)\b"),
-    "repo-check": re.compile(r"(?i)\b(just |uv run|cargo check|npm run|pnpm |bun test|verified|verification|passes?|passed)\b"),
-}
-THEME_PATTERNS = {
-    "agent-skills": re.compile(r"(?i)\b(SKILL\.md|openai\.yaml|frontmatter|allow_implicit|agent skills?|skill catalog)\b"),
-    "transcripts": re.compile(r"(?i)\b(transcript|session_index|sessions/|claude/projects|history\.jsonl)\b"),
-    "markdown": re.compile(r"(?i)\b(markdown|mdformat|README\.md|AGENTS\.md)\b"),
-    "git": re.compile(r"(?i)\b(git status|git diff|commit|branch|worktree|staged)\b"),
-    "shell-tooling": re.compile(r"(?i)\b(zsh|bash|just|uv run|rg |fd |jq )\b"),
-    "privacy": re.compile(r"(?i)\b(secret|redact|private key|api key|token|wallet|address)\b"),
-}
-CONTEXT_PREFIXES = (
-    "# AGENTS.md instructions for",
-    "<skill>",
-    "<environment_context>",
-    "<permissions instructions>",
-    "<collaboration_mode>",
-    "<turn_aborted>",
-    "<command-message>",
-    "Base directory for this skill:",
-)
-FAILURE_STATUSES = {"error", "failed", "failure", "cancelled", "canceled", "timed_out", "timeout"}
-MAX_FULL_SESSION_BYTES = 2_000_000
-SESSION_HEAD_RECORDS = 250
-SESSION_TAIL_RECORDS = 750
-METADATA_HEAD_RECORDS = 100
+
+DATE_YEAR_RE = re.compile(r"^\d{4}$")
+DATE_COMPONENT_RE = re.compile(r"^\d{2}$")
+SINCE_DAYS_RE = re.compile(r"^(\d+)d$")
 
 
 @dataclass
@@ -93,12 +78,37 @@ class SessionSummary:
     privacy_gaps: dict[str, int] = field(default_factory=dict)
     ownership: Ownership | None = None
     signal_channels: SignalChannels = field(default_factory=SignalChannels)
+    modified: str | None = None
+    excerpts: list[dict[str, str]] = field(default_factory=list)
+
+
+@dataclass
+class SinceFilter:
+    value: str
+    cutoff: dt.datetime
+    codex_dirs_pruned: int = 0
+    codex_files_pruned: int = 0
+    claude_files_pruned: int = 0
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "value": self.value,
+            "cutoff": format_utc_iso(self.cutoff),
+            "codex_dirs_pruned": self.codex_dirs_pruned,
+            "codex_files_pruned": self.codex_files_pruned,
+            "claude_files_pruned": self.claude_files_pruned,
+        }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Mine project-owned Codex and Claude Code transcript signals.")
     parser.add_argument("--project", action="append", default=[], help="Project path to mine. Repeatable. Default: pwd -P")
-    parser.add_argument("--keyword", action="append", default=[], help="Task keyword to score. Repeatable")
+    parser.add_argument(
+        "--keyword",
+        action="append",
+        default=[],
+        help="Task keyword to score. Repeatable. Use 'a|b|c' for an OR-group of alternatives",
+    )
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--max-sessions", type=int, default=20, help="Maximum selected sessions per project")
     parser.add_argument("--include-archived", action="store_true", help="Include ~/.codex/archived_sessions")
@@ -106,6 +116,10 @@ def main() -> int:
         "--include-current",
         action="store_true",
         help="Include the live CODEX_THREAD_ID or CLAUDE_SESSION_ID transcript (diagnostics only)",
+    )
+    parser.add_argument("--since", default=None, help="Only mine sessions modified since YYYY-MM-DD or Nd (days back)")
+    parser.add_argument(
+        "--excerpts", action="store_true", help="Include up to 3 redacted message excerpts per candidate session"
     )
     args = parser.parse_args()
 
@@ -118,12 +132,22 @@ def main() -> int:
         print(f"transcript-miner: {error}", file=sys.stderr)
         return 2
 
+    since_filter: SinceFilter | None = None
+    if args.since:
+        try:
+            since_filter = build_since_filter(args.since)
+        except ValueError as error:
+            print(f"transcript-miner: {error}", file=sys.stderr)
+            return 2
+
     report = mine_transcripts(
         projects,
         keywords=[keyword for keyword in args.keyword if keyword.strip()],
         max_sessions=args.max_sessions,
         include_archived=args.include_archived,
         include_current=args.include_current,
+        since=since_filter,
+        include_excerpts=args.excerpts,
     )
     if args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -145,6 +169,18 @@ def normalize_projects(raw_projects: list[str]) -> list[Path]:
     return projects
 
 
+def build_since_filter(value: str) -> SinceFilter:
+    match = SINCE_DAYS_RE.fullmatch(value)
+    if match:
+        cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=int(match.group(1)))
+        return SinceFilter(value=value, cutoff=cutoff)
+    try:
+        parsed = dt.datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"invalid --since value: {value!r} (expected YYYY-MM-DD or Nd)") from None
+    return SinceFilter(value=value, cutoff=parsed.replace(tzinfo=dt.timezone.utc))
+
+
 def mine_transcripts(
     projects: list[Path],
     *,
@@ -152,18 +188,30 @@ def mine_transcripts(
     max_sessions: int,
     include_archived: bool,
     include_current: bool = False,
+    since: SinceFilter | None = None,
+    include_excerpts: bool = False,
 ) -> dict[str, Any]:
     codex_home = Path(os.path.expanduser(os.environ.get("CODEX_HOME", "~/.codex"))).resolve(strict=False)
     claude_home = claude_config_dir()
     codex_index = load_codex_index(codex_home / "session_index.jsonl")
     claude_history = load_claude_history(claude_home / "history.jsonl")
     coverage = {project: new_coverage(codex_index["records"]) for project in projects}
+    now = dt.datetime.now(dt.timezone.utc)
 
     codex_sessions = mine_codex_sessions(
-        projects, keywords, codex_home, codex_index, include_archived, include_current, coverage
+        projects,
+        keywords,
+        codex_home,
+        codex_index,
+        include_archived,
+        include_current,
+        coverage,
+        since,
+        now,
+        include_excerpts,
     )
     claude_sessions = mine_claude_sessions(
-        projects, keywords, claude_home, claude_history, include_current, coverage
+        projects, keywords, claude_home, claude_history, include_current, coverage, since, now, include_excerpts
     )
 
     selected_sessions: list[SessionSummary] = []
@@ -187,6 +235,7 @@ def mine_transcripts(
     return {
         "projects": project_reports,
         "keywords": [redact_text(keyword) for keyword in keywords],
+        "since": since.to_json() if since else None,
         "candidate_sessions": [session_to_json(session) for session in selected_sessions],
         "task_themes": dict(totals["task_themes"]),
         "correction_signals": dict(totals["correction_signals"]),
@@ -223,14 +272,14 @@ def mine_codex_sessions(
     include_archived: bool,
     include_current: bool,
     coverage: dict[Path, dict[str, Any]],
+    since: SinceFilter | None,
+    now: dt.datetime,
+    include_excerpts: bool,
 ) -> list[SessionSummary]:
     roots = [codex_home / "sessions"]
     if include_archived:
         roots.append(codex_home / "archived_sessions")
-    paths = sorted(
-        (path for root in roots if root.is_dir() for path in root.rglob("*.jsonl")),
-        key=lambda path: str(path),
-    )
+    paths = collect_codex_paths(roots, since)
     for project in projects:
         coverage[project]["codex_scanned"] = len(paths)
 
@@ -248,20 +297,123 @@ def mine_codex_sessions(
             continue
         coverage[owner]["codex_candidates"] += 1
         coverage[owner]["structurally_matched"] += 1
-        records = list(read_jsonl_sampled(path))
-        mark_content_only_mentions(records, owner, projects, coverage)
+        title_hint = title_for_codex_path(path, codex_index)
+        if raw_prescan_eligible(keywords) and not title_already_matches(title_hint, keywords):
+            raw_lines = list(read_raw_lines_sampled(path))
+            mark_content_only_mentions_raw(raw_lines, owner, projects, coverage)
+            if not keywords_present_in_lines(raw_lines, keywords):
+                continue
+            records = list(read_jsonl_sampled(path))
+        else:
+            records = list(read_jsonl_sampled(path))
+            mark_content_only_mentions(records, owner, projects, coverage)
         summary = summarize_records(
             path,
             source="codex",
             keywords=keywords,
             ownership=ownership,
             records=records,
-            title_hint=title_for_codex_path(path, codex_index),
+            title_hint=title_hint,
+            now=now,
+            include_excerpts=include_excerpts,
         )
         if summary is not None:
             coverage[owner]["relevance_matched"] += 1
             sessions.append(summary)
     return sessions
+
+
+def collect_codex_paths(roots: list[Path], since: SinceFilter | None) -> list[Path]:
+    if since is None:
+        paths = [path for root in roots if root.is_dir() for path in root.rglob("*.jsonl")]
+        return sorted(paths, key=str)
+    slack_date = since.cutoff.date() - dt.timedelta(days=1)
+    paths: list[Path] = []
+    for root in roots:
+        if root.is_dir():
+            paths.extend(walk_codex_root(root, slack_date, since))
+    kept = [path for path in paths if not prune_if_stale(path, since, "codex_files_pruned")]
+    return sorted(kept, key=str)
+
+
+def walk_codex_root(root: Path, slack_date: dt.date, since: SinceFilter) -> Iterable[Path]:
+    yield from root.glob("*.jsonl")
+    for year_dir in root.iterdir():
+        if not (year_dir.is_dir() and DATE_YEAR_RE.fullmatch(year_dir.name)):
+            if year_dir.is_dir():
+                yield from year_dir.rglob("*.jsonl")
+            continue
+        yield from year_dir.glob("*.jsonl")
+        for month_dir in year_dir.iterdir():
+            if not (month_dir.is_dir() and DATE_COMPONENT_RE.fullmatch(month_dir.name)):
+                if month_dir.is_dir():
+                    yield from month_dir.rglob("*.jsonl")
+                continue
+            yield from month_dir.glob("*.jsonl")
+            for day_dir in month_dir.iterdir():
+                if not (day_dir.is_dir() and DATE_COMPONENT_RE.fullmatch(day_dir.name)):
+                    if day_dir.is_dir():
+                        yield from day_dir.rglob("*.jsonl")
+                    continue
+                try:
+                    dir_date = dt.date(int(year_dir.name), int(month_dir.name), int(day_dir.name))
+                except ValueError:
+                    yield from day_dir.rglob("*.jsonl")
+                    continue
+                if dir_date < slack_date:
+                    # An old date directory can still hold sessions resumed recently; mtime decides.
+                    survivors = [
+                        path
+                        for path in day_dir.rglob("*.jsonl")
+                        if not prune_if_stale(path, since, "codex_files_pruned")
+                    ]
+                    if survivors:
+                        yield from survivors
+                    else:
+                        since.codex_dirs_pruned += 1
+                    continue
+                yield from day_dir.rglob("*.jsonl")
+
+
+def prune_if_stale(path: Path, since: SinceFilter, counter: str) -> bool:
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return False
+    if mtime < since.cutoff.timestamp():
+        setattr(since, counter, getattr(since, counter) + 1)
+        return True
+    return False
+
+
+def raw_prescan_eligible(keywords: list[str]) -> bool:
+    if not keywords:
+        return False
+    for keyword in keywords:
+        alternatives = keyword_alternatives(keyword)
+        if not alternatives:
+            return False
+        for alternative in alternatives:
+            if not alternative.isascii() or '"' in alternative or "\\" in alternative:
+                return False
+    return True
+
+
+def title_already_matches(title: str | None, keywords: list[str]) -> bool:
+    if not title or not keywords:
+        return False
+    return bool(count_keywords([title], keywords))
+
+
+def keywords_present_in_lines(lines: list[str], keywords: list[str]) -> bool:
+    alternatives = [alternative.lower() for keyword in keywords for alternative in keyword_alternatives(keyword)]
+    if not alternatives:
+        return False
+    for line in lines:
+        lowered = line.lower()
+        if any(alternative in lowered for alternative in alternatives):
+            return True
+    return False
 
 
 def codex_ownership(
@@ -349,6 +501,9 @@ def mine_claude_sessions(
     history: dict[str, list[dict[str, str]]],
     include_current: bool,
     coverage: dict[Path, dict[str, Any]],
+    since: SinceFilter | None,
+    now: dt.datetime,
+    include_excerpts: bool,
 ) -> list[SessionSummary]:
     directory_projects: dict[Path, set[Path]] = defaultdict(set)
     for project in projects:
@@ -360,6 +515,8 @@ def mine_claude_sessions(
     path_directory_projects: dict[Path, set[Path]] = defaultdict(set)
     for project_dir, possible_projects in directory_projects.items():
         paths = list(project_dir.glob("*.jsonl"))
+        if since is not None:
+            paths = [path for path in paths if not prune_if_stale(path, since, "claude_files_pruned")]
         for project in possible_projects:
             coverage[project]["claude_scanned"] += len(paths)
             tool_results_dir = project_dir / "tool-results"
@@ -392,8 +549,15 @@ def mine_claude_sessions(
         )
         if keywords and history_records and not count_keywords(history_messages, keywords):
             continue
-        records = list(read_jsonl_sampled(path))
-        mark_content_only_mentions(records, owner, projects, coverage)
+        if not history_records and raw_prescan_eligible(keywords):
+            raw_lines = list(read_raw_lines_sampled(path))
+            mark_content_only_mentions_raw(raw_lines, owner, projects, coverage)
+            if not keywords_present_in_lines(raw_lines, keywords):
+                continue
+            records = list(read_jsonl_sampled(path))
+        else:
+            records = list(read_jsonl_sampled(path))
+            mark_content_only_mentions(records, owner, projects, coverage)
         summary = summarize_records(
             path,
             source="claude",
@@ -402,6 +566,8 @@ def mine_claude_sessions(
             records=records,
             title_hint=None,
             preferred_user_messages=history_messages if history_records else None,
+            now=now,
+            include_excerpts=include_excerpts,
         )
         if summary is not None:
             coverage[owner]["relevance_matched"] += 1
@@ -468,6 +634,8 @@ def summarize_records(
     ownership: Ownership,
     records: list[Any],
     title_hint: str | None,
+    now: dt.datetime,
+    include_excerpts: bool,
     preferred_user_messages: list[str] | None = None,
 ) -> SessionSummary | None:
     user_messages: list[str] = []
@@ -508,6 +676,11 @@ def summarize_records(
     themes = count_patterns(eligible_messages, THEME_PATTERNS)
     privacy = count_privacy_gaps(eligible_messages)
     failures = Counter({"command-failure": structured_failures}) if structured_failures else Counter()
+
+    modified_dt = file_modified_time(path)
+    age_source = parse_candidate_timestamp(timestamp) or modified_dt
+    bonus = recency_bonus(now, age_source) if age_source is not None else 0
+
     score = (
         10
         + sum(user_hits.values()) * 8
@@ -516,7 +689,9 @@ def summarize_records(
         + min(6, sum(corrections.values()) * 2)
         + min(4, structured_failures)
         + min(4, sum(verification.values()))
+        + bonus
     )
+    excerpts = build_excerpts(user_messages, assistant_messages, keywords, include_excerpts)
     return SessionSummary(
         source=source,
         project=ownership.project,
@@ -538,125 +713,71 @@ def summarize_records(
             ignored_context_messages=len(context_messages),
             structured_tool_failures=structured_failures,
         ),
+        modified=format_utc_iso(modified_dt) if modified_dt is not None else None,
+        excerpts=excerpts,
     )
 
 
-def extract_record_channels(item: Any) -> dict[str, Any]:
-    result: dict[str, Any] = {"user": [], "assistant": [], "context": [], "tools": Counter(), "failures": 0}
-    if not isinstance(item, dict):
-        return result
-    payload = item.get("payload") if isinstance(item.get("payload"), dict) else None
-    candidate = payload or item
-    candidate_type = str(candidate.get("type", item.get("type", "")))
-    role = candidate.get("role")
-    message = candidate.get("message")
-    if isinstance(message, dict):
-        role = message.get("role", role)
-        content = message.get("content")
-    else:
-        content = candidate.get("content")
-        if content is None and isinstance(message, str):
-            content = message
-
-    if candidate_type == "user_message" and role is None:
-        role = "user"
-        content = candidate.get("message")
-    texts, tools, failures = parse_content_blocks(content)
-    result["tools"].update(tools)
-    collect_structured_tools(candidate, result["tools"])
-    result["failures"] += max(failures, int(has_structured_failure(candidate)))
-
-    if role in {"system", "developer"} or item.get("type") in {"system", "developer"}:
-        result["context"].extend(texts)
-    elif role == "user" or item.get("type") == "user" or candidate_type == "user_message":
-        for text in texts:
-            if is_context_envelope(text):
-                result["context"].append(text)
-            else:
-                result["user"].append(text)
-    elif role == "assistant" or item.get("type") == "assistant":
-        result["assistant"].extend(texts)
-    return result
-
-
-def parse_content_blocks(content: Any) -> tuple[list[str], Counter[str], int]:
-    texts: list[str] = []
-    tools: Counter[str] = Counter()
-    failures = 0
-    if isinstance(content, str):
-        texts.append(content)
-    elif isinstance(content, list):
-        for block in content:
-            if isinstance(block, str):
-                texts.append(block)
-                continue
-            if not isinstance(block, dict):
-                continue
-            block_type = str(block.get("type", ""))
-            if block_type in {"text", "input_text", "output_text"} and isinstance(block.get("text"), str):
-                texts.append(block["text"])
-            elif block_type in {"tool_use", "tool_call", "function_call"}:
-                name = block.get("name")
-                if isinstance(name, str):
-                    tools[redact_text(name)] += 1
-            elif block_type in {"tool_result", "function_call_output"}:
-                failures += int(has_structured_failure(block))
-    elif isinstance(content, dict):
-        nested_texts, nested_tools, nested_failures = parse_content_blocks([content])
-        texts.extend(nested_texts)
-        tools.update(nested_tools)
-        failures += nested_failures
-    return texts, tools, failures
-
-
-def collect_structured_tools(value: Any, counter: Counter[str]) -> None:
-    if not isinstance(value, dict):
-        return
-    value_type = str(value.get("type", ""))
-    if value_type in {"function_call", "tool_use", "tool_call"}:
-        name = value.get("name") or value.get("tool_name")
-        if isinstance(name, str):
-            counter[redact_text(name)] += 1
-
-
-def has_structured_failure(value: Any, depth: int = 0) -> bool:
-    if depth > 6 or not isinstance(value, (dict, list)):
-        return False
-    if isinstance(value, list):
-        return any(has_structured_failure(child, depth + 1) for child in value)
-    if value.get("is_error") is True or value.get("isError") is True:
-        return True
-    exit_code = value.get("exit_code", value.get("exitCode"))
-    if isinstance(exit_code, int) and exit_code != 0:
-        return True
-    status = value.get("status")
-    if isinstance(status, str) and status.lower() in FAILURE_STATUSES:
-        return True
-    for key, child in value.items():
-        if key in {"input", "arguments", "command", "text"}:
-            continue
-        if isinstance(child, (dict, list)) and has_structured_failure(child, depth + 1):
-            return True
-        if key in {"output", "content"} and isinstance(child, str):
-            parsed = parse_json_value(child)
-            if parsed is not None and has_structured_failure(parsed, depth + 1):
-                return True
-    return False
-
-
-def parse_json_value(value: str) -> Any | None:
-    value = value.strip()
-    if not value.startswith(("{", "[")):
-        return None
+def file_modified_time(path: Path) -> dt.datetime | None:
     try:
-        return json.loads(value)
-    except json.JSONDecodeError:
+        mtime = path.stat().st_mtime
+    except OSError:
         return None
+    return dt.datetime.fromtimestamp(mtime, tz=dt.timezone.utc)
 
 
-def is_context_envelope(text: str) -> bool:
-    stripped = text.lstrip()
-    return any(stripped.startswith(prefix) for prefix in CONTEXT_PREFIXES)
+def parse_candidate_timestamp(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def recency_bonus(now: dt.datetime, candidate: dt.datetime) -> int:
+    age_days = (now - candidate).total_seconds() / 86400
+    if age_days <= 7:
+        return 6
+    if age_days <= 30:
+        return 3
+    return 0
+
+
+def format_utc_iso(value: dt.datetime) -> str:
+    return value.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def build_excerpts(
+    user_messages: list[str], assistant_messages: list[str], keywords: list[str], include_excerpts: bool
+) -> list[dict[str, str]]:
+    if not include_excerpts:
+        return []
+    excerpts: list[dict[str, str]] = []
+    seen: set[str] = set()
+    if user_messages:
+        first = user_messages[0]
+        excerpts.append({"channel": "user", "text": truncate(redact_text(first), 240)})
+        seen.add(" ".join(first.split()))
+    if keywords:
+        alternatives = [alternative.lower() for keyword in keywords for alternative in keyword_alternatives(keyword)]
+        for channel, messages in (("user", user_messages), ("assistant", assistant_messages)):
+            for message in messages:
+                if len(excerpts) >= 3:
+                    return excerpts
+                normalized = " ".join(message.split())
+                if normalized in seen:
+                    continue
+                if any(alternative in message.lower() for alternative in alternatives):
+                    excerpts.append({"channel": channel, "text": truncate(redact_text(message), 240)})
+                    seen.add(normalized)
+    return excerpts
 
 
 def mark_content_only_mentions(
@@ -668,6 +789,14 @@ def mark_content_only_mentions(
             coverage[project]["content_only_project_mentions_ignored"] += 1
 
 
+def mark_content_only_mentions_raw(
+    lines: list[str], owner: Path, projects: list[Path], coverage: dict[Path, dict[str, Any]]
+) -> None:
+    for project in projects:
+        if project != owner and any(str(project) in line for line in lines):
+            coverage[project]["content_only_project_mentions_ignored"] += 1
+
+
 def mark_ambiguous(coverage: dict[Path, dict[str, Any]], projects: Iterable[Path]) -> None:
     for project in set(projects):
         coverage[project]["ambiguous_ownership_excluded"] += 1
@@ -676,18 +805,6 @@ def mark_ambiguous(coverage: dict[Path, dict[str, Any]], projects: Iterable[Path
 def most_specific_project(cwd: Path, projects: list[Path]) -> Path | None:
     matches = [project for project in projects if is_within(cwd, project)]
     return max(matches, key=lambda project: len(project.parts), default=None)
-
-
-def is_within(candidate: Path, root: Path) -> bool:
-    try:
-        candidate.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
-def normalize_path(value: str) -> Path:
-    return Path(os.path.expanduser(value)).resolve(strict=False)
 
 
 def load_codex_index(path: Path) -> dict[str, Any]:
@@ -714,157 +831,6 @@ def title_for_codex_path(path: Path, codex_index: dict[str, Any]) -> str | None:
         if session_id in path.name:
             return candidate_title
     return None
-
-
-def source_title(item: Any) -> str | None:
-    if not isinstance(item, dict):
-        return None
-    for key in ("title", "summary", "task"):
-        value = item.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def read_jsonl(path: Path) -> Iterable[Any]:
-    try:
-        with path.open("r", encoding="utf-8", errors="replace") as handle:
-            for line in handle:
-                item = parse_jsonl_line(line)
-                if item is not None:
-                    yield item
-    except OSError:
-        return
-
-
-def read_jsonl_head(path: Path) -> Iterable[Any]:
-    try:
-        with path.open("r", encoding="utf-8", errors="replace") as handle:
-            for _, line in zip(range(METADATA_HEAD_RECORDS), handle):
-                item = parse_jsonl_line(line)
-                if item is not None:
-                    yield item
-    except OSError:
-        return
-
-
-def read_jsonl_sampled(path: Path) -> Iterable[Any]:
-    try:
-        if path.stat().st_size <= MAX_FULL_SESSION_BYTES:
-            yield from read_jsonl(path)
-            return
-    except OSError:
-        return
-    tail: deque[str] = deque(maxlen=SESSION_TAIL_RECORDS)
-    try:
-        with path.open("r", encoding="utf-8", errors="replace") as handle:
-            for line_number, line in enumerate(handle):
-                if line_number < SESSION_HEAD_RECORDS:
-                    item = parse_jsonl_line(line)
-                    if item is not None:
-                        yield item
-                else:
-                    tail.append(line)
-    except OSError:
-        return
-    for line in tail:
-        item = parse_jsonl_line(line)
-        if item is not None:
-            yield item
-
-
-def parse_jsonl_line(line: str) -> Any | None:
-    try:
-        return json.loads(line) if line.strip() else None
-    except json.JSONDecodeError:
-        return None
-
-
-def extract_strings(value: Any, depth: int = 0) -> Iterable[str]:
-    if depth > 8:
-        return
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, dict):
-        for child in value.values():
-            yield from extract_strings(child, depth + 1)
-    elif isinstance(value, list):
-        for child in value:
-            yield from extract_strings(child, depth + 1)
-
-
-def first_string_shallow(item: Any, keys: tuple[str, ...]) -> str | None:
-    if not isinstance(item, dict):
-        return None
-    for key in keys:
-        value = item.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def deduplicate_messages(messages: Iterable[str]) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for message in messages:
-        normalized = " ".join(message.split())
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            result.append(message.strip())
-    return result
-
-
-def count_keywords(strings: list[str], keywords: list[str]) -> Counter[str]:
-    counter: Counter[str] = Counter()
-    lowered = [text.lower() for text in strings]
-    for keyword in keywords:
-        normalized = keyword.strip().lower()
-        if not normalized:
-            continue
-        matches = sum(1 for text in lowered if normalized in text)
-        if matches:
-            counter[redact_text(keyword)] = matches
-    return counter
-
-
-def count_patterns(strings: list[str], patterns: dict[str, re.Pattern[str]]) -> Counter[str]:
-    counter: Counter[str] = Counter()
-    for text in strings:
-        for name, pattern in patterns.items():
-            if pattern.search(text):
-                counter[name] += 1
-    return counter
-
-
-def count_privacy_gaps(strings: list[str]) -> Counter[str]:
-    counter: Counter[str] = Counter()
-    for text in strings:
-        if EMAIL_RE.search(text):
-            counter["email"] += 1
-        if API_KEY_RE.search(text) or GENERIC_SECRET_RE.search(text):
-            counter["api-key-or-secret"] += 1
-        if HEX_64_RE.search(text):
-            counter["private-key-or-tx-hash"] += 1
-        if EVM_ADDRESS_RE.search(text):
-            counter["evm-address"] += 1
-        if LONG_SECRETISH_RE.search(text):
-            counter["long-secret-like-token"] += 1
-    return counter
-
-
-def redact_text(value: str | None) -> str:
-    if not value:
-        return ""
-    text = EMAIL_RE.sub("<email>", value)
-    text = API_KEY_RE.sub("<api-key>", text)
-    text = GENERIC_SECRET_RE.sub(lambda match: match.group(0).split(match.group(1), 1)[0] + "<secret>", text)
-    text = HEX_64_RE.sub("<tx-or-key-hash>", text)
-    text = EVM_ADDRESS_RE.sub("<evm-address>", text)
-    return LONG_SECRETISH_RE.sub("<secret-like-token>", text)
-
-
-def truncate(value: str, limit: int = 160) -> str:
-    return value if len(value) <= limit else value[: limit - 1].rstrip() + "..."
 
 
 def claude_config_dir() -> Path:
@@ -911,6 +877,13 @@ def session_to_json(session: SessionSummary) -> dict[str, Any]:
 
 def print_text_report(report: dict[str, Any]) -> None:
     print("transcript-miner")
+    since = report.get("since")
+    if since:
+        print(
+            f"\nSince: {since['value']} (cutoff {since['cutoff']}) — "
+            f"codex_dirs_pruned={since['codex_dirs_pruned']}, codex_files_pruned={since['codex_files_pruned']}, "
+            f"claude_files_pruned={since['claude_files_pruned']}"
+        )
     print("\nProjects:")
     for project in report["projects"]:
         coverage = project["coverage"]
@@ -947,6 +920,8 @@ def print_text_report(report: dict[str, Any]) -> None:
         compact = compact_session_line(session)
         if compact:
             print(f"  {compact}")
+        for excerpt in session.get("excerpts") or []:
+            print(f"  excerpt[{excerpt['channel']}]: {excerpt['text']}")
     print_counter_block("Correction signals", report["correction_signals"])
     print_counter_block("Failure signals", report["failure_signals"])
     print_counter_block("Verification signals", report["verification_signals"])

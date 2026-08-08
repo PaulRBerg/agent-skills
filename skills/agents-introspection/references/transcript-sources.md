@@ -41,19 +41,32 @@ project as a repeated `--project` argument:
 uv run "$transcript_miner" \
   --project "$project_path" \
   --keyword '<keyword-1>' \
-  --keyword '<keyword-2>' \
+  --keyword '<synonym-a>|<synonym-b>' \
+  --since 60d \
+  --excerpts \
   --max-sessions 8 \
   --format json
 ```
+
+`--keyword` accepts `|`-separated OR-groups (e.g. `--keyword 'miner|mining|transcript-miner'`) to encode synonyms as one
+group instead of separate flags.
 
 Include another project without requesting permission when task context, an explicit project or path reference, a shared
 change or workflow, or session metadata establishes relevance. Never infer relevance from a shared basename or keyword
 alone.
 
 The helper returns project coverage, ranked candidate sessions, task themes, correction and failure signals,
-verification signals, tool-call counts, and `privacy_gaps` categories. It redacts common secret-like values and emits no
-transcript excerpts. Scores and counts select candidates only; validate every reported finding against the relevant
-transcript body. `keyword_hits` counts eligible `(message, keyword)` pairs, not repeated substring occurrences.
+verification signals, tool-call counts, and `privacy_gaps` categories. It always redacts common secret-like values.
+Transcript excerpts are emitted only with `--excerpts`: up to 3 redacted, 240-character-truncated `{channel, text}`
+entries per candidate, drawn from the first user message plus up to 2 keyword-matching messages (preferring user over
+assistant). Scores and counts select candidates only; validate every reported finding against the relevant transcript
+body. `keyword_hits` counts eligible `(message, keyword)` pairs keyed by the full OR-group keyword string, not repeated
+substring occurrences.
+
+With `--since <YYYY-MM-DD|Nd>`, the report gains a top-level `since` object (`value`, `cutoff`, `codex_dirs_pruned`,
+`codex_files_pruned`, `claude_files_pruned`); it is `null` without the flag. Each candidate carries a `modified` ISO
+mtime; sessions modified within 7 days score higher than those within 30 days, which score higher than older sessions —
+another ranking signal, not evidence.
 
 Source ownership is structural and precedes relevance scoring:
 
@@ -84,8 +97,31 @@ keyword relevance requirement. Additional fields make selection and exclusions a
 - candidate `signal_channels` records eligible user and assistant message counts, ignored context, and structured tool
   failures.
 
-If the first pass is weak, make one broader-keyword pass. Add `--include-archived` only for the final bounded fallback.
-Empty output after those passes is a coverage gap, not proof that no relevant behavior exists.
+If the first pass is weak, make one pass with broader or OR-grouped keywords. If still weak, retry once with `--since`
+removed. Add `--include-archived` only for the final bounded fallback. Empty output after those passes is a coverage
+gap, not proof that no relevant behavior exists.
+
+## Inspect Candidates
+
+Use the bundled inspector to get a bounded, redacted digest of a candidate transcript before opening its raw body:
+
+```sh
+uv run "$skill_dir/scripts/transcript-inspect.py" <transcript-path>... \
+  --keyword '<keyword-1>' \
+  --max-entries 120 \
+  --format text
+```
+
+For each file it emits a header (source, session id, cwd, timestamp range, per-channel totals, sampled flag) and bounded
+entries with absolute record line numbers: every non-context user message, keyword/correction/verification- matching
+assistant messages, and tool failures. Redaction is always on; entry text is capped at 240 characters.
+
+Digests are redacted and bounded — inspect them before reading raw bodies, and read raw bodies only when the digest is
+insufficient. Each entry's line number lets you pull the exact underlying record when needed:
+
+```sh
+sed -n '<line+1>p' <transcript-path> | jq
+```
 
 ## Source Layouts
 
@@ -131,7 +167,9 @@ scoped command before reporting the gap; never compensate by searching unrelated
 
 Transcript JSONL embeds tool output as JSON strings, so quotes inside that content appear escaped in raw text
 (`\"key\":\"value\"`). When grepping raw transcript files, allow optional backslashes in the pattern (e.g. `\\?"`) or
-decode lines with `jq` before matching; a pattern written for decoded JSON will silently miss raw-text matches.
+decode lines with `jq` before matching; a pattern written for decoded JSON will silently miss raw-text matches. This
+caveat mainly matters when bypassing the inspector and grepping raw bodies directly; the inspector's own digest output
+is plain decoded text.
 
 ## Secret Handling and External Disclosure
 

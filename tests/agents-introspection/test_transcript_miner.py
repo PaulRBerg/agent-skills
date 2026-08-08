@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import re
@@ -45,6 +46,7 @@ class MinerFixture:
         extra: list[dict[str, Any]] | None = None,
         session_meta: bool = True,
         turn_cwds: list[Path] | None = None,
+        session_dir: Path | None = None,
     ) -> Path:
         records: list[dict[str, Any]] = []
         if session_meta:
@@ -64,7 +66,7 @@ class MinerFixture:
         if assistant is not None:
             records.append(message_record("assistant", assistant))
         records.extend(extra or [])
-        path = self.codex_sessions / f"rollout-{session_id}.jsonl"
+        path = (session_dir or self.codex_sessions) / f"rollout-{session_id}.jsonl"
         write_jsonl(path, records)
         return path
 
@@ -101,6 +103,8 @@ class MinerFixture:
         include_current: bool = False,
         env_updates: dict[str, str] | None = None,
         output_format: str = "json",
+        since: str | None = None,
+        excerpts: bool = False,
     ) -> Any:
         command = [sys.executable, str(MINER)]
         for project in projects:
@@ -110,6 +114,10 @@ class MinerFixture:
         command.extend(["--max-sessions", "100", "--format", output_format])
         if include_current:
             command.append("--include-current")
+        if since is not None:
+            command.extend(["--since", since])
+        if excerpts:
+            command.append("--excerpts")
         env = os.environ.copy()
         env.update(
             {
@@ -213,7 +221,7 @@ class TranscriptMinerTests(unittest.TestCase):
         self.assertEqual(len(report["candidate_sessions"]), 1)
         session = report["candidate_sessions"][0]
         self.assertEqual(session["keyword_hits"], {"needle": 1})
-        self.assertEqual(session["score"], 18)
+        self.assertEqual(session["score"], 24)
         self.assertEqual(session["signal_channels"]["structured_tool_failures"], 0)
 
     def test_current_codex_and_claude_sessions_are_excluded_by_default(self) -> None:
@@ -325,8 +333,11 @@ class TranscriptMinerTests(unittest.TestCase):
             "privacy_gaps",
             "ownership",
             "signal_channels",
+            "modified",
+            "excerpts",
         ):
             self.assertIn(key, session)
+        self.assertEqual(session["excerpts"], [])
         self.assertEqual(
             set(session["ownership"]),
             {"matched_via", "cwd", "project"},
@@ -345,6 +356,115 @@ class TranscriptMinerTests(unittest.TestCase):
         self.assertIn("exclusions:", text)
         self.assertEqual(session["signal_channels"]["structured_tool_failures"], 1)
         self.assertNotIn(secret_excerpt, text)
+
+    def test_excerpts_are_redacted_and_gated_by_flag(self) -> None:
+        project = self.fixture.project("excerpts")
+        secret_user = "please look into needle issue for user@example.com"
+        self.fixture.codex_session(
+            "excerpt-session",
+            project,
+            user=secret_user,
+            assistant="needle handled, tests passed",
+        )
+
+        without_flag = self.fixture.run([project], ["needle"])
+        with_flag_json = self.fixture.run([project], ["needle"], excerpts=True)
+        with_flag_text = self.fixture.run([project], ["needle"], excerpts=True, output_format="text")
+
+        self.assertEqual(without_flag["candidate_sessions"][0]["excerpts"], [])
+
+        session = with_flag_json["candidate_sessions"][0]
+        self.assertTrue(session["excerpts"])
+        self.assertEqual(session["excerpts"][0]["channel"], "user")
+        self.assertIn("<email>", session["excerpts"][0]["text"])
+        self.assertNotIn("user@example.com", session["excerpts"][0]["text"])
+        self.assertIn("excerpt[user]:", with_flag_text)
+        self.assertNotIn("user@example.com", with_flag_text)
+
+    def test_since_prunes_old_codex_dirs_and_claude_files(self) -> None:
+        project = self.fixture.project("since")
+        self.fixture.codex_session("recent", project, user="needle recent")
+        old_dir = self.fixture.codex_home / "sessions" / "2020" / "01" / "01"
+        old_codex = self.fixture.codex_session("old", project, user="needle old", session_dir=old_dir)
+        old_mtime = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=400)).timestamp()
+        os.utime(old_codex, (old_mtime, old_mtime))
+        revived_dir = self.fixture.codex_home / "sessions" / "2020" / "02" / "02"
+        self.fixture.codex_session("revived", project, user="needle revived recently", session_dir=revived_dir)
+        self.fixture.codex_session("flat", project, user="needle flat layout", session_dir=self.fixture.codex_home / "sessions")
+
+        self.fixture.claude_session(project, "recent-claude", project, user="needle recent claude")
+        old_claude = self.fixture.claude_session(project, "old-claude", project, user="needle old claude")
+        os.utime(old_claude, (old_mtime, old_mtime))
+
+        no_since = self.fixture.run([project], ["needle"])
+        self.assertIsNone(no_since["since"])
+
+        since_report = self.fixture.run([project], ["needle"], since="60d")
+        self.assertIsNotNone(since_report["since"])
+        self.assertGreaterEqual(since_report["since"]["codex_dirs_pruned"], 1)
+        self.assertGreaterEqual(since_report["since"]["codex_files_pruned"], 1)
+        self.assertGreaterEqual(since_report["since"]["claude_files_pruned"], 1)
+
+        stems = {Path(session["path"]).stem for session in since_report["candidate_sessions"]}
+        self.assertIn("rollout-recent", stems)
+        self.assertIn("rollout-revived", stems)
+        self.assertIn("rollout-flat", stems)
+        self.assertNotIn("rollout-old", stems)
+        self.assertIn("recent-claude", stems)
+        self.assertNotIn("old-claude", stems)
+
+    def test_or_group_keyword_counts_one_hit_per_message(self) -> None:
+        project = self.fixture.project("or-group")
+        self.fixture.codex_session(
+            "or-group",
+            project,
+            user="the transcript-miner needs mining improvements",
+        )
+
+        report = self.fixture.run([project], ["miner|mining|transcript-miner"])
+
+        session = report["candidate_sessions"][0]
+        self.assertEqual(session["keyword_hits"], {"miner|mining|transcript-miner": 1})
+
+    def test_prescan_keeps_user_matches_and_gate_still_excludes_body_only_matches(self) -> None:
+        project = self.fixture.project("prescan")
+        self.fixture.codex_session(
+            "user-only",
+            project,
+            user="please handle sentinelword now",
+        )
+        self.fixture.codex_session(
+            "body-only",
+            project,
+            user="unrelated request",
+            extra=[
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call_output",
+                        "output": json.dumps({"exit_code": 0, "output": "sentinelword appears only here"}),
+                    },
+                }
+            ],
+        )
+
+        report = self.fixture.run([project], ["sentinelword"])
+
+        stems = {Path(session["path"]).stem for session in report["candidate_sessions"]}
+        self.assertIn("rollout-user-only", stems)
+        self.assertNotIn("rollout-body-only", stems)
+        coverage = coverage_by_project(report)[project]
+        self.assertEqual(coverage["structurally_matched"], 2)
+        self.assertEqual(coverage["relevance_matched"], 1)
+
+    def test_candidates_expose_modified_timestamp(self) -> None:
+        project = self.fixture.project("modified")
+        self.fixture.codex_session("modified", project, user="needle")
+
+        report = self.fixture.run([project], ["needle"])
+
+        session = report["candidate_sessions"][0]
+        self.assertRegex(session["modified"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def message_record(role: str, text: str) -> dict[str, Any]:

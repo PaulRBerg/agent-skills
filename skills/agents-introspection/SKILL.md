@@ -55,17 +55,19 @@ local projects, and choose 3–6 short, discriminative keywords from relevant fi
 names, issue IDs, and skill names.
 
 1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
-   the chosen keywords and `--max-sessions 8`.
+   the chosen keywords, `--since 60d`, `--excerpts`, and `--max-sessions 8`. Encode synonyms as one OR-group keyword
+   (`--keyword 'a|b'`) rather than separate `--keyword` flags.
 2. Treat source ownership as a miner invariant: every candidate is assigned once from source-native cwd, directory, and
    history metadata, never from transcript content. Review `ownership`; reject a candidate only when fallback ownership
    such as `turn_context.cwd` remains materially ambiguous for the task. The miner excludes conflicting ownership
    evidence and the live session by default.
-3. Treat miner scores, themes, and correction, failure, verification, tool, or `privacy_gaps` counts only as
-   candidate-ranking signals. They are heuristic and are never evidence by themselves. Inspect up to five
-   highest-relevance transcript bodies, stopping earlier when the evidence bar is met. Include a comparable successful
-   session when available.
-4. If evidence is insufficient, retry once with broader keywords. If unarchived history still lacks signal, retry once
-   with `--include-archived`.
+3. Treat miner scores, themes, correction, failure, verification, tool, or `privacy_gaps` counts, redacted `excerpts`,
+   and `modified` timestamps only as candidate-ranking and triage signals. They are heuristic and are never evidence by
+   themselves. Inspect up to five highest-relevance transcript bodies through the bundled inspector digest
+   (`scripts/transcript-inspect.py`) first; open raw bodies only when the digest is insufficient, stopping earlier when
+   the evidence bar is met. Include a comparable successful session when available.
+4. If evidence is insufficient, retry once with broader or OR-grouped keywords. If still weak, retry once with `--since`
+   removed. If unarchived history still lacks signal, retry once with `--include-archived`.
 5. Exceed these bounds only to resolve contradictory evidence or satisfy an explicitly exhaustive request. If the helper
    fails, use one project-scoped manual fallback from the reference.
 
