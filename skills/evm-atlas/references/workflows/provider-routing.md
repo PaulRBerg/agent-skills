@@ -45,7 +45,7 @@ shortcut:
 
 - Allow the shortcut only for exact `ethereum-eoa`.
 - Default-deny it for `native-account-abstraction`, `cross-vm`, `unknown`, a missing field, or an unrecognized value.
-- Under the prb-finance bootstrap profile, the exact `ethereum-eoa` zero-state invariant may omit both `txlist` and
+- Under the `bootstrap-discovery` profile, the exact `ethereum-eoa` zero-state invariant may omit both `txlist` and
   `txlistinternal` wholesale. That profile counts a successful outgoing normal row or a successful positive-value
   normal/internal row touching the address; zero-value inbound normal/internal noise is outside it. The invariant never
   covers token/NFT transfers. Apply the profile rules in `references/workflows/address-sweeps.md` before calling an

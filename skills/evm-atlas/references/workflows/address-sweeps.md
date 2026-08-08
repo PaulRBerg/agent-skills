@@ -1,8 +1,7 @@
 # Address Sweeps
 
-Use for address-wide historical activity and prb-finance bootstrap discovery on target mainnets. The deterministic
-request/evidence rules live in `scripts/sweep-core.py`; this reference defines safety, agent decisions, and coverage
-interpretation.
+Use for address-wide historical activity and bootstrap discovery on target mainnets. The deterministic request/evidence
+rules live in `scripts/sweep-core.py`; this reference defines safety, agent decisions, and coverage interpretation.
 
 ## Safety Model
 
@@ -24,16 +23,15 @@ Name the profile before planning:
 
 - `general`: normal transactions, internal transactions, ERC-20, ERC-721, and ERC-1155 transfers, plus checkpointed
   nonce/native balance facts. This is the default historical-activity profile.
-- `prb-finance-bootstrap`: the narrower discovery policy used only when prb-finance bootstrap is explicitly in scope. It
-  includes checkpointed native state, qualifying normal/internal native activity, ERC-20, and ERC-721; ERC-1155 and
-  nonqualifying native noise are outside this profile.
+- `bootstrap-discovery`: a narrower activity-discovery profile. It includes checkpointed native state, qualifying
+  normal/internal native activity, ERC-20, and ERC-721; ERC-1155 and nonqualifying native noise are outside it.
 
 The helper owns the exact success/noise predicates. Do not silently apply bootstrap exclusions to a general sweep. A
-bootstrap negative means only “no prb-finance bootstrap-profile activity found.”
+`bootstrap-discovery` negative means only “no activity qualifying under the `bootstrap-discovery` profile was found.”
 
-For the bootstrap profile, the helper may omit normal/internal history only when checkpointed nonce and balance are both
-zero and `accountActivityModel` is exactly `ethereum-eoa`. It default-denies this shortcut for missing, unrecognized,
-native-account-abstraction, cross-VM, or unknown models. Token history remains required.
+For the `bootstrap-discovery` profile, the helper may omit normal/internal history only when checkpointed nonce and
+balance are both zero and `accountActivityModel` is exactly `ethereum-eoa`. It default-denies this shortcut for missing,
+unrecognized, native-account-abstraction, cross-VM, or unknown models. Token history remains required.
 
 ## Agent Decisions Before Planning
 

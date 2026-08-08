@@ -25,6 +25,12 @@ Write the smallest interface that makes success checkable:
 Let the agent choose the path inside that contract. Prescribe a sequence only when ordering is safety-critical, a
 prerequisite determines the next action, or a deterministic helper is the simpler interface.
 
+## Self-containment
+
+Global skills must be self-contained. Do not mention or depend on another repository. Put reusable guidance directly in
+the owning skill, and discover target-project conventions when execution requires them. Reference an external repository
+only when it is genuinely required to perform the skill's task.
+
 ## User-facing presentation
 
 Design presentation as part of the observable contract when a skill reports meaningful state:

@@ -55,7 +55,7 @@ boundary.
    known or suspected to predate the final regenesis, read `references/explorers/optimism-pre-regenesis.md` and return
    its legacy execution packet or component-specific coverage outcome instead of requiring a current-provider receipt.
    Otherwise, acquire the exact provider receipt and logs before DEX or bridge outcome interpretation.
-3. For an address-wide historical-activity or prb-finance bootstrap sweep, read `references/workflows/address-sweeps.md`
+3. For an address-wide historical-activity or `bootstrap-discovery` sweep, read `references/workflows/address-sweeps.md`
    and use its deterministic plan/evaluate helper. For current holdings, use
    `references/workflows/blockscan-balances.md` first and provider routing for gaps.
 4. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's

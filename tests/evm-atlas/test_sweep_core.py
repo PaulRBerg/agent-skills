@@ -90,7 +90,7 @@ class SweepCoreTests(unittest.TestCase):
         self.assertEqual(plan["requiredChannels"][-1], "token1155tx")
         self.assertTrue(all(request["credentials"] == [] for request in plan["requests"]["history"]))
         self.assertTrue(all(request["bounds"]["endBlock"] == 100 for request in plan["requests"]["history"]))
-        bootstrap = MODULE.build_plan(spec("prb-finance-bootstrap"))
+        bootstrap = MODULE.build_plan(spec("bootstrap-discovery"))
         self.assertNotIn("token1155tx", bootstrap["requiredChannels"])
 
     def test_general_positive_earliest_and_state_positive(self) -> None:
@@ -104,7 +104,7 @@ class SweepCoreTests(unittest.TestCase):
         self.assertEqual(state_result["earliestQualifyingEvidence"]["channel"], "nonce")
 
     def test_bootstrap_zero_state_shortcut_and_eligibility(self) -> None:
-        plan = MODULE.build_plan(spec("prb-finance-bootstrap"))
+        plan = MODULE.build_plan(spec("bootstrap-discovery"))
         payload = responses(plan)
         del payload["providers"]["p1"]["channels"]["txlist"]
         del payload["providers"]["p1"]["channels"]["txlistinternal"]
@@ -112,13 +112,13 @@ class SweepCoreTests(unittest.TestCase):
         self.assertEqual(result["result"], "negative")
         self.assertEqual({item["channel"] for item in result["omitted"]}, {"txlist", "txlistinternal"})
 
-        ineligible_plan = MODULE.build_plan(spec("prb-finance-bootstrap", model="unknown"))
+        ineligible_plan = MODULE.build_plan(spec("bootstrap-discovery", model="unknown"))
         ineligible = responses(ineligible_plan)
         del ineligible["providers"]["p1"]["channels"]["txlist"]
         self.assertEqual(MODULE.evaluate(ineligible_plan, ineligible)["result"], "unknown")
 
     def test_bootstrap_filters_failed_and_noise_rows(self) -> None:
-        plan = MODULE.build_plan(spec("prb-finance-bootstrap", model="unknown"))
+        plan = MODULE.build_plan(spec("bootstrap-discovery", model="unknown"))
         payload = responses(
             plan,
             {"p1": {

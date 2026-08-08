@@ -80,12 +80,13 @@ For human output, lead with `### 📊 Spreadsheet — ✅ updated` only after th
 `### 📊 Spreadsheet — ⛔ not deliverable`. Include profile JSON only when it materially supports the report, and keep
 JSON, cells, headers, formulas, paths, commands, and diagnostics undecorated.
 
-## prb-finance
+## Generated Financial Artifacts
 
-Never hand-edit generated `.pool.tsv`, `.annual.tsv`, or Markdown reports. After source edits, run `just tsv-check`,
-then `just cli::write-changed`. Cap financial output to counts and file references unless raw rows materially support
-the task or were requested. Perform an external-disclosure review before sending financial data outside the agent
-workspace.
+Treat generated financial tables and reports as outputs. Before editing, identify their source inputs and the
+project-provided validation and regeneration commands. Edit only the sources, validate them, then regenerate affected
+outputs; never hand-edit generated tables or reports. Cap financial output to counts and file references unless raw rows
+materially support the task or were requested. Perform an external-disclosure review before sending financial data
+outside the agent workspace.
 
 Completion requires the requested artifact, an intentional diff, atomic replacement where applicable, and structural
 plus domain validation evidence.

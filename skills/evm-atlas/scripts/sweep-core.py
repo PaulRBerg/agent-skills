@@ -19,7 +19,7 @@ TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 HISTORY_CHANNELS = ("txlist", "txlistinternal", "tokentx", "tokennfttx", "token1155tx")
 PROFILE_CHANNELS = {
     "general": ("nonce", "native-balance", *HISTORY_CHANNELS),
-    "prb-finance-bootstrap": ("nonce", "native-balance", "txlist", "txlistinternal", "tokentx", "tokennfttx"),
+    "bootstrap-discovery": ("nonce", "native-balance", "txlist", "txlistinternal", "tokentx", "tokennfttx"),
 }
 
 
@@ -47,7 +47,7 @@ def iso_time(value: Any, field: str) -> dt.datetime:
 
 
 def normalize_profile(value: Any) -> str:
-    aliases = {"bootstrap": "prb-finance-bootstrap", "prb-finance bootstrap": "prb-finance-bootstrap"}
+    aliases = {"bootstrap": "bootstrap-discovery", "bootstrap discovery": "bootstrap-discovery"}
     normalized = aliases.get(value, value)
     if normalized not in PROFILE_CHANNELS:
         raise SweepError(f"unsupported profile: {value}")
@@ -264,7 +264,7 @@ def evaluate(plan: Any, responses: Any) -> dict[str, Any]:
             state_positive = {"source": "state-rpc", "channel": channel, "value": quantity, "blockNumber": checkpoint["blockNumber"], "blockHash": checkpoint["blockHash"]}
 
     zero_shortcut = (
-        profile == "prb-finance-bootstrap"
+        profile == "bootstrap-discovery"
         and plan.get("chain", {}).get("accountActivityModel") == "ethereum-eoa"
         and state_values.get("nonce") == 0
         and state_values.get("native-balance") == 0

@@ -28,9 +28,9 @@ Consequences:
   are confirmed by checkpoint-bound RPC evidence.
 - An empty list, `totalCount: "0x0"`, or `hasNext: false` proves only that this GraphQL index returned no rows. It is
   not a historical negative.
-- For `prb-finance-bootstrap`, an exact `ethereum-eoa` zero nonce and zero native balance may still omit normal and
-  internal history under the profile invariant, but GraphQL empties do not complete ERC-20 or ERC-721 coverage. Require
-  an independent genesis-complete index or exhaustive checkpoint-bounded logs for those channels.
+- For the `bootstrap-discovery` profile, an exact `ethereum-eoa` zero nonce and zero native balance may still omit
+  normal and internal history under the profile invariant, but GraphQL empties do not complete ERC-20 or ERC-721
+  coverage. Require an independent genesis-complete index or exhaustive checkpoint-bounded logs for those channels.
 - For general or nonzero-state sweeps, GraphQL also lacks account-wide internal-transaction history. Preserve that as an
   explicit coverage gap or use a complete tracing/indexed-history route.
 

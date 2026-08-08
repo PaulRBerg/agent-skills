@@ -127,6 +127,9 @@ narrower check.
   data.
 - Keep skills self-contained. Do not de-duplicate content across skills by extracting shared references or canonical
   files; users install skills individually.
+- Keep globally installed skills self-contained. Do not refer to or depend on another repository; put reusable guidance
+  directly in the owning skill and discover target-project conventions at runtime. Refer to an external repository only
+  when it is genuinely required to perform the skill's task.
 - Write skill content for end users and other repos, not for this repo. Skills must not assume this repo's own tooling
   (e.g. `just prettier-write`, `just skill-invocation-check`) is present elsewhere; have skills detect and use whatever
   the target repo provides instead of naming this repo's recipes.
