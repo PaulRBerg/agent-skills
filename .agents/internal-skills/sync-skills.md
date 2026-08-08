@@ -129,8 +129,8 @@ Treat these as out of scope unless the request explicitly names them:
 - Codex-adapter-only content: harness concurrency limits, fresh-context spawning, native steering and waiting, inherited
   sandbox and approval controls, and native progress rendering.
 - Each skill's default model configuration and its rules about re-running a failed agent. The defaults are intentionally
-  different — the codex-handoff adapters choose GPT-5.6 model and effort tiers, while claude-handoff uses the default
-  Explore model for research and `sonnet` for implementation — so never normalize them.
+  different — the codex-handoff adapters choose GPT-5.6 model and effort tiers, while claude-handoff uses `sonnet` for
+  research and implementation — so never normalize them.
 - Status reporting: the Claude adapter's dashboard system versus both native hosts' concise progress and completion
   reports.
 - Frontmatter and `references/`/`scripts/` contents.
