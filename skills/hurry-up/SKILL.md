@@ -8,7 +8,7 @@ disable-model-invocation: true
 name: hurry-up
 user-invocable: true
 description:
-  Wind down a long-running session fast when the user must leave: freeze new work, collect wrap-up reports from active
+  Wind down a long-running session fast when the user must leave — freeze new work, collect wrap-up reports from active
   subagents, secure finished work, and hand off the remainder via task-handoff.
 ---
 
