@@ -18,6 +18,18 @@ Create readable task automation that matches the repository's installed Just ver
 - Preserve bespoke formatting. Do not rewrite a justfile with `just --fmt`; use `just --fmt --check` only when the
   repository explicitly treats the built-in formatter as authoritative. `just --dump` is inspection output, not a
   formatting source.
+- Define multi-item string sequences one item per line with a parenthesized concatenation. Keep a trailing separator in
+  every non-final item; do not collapse them into one long string. Triple-quoted strings are for values whose newlines
+  are semantic, not visual wrapping. For example:
+
+  ```just
+  check-steps := (
+    "event-class-coverage " +
+    "orphan-disposal " +
+    "price-coverage"
+  )
+  ```
+
 - Prefer explicit, small recipes; `require()` for tool dependencies; private helpers; check/write recipe pairs; and
   aliases after their target recipes.
 - Make recipes quiet by default: prefix the recipe name with `@` unless echoing commands has clear value. Recipe-level
