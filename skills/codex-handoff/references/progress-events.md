@@ -6,7 +6,7 @@ before the stream exists and write no sentinel; after the run starts, the wrappe
 real-time watching and post-mortems. Pass `--result-file PATH` separately to keep the final structured result in an
 artifact and leave background-task stdout empty.
 
-Sessions persist. Record the `thread.started` session ID, then pass `--resume SESSION_ID` to continue that session with
+Sessions persist: record the `thread.started` session ID, then pass `--resume SESSION_ID` to continue that session with
 the same wrapper controls and a new stdin prompt.
 
 ## Codex events
@@ -32,10 +32,10 @@ Item types: `agent_message` (assistant text), `reasoning`, `command_execution` (
 
 The app-server protocol documents separate `model/safetyBuffering/updated` and `model/rerouted` notifications
 ([turn events](https://learn.chatgpt.com/docs/app-server#turn-events)), but they are not part of the documented
-`codex exec --json` event set. This was written against Codex CLI 0.144.3; the current version might differ, but the gap
-may still apply — treat the forwarded event set as version-dependent rather than guaranteed. Do not invent equivalent
-JSONL events or infer a safety check from silence. A quiet period may be ordinary work or transient buffering, and an
-independent server-side policy reroute may leave the responding model unknowable.
+`codex exec --json` event set. Written against Codex CLI 0.144.3; the current version may differ, but the gap may still
+apply — treat the forwarded event set as version-dependent, not guaranteed. Do not invent equivalent JSONL events or
+infer a safety check from silence. A quiet period may be ordinary work or transient buffering, and an independent
+server-side policy reroute may leave the responding model unknowable.
 
 In status digests, say `no recent activity` and keep watching until the wrapper sentinel or approved timeout. Do not
 cancel, retry, extend, downgrade to a suggested faster model, or relaunch because the stream is quiet; preserve normal

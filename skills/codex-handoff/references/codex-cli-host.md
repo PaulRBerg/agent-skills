@@ -3,8 +3,8 @@
 Load this adapter only when `SKILL.md` selects Codex's native orchestration tools. Do not read or apply the Claude Code
 adapter in the same handoff.
 
-Native multi-agent support is required. If the orchestration tools become unavailable, stop with a compatibility
-blocker. Never invoke `codex exec` or fall back to any nested CLI process.
+Native multi-agent support is required. Stop with a compatibility blocker if the orchestration tools become unavailable.
+Never invoke `codex exec` or fall back to any nested CLI process.
 
 ## Native Agent Configuration
 
@@ -26,14 +26,14 @@ the parent conversation and permits explicit `model` and `reasoning_effort` sele
 derived from its manifest ID and scope, and preserve the visible `R1` or `A1` ID in the prompt and report.
 
 Never exceed the active-agent concurrency limit reported by the harness. Reserve one slot for the parent and account for
-other active workers when the harness reports them. Split a wider manifest into dependency-preserving waves; the
-eight-agent shared limit is total implementation agents, not concurrent width. When no concurrency cap is reported,
-launch one worker at a time.
+other active workers when reported. Split a wider manifest into dependency-preserving waves; the eight-agent shared
+limit is total implementation agents, not concurrent width. With no reported concurrency cap, launch one worker at a
+time.
 
-Codex subagents inherit the parent sandbox and approval policy. Plan-mode research therefore stays under the parent's
-read-only controls, and implementation cannot bypass the permissions selected for the approved parent turn. For a
-research-only handoff outside Plan mode, the shared prompt's strict no-edit boundary is mandatory; treat any reported
-edit as a contract violation.
+Codex subagents inherit the parent sandbox and approval policy: Plan-mode research stays under the parent's read-only
+controls, and implementation cannot bypass the permissions selected for the approved parent turn. For a research-only
+handoff outside Plan mode, the shared prompt's strict no-edit boundary is mandatory; treat any reported edit as a
+contract violation.
 
 ## Research Mechanics
 
@@ -41,9 +41,9 @@ For each selected research agent, call `spawn_agent` with `fork_turns: "none"`, 
 shared self-contained research prompt. Start all agents that fit the current concurrency allowance without waiting
 between launches; place any remainder in a later research wave.
 
-Wait for native results with `wait_agent`. Fold the returned findings into the parent plan or research-only response as
-required by the shared Research Phase. Do not create progress, result, stderr, sentinel, or watcher artifacts. Treat any
-reported edit as a contract violation.
+Wait for native results with `wait_agent`. Fold the returned findings into the parent plan or research-only response per
+the shared Research Phase. Do not create progress, result, stderr, sentinel, or watcher artifacts. Treat any reported
+edit as a contract violation.
 
 ## Plan Manifest
 
@@ -79,7 +79,7 @@ not reproduce it with custom dashboards, polling loops, wrapper artifacts, or sy
 user update in an actual agent result or harness state.
 
 Practice wait economy: when `wait_agent` returns without a settled result or an actionable mailbox message, immediately
-call `wait_agent` again with no analysis, narration, or `list_agents` round-trips. Reserve reasoning and user-visible
+call `wait_agent` again — no analysis, narration, or `list_agents` round-trips. Reserve reasoning and user-visible
 status for settlements, steering-worthy evidence, or at most one compact update per roughly fifteen minutes of elapsed
 wave time; every idle wakeup otherwise costs a full model turn.
 
