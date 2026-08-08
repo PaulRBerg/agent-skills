@@ -55,7 +55,7 @@ bunx skills add PaulRBerg/agent-skills
 | spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS                               |
 | stale-comments-audit | Audit and fix stale comments in JavaScript, TypeScript, and Go            |
 | tailwind-css         | Tailwind CSS v4 styling guidance                                          |
-| task-handoff         | Create single- or multi-repository Codex task handoff plans               |
+| task-handoff         | Create one Desktop-based Codex task handoff plan                          |
 | todo-archive         | Archive checked TODO.md tasks into .ai/todos                              |
 | tool-finder          | Find and compare current developer tools                                  |
 | vitest               | Vitest test writing and debugging                                         |

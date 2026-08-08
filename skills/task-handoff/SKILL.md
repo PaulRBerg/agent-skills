@@ -8,8 +8,8 @@ disable-model-invocation: true
 name: task-handoff
 user-invocable: true
 description:
-  Create decision-complete single- or multi-repository task handoffs under `.ai/task-handoffs/` and return commands for
-  fresh interactive Codex sessions.
+  Create one decision-complete task handoff under `~/Desktop/.ai/task-handoffs/` and return a command for a fresh
+  interactive Codex session.
 ---
 
 # Task Handoff
@@ -20,7 +20,7 @@ skill's own work.
 If these instructions are already present from a slash or dollar invocation, follow them directly; do not invoke this
 skill again through a skill tool.
 
-Turn one continuation task into self-contained task handoffs for fresh Codex chats. Write handoffs only; do not
+Turn one continuation task into one self-contained task handoff for a fresh Codex chat. Write the handoff only; do not
 implement, edit tracked files, commit, push, launch Codex, or change ignore configuration.
 
 ## Select the work
@@ -34,8 +34,8 @@ concurrent-agent changes. If the task is already complete, report the evidence a
 unresolved choice materially changes scope, safety, execution approach, verification, repository membership, or handoff
 placement.
 
-Classify each handoff from the user's requested outcome, expected evidence, and authorized actions before choosing its
-topology. Reason about the task; do not keyword-match it. Select exactly one lowercase category:
+Classify the handoff from the user's requested outcome, expected evidence, and authorized actions. Reason about the
+task; do not keyword-match it. Select exactly one lowercase category:
 
 - `implementation`: change code, configuration, documentation, or data to reach a defined end state.
 - `investigation`: explain a bounded symptom, behavior, or failure with evidence and a recommended next action.
@@ -44,19 +44,16 @@ topology. Reason about the task; do not keyword-match it. Select exactly one low
 - `operations`: carry out a bounded maintenance, release, migration, or coordination workflow with state checks and
   rollback boundaries.
 
-When a task contains supporting work from another category, use the category of its primary deliverable. Split it into
-coordinated handoffs only when the work has independent outcomes or owners.
+When a task contains supporting work from another category, use the category of its primary deliverable.
 
 Infer repositories from local paths and relevant context. Do not include the current repository merely because the skill
-runs there when the task selects only other repositories. Choose the topology from the task:
+runs there when the task selects only other repositories. Create exactly one handoff file, whether the task touches one
+repository or many. It always belongs at `~/Desktop/.ai/task-handoffs/<HANDOFF_NAME.md>`; never create it in a
+repository. For a cross-repository task, include every involved repository and choose the first repository to tackle as
+the Codex launch directory. Stop before writing when the repository set or the required operation order is unclear.
 
-- Default to one handoff owned by the current repository.
-- A cross-repository handoff uses the clearly requested owner and covers every involved repository.
-- Multiple coordinated handoffs each belong to their clearly requested owner.
-- Stop before writing when the repository set, one-versus-many topology, or owner mapping is unclear.
-
-Choose a meaningful unique filename per handoff matching `^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*[.]md$`; do not force a `PLAN_`
-prefix. If a target exists, add a semantic qualifier, falling back to `_YYYY_MM_DD_HHMMSS` only when no meaningful
+Choose one meaningful unique filename matching `^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*[.]md$`; do not force a `PLAN_` prefix. If
+the Desktop target exists, add a semantic qualifier, falling back to `_YYYY_MM_DD_HHMMSS` only when no meaningful
 qualifier distinguishes it.
 
 ## Prepare drafts
@@ -66,17 +63,18 @@ Resolve `scripts/task-handoff.sh` relative to this loaded `SKILL.md`. Invoke it 
 ```sh
 bash <skill-dir>/scripts/task-handoff.sh prepare \
   --repo '<candidate-repository>' \
-  --plan '<owner-candidate>' '<HANDOFF_NAME.md>' '<task-category>' '<concise-task>' \
-  [--repo ...] [--plan ...]
+  --plan '<first-repository-to-tackle>' '<HANDOFF_NAME.md>' '<task-category>' '<concise-task>' \
+  [--repo ...]
 ```
 
-Pass every involved repository with `--repo` and every handoff in intended report/clipboard order with `--plan`. Pass
-the inferred category exactly as one of the five values above. The helper validates and canonicalizes physical Git
-roots, owners, categories, ignored new targets, filenames, and required macOS tools before creating mode-0700 temporary
-state. Use its shell-quoted `run_dir`, `repo`, and `plan` records as authoritative; each `plan` record gives its
-canonical owner, relative target, absolute target, category, and draft path.
+Pass every involved repository with `--repo`, then exactly one `--plan`. Its repository must be the first one to tackle
+and becomes the Codex launch directory. Pass the inferred category exactly as one of the five values above. The helper
+validates and canonicalizes physical Git roots, the launch repository, the Desktop target, categories, filenames, and
+required macOS tools before creating mode-0700 temporary state. Use its shell-quoted `run_dir`, `repo`, and `plan`
+records as authoritative; the `plan` record gives its launch repository, Desktop-relative target, absolute target,
+category, and draft path.
 
-Write only the semantic handoff body to each draft. Never add `## Handoff category`, `## Execution status`, or
+Write only the semantic handoff body to the draft. Never add `## Handoff category`, `## Execution status`, or
 `## Handoff cleanup`; `finalize` reserves and appends them. Make every body decision-complete for an agent with access
 to the named repositories but none of this transcript. Include:
 
@@ -94,24 +92,25 @@ alternatives, and recommendation criteria. An audit handoff specifies the assess
 and severity or prioritization model. An operations handoff specifies preconditions, ordered state transitions,
 authority boundaries, observability, and rollback or recovery.
 
-For cross-repository or coordinated handoffs, also name every canonical root, its role and exact write scope, dependency
-and execution order, repository-local validation, combined acceptance criteria, and repository-relative related-handoff
-paths. Use direct transcript excerpts when exact wording is material; otherwise summarize relevant context to keep the
-handoff compact. Leave no placeholders, open task choices, or references that require the old chat.
+For a cross-repository handoff, add a `## Repository order` section with a numbered sequence. Its first item must name
+the repository to tackle first; every item must name the canonical root, role, exact write scope, prerequisite or
+handoff condition, and repository-local validation. Also state the combined acceptance criteria. Use direct transcript
+excerpts when exact wording is material; otherwise summarize relevant context to keep the handoff compact. Leave no
+placeholders, open task choices, or references that require the old chat. `finalize` rejects a cross-repository draft
+without this section.
 
 ## Finalize or cancel
 
-After all bodies are complete, run:
+After the body is complete, run:
 
 ```sh
 bash <skill-dir>/scripts/task-handoff.sh finalize '<run-dir>'
 ```
 
-`finalize` re-runs preflight, rejects empty or reserved-heading drafts, appends the fixed category, execution-status,
-and per-handoff cleanup contracts, validates the complete structures, publishes every new handoff without overwriting,
-and copies and byte-verifies the ordered Codex commands. It rolls back helper-created targets and now-empty directories
-on handled errors, `INT`, or `TERM`; it cannot make publication atomic across filesystems or survive power loss or
-`SIGKILL`.
+`finalize` re-runs preflight, rejects an empty or reserved-heading draft, appends the fixed category, execution-status,
+and cleanup contracts, validates the complete structure, publishes the new Desktop handoff without overwriting, and
+copies and byte-verifies the Codex command. It rolls back helper-created targets and now-empty directories on handled
+errors, `INT`, or `TERM`; it cannot make publication atomic across filesystems or survive power loss or `SIGKILL`.
 
 For noninteractive ai-coord findings triage, uppercase the finding ID only in the deterministic filename
 `FINDING_<UPPERCASE_ID>.md`. Preserve the ledger ID's original spelling in the exact machine-readable line
@@ -121,25 +120,26 @@ For noninteractive ai-coord findings triage, uppercase the finding ID only in th
 bash <skill-dir>/scripts/task-handoff.sh finalize --no-clipboard '<run-dir>'
 ```
 
-This mode keeps the same publication, structural validation, rollback, cleanup, and final `plan` records, but skips all
+This mode keeps the same publication, structural validation, rollback, cleanup, and final `plan` record, but skips all
 `pbcopy` and `pbpaste` checks, copying, and readback verification. On a handled failure, correct the retained draft and
 retry the same finalize command; if abandoning the handoff, use `cancel` to remove only its temporary run state. Never
 overwrite an existing deterministic finding handoff: resolve the existing handoff before preparing another run.
 
-Each final `plan` record contains `relative=`, canonical `owner=`, `category=`, and the exact command after `command=`.
-Never execute the command. If a correctable draft error occurs, edit the draft and retry. If abandoning or blocking
-before successful finalization, remove only helper-created temporary state with:
+The final `plan` record contains `handoff=`, canonical `launch_repo=`, `category=`, and the exact command after
+`command=`. Never execute the command. If a correctable draft error occurs, edit the draft and retry. If abandoning or
+blocking before successful finalization, remove only helper-created temporary state with:
 
 ```sh
 bash <skill-dir>/scripts/task-handoff.sh cancel '<run-dir>'
 ```
 
-Never create or remove targets yourself. A failed or cancelled run must leave no helper-created handoff set.
+Never create or remove targets yourself. A failed or cancelled run must leave no helper-created handoff file.
 
 ## Report
 
-On success, finish with `### ✅ Task handoff ready — <task>`. For each handoff, list the final record's
-repository-relative path, canonical owner, category, and exact command in a code block, preserving handoff order. Do not
-repeat handoff bodies or mention clipboard copying or verification.
+On success, finish with `### ✅ Task handoff ready — <task>`. List the final record's Desktop path, canonical launch
+repository, category, and exact command in a code block. Do not repeat the handoff body or mention clipboard copying or
+verification.
 
-For a blocker, finish with `### ⛔ Task handoff not written — <reason>` and state that no handoff file was created.
+For a blocker, finish with `### ⛔ Task handoff not written — <reason>` and state that no Desktop handoff file was
+created.
