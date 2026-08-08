@@ -44,6 +44,7 @@ bunx skills add PaulRBerg/agent-skills
 | large-file-refactor  | Large source-file report and Serena split plans                          |
 | naming-refactor      | Exhaustive behavior-preserving repository naming refactor                |
 | node-deps-bumper     | Node.js dependency updates via taze                                      |
+| pdf                  | Exact local PDF reading and manipulation on macOS                        |
 | release-bumper       | Release workflow with changelog, tagging                                 |
 | repo-harmonization   | Audit and align multiple interdependent repositories                     |
 | repo-rename          | Rename GitHub repo, folder, and agent thread references                  |
