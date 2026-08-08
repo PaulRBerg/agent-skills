@@ -178,14 +178,19 @@ assert_absent "$single_run" 'successful finalize run cleanup'
 
 single_prompt="A previous agent prepared a $single_category task handoff for $single_task under .ai/task-handoffs/SINGLE_PLAN.md. Read the handoff, then complete its requested $single_category task. Follow its stated outcome, boundaries, authority constraints, and validation requirements."
 single_command="codex -C $(shell_quote "$repo_one_root") $(shell_quote "$single_prompt")"
+single_claude_command="cd $(shell_quote "$repo_one_root") && claude $(shell_quote "$single_prompt")"
 single_prefix="plan handoff=$(shell_quote "$single_target") launch_repo=$(shell_quote "$repo_one_root") category=$(shell_quote "$single_category") command="
 case $single_result in
   "$single_prefix"*) ;;
   *) fail 'single finalize record omitted its repository target or launch repository' ;;
 esac
-single_record_command=${single_result#"$single_prefix"}
+single_record_commands=${single_result#"$single_prefix"}
+single_record_command=${single_record_commands%% claude_command=*}
+single_record_claude_command=${single_record_commands#* claude_command=}
 assert_equal "$single_command" "$single_record_command" 'single exact command'
+assert_equal "$single_claude_command" "$single_record_claude_command" 'single exact Claude command'
 /bin/bash -n -c "$single_record_command" || fail 'single command is not shell-safe'
+/bin/bash -n -c "$single_record_claude_command" || fail 'single Claude command is not shell-safe'
 assert_equal "$single_command" "$(cat "$clipboard_file")" 'single clipboard bytes'
 
 assert_equal 1 "$(grep -Fxc '## Handoff category' "$single_target")" 'handoff category count'
@@ -217,6 +222,15 @@ case $cross_result in
   "$cross_prefix"*) ;;
   *) fail 'cross-repository handoff did not use its first repository as launch directory' ;;
 esac
+cross_record_commands=${cross_result#"$cross_prefix"}
+cross_record_command=${cross_record_commands%% claude_command=*}
+cross_record_claude_command=${cross_record_commands#* claude_command=}
+cross_prompt="A previous agent prepared a implementation task handoff for coordinate both repositories at $cross_target. Read the handoff, then complete its requested implementation task. Start in the selected first repository and follow its stated repository order, outcome, boundaries, authority constraints, and validation requirements."
+assert_equal "codex -C $(shell_quote "$repo_two_root") $(shell_quote "$cross_prompt")" \
+  "$cross_record_command" 'cross exact Codex command'
+assert_equal "cd $(shell_quote "$repo_two_root") && claude $(shell_quote "$cross_prompt")" \
+  "$cross_record_claude_command" 'cross exact Claude command'
+assert_equal "$cross_record_command" "$(cat "$clipboard_file")" 'cross clipboard remains Codex-only'
 
 # The helper rejects topology that could publish more than one handoff.
 expect_failure 'prepare creates exactly one handoff plan' run_helper prepare \
@@ -307,7 +321,7 @@ finding_target=$repo_one_root/.ai/task-handoffs/FINDING_DEADBEEF.md
 assert_exists "$finding_target" 'findings repository publication'
 assert_file_contains 'Source finding: deadbeef' "$finding_target" 'finding provenance'
 case $finding_result in
-  "plan handoff="*) ;;
+  "plan handoff="*" command="*" claude_command="*) ;;
   *) fail 'no-clipboard finalize omitted its plan record' ;;
 esac
 

@@ -12,7 +12,7 @@ SCRIPT = REPO_ROOT / "skills" / "skill-doctor" / "scripts" / "skill-doctor.py"
 
 
 class SkillDoctorAdvisoryTests(unittest.TestCase):
-    def make_catalog(self, model: str, body: str) -> Path:
+    def make_catalog(self, model: str, body: str, *, coordination: str | None = None) -> Path:
         root = Path(self.temp.name)
         skill = root / "skills/demo"
         (skill / "agents").mkdir(parents=True)
@@ -20,8 +20,10 @@ class SkillDoctorAdvisoryTests(unittest.TestCase):
             "# Catalog\n\n## Skills\n\n| Skill | Description |\n| ----- | ----------- |\n| demo | Demo |\n",
             encoding="utf-8",
         )
+        coordination_line = f"coordination: {coordination}\n" if coordination is not None else ""
         (skill / "SKILL.md").write_text(
             "---\n"
+            f"{coordination_line}"
             "disable-model-invocation: false\n"
             f"model: {model}\n"
             "name: demo\n"
@@ -59,6 +61,38 @@ class SkillDoctorAdvisoryTests(unittest.TestCase):
     def test_accepts_current_pin_with_completion_contract(self) -> None:
         report = self.run_doctor(self.make_catalog("sonnet", "## Completion\n\nReport verified output."))
         self.assertEqual(report["counts"]["findings"], 0)
+
+    def test_accepts_matching_coordination_exemption(self) -> None:
+        sentence = (
+            "This skill is coordination-exempt: skip the ai-coord gate "
+            "(`git status` / `ai-coord status` / `ai-coord start`) for this skill's own work."
+        )
+        report = self.run_doctor(
+            self.make_catalog("sonnet", f"{sentence}\n\n## Completion\n\nReport verified output.", coordination="exempt")
+        )
+        self.assertEqual(report["counts"]["findings"], 0)
+
+    def test_reports_frontmatter_without_coordination_sentence(self) -> None:
+        report = self.run_doctor(
+            self.make_catalog("sonnet", "## Completion\n\nReport verified output.", coordination="exempt")
+        )
+        finding = next(item for item in report["findings"] if item["code"] == "COORDINATION_EXEMPT_SENTENCE_MISSING")
+        self.assertFalse(finding["fixable"])
+        self.assertIn("This skill is coordination-exempt:", finding["message"])
+
+    def test_reports_coordination_sentence_without_frontmatter(self) -> None:
+        body = "This skill is coordination-exempt: skip the gate.\n\n## Completion\n\nReport verified output."
+        report = self.run_doctor(self.make_catalog("sonnet", body))
+        codes = {item["code"] for item in report["findings"]}
+        self.assertIn("COORDINATION_EXEMPT_FRONTMATTER_MISSING", codes)
+        self.assertIn("COORDINATION_EXEMPT_SENTENCE_DRIFT", codes)
+
+    def test_reports_drifted_coordination_sentence_with_expected_text(self) -> None:
+        body = "This skill is coordination-exempt: skip the coordination gate.\n\n## Completion\n\nReport verified output."
+        report = self.run_doctor(self.make_catalog("sonnet", body, coordination="exempt"))
+        finding = next(item for item in report["findings"] if item["code"] == "COORDINATION_EXEMPT_SENTENCE_DRIFT")
+        self.assertFalse(finding["fixable"])
+        self.assertIn("expected: This skill is coordination-exempt:", finding["message"])
 
 
 if __name__ == "__main__":

@@ -674,6 +674,7 @@ publish_staged_plans() {
 
 build_commands() {
   commands=()
+  claude_commands=()
   _index=0
   while [ "$_index" -lt "${#plan_owners[@]}" ]; do
     _category=${plan_categories[$_index]}
@@ -687,6 +688,8 @@ build_commands() {
     _prompt="A previous agent prepared a ${_category} task handoff for ${plan_tasks[$_index]} $_location. Read the handoff, then complete its requested ${_category} task. $_instructions"
     _command="codex -C $(shell_quote "${plan_owners[$_index]}") $(shell_quote "$_prompt")"
     commands[${#commands[@]}]=$_command
+    _claude_command="cd $(shell_quote "${plan_owners[$_index]}") && claude $(shell_quote "$_prompt")"
+    claude_commands[${#claude_commands[@]}]=$_claude_command
     _index=$((_index + 1))
   done
 }
@@ -753,11 +756,12 @@ finalize() {
 
   _index=0
   while [ "$_index" -lt "${#commands[@]}" ]; do
-    printf 'plan handoff=%s launch_repo=%s category=%s command=%s\n' \
+    printf 'plan handoff=%s launch_repo=%s category=%s command=%s claude_command=%s\n' \
       "$(shell_quote "${plan_targets[$_index]}")" \
       "$(shell_quote "${plan_owners[$_index]}")" \
       "$(shell_quote "${plan_categories[$_index]}")" \
-      "${commands[$_index]}" || die 'cannot emit finalized plan record'
+      "${commands[$_index]}" \
+      "${claude_commands[$_index]}" || die 'cannot emit finalized plan record'
     _index=$((_index + 1))
   done
 

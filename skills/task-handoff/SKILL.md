@@ -2,7 +2,7 @@
 argument-hint: "[task-to-handoff]"
 compatibility:
   Requires Bash 3.2, Git, local file-write access, and macOS trash. Default finalization also requires macOS pbcopy and
-  pbpaste; `finalize --no-clipboard` does not. The generated launch command requires an authenticated Codex CLI.
+  pbpaste; `finalize --no-clipboard` does not. Generated launch commands require authenticated Codex and Claude CLIs.
 coordination: exempt
 disable-model-invocation: true
 name: task-handoff
@@ -20,8 +20,12 @@ skill's own work.
 If these instructions are already present from a slash or dollar invocation, follow them directly; do not invoke this
 skill again through a skill tool.
 
-Turn one continuation task into one self-contained task handoff for a fresh Codex chat. Write the handoff only; do not
+Turn one continuation task into one self-contained task handoff for a fresh agent chat. Write the handoff only; do not
 implement, edit tracked files, commit, push, launch Codex, or change ignore configuration.
+
+Task-handoff writes a decision-complete file for a fresh, separate session. Codex-handoff and claude-handoff orchestrate
+implementation within the current session from Plan mode; use task-handoff when work continues later or elsewhere, and
+an in-session handoff skill when implementing an approved plan now.
 
 ## Select the work
 
@@ -85,6 +89,8 @@ to the named repositories but none of this transcript. Include:
 - changes keyed to stable paths, symbols, interfaces, schemas, or commands rather than line numbers;
 - task-specific evidence, procedure, material edge cases, and failure behavior;
 - targeted validation, acceptance scenarios, and rollout, compatibility, or authority requirements;
+- exact repository-relative write scopes and a ready-to-run `ai-coord start '<label>' '<path>'...` command derived from
+  those scopes, using `--recursive` only when the handoff genuinely cannot enumerate a subtree;
 - assumptions resolved from repository evidence or explicit user decisions.
 
 Tailor the body to its category. An implementation handoff specifies the intended change, data flow, and compatibility.
@@ -96,10 +102,11 @@ authority boundaries, observability, and rollback or recovery.
 
 For a cross-repository handoff, add a `## Repository order` section with a numbered sequence. Its first item must name
 the repository to tackle first; every item must name the canonical root, role, exact write scope, prerequisite or
-handoff condition, and repository-local validation. Also state the combined acceptance criteria. Use direct transcript
-excerpts when exact wording is material; otherwise summarize relevant context to keep the handoff compact. Leave no
-placeholders, open task choices, or references that require the old chat. `finalize` rejects a cross-repository draft
-without this section.
+handoff condition, repository-local validation, and its own ready-to-run `ai-coord start` command. Also state the
+combined acceptance criteria. Use literal repository-relative paths without globs; use directories only with
+`--recursive`. Use direct transcript excerpts when exact wording is material; otherwise summarize relevant context to
+keep the handoff compact. Leave no placeholders, open task choices, or references that require the old chat. `finalize`
+rejects a cross-repository draft without this section.
 
 ## Finalize or cancel
 
@@ -127,9 +134,18 @@ This mode keeps the same publication, structural validation, rollback, cleanup, 
 retry the same finalize command; if abandoning the handoff, use `cancel` to remove only its temporary run state. Never
 overwrite an existing deterministic finding handoff: resolve the existing handoff before preparing another run.
 
+When creating a finding handoff interactively rather than through the autonomous triage runtime, run the following only
+after successful finalization so the ledger record moves from `pending` to `handed-off`. Preserve the ledger ID's
+original spelling:
+
+```sh
+ai-coord finding handoff '<original-id>' --path '.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md'
+```
+
 The final `plan` record contains `handoff=`, canonical `launch_repo=`, `category=`, and the exact command after
-`command=`. Never execute the command. If a correctable draft error occurs, edit the draft and retry. If abandoning or
-blocking before successful finalization, remove only helper-created temporary state with:
+`command=` plus the exact Claude Code command after `claude_command=`. Never execute either command. If a correctable
+draft error occurs, edit the draft and retry. If abandoning or blocking before successful finalization, remove only
+helper-created temporary state with:
 
 ```sh
 bash <skill-dir>/scripts/task-handoff.sh cancel '<run-dir>'
@@ -140,7 +156,7 @@ Never create or remove targets yourself. A failed or cancelled run must leave no
 ## Report
 
 On success, finish with `### ✅ Task handoff ready — <task>`. List the final record's handoff path, canonical launch
-repository, category, and exact command in a code block. Do not repeat the handoff body or mention clipboard copying or
-verification.
+repository, category, and both exact commands in one code block, Codex first. Do not repeat the handoff body or mention
+clipboard copying or verification.
 
 For a blocker, finish with `### ⛔ Task handoff not written — <reason>` and state that no handoff file was created.

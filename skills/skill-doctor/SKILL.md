@@ -46,6 +46,8 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 - Treat `warning` findings as review-required catalog hygiene issues.
 - Prompt-hygiene warnings are advisory and never auto-fix: stale model pins, oversized unconditional Markdown
   references, conflicting requirement/prohibition language, and missing completion evidence.
+- Coordination-exemption errors are report-only: `coordination: exempt` must be paired with the catalog's canonical
+  `coordination-exempt` body sentence, and neither side is repaired by `--fix-safe`.
 - Use `path` and `line` from JSON output for precise follow-up edits.
 
 ## Safe Fix Policy

@@ -13,6 +13,10 @@ description:
 
 # Claude Handoff
 
+Claude-handoff orchestrates implementation within the current session from Plan mode. Task-handoff instead writes a
+decision-complete file for a fresh, separate session; choose it when work continues later or elsewhere, and choose an
+in-session handoff skill when implementing an approved plan now.
+
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
 

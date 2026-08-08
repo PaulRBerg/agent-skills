@@ -39,6 +39,11 @@ COMPLETION_EVIDENCE_RE = re.compile(
 REQUIREMENT_RE = re.compile(r"\b(?:always|must(?!\s+not\b)|required to)\s+([^.!?\n]+)", re.IGNORECASE)
 PROHIBITION_RE = re.compile(r"\b(?:do not|don't|never|must not|forbid(?:s|den)?)\s+([^.!?\n]+)", re.IGNORECASE)
 STALE_MODEL_PINS = {"opus"}
+COORDINATION_EXEMPT_SENTENCE = (
+    "This skill is coordination-exempt: skip the ai-coord gate "
+    "(`git status` / `ai-coord status` / `ai-coord start`) for this skill's own work."
+)
+COORDINATION_EXEMPT_MENTION_RE = re.compile(r"\bThis\s+skill\s+is\s+coordination-exempt\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -188,11 +193,62 @@ def check_skill(skill: SkillFile, findings: list[Finding], fixes: list[Fix], *, 
         return
 
     check_frontmatter_fields(skill, frontmatter, field_lines, field_order, findings)
+    check_coordination_exemption(skill, text, frontmatter, field_lines, findings)
     check_openai_metadata(skill, frontmatter, findings, fixes, fix_safe=fix_safe)
     if skill.active:
         check_cli_version(skill, frontmatter, findings)
     check_resource_links(skill, text, findings)
     check_prompt_hygiene(skill, text, frontmatter, field_lines, findings)
+
+
+def check_coordination_exemption(
+    skill: SkillFile,
+    text: str,
+    frontmatter: dict[str, Any],
+    field_lines: dict[str, int],
+    findings: list[Finding],
+) -> None:
+    match = FRONTMATTER_RE.match(text)
+    body = text[match.end() :] if match else text
+    is_exempt = frontmatter.get("coordination") == "exempt"
+    has_exact_sentence = COORDINATION_EXEMPT_SENTENCE in " ".join(body.split())
+    mention = COORDINATION_EXEMPT_MENTION_RE.search(body)
+
+    if not is_exempt and mention:
+        findings.append(
+            finding(
+                "COORDINATION_EXEMPT_FRONTMATTER_MISSING",
+                "error",
+                skill.path,
+                line_number_at_offset(text, match.end() + mention.start()) if match else line_number_at_offset(text, mention.start()),
+                False,
+                "body declares coordination-exempt behavior but frontmatter does not set coordination: exempt",
+            )
+        )
+
+    if is_exempt and not has_exact_sentence and mention is None:
+        findings.append(
+            finding(
+                "COORDINATION_EXEMPT_SENTENCE_MISSING",
+                "error",
+                skill.path,
+                field_lines.get("coordination"),
+                False,
+                f"coordination: exempt requires the canonical body sentence: {COORDINATION_EXEMPT_SENTENCE}",
+            )
+        )
+    elif mention is not None and not has_exact_sentence:
+        body_offset = match.end() if match else 0
+        findings.append(
+            finding(
+                "COORDINATION_EXEMPT_SENTENCE_DRIFT",
+                "error",
+                skill.path,
+                line_number_at_offset(text, body_offset + mention.start()),
+                False,
+                f"coordination-exempt sentence differs from canonical text; expected: {COORDINATION_EXEMPT_SENTENCE}",
+            )
+        )
 
 
 def parse_frontmatter(

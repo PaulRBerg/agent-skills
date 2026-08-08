@@ -1,13 +1,13 @@
 ---
-argument-hint: "[--all] [--staged] [--natural] [--push] [--close <issue_numbers>]"
-compatibility: Requires Git and ai-commit >=0.1.0 on PATH.
+argument-hint: "[--all] [--staged] [--natural] [--push] [--close <issue_numbers>] [--finding <finding_ids>]"
+compatibility: Requires Git and ai-commit with automatic ai-coord stale-dirt baseline discovery on PATH.
 disable-model-invocation: false
 effort: medium
 name: commit
 user-invocable: true
 description:
   "Commit staged or intended changes: compose a Conventional Prefix or Natural Language message, then use ai-commit —
-  with --all, --staged, --close, or --push."
+  with --all, --staged, --close, --finding, or --push."
 ---
 
 # Git Commit
@@ -29,6 +29,9 @@ Arguments: `$ARGUMENTS`
 - `--push`: request a push after commit. Otherwise push only when standing instructions authorize it.
 - `--close <issue_numbers>`: append one `Closes #N` trailer per positive decimal issue number; accept comma- or
   space-separated input.
+- `--finding <finding_ids>`: append one `Finding-ID: <id>` trailer per ledger finding this commit fixes; accept comma-
+  or space-separated input. Also infer a finding from context when this session's commit fixes a specific ledger
+  finding. Never include or resolve findings the commit does not actually fix.
 - In Conventional Prefix Format, a positional type keyword overrides the inferred type. In Natural Language Format, a
   positional verb or category keyword overrides the inferred verb. Quoted positional text overrides the inferred
   description or subject.
@@ -47,11 +50,15 @@ ai-commit prepare [--all | --staged] [--natural] --diff full \
 
 - Default mode requires every path edited in this session. For a rename, include both old and new names, including
   case-only file or directory renames.
+- Before default-mode preparation, run `ai-coord touched` when available and reconcile its output against the session
+  path list: add missed session-edited paths, but ignore paths this session did not semantically change because touched
+  paths are best-effort evidence, not authority. Skip this cross-check silently when the command is unavailable or the
+  session is unrecognized.
 - `--all` accepts no explicit paths and captures all tracked, untracked, modified, deleted, and staged changes.
 - `--staged` accepts neither explicit paths nor baseline exclusions and captures the shared index exactly.
-- When `ai-coord start` reported `stale-dirt:<paths>`, run `ai-coord baseline` and pass every returned path/blob pair as
-  a repeated `--exclude-baseline '<path>=<oid>'`. Without that baseline, preparation includes the whole current file.
-  Never revert unrelated changes.
+- `ai-commit prepare` automatically applies this session's ai-coord stale-dirt baselines. Auto-applied exclusions appear
+  in the preparation evidence and must be disclosed unchanged. Explicit `--exclude-baseline` remains available for
+  overrides, and `--no-auto-baseline` disables discovery for deterministic automation. Never revert unrelated changes.
 
 Preparation pins the exact tree and delta under the printed transaction ID without changing the shared index. Keep that
 ID. The later commit reuses the transaction instead of recomputing intended content from the mutable worktree or shared
@@ -68,6 +75,8 @@ Analyze the single prepared full diff. Do not prepare again to get different evi
   when it adds material rationale.
 - Add `Closes #N` trailers from `--close` and from transcript issue references only when this commit actually resolves
   them. De-duplicate issue numbers.
+- Add one `Finding-ID: <id>` trailer per finding supplied by `--finding` or inferred from context that this commit
+  actually fixes. De-duplicate finding IDs.
 - Append the exact `Agent-Session:` line from the preparation trailer section when present. `ai-commit` has already
   validated it; do not synthesize or repair a missing or malformed trailer.
 
@@ -91,6 +100,10 @@ receipt without creating a duplicate commit. Never delete an index lock.
 
 Read [references/failure-recovery.md](references/failure-recovery.md) before adding `--no-verify` or `--no-gpg-sign`.
 Those are explicit per-attempt recovery options, not first-attempt defaults.
+
+After `COMMITTED <transaction-id> <commit-oid>`, resolve every included finding with
+`ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'`. Use the committed OID from the receipt and report
+the resolved finding IDs in the receipt summary.
 
 ## 5. Interpret the Receipt
 
