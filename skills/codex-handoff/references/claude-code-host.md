@@ -19,7 +19,8 @@ Give each research agent a self-contained prompt containing the open questions, 
 boundary, relevant repository constraints, and stopping rule from the shared prompt contract. Require every field in
 `research-result.schema.json`; prohibit plans, design decisions, and edits.
 
-Select research configuration from these tiers:
+When the user has not explicitly included research agents in a model preference, select research configuration from
+these tiers:
 
 | Investigation                          | Model           | Effort             | Baseline timeout |
 | -------------------------------------- | --------------- | ------------------ | ---------------- |
@@ -43,7 +44,7 @@ Use this exact host-specific table inside the shared `## Codex Handoff` plan sec
 | `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-luna\|gpt-5.6-terra\|gpt-5.6-sol>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
-Select implementation configuration deliberately:
+When the user has not specified a model preference, select implementation configuration from these tiers:
 
 | Work                                     | Model           | Effort             | Baseline timeout |
 | ---------------------------------------- | --------------- | ------------------ | ---------------- |
@@ -51,9 +52,10 @@ Select implementation configuration deliberately:
 | Everyday or involved implementation      | `gpt-5.6-terra` | `medium` or `high` | 20 minutes       |
 | Semantic or cross-cutting implementation | `gpt-5.6-sol`   | `xhigh`            | 40 minutes       |
 
-Never select `low`, `ultra`, or `max`. Adjust a timeout when repository evidence shows that required validation needs
-materially more or less time. The timeout is a kill-switch, not pacing: Codex never sees it and an early finish costs
-nothing, so size it only to bound how long a hung agent can block its wave.
+An explicit user model preference replaces this task-complexity model selection, but effort and timeout still follow the
+applicable work tier. Never select `low`, `ultra`, or `max`. Adjust a timeout when repository evidence shows that
+required validation needs materially more or less time. The timeout is a kill-switch, not pacing: Codex never sees it
+and an early finish costs nothing, so size it only to bound how long a hung agent can block its wave.
 
 Keep the highest-tier agent's scope minimal and move deferrable validation to the validation owner.
 

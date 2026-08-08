@@ -8,7 +8,7 @@ blocker. Never invoke `codex exec` or fall back to any nested CLI process.
 
 ## Native Agent Configuration
 
-Use these tiers for research and implementation:
+When the user has not specified a model preference, use these tiers for research and implementation:
 
 | Work                                       | Model           | Effort   |
 | ------------------------------------------ | --------------- | -------- |
@@ -16,9 +16,10 @@ Use these tiers for research and implementation:
 | Involved research or implementation        | `gpt-5.6-terra` | `high`   |
 | Semantic or cross-cutting implementation   | `gpt-5.6-sol`   | `xhigh`  |
 
-Sol at `xhigh` is the ceiling and is implementation-only; research agents always use Terra — research gathers evidence,
-the parent synthesizes. Never select `low`, `ultra`, or `max`, and do not use Luna in this adapter. Keep the
-highest-tier agent's scope minimal and move deferrable validation to the validation owner.
+Under this default selection, Sol at `xhigh` is the ceiling and is implementation-only; research agents always use Terra
+— research gathers evidence, the parent synthesizes. Never select `low`, `ultra`, or `max`, and do not choose Luna
+unless the user's explicit preference requires it. Keep the highest-tier agent's scope minimal and move deferrable
+validation to the validation owner.
 
 Spawn every research or implementation worker with a self-contained prompt and `fork_turns: "none"`. This avoids copying
 the parent conversation and permits explicit `model` and `reasoning_effort` selection. Use a stable lowercase task name
@@ -34,9 +35,9 @@ read-only controls, and implementation cannot bypass the permissions selected fo
 
 ## Research Mechanics
 
-For each selected research agent, call `spawn_agent` with `fork_turns: "none"`, the approved Terra or Sol model and
-effort, and the shared self-contained research prompt. Start all agents that fit the current concurrency allowance
-without waiting between launches; place any remainder in a later research wave.
+For each selected research agent, call `spawn_agent` with `fork_turns: "none"`, the selected model and effort, and the
+shared self-contained research prompt. Start all agents that fit the current concurrency allowance without waiting
+between launches; place any remainder in a later research wave.
 
 Wait for native results with `wait_agent`. Fold the returned findings into the parent plan as required by the shared
 Research Phase. Do not create progress, result, stderr, sentinel, or watcher artifacts. Treat any reported edit as a
@@ -47,13 +48,13 @@ contract violation.
 Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                          | Effort                  | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | ------------------------------ | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-terra\|gpt-5.6-sol>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                                        | Effort                  | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | -------------------------------------------- | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-luna\|gpt-5.6-terra\|gpt-5.6-sol>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
-Use the native configuration table above for every manifest row. Do not add artificial timeout budgets: native agent
-lifetime and waiting are owned by the harness.
+Use the native configuration table above for every manifest row unless the user's explicit preference overrides its
+model selection. Do not add artificial timeout budgets: native agent lifetime and waiting are owned by the harness.
 
 ## Execution Mechanics
 
