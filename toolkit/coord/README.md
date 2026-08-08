@@ -113,11 +113,12 @@ ai-coord wait        # waits up to 300 seconds
 ai-coord wait -t 60  # explicit timeout, capped at one hour
 ```
 
-Editing requires `ai-coord start` to return `READY`. `wait` checks the SQLite generation counter each second and
-performs full inventory, Git, and arbitration refreshes only when coordination state changes or every 20 seconds as a
-fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN` exits 2. After any such
-wake, inspect the reported state and re-arm as needed. `done` idempotently releases draft, active, or queued work and
-notifies overlapping queued holders that their work may now be ready.
+Editing requires `ai-coord start` to return `READY`. Every terminal `start`, `wait`, and `done` outcome also prints one
+concise next-step sentence to stderr while preserving the stdout TSV contract. `wait` checks the SQLite generation
+counter each second and performs full inventory, Git, and arbitration refreshes only when coordination state changes or
+every 20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN`
+exits 2. After any such wake, inspect the reported state and re-arm as needed. `done` idempotently releases draft,
+active, or queued work and notifies overlapping queued holders that their work may now be ready.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. Newly blocked work
 reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
@@ -134,8 +135,15 @@ Sessions whose hooks report plan mode are labeled `planning` in `status` and the
 planning presence from active implementation work.
 
 When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks byte-for-byte. Run `ai-coord baseline` to
-print their blob OIDs and pass affected paths to the commit skill's baseline exclusion. A session that finishes with
-uncommitted dirt retains residual ownership and can reclaim it immediately.
+print their blob OIDs and pass affected paths to the commit skill's baseline exclusion. `baseline` is a stable machine
+contract: zero or more `path<TAB>oid` records, with normalized repository-relative paths and empty output when no
+baselines exist. A session that finishes with uncommitted dirt retains residual ownership and can reclaim it
+immediately.
+
+`ai-coord touched` prints normalized repository-relative paths written by this session's observed post-tool events, one
+per line. `!TRUNCATED` is the first record when the bounded 1,000-path set dropped older observations. Collection is
+best-effort: unsupported tools or hosts that omit usable path fields contribute nothing, and no tool payload content is
+stored.
 
 Repositories may list harness churn in a tracked `.ai-coord.toml`:
 
@@ -160,11 +168,12 @@ ai-coord inbox --ack '<message-id>'
 
 `status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output marks
 queued work with `work=queued`, renders drafts as `draft · N scopes`, and ends with compact, contextual definitions for
-the states present; it reports only finding counts (`pending`, `triaging`, and `handed-off`), never a backlog. `--json`
-emits public schema v3. Draft records include only their label, state, timestamps, and scope count. Submitted work
-includes literal normalized scope objects. Status, dashboard snapshots, and message recipient discovery may reuse
-complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe providers freshly
-before granting work or reporting installation health.
+the states present; it reports only finding counts (`pending`, `triaging`, and `handed-off`), never a backlog, plus
+nonzero `.ai/task-handoffs/*.md` counts without reading file names or contents. `--json` emits public schema v4 with
+`handoffs` records shaped as `{repo_root, count}`. Draft records include only their label, state, timestamps, and scope
+count. Submitted work includes literal normalized scope objects. Status, dashboard snapshots, and message recipient
+discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe
+providers freshly before granting work or reporting installation health.
 
 Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
 number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
@@ -232,11 +241,13 @@ sessions idle. Prompt hooks inject at most 200 characters of factual state: whet
 queued-work, and unread-message counts. Naming removes the unnamed fact. Claude's `PostToolBatch` hook and Codex's
 `PostToolUse` hook report the unread count once, route inspection to `ai-coord inbox`, and identify message text as
 peer-reported data rather than instructions or authority. Peer text, IDs, prompts, and tool payloads are never injected.
-Stop hooks require a final `Findings recorded` summary with exact IDs for findings added in that turn; they request one
-bounded continuation when it is absent, then remain fail-open. After an allowed main Stop or SessionEnd, autonomous
-triage may run under its opt-in guards. Subagent hooks add read-only parent/child topology and never schedule triage.
-Claude's filtered `ai-coord waker claude` hook handles blocked starts in the background; planning scopes are recorded
-explicitly with `draft`, not inferred from provider-specific plan hooks.
+When other live work makes a repository non-quiet, prompt context adds a scope-gate reminder only when it fits the
+200-character budget. Post-tool hooks also record best-effort touched paths and emit one `ai-coord done` nudge per
+transition to clean owned scopes. Stop hooks require a final `Findings recorded` summary with exact IDs for findings
+added in that turn; they request one bounded continuation when it is absent, then remain fail-open. After an allowed
+main Stop or SessionEnd, autonomous triage may run under its opt-in guards. Subagent hooks add read-only parent/child
+topology and never schedule triage. Claude's filtered `ai-coord waker claude` hook handles blocked starts in the
+background; planning scopes are recorded explicitly with `draft`, not inferred from provider-specific plan hooks.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
@@ -254,8 +265,8 @@ parent.
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
 mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v11. Any other nonzero schema, including v10, is rejected without migration, import, deletion, or
-replacement, while the public `status --json` schema is v3. Close agents and explicitly choose any backup, removal,
+internal schema v12. Any other nonzero schema, including v11, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema is v4. Close agents and explicitly choose any backup, removal,
 installation, and relinking rollout before retrying with incompatible state.
 
 The SQLite ledger stores bounded session metadata, callsigns, work labels, literal scopes, messages, finding lifecycle

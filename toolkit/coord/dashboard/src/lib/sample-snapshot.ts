@@ -3,7 +3,7 @@ import type { Snapshot } from "@/lib/types";
 export const SAMPLE_NOW = 1_785_833_730;
 
 export const sampleSnapshot = {
-  schema_version: 3,
+  schema_version: 4,
   complete: false,
   scope: { kind: "machine" },
   self: {
@@ -159,6 +159,7 @@ export const sampleSnapshot = {
       updated_at: 1_785_833_360,
     },
   ],
+  handoffs: [],
   findings: [
     {
       id: "5defa09e",

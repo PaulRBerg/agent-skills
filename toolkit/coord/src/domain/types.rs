@@ -246,6 +246,12 @@ pub(crate) struct SnapshotDelegateV2 {
     pub(crate) last_seen: f64,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct SnapshotHandoffV4 {
+    pub(crate) repo_root: String,
+    pub(crate) count: usize,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct OutsideScopeV2 {
     pub(crate) sessions: usize,
@@ -263,6 +269,7 @@ pub(crate) struct SnapshotV2 {
     pub(crate) sessions: Vec<SnapshotSessionV2>,
     pub(crate) work: Vec<SnapshotWorkV2>,
     pub(crate) findings: Vec<FindingSummary>,
+    pub(crate) handoffs: Vec<SnapshotHandoffV4>,
     pub(crate) delegates: Vec<SnapshotDelegateV2>,
     pub(crate) outside_scope: OutsideScopeV2,
 }

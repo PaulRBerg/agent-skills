@@ -21,8 +21,8 @@ use unicode_normalization::UnicodeNormalization;
 use crate::{
     domain::{
         Client, Identity, InventoryResult, Outcome, OutcomeKind, OutsideScopeV2, ProcessLiveness, ProcessProbe,
-        ProviderReport, Scope, ScopeKind, SessionState, SnapshotDelegateV2, SnapshotScopeKindV2, SnapshotScopeV2,
-        SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
+        ProviderReport, Scope, ScopeKind, SessionState, SnapshotDelegateV2, SnapshotHandoffV4, SnapshotScopeKindV2,
+        SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
     },
     error::{AppError, Result},
     host::{
@@ -31,7 +31,10 @@ use crate::{
         relevant_dirty,
     },
     server::{SnapshotMessageV1, SnapshotSource},
-    state::{BaselineRow, EndedObservation, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow},
+    state::{
+        BaselineRow, EndedObservation, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, TouchedPaths,
+        WorkRow,
+    },
     work::WorkCoordinator,
 };
 
@@ -319,12 +322,14 @@ impl Coordinator {
         let mut store = self.store()?;
         let work = store.work(identity)?;
         let mut waiters = Vec::new();
+        let mut residual_paths = Vec::new();
         if let Some(work) = work.as_ref().filter(|work| work.state == WorkState::Active && !work.scopes.is_empty()) {
             let root = PathBuf::from(&work.repo_root);
             let dirty = git_dirty_paths(&root).unwrap_or_default();
             let hashes = dirty.iter().map(|path| (path.clone(), git_blob_hash(&root, path, false))).collect::<Vec<_>>();
             let _ = store.observe_dirt(&work.repo_root, &hashes, self.clock.wall());
             let residual = relevant_dirty(&work.scopes, &dirty);
+            residual_paths = residual.clone();
             store.record_residual_owners(&work.repo_root, &residual, identity, self.clock.wall())?;
             waiters = store
                 .works(Some(&work.repo_root))?
@@ -343,7 +348,9 @@ impl Coordinator {
             let text = format!("Released work '{}'; your queued work may now be ready.", work.label);
             store.send_message(identity, &waiters, &text, Some(&work.repo_root), self.clock.wall())?;
         }
-        Ok(Outcome::new(OutcomeKind::Done, 0, if removed { "released" } else { "already clear" }))
+        let mut outcome = Outcome::new(OutcomeKind::Done, 0, if removed { "released" } else { "already clear" });
+        outcome.holders = residual_paths;
+        Ok(outcome)
     }
 
     pub(crate) fn baselines(&self) -> Result<Vec<BaselineRow>> {
@@ -354,6 +361,12 @@ impl Coordinator {
         } else {
             Vec::new()
         })
+    }
+
+    pub(crate) fn touched(&self, cwd: &Path) -> Result<TouchedPaths> {
+        let identity = self.identity(true)?.expect("required identity");
+        let root = git_root(cwd).ok_or_else(|| AppError::operational("touched requires a Git worktree"))?;
+        self.store()?.touched(&identity, &path_text(&root)?)
     }
 
     pub(crate) fn snapshot(&self, machine_wide: bool, cwd: &Path, allow_cached: bool) -> Result<SnapshotV2> {
@@ -585,6 +598,18 @@ fn build_snapshot(
     work: Vec<WorkRow>,
     current: f64,
 ) -> Result<SnapshotV2> {
+    let handoff_roots = if machine {
+        sessions
+            .iter()
+            .filter_map(|row| row.repo_root.as_ref())
+            .chain(work.iter().map(|row| &row.repo_root))
+            .map(PathBuf::from)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
+    } else {
+        root.map(Path::to_path_buf).into_iter().collect()
+    };
     let work_by_identity = work.iter().map(|work| (work.identity.clone(), work)).collect::<HashMap<_, _>>();
     let delegates = store.delegates()?;
     let delegate_counts = delegates.iter().fold(HashMap::<Identity, usize>::new(), |mut counts, row| {
@@ -657,8 +682,9 @@ fn build_snapshot(
         })
         .collect();
     let outside_directories = outside.iter().map(|row| row.cwd.clone()).collect::<HashSet<_>>().len();
+    let handoffs = snapshot_handoffs(handoff_roots);
     Ok(SnapshotV2 {
-        schema_version: 3,
+        schema_version: 4,
         complete: inventory.complete,
         scope: if machine {
             SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None }
@@ -673,9 +699,34 @@ fn build_snapshot(
         sessions: scoped,
         work: scoped_work,
         findings,
+        handoffs,
         delegates,
         outside_scope: OutsideScopeV2 { sessions: outside.len(), directories: outside_directories },
     })
+}
+
+fn snapshot_handoffs(roots: Vec<PathBuf>) -> Vec<SnapshotHandoffV4> {
+    let mut rows = roots
+        .into_iter()
+        .filter_map(|root| {
+            let directory = root.join(".ai/task-handoffs");
+            let count = std::fs::read_dir(directory)
+                .ok()?
+                .filter_map(std::result::Result::ok)
+                .filter(|entry| {
+                    entry.path().extension().is_some_and(|extension| extension == "md") &&
+                        entry.file_type().is_ok_and(|kind| kind.is_file())
+                })
+                .count();
+            if count == 0 {
+                None
+            } else {
+                path_text(&root).ok().map(|repo_root| SnapshotHandoffV4 { repo_root, count })
+            }
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| left.repo_root.cmp(&right.repo_root));
+    rows
 }
 
 fn cached_inventory(store: &Store, key: &str, current: f64) -> Result<Option<InventoryResult>> {

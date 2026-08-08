@@ -86,11 +86,12 @@ async fn execute(cli: Cli) -> Result<u8> {
             Ok(outcome.code)
         }
         Command::Start(arguments) => {
+            let coordinator = Coordinator::open_default()?;
             let outcome = if arguments.draft {
-                Coordinator::open_default()?.promote_draft(&std::env::current_dir()?)?
+                coordinator.promote_draft(&std::env::current_dir()?)?
             } else {
                 validate_scopes(&arguments.paths, &arguments.recursive_paths, "start")?;
-                Coordinator::open_default()?.start(
+                coordinator.start(
                     arguments.label.as_deref().expect("clap requires a direct-start label"),
                     &arguments.paths,
                     &arguments.recursive_paths,
@@ -104,20 +105,35 @@ async fn execute(cli: Cli) -> Result<u8> {
                     outcome.broad_paths.join(", ")
                 );
             }
+            eprintln!("{}", outcome_guidance(&outcome, coordinator.identity(false)?.map(|value| value.client)));
             Ok(outcome.code)
         }
         Command::Wait(arguments) => {
-            let outcome = Coordinator::open_default()?.wait(arguments.timeout_seconds, 1.0)?;
+            let coordinator = Coordinator::open_default()?;
+            let outcome = coordinator.wait(arguments.timeout_seconds, 1.0)?;
             println!("{}", outcome.line());
+            eprintln!("{}", outcome_guidance(&outcome, coordinator.identity(false)?.map(|value| value.client)));
             Ok(outcome.code)
         }
         Command::Done => {
-            println!("{}", Coordinator::open_default()?.done()?.line());
+            let outcome = Coordinator::open_default()?.done()?;
+            println!("{}", outcome.line());
+            eprintln!("{}", outcome_guidance(&outcome, None));
             Ok(0)
         }
         Command::Baseline => {
             for row in Coordinator::open_default()?.baselines()? {
                 println!("{}\t{}", row.path, row.oid);
+            }
+            Ok(0)
+        }
+        Command::Touched => {
+            let touched = Coordinator::open_default()?.touched(&std::env::current_dir()?)?;
+            if touched.truncated {
+                println!("!TRUNCATED");
+            }
+            for path in touched.paths {
+                println!("{path}");
             }
             Ok(0)
         }
@@ -244,6 +260,33 @@ async fn execute(cli: Cli) -> Result<u8> {
             run_link(arguments.client, arguments.path.as_deref(), arguments.dry_run, arguments.force)
         }
         Command::Check(arguments) => run_check(arguments.as_json),
+    }
+}
+
+fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
+    match outcome.kind {
+        OutcomeKind::Ready if outcome.detail.starts_with("stale-dirt:") =>
+            "ai-coord: Editing is authorized; preserve stale-dirt hunks byte-for-byte, and use `ai-coord baseline` as the commit exclusion fallback before `ai-coord done`.".to_owned(),
+        OutcomeKind::Ready =>
+            "ai-coord: Editing is authorized for the listed scopes; run `ai-coord done` when the work is complete.".to_owned(),
+        OutcomeKind::Blocked if client == Some(Client::Claude) =>
+            "ai-coord: No edit scope is owned; keep reading or planning only, and the Claude waker will wake this session when ownership may be available.".to_owned(),
+        OutcomeKind::Blocked =>
+            "ai-coord: No edit scope is owned; keep reading or planning only, then run `ai-coord wait` in the foreground.".to_owned(),
+        OutcomeKind::Unknown if outcome.detail == "coverage" =>
+            "ai-coord: Ownership cannot be established; do not edit, and re-run `ai-coord start` after coverage recovers.".to_owned(),
+        OutcomeKind::Unknown if outcome.detail.starts_with("dirty-settling:") =>
+            "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and keep waiting via wait or the waker.".to_owned(),
+        OutcomeKind::Active =>
+            "ai-coord: The old edit scope remains active because the requested expansion failed; inspect the result before retrying.".to_owned(),
+        OutcomeKind::Message =>
+            "ai-coord: A message woke this wait; inspect `ai-coord inbox`, then re-run `ai-coord start` to recheck ownership.".to_owned(),
+        OutcomeKind::Released | OutcomeKind::Timeout =>
+            "ai-coord: This wake did not grant an edit scope; inspect current state, then re-run `ai-coord start` because silence is not progress.".to_owned(),
+        OutcomeKind::Done if !outcome.holders.is_empty() =>
+            "ai-coord: Coordination was released, but uncommitted dirt retains residual ownership until it is resolved.".to_owned(),
+        OutcomeKind::Done => "ai-coord: Coordination work is released.".to_owned(),
+        _ => "ai-coord: Inspect this outcome before continuing.".to_owned(),
     }
 }
 
@@ -642,5 +685,27 @@ mod tests {
     fn lexical_paths_collapse_parent_components() {
         let base = std::env::current_dir().unwrap();
         assert_eq!(lexical_absolute(Path::new("one/../two")).unwrap(), base.join("two"));
+    }
+
+    #[test]
+    fn lifecycle_outcomes_have_single_line_protocol_guidance() {
+        let cases = [
+            (Outcome::new(OutcomeKind::Ready, 0, ""), Some(Client::Codex)),
+            (Outcome::new(OutcomeKind::Ready, 0, "stale-dirt:README.md"), Some(Client::Claude)),
+            (Outcome::new(OutcomeKind::Blocked, 3, "conflict"), Some(Client::Codex)),
+            (Outcome::new(OutcomeKind::Blocked, 3, "conflict"), Some(Client::Claude)),
+            (Outcome::new(OutcomeKind::Unknown, 2, "coverage"), None),
+            (Outcome::new(OutcomeKind::Unknown, 2, "dirty-settling:README.md"), None),
+            (Outcome::new(OutcomeKind::Active, 3, "update-blocked"), None),
+            (Outcome::new(OutcomeKind::Message, 3, "1"), None),
+            (Outcome::new(OutcomeKind::Released, 3, ""), None),
+            (Outcome::new(OutcomeKind::Timeout, 3, "300"), None),
+            (Outcome::new(OutcomeKind::Done, 0, "released"), None),
+        ];
+        for (outcome, client) in cases {
+            let guidance = outcome_guidance(&outcome, client);
+            assert!(guidance.starts_with("ai-coord: "), "{guidance}");
+            assert!(!guidance.contains('\n'), "{guidance}");
+        }
     }
 }

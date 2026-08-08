@@ -460,3 +460,105 @@ fn claude_exit_plan_hook_is_obsolete_and_creates_no_work() {
     assert!(coordinator.store().unwrap().work(&identity).unwrap().is_none());
     assert!(coordinator.store().unwrap().session(&identity).unwrap().is_none());
 }
+
+#[test]
+fn post_tool_payloads_record_normalized_deduplicated_touched_paths() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_uses":[
+                {"tool_name":"Write", "tool_input":{"file_path":repo.join("src/lib.rs")}},
+                {"tool_name":"Edit", "tool_input":{"file_path":repo.join("src/lib.rs")}},
+                {"tool_name":"NotebookEdit", "tool_input":{"notebook_path":repo.join("notes.ipynb")}},
+                {"tool_name":"Write", "tool_input":{"file_path":temp.path().join("outside")}}
+            ]
+        }),
+    );
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"codex-self", "cwd":repo, "hook_event_name":"SessionStart"
+        }),
+    );
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"codex-self", "cwd":repo, "hook_event_name":"PostToolUse",
+            "tool_name":"apply_patch", "tool_input":{"command":"*** Begin Patch\n*** Update File: README.md\n*** End Patch"}
+        }),
+    );
+
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    assert_eq!(
+        coordinator
+            .store()
+            .unwrap()
+            .touched(&Identity { client: Client::Claude, session_id: "self".into() }, &root)
+            .unwrap()
+            .paths,
+        vec!["notes.ipynb", "src/lib.rs"]
+    );
+    assert_eq!(
+        coordinator
+            .store()
+            .unwrap()
+            .touched(&Identity { client: Client::Codex, session_id: "codex-self".into() }, &root)
+            .unwrap()
+            .paths,
+        vec!["README.md"]
+    );
+}
+
+#[test]
+fn touched_cap_drops_oldest_and_discloses_truncation() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("codex", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let identity = Identity { client: Client::Codex, session_id: "self".into() };
+    let root = fs::canonicalize(repo).unwrap().to_string_lossy().into_owned();
+    let paths = (0..=1_000).map(|index| format!("path-{index:04}")).collect::<Vec<_>>();
+    coordinator.store().unwrap().record_touched(&identity, &root, &paths, 100.0).unwrap();
+    let touched = coordinator.store().unwrap().touched(&identity, &root).unwrap();
+    assert!(touched.truncated);
+    assert_eq!(touched.paths.len(), 1_000);
+    assert!(!touched.paths.contains(&"path-0000".to_owned()));
+}
+
+#[test]
+fn clean_scope_release_nudge_emits_once_per_transition() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    fs::write(repo.join("tracked.txt"), "clean\n").unwrap();
+    for arguments in [
+        vec!["config", "user.email", "smoke@example.invalid"],
+        vec!["config", "user.name", "Smoke"],
+        vec!["add", "tracked.txt"],
+        vec!["commit", "-q", "-m", "init"],
+    ] {
+        assert!(std::process::Command::new("git").args(arguments).current_dir(&repo).status().unwrap().success());
+    }
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("codex", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let identity = Identity { client: Client::Codex, session_id: "self".into() };
+    assert_eq!(
+        coordinator.start_for(identity, "work", &[repo.join("tracked.txt")], &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    let payload = json!({
+        "session_id":"self", "cwd":repo, "hook_event_name":"PostToolUse", "tool_name":"Read", "tool_input":{}
+    });
+    let first = runtime.ingest("codex", &payload);
+    assert!(first.contains("Owned scopes are clean"), "{first}");
+    assert_eq!(runtime.ingest("codex", &payload), "");
+
+    fs::write(repo.join("tracked.txt"), "dirty\n").unwrap();
+    assert_eq!(runtime.ingest("codex", &payload), "");
+    fs::write(repo.join("tracked.txt"), "clean\n").unwrap();
+    assert!(runtime.ingest("codex", &payload).contains("Owned scopes are clean"));
+}

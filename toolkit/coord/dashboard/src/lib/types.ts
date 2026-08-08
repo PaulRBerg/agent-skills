@@ -105,6 +105,7 @@ export interface Snapshot {
   sessions: Session[];
   work: Work[];
   findings: Finding[];
+  handoffs: { repo_root: string; count: number }[];
   delegates: Delegate[];
   outside_scope: {
     sessions: number;
@@ -130,4 +131,5 @@ export interface RepoLaneModel {
   sessions: LaneSession[];
   unmatchedWork: WorkWithQueuePosition[];
   lastActivity: number;
+  handoffCount: number;
 }

@@ -143,7 +143,6 @@ impl Store {
         works_from(&self.connection, repo_root)
     }
 
-    #[cfg(test)]
     pub(crate) fn residual_owners(&self, repo_root: &str) -> Result<Vec<ResidualOwnerRow>> {
         residual_owners_from(&self.connection, repo_root)
     }

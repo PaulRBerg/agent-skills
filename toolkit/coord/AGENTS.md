@@ -33,7 +33,7 @@ schema migration ladders, old-format importers, deprecated CLI aliases, dual rea
 or transitional hook recognition by default. Rejecting an incompatible persisted version with an actionable error is
 required safety behavior, not backward compatibility.
 
-Schema v10 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
+Schema v12 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
 based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced process is removed without
 an age grace period, while unknown liveness fails closed and never deletes the record.
 
@@ -42,6 +42,19 @@ agents and explicitly authorize the break, then implement it from one fresh sess
 `AI_COORD_STATE_DIR` for development and validation. Never silently reset a ledger or globally install, relink, or run
 incompatible source against live state. Live hook replacement must finish before removing any one-time transitional
 recognizer; ledger replacement and global rollout remain separate explicitly authorized actions.
+
+## Agent-facing protocol
+
+Treat the one-sentence stderr guidance printed for every `start`, `wait`, and `done` outcome as the authoritative next
+step while preserving their stdout TSV as a machine interface. Only `READY` grants editing; release completed work with
+`done`. Preserve `stale-dirt` hunks byte-for-byte. `ai-coord baseline` is a stable machine contract consisting of one
+normalized repository-relative `path<TAB>oid` record per line, or empty output when no baselines exist.
+
+`ai-coord touched` is a best-effort cross-check of normalized repository-relative paths observed in this session's
+file-mutating post-tool payloads. Its stable output is one path per line, with a leading `!TRUNCATED` record when its
+1,000-path cap dropped older records; an empty complete set exits successfully with no output. It stores no payload
+content. Status schema v4 exposes nonzero repository task-handoff counts as `{repo_root, count}` records; guidance stays
+here while README remains human-facing tool documentation.
 
 ## Upstream documentation
 

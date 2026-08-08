@@ -54,6 +54,11 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
             session
             {lane.sessions.length === 1 ? "" : "s"}
           </span>
+          {lane.handoffCount > 0 ? (
+            <span>
+              {lane.handoffCount} handoff{lane.handoffCount === 1 ? "" : "s"}
+            </span>
+          ) : null}
           <span>
             <AnimatedValue value={workCount}>{workCount}</AnimatedValue> work
             {workCount === 1 ? " item" : " items"}

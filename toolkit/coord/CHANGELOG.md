@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Break the internal ledger at schema v12 and public status at schema v4; add best-effort touched-path tracking,
+  task-handoff counts, contextual gate and release nudges, and outcome-specific stderr protocol guidance.
+- Document `ai-coord baseline` as stable `path<TAB>oid` output and add stable bounded `ai-coord touched` output.
+
 - Break the internal ledger at schema v11 and the public status snapshot at schema v3. Add durable `finding` lifecycle
   records, exact open-record deduplication with sightings and evidence, terminal recurrence, triage leases, and a
   dashboard/SSE finding summary contract; reject v10 without migration or import.

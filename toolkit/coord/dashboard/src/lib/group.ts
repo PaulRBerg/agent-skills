@@ -74,6 +74,7 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
   snapshot.sessions.forEach((session) => roots.add(sessionRepo(session)));
   work.forEach((item) => roots.add(item.repo_root));
   snapshot.findings.forEach((finding) => roots.add(finding.repo_root));
+  snapshot.handoffs.forEach((handoff) => roots.add(handoff.repo_root));
   snapshot.messages.forEach((message) => {
     if (message.repo_root) roots.add(message.repo_root);
   });
@@ -128,6 +129,9 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
         repoRoot,
         sessions,
         unmatchedWork,
+        handoffCount:
+          snapshot.handoffs.find((handoff) => handoff.repo_root === repoRoot)
+            ?.count ?? 0,
         lastActivity: Math.max(...activity),
       };
     })

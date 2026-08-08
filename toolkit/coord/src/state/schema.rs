@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 11;
+pub(crate) const SCHEMA_VERSION: i64 = 12;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -62,6 +62,28 @@ const STATEMENTS: &[&str] = &[
         path TEXT NOT NULL,
         oid TEXT NOT NULL,
         PRIMARY KEY (work_id, path)
+    )",
+    "CREATE TABLE touched_paths (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        repo_root TEXT NOT NULL,
+        path TEXT NOT NULL,
+        touched_at REAL NOT NULL,
+        PRIMARY KEY (client, session_id, repo_root, path),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE INDEX touched_paths_session_idx
+        ON touched_paths(client, session_id, repo_root, touched_at, path)",
+    "CREATE TABLE touched_sets (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        repo_root TEXT NOT NULL,
+        truncated INTEGER NOT NULL DEFAULT 0 CHECK (truncated IN (0, 1)),
+        scopes_clean INTEGER NOT NULL DEFAULT 0 CHECK (scopes_clean IN (0, 1)),
+        PRIMARY KEY (client, session_id, repo_root),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
     )",
     "CREATE TABLE dirt_observations (
         repo_root TEXT NOT NULL,

@@ -215,8 +215,8 @@ function validateMessage(value: unknown, path: string): void {
 
 export function parseSnapshot(value: unknown): Snapshot {
   const snapshot = record(value, "snapshot");
-  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 3) {
-    throw new Error("snapshot.schema_version must be 3");
+  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 4) {
+    throw new Error("snapshot.schema_version must be 4");
   }
   boolean(snapshot.complete, "snapshot.complete");
 
@@ -243,6 +243,11 @@ export function parseSnapshot(value: unknown): Snapshot {
   array(snapshot.findings, "snapshot.findings").forEach((row, index) =>
     validateFinding(row, `snapshot.findings[${index}]`),
   );
+  array(snapshot.handoffs, "snapshot.handoffs").forEach((value, index) => {
+    const row = record(value, `snapshot.handoffs[${index}]`);
+    string(row.repo_root, `snapshot.handoffs[${index}].repo_root`);
+    integer(row.count, `snapshot.handoffs[${index}].count`);
+  });
   array(snapshot.delegates, "snapshot.delegates").forEach((row, index) =>
     validateDelegate(row, `snapshot.delegates[${index}]`),
   );

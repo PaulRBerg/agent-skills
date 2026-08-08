@@ -55,7 +55,7 @@ fn work_update(identity: &Identity) -> WorkUpdate {
 }
 
 #[test]
-fn new_store_has_exact_v11_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v12_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -149,7 +149,7 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 10 is incompatible with required schema 11 at {}; \
+            "state schema 10 is incompatible with required schema 12 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )

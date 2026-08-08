@@ -29,6 +29,8 @@ pub(crate) enum Command {
     Done,
     /// Print Git blob baselines for this session's active work.
     Baseline,
+    /// Print repository-relative paths written by this session's observed tool calls.
+    Touched,
     /// Show sessions, work, provider coverage, and repository findings.
     Status(StatusArgs),
     /// Serve the local dashboard HTTP interface.

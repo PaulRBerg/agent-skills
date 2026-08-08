@@ -83,6 +83,9 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
             finding_counts.0, finding_counts.1, finding_counts.2
         ));
     }
+    for handoff in &snapshot.handoffs {
+        lines.push(format!("Task handoffs ({}): {}.", handoff.repo_root, handoff.count));
+    }
 
     let states = snapshot.sessions.iter().map(|session| session.state).collect::<Vec<_>>();
     let partial = !snapshot.complete ||
@@ -221,7 +224,7 @@ mod tests {
 
     fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {
         SnapshotV2 {
-            schema_version: 3,
+            schema_version: 4,
             complete: true,
             scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Repo, repo_root: Some("/repo".into()) },
             self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
@@ -236,6 +239,7 @@ mod tests {
             sessions,
             work,
             findings: vec![],
+            handoffs: vec![],
             delegates: vec![],
             outside_scope: OutsideScopeV2 { sessions: 0, directories: 0 },
         }
@@ -296,17 +300,28 @@ mod tests {
     }
 
     #[test]
-    fn json_keeps_the_v3_schema_and_omits_draft_paths() {
+    fn json_keeps_the_v4_schema_and_omits_draft_paths() {
         let payload: serde_json::Value = serde_json::from_str(
             &snapshot_json(&snapshot(vec![session("self")], vec![work("self", WorkState::Draft)])).unwrap(),
         )
         .unwrap();
-        assert_eq!(payload["schema_version"], 3);
+        assert_eq!(payload["schema_version"], 4);
         assert_eq!(payload["self"]["session_id"], "self");
         assert_eq!(payload["work"][0]["scope_count"], 1);
         assert!(payload["work"][0].get("scopes").is_none());
         assert!(payload["work"][0].get("blocked_reason").is_none());
         assert!(payload.get("messages").is_none());
+    }
+
+    #[test]
+    fn rendering_reports_task_handoff_counts() {
+        let mut value = snapshot(vec![], vec![]);
+        value.handoffs.push(crate::domain::SnapshotHandoffV4 { repo_root: "/repo".into(), count: 2 });
+        assert!(render_status_at(&value, 100.0).contains("Task handoffs (/repo): 2."));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&snapshot_json(&value).unwrap()).unwrap()["handoffs"][0]["count"],
+            2
+        );
     }
 
     #[test]

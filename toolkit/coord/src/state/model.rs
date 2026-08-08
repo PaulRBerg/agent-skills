@@ -79,6 +79,12 @@ pub(crate) struct BaselineRow {
     pub(crate) oid: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TouchedPaths {
+    pub(crate) paths: Vec<String>,
+    pub(crate) truncated: bool,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DirtObservationRow {
     pub(crate) repo_root: String,

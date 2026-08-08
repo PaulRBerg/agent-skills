@@ -4,6 +4,7 @@ mod store;
 mod store_communications;
 mod store_findings;
 mod store_sessions;
+mod store_touched;
 mod store_triage;
 mod store_work;
 
