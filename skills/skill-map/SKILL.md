@@ -72,10 +72,16 @@ labels sparingly and keep snippets, local paths, exact edges, commands, and diag
 
 ## Output Semantics
 
-- `dependency`: a skill file or support file references another discovered skill.
+- `dependency`: a skill declares another skill in `skill-dependencies`, or a skill file or support file references
+  another discovered skill. Declared edges use their canonical bare or `ORG/REPO#SKILL` target and include
+  `declared: true`; a declaration supersedes inferred prose evidence for the same source and target skill name.
 - `external-reference`: a non-skill file references a discovered skill.
 - `duplicate-install`: multiple discovered `SKILL.md` files declare or resolve to the same skill name.
 - `unresolved-like-reference`: explicit `$kebab-name` or `/kebab-name` tokens that do not match a discovered skill.
+
+JSON `counts.declared_dependencies` reports the number of emitted declared edges. Skill filters match declaration
+sources and target skill names, including the name after `#` for external identifiers. Invalid declaration fields stop
+the mapper with a path-specific parse error.
 
 Portfolio JSON preserves those fields and adds:
 

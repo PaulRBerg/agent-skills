@@ -3,6 +3,8 @@ argument-hint: "[task]"
 compatibility: Requires Git, ripgrep (rg), uv, and an installed skill-map skill with --portfolio-root support.
 disable-model-invocation: true
 name: skill-harmonization
+skill-dependencies:
+  - skill-map
 user-invocable: true
 description: Harmonize a repository's skill portfolio across catalog and user-installed skills.
 ---

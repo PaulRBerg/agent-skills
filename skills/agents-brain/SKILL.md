@@ -3,6 +3,8 @@ argument-hint:
   <polish|create> [path] [target ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run] [--force]
 disable-model-invocation: true
 name: agents-brain
+skill-dependencies:
+  - skill-writing
 user-invocable: true
 description:
   "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.md, installed project skills, and other Markdown

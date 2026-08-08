@@ -4,6 +4,8 @@ compatibility: Requires the `routemesh` CLI initialized on macOS with `routemesh
 coordination: exempt
 disable-model-invocation: false
 name: evm-atlas
+skill-dependencies:
+  - cli-cast
 user-invocable: true
 description:
   "Use for targeted EVM chain, account, transaction, RPC, explorer, bridge, and DEX evidence: chain name/ID, native

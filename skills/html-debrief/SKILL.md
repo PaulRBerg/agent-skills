@@ -2,6 +2,8 @@
 argument-hint: "[<slug>]"
 disable-model-invocation: false
 name: html-debrief
+skill-dependencies:
+  - html-playground
 user-invocable: true
 description: "Use for interactive HTML debriefs or saved HTML findings/reports from the current task."
 ---

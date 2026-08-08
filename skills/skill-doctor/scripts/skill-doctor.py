@@ -7,7 +7,7 @@
 
 Usage:
   uv run scripts/skill-doctor.py [--root PATH ...] [--format text|json]
-      [--fix-safe]
+      [--fix-safe] [--dependencies-only]
 """
 
 from __future__ import annotations
@@ -26,6 +26,11 @@ import yaml
 
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+EXTERNAL_SKILL_DEPENDENCY_RE = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?/"
+    r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?#"
+    r"(?P<skill>[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$"
+)
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*(?:\n|\Z)", re.DOTALL)
 TOP_LEVEL_FIELD_RE = re.compile(r"^(?P<key>[A-Za-z0-9_-]+):(?:\s|$)")
 MARKDOWN_RESOURCE_LINK_RE = re.compile(r"\]\((?P<path>(?:references|scripts|assets)/[^)\s]+)\)")
@@ -83,7 +88,15 @@ def main() -> int:
     parser.add_argument("--root", action="append", default=[], help="Catalog or installed skill root to scan")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--fix-safe", action="store_true", help="Apply narrow openai.yaml metadata fixes")
+    parser.add_argument(
+        "--dependencies-only",
+        action="store_true",
+        help="Report only malformed or unresolved skill-dependencies declarations",
+    )
     args = parser.parse_args()
+
+    if args.dependencies_only and args.fix_safe:
+        parser.error("--dependencies-only cannot be combined with --fix-safe")
 
     try:
         roots = normalize_roots(args.root or [os.curdir])
@@ -91,7 +104,7 @@ def main() -> int:
         print(f"skill-doctor: {error}", file=sys.stderr)
         return 2
 
-    report = audit(roots, fix_safe=args.fix_safe)
+    report = audit(roots, fix_safe=args.fix_safe, dependencies_only=args.dependencies_only)
 
     if args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -117,7 +130,7 @@ def normalize_roots(raw_roots: list[str]) -> list[Path]:
     return roots
 
 
-def audit(roots: list[Path], *, fix_safe: bool) -> dict[str, Any]:
+def audit(roots: list[Path], *, fix_safe: bool, dependencies_only: bool = False) -> dict[str, Any]:
     findings: list[Finding] = []
     fixes: list[Fix] = []
     root_reports: list[dict[str, Any]] = []
@@ -126,11 +139,20 @@ def audit(roots: list[Path], *, fix_safe: bool) -> dict[str, Any]:
     for root in roots:
         skills = [skill for skill in discover_skills(root) if skill.path not in seen_skill_paths]
         seen_skill_paths.update(skill.path for skill in skills)
+        repository_skill_names = {skill.directory_name for skill in skills}
 
         for skill in skills:
-            check_skill(skill, findings, fixes, fix_safe=fix_safe)
+            check_skill(
+                skill,
+                findings,
+                fixes,
+                repository_skill_names=repository_skill_names,
+                fix_safe=fix_safe,
+                dependencies_only=dependencies_only,
+            )
 
-        check_readme(root, skills, findings)
+        if not dependencies_only:
+            check_readme(root, skills, findings)
         root_reports.append(
             {
                 "path": str(root),
@@ -182,7 +204,15 @@ def child_skill_paths(root: Path, child: str) -> list[Path]:
     return sorted(path for path in directory.glob("*/SKILL.md") if path.is_file())
 
 
-def check_skill(skill: SkillFile, findings: list[Finding], fixes: list[Fix], *, fix_safe: bool) -> None:
+def check_skill(
+    skill: SkillFile,
+    findings: list[Finding],
+    fixes: list[Fix],
+    *,
+    repository_skill_names: set[str],
+    fix_safe: bool,
+    dependencies_only: bool,
+) -> None:
     text = read_text(skill.path)
     if text is None:
         findings.append(finding("READ_ERROR", "error", skill.path, None, False, "could not read SKILL.md"))
@@ -192,6 +222,11 @@ def check_skill(skill: SkillFile, findings: list[Finding], fixes: list[Fix], *, 
     if frontmatter is None:
         return
 
+    check_skill_dependencies(skill, frontmatter, field_lines, repository_skill_names, findings)
+    if dependencies_only:
+        check_dependency_field_order(skill, frontmatter, field_order, findings)
+        return
+
     check_frontmatter_fields(skill, frontmatter, field_lines, field_order, findings)
     check_coordination_exemption(skill, text, frontmatter, field_lines, findings)
     check_openai_metadata(skill, frontmatter, findings, fixes, fix_safe=fix_safe)
@@ -199,6 +234,160 @@ def check_skill(skill: SkillFile, findings: list[Finding], fixes: list[Fix], *, 
         check_cli_version(skill, frontmatter, findings)
     check_resource_links(skill, text, findings)
     check_prompt_hygiene(skill, text, frontmatter, field_lines, findings)
+
+
+def check_dependency_field_order(
+    skill: SkillFile,
+    frontmatter: dict[str, Any],
+    field_order: list[str],
+    findings: list[Finding],
+) -> None:
+    if "skill-dependencies" not in frontmatter:
+        return
+
+    expected_order = sorted(key for key in field_order if key != "description")
+    if "description" in field_order:
+        expected_order.append("description")
+    if field_order != expected_order:
+        findings.append(
+            finding(
+                "SKILL_DEPENDENCIES_FIELD_ORDER",
+                "error",
+                skill.path,
+                2,
+                False,
+                "frontmatter containing skill-dependencies must be alphabetized with description last",
+            )
+        )
+
+
+def check_skill_dependencies(
+    skill: SkillFile,
+    frontmatter: dict[str, Any],
+    field_lines: dict[str, int],
+    repository_skill_names: set[str],
+    findings: list[Finding],
+) -> None:
+    if "skill-dependencies" not in frontmatter:
+        return
+
+    dependencies = frontmatter["skill-dependencies"]
+    line = field_lines.get("skill-dependencies")
+    if not isinstance(dependencies, list):
+        findings.append(
+            finding(
+                "SKILL_DEPENDENCIES_NOT_ARRAY",
+                "error",
+                skill.path,
+                line,
+                False,
+                "skill-dependencies must be an array of skill identifiers",
+            )
+        )
+        return
+    if not dependencies:
+        findings.append(
+            finding(
+                "SKILL_DEPENDENCIES_EMPTY",
+                "error",
+                skill.path,
+                line,
+                False,
+                "omit skill-dependencies when the skill has no dependencies",
+            )
+        )
+        return
+
+    strings: list[str] = []
+    for index, dependency in enumerate(dependencies):
+        if not isinstance(dependency, str):
+            findings.append(
+                finding(
+                    "SKILL_DEPENDENCY_NOT_STRING",
+                    "error",
+                    skill.path,
+                    line,
+                    False,
+                    f"skill-dependencies item {index + 1} must be a string",
+                )
+            )
+            continue
+        strings.append(dependency)
+
+    duplicates = sorted(dependency for dependency, count in Counter(strings).items() if count > 1)
+    for dependency in duplicates:
+        findings.append(
+            finding(
+                "SKILL_DEPENDENCY_DUPLICATE",
+                "error",
+                skill.path,
+                line,
+                False,
+                f"duplicate skill dependency: {dependency}",
+            )
+        )
+
+    valid_identifiers: list[str] = []
+    for dependency in strings:
+        external_match = EXTERNAL_SKILL_DEPENDENCY_RE.fullmatch(dependency)
+        is_bare = bool(SKILL_NAME_RE.fullmatch(dependency)) and "--" not in dependency
+        is_external = external_match is not None and "--" not in external_match.group("skill")
+        if not is_bare and not is_external:
+            findings.append(
+                finding(
+                    "SKILL_DEPENDENCY_INVALID",
+                    "error",
+                    skill.path,
+                    line,
+                    False,
+                    f"invalid skill dependency {dependency!r}; use SKILL or ORG/REPO#SKILL",
+                )
+            )
+            continue
+
+        valid_identifiers.append(dependency)
+        if not is_bare:
+            continue
+        if dependency == skill.directory_name:
+            findings.append(
+                finding(
+                    "SKILL_DEPENDENCY_SELF",
+                    "error",
+                    skill.path,
+                    line,
+                    False,
+                    f"skill cannot depend on itself: {dependency}",
+                )
+            )
+        elif dependency not in repository_skill_names:
+            findings.append(
+                finding(
+                    "SKILL_DEPENDENCY_UNRESOLVED",
+                    "error",
+                    skill.path,
+                    line,
+                    False,
+                    f"bare skill dependency does not resolve in this repository: {dependency}",
+                )
+            )
+
+    expected_order = sorted(valid_identifiers, key=skill_dependency_sort_key)
+    if valid_identifiers != expected_order:
+        findings.append(
+            finding(
+                "SKILL_DEPENDENCIES_ORDER",
+                "error",
+                skill.path,
+                line,
+                False,
+                "skill-dependencies must be sorted by target skill name, then complete identifier",
+            )
+        )
+
+
+def skill_dependency_sort_key(identifier: str) -> tuple[str, str]:
+    target = identifier.rsplit("#", 1)[-1]
+    return target.replace("-", ""), identifier
 
 
 def check_coordination_exemption(

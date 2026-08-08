@@ -2,6 +2,9 @@
 coordination: exempt
 disable-model-invocation: false
 name: cli-gh
+skill-dependencies:
+  - repo-rename
+  - yeet
 user-invocable: false
 description:
   "Use for GitHub CLI automation: repository reads, workflow runs, search, codespaces, releases, configuration, or gh

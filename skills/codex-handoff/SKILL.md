@@ -7,6 +7,10 @@ disable-model-invocation: true
 metadata:
   install-targets: claude-code codex
 name: codex-handoff
+skill-dependencies:
+  - agents-brain
+  - code-polish
+  - commit
 user-invocable: true
 description:
   Orchestrate read-only planning research and one to eight Codex agents to implement approved plans from Claude Code or

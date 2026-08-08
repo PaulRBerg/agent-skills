@@ -4,6 +4,9 @@ disable-model-invocation: true
 metadata:
   install-targets: claude-code codex
 name: repo-harmonization
+skill-dependencies:
+  - codex-handoff
+  - commit
 user-invocable: true
 description:
   Audit multiple interdependent repositories for alignment, then plan and apply surgical fixes for drift and

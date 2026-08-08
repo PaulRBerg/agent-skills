@@ -1,5 +1,5 @@
 ---
-argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe]"
+argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe] [--dependencies-only]"
 disable-model-invocation: false
 name: skill-doctor
 user-invocable: true
@@ -17,6 +17,8 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 - `--root PATH`: Scan this catalog or installed skill root. Repeatable. Default: current working directory.
 - `--format text|json`: Select report format. Default: `text`.
 - `--fix-safe`: Create missing `agents/openai.yaml` files or update mismatched `policy.allow_implicit_invocation`.
+- `--dependencies-only`: Report only malformed or unresolved `skill-dependencies` declarations. Do not combine with
+  `--fix-safe`.
 
 ## Workflow
 
@@ -40,6 +42,12 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
 
 4. Re-run without `--fix-safe` after any manual edits.
 
+For a dependency-only catalog gate, run:
+
+```sh
+uv run scripts/skill-doctor.py --root . --dependencies-only
+```
+
 ## Findings
 
 - Treat `error` findings as catalog defects that should block publishing or syncing.
@@ -48,6 +56,8 @@ Audit local Agent Skills catalogs and installed skill roots, then apply only nar
   references, conflicting requirement/prohibition language, and missing completion evidence.
 - Coordination-exemption errors are report-only: `coordination: exempt` must be paired with the catalog's canonical
   `coordination-exempt` body sentence, and neither side is repaired by `--fix-safe`.
+- Dependency errors reject non-array, empty, non-string, duplicate, malformed, incorrectly ordered, self-referential, or
+  unresolved local declarations. External `ORG/REPO#SKILL` identifiers are shape-checked without network access.
 - Use `path` and `line` from JSON output for precise follow-up edits.
 
 ## Safe Fix Policy

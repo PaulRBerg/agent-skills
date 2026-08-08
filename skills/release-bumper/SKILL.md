@@ -5,6 +5,8 @@ disable-model-invocation: true
 effort: high
 model: sonnet
 name: release-bumper
+skill-dependencies:
+  - cli-gh
 user-invocable: true
 description: "Cut a release: bump versions, write changelogs, commit, tag."
 ---

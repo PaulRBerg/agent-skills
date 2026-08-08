@@ -12,6 +12,7 @@ prettier_cache := ".cache/prettier/.prettier-cache"
 prettier_globs := "\"**/*.{md,json,jsonc,yaml,yml}\""
 evm_atlas_generator := "scripts/generate-evm-atlas.ts"
 skill_invocation_script := "scripts/sync-invocation-policy.ts"
+skill_doctor_script := "skills/skill-doctor/scripts/skill-doctor.py"
 publish_skills_script := "scripts/publish-skills.ts"
 publish_skills_test := "scripts/publish-skills.test.ts"
 codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
@@ -136,6 +137,12 @@ alias sic := skill-invocation-check
 @skill-invocation-fix:
     bun run {{ skill_invocation_script }} --fix
 alias sif := skill-invocation-fix
+
+# Check skill dependency declarations
+[group("checks")]
+@skill-dependencies-check:
+    uv run {{ skill_doctor_script }} --root . --dependencies-only
+alias sdc := skill-dependencies-check
 
 # Check source-owned global skill installations and CLI metadata for drift
 [group("checks")]

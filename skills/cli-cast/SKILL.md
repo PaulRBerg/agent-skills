@@ -2,6 +2,8 @@
 coordination: exempt
 disable-model-invocation: false
 name: cli-cast
+skill-dependencies:
+  - evm-atlas
 user-invocable: false
 description:
   "Use for Foundry cast/on-chain actions: prepare, simulate, sign, or broadcast transactions; call contracts; sign

@@ -6,6 +6,8 @@ compatibility:
 coordination: exempt
 disable-model-invocation: true
 name: hurry-up
+skill-dependencies:
+  - task-handoff
 user-invocable: true
 description:
   Wind down a long-running session fast when the user must leave — freeze new work, collect wrap-up reports from active

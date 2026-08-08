@@ -1,6 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
+# dependencies = ["PyYAML>=6.0.2"]
 # ///
 """Map agent skill installs, dependencies, and references.
 
@@ -26,6 +27,15 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
+
+from skill_frontmatter import (
+    ALL_CLIENTS,
+    SKILL_NAME_RE,
+    FrontmatterError,
+    declared_dependency_edges,
+    dependency_skill_name,
+    parse_skill_frontmatter,
+)
 
 
 DEFAULT_DIR_IGNORES = (
@@ -108,8 +118,6 @@ PORTFOLIO_SKILL_ROOTS = (
     ".codex/skills",
 )
 
-ALL_CLIENTS = ("claude-code", "codex")
-
 BROAD_SCAN_CACHE_PATHS = (
     "~/.cache",
     "~/.npm",
@@ -127,10 +135,6 @@ BROAD_SCAN_CACHE_PATHS = (
     "~/go/pkg/mod",
 )
 
-SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
-FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", re.DOTALL)
-NAME_FIELD_RE = re.compile(r"^name:\s*['\"]?([^'\"\n#]+?)['\"]?\s*(?:#.*)?$", re.MULTILINE)
-INSTALL_TARGETS_RE = re.compile(r"^[ \t]+install-targets:\s*['\"]?([^'\"\n#]+?)['\"]?\s*(?:#.*)?$", re.MULTILINE)
 UNRESOLVED_TOKEN_RE = re.compile(
     r"(?<![\w./-])\$(?P<dollar>[a-z0-9]+(?:-[a-z0-9]+)+)\b"
     r"|(?:^|[\s`'\"(])/(?P<slash>[a-z0-9]+(?:-[a-z0-9]+)+)\b"
@@ -291,39 +295,6 @@ def path_is_scannable(path: Path, roots: list[Path], include_catalog_sources: bo
     return catalog_sources_enabled_for_path(path.resolve(), roots, include_catalog_sources)
 
 
-def read_text(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-
-
-def frontmatter(path: Path) -> str:
-    match = FRONTMATTER_RE.match(read_text(path))
-    return match.group(1) if match else ""
-
-
-def parse_skill_name(path: Path) -> str:
-    metadata = frontmatter(path)
-    if metadata:
-        name_match = NAME_FIELD_RE.search(metadata)
-        if name_match:
-            value = name_match.group(1).strip()
-            if SKILL_NAME_RE.match(value):
-                return value
-    return path.parent.name
-
-
-def declared_clients(path: Path) -> tuple[str, ...]:
-    match = INSTALL_TARGETS_RE.search(frontmatter(path))
-    if not match:
-        return ALL_CLIENTS
-    values = tuple(value for value in ALL_CLIENTS if value in match.group(1).split())
-    return values or ALL_CLIENTS
-
-
 def classify_scope(path: Path) -> str:
     parts = path.parts
     joined = "/".join(parts)
@@ -351,7 +322,10 @@ def applicable_clients(path: Path, kind: str) -> tuple[str, ...]:
             return ("claude-code",)
         if scope in ("agents", "codex"):
             return ("codex",)
-    return declared_clients(path)
+    try:
+        return parse_skill_frontmatter(path).clients
+    except FrontmatterError as error:
+        fail(f"cannot parse {path}: {error}")
 
 
 def tree_path_is_ignored(relative: Path) -> bool:
@@ -441,7 +415,10 @@ def sha256_tree(directory: Path) -> str:
 
 
 def make_skill(path: Path, portfolio: Portfolio | None) -> Skill | None:
-    name = parse_skill_name(path)
+    try:
+        name = parse_skill_frontmatter(path).name or path.parent.name
+    except FrontmatterError as error:
+        fail(f"cannot parse {path}: {error}")
     if not SKILL_NAME_RE.match(name):
         return None
 
@@ -665,7 +642,14 @@ def collect_edges(
     include_catalog_sources: bool,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     known_names = {skill.name for skill in skills}
-    edges: list[dict[str, Any]] = []
+    try:
+        declarations = declared_dependency_edges(skills, selected, include_self)
+    except FrontmatterError as error:
+        fail(str(error))
+    declared_pairs = {
+        (edge["source"], dependency_skill_name(edge["target"])) for edge in declarations
+    }
+    inferred_edges: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
 
     def scan_known_references(search_roots: list[Path], pattern: str) -> None:
@@ -693,7 +677,7 @@ def collect_edges(
                 }
                 if include_snippets:
                     entry["snippet"] = match_text
-                edges.append(entry)
+                inferred_edges.append(entry)
 
     all_known_pattern = build_known_pattern(list(known_names))
     if not selected:
@@ -737,7 +721,15 @@ def collect_edges(
                     entry["snippet"] = match_text
                 unresolved.append(entry)
 
-    unique_edges = unique_by(edges, ("type", "source", "target", "path", "line"))
+    inferred_edges = [
+        edge
+        for edge in inferred_edges
+        if edge["type"] != "dependency" or (edge["source"], edge["target"]) not in declared_pairs
+    ]
+    unique_edges = unique_by(
+        declarations + inferred_edges,
+        ("type", "source", "target", "path", "line"),
+    )
     unique_unresolved = unique_by(unresolved, ("type", "source", "target", "path", "line"))
     return unique_edges, unique_unresolved
 
@@ -846,6 +838,7 @@ def as_json(
         "counts": {
             "skills": len(skills),
             "edges": len(edges),
+            "declared_dependencies": sum(bool(edge.get("declared")) for edge in edges),
             "duplicates": len(duplicates),
             "unresolved": len(unresolved),
         },
@@ -899,7 +892,9 @@ def as_text(
     if dependency_edges:
         print("\nDependencies:")
         for edge in dependency_edges:
-            print(f"- {edge['source']} -> {edge['target']} ({edge['path']}:{edge['line']})")
+            location = f"{edge['path']}:{edge['line']}"
+            evidence = f"declared; {location}" if edge.get("declared") else location
+            print(f"- {edge['source']} -> {edge['target']} ({evidence})")
             if "snippet" in edge:
                 print(f"  {edge['snippet']}")
 

@@ -1,3 +1,7 @@
+# /// script
+# dependencies = ["PyYAML>=6.0.2"]
+# ///
+
 from __future__ import annotations
 
 import importlib.util
@@ -16,6 +20,7 @@ from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "skills" / "skill-map" / "scripts" / "skill-map.py"
+sys.path.insert(0, str(SCRIPT_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("skill_map", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 skill_map = importlib.util.module_from_spec(SPEC)
@@ -23,11 +28,24 @@ sys.modules[SPEC.name] = skill_map
 SPEC.loader.exec_module(skill_map)
 
 
-def write_skill(directory: Path, name: str, install_targets: str | None = None) -> None:
+def write_skill(
+    directory: Path,
+    name: str,
+    install_targets: str | None = None,
+    dependencies: list[object] | object | None = None,
+) -> None:
     directory.mkdir(parents=True)
     metadata = f"metadata:\n  install-targets: {install_targets}\n" if install_targets else ""
+    if isinstance(dependencies, list):
+        dependency_field = "skill-dependencies:\n" + "".join(
+            f"  - {json.dumps(value)}\n" for value in dependencies
+        )
+    elif dependencies is not None:
+        dependency_field = f"skill-dependencies: {json.dumps(dependencies)}\n"
+    else:
+        dependency_field = ""
     (directory / "SKILL.md").write_text(
-        f"---\n{metadata}name: {name}\ndescription: Test skill.\n---\n\n# {name}\n",
+        f"---\n{metadata}name: {name}\n{dependency_field}description: Test skill.\n---\n\n# {name}\n",
         encoding="utf-8",
     )
 
@@ -123,6 +141,124 @@ class QueryPlanningTest(unittest.TestCase):
         search.assert_called_once()
         self.assertIn("missing\\-skill", search.call_args.args[1])
         self.assertNotIn("[a-z0-9]+", search.call_args.args[1])
+
+
+class DeclaredDependencyTest(unittest.TestCase):
+    def test_declaration_precedes_inference_and_keeps_external_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "skills" / "source-skill"
+            write_skill(
+                source,
+                "source-skill",
+                dependencies=["OrgName/RepositoryName#target-skill"],
+            )
+            (source / "SKILL.md").write_text(
+                (source / "SKILL.md").read_text(encoding="utf-8")
+                + "\nUse the target-skill skill.\n",
+                encoding="utf-8",
+            )
+            write_skill(root / "skills" / "target-skill", "target-skill")
+            skills = skill_map.discover_skills([root], False)
+
+            edges, unresolved = skill_map.collect_edges(
+                [root], skills, set(), False, False, False
+            )
+
+        matching = [
+            edge
+            for edge in edges
+            if edge.get("source") == "source-skill"
+            and skill_map.dependency_skill_name(edge["target"]) == "target-skill"
+        ]
+        self.assertEqual(unresolved, [])
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["target"], "OrgName/RepositoryName#target-skill")
+        self.assertIs(matching[0]["declared"], True)
+
+    def test_filters_declarations_by_source_or_target_skill_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_skill(
+                root / "skills" / "source-skill",
+                "source-skill",
+                dependencies=["OrgName/RepositoryName#target-skill", "other-skill"],
+            )
+            write_skill(root / "skills" / "other-skill", "other-skill")
+            skills = skill_map.discover_skills([root], False)
+
+            by_target, _ = skill_map.collect_edges(
+                [root], skills, {"target-skill"}, False, False, False
+            )
+            by_source, _ = skill_map.collect_edges(
+                [root], skills, {"source-skill"}, False, False, False
+            )
+
+        declared_by_target = [edge for edge in by_target if edge.get("declared")]
+        declared_by_source = [edge for edge in by_source if edge.get("declared")]
+        self.assertEqual(
+            [edge["target"] for edge in declared_by_target],
+            ["OrgName/RepositoryName#target-skill"],
+        )
+        self.assertEqual(len(declared_by_source), 2)
+
+    def test_rejects_malformed_declaration_fields_with_path_context(self) -> None:
+        invalid_values: list[object] = ["target-skill", [], [1], ["Org/repo/extra#target-skill"]]
+        for value in invalid_values:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_skill(root / "source-skill", "source-skill", dependencies=value)
+                stderr = io.StringIO()
+                with redirect_stderr(stderr), self.assertRaisesRegex(SystemExit, "2"):
+                    skill_map.discover_skills([root], False)
+                self.assertIn("cannot parse", stderr.getvalue())
+                self.assertIn("skill-dependencies", stderr.getvalue())
+
+    def test_rejects_malformed_yaml_with_path_context(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "source-skill"
+            write_skill(skill, "source-skill")
+            (skill / "SKILL.md").write_text(
+                "---\nname: source-skill\nskill-dependencies: [target-skill\n---\n",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with redirect_stderr(stderr), self.assertRaisesRegex(SystemExit, "2"):
+                skill_map.discover_skills([root], False)
+        self.assertIn(str(skill / "SKILL.md"), stderr.getvalue())
+        self.assertIn("invalid YAML frontmatter", stderr.getvalue())
+
+    def test_declarations_appear_in_text_json_and_dot_outputs(self) -> None:
+        edge = {
+            "type": "dependency",
+            "source": "source-skill",
+            "target": "OrgName/RepositoryName#target-skill",
+            "path": "/tmp/source-skill/SKILL.md",
+            "line": 5,
+            "declared": True,
+        }
+        root = Path("/tmp")
+
+        text_output = io.StringIO()
+        with redirect_stdout(text_output):
+            skill_map.as_text([root], [], [edge], [], [], False)
+        self.assertIn("(declared; /tmp/source-skill/SKILL.md:5)", text_output.getvalue())
+
+        json_output = io.StringIO()
+        with redirect_stdout(json_output):
+            skill_map.as_json([root], [], [edge], [], [], False)
+        payload = json.loads(json_output.getvalue())
+        self.assertIs(payload["edges"][0]["declared"], True)
+        self.assertEqual(payload["counts"]["declared_dependencies"], 1)
+
+        dot_output = io.StringIO()
+        with redirect_stdout(dot_output):
+            skill_map.as_dot([edge], [])
+        self.assertIn(
+            '"source-skill" -> "OrgName/RepositoryName#target-skill";',
+            dot_output.getvalue(),
+        )
 
 
 class PortfolioResolutionTest(unittest.TestCase):
