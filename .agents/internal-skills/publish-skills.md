@@ -73,6 +73,14 @@ Require `READY` for every target claim before `apply`. On a dirty-settling hold 
 target set. The CLI state lock is not a repository scope: its exclusive process lock already serializes it, and it is
 never a commit path.
 
+For a `shared` replacement, an existing correct Claude symlink is not a mutation target. The current `skills` installer
+resolves the canonical and Claude endpoints and returns before unlinking or recreating the symlink when they already
+refer to the same path. When the planner reports no Claude symlink or layout drift, claim only the canonical
+`~/.agents/skills/<name>` directory, then confirm after `apply` that the Claude repository has no diff and the link
+still resolves to the canonical install. Before relying on this exception after an installer update, re-confirm that
+no-op behavior. Do not use the exception for a missing or incorrect symlink, a target-restriction change, or a source
+deletion; the remove step can mutate those Claude paths, so they retain the normal target-claim requirement.
+
 Keep target claims until the corresponding reported repository changes are committed and pushed, or until that target
 has no Git diff. Release each with `ai-coord done` before re-planning a partial apply or after finalization.
 
