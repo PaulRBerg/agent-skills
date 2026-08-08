@@ -73,10 +73,16 @@ canonical_git_root() {
   printf '%s\n' "$_physical_root"
 }
 
-desktop_root=
+handoff_base=
 handoff_root=
 
 resolve_handoff_root() {
+  if [ "${#repo_roots[@]}" -eq 1 ]; then
+    handoff_base=${repo_roots[0]}
+    handoff_root=$handoff_base/.ai/task-handoffs
+    return
+  fi
+
   _desktop_candidate=${TASK_HANDOFF_TEST_DESKTOP:-"${HOME:-}/Desktop"}
   has_line_break "$_desktop_candidate" && die 'Desktop path must not contain line breaks'
   [ -d "$_desktop_candidate" ] && [ ! -L "$_desktop_candidate" ] ||
@@ -84,8 +90,8 @@ resolve_handoff_root() {
 
   _desktop_root=$(cd "$_desktop_candidate" 2>/dev/null && pwd -P) ||
     die "cannot canonicalize Desktop directory: $_desktop_candidate"
-  desktop_root=$_desktop_root
-  handoff_root=$desktop_root/.ai/task-handoffs
+  handoff_base=$_desktop_root
+  handoff_root=$handoff_base/.ai/task-handoffs
 }
 
 directory_mode() {
@@ -131,7 +137,7 @@ resolve_tools() {
 }
 
 validate_handoff_parent() {
-  for _directory in "$desktop_root/.ai" "$handoff_root"; do
+  for _directory in "$handoff_base/.ai" "$handoff_root"; do
     if [ -e "$_directory" ] || [ -L "$_directory" ]; then
       [ -d "$_directory" ] && [ ! -L "$_directory" ] ||
         die "handoff parent must be a physical directory: $_directory"
@@ -189,6 +195,10 @@ preflight_plan_set() {
     validate_handoff_parent
     if [ -e "$_target" ] || [ -L "$_target" ]; then
       die "plan target already exists: $_target"
+    fi
+    if [ "${#repo_roots[@]}" -eq 1 ]; then
+      git -C "${repo_roots[0]}" check-ignore -q -- "${plan_relpaths[$_index]}" ||
+        die "plan target is not ignored: $_target"
     fi
 
     _index=$((_index + 1))
@@ -292,7 +302,7 @@ prepare() {
   trap cleanup_failed_prepare EXIT
 
   mkdir "$prepare_run_dir/repos" "$prepare_run_dir/plans" || die 'cannot initialize temporary run state'
-  printf 'task-handoff-run-v3\n%s\n%s\n%s\n' \
+  printf 'task-handoff-run-v4\n%s\n%s\n%s\n' \
     "$prepare_run_dir" "${#repo_roots[@]}" "${#plan_owners[@]}" >"$prepare_run_dir/.task-handoff-run" ||
     die 'cannot write temporary run marker'
 
@@ -362,8 +372,8 @@ validate_run_dir() {
   [ "$(wc -l <"$_marker" | tr -d '[:space:]')" = 4 ] || die 'run marker has an invalid shape'
   _marker_version=$(sed -n '1p' "$_marker")
   case $_marker_version in
-    task-handoff-run-v3) _plan_state_entries=7 ;;
-    *) die 'run marker version is incompatible with Desktop handoffs' ;;
+    task-handoff-run-v4) _plan_state_entries=7 ;;
+    *) die 'run marker version is incompatible with the current handoff placement policy' ;;
   esac
   [ "$(sed -n '2p' "$_marker")" = "$_candidate_run_dir" ] || die 'run marker path does not match'
   _repo_count=$(sed -n '3p' "$_marker")
@@ -538,7 +548,7 @@ validate_drafts() {
 }
 
 ensure_target_directory() {
-  for _directory in "$desktop_root/.ai" "$handoff_root"; do
+  for _directory in "$handoff_base/.ai" "$handoff_root"; do
     if [ -e "$_directory" ] || [ -L "$_directory" ]; then
       [ -d "$_directory" ] && [ ! -L "$_directory" ] ||
         die "handoff parent must be a physical directory: $_directory"
@@ -667,7 +677,14 @@ build_commands() {
   _index=0
   while [ "$_index" -lt "${#plan_owners[@]}" ]; do
     _category=${plan_categories[$_index]}
-    _prompt="A previous agent prepared a ${_category} task handoff for ${plan_tasks[$_index]} at ${plan_targets[$_index]}. Read the handoff, then complete its requested ${_category} task. Start in the selected first repository and follow its stated repository order, outcome, boundaries, authority constraints, and validation requirements."
+    if [ "${#repo_roots[@]}" -eq 1 ]; then
+      _location="under ${plan_relpaths[$_index]}"
+      _instructions='Follow its stated outcome, boundaries, authority constraints, and validation requirements.'
+    else
+      _location="at ${plan_targets[$_index]}"
+      _instructions='Start in the selected first repository and follow its stated repository order, outcome, boundaries, authority constraints, and validation requirements.'
+    fi
+    _prompt="A previous agent prepared a ${_category} task handoff for ${plan_tasks[$_index]} $_location. Read the handoff, then complete its requested ${_category} task. $_instructions"
     _command="codex -C $(shell_quote "${plan_owners[$_index]}") $(shell_quote "$_prompt")"
     commands[${#commands[@]}]=$_command
     _index=$((_index + 1))

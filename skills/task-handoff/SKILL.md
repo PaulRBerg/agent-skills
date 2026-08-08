@@ -8,8 +8,8 @@ disable-model-invocation: true
 name: task-handoff
 user-invocable: true
 description:
-  Create one decision-complete task handoff under `~/Desktop/.ai/task-handoffs/` and return a command for a fresh
-  interactive Codex session.
+  Create one decision-complete task handoff in its repository or on the Desktop for cross-repository work, and return a
+  command for a fresh interactive Codex session.
 ---
 
 # Task Handoff
@@ -48,13 +48,15 @@ When a task contains supporting work from another category, use the category of 
 
 Infer repositories from local paths and relevant context. Do not include the current repository merely because the skill
 runs there when the task selects only other repositories. Create exactly one handoff file, whether the task touches one
-repository or many. It always belongs at `~/Desktop/.ai/task-handoffs/<HANDOFF_NAME.md>`; never create it in a
-repository. For a cross-repository task, include every involved repository and choose the first repository to tackle as
-the Codex launch directory. Stop before writing when the repository set or the required operation order is unclear.
+repository or many. A single-repository handoff belongs in that repository at
+`<REPOSITORY>/.ai/task-handoffs/<HANDOFF_NAME.md>`. A cross-repository handoff belongs at
+`~/Desktop/.ai/task-handoffs/<HANDOFF_NAME.md>` only when it spans at least two repositories. For cross-repository work,
+include every involved repository and choose the first repository to tackle as the Codex launch directory. Stop before
+writing when the repository set or the required operation order is unclear.
 
 Choose one meaningful unique filename matching `^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*[.]md$`; do not force a `PLAN_` prefix. If
-the Desktop target exists, add a semantic qualifier, falling back to `_YYYY_MM_DD_HHMMSS` only when no meaningful
-qualifier distinguishes it.
+the target exists, add a semantic qualifier, falling back to `_YYYY_MM_DD_HHMMSS` only when no meaningful qualifier
+distinguishes it.
 
 ## Prepare drafts
 
@@ -69,10 +71,10 @@ bash <skill-dir>/scripts/task-handoff.sh prepare \
 
 Pass every involved repository with `--repo`, then exactly one `--plan`. Its repository must be the first one to tackle
 and becomes the Codex launch directory. Pass the inferred category exactly as one of the five values above. The helper
-validates and canonicalizes physical Git roots, the launch repository, the Desktop target, categories, filenames, and
-required macOS tools before creating mode-0700 temporary state. Use its shell-quoted `run_dir`, `repo`, and `plan`
-records as authoritative; the `plan` record gives its launch repository, Desktop-relative target, absolute target,
-category, and draft path.
+validates and canonicalizes physical Git roots, the launch repository, the placement-dependent target, categories,
+filenames, and required macOS tools before creating mode-0700 temporary state. Use its shell-quoted `run_dir`, `repo`,
+and `plan` records as authoritative; the `plan` record gives its launch repository, repository-relative handoff path,
+absolute target, category, and draft path. The helper also verifies that a repository-local target is ignored.
 
 Write only the semantic handoff body to the draft. Never add `## Handoff category`, `## Execution status`, or
 `## Handoff cleanup`; `finalize` reserves and appends them. Make every body decision-complete for an agent with access
@@ -108,9 +110,9 @@ bash <skill-dir>/scripts/task-handoff.sh finalize '<run-dir>'
 ```
 
 `finalize` re-runs preflight, rejects an empty or reserved-heading draft, appends the fixed category, execution-status,
-and cleanup contracts, validates the complete structure, publishes the new Desktop handoff without overwriting, and
-copies and byte-verifies the Codex command. It rolls back helper-created targets and now-empty directories on handled
-errors, `INT`, or `TERM`; it cannot make publication atomic across filesystems or survive power loss or `SIGKILL`.
+and cleanup contracts, validates the complete structure, publishes the new handoff without overwriting, and copies and
+byte-verifies the Codex command. It rolls back helper-created targets and now-empty directories on handled errors,
+`INT`, or `TERM`; it cannot make publication atomic across filesystems or survive power loss or `SIGKILL`.
 
 For noninteractive ai-coord findings triage, uppercase the finding ID only in the deterministic filename
 `FINDING_<UPPERCASE_ID>.md`. Preserve the ledger ID's original spelling in the exact machine-readable line
@@ -137,9 +139,8 @@ Never create or remove targets yourself. A failed or cancelled run must leave no
 
 ## Report
 
-On success, finish with `### ✅ Task handoff ready — <task>`. List the final record's Desktop path, canonical launch
+On success, finish with `### ✅ Task handoff ready — <task>`. List the final record's handoff path, canonical launch
 repository, category, and exact command in a code block. Do not repeat the handoff body or mention clipboard copying or
 verification.
 
-For a blocker, finish with `### ⛔ Task handoff not written — <reason>` and state that no Desktop handoff file was
-created.
+For a blocker, finish with `### ⛔ Task handoff not written — <reason>` and state that no handoff file was created.

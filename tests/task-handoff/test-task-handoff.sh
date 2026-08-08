@@ -100,9 +100,13 @@ write_draft() {
 
 make_repo() {
   _repo=$1
+  _ignored=${2:-true}
   mkdir -p "$_repo"
   git -C "$_repo" init --quiet
   git -C "$_repo" config core.excludesFile /dev/null
+  if [ "$_ignored" = true ]; then
+    printf '.ai/task-handoffs/\n' >"$_repo/.gitignore"
+  fi
 }
 
 mkdir -p "$fake_bin" "$runs_dir" "$desktop"
@@ -156,10 +160,10 @@ repo_one_root=$(git -C "$repo_one" rev-parse --show-toplevel)
 repo_two_root=$(git -C "$repo_two" rev-parse --show-toplevel)
 handoff_dir=$desktop/.ai/task-handoffs
 
-# A one-repository handoff publishes on the Desktop, not in the repository.
+# A one-repository handoff stays in its repository and does not require a Desktop.
 single_task="fix Bob's parser"
 single_category=investigation
-single_prepare=$(run_helper prepare \
+single_prepare=$(TASK_HANDOFF_TEST_DESKTOP=$test_root/missing-desktop run_helper prepare \
   --repo "$repo_one/subdirectory" \
   --repo "$repo_alias" \
   --plan "$repo_alias" SINGLE_PLAN.md "$single_category" "$single_task")
@@ -167,17 +171,17 @@ assert_equal 1 "$(printf '%s\n' "$single_prepare" | grep -c '^repo ')" 'symlink 
 single_run=$(extract_run_dir "$single_prepare")
 write_draft "$single_run/plans/0001/draft.md" 'Single plan'
 single_result=$(run_helper finalize "$single_run")
-single_target=$handoff_dir/SINGLE_PLAN.md
-assert_exists "$single_target" 'Desktop handoff publication'
-assert_absent "$repo_one_root/.ai/task-handoffs/SINGLE_PLAN.md" 'repository-local handoff publication'
+single_target=$repo_one_root/.ai/task-handoffs/SINGLE_PLAN.md
+assert_exists "$single_target" 'repository-local handoff publication'
+assert_absent "$handoff_dir/SINGLE_PLAN.md" 'single-repository Desktop publication'
 assert_absent "$single_run" 'successful finalize run cleanup'
 
-single_prompt="A previous agent prepared a $single_category task handoff for $single_task at $single_target. Read the handoff, then complete its requested $single_category task. Start in the selected first repository and follow its stated repository order, outcome, boundaries, authority constraints, and validation requirements."
+single_prompt="A previous agent prepared a $single_category task handoff for $single_task under .ai/task-handoffs/SINGLE_PLAN.md. Read the handoff, then complete its requested $single_category task. Follow its stated outcome, boundaries, authority constraints, and validation requirements."
 single_command="codex -C $(shell_quote "$repo_one_root") $(shell_quote "$single_prompt")"
 single_prefix="plan handoff=$(shell_quote "$single_target") launch_repo=$(shell_quote "$repo_one_root") category=$(shell_quote "$single_category") command="
 case $single_result in
   "$single_prefix"*) ;;
-  *) fail 'single finalize record omitted its Desktop target or launch repository' ;;
+  *) fail 'single finalize record omitted its repository target or launch repository' ;;
 esac
 single_record_command=${single_result#"$single_prefix"}
 assert_equal "$single_command" "$single_record_command" 'single exact command'
@@ -191,7 +195,7 @@ assert_equal 1 "$(grep -Fxc '## Handoff cleanup' "$single_target")" 'handoff cle
 single_quoted_target=$(shell_quote "$single_target")
 assert_file_contains "Run \`/usr/bin/trash $single_quoted_target\` only after the requested work is complete and" \
   "$single_target" \
-  'Desktop cleanup command'
+  'repository-local cleanup command'
 
 # Cross-repository work still produces one Desktop handoff and launches in the stated first repository.
 cross_prepare=$(run_helper prepare \
@@ -228,7 +232,7 @@ write_draft "$unordered_run/plans/0001/draft.md" 'Missing cross-repository order
 expect_failure 'cross-repository draft is missing a Repository order section' run_helper finalize "$unordered_run"
 run_helper cancel "$unordered_run" >/dev/null
 
-# Prepare validates the one Desktop target and launch repository before creating temporary state.
+# Prepare validates the conditional target and launch repository before creating temporary state.
 expect_failure 'invalid plan filename' run_helper prepare \
   --repo "$repo_one" --plan "$repo_one" invalid.md implementation 'invalid name'
 expect_failure 'invalid task category' run_helper prepare \
@@ -239,16 +243,22 @@ expect_failure 'launch repository is not a Git worktree' run_helper prepare \
   --repo "$repo_one" --plan "$nongit" NON_GIT.md research 'non-git launch repository'
 expect_failure 'launch repository is not among the involved repositories' run_helper prepare \
   --repo "$repo_one" --plan "$repo_two" WRONG_LAUNCH.md audit 'wrong launch repository'
-printf 'pre-existing\n' >"$handoff_dir/EXISTING.md"
+unignored_repo=$test_root/unignored-repo
+make_repo "$unignored_repo" false
+expect_failure 'plan target is not ignored' run_helper prepare \
+  --repo "$unignored_repo" --plan "$unignored_repo" UNIGNORED.md operations 'unignored target'
+mkdir -p "$repo_two_root/.ai/task-handoffs"
+printf 'pre-existing\n' >"$repo_two_root/.ai/task-handoffs/EXISTING.md"
 expect_failure 'plan target already exists' run_helper prepare \
   --repo "$repo_two" --plan "$repo_two" EXISTING.md operations 'existing target'
-assert_equal 'pre-existing' "$(cat "$handoff_dir/EXISTING.md")" 'existing Desktop target changed during prepare'
+assert_equal 'pre-existing' "$(cat "$repo_two_root/.ai/task-handoffs/EXISTING.md")" \
+  'existing repository target changed during prepare'
 
 # Empty and reserved-heading drafts fail without publishing and remain cancellable.
 empty_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" EMPTY_DRAFT.md research 'empty draft')
 empty_run=$(extract_run_dir "$empty_prepare")
 expect_failure 'plan draft is empty' run_helper finalize "$empty_run"
-assert_absent "$handoff_dir/EMPTY_DRAFT.md" 'empty draft target'
+assert_absent "$repo_two_root/.ai/task-handoffs/EMPTY_DRAFT.md" 'empty draft target'
 run_helper cancel "$empty_run" >/dev/null
 assert_absent "$empty_run" 'empty draft cancellation'
 
@@ -256,7 +266,7 @@ reserved_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" RESE
 reserved_run=$(extract_run_dir "$reserved_prepare")
 printf '# Body\n\n## Execution status\n' >"$reserved_run/plans/0001/draft.md"
 expect_failure 'reserved heading' run_helper finalize "$reserved_run"
-assert_absent "$handoff_dir/RESERVED.md" 'reserved draft target'
+assert_absent "$repo_two_root/.ai/task-handoffs/RESERVED.md" 'reserved draft target'
 run_helper cancel "$reserved_run" >/dev/null
 
 # A target race is not overwritten or removed because the helper did not create it.
@@ -264,24 +274,25 @@ race_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" RACE_TAR
 race_run=$(extract_run_dir "$race_prepare")
 write_draft "$race_run/plans/0001/draft.md" 'Race target'
 TASK_HANDOFF_TEST_HOOK_MODE=race expect_failure 'appeared during publication' run_helper finalize "$race_run"
-race_target=$handoff_dir/RACE_TARGET.md
+race_target=$repo_two_root/.ai/task-handoffs/RACE_TARGET.md
 assert_equal 'raced target' "$(cat "$race_target")" 'raced target was overwritten or removed'
 run_helper cancel "$race_run" >/dev/null
 
-# A failed clipboard copy rolls back the one Desktop handoff and the directories it created.
-clipboard_desktop=$test_root/clipboard-desktop
-mkdir "$clipboard_desktop"
-clipboard_prepare=$(TASK_HANDOFF_TEST_DESKTOP=$clipboard_desktop run_helper prepare \
-  --repo "$repo_one" --plan "$repo_one" CLIPBOARD.md implementation 'clipboard failure')
+# A failed clipboard copy rolls back the repository-local handoff and the directories it created.
+clipboard_repo=$test_root/clipboard-failure-repo
+make_repo "$clipboard_repo"
+clipboard_root=$(git -C "$clipboard_repo" rev-parse --show-toplevel)
+clipboard_prepare=$(run_helper prepare \
+  --repo "$clipboard_repo" --plan "$clipboard_repo" CLIPBOARD.md implementation 'clipboard failure')
 clipboard_run=$(extract_run_dir "$clipboard_prepare")
 write_draft "$clipboard_run/plans/0001/draft.md" 'Clipboard failure'
-TASK_HANDOFF_TEST_DESKTOP=$clipboard_desktop TASK_HANDOFF_TEST_CLIPBOARD_FAIL=copy \
+TASK_HANDOFF_TEST_CLIPBOARD_FAIL=copy \
   expect_failure 'clipboard copy failed' run_helper finalize "$clipboard_run"
-assert_absent "$clipboard_desktop/.ai/task-handoffs/CLIPBOARD.md" 'clipboard rollback target'
-assert_absent "$clipboard_desktop/.ai" 'now-empty Desktop rollback directories'
-TASK_HANDOFF_TEST_DESKTOP=$clipboard_desktop run_helper cancel "$clipboard_run" >/dev/null
+assert_absent "$clipboard_root/.ai/task-handoffs/CLIPBOARD.md" 'clipboard rollback target'
+assert_absent "$clipboard_root/.ai" 'now-empty repository rollback directories'
+run_helper cancel "$clipboard_run" >/dev/null
 
-# Noninteractive findings publication still uses the Desktop target without clipboard tools.
+# Noninteractive findings publication stays in its repository without clipboard tools.
 finding_prepare=$(run_helper prepare \
   --repo "$repo_one" \
   --plan "$repo_one" FINDING_DEADBEEF.md audit 'triage finding deadbeef')
@@ -292,8 +303,8 @@ missing_pbcopy=$fake_bin/missing-pbcopy
 missing_pbpaste=$fake_bin/missing-pbpaste
 finding_result=$(TASK_HANDOFF_TEST_PBCOPY=$missing_pbcopy TASK_HANDOFF_TEST_PBPASTE=$missing_pbpaste \
   run_helper finalize --no-clipboard "$finding_run")
-finding_target=$handoff_dir/FINDING_DEADBEEF.md
-assert_exists "$finding_target" 'findings Desktop publication'
+finding_target=$repo_one_root/.ai/task-handoffs/FINDING_DEADBEEF.md
+assert_exists "$finding_target" 'findings repository publication'
 assert_file_contains 'Source finding: deadbeef' "$finding_target" 'finding provenance'
 case $finding_result in
   "plan handoff="*) ;;
