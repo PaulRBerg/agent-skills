@@ -31,7 +31,9 @@ eight-agent shared limit is total implementation agents, not concurrent width. W
 launch one worker at a time.
 
 Codex subagents inherit the parent sandbox and approval policy. Plan-mode research therefore stays under the parent's
-read-only controls, and implementation cannot bypass the permissions selected for the approved parent turn.
+read-only controls, and implementation cannot bypass the permissions selected for the approved parent turn. For a
+research-only handoff outside Plan mode, the shared prompt's strict no-edit boundary is mandatory; treat any reported
+edit as a contract violation.
 
 ## Research Mechanics
 
@@ -39,9 +41,9 @@ For each selected research agent, call `spawn_agent` with `fork_turns: "none"`, 
 shared self-contained research prompt. Start all agents that fit the current concurrency allowance without waiting
 between launches; place any remainder in a later research wave.
 
-Wait for native results with `wait_agent`. Fold the returned findings into the parent plan as required by the shared
-Research Phase. Do not create progress, result, stderr, sentinel, or watcher artifacts. Treat any reported edit as a
-contract violation.
+Wait for native results with `wait_agent`. Fold the returned findings into the parent plan or research-only response as
+required by the shared Research Phase. Do not create progress, result, stderr, sentinel, or watcher artifacts. Treat any
+reported edit as a contract violation.
 
 ## Plan Manifest
 

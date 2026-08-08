@@ -66,7 +66,8 @@ Files:
 adapters specialize runtime mechanics. `claude-handoff` remains Claude Code only. Compare the platform-neutral blocks in
 both skill entrypoints and keep them semantically identical, adjusted only for the parent/agent noun and runtime:
 
-- Contract bullets: the Plan-mode gate; parent ownership of decisions, the final plan, and orchestration; the
+- Contract bullets: the Plan-mode gate for implementation handoffs, the any-mode exception for strictly research-only
+  tasks, and their stop-before-planning boundary; parent ownership of decisions, the final plan, and orchestration; the
   no-redesign rule for implementation agents; the smallest-effective-team and eight-implementation-agent limits; the
   brief-sizing rule that splits any brief likely to exceed roughly 25-30 minutes; and parent implementation work being
   limited to orchestration, integrity checks, failure handling, and the conditional polish passes.

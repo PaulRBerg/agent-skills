@@ -13,7 +13,7 @@ For each research agent selected by the shared contract, resolve `../scripts/run
 and use the implementation launch template with `--read-only`. Give every agent separate `<agent-id>.progress.jsonl`,
 `<agent-id>.result.json`, and `<agent-id>.stderr.log` artifacts. Start all selected agents as background Bash tasks
 (`run_in_background: true`) in the same turn, then watch the wave through the implementation watcher and Monitor flow
-below. The runner-enforced read-only sandbox makes this launch legitimate during Plan mode.
+below. The runner-enforced read-only sandbox makes this launch legitimate in any mode, including Plan mode.
 
 Give each research agent a self-contained prompt containing the open questions, exact investigation scope, read-only
 boundary, relevant repository constraints, and stopping rule from the shared prompt contract. Require every field in
@@ -32,7 +32,8 @@ parent synthesizes. Never select `low`, `ultra`, or `max`. Research should norma
 implementation; keep the baseline between 10 and 15 minutes unless repository evidence requires otherwise.
 
 When the research wave settles, parse each result against `research-result.schema.json`, read its stderr artifact for
-failure forensics, and return the findings to the shared Research Phase. Do not reconcile the working tree.
+failure forensics, and return the findings to the shared Research Phase for the plan or research-only response. Do not
+reconcile the working tree.
 
 ## Plan Manifest and Configuration
 

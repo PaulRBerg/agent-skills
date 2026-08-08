@@ -1,8 +1,9 @@
 ---
 argument-hint: "[task]"
 compatibility:
-  Requires Plan mode in Claude Code with Git, /bin/bash, Python 3, and an authenticated Codex CLI with dangerous bypass
-  support, or Plan mode in Codex CLI with native subagents enabled.
+  Requires Plan mode for implementation handoffs, but research-only handoffs may run in any mode. The Claude Code host
+  also requires Git, /bin/bash, Python 3, and an authenticated Codex CLI with dangerous bypass support; the Codex CLI
+  host requires native subagents.
 disable-model-invocation: true
 metadata:
   install-targets: claude-code codex
@@ -13,15 +14,15 @@ skill-dependencies:
   - commit
 user-invocable: true
 description:
-  Orchestrate read-only planning research and one to eight Codex agents to implement approved plans from Claude Code or
-  Codex CLI.
+  Orchestrate read-only Codex research in any mode, or one to eight Codex agents to implement approved plans from Claude
+  Code or Codex CLI.
 ---
 
 # Codex Handoff
 
-Codex-handoff orchestrates implementation within the current session from Plan mode. Task-handoff instead writes a
-decision-complete file for a fresh, separate session; choose it when work continues later or elsewhere, and choose an
-in-session handoff skill when implementing an approved plan now.
+Codex-handoff orchestrates read-only investigation in any mode or implementation within the current session from Plan
+mode. Task-handoff instead writes a decision-complete file for a fresh, separate session; choose it when work continues
+later or elsewhere, and choose an in-session handoff skill when implementing an approved plan now.
 
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
@@ -44,8 +45,10 @@ selected adapter may specialize host mechanics and manifest configuration, but i
 
 ## Contract
 
-- Run only after the user explicitly invokes this skill in Plan mode. If Plan mode is not active, ask the user to switch
-  and stop.
+- Run only after the user explicitly invokes this skill. Classify the task as research-only only when its requested
+  outcome is findings, evidence, or an assessment and it requests neither repository changes nor an implementation plan.
+  A research-only task may run in any mode. Every other task requires Plan mode; if it is not active, ask the user to
+  switch and stop.
 - The parent agent owns decisions, the final implementation plan, and orchestration. For complex tasks, delegate
   investigation to read-only Codex research agents before writing the plan.
 - Research agents gather evidence and report findings. They never edit files, make design decisions, or return plans of
@@ -77,13 +80,15 @@ Use `$ARGUMENTS` as the task when present; otherwise use the active user request
 
 ## Research Phase
 
-Trigger research when scope is uncertain, the task crosses multiple or unfamiliar subsystems, or the plan depends on
-evidence that would be materially slower for the parent to gather serially. Zero research agents remains the default.
-The parent alone decides from the task and repository evidence whether research runs; never ask the user to opt in or
-name agents. Either launch the research wave immediately or proceed straight to planning.
+For a research-only task, launch one to three research agents and stop after returning the consolidated investigation;
+never enter the Plan Phase or launch implementation agents. For an implementation handoff, trigger research when scope
+is uncertain, the task crosses multiple or unfamiliar subsystems, or the plan depends on evidence that would be
+materially slower for the parent to gather serially. Zero research agents remains the default for implementation
+handoffs. The parent alone decides the research count from the task and repository evidence; never ask the user to opt
+in or name agents. Either launch the research wave immediately or proceed straight to planning.
 
-When triggered, assign up to three agents stable IDs `R1` through `R3` and launch them immediately during Plan mode
-through the selected adapter's read-only mechanism. Give each agent a self-contained prompt containing:
+When triggered, assign up to three agents stable IDs `R1` through `R3` and launch them immediately through the selected
+adapter's read-only mechanism. Give each agent a self-contained prompt containing:
 
 - the open questions and exact investigation scope;
 - relevant repository constraints and known concurrent-work boundaries;
@@ -91,11 +96,19 @@ through the selected adapter's read-only mechanism. Give each agent a self-conta
 - the stopping rule that it must return evidence rather than a plan or design; and
 - exact result fields: `status`, `findings`, `open_questions`, `evidence`, and `blockers`.
 
-When every required research agent settles, fold its findings and evidence into the implementation plan. Surface open
-questions or blockers through the host's user-question mechanism only when they change scope or approach. Do not
-reconcile the working tree because research agents change nothing; any reported edit is a contract violation.
+When every required research agent settles, fold its findings and evidence into the implementation plan or the
+research-only response. Surface open questions or blockers through the host's user-question mechanism only when they
+change scope or approach. Do not reconcile the working tree because research agents change nothing; any reported edit is
+a contract violation.
+
+For a research-only task, synthesize the evidence and finish with `### 🔎 Research handoff — <completed|blocked>`, the
+agent count, findings, evidence, open questions, and blockers. This replaces the Plan Phase and the selected adapter's
+implementation completion report. If the investigation shows that changes are needed, report them as findings and stop;
+do not produce an implementation plan or begin edits.
 
 ## Plan Phase
+
+Enter this phase only for an implementation handoff in Plan mode.
 
 Produce a decision-complete plan with this section and the selected adapter's exact manifest table:
 
