@@ -45,6 +45,12 @@ assert_file_contains() {
   grep -Fq -- "$1" "$2" || fail "$3: missing $1"
 }
 
+assert_file_not_contains() {
+  if grep -Fq -- "$1" "$2"; then
+    fail "$3: unexpectedly found $1"
+  fi
+}
+
 expect_failure() {
   _expected_text=$1
   shift
@@ -199,8 +205,18 @@ between_headings=$(sed -n "${status_line},${cleanup_line}p" "$single_target")
 expected_between=$'## Execution status\n\nCurrent status: No task attempt has been recorded.\n\nIf work stops before successful completion, replace the current status—not append an attempt history—with a concise\nrecord of completed work, remaining work, validation commands and outcomes, the blocker, and the next concrete\naction.\n\n## Handoff cleanup'
 assert_equal "$expected_between" "$between_headings" 'exact execution status placement'
 single_quoted_target=$(shell_quote "$single_target")
-assert_file_contains "Run \`/usr/bin/trash $single_quoted_target\` only after" "$single_target" \
+assert_file_contains "Run \`/usr/bin/trash $single_quoted_target\` only after the requested work is complete and" \
+  "$single_target" \
   'canonical cleanup command'
+assert_file_contains 'task-scoped validation passes.' "$single_target" 'task-scoped cleanup threshold'
+assert_file_contains 'A broader required check may remain non-green only when evidence attributes every failure' \
+  "$single_target" 'unrelated broader-check exception'
+assert_file_contains 'Record each non-green command, its outcome, and that attribution in the final report,' \
+  "$single_target" 'non-green check disclosure requirement'
+assert_file_contains 'or any broader failure may have been caused by this task.' "$single_target" \
+  'ambiguous broader failure retains handoff'
+assert_file_not_contains 'every required validation passes' "$single_target" \
+  'obsolete all-green cleanup threshold'
 
 # Version 1 runs remain finalizable with an implementation-category default.
 legacy_prepare=$(run_helper prepare --repo "$repo_one" --plan "$repo_one" LEGACY_RUN.md research 'legacy task')

@@ -566,10 +566,12 @@ action.
 
 EOF
     printf '%s%s%s\n' 'Run `/usr/bin/trash ' "$_quoted_target" \
-      '` only after every success criterion is satisfied and every required validation passes,'
+      '` only after the requested work is complete and task-scoped validation passes.'
     cat <<'EOF'
-then verify the original path no longer exists. Keep this handoff when work remains, the requested task or validation fails,
-or required validation is skipped. Never trash `.ai/task-handoffs/` or any other handoff.
+A broader required check may remain non-green only when evidence attributes every failure to pre-existing or unrelated
+work outside this task's scope. Record each non-green command, its outcome, and that attribution in the final report,
+then verify the original path no longer exists. Keep this handoff when work remains, task-scoped validation fails or is
+skipped, or any broader failure may have been caused by this task. Never trash `.ai/task-handoffs/` or any other handoff.
 EOF
   } >"$_footer"
 }
