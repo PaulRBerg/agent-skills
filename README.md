@@ -41,7 +41,7 @@ bunx skills add PaulRBerg/agent-skills
 | grill-me             | Relentlessly stress-test plans and designs                                |
 | html-debrief         | Interactive HTML task debriefs                                            |
 | html-playground      | Interactive single-file HTML playgrounds                                  |
-| hurry-up             | Wind down a session fast: collect subagent wrap-ups and hand off the rest |
+| wrap-up              | Wind down a session fast: collect subagent wrap-ups and hand off the rest |
 | large-file-refactor  | Large source-file report and Serena split plans                           |
 | naming-refactor      | Exhaustive behavior-preserving repository naming refactor                 |
 | node-deps-bumper     | Node.js dependency updates via taze                                       |

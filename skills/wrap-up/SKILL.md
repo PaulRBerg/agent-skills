@@ -5,7 +5,7 @@ compatibility:
   and its requirements.
 coordination: exempt
 disable-model-invocation: true
-name: hurry-up
+name: wrap-up
 skill-dependencies:
   - task-handoff
 user-invocable: true
@@ -14,7 +14,7 @@ description:
   subagents, secure finished work, and hand off the remainder via task-handoff.
 ---
 
-# Hurry Up
+# Wrap Up
 
 This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
 skill's own work.
