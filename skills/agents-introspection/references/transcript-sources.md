@@ -1,7 +1,8 @@
 # Transcript Sources
 
-Use the bundled miner to rank project-scoped Codex and Claude Code sessions before opening transcript bodies. Treat its
-output as heuristic discovery data, not evidence.
+Use the bundled miner to rank Codex and Claude Code sessions for the current project and any other local project
+materially relevant to the user's task before opening transcript bodies. Reading relevant other-project sessions is
+authorized; treat its output as heuristic discovery data, not evidence.
 
 ## Resolve Local Paths
 
@@ -33,7 +34,8 @@ directory instead of searching installed copies.
 
 ## Preferred Helper
 
-Run one unarchived-session pass with 3–6 task keywords:
+Run one unarchived-session pass with 3–6 task keywords. Include the current project and every task-relevant local
+project as a repeated `--project` argument:
 
 ```sh
 uv run "$transcript_miner" \
@@ -44,8 +46,9 @@ uv run "$transcript_miner" \
   --format json
 ```
 
-For explicitly named additional projects, repeat `--project` with each absolute path. Never infer a second project from
-a shared basename or keyword.
+Include another project without requesting permission when task context, an explicit project or path reference, a shared
+change or workflow, or session metadata establishes relevance. Never infer relevance from a shared basename or keyword
+alone.
 
 The helper returns project coverage, ranked candidate sessions, task themes, correction and failure signals,
 verification signals, tool-call counts, and `privacy_gaps` categories. It redacts common secret-like values and emits no
@@ -78,15 +81,15 @@ JSON-aware inspection of the smallest relevant record range to keep retrieval bo
 
 ## Manual Fallback
 
-Use this only when the helper is missing or fails. Preserve the same project and retrieval bounds, secret handling, and
-external-disclosure boundary.
+Use this only when the helper is missing or fails. Preserve the same relevant-project and retrieval bounds, secret
+handling, and external-disclosure boundary.
 
 1. For Claude Code, compute the encoded directory from the exact absolute project path and inspect newest JSONL files
    there.
 2. For Codex, search unarchived transcript metadata for the exact absolute project path. Search archives only after the
    unarchived pass is insufficient.
 3. If exact matching is suspiciously empty, use the repository basename only to identify candidates, then reject every
-   candidate whose metadata or cwd does not resolve to an explicitly allowed project.
+   candidate whose metadata or cwd does not resolve to the current or a task-relevant project.
 4. Filter candidates with the task keywords before opening bodies. Inspect at most five unless evidence conflicts or the
    user requested exhaustive coverage.
 

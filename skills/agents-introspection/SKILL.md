@@ -35,8 +35,10 @@ consistent evidence bar, and either proposes a concrete prevention step or expla
 
 ## Scope and Authority
 
-- Inspect only Codex and Claude Code transcripts whose metadata or cwd resolves to the current project. Include another
-  project only when the user explicitly names its path.
+- Inspect Codex and Claude Code transcripts whose metadata or cwd resolves to the current project and any other local
+  project materially relevant to the user's task. You are authorized to read relevant other-project sessions without
+  asking the user. Establish relevance from task context, explicit project or path references, a shared change or
+  workflow, or session metadata; do not scan another project's history solely because it shares a basename or keyword.
 - Treat current-project transcripts as internal working evidence. Include direct excerpts when they materially improve
   the report; do not summarize or redact solely because the model provider can see them. Never expose credentials,
   security secrets, or personal wallet addresses.
@@ -48,15 +50,17 @@ consistent evidence bar, and either proposes a concrete prevention step or expla
 
 ## Bounded Retrieval
 
-Read `references/transcript-sources.md`, resolve the current project with `pwd -P`, and choose 3–6 short, discriminative
-keywords from relevant filenames, commands, tools, errors, package names, issue IDs, and skill names.
+Read `references/transcript-sources.md`, resolve the current project with `pwd -P`, identify any other task-relevant
+local projects, and choose 3–6 short, discriminative keywords from relevant filenames, commands, tools, errors, package
+names, issue IDs, and skill names.
 
-1. Run the bundled miner for the current project, unarchived sessions only, with the chosen keywords and
-   `--max-sessions 8`.
+1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
+   the chosen keywords and `--max-sessions 8`.
 2. Treat miner scores, themes, and correction, failure, verification, tool, or `privacy_gaps` counts only as
    candidate-ranking signals. They are heuristic and are never evidence by themselves.
-3. Validate project metadata or cwd before opening a candidate. Inspect up to five highest-relevance transcript bodies,
-   stopping earlier when the evidence bar is met. Include a comparable successful session when available.
+3. Validate that each candidate's project metadata or cwd resolves to the current or a task-relevant project before
+   opening it. Inspect up to five highest-relevance transcript bodies, stopping earlier when the evidence bar is met.
+   Include a comparable successful session when available.
 4. If evidence is insufficient, retry once with broader keywords. If unarchived history still lacks signal, retry once
    with `--include-archived`.
 5. Exceed these bounds only to resolve contradictory evidence or satisfy an explicitly exhaustive request. If the helper
