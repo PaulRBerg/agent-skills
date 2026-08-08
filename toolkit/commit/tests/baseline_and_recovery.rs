@@ -2,7 +2,7 @@ mod common;
 
 use std::fs;
 
-use common::{Harness, exit_code, stderr, stdout};
+use common::{Harness, exit_code, stderr, stdout, write_executable};
 
 const BASE: &str = "line 01\nline 02 original\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\nline 11 original\nline 12\nline 13\nline 14\n";
 const BASELINE: &str = "line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\nline 11 original\nline 12\nline 13\nline 14\n";
@@ -26,6 +26,88 @@ fn baseline_exclusion_commits_only_baseline_to_worktree_delta() {
     assert!(committed.contains("line 11 agent"));
     assert_eq!(harness.read("intended.txt"), WORKTREE);
     assert_eq!(harness.git(["status", "--short"]), " M intended.txt");
+}
+
+#[test]
+fn auto_baseline_is_applied_and_disclosed_in_both_output_modes() {
+    let harness = Harness::new("auto-baseline");
+    harness.write("intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("intended.txt", BASELINE);
+    let baseline_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+    harness.write("intended.txt", WORKTREE);
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        &format!("#!/bin/sh\n[ \"$1\" = baseline ] && printf 'intended.txt\\t{baseline_oid}\\n'\n"),
+    );
+
+    let output = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
+    assert!(stdout(&output).contains(&format!("AUTO_BASELINE\tintended.txt\t{baseline_oid}\n")));
+    let transaction = prepared_id(&stdout(&output));
+    harness.success(["commit", &transaction, "-m", "test: auto baseline"]);
+    let committed = harness.git(["show", "HEAD:intended.txt"]);
+    assert!(committed.contains("line 02 original"));
+    assert!(committed.contains("line 11 agent"));
+
+    harness.git(["reset", "--soft", "HEAD^"]);
+    let output = harness.success(["prepare", "--", "intended.txt"]);
+    assert!(stdout(&output).contains(&format!("## auto-applied baselines\nintended.txt={baseline_oid}\n")));
+}
+
+#[test]
+fn explicit_baseline_wins_and_malformed_auto_records_are_ignored() {
+    let harness = Harness::new("auto-precedence");
+    harness.write("intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("intended.txt", BASELINE);
+    let explicit_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+    harness.write("intended.txt", &BASE.replace("line 02 original", "line 02 other stray"));
+    let auto_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+    harness.write("intended.txt", WORKTREE);
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        &format!(
+            "#!/bin/sh\n[ \"$1\" = baseline ] && printf 'malformed\\nintended.txt\\t{auto_oid}\\nextra.txt\\tbad\\textra\\n'\n"
+        ),
+    );
+
+    let specification = format!("intended.txt={explicit_oid}");
+    let output =
+        harness.success(["prepare", "--porcelain", "--exclude-baseline", &specification, "--", "intended.txt"]);
+    assert!(!stdout(&output).contains("AUTO_BASELINE\t"));
+    let transaction = prepared_id(&stdout(&output));
+    harness.success(["commit", &transaction, "-m", "test: explicit precedence"]);
+    let committed = harness.git(["show", "HEAD:intended.txt"]);
+    assert!(committed.contains("line 02 original"));
+    assert!(committed.contains("line 11 agent"));
+}
+
+#[test]
+fn staged_and_opt_out_skip_auto_query_and_missing_binary_is_tolerated() {
+    let harness = Harness::new("auto-skip");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    harness.git(["add", "intended.txt"]);
+    let marker = harness.root.join("baseline-called");
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        "#!/bin/sh\n[ \"$1\" = baseline ] && : > \"$AI_COORD_MARKER\"\nexit 1\n",
+    );
+    let marker_text = marker.to_string_lossy().into_owned();
+
+    let staged = harness.command_with_env(["prepare", "--staged", "--porcelain"], [("AI_COORD_MARKER", &marker_text)]);
+    assert!(staged.status.success(), "{}", stderr(&staged));
+    assert!(!marker.exists());
+    let opted_out = harness.command_with_env(
+        ["prepare", "--all", "--no-auto-baseline", "--porcelain"],
+        [("AI_COORD_MARKER", &marker_text)],
+    );
+    assert!(opted_out.status.success(), "{}", stderr(&opted_out));
+    assert!(!marker.exists());
+
+    let missing = harness.command_with_env(["prepare", "--all", "--porcelain"], [("PATH", "/usr/bin:/bin")]);
+    assert!(missing.status.success(), "{}", stderr(&missing));
 }
 
 #[test]

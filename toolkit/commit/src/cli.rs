@@ -54,6 +54,10 @@ pub struct PrepareArgs {
     #[arg(long = "exclude-baseline", value_name = "PATH=OID")]
     pub exclude_baselines: Vec<String>,
 
+    /// Do not discover stale-dirt baselines from ai-coord.
+    #[arg(long)]
+    pub no_auto_baseline: bool,
+
     /// Emit stable tab-separated records.
     #[arg(long)]
     pub porcelain: bool,

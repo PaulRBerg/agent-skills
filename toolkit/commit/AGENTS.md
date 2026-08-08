@@ -15,6 +15,8 @@
 ## Invariants
 
 - `prepare` must never mutate the worktree, shared index, branch ref, or user configuration.
+- Automatic stale-dirt baselines are advisory: malformed output or an unavailable/failing `ai-coord` must not fail
+  preparation, explicit exclusions win by path, and staged capture never consults ambient coordination state.
 - Prepared objects remain pinned until a terminal receipt expires or a prepared transaction is discarded.
 - A commit is built from the prepared tree, with only clean current-HEAD movement and hook-staged changes admitted.
 - Never remove an index lock that this process did not create. Hold the owned lock through ref CAS and index

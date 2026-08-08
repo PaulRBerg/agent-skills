@@ -31,6 +31,7 @@ cargo install --path . --locked --force --root "$HOME/.local"
 ```text
 ai-commit prepare [--all|--staged] [--natural|--conventional]
                   [--diff summary|full] [--exclude-baseline path=oid]...
+                  [--no-auto-baseline]
                   [--porcelain] -- [paths...]
 ai-commit commit <transaction-id> -m <message>... [--push]
                   [--no-verify] [--no-gpg-sign]
@@ -45,6 +46,10 @@ uses Git's empty tree and commit creates a transactional parentless root commit.
 transaction is pinned under `refs/ai-commit/transactions/<id>` and remains retryable until committed or discarded.
 Prepared journals do not age out; terminal receipts and their refs are retained for seven days. When available,
 `ai-coord trailer` contributes one validated `Agent-Session:` line to the preparation evidence.
+In default and `--all` modes, `prepare` also asks `ai-coord baseline` for stale-dirt baselines and excludes the
+pre-existing portions of those files automatically. Explicit `--exclude-baseline` values take precedence for the same
+path. Use `--no-auto-baseline` to disable ambient discovery while retaining explicit exclusions; `--staged` always
+skips discovery because it captures the index exactly.
 
 State defaults to `$XDG_STATE_HOME/ai-commit` or `~/.local/state/ai-commit`; `AI_COMMIT_STATE_DIR` overrides it.
 Configuration defaults to `$XDG_CONFIG_HOME/ai-commit/config.toml` and can be overridden with `AI_COMMIT_CONFIG`:
@@ -59,7 +64,8 @@ valid. Explicit `--natural` or `--conventional` always wins.
 
 `prepare --porcelain` emits stable TSV records. Tabs, newlines, carriage returns, and backslashes inside fields are
 backslash-escaped. Outcome records use `PREPARED`, `COMMITTED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and
-`DISCARDED`.
+`DISCARDED`. Each automatically applied exclusion is disclosed as `AUTO_BASELINE<tab>path<tab>oid`; the ordinary
+output lists the same pairs under `auto-applied baselines`.
 
 Exit status `0` means success or an idempotent replay, `2` means invalid invocation or configuration, and `3` means the
 repository was left safe but needs a retry or reconciliation. Other Git, hook, signing, and push failures return `1`.

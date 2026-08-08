@@ -24,6 +24,7 @@ use crate::{
 struct Baseline {
     path: String,
     oid: String,
+    automatic: bool,
 }
 
 const PATH_BATCH_SIZE: usize = 32;
@@ -151,7 +152,7 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         let _ = repository.delete_refs(&transaction.references());
         return Err(error);
     }
-    print_prepared(&transaction, args.porcelain, full_diff.as_deref());
+    print_prepared(&transaction, args.porcelain, full_diff.as_deref(), &baselines);
     Ok(())
 }
 
@@ -400,9 +401,56 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
             return Err(AppError::usage(format!("baseline OID is not a blob for path {path}: {oid}")));
         }
         let oid = repository.text(["rev-parse", "--verify", &format!("{oid}^{{blob}}")], None)?;
-        baselines.push(Baseline { path, oid });
+        baselines.push(Baseline { path, oid, automatic: false });
+    }
+    if !args.staged && !args.no_auto_baseline {
+        for (raw_path, raw_oid) in bounded_baselines(&repository.root) {
+            if Path::new(&raw_path).is_absolute() {
+                continue;
+            }
+            let Ok(paths) = normalize_inputs(repository, &[raw_path]) else {
+                continue;
+            };
+            let path = paths.into_iter().next().expect("one normalized baseline path");
+            if seen.contains(&path) || (!args.all && !intended_paths.contains(&path)) {
+                continue;
+            }
+            if !matches!(raw_oid.len(), 40 | 64) || !raw_oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                continue;
+            }
+            let output = match repository.raw(["cat-file", "-t", &raw_oid], None) {
+                Ok(output) if output.status.success() => output,
+                _ => continue,
+            };
+            if String::from_utf8_lossy(&output.stdout).trim() != "blob" {
+                continue;
+            }
+            let Ok(oid) = repository.text(["rev-parse", "--verify", &format!("{raw_oid}^{{blob}}")], None) else {
+                continue;
+            };
+            seen.insert(path.clone());
+            baselines.push(Baseline { path, oid, automatic: true });
+        }
     }
     Ok(baselines)
+}
+
+fn bounded_baselines(repository_root: &Path) -> Vec<(String, String)> {
+    let Some(bytes) = bounded_ai_coord(repository_root, "baseline", 64 * 1024) else {
+        return Vec::new();
+    };
+    let Ok(text) = String::from_utf8(bytes) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|line| {
+            let (path, oid) = line.split_once('\t')?;
+            if path.is_empty() || oid.is_empty() || oid.contains('\t') {
+                return None;
+            }
+            Some((path.to_owned(), oid.to_owned()))
+        })
+        .collect()
 }
 
 fn apply_baselines(
@@ -486,30 +534,7 @@ fn allocate_id(store: &Store) -> Result<String> {
 }
 
 fn bounded_trailer(repository_root: &Path) -> Option<String> {
-    let mut child = Command::new("ai-coord")
-        .arg("trailer")
-        .current_dir(repository_root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let status = match child.wait_timeout(Duration::from_millis(750)).ok()? {
-        Some(status) => status,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return None;
-        }
-    };
-    if !status.success() {
-        return None;
-    }
-    let mut bytes = Vec::new();
-    child.stdout.take()?.take(513).read_to_end(&mut bytes).ok()?;
-    if bytes.len() > 512 {
-        return None;
-    }
+    let bytes = bounded_ai_coord(repository_root, "trailer", 512)?;
     let text = String::from_utf8(bytes).ok()?;
     let line = text.trim_end_matches(['\r', '\n']);
     if line.is_empty() ||
@@ -524,7 +549,40 @@ fn bounded_trailer(repository_root: &Path) -> Option<String> {
     Some(line.to_owned())
 }
 
-fn print_prepared(transaction: &Transaction, porcelain: bool, full_diff: Option<&str>) {
+fn bounded_ai_coord(repository_root: &Path, subcommand: &str, limit: u64) -> Option<Vec<u8>> {
+    let mut child = Command::new("ai-coord")
+        .arg(subcommand)
+        .current_dir(repository_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let stdout = child.stdout.take()?;
+    let reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout.take(limit + 1).read_to_end(&mut bytes).ok()?;
+        Some(bytes)
+    });
+    let status = match child.wait_timeout(Duration::from_millis(750)).ok()? {
+        Some(status) => status,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+    };
+    let bytes = reader.join().ok()??;
+    if !status.success() {
+        return None;
+    }
+    if bytes.len() as u64 > limit {
+        return None;
+    }
+    Some(bytes)
+}
+
+fn print_prepared(transaction: &Transaction, porcelain: bool, full_diff: Option<&str>, baselines: &[Baseline]) {
     if porcelain {
         println!("PREPARED\t{}", transaction.id);
         println!("FORMAT\t{}", transaction.message_format.label());
@@ -533,6 +591,9 @@ fn print_prepared(transaction: &Transaction, porcelain: bool, full_diff: Option<
         }
         if let Some(trailer) = &transaction.trailer {
             println!("TRAILER\t{}", escape_tsv(trailer));
+        }
+        for baseline in baselines.iter().filter(|baseline| baseline.automatic) {
+            println!("AUTO_BASELINE\t{}\t{}", escape_tsv(&baseline.path), baseline.oid);
         }
         println!("BRANCH\t{}", escape_tsv(&transaction.branch));
         for line in transaction.name_status.lines() {
@@ -555,6 +616,13 @@ fn print_prepared(transaction: &Transaction, porcelain: bool, full_diff: Option<
     println!("\n## message format rules\n{}", rules::for_format(transaction.message_format).trim_end());
     if let Some(trailer) = &transaction.trailer {
         println!("\n## trailer\n{trailer}");
+    }
+    let automatic = baselines.iter().filter(|baseline| baseline.automatic).collect::<Vec<_>>();
+    if !automatic.is_empty() {
+        println!("\n## auto-applied baselines");
+        for baseline in automatic {
+            println!("{}={}", baseline.path, baseline.oid);
+        }
     }
     println!("\n## branch\n{}", transaction.branch);
     println!("\n## name-status\n{}", transaction.name_status);
