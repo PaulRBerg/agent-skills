@@ -7,6 +7,8 @@ Load only the sections linked by the active workflow.
 Do not run unconditional `gh auth status`. Treat the first required read-only `gh` command as auth validation. Resolve
 the bundled helper relative to the skill directory, never the target repository:
 
+Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md` before running these commands:
+
 ```sh
 <skill-dir>/scripts/yeet-context.sh repo "<owner>/<repo>" [--issue-templates] [--discussion-templates] [--discussion-categories]
 <skill-dir>/scripts/yeet-context.sh issue "<owner>/<repo>" <number>
@@ -31,9 +33,10 @@ labels, and never invent labels. Skip maintainer workflow labels such as `good f
 
 ## Template Metadata and Issue Forms
 
-Issue-form YAML may define labels and type, but `gh issue create --body-file` does not execute the form. For
-deterministic posting, render the relevant fields into Markdown and pass supported metadata explicitly. Do not combine
-`--template` with `--body` or `--body-file`.
+Issue-form YAML may define assignees, labels, type, and projects, but `gh issue create --body-file` does not execute the
+form. For deterministic posting, render the relevant fields into Markdown and pass supported metadata explicitly. Apply
+project metadata only after creation with `gh project item-add`; a failed project add leaves a created issue and must
+not trigger issue recreation. Do not combine `--template` with `--body` or `--body-file`.
 
 ## Platform String Normalization
 

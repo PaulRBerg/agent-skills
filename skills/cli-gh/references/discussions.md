@@ -5,31 +5,31 @@
 The `gh discussion` command set is in preview and subject to change. A discussion is supplied by number (`123`) or URL.
 
 ```bash
-# List discussions
+# List discussions (open by default; use --state all when checking all outcomes)
 gh discussion list
-gh discussion list --answered
+gh discussion list --state all --answered
 gh discussion list --sort created --order asc
-gh discussion list --json number,title,category,answeredAt
+gh discussion list --search "cache invalidation" --json number,title,category,answerChosenAt
 
 # View a discussion, its comments, or replies to a comment
 gh discussion view 123
 gh discussion view 123 --comments
 gh discussion view 123 --order oldest
 
-# Create a discussion (interactive when flags omitted)
-gh discussion create
+# Create a discussion non-interactively
 gh discussion create --title "My question" --category "Q&A" --body "Details here"
-gh discussion create --title "Notes" --category "General" --body-file notes.md --label question
+gh discussion create --title "Notes" --category general --body-file notes.md --label question
 
 # Edit a discussion
 gh discussion edit 123 --title "New title"
 gh discussion edit 123 --add-label answered --remove-label question
 
-# Comment on a discussion, or reply to a comment using its URL
+# Add a top-level comment or reply to a comment URL/node ID
 gh discussion comment 123 --body "Thanks!"
-gh discussion comment <comment-url> --body "Reply text"
+gh discussion comment <comment-url-or-id> --body "Reply text"
 
-# Edit or delete a comment
-gh discussion comment <comment-url> --edit --body "Updated"
-gh discussion comment <comment-url> --delete --yes
+# Edit a comment or reply
+gh discussion comment <comment-url-or-id> --edit --body "Updated"
 ```
+
+Use `gh discussion list --search` for discussion searches. For JSON, use current fields such as `answerChosenAt`.

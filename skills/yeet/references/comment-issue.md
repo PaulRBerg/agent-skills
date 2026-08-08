@@ -25,7 +25,7 @@ Rules:
 - ELSE IF first token matches `{owner}/{repo}`: use it as repository; next token must be the issue number (strip leading
   `#`)
 - ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from the local `origin` remote via
-  `{skill-dir}/scripts/yeet-context.sh issue`
+  `<skill-dir>/scripts/yeet-context.sh issue`
 - ELSE: ERROR "Couldn't figure out the issue. Pass `owner/repo#123` or a GitHub issue URL."
 
 Everything after the issue identifier is the **comment context** — the user's description of what they want to say. May
@@ -37,8 +37,11 @@ Always read the issue before writing the comment — never generate a reply base
 tone/terminology should match the thread.
 
 ```bash
-{skill-dir}/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
+<skill-dir>/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
 ```
+
+Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`. Before writing, load
+`posting.md > External-disclosure Review` and review the exact comment body.
 
 Analyze:
 
@@ -140,7 +143,8 @@ Display the verified anchored URL with the `### ✅ Comment posted` receipt from
 
 The URL with the comment anchor is returned by `gh` on success — parse it from the output.
 
-On failure: show the specific error (auth, permissions, locked issue, etc.) and what to do. Do not retry automatically.
+On failure: follow `posting.md > Error Handling and Idempotency`; reread the issue comments before any retry and do not
+post a duplicate.
 
 ## Editing a Prior Comment
 

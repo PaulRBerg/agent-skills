@@ -14,8 +14,12 @@ See `context.md > Auth Validation` for GitHub authentication. The repository con
 **Collect repo context once:**
 
 ```bash
-{skill-dir}/scripts/yeet-context.sh repo
+<skill-dir>/scripts/yeet-context.sh repo
 ```
+
+Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`. Before pushing or creating the PR,
+load `posting.md > External-disclosure Review` and review the exact title, body, reviewers, labels, and branch contents
+that will be published.
 
 Use `repository.defaultBranchRef.name` as the default base branch unless args specify a base.
 
@@ -63,7 +67,7 @@ Use an admonition only for a material warning that would otherwise be missed.
 ## Check for Existing PR
 
 ```bash
-gh pr list --head $(git branch --show-current) --json number,url --jq '.[0]' 2>/dev/null
+gh pr list --state all --head $(git branch --show-current) --json number,url --jq '.[0]' 2>/dev/null
 ```
 
 IF existing PR found: ERROR "PR already exists for this branch: $URL". Do not create or update.

@@ -56,6 +56,10 @@ specified.
 
 ## Create the Issue
 
+Run `posting.md > External-disclosure Review` on the title, body, labels, and attachments before posting. Follow
+`posting.md > Error Handling and Idempotency` after any failure; a label or metadata failure never authorizes issue
+recreation.
+
 ```bash
 gh issue create \
   --repo "sablier-labs/{repo_name}" \

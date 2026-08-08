@@ -1,94 +1,76 @@
 # Discussion Creation Workflow
 
-Create GitHub discussions using the GraphQL API with automatic category selection and optional template support.
+Create a GitHub discussion with the native `gh discussion` command. Load [posting.md](posting.md) before the write.
 
 ## Validate Prerequisites
 
-See `context.md > Auth Validation`. The repository context read below is the auth check.
+Requires authenticated GitHub CLI >= 2.97.0. See `context.md > Auth Validation`; the repository-context read is the auth
+check. Handle image options through `context.md > Image Uploads`, then run `posting.md > External-disclosure Review` on
+the final title, body, labels, and attachments.
 
 ## Parse Repository Argument
 
-- If first token matches "owner/repo": use it as repository
-- Otherwise: infer from the local `origin` remote via `{skill-dir}/scripts/yeet-context.sh repo`
-- Error if not in a repo and no explicit repository provided
+- If the first token matches `owner/repo`, use it as the repository.
+- Otherwise infer the repository from the local `origin` remote via `<skill-dir>/scripts/yeet-context.sh repo`.
+- Error if no repository can be inferred and none was supplied.
 
-Parse `--check`; handle image options through `context.md > Image Uploads`.
+Parse `--check`; resolve `<skill-dir>` as the absolute directory containing the owning `SKILL.md`.
 
 ## Collect Repository Context
 
-Fetch repo id, categories, and discussion-template tree once:
+Fetch repository identity, live categories, and discussion-template entries once:
 
 ```bash
-{skill-dir}/scripts/yeet-context.sh repo "{owner}/{repo}" --discussion-categories --discussion-templates
+<skill-dir>/scripts/yeet-context.sh repo "<owner>/<repo>" --discussion-categories --discussion-templates
 ```
 
-If the repository was inferred from the current Git repo, omit `{owner}/{repo}`. Store `repository.id`,
-`repository.discussionCategories.nodes`, and `repository.discussionTemplateTree.entries`.
+Cache `repository.discussionCategories.nodes` and `repository.discussionTemplateTree.entries`. Treat every live
+category's `name`, `slug`, and `description` as authoritative. Do not use a static category table.
 
 ## Check for Similar Discussions (Optional)
 
-If `--check` flag is present:
+If `--check` is present, search title/body terms in every state and show matches without adding a confirmation gate:
 
-1. Extract key terms from description
+```bash
+gh discussion list --repo "<owner>/<repo>" --state all --search "<key terms>" \
+  --limit 10 --json number,title,url,closed
+```
 
-2. Search:
-
-   ```bash
-   gh search discussions "{key_terms}" --repo "{owner}/{repo}" --limit 10 --json number,title,url
-   ```
-
-3. IF found: display a compact `### 🔎 Similar discussions` table, say `Creation is continuing`, then continue without
-   blocking on confirmation
-
-4. IF none found: inform user, continue
+Display matches under `### 🔎 Similar discussions`, say `Creation is continuing`, and continue. If the create command
+later fails, follow `posting.md > Error Handling and Idempotency` before retrying; never recreate a possible match.
 
 ## Select Discussion Category
 
-Infer best category from description:
-
-| Keywords                                                  | Category      |
-| --------------------------------------------------------- | ------------- |
-| "idea", "proposal", "suggest", "would be nice", "feature" | Ideas         |
-| "how do I", "help", "question", "why does", "what is"     | Q&A           |
-| "built", "made", "created", "sharing", "check out"        | Show and Tell |
-| "vote", "poll", "which", "prefer"                         | Polls         |
-| General conversation, feedback, meta-discussion           | General       |
-
-Default to **General** or **Ideas** if uncertain.
+Infer a category from the user's title and description by matching the live `name`, `slug`, and `description`. A
+supplied category may match its exact name or slug. If no category matches, or more than one category is plausible, stop
+and ask the user to choose from the live candidates with their descriptions. Never default to a guessed or invented
+category.
 
 ## Check for Discussion Templates
 
-Use `repository.discussionTemplateTree.entries` from the cached context. Keep entries ending in `.yml` or `.yaml`.
+Keep live template-tree entries ending in `.yml` or `.yaml`. A discussion form filename normally matches the category
+slug. If multiple templates match, stop and ask the user to choose; if none matches, use the selected category without a
+form.
 
-### If Templates Found
+For a selected form, fetch it from the default branch:
 
-1. Select template matching category slug (e.g., `ideas.yml` for Ideas)
+```bash
+gh api repos/<owner>/<repo>/contents/.github/DISCUSSION_TEMPLATE/<template-name> --jq '.content' | base64 -d
+```
 
-2. After selecting the template, fetch and parse:
-
-   ```bash
-   gh api repos/{owner}/{repo}/contents/.github/DISCUSSION_TEMPLATE/{template_name} --jq '.content' | base64 -d
-   ```
-
-3. Parse YAML: `title` (prefix), `body` array (fields with `type`, `id`, `attributes`)
-
-4. Field types: `textarea`/`input` → section header; `dropdown` → select option; `checkboxes` → check only attestations
-   verified from repository/user evidence; `markdown` → skip. If a required checkbox cannot be verified, stop for the
-   missing fact rather than auto-acknowledging it.
-
-### If No Templates Found
-
-Use default structure (see below).
+Parse `title`, `labels`, and `body`. If labels are declared, fetch the live label set with
+`<skill-dir>/scripts/yeet-context.sh labels "<owner>/<repo>"`; preserve declared labels whose exact live names match,
+deduplicate, and pass them with `--label`. Stop for a declared label that is not live rather than inventing it. For
+`textarea`/`input`, render a section header; for `dropdown`, select only a live option; for `checkboxes`, check an
+attestation only when repository or user evidence verifies it. Stop for any required checkbox whose attestation cannot
+be verified. Skip `markdown` fields.
 
 ## Generate Title and Body
 
-See `writing.md > Informal Tone` for tone guidance.
+See `writing.md > Informal Tone`.
 
-**Title**: If template has `title` field, prepend it. Otherwise create clear summary (5-10 words).
-
-**Body with template**: Generate `### {field.attributes.label}` sections matching template fields.
-
-**Body without template**:
+If the form supplies a title prefix, prepend it. Otherwise write a clear 5–10-word title. Render form fields as
+`### <field label>` sections. Without a form, use:
 
 ```markdown
 ## Context
@@ -104,45 +86,33 @@ See `writing.md > Informal Tone` for tone guidance.
 [Background information, if applicable]
 ```
 
-Use ordinary GitHub Markdown only where it improves this discussion. See `context.md > Platform String Normalization` if
-OS details are required.
+If images were requested, complete `context.md > Image Uploads` before the disclosure review.
 
-If images were requested, complete `context.md > Image Uploads` before creating the discussion.
+## Create and Verify the Discussion
 
-## Create the Discussion
+Use the live category name or slug and the native command:
 
 ```bash
-gh api graphql -f query='
-  mutation($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
-    createDiscussion(input: {
-      repositoryId: $repositoryId
-      categoryId: $categoryId
-      title: $title
-      body: $body
-    }) {
-      discussion { url }
-    }
-  }
-' -f repositoryId="$REPO_ID" -f categoryId="$CAT_ID" -f title="$TITLE" -f body="$BODY"
+gh discussion create --repo "<owner>/<repo>" \
+  --category "<category-name-or-slug>" \
+  --title "<title>" \
+  --body-file "<body-file>" \
+  --label "<template-labels>"
 ```
 
-Display the verified URL with the `### 🚀 Discussion created` receipt from `SKILL.md`.
+Omit `--label` when no labels apply. Read the returned URL (or list the distinctive title in `--state all`) to verify
+the discussion, then display the `### 🚀 Discussion created` receipt from `SKILL.md`. On any ambiguous result, follow
+`posting.md` and do not rerun creation.
 
 ## Examples
 
-```bash
+```text
 # Simple discussion in current repository
 "Proposal for adding dark mode support"
 
 # Explicit repository
 PaulRBerg/dotfiles "Ideas for improving the zsh setup"
 
-# Another repository
-vercel/next.js "Question about server components caching"
-
-# With --check flag
+# With a non-blocking duplicate search
 --check "How to configure custom routes"
-
-# Explicit repository with --check
-facebook/react --check "Proposal for new hook API"
 ```

@@ -5,7 +5,17 @@ if [ "$(uname -s 2>/dev/null)" != "Darwin" ]; then
   exit 0
 fi
 
-name=$(awk -F 'macOS ' '/SOFTWARE LICENSE AGREEMENT FOR macOS/{gsub(/[0-9]+\.*/, "", $2); gsub(/\\.*/, "", $2); print $2; exit}' "/System/Library/CoreServices/Setup Assistant.app/Contents/Resources/en.lproj/OSXSoftwareLicense.rtf" 2>/dev/null | tr -d ' ')
+license_file=${MACOS_LICENSE_FILE:-/System/Library/CoreServices/Setup Assistant.app/Contents/Resources/en.lproj/OSXSoftwareLicense.rtf}
+name=$(awk -F 'macOS ' '/SOFTWARE LICENSE AGREEMENT FOR macOS/ {
+  value = $2
+  sub(/\\.*$/, "", value)
+  sub(/[0-9]+[.].*$/, "", value)
+  gsub(/[{}]/, "", value)
+  sub(/^[[:space:]]+/, "", value)
+  sub(/[[:space:]]+$/, "", value)
+  print value
+  exit
+}' "$license_file" 2>/dev/null)
 version=$(sw_vers -productVersion 2>/dev/null)
 
 if [ -z "$version" ]; then

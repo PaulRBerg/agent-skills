@@ -25,7 +25,7 @@ Rules:
 - ELSE IF first token matches `{owner}/{repo}`: use it as repository; next token must be the issue number (strip leading
   `#`)
 - ELSE IF first token matches `#?{number}`: use it as issue number, infer repo from the local `origin` remote via
-  `{skill-dir}/scripts/yeet-context.sh issue`
+  `<skill-dir>/scripts/yeet-context.sh issue`
 - ELSE: ERROR "Couldn't figure out the issue. Pass `owner/repo#123` or a GitHub issue URL."
 
 Everything after the issue identifier is the **update instructions** — natural-language description of what to change.
@@ -35,26 +35,40 @@ Everything after the issue identifier is the **update instructions** — natural
 Always read the issue before editing — never regenerate based on the user's instructions alone.
 
 ```bash
-{skill-dir}/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
+<skill-dir>/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
 ```
+
+Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`. Before any write, load
+`posting.md > External-disclosure Review` and `posting.md > Error Handling and Idempotency`.
 
 ## Interpret Update Instructions
 
 Parse the instructions naturally — multiple intents may apply at once:
 
-| Intent          | Cue words                                          | `gh issue edit` flag                  |
-| --------------- | -------------------------------------------------- | ------------------------------------- |
-| Update title    | "title", "rename", quoted text passed as new title | `--title`                             |
-| Regenerate body | "description", "body", "rewrite"                   | `--body`                              |
-| Append to body  | "add to body", "append"                            | `--body` (preserve existing + append) |
-| Add images      | `--image <path>`                                   | `--body` after shared image upload    |
-| Add labels      | "label X", "tag as X", "add label"                 | `--add-label`                         |
-| Remove labels   | "unlabel", "remove label"                          | `--remove-label`                      |
-| Assign user     | "assign X", "assign to X", `@user`                 | `--add-assignee`                      |
-| Unassign user   | "unassign X"                                       | `--remove-assignee`                   |
-| Set milestone   | "milestone X"                                      | `--milestone`                         |
-| Close           | "close", "resolve"                                 | `gh issue close` (separate command)   |
-| Reopen          | "reopen"                                           | `gh issue reopen` (separate command)  |
+| Intent            | Cue words                                          | `gh issue edit` flag                                 |
+| ----------------- | -------------------------------------------------- | ---------------------------------------------------- |
+| Update title      | "title", "rename", quoted text passed as new title | `--title`                                            |
+| Regenerate body   | "description", "body", "rewrite"                   | `--body`                                             |
+| Append to body    | "add to body", "append"                            | `--body` (preserve existing + append)                |
+| Add images        | `--image <path>`                                   | `--body` after shared image upload                   |
+| Add labels        | "label X", "tag as X", "add label"                 | `--add-label`                                        |
+| Remove labels     | "unlabel", "remove label"                          | `--remove-label`                                     |
+| Set issue type    | "type X", "classify as X"                          | `--type`                                             |
+| Remove issue type | "remove type"                                      | `--remove-type`                                      |
+| Set parent        | "make sub-issue of X", "parent X"                  | `--parent`                                           |
+| Remove parent     | "remove parent"                                    | `--remove-parent`                                    |
+| Add sub-issues    | "add sub-issue X"                                  | `--add-sub-issue`                                    |
+| Remove sub-issues | "remove sub-issue X"                               | `--remove-sub-issue`                                 |
+| Add blocked-by    | "blocked by X"                                     | `--add-blocked-by`                                   |
+| Remove blocked-by | "remove blocked-by X"                              | `--remove-blocked-by`                                |
+| Add blocking      | "blocking X"                                       | `--add-blocking`                                     |
+| Remove blocking   | "remove blocking X"                                | `--remove-blocking`                                  |
+| Assign user       | "assign X", "assign to X", `@user`                 | `--add-assignee`                                     |
+| Unassign user     | "unassign X"                                       | `--remove-assignee`                                  |
+| Set milestone     | "milestone X"                                      | `--milestone`                                        |
+| Close             | "close", "resolve"                                 | `gh issue close` (separate command)                  |
+| Close duplicate   | "duplicate of X", "close as duplicate"             | `gh issue close --duplicate-of X --reason duplicate` |
+| Reopen            | "reopen"                                           | `gh issue reopen` (separate command)                 |
 
 If user provides only an issue identifier with no instructions, ERROR: "Tell me what to update — title, body, images,
 labels, assignees, or state."
@@ -108,6 +122,12 @@ gh issue edit {number} --repo "{owner}/{repo}" \
   --add-assignee "user1" \
   --remove-assignee "user2"
 
+# Type, hierarchy, and dependency metadata
+gh issue edit {number} --repo "{owner}/{repo}" --type "Bug"
+gh issue edit {number} --repo "{owner}/{repo}" --parent 100
+gh issue edit {number} --repo "{owner}/{repo}" --add-sub-issue 123
+gh issue edit {number} --repo "{owner}/{repo}" --add-blocked-by 200 --add-blocking 300
+
 # Combined edit
 gh issue edit {number} --repo "{owner}/{repo}" \
   --title "$new_title" \
@@ -120,14 +140,18 @@ State changes use separate commands:
 ```bash
 gh issue close {number}  --repo "{owner}/{repo}" [--comment "..."] [--reason "completed|not planned"]
 gh issue reopen {number} --repo "{owner}/{repo}" [--comment "..."]
+
+# Close as a duplicate and record the canonical issue
+gh issue close {number} --repo "{owner}/{repo}" \
+  --duplicate-of {canonical-number-or-url} --reason duplicate
 ```
 
 See `writing.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
 
 Display the verified URL with the `### ✅ Issue updated` receipt from `SKILL.md` and a one-line summary of what changed.
 
-On failure: show the specific error (auth, permissions, missing label, locked issue) and what to do. Do not retry
-automatically.
+On failure: reread the issue, follow `posting.md > Error Handling and Idempotency`, and show the specific error (auth,
+permissions, missing label, locked issue) and next action. Do not retry automatically.
 
 ## Examples
 

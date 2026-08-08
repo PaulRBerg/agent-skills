@@ -1,13 +1,13 @@
 # Discussion Update Workflow
 
 Update an existing GitHub discussion's title, body, category, labels, or images with `gh discussion edit`. Discussion
-state changes and comment editing are outside this workflow.
+state changes and comment editing belong to `comment-discussion.md`. Load [posting.md](posting.md) before the write.
 
 ## Validate Prerequisites
 
-The installed GitHub CLI must provide `gh discussion view` and `gh discussion edit`. These commands are in preview; if
-either is unavailable, stop and tell the user to upgrade GitHub CLI rather than inventing a GraphQL fallback. The
-discussion read below is the authentication check.
+The installed GitHub CLI must be authenticated and >= 2.97.0, with `gh discussion view` and `gh discussion edit`
+available. These commands are in preview; if either is unavailable, stop and tell the user to upgrade GitHub CLI rather
+than inventing a GraphQL fallback. The discussion read below is the authentication check.
 
 ## Parse Arguments
 
@@ -20,10 +20,11 @@ Accept these forms:
 - `https://github.com/{owner}/{repo}/discussions/{number} {update instructions}`
 
 For a URL, parse the owner, repository, and number. For `owner/repo#number`, split on `#`. For `owner/repo number`, use
-the first two tokens. For a local number, resolve the repository with `{skill-dir}/scripts/yeet-context.sh repo`. Reject
-other targets with: `Couldn't figure out the discussion. Pass owner/repo#123 or a GitHub discussion URL.` Everything
-after the target is the natural-language update instruction; parse repeated `--image <path>` and optional
-`--image-release` through `context.md > Image Uploads`.
+the first two tokens. For a local number, resolve the repository with `<skill-dir>/scripts/yeet-context.sh repo`.
+Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`. Reject other targets with:
+`Couldn't figure out the discussion. Pass owner/repo#123 or a GitHub discussion URL.` Everything after the target is the
+natural-language update instruction; parse repeated `--image <path>` and optional `--image-release` through
+`context.md > Image Uploads`.
 
 ## Fetch Discussion Context
 
@@ -60,7 +61,7 @@ images in the regenerated body.
 For a category change, fetch live categories with:
 
 ```sh
-{skill-dir}/scripts/yeet-context.sh repo "<owner>/<repo>" --discussion-categories
+<skill-dir>/scripts/yeet-context.sh repo "<owner>/<repo>" --discussion-categories
 ```
 
 Match the requested category against the live name or slug and reject an unknown category. For label additions, follow
@@ -83,8 +84,8 @@ gh discussion edit <number> --repo "<owner>/<repo>" \
 After the edit, repeat the context read and verify every requested field. Display its URL with the
 `### ✅ Discussion updated` receipt from `SKILL.md` and one line naming the changed fields.
 
-On failure, read the discussion again before any retry to determine whether GitHub applied the update. Do not retry
-automatically; report the concrete error, observed state, and next action.
+On failure, read the discussion again and follow `posting.md > Error Handling and Idempotency` before any retry. Do not
+retry automatically; report the concrete error, observed state, and next action.
 
 ## Examples
 
