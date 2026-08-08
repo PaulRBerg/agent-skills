@@ -64,10 +64,9 @@ selected adapter may specialize host mechanics and manifest configuration, but i
 - Keep the parent agent's implementation work to orchestration, integrity checks, failure handling, and the conditional
   polish passes.
 - Treat an explicit user model preference, such as GPT-5.6 Luna, as an orchestration constraint. Apply it to every
-  implementation agent unless the user scopes it more narrowly; do not replace it with the adapter's usual
+  research and implementation agent unless the user scopes it more narrowly; do not replace it with the adapter's usual
   Luna/Terra/Sol selection based on task complexity. If the selected host cannot launch that model, report the
-  incompatibility and ask before using a fallback. Research keeps its adapter default unless the user explicitly
-  includes research agents in the preference.
+  incompatibility and ask before using a fallback.
 - Treat the approved outcome, not the initial agent manifest or its write scopes, as the authorization boundary. When
   implementation reveals a related in-repository fix or evidence change required to achieve that outcome, the parent is
   fully authorized to extend the handoff and launch follow-on implementation agents for the newly discovered scope
