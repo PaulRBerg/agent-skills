@@ -70,6 +70,9 @@ both skill entrypoints and keep them semantically identical, adjusted only for t
   no-redesign rule for implementation agents; the smallest-effective-team and eight-implementation-agent limits; the
   brief-sizing rule that splits any brief likely to exceed roughly 25-30 minutes; and parent implementation work being
   limited to orchestration, integrity checks, failure handling, and the conditional polish passes.
+- User model preferences: an explicit preference overrides the normal task-complexity model selection for every research
+  and implementation agent unless the user narrows its scope; an unavailable preferred model requires user approval
+  before fallback.
 - Follow-on authorization: the approved outcome, not the initial manifest or worker write scopes, is the authorization
   boundary; workers stop and report newly discovered out-of-scope prerequisites, while the parent extends the manifest,
   coordinates the new scope, and delegates the smallest sufficient in-repository fix without asking the user again.
@@ -124,9 +127,9 @@ Treat these as out of scope unless the request explicitly names them:
   dangerous bypass behavior, and subprocess command conventions.
 - Codex-adapter-only content: harness concurrency limits, fresh-context spawning, native steering and waiting, inherited
   sandbox and approval controls, and native progress rendering.
-- Each skill's model configuration and its rules about re-running a failed agent. They are intentionally different — the
-  codex-handoff adapters choose GPT-5.6 model and effort tiers, while claude-handoff pins every subagent to `sonnet` —
-  so never normalize them.
+- Each skill's default model configuration and its rules about re-running a failed agent. The defaults are intentionally
+  different — the codex-handoff adapters choose GPT-5.6 model and effort tiers, while claude-handoff uses the default
+  Explore model for research and `sonnet` for implementation — so never normalize them.
 - Status reporting: the Claude adapter's dashboard system versus both native hosts' concise progress and completion
   reports.
 - Frontmatter and `references/`/`scripts/` contents.
