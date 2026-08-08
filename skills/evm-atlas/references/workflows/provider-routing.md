@@ -97,10 +97,17 @@ For historical state requests:
    support it.
 3. When a numeric block fallback is required, use the verified block number and retain the same-endpoint
    block-number/hash consistency checks immediately before and after the request batch.
-4. Treat pruning, missing-trie/state-unavailable errors, malformed data, or a failed block-identity check as a coverage
+4. Some chain RPCs silently ignore historical block selectors and return successful, well-formed latest state for
+   `eth_getBalance`, `eth_getTransactionCount`, or other state methods. For an RPC whose archive behavior is unproven,
+   cross-check one known-old selector against an independent historical source, such as an Etherscan-family historical
+   endpoint or explorer historical-balance view. A mismatch, especially when the RPC's old-block value equals
+   independently observed latest state, indicates latest-only substitution. Treat the RPC's historical state as unusable
+   for that chain and method, not merely for that request; absence of an error is not evidence of historical
+   correctness.
+5. Treat pruning, missing-trie/state-unavailable errors, malformed data, or a failed block-identity check as a coverage
    failure. Try the ordered independent RPC fallback; if that cannot serve the request, report the state as unknown.
    Never turn the failure into a zero balance or empty state.
-5. On an error or suspicious `null`, retain the CLI-provided batch ID for traceability, but never persist a credential.
+6. On an error or suspicious `null`, retain the CLI-provided batch ID for traceability, but never persist a credential.
 
 Do not rerun a failed RouteMesh command arbitrarily. The CLI already performs its bounded retry policy, and another
 attempt does not promise a different archive-capable pathway on repeat.
