@@ -53,7 +53,36 @@ alone.
 The helper returns project coverage, ranked candidate sessions, task themes, correction and failure signals,
 verification signals, tool-call counts, and `privacy_gaps` categories. It redacts common secret-like values and emits no
 transcript excerpts. Scores and counts select candidates only; validate every reported finding against the relevant
-transcript body.
+transcript body. `keyword_hits` counts eligible `(message, keyword)` pairs, not repeated substring occurrences.
+
+Source ownership is structural and precedes relevance scoring:
+
+- Codex uses `session_meta.payload.cwd`; when absent, it accepts sampled `turn_context.cwd` values only when all resolve
+  under one requested project.
+- Claude reconciles the encoded project directory, top-level transcript `cwd`, and `history.jsonl.project` when a
+  history record exists. Conflicts are excluded rather than guessed.
+- A cwd equal to or below multiple requested roots belongs to the longest, most-specific root. A transcript is emitted
+  at most once, and project strings in messages, context, tool inputs, or tool outputs never establish ownership.
+
+The live `CODEX_THREAD_ID` or `CLAUDE_SESSION_ID` transcript is excluded by default. Use `--include-current` only when
+diagnosing the miner or intentionally inspecting the active session.
+
+Candidate signals use delineated channels. `user` is actual task text, preferring Claude history `display`; `assistant`
+is plain assistant message text; injected AGENTS, skill, environment, permission, collaboration, abort, and command
+envelopes are ignored `context`; and `tool` contributes names plus structured error status or nonzero exit codes only.
+Serialized tool inputs and raw outputs never contribute keywords or behavioral regex signals. Identical eligible
+messages are deduplicated within each channel.
+
+Each project coverage record retains `codex_candidates`, `claude_candidates`, and `selected_sessions`.
+`codex_candidates` and `claude_candidates` mean structurally owned sessions, including sessions that did not meet the
+keyword relevance requirement. Additional fields make selection and exclusions auditable:
+
+- `codex_scanned`, `claude_scanned`, `structurally_matched`, and `relevance_matched` describe source coverage;
+- `current_sessions_excluded`, `content_only_project_mentions_ignored`, and `ambiguous_ownership_excluded` count
+  distinct session files, not occurrences;
+- candidate `ownership` records `matched_via`, canonical `cwd`, and assigned `project`;
+- candidate `signal_channels` records eligible user and assistant message counts, ignored context, and structured tool
+  failures.
 
 If the first pass is weak, make one broader-keyword pass. Add `--include-archived` only for the final bounded fallback.
 Empty output after those passes is a coverage gap, not proof that no relevant behavior exists.
@@ -67,8 +96,11 @@ under:
 <claude-config>/projects/<absolute-path-with-nonalphanumerics-replaced-by-dashes>/
 ```
 
-The helper also checks the legacy slash-only encoding. Validate the decoded project path or transcript metadata before
-reading a body.
+The helper parses `<claude-config>/history.jsonl` once, indexing source-native `project`, `sessionId`, and user-authored
+`display` fields. History relevance preselects sessions before their transcript bodies are sampled, so an older relevant
+session remains discoverable behind any number of newer irrelevant files. Sessions without history records use bounded
+head/tail transcript sampling. The helper also checks the legacy slash-only project encoding and excludes directory,
+cwd, or history disagreements.
 
 Codex uses `CODEX_HOME`, defaulting to `~/.codex`:
 
@@ -89,7 +121,8 @@ handling, and external-disclosure boundary.
 2. For Codex, search unarchived transcript metadata for the exact absolute project path. Search archives only after the
    unarchived pass is insufficient.
 3. If exact matching is suspiciously empty, use the repository basename only to identify candidates, then reject every
-   candidate whose metadata or cwd does not resolve to the current or a task-relevant project.
+   candidate whose source-native metadata or cwd does not resolve to the current or a task-relevant project. Never use a
+   content occurrence as ownership evidence.
 4. Filter candidates with the task keywords before opening bodies. Inspect at most five unless evidence conflicts or the
    user requested exhaustive coverage.
 

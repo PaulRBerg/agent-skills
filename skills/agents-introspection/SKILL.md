@@ -56,11 +56,14 @@ names, issue IDs, and skill names.
 
 1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
    the chosen keywords and `--max-sessions 8`.
-2. Treat miner scores, themes, and correction, failure, verification, tool, or `privacy_gaps` counts only as
-   candidate-ranking signals. They are heuristic and are never evidence by themselves.
-3. Validate that each candidate's project metadata or cwd resolves to the current or a task-relevant project before
-   opening it. Inspect up to five highest-relevance transcript bodies, stopping earlier when the evidence bar is met.
-   Include a comparable successful session when available.
+2. Treat source ownership as a miner invariant: every candidate is assigned once from source-native cwd, directory, and
+   history metadata, never from transcript content. Review `ownership`; reject a candidate only when fallback ownership
+   such as `turn_context.cwd` remains materially ambiguous for the task. The miner excludes conflicting ownership
+   evidence and the live session by default.
+3. Treat miner scores, themes, and correction, failure, verification, tool, or `privacy_gaps` counts only as
+   candidate-ranking signals. They are heuristic and are never evidence by themselves. Inspect up to five
+   highest-relevance transcript bodies, stopping earlier when the evidence bar is met. Include a comparable successful
+   session when available.
 4. If evidence is insufficient, retry once with broader keywords. If unarchived history still lacks signal, retry once
    with `--include-archived`.
 5. Exceed these bounds only to resolve contradictory evidence or satisfy an explicitly exhaustive request. If the helper
