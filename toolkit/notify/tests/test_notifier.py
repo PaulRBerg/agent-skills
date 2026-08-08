@@ -10,6 +10,7 @@ from ai_notify.notifier import (
     DETAIL_EXCERPT_LENGTH,
     TASK_EXCERPT_LENGTH,
     MacNotifier,
+    _build_focus_command,
     _format_context_message,
 )
 
@@ -20,6 +21,12 @@ class TestMacNotifier:
     @pytest.fixture
     def notifier(self):
         return MacNotifier()
+
+    @pytest.fixture(autouse=True)
+    def _clear_iterm_session(self, monkeypatch):
+        # Ambient ITERM_SESSION_ID (set when tests run inside iTerm2) would otherwise
+        # make the -execute vs -activate branch nondeterministic across dev machines/CI.
+        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
 
     def test_check_available_true(self, notifier, mocker):
         # Mock platform and terminal-notifier availability
@@ -148,6 +155,77 @@ class TestMacNotifier:
         cmd = mock_run.call_args[0][0]
         activate_idx = cmd.index("-activate") + 1
         assert cmd[activate_idx] == "com.example.MyApp"
+
+    def test_send_notification_uses_execute_when_iterm_session_present(
+        self, notifier, mocker, monkeypatch
+    ):
+        notifier._available = True
+        monkeypatch.setenv("ITERM_SESSION_ID", "w0t0p0:8FC1AAA5-2AA5-40D4-A410-1234567890AB")
+        mocker.patch("ai_notify.notifier.shutil.which", return_value="/opt/homebrew/bin/it2")
+
+        mock_run = mocker.patch("ai_notify.notifier.subprocess.run")
+        mock_run.return_value.returncode = 0
+        mocker.patch.object(notifier, "_get_icon_path", return_value=None)
+
+        result = notifier.send_notification("Test", "Subtitle")
+        assert result is True
+
+        cmd = mock_run.call_args[0][0]
+        assert "-activate" not in cmd
+        assert "-execute" in cmd
+        execute_arg = cmd[cmd.index("-execute") + 1]
+        assert "/opt/homebrew/bin/it2" in execute_arg
+        assert "8FC1AAA5-2AA5-40D4-A410-1234567890AB" in execute_arg
+        assert "session focus" in execute_arg
+        assert "open -b com.googlecode.iterm2" in execute_arg
+
+    def test_send_notification_falls_back_when_it2_missing(self, notifier, mocker, monkeypatch):
+        notifier._available = True
+        monkeypatch.setenv("ITERM_SESSION_ID", "w0t0p0:8FC1AAA5-2AA5-40D4-A410-1234567890AB")
+        mocker.patch("ai_notify.notifier.shutil.which", return_value=None)
+
+        mock_run = mocker.patch("ai_notify.notifier.subprocess.run")
+        mock_run.return_value.returncode = 0
+        mocker.patch.object(notifier, "_get_icon_path", return_value=None)
+
+        result = notifier.send_notification("Test", "Subtitle")
+        assert result is True
+
+        cmd = mock_run.call_args[0][0]
+        assert "-execute" not in cmd
+        assert "-activate" in cmd
+        assert cmd[cmd.index("-activate") + 1] == "com.googlecode.iterm2"
+
+    def test_build_focus_command_without_session_id(self, monkeypatch):
+        monkeypatch.delenv("ITERM_SESSION_ID", raising=False)
+        assert _build_focus_command("com.googlecode.iterm2") is None
+
+    def test_build_focus_command_without_it2(self, mocker, monkeypatch):
+        monkeypatch.setenv("ITERM_SESSION_ID", "w0t0p0:UUID-VALUE")
+        mocker.patch("ai_notify.notifier.shutil.which", return_value=None)
+        assert _build_focus_command("com.googlecode.iterm2") is None
+
+    def test_build_focus_command_parses_session_uuid(self, mocker, monkeypatch):
+        monkeypatch.setenv("ITERM_SESSION_ID", "w2t3p0:8FC1AAA5-2AA5-40D4-A410-1234567890AB")
+        mocker.patch("ai_notify.notifier.shutil.which", return_value="/usr/local/bin/it2")
+
+        command = _build_focus_command("com.googlecode.iterm2")
+
+        assert command is not None
+        assert "/usr/local/bin/it2" in command
+        assert "session focus" in command
+        assert "8FC1AAA5-2AA5-40D4-A410-1234567890AB" in command
+        assert "w2t3p0" not in command
+        assert command.endswith("|| open -b com.googlecode.iterm2")
+
+    def test_build_focus_command_handles_session_id_without_colon(self, mocker, monkeypatch):
+        monkeypatch.setenv("ITERM_SESSION_ID", "8FC1AAA5-2AA5-40D4-A410-1234567890AB")
+        mocker.patch("ai_notify.notifier.shutil.which", return_value="/usr/local/bin/it2")
+
+        command = _build_focus_command("com.googlecode.iterm2")
+
+        assert command is not None
+        assert "8FC1AAA5-2AA5-40D4-A410-1234567890AB" in command
 
     def test_send_notification_terminal_notifier_fails(self, notifier, mocker):
         notifier._available = True

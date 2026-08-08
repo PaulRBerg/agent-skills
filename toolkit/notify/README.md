@@ -16,6 +16,9 @@ notifications for key events.
 - Python 3.13+
 - [uv](https://github.com/astral-sh/uv) package manager
 - [terminal-notifier](https://github.com/julienXX/terminal-notifier) app: Install with `brew install terminal-notifier`
+- (optional) [it2](https://github.com/mkusaka/it2) CLI (`uv tool install it2`) with iTerm2's Python API enabled
+  (`iTerm2 > Settings > General > Magic > Enable Python API`): lets clicking a notification focus the exact iTerm2
+  session that produced it, instead of only activating the app
 
 ### Installation
 

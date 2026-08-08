@@ -2,7 +2,9 @@
 Notification layer using terminal-notifier for macOS notifications.
 """
 
+import os
 import platform
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +16,43 @@ from ai_notify.config import Config, get_runtime_config
 
 TASK_EXCERPT_LENGTH = 100
 DETAIL_EXCERPT_LENGTH = 180
+
+
+def _build_focus_command(app_bundle: str) -> Optional[str]:
+    """
+    Build a shell command that focuses the exact iTerm2 session that produced the
+    notification, falling back to activating the app if the focus fails.
+
+    Uses the `ITERM_SESSION_ID` environment variable (format `w0t0p0:UUID`) captured
+    at notification time, and the `it2` CLI (iTerm2 Python API client) to focus that
+    session by ID. Returns None when the session can't be identified or `it2` isn't
+    available, so the caller can fall back to plain app activation.
+
+    Args:
+        app_bundle: Bundle ID to activate if focusing the specific session fails
+
+    Returns:
+        A shell command string suitable for terminal-notifier's -execute, or None
+    """
+    try:
+        session_id_raw = os.environ.get("ITERM_SESSION_ID")
+        if not session_id_raw:
+            return None
+
+        it2_path = shutil.which("it2")
+        if not it2_path:
+            logger.debug("it2 CLI not found; falling back to plain app activation")
+            return None
+
+        # ITERM_SESSION_ID looks like "w0t0p0:UUID"; it2 expects the bare UUID.
+        session_id = session_id_raw.split(":", 1)[-1]
+
+        focus_cmd = f"{shlex.quote(it2_path)} session focus {shlex.quote(session_id)}"
+        activate_cmd = f"open -b {shlex.quote(app_bundle)}"
+        return f"{focus_cmd} || {activate_cmd}"
+    except Exception as e:
+        logger.debug(f"Failed to build iTerm2 session focus command: {e}")
+        return None
 
 
 def _truncate_text(value: str, limit: int) -> str:
@@ -135,15 +174,15 @@ class MacNotifier:
                 # terminal-notifier requires a message; retain the existing
                 # two-argument behavior without duplicating the subtitle.
                 cmd.extend(["-message", subtitle])
-            cmd.extend(
-                [
-                    "-ignoreDnD",
-                    "-activate",
-                    runtime_config.notification.app_bundle,
-                    "-sound",
-                    runtime_config.notification.sound,
-                ]
-            )
+            cmd.append("-ignoreDnD")
+
+            focus_command = _build_focus_command(runtime_config.notification.app_bundle)
+            if focus_command:
+                cmd.extend(["-execute", focus_command])
+            else:
+                cmd.extend(["-activate", runtime_config.notification.app_bundle])
+
+            cmd.extend(["-sound", runtime_config.notification.sound])
 
             # Add icon as content image if available (contentImage instead of appIcon due to macOS API restrictions)
             icon_path = self._get_icon_path()
