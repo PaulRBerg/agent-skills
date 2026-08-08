@@ -49,16 +49,18 @@ git rev-parse HEAD
 
 ### 3. Claim Target Repositories
 
-Use the refreshed planner's non-empty groups to derive every installed skill directory that `apply` can change. Claim
-only those directories, grouped by their containing Git repository:
+Use the refreshed planner's non-empty groups to derive every installed skill directory that `apply` can change, grouped
+by their containing Git repository:
 
-- `shared`: `~/.agents/skills/<name>` and `~/.claude/skills/<name>`.
+- `shared`: `~/.agents/skills/<name>` and the `~/.claude/skills/<name>` symlink.
 - `claude`: `~/.claude/skills/<name>`.
 - `codex`: `~/.agents/skills/<name>`.
 - `remove`: every existing target directory for the named skill that the planner reports.
 
-For each affected target that is a Git repository, run its normal coordination preflight from that repository root, then
-claim the derived repository-relative directories before applying:
+`ai-coord` holds at most one active work item per session, so claims in different repositories cannot be held at the
+same time: serialize them. Before `apply`, claim only the repository receiving the canonical file mutations —
+`~/.agents` when any `shared` or `codex` group is non-empty, otherwise `~/.claude` — from that repository root after its
+normal coordination preflight:
 
 ```bash
 git status --short
@@ -68,10 +70,15 @@ ai-coord start 'publish-skills targets' \
   --recursive 'skills/<name-b>'
 ```
 
-Require `READY` for every target claim before `apply`. On a dirty-settling hold or conflict, use the normal
-`ai-coord wait` flow. If the planner changes while waiting, release obsolete claims, re-plan, and claim the refreshed
-target set. The CLI state lock is not a repository scope: its exclusive process lock already serializes it, and it is
-never a commit path.
+Use `--recursive` only for a path that is a real directory; `ai-coord` rejects a recursive scope on a symlink, so claim
+the `~/.claude/skills/<name>` symlink of a shared install as a plain file scope without `--recursive`.
+
+Require `READY` before `apply`. For every other affected target repository, run `ai-coord status` from its root
+immediately before `apply` and require that no session has active or queued work intersecting the derived paths there; a
+conflict means wait or re-plan, never an `apply` over contested paths. On a dirty-settling hold or conflict, use the
+normal `ai-coord wait` flow. If the planner changes while waiting, release the obsolete claim, re-plan, and claim the
+refreshed target set. The CLI state lock is not a repository scope: its exclusive process lock already serializes it,
+and it is never a commit path.
 
 For a `shared` replacement, an existing correct Claude symlink is not a mutation target. The current `skills` installer
 resolves the canonical and Claude endpoints and returns before unlinking or recreating the symlink when they already
@@ -81,8 +88,9 @@ still resolves to the canonical install. Before relying on this exception after 
 no-op behavior. Do not use the exception for a missing or incorrect symlink, a target-restriction change, or a source
 deletion; the remove step can mutate those Claude paths, so they retain the normal target-claim requirement.
 
-Keep target claims until the corresponding reported repository changes are committed and pushed, or until that target
-has no Git diff. Release each with `ai-coord done` before re-planning a partial apply or after finalization.
+Keep the pre-apply claim until its repository's reported changes are committed and pushed, or until that repository has
+no Git diff; release it with `ai-coord done` before claiming the next target repository in step 5 or before re-planning
+a partial apply.
 
 ### 4. Apply Once
 
@@ -103,10 +111,14 @@ report the failed command, completed groups, and changed paths.
 
 ### 5. Commit and Push Reported Global Paths
 
-Group `Changed global paths` under `~/.agents` and `~/.claude`. In each repository with a reported diff, invoke
-`$commit --push` under its already-held target claim and pass only the reported skill paths as session-modified paths,
-including deletions. Never acquire a new claim after `apply`, or include unreported skills, unrelated dirty paths, or
-the CLI state lock. Skip repositories with no reported diff.
+Group `Changed global paths` under `~/.agents` and `~/.claude`. Commit the repositories serially, one claim at a time:
+first the repository whose claim is still held from step 3, then each remaining repository with a reported diff. For
+each remaining repository, claim exactly its reported skill paths from its root — file scope for symlinks — and require
+`READY`; an `UNKNOWN dirty-settling:` hold on paths `apply` just created is normal and self-resolving, so wait it out
+with the standard `ai-coord wait` flow and retry the claim. In each claimed repository, invoke `$commit --push` and pass
+only the reported skill paths as session-modified paths, including deletions, then release the claim with
+`ai-coord done`. Claims acquired after `apply` must cover only paths `apply` reported; never include unreported skills,
+unrelated dirty paths, or the CLI state lock. Skip repositories with no reported diff.
 
 ### 6. Require a Clean Final Check
 
