@@ -4,7 +4,7 @@ compatibility:
   Requires Bash 3.2, Git, local file-write access, and macOS trash. Default finalization also requires macOS pbcopy and
   pbpaste; `finalize --no-clipboard` does not. Generated launch commands require authenticated Codex and Claude CLIs.
 coordination: exempt
-disable-model-invocation: true
+disable-model-invocation: false
 name: task-handoff
 user-invocable: true
 description:
