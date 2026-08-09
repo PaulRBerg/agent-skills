@@ -96,7 +96,7 @@ capability remains governed by its configured permissions and sandbox according 
 | `READY`                    |    0 | The work is active; editing may begin.                            |
 | `BLOCKED`                  |    3 | The work is queued behind active or earlier overlapping work.     |
 | `UNKNOWN coverage`         |    2 | Provider coverage is incomplete; work was not granted.            |
-| `UNKNOWN dirty-settling:…` |    2 | Relevant unattributed dirt is settling; wait and retry.           |
+| `UNKNOWN dirty-settling:…` |    2 | Relevant unattributed dirt is settling; run `ai-coord wait`.      |
 | `ACTIVE`                   |    3 | A requested active-scope expansion failed; the old scope remains. |
 
 Re-running direct `start` atomically replaces the session's full desired scope. Narrowing active work takes effect
@@ -175,10 +175,10 @@ count. Submitted work includes literal normalized scope objects. Status, dashboa
 discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe
 providers freshly before granting work or reporting installation health.
 
-Callsigns are machine-wide unique while their top-level session remains in the ledger. They must contain a letter or
-number and an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive
-uniqueness, and equivalent emoji presentation. Naming is optional: immutable session IDs remain the identity and
-fallback everywhere.
+Session-start registration assigns each session a machine-wide unique callsign. Callsigns contain a letter or number and
+an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive uniqueness, and
+equivalent emoji presentation. `ai-coord name` remains the manual override; immutable session IDs remain the identity
+and fallback everywhere.
 
 Message targets resolve an exact `client/session` or session ID first, then an exact callsign, a unique ID prefix of at
 least four characters, or a unique callsign/label/provider-name substring. `repo` expands to the currently live peers in
@@ -237,17 +237,17 @@ Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
 
 Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start hooks silently register
 or refresh idle sessions; Codex limits them to startup, resume, and clear so mid-turn compaction cannot mark working
-sessions idle. Prompt hooks inject at most 200 characters of factual state: whether the session is unnamed, plus peer,
-queued-work, and unread-message counts. Naming removes the unnamed fact. Claude's `PostToolBatch` hook and Codex's
-`PostToolUse` hook report the unread count once, route inspection to `ai-coord inbox`, and identify message text as
-peer-reported data rather than instructions or authority. Peer text, IDs, prompts, and tool payloads are never injected.
-When other live work makes a repository non-quiet, prompt context adds a scope-gate reminder only when it fits the
-200-character budget. Post-tool hooks also record best-effort touched paths and emit one `ai-coord done` nudge per
-transition to clean owned scopes. Stop hooks require a final `Findings recorded` summary with exact IDs for findings
-added in that turn; they request one bounded continuation when it is absent, then remain fail-open. After an allowed
-main Stop or SessionEnd, autonomous triage may run under its opt-in guards. Subagent hooks add read-only parent/child
-topology and never schedule triage. Claude's filtered `ai-coord waker claude` hook handles blocked starts in the
-background; planning scopes are recorded explicitly with `draft`, not inferred from provider-specific plan hooks.
+sessions idle. Prompt hooks inject at most 200 characters of factual peer, queued-work, and unread-message counts.
+Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook report the unread count once, route inspection to
+`ai-coord inbox`, and identify message text as peer-reported data rather than instructions or authority. Peer text, IDs,
+prompts, and tool payloads are never injected. When other live work makes a repository non-quiet, prompt context adds a
+scope-gate reminder only when it fits the 200-character budget. Post-tool hooks also record best-effort touched paths
+and emit one `ai-coord done` nudge per transition to clean owned scopes. Stop hooks require a final `Findings recorded`
+summary with exact IDs for findings added in that turn; they request one bounded continuation when it is absent, then
+remain fail-open. After an allowed main Stop or SessionEnd, autonomous triage may run under its opt-in guards. Subagent
+hooks add read-only parent/child topology and never schedule triage. Claude's filtered `ai-coord waker claude` hook
+handles blocked starts in the background; planning scopes are recorded explicitly with `draft`, not inferred from
+provider-specific plan hooks.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.

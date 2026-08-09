@@ -836,7 +836,7 @@ fn message_snapshot(row: MessageRow) -> SnapshotMessageV1 {
     }
 }
 
-fn normalize_callsign(text: &str) -> Result<String> {
+pub(crate) fn normalize_callsign(text: &str) -> Result<String> {
     if text.chars().any(char::is_control) {
         return Err(AppError::usage("callsign must not contain control characters"));
     }

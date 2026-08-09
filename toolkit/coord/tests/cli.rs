@@ -385,6 +385,40 @@ fn draft_and_direct_start_require_scopes_and_draft_promotion_is_exclusive() {
 }
 
 #[test]
+fn directory_scope_errors_include_copy_paste_ready_recursive_commands() {
+    let fixture = Fixture::new();
+
+    for (arguments, expected) in [
+        (
+            ["start", "regenerate all reports", "src"].as_slice(),
+            "re-run: ai-coord start --recursive 'src' 'regenerate all reports'",
+        ),
+        (
+            ["draft", "regenerate all reports", "src"].as_slice(),
+            "re-run: ai-coord draft --recursive 'src' 'regenerate all reports'",
+        ),
+        (
+            ["start", "--recursive", "regenerate all reports", "src"].as_slice(),
+            "re-run: ai-coord start --recursive 'src' 'regenerate all reports'",
+        ),
+    ] {
+        let output = fixture.output(arguments);
+        assert_eq!(output.status.code(), Some(64));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains(expected));
+    }
+}
+
+#[test]
+fn labels_that_fail_scope_normalization_do_not_break_validation() {
+    let fixture = Fixture::new();
+
+    let output = fixture.output(&["draft", "fix [2025] *reports* under ~", "tracked.txt"]);
+    assert_eq!(output.status.code(), Some(0), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "DRAFT\t1\n");
+}
+
+#[test]
 fn promotion_revalidates_paths_and_repository_without_consuming_the_draft() {
     let fixture = Fixture::new();
     let mut host = spawn_synthetic_host(&fixture, "revalidate-host");

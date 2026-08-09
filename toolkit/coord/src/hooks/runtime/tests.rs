@@ -12,7 +12,7 @@ use super::*;
 use crate::{
     coordinator::{Clock, InventoryObservation, ProviderInventory},
     domain::{InventoryResult, ProcessFingerprint, ProcessLiveness, ProcessProbe, ProviderReport},
-    state::{FindingAdd, Store},
+    state::{FindingAdd, SessionUpdate, Store},
 };
 
 struct AliveProbe;
@@ -271,6 +271,49 @@ fn prompt_presence_is_counts_only() {
     assert!(output.contains("Peers: 1"));
     assert!(!output.contains("peer-secret-id"));
     assert!(!output.contains("PRIVATE"));
+}
+
+#[test]
+fn session_start_assigns_unique_normalized_callsigns() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let first = Identity { client: Client::Codex, session_id: "first".into() };
+    let callsign = generated_callsign(&first, 0);
+    let second = (0..4_096)
+        .map(|index| Identity { client: Client::Codex, session_id: format!("collision-{index}") })
+        .find(|identity| generated_callsign(identity, 0) == callsign)
+        .expect("wordlist combinations collide for a bounded set of session IDs");
+
+    let canonical_repo = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    let mut store = coordinator.store().unwrap();
+    store
+        .upsert_session(&SessionUpdate {
+            identity: first.clone(),
+            cwd: canonical_repo.clone(),
+            repo_root: Some(canonical_repo),
+            state: SessionState::Idle,
+            source: "test".into(),
+            name: None,
+            waiting_for: None,
+            permission_mode: None,
+            update_permission_mode: false,
+            fingerprint: None,
+            started_at: None,
+            current: 100.0,
+        })
+        .unwrap();
+    store.set_session_callsign(&first, &callsign).unwrap();
+    drop(store);
+    runtime.ingest("codex", &json!({"session_id":second.session_id, "cwd":repo, "hook_event_name":"SessionStart"}));
+
+    let store = coordinator.store().unwrap();
+    let first_callsign = store.session(&first).unwrap().unwrap().callsign.unwrap();
+    let second_callsign = store.session(&second).unwrap().unwrap().callsign.unwrap();
+    assert_eq!(first_callsign, normalize_callsign(&first_callsign).unwrap());
+    assert_eq!(second_callsign, normalize_callsign(&second_callsign).unwrap());
+    assert_ne!(first_callsign, second_callsign);
+    assert_eq!(second_callsign, generated_callsign(&second, 1));
 }
 
 #[test]

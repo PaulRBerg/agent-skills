@@ -8,7 +8,7 @@ use std::{
 use serde_json::{Value, json};
 
 use crate::{
-    coordinator::Coordinator,
+    coordinator::{Coordinator, normalize_callsign},
     domain::{Client, Identity, Outcome, SessionState, WorkState},
     error::{AppError, Result},
     host::{git_dirty_paths, git_root, host_process_reference, normalize_scopes, relevant_dirty},
@@ -22,9 +22,11 @@ const MAX_FINDING_REASON_CHARS: usize = 8_000;
 const MAX_FINDING_SUMMARY_CHARS: usize = 160;
 const WAKER_TIMEOUT_SECONDS: u64 = 3_480;
 const WAKER_POLL_SECONDS: f64 = 1.0;
-const CALLSIGN_NUDGE: &str =
-    "ai-coord: Session unnamed; `ai-coord name '<callsign>'` assigns a short, funny callsign containing an emoji.";
 const PERMISSION_MODES: &[&str] = &["default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"];
+const CALLSIGN_ADJECTIVES: &[&str] = &["Brisk", "Clever", "Daring", "Gentle", "Keen", "Lucky", "Mighty", "Swift"];
+const CALLSIGN_NOUNS: &[&str] = &["Badger", "Comet", "Falcon", "Lynx", "Otter", "Panda", "Raven", "Tiger"];
+const CALLSIGN_EMOJI: &[&str] = &["🦊", "🐙", "🦀", "🐝", "🦉", "🐬", "🦄", "🦜"];
+const AUTO_CALLSIGN_RETRIES: usize = 32;
 
 trait LifecycleTriageScheduler: Sync {
     fn schedule(&self, coordinator: &Coordinator, cwd: &Path, identity: &Identity);
@@ -125,7 +127,10 @@ impl<'a> HookRuntime<'a> {
             current: self.coordinator.now(),
         };
         if event == "SessionStart" {
-            store.upsert_session_superseding(&update)?;
+            let session = store.upsert_session_superseding(&update)?;
+            if session.callsign.is_none() {
+                assign_auto_callsign(&mut store, &identity);
+            }
         } else {
             store.upsert_session(&update)?;
         }
@@ -291,9 +296,6 @@ fn prompt_context(
     current: f64,
 ) -> Result<String> {
     let mut parts = Vec::new();
-    if store.session(identity)?.is_none_or(|row| row.callsign.is_none()) {
-        parts.push(CALLSIGN_NUDGE.to_owned());
-    }
     if let Some(root) = root {
         let dirty = git_dirty_paths(root).unwrap_or_default();
         let root = path_text(root)?;
@@ -338,6 +340,31 @@ fn prompt_context(
         }
     }
     Ok(sanitize(&parts.join(" "), MAX_PRESENCE_CHARS))
+}
+
+fn assign_auto_callsign(store: &mut crate::state::Store, identity: &Identity) {
+    for attempt in 0..AUTO_CALLSIGN_RETRIES {
+        let callsign = normalize_callsign(&generated_callsign(identity, attempt))
+            .expect("built-in auto-callsigns satisfy callsign validation");
+        if store.set_session_callsign(identity, &callsign).is_ok() {
+            return;
+        }
+    }
+}
+
+fn generated_callsign(identity: &Identity, attempt: usize) -> String {
+    let seed = identity
+        .session_id
+        .bytes()
+        .chain(client_name(identity.client).bytes())
+        .fold(14_695_981_039_346_656_037_u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(1_099_511_628_211));
+    let combinations = CALLSIGN_ADJECTIVES.len() * CALLSIGN_NOUNS.len() * CALLSIGN_EMOJI.len();
+    let index = (seed as usize).wrapping_add(attempt) % combinations;
+    let emoji = CALLSIGN_EMOJI[index % CALLSIGN_EMOJI.len()];
+    let noun = CALLSIGN_NOUNS[(index / CALLSIGN_EMOJI.len()) % CALLSIGN_NOUNS.len()];
+    let adjective =
+        CALLSIGN_ADJECTIVES[(index / (CALLSIGN_EMOJI.len() * CALLSIGN_NOUNS.len())) % CALLSIGN_ADJECTIVES.len()];
+    format!("{emoji} {adjective} {noun}")
 }
 
 fn touched_paths(payload: &Value, cwd: &Path, root: &Path) -> Vec<String> {

@@ -75,7 +75,7 @@ async fn execute(cli: Cli) -> Result<u8> {
             Ok(0)
         }
         Command::Draft(arguments) => {
-            validate_scopes(&arguments.paths, &arguments.recursive_paths, "draft")?;
+            validate_scopes(&arguments.paths, &arguments.recursive_paths, "draft", &arguments.label)?;
             let outcome = Coordinator::open_default()?.draft(
                 &arguments.label,
                 &arguments.paths,
@@ -90,7 +90,12 @@ async fn execute(cli: Cli) -> Result<u8> {
             let outcome = if arguments.draft {
                 coordinator.promote_draft(&std::env::current_dir()?)?
             } else {
-                validate_scopes(&arguments.paths, &arguments.recursive_paths, "start")?;
+                validate_scopes(
+                    &arguments.paths,
+                    &arguments.recursive_paths,
+                    "start",
+                    arguments.label.as_deref().expect("clap requires a direct-start label"),
+                )?;
                 coordinator.start(
                     arguments.label.as_deref().expect("clap requires a direct-start label"),
                     &arguments.paths,
@@ -276,7 +281,12 @@ fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
         OutcomeKind::Unknown if outcome.detail == "coverage" =>
             "ai-coord: Ownership cannot be established; do not edit, and re-run `ai-coord start` after coverage recovers.".to_owned(),
         OutcomeKind::Unknown if outcome.detail.starts_with("dirty-settling:") =>
-            "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and keep waiting via wait or the waker.".to_owned(),
+            match client {
+                Some(Client::Claude) =>
+                    "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and let the Claude waker re-arbitrate.".to_owned(),
+                _ =>
+                    "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and run `ai-coord wait`.".to_owned(),
+            },
         OutcomeKind::Active =>
             "ai-coord: The old edit scope remains active because the requested expansion failed; inspect the result before retrying.".to_owned(),
         OutcomeKind::Message =>
@@ -290,14 +300,101 @@ fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
     }
 }
 
-fn validate_scopes(files: &[PathBuf], recursive: &[PathBuf], operation: &str) -> Result<()> {
+fn validate_scopes(files: &[PathBuf], recursive: &[PathBuf], operation: &str, label: &str) -> Result<()> {
     if files.is_empty() && recursive.is_empty() {
         return Err(AppError::usage("at least one scope is required"));
     }
     let cwd = std::env::current_dir()?;
     let root =
         host::git_root(&cwd).ok_or_else(|| AppError::operational(format!("{operation} requires a Git worktree")))?;
+    if let Some((directory, command)) = corrected_directory_command(files, recursive, operation, label, &cwd, &root)? {
+        return Err(AppError::usage(format!("directory scope requires --recursive: {directory}\nre-run: {command}")));
+    }
+    if let Some((misordered_label, command)) =
+        corrected_recursive_order(files, recursive, operation, label, &cwd, &root)?
+    {
+        return Err(AppError::usage(format!(
+            "recursive scope is not a directory: {misordered_label}\nre-run: {command}"
+        )));
+    }
     host::normalize_work_scopes(files, recursive, &cwd, &root).map(|_| ())
+}
+
+fn corrected_directory_command(
+    files: &[PathBuf],
+    recursive: &[PathBuf],
+    operation: &str,
+    label: &str,
+    cwd: &Path,
+    root: &Path,
+) -> Result<Option<(String, String)>> {
+    let files = host::normalize_scopes(files, cwd, root)?;
+    let recursive = host::normalize_scopes(recursive, cwd, root)?;
+    let directories = files
+        .iter()
+        .filter(|path| {
+            let candidate = root.join(path);
+            !std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink()) &&
+                candidate.is_dir()
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let Some(directory) = directories.first().cloned() else {
+        return Ok(None);
+    };
+    let exact = files.into_iter().filter(|path| !directories.contains(path)).collect::<Vec<_>>();
+    let recursive = recursive.into_iter().chain(directories).collect::<Vec<_>>();
+    Ok(Some((directory, corrected_command(operation, &recursive, label, &exact))))
+}
+
+fn corrected_recursive_order(
+    files: &[PathBuf],
+    recursive: &[PathBuf],
+    operation: &str,
+    label: &str,
+    cwd: &Path,
+    root: &Path,
+) -> Result<Option<(String, String)>> {
+    // Labels are free text, not paths: a label that fails scope normalization can never be a misordered directory.
+    let Ok(label_scope) = host::normalize_scopes(&[PathBuf::from(label)], cwd, root) else {
+        return Ok(None);
+    };
+    let Some(directory) = label_scope.first().filter(|path| root.join(path).is_dir()) else {
+        return Ok(None);
+    };
+    let recursive = host::normalize_scopes(recursive, cwd, root)?;
+    let Some(misordered_label) = recursive
+        .iter()
+        .find(|path| {
+            !root.join(path).is_dir() ||
+                std::fs::symlink_metadata(root.join(path)).is_ok_and(|metadata| metadata.file_type().is_symlink())
+        })
+        .cloned()
+    else {
+        return Ok(None);
+    };
+    let files = host::normalize_scopes(files, cwd, root)?;
+    let corrected_recursive = recursive
+        .into_iter()
+        .filter(|path| path != &misordered_label)
+        .chain(std::iter::once(directory.clone()))
+        .collect::<Vec<_>>();
+    let command = corrected_command(operation, &corrected_recursive, &misordered_label, &files);
+    Ok(Some((misordered_label, command)))
+}
+
+fn corrected_command(operation: &str, recursive: &[String], label: &str, files: &[String]) -> String {
+    let recursive = recursive.iter().map(|path| format!("--recursive {}", shell_quote(path))).collect::<Vec<_>>();
+    let files = files.iter().map(|path| shell_quote(path)).collect::<Vec<_>>();
+    [format!("ai-coord {operation}"), recursive.join(" "), shell_quote(label), files.join(" ")]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 fn finding_kind(value: FindingKindArg) -> FindingKind {
@@ -707,5 +804,15 @@ mod tests {
             assert!(guidance.starts_with("ai-coord: "), "{guidance}");
             assert!(!guidance.contains('\n'), "{guidance}");
         }
+    }
+
+    #[test]
+    fn dirty_settling_guidance_routes_codex_to_wait() {
+        let guidance =
+            outcome_guidance(&Outcome::new(OutcomeKind::Unknown, 2, "dirty-settling:README.md"), Some(Client::Codex));
+        assert_eq!(
+            guidance,
+            "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and run `ai-coord wait`."
+        );
     }
 }
