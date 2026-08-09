@@ -265,17 +265,14 @@ When `context: fork` is set, `agent` selects the subagent type.
 `coordination: exempt` is a repository-specific field, not a Claude Code or Codex feature: the agent reads it from the
 skill body at invocation time, and the global agent instructions define its meaning.
 
-Set it only for skills that can never write repository files: pure read-only or reporting skills, skills that write only
-external or out-of-repository state (GitHub, Notion, on-chain), or repository-local metadata-only skills such as
-`task-handoff`. Skills that edit repository files must not set it.
+Set it only when the skill's declared default workflow writes no repository files or only repository metadata.
+Explicitly authorized work that escalates beyond that declared behavior must enter the ai-coord gate.
 
-An exempt skill skips the ai-coord coordination gate (`git status` / `ai-coord status` / `ai-coord start`) for its own
-work. Pair the field with one standard body sentence near the top of the skill so the executing agent sees the exemption
-without consulting the frontmatter:
+An exempt skill skips the ai-coord gate for its declared work. Pair the field with one standard body sentence near the
+top of the skill so the executing agent sees the exemption without consulting the frontmatter:
 
 ```markdown
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
-skill's own work.
+This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 ```
 
-If a skill's work escalates beyond its declared write behavior, the gate applies again.
+Explicitly authorized escalation beyond the declared write behavior re-enters the gate.

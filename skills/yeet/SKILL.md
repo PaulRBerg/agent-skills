@@ -17,8 +17,7 @@ description:
 
 # GitHub Contribution Workflows
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
-skill's own work.
+This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 
 Create or update GitHub contributions from repository evidence, using the matching workflow's templates, idempotency
 rules, and Paul's writing voice.

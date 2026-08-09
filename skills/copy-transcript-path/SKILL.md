@@ -13,8 +13,7 @@ description: Copy the active Claude Code or Codex CLI chat transcript path to th
 
 Copy the active chat's transcript path to the clipboard.
 
-This skill is coordination-exempt: skip the ai-coord gate (`git status` / `ai-coord status` / `ai-coord start`) for this
-skill's own work.
+This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 
 ## Supported Chat Hosts
 

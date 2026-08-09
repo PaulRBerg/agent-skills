@@ -76,6 +76,9 @@ Before launching agents, do not hold a path-scoped session claim over any path i
 orchestrator intent with a pathless label only; the delegated agents own per-path claims. Tell every agent that the
 orchestrating session's presence authorizes its assigned work and is not a conflict.
 
+The ai-coord session that performs writes owns the claim. Each separately spawned Codex CLI process registers its own
+session, so each delegate claims its assigned paths rather than the Claude host parent.
+
 For every agent, create separate per-agent artifact paths ending in `<agent-id>.progress.jsonl`,
 `<agent-id>.result.json`, and `<agent-id>.stderr.log` under `${TMPDIR:-/tmp}`. Convert its approved whole-minute timeout
 to seconds only at the wrapper boundary, then start the runner from anywhere inside the target Git worktree as a

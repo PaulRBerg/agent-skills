@@ -70,10 +70,7 @@ class SkillDoctorAdvisoryTests(unittest.TestCase):
         self.assertEqual(report["counts"]["findings"], 0)
 
     def test_accepts_matching_coordination_exemption(self) -> None:
-        sentence = (
-            "This skill is coordination-exempt: skip the ai-coord gate "
-            "(`git status` / `ai-coord status` / `ai-coord start`) for this skill's own work."
-        )
+        sentence = "This skill is coordination-exempt: skip the ai-coord gate for its declared work."
         report = self.run_doctor(
             self.make_catalog("sonnet", f"{sentence}\n\n## Completion\n\nReport verified output.", coordination="exempt")
         )

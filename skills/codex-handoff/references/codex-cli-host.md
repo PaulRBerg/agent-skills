@@ -60,10 +60,10 @@ model selection. Do not add artificial timeout budgets: native agent lifetime an
 
 ## Execution Mechanics
 
-The parent session owns the coordination claim for every delegated write scope. Native subagents share that session
-ownership and must never run `ai-coord start`, `ai-coord wait`, or `ai-coord done`. Include this fact in every worker
-prompt so the parent's claim is treated as authorization rather than a conflict; unrelated claims on the exact assigned
-scope can still block work.
+The ai-coord session that performs writes owns the claim. Native Codex subagents inherit the parent session identity, so
+the parent owns the coordination claim for every delegated write scope and subagents must never run `ai-coord start`,
+`ai-coord wait`, or `ai-coord done`. Include this fact in every worker prompt so the parent's claim is treated as
+authorization rather than a conflict; unrelated claims on the exact assigned scope can still block work.
 
 After plan approval and exit from Plan mode, call `spawn_agent` for each implementation worker with:
 

@@ -44,10 +44,7 @@ COMPLETION_EVIDENCE_RE = re.compile(
 REQUIREMENT_RE = re.compile(r"\b(?:always|must(?!\s+not\b)|required to)\s+([^.!?\n]+)", re.IGNORECASE)
 PROHIBITION_RE = re.compile(r"\b(?:do not|don't|never|must not|forbid(?:s|den)?)\s+([^.!?\n]+)", re.IGNORECASE)
 STALE_MODEL_PINS = {"opus"}
-COORDINATION_EXEMPT_SENTENCE = (
-    "This skill is coordination-exempt: skip the ai-coord gate "
-    "(`git status` / `ai-coord status` / `ai-coord start`) for this skill's own work."
-)
+COORDINATION_EXEMPT_SENTENCE = "This skill is coordination-exempt: skip the ai-coord gate for its declared work."
 COORDINATION_EXEMPT_MENTION_RE = re.compile(r"\bThis\s+skill\s+is\s+coordination-exempt\b", re.IGNORECASE)
 
 
