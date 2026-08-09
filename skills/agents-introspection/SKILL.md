@@ -53,6 +53,9 @@ Read `references/transcript-sources.md`, resolve the current project with `pwd -
 local projects, and choose 3–6 short, discriminative keywords from relevant filenames, commands, tools, errors, package
 names, issue IDs, and skill names.
 
+In a Codex read-only sandbox, or whenever `uv` cannot write its cache, skip the helper and go directly to the Manual
+Fallback below; do not retry `uv run`.
+
 1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
    the chosen keywords, `--since 60d`, `--excerpts`, and `--max-sessions 8`. Encode synonyms as one OR-group keyword
    (`--keyword 'a|b'`) rather than separate `--keyword` flags.
