@@ -68,8 +68,13 @@ file, removing the new leading H1 only when it exactly matches the existing arch
 ## Completion
 
 Completion evidence is the helper's archive path plus archived and remaining task counts; a no-checked-task result is a
-successful no-op. Dry-run completion requires rendered paths/content with no filesystem changes. Finish with
-`### 📦 Archived <count> checked tasks` and concise TODO/archive/scope/count rows; use
-`### ✅ Nothing to archive — no files written` for a no-op and `### 🔎 Archive preview — no files written` for dry runs.
+successful no-op. Dry-run completion requires rendered paths/content with no filesystem changes, but the final message
+still follows the one-line formats below. Report the result as a single line (append a `(scope: "<hint>")` segment only
+when `--hint` was given), with the archive path relative to the repository root:
+
+- Success: `📦 Archived <n> → <archive path> (created|merged) · <remaining> remaining`
+- No-op: `✅ Nothing to archive · <remaining> remaining`
+- Dry run: `🔎 Would archive <n> → <archive path> (would create|would merge) · <remaining> would remain`
+
 Do not repeat full dry-run document content in the final message or add decoration to TODO/archive files, paths,
 commands, or helper diagnostics.
