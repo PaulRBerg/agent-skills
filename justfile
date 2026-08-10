@@ -14,6 +14,7 @@ evm_atlas_generator := "scripts/generate-evm-atlas.ts"
 skill_invocation_script := "scripts/sync-invocation-policy.ts"
 publish_skills_script := "scripts/publish-skills.ts"
 publish_skills_test := "scripts/publish-skills.test.ts"
+readme_skills_script := "scripts/readme-skills-check.ts"
 codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
 codex_handoff_wave_test := "tests/codex-handoff/test-watch-codex-wave.py"
 
@@ -154,6 +155,12 @@ alias psc := publish-skills-check
 @publish-skills-test:
     bun test {{ publish_skills_test }}
 alias pst := publish-skills-test
+
+# Check README skills tables match skills/ directories
+[group("checks")]
+@readme-skills-check:
+    bun run {{ readme_skills_script }}
+alias rsc := readme-skills-check
 
 # Type-check Bun TypeScript helper scripts without emitting JavaScript
 @typescript-check:

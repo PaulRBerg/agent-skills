@@ -61,6 +61,8 @@ type Plan = {
 type ProcessLock = { owner: string; token: string };
 type GlobalChanges = { lockChanged: boolean; paths: string[] };
 type TargetPaths = Record<"agents" | "claude" | "codex", string>;
+type ClaimScope = "file" | "recursive";
+type RepoClaim = { canonical: boolean; paths: Array<{ path: string; scope: ClaimScope }>; root: string };
 
 const repository = "PaulRBerg/agent-skills";
 const sourceUrl = "https://github.com/PaulRBerg/agent-skills.git";
@@ -86,7 +88,7 @@ try {
     process.exitCode = await applyPlan(options);
   } else {
     const plan = createPlan(options.skills);
-    printPlan(plan, options.json);
+    printPlan(plan, options.json, options.skills);
     if (options.command === "check" && plan.drifts.length > 0) process.exitCode = 1;
   }
 } catch (error) {
@@ -209,6 +211,8 @@ function readSourceSkills(): Map<string, SourceSkill> {
     const root = path.join(skillsRoot, entry.name);
     const skillFile = path.join(root, "SKILL.md");
     if (!isRegularFile(skillFile)) continue;
+    const frontmatter = readFrontmatter(skillFile);
+    validateFrontmatterName(skillFile, entry.name, frontmatter);
     const relativeFiles = sourceFiles
       .filter((sourcePath) => sourcePath.startsWith(`skills/${entry.name}/`))
       .map((sourcePath) => sourcePath.slice(`skills/${entry.name}/`.length));
@@ -216,7 +220,7 @@ function readSourceSkills(): Map<string, SourceSkill> {
       name: entry.name,
       root,
       snapshot: snapshotDirectory(root, relativeFiles),
-      target: readInstallTarget(skillFile),
+      target: readInstallTarget(skillFile, frontmatter),
       treeHash: gitTreeHash(root, relativeFiles),
     });
   }
@@ -239,11 +243,14 @@ function readSourceFileIndex(): string[] {
     .filter((sourcePath) => sourcePath && nodeKind(path.join(config.sourceRoot, sourcePath)) !== "missing");
 }
 
-function readInstallTarget(skillFile: string): InstallTarget {
+function readFrontmatter(skillFile: string): string {
   const text = fs.readFileSync(skillFile, "utf8");
   const frontmatter = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   if (frontmatter === undefined) throw new Error(`${skillFile}: missing YAML frontmatter.`);
+  return frontmatter;
+}
 
+function readInstallTarget(skillFile: string, frontmatter: string): InstallTarget {
   const lines = frontmatter.split(/\r?\n/);
   let value: string | undefined;
   for (let index = 0; index < lines.length; index += 1) {
@@ -262,6 +269,18 @@ function readInstallTarget(skillFile: string): InstallTarget {
   if (value === "claude-code") return "claude";
   if (value === "codex") return "codex";
   throw new Error(`${skillFile}: invalid metadata.install-targets: ${JSON.stringify(value)}`);
+}
+
+function validateFrontmatterName(skillFile: string, directoryName: string, frontmatter: string): void {
+  for (const line of frontmatter.split(/\r?\n/)) {
+    const match = line.match(/^name:\s*(.*?)\s*$/);
+    if (match?.[1] === undefined) continue;
+    const value = stripYamlQuotes(match[1]);
+    if (value !== directoryName) {
+      throw new Error(`${skillFile}: frontmatter name "${value}" does not match directory "${directoryName}"`);
+    }
+    return;
+  }
 }
 
 function stripYamlQuotes(value: string): string {
@@ -794,20 +813,58 @@ function collectGlobalChanges(
   return { lockChanged, paths: changedPaths };
 }
 
-function printPlan(plan: Plan, json: boolean): void {
+function buildRepoClaims(plan: Plan): RepoClaim[] {
+  const perRoot = new Map<string, Map<string, ClaimScope>>();
+  const addPath = (root: string, relativePath: string, scope: ClaimScope): void => {
+    let paths = perRoot.get(root);
+    if (!paths) {
+      paths = new Map();
+      perRoot.set(root, paths);
+    }
+    if (paths.get(relativePath) !== "recursive") paths.set(relativePath, scope);
+  };
+
+  for (const name of plan.groups.shared) {
+    addPath(config.agentsRoot, `skills/${name}`, "recursive");
+    const claudeDrifted = plan.drifts.some((drift) => drift.skill === name && drift.target === "claude");
+    if (claudeDrifted) addPath(config.claudeRoot, `skills/${name}`, "file");
+  }
+  for (const name of plan.groups.claude) addPath(config.claudeRoot, `skills/${name}`, "recursive");
+  for (const name of plan.groups.codex) addPath(config.agentsRoot, `skills/${name}`, "recursive");
+  for (const name of plan.groups.remove) {
+    for (const [target, targetPath] of Object.entries(targetPaths(name)) as Array<[keyof TargetPaths, string]>) {
+      const kind = nodeKind(targetPath);
+      if (kind === "missing") continue;
+      const root = target === "agents" ? config.agentsRoot : target === "claude" ? config.claudeRoot : config.codexRoot;
+      addPath(root, `skills/${name}`, kind === "directory" ? "recursive" : "file");
+    }
+  }
+
+  const canonicalRoot = plan.groups.shared.length > 0 || plan.groups.codex.length > 0 ? config.agentsRoot : config.claudeRoot;
+  return [...perRoot.keys()].sort().map((root) => ({
+    canonical: root === canonicalRoot,
+    paths: [...perRoot.get(root)!.entries()]
+      .sort(([left], [right]) => compareNames(left, right))
+      .map(([claimPath, scope]) => ({ path: claimPath, scope })),
+    root,
+  }));
+}
+
+function printPlan(plan: Plan, json: boolean, filters: string[]): void {
   const driftSkills = [...new Set(plan.drifts.map((drift) => drift.skill))].sort();
   if (json) {
     console.log(
       JSON.stringify(
         {
-          candidateCount: plan.candidateNames.length,
           clean: plan.clean,
-          driftCount: plan.drifts.length,
           driftSkills,
           drifts: plan.drifts,
+          filters,
           groups: plan.groups,
-          selected: plan.selected,
-          version: 1,
+          head: git(["rev-parse", "HEAD"]),
+          repos: buildRepoClaims(plan),
+          selectedCount: plan.selected.length,
+          version: 2,
         },
         null,
         2,

@@ -7,13 +7,17 @@ import { afterEach, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 
 type InstallTarget = "claude-code" | "codex" | "shared";
-type Drift = { kind: string; skill: string };
+type Drift = { kind: string; skill: string; target: string };
+type RepoClaim = { canonical: boolean; paths: Array<{ path: string; scope: "file" | "recursive" }>; root: string };
 type PlanJson = {
   clean: boolean;
   drifts: Drift[];
   driftSkills: string[];
+  filters: string[];
   groups: Record<"claude" | "codex" | "remove" | "shared", string[]>;
-  selected: string[];
+  head: string;
+  repos: RepoClaim[];
+  selectedCount: number;
 };
 type LockEntry = Record<string, unknown>;
 type CliLock = { [key: string]: unknown; skills: Record<string, LockEntry>; version: number };
@@ -52,7 +56,10 @@ test("plan and check cover clean shared and restricted installs, content, modes,
   const clean = runJson(fixture, "plan", "--json");
   assert.equal(clean.result.status, 0, clean.result.stderr);
   assert.equal(clean.json.clean, true);
-  assert.deepEqual(clean.json.selected, ["alpha", "beta", "gamma"]);
+  assert.equal(clean.json.selectedCount, 3);
+  assert.deepEqual(clean.json.filters, []);
+  assert.equal(clean.json.head, fixture.head);
+  assert.deepEqual(clean.json.repos, []);
   assert.equal(run(fixture, "check").status, 0);
 
   fs.appendFileSync(path.join(fixture.agentsRoot, "skills", "alpha", "SKILL.md"), "drift\n");
@@ -60,9 +67,13 @@ test("plan and check cover clean shared and restricted installs, content, modes,
   fs.appendFileSync(path.join(fixture.claudeRoot, "skills", "beta", "SKILL.md"), "drift\n");
 
   const alpha = runJson(fixture, "plan", "--json", "--skill", "alpha");
-  assert.deepEqual(alpha.json.selected, ["alpha"]);
+  assert.equal(alpha.json.selectedCount, 1);
+  assert.deepEqual(alpha.json.filters, ["alpha"]);
   assert(alpha.json.drifts.some((drift) => drift.skill === "alpha" && drift.kind === "content"));
   assert(!alpha.json.drifts.some((drift) => drift.skill === "beta"));
+  assert.deepEqual(alpha.json.repos, [
+    { canonical: true, paths: [{ path: "skills/alpha", scope: "recursive" }], root: fixture.agentsRoot },
+  ]);
 
   const gamma = runJson(fixture, "plan", "--json", "--skill", "gamma");
   assert(gamma.json.drifts.some((drift) => drift.kind === "mode"));
@@ -91,6 +102,13 @@ test("planner detects target layout, symlink, deletion, and stale lock metadata"
   fs.cpSync(path.join(fixture.sourceRoot, "skills", "alpha"), path.join(fixture.agentsRoot, "skills", "gone"), {
     recursive: true,
   });
+  fs.symlinkSync(
+    path.relative(
+      path.join(fixture.claudeRoot, "skills"),
+      path.join(fixture.agentsRoot, "skills", "gone"),
+    ),
+    path.join(fixture.claudeRoot, "skills", "gone"),
+  );
 
   const { json, result } = runJson(fixture, "plan", "--json");
   assert.equal(result.status, 0, result.stderr);
@@ -104,6 +122,20 @@ test("planner detects target layout, symlink, deletion, and stale lock metadata"
   assert(hasDrift(json, "gamma", "lock-skill-folder-hash"));
   assert(json.groups.remove.includes("beta"));
   assert(json.groups.remove.includes("gone"));
+
+  const agentsClaim = json.repos.find((claim) => claim.root === fixture.agentsRoot);
+  const claudeClaim = json.repos.find((claim) => claim.root === fixture.claudeRoot);
+  assert(agentsClaim, "expected an agents-root claim");
+  assert(claudeClaim, "expected a claude-root claim");
+  assert.equal(agentsClaim.canonical, true);
+  assert.deepEqual(
+    agentsClaim.paths.find((entry) => entry.path === "skills/gone"),
+    { path: "skills/gone", scope: "recursive" },
+  );
+  assert.deepEqual(
+    claudeClaim.paths.find((entry) => entry.path === "skills/gone"),
+    { path: "skills/gone", scope: "file" },
+  );
 });
 
 test("planner rejects invalid source and CLI lock metadata", () => {
@@ -125,6 +157,16 @@ test("planner rejects invalid source and CLI lock metadata", () => {
   const versionResult = run(wrongVersion, "plan");
   assert.equal(versionResult.status, 2);
   assert.match(versionResult.stderr, /expected skills CLI lock version 3/);
+});
+
+test("planner rejects frontmatter name that does not match its directory", () => {
+  const fixture = createFixture();
+  const skillFile = path.join(fixture.sourceRoot, "skills", "beta", "SKILL.md");
+  const original = fs.readFileSync(skillFile, "utf8");
+  fs.writeFileSync(skillFile, original.replace("name: beta", "name: not-beta"));
+  const result = run(fixture, "plan");
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /does not match directory/);
 });
 
 test("apply batches one remove and one add per target group, then verifies clean state", () => {
