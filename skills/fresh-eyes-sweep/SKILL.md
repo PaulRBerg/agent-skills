@@ -4,7 +4,7 @@ compatibility: Requires Git and local command and edit access.
 disable-model-invocation: true
 name: fresh-eyes-sweep
 skill-dependencies:
-  - PaulRBerg/dot-agents#codebase-design
+  - codebase-design
   - code-polish
   - commit
 user-invocable: true

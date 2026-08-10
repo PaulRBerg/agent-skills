@@ -27,6 +27,7 @@ bunx skills add PaulRBerg/agent-skills
 | cli-coingecko        | CoinGecko CLI for prices and market data                                  |
 | cli-gh               | GitHub CLI operations                                                     |
 | cli-just             | Just command runner guidance                                              |
+| codebase-design      | Shared vocabulary and principles for designing deep modules               |
 | codex-handoff        | Delegate approved plans to Codex agents from Claude Code or Codex CLI     |
 | code-polish          | Simplify and/or risk-profiled review with autofix                         |
 | coingecko-open-page  | Open CoinGecko historical data page in Chromium                           |
