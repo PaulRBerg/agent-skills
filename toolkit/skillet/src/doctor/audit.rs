@@ -835,7 +835,7 @@ fn clean_reference(reference: &str) -> &str {
         .split(['#', '?'])
         .next()
         .unwrap_or_default()
-        .trim_end_matches(|character| matches!(character, '.' | ',' | ';' | ':' | ')' | ']' | '}' | '\'' | '"'))
+        .trim_end_matches(['.', ',', ';', ':', ')', ']', '}', '\'', '"'])
 }
 
 fn line_for(source: &str, needle: &str) -> Option<u64> {
