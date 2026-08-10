@@ -1,0 +1,41 @@
+{
+  "name": "ai-handoffs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "dev": "bun run src/dev.ts",
+    "build": "vite build",
+    "test": "vitest run",
+    "tsc-check": "tsc --noEmit",
+    "check": "bun run tsc-check && bun run test && bun run build",
+    "start": "bun run src/start.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.6.0",
+    "@shikijs/rehype": "4.4.3",
+    "lucide-react": "0.468.0",
+    "motion": "12.43.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "tailwind-merge": "3.6.0",
+    "tailwind-variants": "3.3.1",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/bun": "1.3.14",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.2.0",
+    "vitest": "4.1.10"
+  }
+}
+

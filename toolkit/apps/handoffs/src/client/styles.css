@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.prose {
+  h1,
+  h2,
+  h3 {
+    margin-top: 1.5rem;
+    font-weight: 600;
+  }
+
+  p,
+  ul,
+  ol,
+  pre {
+    margin-top: 1rem;
+  }
+
+  ul,
+  ol {
+    padding-left: 1.5rem;
+  }
+
+  ul {
+    list-style: disc;
+  }
+
+  ol {
+    list-style: decimal;
+  }
+
+  code,
+  pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  pre {
+    overflow-x: auto;
+    border-radius: 0.375rem;
+    background: rgb(15 23 42);
+    padding: 1rem;
+  }
+}
+
