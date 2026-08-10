@@ -1,0 +1,11 @@
+# directories
+.ai/
+.serena/
+__pycache__/
+.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# files
+settings.local.json
