@@ -1,8 +1,6 @@
 ---
 argument-hint: <skill-name>
-disable-model-invocation: false
 name: skill-writing
-user-invocable: true
 description:
   Use to create/scaffold/init a new agent skill under `.agents/skills` in the working directory where invoked.
 ---
@@ -148,14 +146,15 @@ Inline the basic case in `SKILL.md`, link advanced files for edge cases (`tracke
 
 ## Workflow
 
-### 1. Fetch Agent Skills Docs
+### 1. Fetch Format Docs
 
-Always fetch the latest spec before authoring frontmatter or content:
+Always fetch the latest portable and Claude Code references before authoring frontmatter or content:
 
-- https://agentskills.io
+- https://agentskills.io/specification
+- https://code.claude.com/docs/en/skills#frontmatter-reference
 
-Use `WebFetch` to confirm the current frontmatter schema, naming rules, and progressive-disclosure conventions. Do not
-guess — the spec evolves.
+Use `WebFetch` to confirm the current field shapes, naming rules, and progressive-disclosure conventions. Do not guess —
+the formats evolve.
 
 ### 2. Validate
 
@@ -200,12 +199,18 @@ Write `<scope>/.agents/skills/<name>/SKILL.md` with:
   by the complete identifier. Omit the field when no dependencies exist.
 - A short `# Title`.
 - A one-line summary of what the skill does.
-- `disable-model-invocation` and `user-invocable` fields set for Claude behavior. Omit only when intentionally relying
-  on Claude defaults: `disable-model-invocation: false`, `user-invocable: true`.
+- Add `disable-model-invocation: true` or `user-invocable: false` only when the skill differs from Claude's defaults.
+  Omit `disable-model-invocation: false` and `user-invocable: true` because absence already expresses those values.
 - Set `coordination: exempt` only when the skill's declared default workflow writes no repository files or only
-  repository metadata. This field uses the canonical body sentence
-  `This skill is coordination-exempt: skip the ai-coord gate for its declared work.` Explicitly authorized escalation
-  beyond the declared behavior re-enters the gate.
+  repository metadata. When selected, add this ordinary prose declaration to the new skill's body; the fence below is
+  documentation for this authoring skill, not its own declaration:
+
+  ```text
+  This skill is coordination-exempt: skip the ai-coord gate for its declared work.
+  ```
+
+  Explicitly authorized escalation beyond the declared behavior re-enters the gate.
+
 - `## Arguments` (if any) and a lean imperative workflow. Use fixed steps only when order matters; otherwise state the
   contract and let repository evidence guide execution.
 - Explicit links to every `references/` file the workflow may need, each with a one-line note describing _when_ to read
@@ -245,6 +250,8 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - `readlink "<scope>/.claude/skills/<name>"` resolves to the source directory.
 - `test -x` every `scripts/*` and `tests/*` executable so a missed `chmod` fails loudly instead of surfacing later as a
   permission error.
+- `ai-skillet doctor --root "<scope>/.agents/skills/<name>"` exits 0. This is the canonical local schema and policy
+  gate.
 - Finish with `### 🧩 Skill created: <name>`, a tree of created paths, and `### ✅ Verified` with the exact checks. Link
   both absolute source and symlink paths.
 - Offer to commit the new skill. When the host project's standing instructions require prompt commits, commit without
@@ -259,6 +266,8 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
   scalar, such as `leave: freeze` in `description`, makes that parser fail. Use an em dash or another safe separator, or
   quote the entire scalar.
 - "When to use" information belongs in `description` (discovery-time), not in the body (activation-time only).
+- Omit default-valued Claude invocation fields: absent `disable-model-invocation` means `false`, and absent
+  `user-invocable` means `true`.
 - Use imperative / infinitive form throughout `SKILL.md`.
 - All paths inside `SKILL.md` (e.g., `references/placeholder.md`, `scripts/example.sh`) are relative to the skill
   directory.

@@ -121,6 +121,11 @@ Keep the same ai-skillet minimum version, `0.1.0+`. Each consumer must invoke it
 directly (`map` for skill-map and skill-harmonization; `doctor` for skill-doctor), with no retired Python, uv, ripgrep,
 helper-resolution, wrapper, or fallback path.
 
+Keep `skill-doctor` authoritative for ai-skillet's complete extended-dialect contract: the portable, Claude Code, and
+repository field union; unknown-field, type, value, and cross-field diagnostics; redundant-default warnings; and the
+Markdown-aware coordination declaration. Preserve its report-only boundary for those findings and its narrow
+`--fix-safe` policy. Do not turn `doctor` into the primary command for the map consumers.
+
 ## Workflow
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git

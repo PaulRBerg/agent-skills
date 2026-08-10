@@ -66,6 +66,25 @@ Choose:
 When user-invoked skills multiply past what the human can remember, add a **router skill**: one user-invoked skill
 naming the others and when to reach for each. It can only hint, never fire them.
 
+## Frontmatter dialect
+
+Use `ai-skillet doctor --root '<skill-directory>'` as the canonical deterministic local validator. It accepts one
+extended top-level field union:
+
+- Portable Agent Skills fields: `name`, `description`, `license`, `compatibility`, `metadata`, and `allowed-tools`.
+- Claude Code fields: `when_to_use`, `argument-hint`, `arguments`, `disable-model-invocation`, `user-invocable`,
+  `disallowed-tools`, `model`, `effort`, `context`, `agent`, `background`, `hooks`, `paths`, and `shell`.
+- Repository fields: `coordination` and `skill-dependencies`.
+
+Unknown fields are errors. `metadata` is a string-to-string mapping; tool, argument, and path fields are strings or
+lists of strings; and `hooks` is a mapping. `effort` accepts `low`, `medium`, `high`, `xhigh`, or `max`; `context`
+accepts only `fork`; and `shell` accepts `bash` or `powershell`. `agent` and `background` require `context: fork`.
+
+Omit default-valued Claude invocation fields: absent `disable-model-invocation` means `false`, and absent
+`user-invocable` means `true`. Use portable-only validators such as `skills-ref` or `agentskills` only as optional
+distribution-boundary checks when a target explicitly requires the strict portable format; they are not authoritative
+for this repository's normal authoring workflow.
+
 ## Naming skills
 
 Prefer domain-first, noun-based skill names (`<domain>-<capability noun>`) over imperative verb-object names—for

@@ -15,8 +15,8 @@ Checklists for the three lifecycle operations on skills owned by this repository
 2. Do not use the `skill-writing` catalog skill for this: it scaffolds project skills in **other** repos, not this
    repo's own catalog.
 3. Add a row to the skills table in `README.md`.
-4. Run `just skill-invocation-check` (SKILL.md invocation fields match `agents/openai.yaml`) and
-   `just readme-skills-check`.
+4. Run `ai-skillet doctor --root 'skills/<name>'`, `just skill-invocation-check` (SKILL.md invocation fields match
+   `agents/openai.yaml`), and `just readme-skills-check`.
 5. Publish via `@publish-skills`.
 
 ## Rename (Catalog)
@@ -27,7 +27,9 @@ Checklists for the three lifecycle operations on skills owned by this repository
 3. `rg` the repo for stale references: `$<old>` invocations, `skill-dependencies` entries naming `<old>`, and prose
    references in other skills or docs. Update every hit.
 4. Update the `README.md` row.
-5. When publishing with an explicit commit range, pass **both** `--skill <old> --skill <new>`; the planner then removes
+5. Run `ai-skillet doctor --root 'skills/<new>'`, `just skill-invocation-check`, `just skill-dependencies-check`, and
+   `just readme-skills-check`.
+6. When publishing with an explicit commit range, pass **both** `--skill <old> --skill <new>`; the planner then removes
    the old install and adds the new one automatically.
 
 ## Delete (Catalog)

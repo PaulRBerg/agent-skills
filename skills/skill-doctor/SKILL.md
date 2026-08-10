@@ -11,7 +11,8 @@ description:
 
 # Skill Doctor
 
-Audit local Agent Skills catalogs and installed skill roots, then apply only narrow metadata repairs when requested.
+Use ai-skillet's canonical validator for the supported extended skill dialect to audit local catalogs and installed
+skill roots, then apply only narrow metadata repairs when requested.
 
 ## Arguments
 
@@ -55,10 +56,16 @@ ai-skillet doctor --root . --dependencies-only
 - Treat `warning` findings as review-required catalog hygiene issues.
 - JSON output uses schema version 1 with structured roots, counts, findings, and safe-fix records. Each finding carries
   its code, severity, path, line when known, fixability, and message.
+- Frontmatter validation accepts the portable Agent Skills fields, Claude Code extensions, and repository extensions as
+  one supported union. It reports unknown top-level fields; invalid field, item, and metadata-value types; invalid
+  enumerated values; and `agent` or `background` used without `context: fork`.
+- Explicit `disable-model-invocation: false` and `user-invocable: true` produce redundant-default warnings. Omit those
+  fields to preserve the same effective defaults.
 - Prompt-hygiene warnings are advisory and never auto-fix: stale model pins, oversized unconditional Markdown
   references, conflicting requirement/prohibition language, and missing completion evidence.
 - Coordination-exemption errors are report-only: `coordination: exempt` must be paired with the catalog's canonical
-  `coordination-exempt` body sentence, and neither side is repaired by `--fix-safe`.
+  `coordination-exempt` sentence in ordinary Markdown prose. Inline code, fenced or indented code, blockquotes, and
+  headed `Example` or `Examples` sections do not count as declarations. Neither side is repaired by `--fix-safe`.
 - Dependency errors reject non-array, empty, non-string, duplicate, malformed, incorrectly ordered, self-referential, or
   unresolved local declarations. External `ORG/REPO#SKILL` identifiers are shape-checked without network access.
 - Metadata, OpenAI policy, coordination, resource, README, prompt-hygiene, and CLI-version checks remain available
@@ -75,8 +82,9 @@ ai-skillet doctor --root . --dependencies-only
 Each permitted repair is staged and atomically renamed into place, preserving the target's permissions for updates. A
 failed safe fix exits 3 without partially rewriting its target.
 
-Do not use `ai-skillet doctor` to rewrite frontmatter order, descriptions, README rows, `references/version.txt`, or
-relative links. Make those edits manually and verify with a fresh audit.
+`--fix-safe` does not rewrite frontmatter, descriptions, README rows, `references/version.txt`, or relative links.
+Unknown fields, invalid types or values, cross-field errors, redundant defaults, and coordination declarations are
+report-only. Make those edits manually and verify with a fresh audit.
 
 ## Related Skills
 

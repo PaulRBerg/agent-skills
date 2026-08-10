@@ -15,6 +15,26 @@ semantics.
 
 Full reference: <https://code.claude.com/docs/en/skills>
 
+### Supported Dialect and Validation
+
+`ai-skillet doctor --root '<skill-directory>'` is the canonical deterministic local validator. It accepts one extended
+top-level field union:
+
+- Portable [Agent Skills](https://agentskills.io/specification) fields: `name`, `description`, `license`,
+  `compatibility`, `metadata`, and `allowed-tools`.
+- [Claude Code](https://code.claude.com/docs/en/skills#frontmatter-reference) fields: `when_to_use`, `argument-hint`,
+  `arguments`, `disable-model-invocation`, `user-invocable`, `disallowed-tools`, `model`, `effort`, `context`, `agent`,
+  `background`, `hooks`, `paths`, and `shell`.
+- Repository fields: `coordination` and `skill-dependencies`.
+
+Unknown top-level fields are errors. `metadata` must be a string-to-string mapping. Tool, argument, and path fields
+accept a string or a list of strings; `hooks` must be a mapping. Claude Boolean fields accept `true`/`false`,
+`yes`/`no`, `on`/`off`, or `1`/`0`. `context` accepts only `fork`; `effort` accepts `low`, `medium`, `high`, `xhigh`, or
+`max`; and `shell` accepts `bash` or `powershell`. `agent` and `background` require `context: fork`.
+
+Use portable-only validators such as `skills-ref` or `agentskills` only as optional distribution-boundary checks when a
+target explicitly requires the strict portable format. They are not authoritative for normal catalog authoring.
+
 ### Invocation Control
 
 Reference: <https://code.claude.com/docs/en/skills#control-who-invokes-a-skill>
@@ -39,6 +59,10 @@ Do not treat `agents/openai.yaml` as authoritative and do not treat `user-invoca
 equivalent. Claude documents `user-invocable` as slash-menu visibility, while `disable-model-invocation` controls
 whether Claude can load the skill automatically. Codex has no equivalent metadata bit for `user-invocable`.
 
+Omit default-valued invocation fields: absent `disable-model-invocation` means `false`, and absent `user-invocable`
+means `true`. Add only `disable-model-invocation: true` or `user-invocable: false` when behavior differs from those
+defaults.
+
 ### Execution Context
 
 Use `context` to control where a skill runs.
@@ -48,7 +72,8 @@ Use `context` to control where a skill runs.
 | Default | Runs inline in the current conversation                                   |
 | `fork`  | Runs in an isolated subagent without access to prior conversation history |
 
-When `context: fork` is set, `agent` selects the subagent type.
+When `context: fork` is set, `agent` selects the subagent type. Both `agent` and `background` are invalid without
+`context: fork`.
 
 | `agent` value | Description                                        |
 | ------------- | -------------------------------------------------- |
@@ -65,14 +90,18 @@ skill body at invocation time, and the global agent instructions define its mean
 Set it only when the skill's declared default workflow writes no repository files or only repository metadata.
 Explicitly authorized work that escalates beyond that declared behavior must enter the ai-coord gate.
 
-An exempt skill skips the ai-coord gate for its declared work. Pair the field with one standard body sentence near the
-top of the skill so the executing agent sees the exemption without consulting the frontmatter:
+An exempt skill skips the ai-coord gate for its declared work. Pair the field with one standard body sentence in
+ordinary Markdown prose near the top of the skill so the executing agent sees the exemption without consulting the
+frontmatter:
 
 ```markdown
 This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 ```
 
 Explicitly authorized escalation beyond the declared write behavior re-enters the gate.
+
+Inline code, fenced or indented code, blockquotes, and sections headed `Example` or `Examples` do not count as the
+declaration and do not trigger a missing-frontmatter error.
 
 ## Platform Targets
 
@@ -143,6 +172,8 @@ skill-dependencies:
 ## Other Frontmatter Rules
 
 - Sort `SKILL.md` frontmatter fields alphabetically, but always place `description` last.
+- Run `ai-skillet doctor --root '<skill-directory>'` after authoring or changing a catalog skill. Require exit 0 for the
+  changed skill before publishing it.
 - Every `skills/cli-*` skill must maintain `references/version.txt` with exactly one normalized semver for the CLI
   version the docs were last refreshed against: no leading `v`, prose, comments, ranges, prerelease labels, or extra
   lines. The wakeup automation maps `skills/cli-<name>` to binary `<name>` and refreshes the skill when the installed
