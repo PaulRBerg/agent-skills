@@ -12,9 +12,8 @@ skill-specific behavior and examples.
 
 ## Scope
 
-Default: run every sync group below. If the request names a group, file, or subset, run only that group.
-
-Work only in the files listed for the selected groups.
+Default: run every sync group below. If the request names a group, file, or subset, run only that group. Work only in
+the files listed for the selected groups.
 
 ## Sync Groups
 
@@ -63,81 +62,54 @@ Files:
 - `skills/claude-handoff/SKILL.md`
 
 `codex-handoff/SKILL.md` is the platform-neutral contract for delegation from Claude Code or Codex CLI; its two host
-adapters specialize runtime mechanics. `claude-handoff` remains Claude Code only. Compare the platform-neutral blocks in
-both skill entrypoints and keep them semantically identical, adjusted only for the parent/agent noun and runtime:
+adapters specialize runtime mechanics. `claude-handoff` remains Claude Code only. The following topics must stay
+semantically identical between the two entrypoints, adjusted only for the parent/agent noun and runtime — do not restate
+their content here, the sync run reads both skills directly:
 
-- Contract bullets: the Plan-mode gate for implementation handoffs, the any-mode exception for strictly research-only
-  tasks, and their stop-before-planning boundary; parent ownership of decisions, the final plan, and orchestration; the
-  no-redesign rule for implementation agents; the smallest-effective-team and eight-implementation-agent limits; the
-  brief-sizing rule that splits any brief likely to exceed roughly 25-30 minutes; and parent implementation work being
-  limited to orchestration, integrity checks, failure handling, and the conditional polish passes.
-- User model preferences: an explicit preference overrides the normal task-complexity model selection for every research
-  and implementation agent unless the user narrows its scope; an unavailable preferred model requires user approval
-  before fallback.
-- Follow-on authorization: the approved outcome, not the initial manifest or worker write scopes, is the authorization
-  boundary; workers stop and report newly discovered out-of-scope prerequisites, while the parent extends the manifest,
-  coordinates the new scope, and delegates the smallest sufficient in-repository fix without asking the user again.
-- Pre-plan research delegation: trigger it for uncertain scope, multiple or unfamiliar subsystems, or materially slower
-  serial evidence gathering; keep zero research agents as the default; let the parent alone decide whether it runs
-  without asking the user; require research agents to stay read-only, gather evidence, and return findings rather than
-  decisions or plans; limit the separate research budget to three agents (`R1` through `R3`); feed findings into the
-  final plan; and include the optional plan `Research:` traceability line.
-- Strategy selection guidance: sequential vs parallel vs hybrid criteria, disjoint-write-scope requirement, wave
-  semantics, the slowest-agent note, and the whole-handoff eight-implementation-agent limit with stable IDs and
-  dependencies.
-- The single-validation-owner rule: aggregate checks run once; every other agent runs only the narrowest checks proving
-  its own edits; aggregate-check failures confined to files outside every agent's scope are attributed to unrelated
-  concurrent work, not treated as blockers.
-- The independent polish-selection rules: `$code-polish` retains its risk trigger list, including "file count alone is
-  not a trigger"; `$agents-brain polish` applies to README.md, AGENTS.md or CLAUDE.md, durable context docs, and
-  existing project-installed skills under `.agents/skills`, while source catalog skills under `skills/` remain excluded;
-  both or neither pass may be selected.
-- Before-launch session-claim guidance: delegated agents treat the orchestrating session's presence as authorization for
-  their assigned work. The exact claim owner is host-specific.
-- Platform-agnostic agent prompt requirements: outcome plus brief, exact write scope and dirty-work boundaries,
-  validation assignment, soft time budget, authority boundary, delegation context, stopping rule, and reporting
-  requirement.
-- The structured result-field contract: status, summary, changed files, verification with each command and outcome,
-  residual risks, and blockers.
-- Failure classification: a returned blocker caused by a newly discovered, necessary in-repository fix or evidence
-  change triggers parent-owned follow-on delegation without fresh authorization; user input is reserved for a changed
-  outcome, material redesign, unrelated work, or an existing confirmation boundary. An evidenced tool or infrastructure
-  failure permits exactly one same-agent continuation after inspecting partial edits, and a second infrastructure
-  failure blocks. The continuation mechanics are platform-specific.
-- Post-success skill-evolution review: run only after every required implementation agent succeeds and the overall task
-  is verified; keep the judgment with the parent orchestrator; require credible recurrence and durable reuse rather than
-  task size or difficulty; reject one-offs, rare contingencies, incidental cleanup, and speculative value; place a new
-  skill in the work repository for project-specific reuse or `~/projects/agent-skills` for cross-project reuse; name
-  every exact skill and reason when revision is warranted; allow at most one two-sentence suggestion that offers
-  `$task-handoff` while reserving low-level details for that future handoff; never act automatically; and remain silent
-  for blocked, failed, partial, or below-threshold work.
-- Completion rules: success verification, dependent gating on failure, changed-files union dedupe, ordered and scoped
-  polish invocation, polish skip and failure conditions, and cross-repository `$commit` behavior.
-- Adapter integrity: each codex-handoff adapter implements the shared prompt, result, failure, and completion contracts
-  without weakening them, while the shared entrypoint loads exactly one adapter.
+1. Plan-mode gate for implementation handoffs, the research-only any-mode exception, and the stop-before-planning
+   boundary.
+2. Parent ownership of decisions/plan/orchestration; implementation-agent no-redesign rule.
+3. Smallest-effective-team rule + eight-implementation-agent limit; brief-sizing rule splitting any brief likely to
+   exceed roughly 25-30 minutes.
+4. User model-preference override (beats normal task-complexity selection for every research and implementation agent
+   unless the user narrows scope); an unavailable preferred model needs user approval before fallback.
+5. Follow-on authorization boundary: the approved outcome, not the initial manifest or worker write scopes, authorizes
+   follow-on work; workers report new out-of-scope prerequisites, the parent extends scope and delegates without
+   re-asking.
+6. Pre-plan research delegation: zero agents by default, parent-only decision, read-only agents, findings not
+   decisions/plans, budget capped at three agents (`R1`-`R3`), optional `Research:` traceability line.
+7. Strategy selection: sequential/parallel/hybrid criteria, disjoint-write-scope requirement, wave semantics,
+   slowest-agent note, whole-handoff eight-implementation-agent limit with stable IDs and dependencies.
+8. Single-validation-owner rule: aggregate checks run once, every other agent runs only checks proving its own edits,
+   failures confined to files outside every agent's scope attribute to unrelated concurrent work.
+9. Polish-selection rules: `$code-polish` risk-trigger list (file count alone is not a trigger); `$agents-brain polish`
+   targets README/AGENTS/CLAUDE.md and project-installed skills under `.agents/skills`, excluding `skills/`; either,
+   both, or neither pass may run.
+10. Before-launch session-claim guidance: orchestrating session's presence authorizes delegated work; claim owner is
+    host-specific.
+11. Platform-agnostic agent prompt requirements: outcome + brief, write scope and dirty-work boundaries, validation
+    assignment, soft time budget, authority boundary, delegation context, stopping rule, reporting requirement.
+12. Structured result-field contract: status, summary, changed files, verification (command + outcome), residual risks,
+    blockers.
+13. Failure classification: a blocker from a newly discovered necessary in-repository fix or evidence change triggers
+    parent-owned follow-on without fresh authorization; an evidenced tool/infrastructure failure permits exactly one
+    same-agent continuation, a second blocks.
+14. Post-success skill-evolution review: parent-only judgment, only after full success and verification, requires
+    credible recurrence and durable reuse (not size/difficulty), rejects one-offs and speculative value, at most one
+    two-sentence `$task-handoff` suggestion, silent otherwise.
+15. Completion rules: success verification, dependent gating on failure, changed-files union dedupe, ordered/scoped
+    polish invocation, polish skip/failure conditions, cross-repository `$commit` behavior.
+16. Adapter integrity: adapters implement the shared prompt/result/failure/completion contracts without weakening them;
+    the shared entrypoint loads exactly one adapter.
 
-Treat these as out of scope unless the request explicitly names them:
-
-- Host selection and launch mechanics: the Claude adapter's runner and artifacts, the Codex adapter's native tools, and
-  claude-handoff's Agent-tool calls.
-- Same-agent continuation mechanics: the Claude adapter's runner resume, the Codex adapter's native follow-up, and
-  claude-handoff's SendMessage flow.
-- Research mechanics: the Claude adapter's read-only runner, per-agent artifacts, and result schema; the Codex adapter's
-  native read-only agents; and claude-handoff's Explore subagent type and native result flow.
-- Claude-adapter-only content: effort and timeout selection, progress streams, Monitor guidance, sentinel handling,
-  dangerous bypass behavior, and subprocess command conventions.
-- Codex-adapter-only content: harness concurrency limits, fresh-context spawning, native steering and waiting, inherited
-  sandbox and approval controls, and native progress rendering.
-- Each skill's default model configuration and its rules about re-running a failed agent. The defaults are intentionally
-  different — the codex-handoff adapters choose GPT-5.6 model and effort tiers, while claude-handoff uses `sonnet` for
-  research and implementation — so never normalize them.
-- Status reporting: the Claude adapter's dashboard system versus both native hosts' concise progress and completion
-  reports.
-- Frontmatter and `references/`/`scripts/` contents.
+Out of scope unless the request explicitly names it: host selection, launch, and continuation mechanics; research
+mechanics; Claude-adapter-only content; Codex-adapter-only content; each skill's model defaults and its failed-agent
+re-run rules — model defaults are intentionally different (codex-handoff adapters choose GPT-5.6 tiers; claude-handoff
+uses `sonnet`) — never normalize them; status reporting style; frontmatter and `references/`/`scripts/` contents.
 
 Verification is prose comparison of the in-scope blocks; there is no extractable helper data.
 
-### Ai-ai-skillet CLI consumers
+### Ai-skillet CLI consumers
 
 Files:
 
