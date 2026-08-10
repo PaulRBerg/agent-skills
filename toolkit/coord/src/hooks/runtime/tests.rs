@@ -589,6 +589,28 @@ fn clean_scope_release_nudge_emits_once_per_transition() {
     let runtime = HookRuntime::new(&coordinator);
     runtime.ingest("codex", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
     let identity = Identity { client: Client::Codex, session_id: "self".into() };
+    // CI does not run under a Codex host process, so SessionStart cannot
+    // discover a fingerprint there. Register deterministic test evidence so
+    // the injected AliveProbe can establish complete provider coverage.
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    coordinator
+        .store()
+        .unwrap()
+        .upsert_session(&SessionUpdate {
+            identity: identity.clone(),
+            cwd: root.clone(),
+            repo_root: Some(root),
+            state: SessionState::Idle,
+            source: "test".into(),
+            name: None,
+            waiting_for: None,
+            permission_mode: None,
+            update_permission_mode: false,
+            fingerprint: Some(ProcessFingerprint { pid: std::process::id(), start_token: Some("test".into()) }),
+            started_at: Some(100.0),
+            current: 100.0,
+        })
+        .unwrap();
     assert_eq!(
         coordinator.start_for(identity, "work", &[repo.join("tracked.txt")], &[], &repo).unwrap().kind,
         crate::domain::OutcomeKind::Ready
