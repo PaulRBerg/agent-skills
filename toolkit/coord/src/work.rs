@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, ScopeKind, WorkState},
+    domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, ScopeKind, WorkState, client_name, sanitize},
     error::{AppError, Result},
     host::{
         UNHASHABLE_BLOB_HASH, any_overlap, git_blob_hash, git_dirty_paths, normalize_scopes, overlapping_paths,
@@ -433,7 +433,7 @@ fn identity_display(identity: &Identity, transaction: &crate::state::WorkTransac
         return Ok(callsign);
     }
     let prefix = identity.session_id.chars().take(8).collect::<String>();
-    Ok(format!("{}/{prefix}", client_name(identity)))
+    Ok(format!("{}/{prefix}", client_name(identity.client)))
 }
 
 fn blocked_message(label: &str, requested: &[Scope], blocker: &WorkRow) -> String {
@@ -527,21 +527,6 @@ fn scope_paths(scopes: &[Scope]) -> Vec<String> {
 }
 fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
-}
-fn client_name(identity: &Identity) -> &'static str {
-    match identity.client {
-        crate::domain::Client::Codex => "codex",
-        crate::domain::Client::Claude => "claude",
-    }
-}
-fn sanitize(text: &str, limit: usize) -> String {
-    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if collapsed.chars().count() <= limit {
-        return collapsed;
-    }
-    let mut value = collapsed.chars().take(limit.saturating_sub(1)).collect::<String>();
-    value.push('…');
-    value
 }
 fn sorted(values: HashSet<String>) -> Vec<String> {
     let mut values = values.into_iter().collect::<Vec<_>>();

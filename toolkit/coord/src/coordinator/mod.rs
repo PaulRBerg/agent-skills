@@ -22,7 +22,7 @@ use crate::{
     domain::{
         Client, Identity, InventoryResult, Outcome, OutcomeKind, OutsideScopeV2, ProcessLiveness, ProcessProbe,
         ProviderReport, Scope, ScopeKind, SessionState, SnapshotDelegateV2, SnapshotHandoffV4, SnapshotScopeKindV2,
-        SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
+        SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState, sanitize,
     },
     error::{AppError, Result},
     host::{
@@ -870,23 +870,6 @@ fn callsign_key(text: &str) -> String {
         .filter(|value| !matches!(value, '\u{fe0e}' | '\u{fe0f}'))
         .collect()
 }
-fn sanitize(text: &str, limit: usize) -> String {
-    let value = text
-        .chars()
-        .map(|value| if value.is_control() { ' ' } else { value })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if value.chars().count() <= limit {
-        value
-    } else {
-        let mut result = value.chars().take(limit - 1).collect::<String>();
-        result.push('…');
-        result
-    }
-}
-
 fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
 }

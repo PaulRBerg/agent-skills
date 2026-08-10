@@ -25,7 +25,7 @@ use crate::{
         Cli, Command, FindingCommand, FindingKindArg, FindingResolutionArg, FindingStateArg, HookClient, LinkClient,
     },
     coordinator::Coordinator,
-    domain::{Client, FindingKind, FindingState, FindingSummary, Outcome, OutcomeKind},
+    domain::{Client, FindingKind, FindingState, FindingSummary, Outcome, OutcomeKind, client_name, terminal_field},
     error::{AppError, Result},
     hooks::{
         config::{ConfigError, default_hook_path, inspect_hooks, link_default_hooks},
@@ -457,10 +457,6 @@ fn finding_line(finding: &FindingSummary) -> String {
     .join("\t")
 }
 
-fn terminal_field(value: &str) -> String {
-    value.chars().map(|character| if character.is_control() { ' ' } else { character }).collect()
-}
-
 fn run_hook(client: HookClient) {
     let client = hook_client_name(client);
     let Some(payload) = read_hook_payload() else {
@@ -737,13 +733,6 @@ fn hook_config_client_name(client: HookConfigClient) -> &'static str {
     match client {
         HookConfigClient::Codex => "codex",
         HookConfigClient::Claude => "claude",
-    }
-}
-
-fn client_name(client: Client) -> &'static str {
-    match client {
-        Client::Codex => "codex",
-        Client::Claude => "claude",
     }
 }
 

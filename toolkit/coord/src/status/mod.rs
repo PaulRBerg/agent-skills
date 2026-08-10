@@ -7,7 +7,8 @@ use std::{
 
 use crate::{
     domain::{
-        Client, Identity, SessionState, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
+        Identity, SessionState, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
+        client_name, terminal_field,
     },
     error::Result,
 };
@@ -167,10 +168,6 @@ fn session_line(
     .join("\t")
 }
 
-fn terminal_field(value: &str) -> String {
-    value.chars().map(|character| if character.is_control() { ' ' } else { character }).collect()
-}
-
 fn coverage_label(provider: &crate::domain::ProviderReport) -> &'static str {
     if !provider.enabled {
         "disabled"
@@ -178,13 +175,6 @@ fn coverage_label(provider: &crate::domain::ProviderReport) -> &'static str {
         "ok"
     } else {
         "partial"
-    }
-}
-
-fn client_name(client: Client) -> &'static str {
-    match client {
-        Client::Codex => "codex",
-        Client::Claude => "claude",
     }
 }
 
@@ -219,7 +209,8 @@ fn unix_now() -> f64 {
 mod tests {
     use super::*;
     use crate::domain::{
-        FindingState, FindingSummary, OutsideScopeV2, ProviderReport, Scope, ScopeKind, SnapshotScopeV2, SnapshotWorkV2,
+        Client, FindingState, FindingSummary, OutsideScopeV2, ProviderReport, Scope, ScopeKind, SnapshotScopeV2,
+        SnapshotWorkV2,
     };
 
     fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {

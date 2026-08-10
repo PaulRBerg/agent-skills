@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use crate::{
     coordinator::{Coordinator, normalize_callsign},
-    domain::{Client, Identity, Outcome, SessionState, WorkState},
+    domain::{Client, Identity, Outcome, SessionState, WorkState, client_name, sanitize},
     error::{AppError, Result},
     host::{git_dirty_paths, git_root, host_process_reference, normalize_scopes, relevant_dirty},
     state::SessionUpdate,
@@ -452,27 +452,8 @@ fn parse_client(client: &str) -> Option<Client> {
         _ => None,
     }
 }
-fn client_name(client: Client) -> &'static str {
-    match client {
-        Client::Codex => "codex",
-        Client::Claude => "claude",
-    }
-}
 fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
-}
-fn sanitize(text: &str, limit: usize) -> String {
-    if limit == 0 {
-        return String::new();
-    }
-    let value = text.chars().map(|character| if character.is_control() { ' ' } else { character }).collect::<String>();
-    let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if value.chars().count() <= limit {
-        return value;
-    }
-    let mut result = value.chars().take(limit.saturating_sub(1)).collect::<String>();
-    result.push('…');
-    result
 }
 
 #[cfg(test)]

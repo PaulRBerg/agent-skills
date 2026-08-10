@@ -12,6 +12,8 @@ use crate::{
     error::{AppError, Result},
 };
 
+pub(super) use crate::domain::{client_name, sanitize};
+
 use super::schema;
 
 pub(crate) const MESSAGE_TTL: f64 = 48.0 * 60.0 * 60.0;
@@ -152,13 +154,6 @@ pub(super) fn bump_generation(transaction: &Transaction<'_>) -> Result<()> {
     Ok(())
 }
 
-pub(super) const fn client_name(client: Client) -> &'static str {
-    match client {
-        Client::Codex => "codex",
-        Client::Claude => "claude",
-    }
-}
-
 pub(super) fn parse_client(value: String) -> rusqlite::Result<Client> {
     match value.as_str() {
         "codex" => Ok(Client::Codex),
@@ -221,19 +216,4 @@ pub(super) fn new_id() -> String {
         let _ = write!(result, "{byte:02x}");
     }
     result
-}
-
-pub(super) fn sanitize(text: &str, limit: usize) -> String {
-    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut characters = collapsed.chars();
-    let prefix = characters.by_ref().take(limit).collect::<String>();
-    if characters.next().is_none() {
-        return prefix;
-    }
-    let mut shortened = prefix.chars().take(limit.saturating_sub(1)).collect::<String>();
-    while shortened.chars().last().is_some_and(char::is_whitespace) {
-        shortened.pop();
-    }
-    shortened.push('…');
-    shortened
 }
