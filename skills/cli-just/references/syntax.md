@@ -113,21 +113,35 @@ Beyond `just`'s own semantic styles — `command`, `error`, `warning` — v1.55.
 
 ### Executable Functions
 
+Prefer Just-native executable lookup over a shell `command -v` or backtick `which` check. `which()` and `assert()`
+require `set unstable` and `set lists`; use the pattern below only when both settings are already enabled. Do not enable
+them solely for an isolated executable check, since `set lists` changes justfile semantics.
+
 ```just
-# Require executable (fail if not found)
-jq := require("jq")
-# Returns full path: /usr/bin/jq
-
-# Usage: invoke directly in recipes (not with interpolation)
-process:
-    jq '.name' package.json
-
-# Check if executable exists
-has_docker := `which docker > /dev/null 2>&1 && echo "true" || echo "false"`
+# Requires existing `set unstable` and `set lists`.
+_ := assert(
+    which("uv") != [],
+    "uv is required. Install it:
+https://docs.astral.sh/uv/getting-started/installation/"
+)
 ```
 
-**Note:** `require()` validates the tool exists and stores its path. Use the variable name directly (e.g., `jq`), not
-with interpolation (`{{ jq }}`).
+`require("uv")` is more idiomatic when the generic missing-executable error is adequate and the resolved full path is
+useful:
+
+```just
+uv := require("uv")
+
+process:
+    uv run process.py
+```
+
+Use the `require()` variable directly (e.g., `uv`), not with interpolation (`{{ uv }}`). Its generic error cannot
+include project-specific installation guidance.
+
+An assertion declared at top level blocks every recipe invocation when the executable is absent. Use that scope only if
+every recipe needs it. Otherwise, put the same `which()` plus `assert()` expression in a private prerequisite of only
+the recipes that invoke the executable, so unrelated recipes remain runnable.
 
 ### Environment Functions
 
