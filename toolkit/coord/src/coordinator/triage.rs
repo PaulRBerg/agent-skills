@@ -31,7 +31,7 @@ use super::{
 };
 
 #[cfg(test)]
-const CONFIG_PATH: &str = ".ai-coord.toml";
+const CONFIG_PATH: &str = ".agents/coord.toml";
 const RUN_DIRECTORY: &str = "triage-runs";
 const RUN_DEADLINE_SECONDS: f64 = 30.0 * 60.0;
 const HEARTBEAT_SECONDS: f64 = 2.0;

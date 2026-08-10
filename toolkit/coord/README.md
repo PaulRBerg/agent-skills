@@ -146,7 +146,7 @@ per line. `!TRUNCATED` is the first record when the bounded 1,000-path set dropp
 best-effort: unsupported tools or hosts that omit usable path fields contribute nothing, and no tool payload content is
 stored.
 
-Repositories may list harness churn in a tracked `.ai-coord.toml`:
+Repositories may list harness churn in a tracked `.agents/coord.toml`:
 
 ```toml
 [dirt]
@@ -210,7 +210,7 @@ a later recurrence. `handoff` moves a pending record to `handed-off`; `resolve` 
 same finding summary: `id`, `repo_root`, `summary`, nullable `kind`, `state`, `paths`, timestamps, nullable terminal
 evidence, `sighting_count`, and live `triaging`.
 
-Autonomous triage is disabled unless the repository-root `.ai-coord.toml` is committed at `HEAD` and sets:
+Autonomous triage is disabled unless the repository-root `.agents/coord.toml` is committed at `HEAD` and sets:
 
 ```toml
 [findings]

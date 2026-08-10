@@ -5,7 +5,7 @@ use std::fs;
 
 use crate::error::Result;
 
-const CONFIG_PATH: &str = ".ai-coord.toml";
+const CONFIG_PATH: &str = ".agents/coord.toml";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum TriageSchedule {
@@ -73,6 +73,7 @@ mod tests {
     #[test]
     fn opt_in_must_be_exact_and_tracked() {
         let repo = init();
+        fs::create_dir_all(repo.path().join(CONFIG_PATH).parent().unwrap()).unwrap();
         fs::write(repo.path().join(CONFIG_PATH), "[findings]\nauto_triage = true\n").unwrap();
         assert!(!auto_triage_enabled(repo.path()).unwrap());
         assert!(Command::new("git").args(["add", CONFIG_PATH]).current_dir(repo.path()).status().unwrap().success());

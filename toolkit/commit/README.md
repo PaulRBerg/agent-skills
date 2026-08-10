@@ -52,15 +52,15 @@ path. Use `--no-auto-baseline` to disable ambient discovery while retaining expl
 skips discovery because it captures the index exactly.
 
 State defaults to `$XDG_STATE_HOME/ai-commit` or `~/.local/state/ai-commit`; `AI_COMMIT_STATE_DIR` overrides it.
-Configuration defaults to `$XDG_CONFIG_HOME/ai-commit/config.toml` and can be overridden with `AI_COMMIT_CONFIG`:
+Message format configuration is repository-local at `<git-root>/.agents/commit.toml`:
 
 ```toml
 [message]
-natural_repositories = ["~/work/natural-history"]
+format = "natural"
 ```
 
-Configured repository paths are matched against the exact canonical physical repository root. Missing configuration is
-valid. Explicit `--natural` or `--conventional` always wins.
+`format` must be `"natural"` or `"conventional"`. An absent file defaults to conventional format; an invalid file is a
+usage error. Explicit `--natural` or `--conventional` always wins for that preparation.
 
 `prepare --porcelain` emits stable TSV records. Tabs, newlines, carriage returns, and backslashes inside fields are
 backslash-escaped. Outcome records use `PREPARED`, `COMMITTED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and

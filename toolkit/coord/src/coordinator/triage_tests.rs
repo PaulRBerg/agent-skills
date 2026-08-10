@@ -73,6 +73,7 @@ fn repository(auto_triage: bool) -> TempDir {
     assert!(
         Command::new("git").args(["init", "-q", "-b", "main"]).current_dir(temp.path()).status().unwrap().success()
     );
+    fs::create_dir_all(temp.path().join(CONFIG_PATH).parent().unwrap()).unwrap();
     fs::write(temp.path().join(CONFIG_PATH), format!("[findings]\nauto_triage = {auto_triage}\n")).unwrap();
     fs::write(temp.path().join("README.md"), "old prose\n").unwrap();
     fs::write(temp.path().join("NOTES.md"), "other prose\n").unwrap();

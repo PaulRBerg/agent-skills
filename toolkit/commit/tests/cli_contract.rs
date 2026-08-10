@@ -26,45 +26,81 @@ fn commit_messages_accept_hyphen_leading_paragraphs() {
 }
 
 #[test]
-fn config_uses_exact_canonical_root_and_explicit_format_wins() {
-    let harness = Harness::new("config");
+fn local_config_selects_message_format_and_absence_defaults_to_conventional() {
+    let harness = Harness::new("local-config");
     harness.write("intended.txt", "base\n");
     harness.commit_all("base");
     harness.write("intended.txt", "changed\n");
-    let config_dir = harness.root.join("config/ai-commit");
-    fs::create_dir_all(&config_dir).unwrap();
-    #[cfg(unix)]
-    {
-        std::os::unix::fs::symlink(&harness.repo, harness.home.join("repo-link")).unwrap();
-        fs::write(config_dir.join("config.toml"), "[message]\nnatural_repositories = [\"~/repo-link\"]\n").unwrap();
-    }
-    #[cfg(not(unix))]
-    fs::write(
-        config_dir.join("config.toml"),
-        format!("[message]\nnatural_repositories = [\"{}\"]\n", harness.repo.display()),
-    )
-    .unwrap();
 
-    let configured = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
-    assert!(stdout(&configured).contains("FORMAT\tnatural\n"));
-    let forced = harness.success(["prepare", "--porcelain", "--conventional", "--", "intended.txt"]);
-    assert!(stdout(&forced).contains("FORMAT\tconventional\n"));
-    let forced_natural = harness.success(["prepare", "--porcelain", "--natural", "--", "intended.txt"]);
-    assert!(stdout(&forced_natural).contains("FORMAT\tnatural\n"));
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "conventional");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n");
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "natural");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"conventional\"\n");
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "conventional");
+}
+
+#[test]
+fn invalid_local_config_is_a_usage_error_that_identifies_the_path() {
+    let harness = Harness::new("invalid-local-config");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let config_path = harness.repo.join(".agents/commit.toml");
+
+    for source in [
+        "[message\nformat = \"natural\"\n",
+        "[message]\nformat = \"natural\"\nextra = true\n",
+        "[message]\n",
+        "[message]\nformat = \"verbose\"\n",
+    ] {
+        harness.write(".agents/commit.toml", source);
+        let invalid = harness.command(["prepare", "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        let error = stderr(&invalid);
+        assert!(error.contains("invalid config"), "{error}");
+        assert!(error.contains(&config_path.to_string_lossy().into_owned()), "{error}");
+    }
+}
+
+#[test]
+fn explicit_format_overrides_local_config() {
+    let harness = Harness::new("config-override");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n");
+    let conventional = harness.success(["prepare", "--porcelain", "--conventional", "--", "intended.txt"]);
+    assert_format(&conventional, "conventional");
+
+    harness.write(".agents/commit.toml", "not valid TOML");
+    let natural = harness.success(["prepare", "--porcelain", "--natural", "--", "intended.txt"]);
+    assert_format(&natural, "natural");
+}
+
+#[test]
+fn legacy_global_and_environment_config_are_ignored() {
+    let harness = Harness::new("legacy-config");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+
+    let global_path = harness.root.join("config/ai-commit/config.toml");
+    fs::create_dir_all(global_path.parent().unwrap()).unwrap();
+    fs::write(&global_path, format!("[message]\nnatural_repositories = [\"{}\"]\n", harness.repo.display())).unwrap();
+    let global = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
+    assert_format(&global, "conventional");
 
     let override_path = harness.root.join("override.toml");
-    fs::write(&override_path, format!("[message]\nnatural_repositories = [\"{}\"]\n", harness.repo.display())).unwrap();
-    let overridden = harness.command_with_env(
+    fs::write(&override_path, "not valid TOML").unwrap();
+    let environment = harness.command_with_env(
         ["prepare", "--porcelain", "--", "intended.txt"],
         [("AI_COMMIT_CONFIG", override_path.to_string_lossy().into_owned())],
     );
-    assert!(overridden.status.success(), "{}", stderr(&overridden));
-    assert!(stdout(&overridden).contains("FORMAT\tnatural\n"));
-
-    fs::write(config_dir.join("config.toml"), "[message\ninvalid = true\n").unwrap();
-    let invalid = harness.command(["prepare", "--", "intended.txt"]);
-    assert_eq!(exit_code(&invalid), 2);
-    assert!(stderr(&invalid).contains("invalid config"));
+    assert!(environment.status.success(), "{}", stderr(&environment));
+    assert_format(&environment, "conventional");
 }
 
 #[test]
@@ -188,4 +224,8 @@ fn signing_failure_is_retryable_and_explicit_bypass_succeeds() {
 
 fn prepared_id(output: &str) -> String {
     output.lines().find_map(|line| line.strip_prefix("PREPARED\t")).expect("PREPARED record").to_owned()
+}
+
+fn assert_format(output: &std::process::Output, expected: &str) {
+    assert!(stdout(output).contains(&format!("FORMAT\t{expected}\n")), "{}", stdout(output));
 }

@@ -174,10 +174,8 @@ fn select_format(repository: &Repository, args: &PrepareArgs) -> Result<MessageF
         Ok(MessageFormat::Natural)
     } else if args.conventional {
         Ok(MessageFormat::Conventional)
-    } else if config::repository_uses_natural_format(&repository.root)? {
-        Ok(MessageFormat::Natural)
     } else {
-        Ok(MessageFormat::Conventional)
+        config::message_format(&repository.root)
     }
 }
 

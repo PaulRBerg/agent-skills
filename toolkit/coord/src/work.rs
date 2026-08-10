@@ -461,7 +461,7 @@ fn blocked_message(label: &str, requested: &[Scope], blocker: &WorkRow) -> Strin
 }
 
 fn benign_dirt_scopes(root: &Path) -> Vec<Scope> {
-    let Ok(text) = fs::read_to_string(root.join(".ai-coord.toml")) else {
+    let Ok(text) = fs::read_to_string(root.join(".agents/coord.toml")) else {
         return Vec::new();
     };
     let mut in_dirt = false;
