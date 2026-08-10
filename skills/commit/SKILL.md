@@ -23,9 +23,14 @@ automation that explicitly parses its stable TSV records; the normal skill flow 
 
 Arguments: `$ARGUMENTS`
 
+- By default, `ai-commit` reads `<git-root>/.agents/commit.toml`: `[message] format = "natural"` selects Natural
+  Language Format and `format = "conventional"` selects Conventional Prefix Format. A missing local file defaults to
+  Conventional Prefix Format. Use `--natural` or `--conventional` only as one-off overrides; do not add either flag
+  merely to reproduce repository policy.
 - `--all`: capture all worktree and index changes. This intentionally risks including another agent's work.
 - `--staged`: capture exactly the current index; do not add session paths. It conflicts with `--all`.
-- `--natural`: force Natural Language Format.
+- `--natural`: force Natural Language Format for this commit.
+- `--conventional`: force Conventional Prefix Format for this commit.
 - `--push`: request a push after commit. Otherwise push only when standing instructions authorize it.
 - `--close <issue_numbers>`: append one `Closes #N` trailer per positive decimal issue number; accept comma- or
   space-separated input.
@@ -44,7 +49,7 @@ If the requested operation is only to push a clean branch that is already ahead,
 Run one preparation command:
 
 ```bash
-ai-commit prepare [--all | --staged] [--natural] --diff full \
+ai-commit prepare [--all | --staged] [--natural | --conventional] --diff full \
   [--exclude-baseline '<path>=<oid>']... [-- <session-modified-paths>...]
 ```
 
