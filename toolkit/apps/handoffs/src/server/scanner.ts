@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -10,7 +10,7 @@ export interface ScanOptions {
   logError?: (message: string, error: unknown) => void;
 }
 
-interface ScanTarget {
+export interface ScanTarget {
   state: HandoffRecord["state"];
   root: string;
   repository: string;
@@ -40,9 +40,9 @@ function isMissing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-async function immediateDirectories(directory: string, logError: ScanOptions["logError"]): Promise<string[]> {
+function immediateDirectories(directory: string, logError: ScanOptions["logError"]): string[] {
   try {
-    const entries = await readdir(directory, { withFileTypes: true });
+    const entries = readdirSync(directory, { withFileTypes: true });
     return entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => join(directory, entry.name))
@@ -53,13 +53,10 @@ async function immediateDirectories(directory: string, logError: ScanOptions["lo
   }
 }
 
-async function scanTarget(
-  target: ScanTarget,
-  logError: NonNullable<ScanOptions["logError"]>,
-): Promise<HandoffRecord[]> {
+export function scanTarget(target: ScanTarget, logError: NonNullable<ScanOptions["logError"]>): HandoffRecord[] {
   let entries;
   try {
-    entries = await readdir(target.handoffDirectory, { withFileTypes: true });
+    entries = readdirSync(target.handoffDirectory, { withFileTypes: true });
   } catch (error) {
     if (!isMissing(error)) logError(`unable to scan handoff directory ${target.handoffDirectory}`, error);
     return [];
@@ -70,30 +67,68 @@ async function scanTarget(
     .map((entry) => entry.name)
     .sort(compareText);
 
-  const records = await Promise.all(
-    filenames.map(async (filename): Promise<HandoffRecord | null> => {
-      const path = join(target.handoffDirectory, filename);
-      try {
-        const [source, metadata] = await Promise.all([readFile(path, "utf8"), stat(path)]);
-        const parsed = parseHandoff(source, filename);
-        return {
-          id: path,
-          state: target.state,
-          root: target.root,
-          repository: target.repository,
-          filename,
-          path,
-          modifiedAt: metadata.mtime.toISOString(),
-          ...parsed,
-        };
-      } catch (error) {
-        logError(`unable to read handoff ${path}`, error);
-        return null;
-      }
-    }),
-  );
+  const records = filenames.map((filename): HandoffRecord | null => {
+    const path = join(target.handoffDirectory, filename);
+    try {
+      const source = readFileSync(path, "utf8");
+      const metadata = statSync(path);
+      const parsed = parseHandoff(source, filename);
+      return {
+        id: path,
+        state: target.state,
+        root: target.root,
+        repository: target.repository,
+        filename,
+        path,
+        modifiedAt: metadata.mtime.toISOString(),
+        ...parsed,
+      };
+    } catch (error) {
+      logError(`unable to read handoff ${path}`, error);
+      return null;
+    }
+  });
 
   return records.filter((record): record is HandoffRecord => record !== null);
+}
+
+async function scanIsolatedTarget(
+  target: ScanTarget,
+  logError: NonNullable<ScanOptions["logError"]>,
+): Promise<HandoffRecord[]> {
+  const worker = Bun.spawn([process.execPath, join(import.meta.dir, "scanner-worker.ts"), JSON.stringify(target)], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    worker.kill("SIGKILL");
+  }, 1_000);
+
+  const [output, errors, exitCode] = await Promise.all([
+    new Response(worker.stdout).text(),
+    new Response(worker.stderr).text(),
+    worker.exited,
+  ]);
+  clearTimeout(timeout);
+
+  if (timedOut) {
+    logError(`timed out scanning protected handoff directory ${target.handoffDirectory}`, "scan timed out");
+    return [];
+  }
+  if (exitCode !== 0) {
+    logError(`unable to scan protected handoff directory ${target.handoffDirectory}`, errors.trim() || exitCode);
+    return [];
+  }
+
+  try {
+    return JSON.parse(output) as HandoffRecord[];
+  } catch (error) {
+    logError(`unable to parse scan result for ${target.handoffDirectory}`, error);
+    return [];
+  }
 }
 
 export async function scanHandoffs(options: ScanOptions = {}): Promise<HandoffRecord[]> {
@@ -102,7 +137,7 @@ export async function scanHandoffs(options: ScanOptions = {}): Promise<HandoffRe
   const targets: ScanTarget[] = [];
 
   for (const container of [join(home, "projects"), join(home, "work")]) {
-    for (const repositoryRoot of await immediateDirectories(container, logError)) {
+    for (const repositoryRoot of immediateDirectories(container, logError)) {
       targets.push({
         state: "live",
         root: container,
@@ -113,15 +148,15 @@ export async function scanHandoffs(options: ScanOptions = {}): Promise<HandoffRe
   }
 
   const desktop = join(home, "Desktop");
-  targets.push({
+  const desktopTarget: ScanTarget = {
     state: "live",
     root: desktop,
     repository: "Desktop",
     handoffDirectory: join(desktop, ".ai", "task-handoffs"),
-  });
+  };
 
   const archive = join(home, ".local", "share", "task-handoffs", "archive");
-  for (const originDirectory of await immediateDirectories(archive, logError)) {
+  for (const originDirectory of immediateDirectories(archive, logError)) {
     targets.push({
       state: "archived",
       root: archive,
@@ -130,6 +165,11 @@ export async function scanHandoffs(options: ScanOptions = {}): Promise<HandoffRe
     });
   }
 
-  const groups = await Promise.all(targets.map((target) => scanTarget(target, logError)));
+  const groups = targets.map((target) => scanTarget(target, logError));
+  groups.push(
+    options.homeDir === undefined
+      ? await scanIsolatedTarget(desktopTarget, logError)
+      : scanTarget(desktopTarget, logError),
+  );
   return groups.flat().sort(compareHandoffs);
 }
