@@ -1,18 +1,24 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::Path;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+};
 
 use regex::Regex;
 use serde_json::Value;
 
-use crate::catalog::{Catalog, Skill};
-use crate::diagnostic::Diagnostic;
-use crate::frontmatter::Frontmatter;
-use crate::traversal::ScanRoot;
+use crate::{
+    catalog::{Catalog, Skill},
+    diagnostic::Diagnostic,
+    frontmatter::Frontmatter,
+    traversal::ScanRoot,
+};
 
-use super::fix;
-use super::model::{Counts, Finding, Fix, Report, RootRecord, SCHEMA_VERSION, Severity};
-use super::resource::resource_target;
+use super::{
+    fix,
+    model::{Counts, Finding, Fix, Report, RootRecord, SCHEMA_VERSION, Severity},
+    resource::resource_target,
+};
 
 const COORDINATION_EXEMPT_SENTENCE: &str =
     "This skill is coordination-exempt: skip the ai-coord gate for its declared work.";
@@ -59,8 +65,7 @@ pub fn build_report(catalog: &Catalog, dependencies_only: bool, fix_safe: bool) 
         check_prompt_hygiene(skill, raw.as_ref(), &source, &mut findings);
     }
 
-    let roots =
-        catalog.roots.iter().map(|root| root_record(root, &catalog.skills)).collect::<Vec<_>>();
+    let roots = catalog.roots.iter().map(|root| root_record(root, &catalog.skills)).collect::<Vec<_>>();
     if !dependencies_only {
         for root in &catalog.roots {
             check_readme(root, &catalog.skills, &mut findings);
@@ -76,9 +81,7 @@ pub fn build_report(catalog: &Catalog, dependencies_only: bool, fix_safe: bool) 
 }
 
 fn retained_shared_diagnostic(diagnostic: &Diagnostic, dependencies_only: bool) -> bool {
-    diagnostic.code.starts_with("FRONTMATTER_")
-        || diagnostic.code.starts_with("SKILL_DEPENDENC")
-        || !dependencies_only
+    diagnostic.code.starts_with("FRONTMATTER_") || diagnostic.code.starts_with("SKILL_DEPENDENC") || !dependencies_only
 }
 
 fn shared_finding(diagnostic: &Diagnostic) -> Finding {
@@ -133,10 +136,7 @@ fn check_required_frontmatter(
                     skill.skill_path(),
                     Some(name.line),
                     false,
-                    format!(
-                        "name {:?} does not match directory {:?}",
-                        name.value, skill.directory_name
-                    ),
+                    format!("name {:?} does not match directory {:?}", name.value, skill.directory_name),
                 ));
             }
         }
@@ -181,15 +181,9 @@ fn check_required_frontmatter(
     }
 }
 
-fn check_field_order(
-    skill: &Skill,
-    frontmatter: &Frontmatter,
-    dependencies_only: bool,
-    findings: &mut Vec<Finding>,
-) {
+fn check_field_order(skill: &Skill, frontmatter: &Frontmatter, dependencies_only: bool, findings: &mut Vec<Finding>) {
     let actual = frontmatter.fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>();
-    let mut expected =
-        actual.iter().filter(|name| name.as_str() != "description").cloned().collect::<Vec<_>>();
+    let mut expected = actual.iter().filter(|name| name.as_str() != "description").cloned().collect::<Vec<_>>();
     expected.sort();
     if actual.iter().any(|name| name == "description") {
         expected.push("description".to_owned());
@@ -218,12 +212,7 @@ fn check_field_order(
     }
 }
 
-fn check_typed_frontmatter(
-    skill: &Skill,
-    frontmatter: &Frontmatter,
-    raw: Option<&Value>,
-    findings: &mut Vec<Finding>,
-) {
+fn check_typed_frontmatter(skill: &Skill, frontmatter: &Frontmatter, raw: Option<&Value>, findings: &mut Vec<Finding>) {
     check_string_field(
         skill,
         frontmatter,
@@ -248,22 +237,8 @@ fn check_typed_frontmatter(
         "DISABLE_MODEL_INVOCATION_INVALID",
         findings,
     );
-    check_string_field(
-        skill,
-        frontmatter,
-        "context",
-        frontmatter.context.is_some(),
-        "CONTEXT_INVALID",
-        findings,
-    );
-    check_string_field(
-        skill,
-        frontmatter,
-        "agent",
-        frontmatter.agent.is_some(),
-        "AGENT_INVALID",
-        findings,
-    );
+    check_string_field(skill, frontmatter, "context", frontmatter.context.is_some(), "CONTEXT_INVALID", findings);
+    check_string_field(skill, frontmatter, "agent", frontmatter.agent.is_some(), "AGENT_INVALID", findings);
     check_string_field(
         skill,
         frontmatter,
@@ -294,8 +269,8 @@ fn check_typed_frontmatter(
         }
     }
 
-    if let Some(context) = frontmatter.context.as_ref()
-        && context.value != "fork"
+    if let Some(context) = frontmatter.context.as_ref() &&
+        context.value != "fork"
     {
         findings.push(Finding::new(
             "CONTEXT_INVALID",
@@ -306,8 +281,8 @@ fn check_typed_frontmatter(
             "context must be fork when present",
         ));
     }
-    if let Some(coordination) = frontmatter.coordination.as_ref()
-        && coordination.value != "exempt"
+    if let Some(coordination) = frontmatter.coordination.as_ref() &&
+        coordination.value != "exempt"
     {
         findings.push(Finding::new(
             "COORDINATION_INVALID",
@@ -318,8 +293,8 @@ fn check_typed_frontmatter(
             "coordination must be exempt when present",
         ));
     }
-    if let Some(targets) = frontmatter.install_targets.as_ref()
-        && targets.value.is_none()
+    if let Some(targets) = frontmatter.install_targets.as_ref() &&
+        targets.value.is_none()
     {
         findings.push(Finding::new(
             "INSTALL_TARGETS_INVALID",
@@ -330,19 +305,12 @@ fn check_typed_frontmatter(
             "metadata.install-targets must be claude-code, codex, or claude-code codex",
         ));
     }
-    if frontmatter.has_field("metadata")
-        && raw
-            .and_then(Value::as_object)
+    if frontmatter.has_field("metadata") &&
+        raw.and_then(Value::as_object)
             .and_then(|object| object.get("metadata"))
             .is_some_and(|metadata| !metadata.is_object())
     {
-        findings.push(typed_finding(
-            skill,
-            frontmatter,
-            "metadata",
-            "METADATA_INVALID",
-            "metadata must be a mapping",
-        ));
+        findings.push(typed_finding(skill, frontmatter, "metadata", "METADATA_INVALID", "metadata must be a mapping"));
     }
 }
 
@@ -355,13 +323,7 @@ fn check_string_field(
     findings: &mut Vec<Finding>,
 ) {
     if frontmatter.has_field(name) && !valid {
-        findings.push(typed_finding(
-            skill,
-            frontmatter,
-            name,
-            code,
-            format!("{name} must be a string"),
-        ));
+        findings.push(typed_finding(skill, frontmatter, name, code, format!("{name} must be a string")));
     }
 }
 
@@ -374,13 +336,7 @@ fn check_bool_field(
     findings: &mut Vec<Finding>,
 ) {
     if frontmatter.has_field(name) && !valid {
-        findings.push(typed_finding(
-            skill,
-            frontmatter,
-            name,
-            code,
-            format!("{name} must be true or false"),
-        ));
+        findings.push(typed_finding(skill, frontmatter, name, code, format!("{name} must be true or false")));
     }
 }
 
@@ -401,12 +357,7 @@ fn typed_finding(
     )
 }
 
-fn check_coordination(
-    skill: &Skill,
-    frontmatter: &Frontmatter,
-    source: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn check_coordination(skill: &Skill, frontmatter: &Frontmatter, source: &str, findings: &mut Vec<Finding>) {
     let body_start = frontmatter_ranges(source).map_or(0, |(_, body)| body);
     let body = &source[body_start..];
     let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -431,9 +382,7 @@ fn check_coordination(
             skill.skill_path(),
             frontmatter.coordination.as_ref().map(|value| value.line),
             false,
-            format!(
-                "coordination: exempt requires the canonical body sentence: {COORDINATION_EXEMPT_SENTENCE}"
-            ),
+            format!("coordination: exempt requires the canonical body sentence: {COORDINATION_EXEMPT_SENTENCE}"),
         ));
     } else if !exact && let Some(mention) = mention {
         findings.push(Finding::new(
@@ -456,9 +405,7 @@ fn check_openai(
     findings: &mut Vec<Finding>,
     fixes: &mut Vec<Fix>,
 ) {
-    if frontmatter.has_field("disable-model-invocation")
-        && frontmatter.disable_model_invocation.is_none()
-    {
+    if frontmatter.has_field("disable-model-invocation") && frontmatter.disable_model_invocation.is_none() {
         return;
     }
     let expected = !frontmatter.disable_model_invocation.as_ref().is_some_and(|value| value.value);
@@ -625,10 +572,7 @@ fn check_resource_links(skill: &Skill, source: &str, findings: &mut Vec<Finding>
                 continue;
             };
             let raw = clean_reference(reference.as_str());
-            if raw.is_empty()
-                || raw.ends_with('/')
-                || raw.bytes().any(|byte| matches!(byte, b'*' | b'{' | b'}'))
-            {
+            if raw.is_empty() || raw.ends_with('/') || raw.bytes().any(|byte| matches!(byte, b'*' | b'{' | b'}')) {
                 continue;
             }
             let Some(target) = resource_target(skill.exposure.exposure_directory(), raw) else {
@@ -657,17 +601,9 @@ fn check_resource_links(skill: &Skill, source: &str, findings: &mut Vec<Finding>
     }
 }
 
-fn check_prompt_hygiene(
-    skill: &Skill,
-    raw: Option<&Value>,
-    source: &str,
-    findings: &mut Vec<Finding>,
-) {
-    if let Some(model) = raw
-        .and_then(Value::as_object)
-        .and_then(|object| object.get("model"))
-        .and_then(Value::as_str)
-        && model.eq_ignore_ascii_case("opus")
+fn check_prompt_hygiene(skill: &Skill, raw: Option<&Value>, source: &str, findings: &mut Vec<Finding>) {
+    if let Some(model) = raw.and_then(Value::as_object).and_then(|object| object.get("model")).and_then(Value::as_str) &&
+        model.eq_ignore_ascii_case("opus")
     {
         findings.push(Finding::new(
             "STALE_MODEL_PIN",
@@ -675,9 +611,7 @@ fn check_prompt_hygiene(
             skill.skill_path(),
             line_for(source, "model:"),
             false,
-            format!(
-                "model pin {model:?} is a stale alias; verify that an explicit pin is still needed"
-            ),
+            format!("model pin {model:?} is a stale alias; verify that an explicit pin is still needed"),
         ));
     }
     if !completion_evidence().is_match(source) {
@@ -699,19 +633,15 @@ fn check_prompt_hygiene(
         let Some(target) = resource_target(skill.exposure.exposure_directory(), raw) else {
             continue;
         };
-        if target.extension().and_then(|extension| extension.to_str()) != Some("md")
-            || !target.is_file()
-        {
+        if target.extension().and_then(|extension| extension.to_str()) != Some("md") || !target.is_file() {
             continue;
         }
         let line_start = source[..reference.start()].rfind('\n').map_or(0, |offset| offset + 1);
-        let line_end = source[reference.end()..]
-            .find('\n')
-            .map_or(source.len(), |offset| reference.end() + offset);
+        let line_end = source[reference.end()..].find('\n').map_or(source.len(), |offset| reference.end() + offset);
         let line = source[line_start..line_end].to_ascii_lowercase();
-        let unconditional = line.contains("mandatory")
-            || line.contains("always read")
-            || (line.contains("read") && line.contains("before"));
+        let unconditional = line.contains("mandatory") ||
+            line.contains("always read") ||
+            (line.contains("read") && line.contains("before"));
         if !unconditional {
             continue;
         }
@@ -861,9 +791,9 @@ fn skill_belongs_to_root(root: &ScanRoot, path: &Path) -> bool {
     let Some(parent) = path.parent() else {
         return false;
     };
-    parent.parent() == Some(root.exposure_path.join("skills").as_path())
-        || (root.exposure_path.file_name().and_then(|name| name.to_str()) == Some("skills")
-            && parent.parent() == Some(root.exposure_path.as_path()))
+    parent.parent() == Some(root.exposure_path.join("skills").as_path()) ||
+        (root.exposure_path.file_name().and_then(|name| name.to_str()) == Some("skills") &&
+            parent.parent() == Some(root.exposure_path.as_path()))
 }
 
 fn counts(findings: &[Finding], fixes: &[Fix]) -> Counts {
@@ -873,10 +803,7 @@ fn counts(findings: &[Finding], fixes: &[Fix]) -> Counts {
         warnings: findings.iter().filter(|finding| finding.severity == Severity::Warning).count(),
         fixable: findings.iter().filter(|finding| finding.fixable).count(),
         fixes: fixes.len(),
-        fix_errors: findings
-            .iter()
-            .filter(|finding| finding.severity == Severity::FixError)
-            .count(),
+        fix_errors: findings.iter().filter(|finding| finding.severity == Severity::FixError).count(),
     }
 }
 
@@ -904,9 +831,11 @@ fn frontmatter_ranges(source: &str) -> Option<(std::ops::Range<usize>, usize)> {
 }
 
 fn clean_reference(reference: &str) -> &str {
-    reference.split(['#', '?']).next().unwrap_or_default().trim_end_matches(|character| {
-        matches!(character, '.' | ',' | ';' | ':' | ')' | ']' | '}' | '\'' | '"')
-    })
+    reference
+        .split(['#', '?'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(|character| matches!(character, '.' | ',' | ';' | ':' | ')' | ']' | '}' | '\'' | '"'))
 }
 
 fn line_for(source: &str, needle: &str) -> Option<u64> {
@@ -914,33 +843,22 @@ fn line_for(source: &str, needle: &str) -> Option<u64> {
 }
 
 fn line_at(source: &str, offset: usize) -> u64 {
-    source.as_bytes()[..offset.min(source.len())].iter().filter(|byte| **byte == b'\n').count()
-        as u64
-        + 1
+    source.as_bytes()[..offset.min(source.len())].iter().filter(|byte| **byte == b'\n').count() as u64 + 1
 }
 
-fn authority_clauses(
-    regex: &Regex,
-    source: &str,
-    exclude_leading_not: bool,
-) -> Vec<(usize, BTreeSet<String>)> {
+fn authority_clauses(regex: &Regex, source: &str, exclude_leading_not: bool) -> Vec<(usize, BTreeSet<String>)> {
     regex
         .captures_iter(source)
         .filter_map(|captures| {
             let whole = captures.get(0)?;
             let clause = captures.get(1)?;
-            if exclude_leading_not
-                && clause.as_str().trim_start().to_ascii_lowercase().starts_with("not ")
-            {
+            if exclude_leading_not && clause.as_str().trim_start().to_ascii_lowercase().starts_with("not ") {
                 return None;
             }
             let words = word().find_iter(clause.as_str()).take(10).filter_map(|word| {
                 let word = word.as_str().to_ascii_lowercase();
-                (!matches!(
-                    word.as_str(),
-                    "the" | "a" | "an" | "to" | "of" | "and" | "or" | "when" | "if"
-                ))
-                .then_some(word)
+                (!matches!(word.as_str(), "the" | "a" | "an" | "to" | "of" | "and" | "or" | "when" | "if"))
+                    .then_some(word)
             });
             Some((whole.start(), words.collect()))
         })
@@ -954,22 +872,18 @@ fn coordination_mention() -> &'static Regex {
 
 fn semver() -> &'static Regex {
     static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    VALUE
-        .get_or_init(|| Regex::new(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$").unwrap())
+    VALUE.get_or_init(|| Regex::new(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$").unwrap())
 }
 
 fn markdown_resource() -> &'static Regex {
     static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    VALUE.get_or_init(|| {
-        Regex::new(r"\]\((?P<path>(?:references|scripts|assets)/[^)\s]+)\)").unwrap()
-    })
+    VALUE.get_or_init(|| Regex::new(r"\]\((?P<path>(?:references|scripts|assets)/[^)\s]+)\)").unwrap())
 }
 
 fn script_resource() -> &'static Regex {
     static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     VALUE.get_or_init(|| {
-        Regex::new(r"(?:^|[^A-Za-z0-9_./-])uv run (?P<path>scripts/[A-Za-z0-9][A-Za-z0-9._/-]*)")
-            .unwrap()
+        Regex::new(r"(?:^|[^A-Za-z0-9_./-])uv run (?P<path>scripts/[A-Za-z0-9][A-Za-z0-9._/-]*)").unwrap()
     })
 }
 
@@ -985,9 +899,7 @@ fn requirement() -> &'static Regex {
 
 fn prohibition() -> &'static Regex {
     static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    VALUE.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:do not|don't|never|must not|forbid(?:s|den)?)\s+([^.!?\n]+)").unwrap()
-    })
+    VALUE.get_or_init(|| Regex::new(r"(?i)\b(?:do not|don't|never|must not|forbid(?:s|den)?)\s+([^.!?\n]+)").unwrap())
 }
 
 fn word() -> &'static Regex {

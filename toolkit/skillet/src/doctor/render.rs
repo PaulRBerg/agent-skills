@@ -1,8 +1,6 @@
-use std::fmt::Write as _;
-use std::path::Path;
+use std::{fmt::Write as _, path::Path};
 
-use crate::cli::DoctorFormat;
-use crate::error::Error;
+use crate::{cli::DoctorFormat, error::Error};
 
 use super::model::{Report, Severity};
 
@@ -30,15 +28,13 @@ fn render_text(report: &Report) -> String {
     if !report.roots.is_empty() {
         output.push_str("\nRoots:\n");
         for root in &report.roots {
-            writeln!(output, "- {}: {} active", display_path(&root.path), root.active_skills)
-                .unwrap();
+            writeln!(output, "- {}: {} active", display_path(&root.path), root.active_skills).unwrap();
         }
     }
     if !report.fixes.is_empty() {
         output.push_str("\nFixes:\n");
         for fix in &report.fixes {
-            writeln!(output, "- {}: {}: {}", fix.code, display_path(&fix.path), fix.message)
-                .unwrap();
+            writeln!(output, "- {}: {}: {}", fix.code, display_path(&fix.path), fix.message).unwrap();
         }
     }
     if !report.findings.is_empty() {

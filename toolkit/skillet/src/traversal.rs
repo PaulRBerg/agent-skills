@@ -1,26 +1,18 @@
-use std::collections::BTreeMap;
-use std::env;
-use std::ffi::OsStr;
-use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    env,
+    ffi::OsStr,
+    fs,
+    path::{Component, Path, PathBuf},
+};
 
 use ignore::{DirEntry, WalkBuilder};
 use serde::Serialize;
 
 use crate::error::Error;
 
-const BROAD_EXCLUDED_NAMES: &[&str] = &[
-    ".git",
-    ".next",
-    ".venv",
-    "build",
-    "coverage",
-    "dist",
-    "node_modules",
-    "out",
-    "target",
-    "vendor",
-];
+const BROAD_EXCLUDED_NAMES: &[&str] =
+    &[".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"];
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -128,8 +120,8 @@ fn normalize_root(request: &RootRequest) -> Result<ScanRoot, Error> {
     if !metadata.is_dir() {
         return Err(Error::RootNotDirectory(exposure_path));
     }
-    let resolved_path = fs::canonicalize(&exposure_path)
-        .map_err(|error| Error::io("resolve", &exposure_path, error))?;
+    let resolved_path =
+        fs::canonicalize(&exposure_path).map_err(|error| Error::io("resolve", &exposure_path, error))?;
     Ok(ScanRoot {
         exposure_path,
         resolved_path,
@@ -152,10 +144,7 @@ fn lexical_normalize(path: &Path) -> PathBuf {
     normalized
 }
 
-fn discover_root(
-    root: &ScanRoot,
-    skills: &mut BTreeMap<PathBuf, SkillExposure>,
-) -> Result<(), Error> {
+fn discover_root(root: &ScanRoot, skills: &mut BTreeMap<PathBuf, SkillExposure>) -> Result<(), Error> {
     // A directly requested skill remains explicit even when a parent ignore file excludes it.
     add_candidate(root, &root.exposure_path.join("SKILL.md"), skills)?;
 
@@ -177,24 +166,20 @@ fn discover_root(
     }
 
     for entry in builder.build() {
-        let entry = entry.map_err(|error| Error::Traversal {
-            path: root.exposure_path.clone(),
-            message: error.to_string(),
-        })?;
+        let entry =
+            entry.map_err(|error| Error::Traversal { path: root.exposure_path.clone(), message: error.to_string() })?;
         let path = entry.path();
         if path == root.exposure_path {
             continue;
         }
 
-        if entry.file_type().is_some_and(|file_type| file_type.is_symlink())
-            && recognized_skill_directory(root, path)
-        {
+        if entry.file_type().is_some_and(|file_type| file_type.is_symlink()) && recognized_skill_directory(root, path) {
             add_candidate(root, &path.join("SKILL.md"), skills)?;
             continue;
         }
-        if entry.file_type().is_some_and(|file_type| file_type.is_file())
-            && path.file_name() == Some(OsStr::new("SKILL.md"))
-            && (root.mode == RootMode::Broad || recognized_skill_file(root, path))
+        if entry.file_type().is_some_and(|file_type| file_type.is_file()) &&
+            path.file_name() == Some(OsStr::new("SKILL.md")) &&
+            (root.mode == RootMode::Broad || recognized_skill_file(root, path))
         {
             add_candidate(root, path, skills)?;
         }
@@ -202,11 +187,7 @@ fn discover_root(
     Ok(())
 }
 
-fn add_candidate(
-    root: &ScanRoot,
-    path: &Path,
-    skills: &mut BTreeMap<PathBuf, SkillExposure>,
-) -> Result<(), Error> {
+fn add_candidate(root: &ScanRoot, path: &Path, skills: &mut BTreeMap<PathBuf, SkillExposure>) -> Result<(), Error> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -216,14 +197,13 @@ fn add_candidate(
         return Ok(());
     }
     let exposure_path = lexical_normalize(path);
-    let resolved_path = fs::canonicalize(&exposure_path)
-        .map_err(|error| Error::io("resolve", &exposure_path, error))?;
+    let resolved_path =
+        fs::canonicalize(&exposure_path).map_err(|error| Error::io("resolve", &exposure_path, error))?;
     let directory = exposure_path.parent().expect("a SKILL.md candidate always has a parent");
     let directory_symlink_target = match fs::symlink_metadata(directory) {
-        Ok(metadata) if metadata.file_type().is_symlink() => Some(
-            fs::read_link(directory)
-                .map_err(|error| Error::io("read symlink", directory, error))?,
-        ),
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Some(fs::read_link(directory).map_err(|error| Error::io("read symlink", directory, error))?)
+        }
         Ok(_) => None,
         Err(error) => return Err(Error::io("inspect", directory, error)),
     };
@@ -246,17 +226,17 @@ fn recognized_skill_file(root: &ScanRoot, path: &Path) -> bool {
     if parts.as_slice() == [OsStr::new("SKILL.md")] {
         return true;
     }
-    if root.exposure_path.file_name() == Some(OsStr::new("skills"))
-        && parts.len() == 2
-        && parts[1] == OsStr::new("SKILL.md")
+    if root.exposure_path.file_name() == Some(OsStr::new("skills")) &&
+        parts.len() == 2 &&
+        parts[1] == OsStr::new("SKILL.md")
     {
         return true;
     }
-    (parts.len() == 3 && parts[0] == OsStr::new("skills") && parts[2] == OsStr::new("SKILL.md"))
-        || (parts.len() == 4
-            && matches!(parts[0].to_str(), Some(".agents" | ".claude" | ".codex"))
-            && parts[1] == OsStr::new("skills")
-            && parts[3] == OsStr::new("SKILL.md"))
+    (parts.len() == 3 && parts[0] == OsStr::new("skills") && parts[2] == OsStr::new("SKILL.md")) ||
+        (parts.len() == 4 &&
+            matches!(parts[0].to_str(), Some(".agents" | ".claude" | ".codex")) &&
+            parts[1] == OsStr::new("skills") &&
+            parts[3] == OsStr::new("SKILL.md"))
 }
 
 fn recognized_skill_directory(root: &ScanRoot, path: &Path) -> bool {
@@ -280,11 +260,7 @@ fn classify_scope(root: &ScanRoot, path: &Path) -> ExposureScope {
             _ => {}
         }
     }
-    if parts.iter().any(|part| *part == OsStr::new("skills")) {
-        ExposureScope::Catalog
-    } else {
-        ExposureScope::Broad
-    }
+    if parts.iter().any(|part| *part == OsStr::new("skills")) { ExposureScope::Catalog } else { ExposureScope::Broad }
 }
 
 fn broad_entry_allowed(entry: &DirEntry, scan_root: &Path, excluded_roots: &[PathBuf]) -> bool {
@@ -296,10 +272,7 @@ fn broad_entry_allowed(entry: &DirEntry, scan_root: &Path, excluded_roots: &[Pat
     if BROAD_EXCLUDED_NAMES.iter().any(|excluded| name == *excluded) {
         return false;
     }
-    if excluded_roots
-        .iter()
-        .any(|excluded| !scan_root.starts_with(excluded) && path.starts_with(excluded))
-    {
+    if excluded_roots.iter().any(|excluded| !scan_root.starts_with(excluded) && path.starts_with(excluded)) {
         return false;
     }
     if agent_state_path(path) {
@@ -335,11 +308,7 @@ fn broad_excluded_roots(include_catalog_sources: bool) -> Vec<PathBuf> {
         "go/pkg/mod",
     ];
     if !include_catalog_sources {
-        relative_roots.extend([
-            "projects/agent-skills",
-            "sablier/agent-skills",
-            "sablier/sablier-skills",
-        ]);
+        relative_roots.extend(["projects/agent-skills", "sablier/agent-skills", "sablier/sablier-skills"]);
     }
     relative_roots.into_iter().map(|relative| home.join(relative)).collect()
 }
@@ -352,35 +321,35 @@ fn agent_state_path(path: &Path) -> bool {
             (
                 Some(".claude"),
                 Some(
-                    "backups"
-                        | "debug"
-                        | "file-history"
-                        | "image-cache"
-                        | "logs"
-                        | "paste-cache"
-                        | "plans"
-                        | "projects"
-                        | "session-env"
-                        | "shell-snapshots"
-                        | "statsig"
-                        | "tasks"
-                        | "todos"
+                    "backups" |
+                        "debug" |
+                        "file-history" |
+                        "image-cache" |
+                        "logs" |
+                        "paste-cache" |
+                        "plans" |
+                        "projects" |
+                        "session-env" |
+                        "shell-snapshots" |
+                        "statsig" |
+                        "tasks" |
+                        "todos"
                 )
             ) | (
                 Some(".codex"),
                 Some(
-                    ".tmp"
-                        | "archived_sessions"
-                        | "backups"
-                        | "cache"
-                        | "generated_images"
-                        | "log"
-                        | "logs"
-                        | "sessions"
-                        | "shell_snapshots"
-                        | "sqlite"
-                        | "threads"
-                        | "tmp"
+                    ".tmp" |
+                        "archived_sessions" |
+                        "backups" |
+                        "cache" |
+                        "generated_images" |
+                        "log" |
+                        "logs" |
+                        "sessions" |
+                        "shell_snapshots" |
+                        "sqlite" |
+                        "threads" |
+                        "tmp"
                 )
             )
         )

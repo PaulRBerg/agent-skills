@@ -1,7 +1,6 @@
 mod common;
 
-use std::collections::BTreeSet;
-use std::fs;
+use std::{collections::BTreeSet, fs};
 
 use predicates::prelude::*;
 use serde_json::Value;
@@ -23,9 +22,7 @@ fn run_json(root: &std::path::Path, extra: &[&str]) -> (std::process::Output, Va
 fn write_skill(root: &std::path::Path, name: &str, fields: &str, body: &str) {
     common::write(
         root.join("skills").join(name).join("SKILL.md"),
-        format!(
-            "---\n{fields}name: {name}\ndescription: {name} description.\n---\n\n# {name}\n\n{body}\n"
-        ),
+        format!("---\n{fields}name: {name}\ndescription: {name} description.\n---\n\n# {name}\n\n{body}\n"),
     );
 }
 
@@ -42,12 +39,7 @@ fn write_readme(root: &std::path::Path, names: &[&str]) {
 }
 
 fn codes(report: &Value) -> BTreeSet<&str> {
-    report["findings"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|finding| finding["code"].as_str().unwrap())
-        .collect()
+    report["findings"].as_array().unwrap().iter().map(|finding| finding["code"].as_str().unwrap()).collect()
 }
 
 #[test]
@@ -181,12 +173,7 @@ fn dependencies_report_every_validation_family_and_malformed_frontmatter() {
 fn fix_safe_creates_and_updates_metadata_without_other_byte_changes() {
     let root = TempDir::new().unwrap();
     write_skill(root.path(), "alpha", "", "## Completion\n\nReport verification.");
-    write_skill(
-        root.path(),
-        "beta",
-        "disable-model-invocation: true\n",
-        "## Completion\n\nReport verification.",
-    );
+    write_skill(root.path(), "beta", "disable-model-invocation: true\n", "## Completion\n\nReport verification.");
     write_metadata(
         root.path(),
         "beta",
@@ -218,12 +205,7 @@ fn fix_safe_creates_and_updates_metadata_without_other_byte_changes() {
 #[test]
 fn failed_fix_is_exit_three_and_leaves_target_and_directories_unchanged() {
     let root = TempDir::new().unwrap();
-    write_skill(
-        root.path(),
-        "alpha",
-        "disable-model-invocation: true\n",
-        "## Completion\n\nReport verification.",
-    );
+    write_skill(root.path(), "alpha", "disable-model-invocation: true\n", "## Completion\n\nReport verification.");
     write_metadata(root.path(), "alpha", "policy: { allow_implicit_invocation: true }\n");
     write_readme(root.path(), &["alpha"]);
     let path = root.path().join("skills/alpha/agents/openai.yaml");
@@ -235,10 +217,7 @@ fn failed_fix_is_exit_three_and_leaves_target_and_directories_unchanged() {
     assert!(codes(&report).contains("OPENAI_METADATA_FIX_FAILED"));
     assert_eq!(fs::read(&path).unwrap(), before);
     assert_eq!(
-        fs::read_dir(path.parent().unwrap())
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name())
-            .collect::<Vec<_>>(),
+        fs::read_dir(path.parent().unwrap()).unwrap().map(|entry| entry.unwrap().file_name()).collect::<Vec<_>>(),
         [std::ffi::OsString::from("openai.yaml")]
     );
 }
@@ -247,12 +226,7 @@ fn failed_fix_is_exit_three_and_leaves_target_and_directories_unchanged() {
 fn safe_fix_failures_are_isolated_from_successful_atomic_fixes() {
     let root = TempDir::new().unwrap();
     write_skill(root.path(), "alpha", "", "## Completion\n\nReport verification.");
-    write_skill(
-        root.path(),
-        "beta",
-        "disable-model-invocation: true\n",
-        "## Completion\n\nReport verification.",
-    );
+    write_skill(root.path(), "beta", "disable-model-invocation: true\n", "## Completion\n\nReport verification.");
     write_metadata(root.path(), "beta", "policy: { allow_implicit_invocation: true }\n");
     write_readme(root.path(), &["alpha", "beta"]);
     let failed_path = root.path().join("skills/beta/agents/openai.yaml");
@@ -272,13 +246,7 @@ fn safe_fix_failures_are_isolated_from_successful_atomic_fixes() {
 #[test]
 fn output_is_deterministic_default_root_works_and_operational_errors_exit_two() {
     let root = common::fixture("doctor/catalog");
-    let run = || {
-        common::ai_skillet()
-            .args(["doctor", "--format", "json"])
-            .current_dir(&root)
-            .output()
-            .unwrap()
-    };
+    let run = || common::ai_skillet().args(["doctor", "--format", "json"]).current_dir(&root).output().unwrap();
     let first = run();
     let second = run();
     assert!(first.status.success());

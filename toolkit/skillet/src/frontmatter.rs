@@ -1,10 +1,14 @@
-use std::fmt;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
-use std::path::Path;
+use std::{
+    fmt,
+    fs::File,
+    io::{self, BufRead, BufReader, Read},
+    path::Path,
+};
 
-use serde::de::{MapAccess, SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{
+    Deserialize, Deserializer, Serialize,
+    de::{MapAccess, SeqAccess, Visitor},
+};
 use serde_saphyr::Spanned;
 
 use crate::diagnostic::Diagnostic;
@@ -152,10 +156,9 @@ fn parse_reader(path: &Path, mut reader: impl BufRead) -> FrontmatterParse {
     let yaml = match String::from_utf8(yaml) {
         Ok(yaml) => yaml,
         Err(error) => {
-            let line = 1 + error.as_bytes()[..error.utf8_error().valid_up_to()]
-                .iter()
-                .filter(|byte| **byte == b'\n')
-                .count() as u64;
+            let line =
+                1 + error.as_bytes()[..error.utf8_error().valid_up_to()].iter().filter(|byte| **byte == b'\n').count()
+                    as u64;
             return FrontmatterParse {
                 frontmatter: None,
                 diagnostics: vec![Diagnostic::error(
@@ -230,9 +233,8 @@ fn extract_frontmatter(fields: &[(Spanned<String>, Spanned<YamlValue>)]) -> Fron
             "agent" => frontmatter.agent = string_value(value, field_location),
             "coordination" => frontmatter.coordination = string_value(value, field_location),
             "metadata" => {
-                if let YamlValue::Mapping(metadata) = &value.value
-                    && let Some((key, value)) =
-                        metadata.iter().find(|(key, _)| key.value == "install-targets")
+                if let YamlValue::Mapping(metadata) = &value.value &&
+                    let Some((key, value)) = metadata.iter().find(|(key, _)| key.value == "install-targets")
                 {
                     let parsed = match &value.value {
                         YamlValue::String(value) => InstallTargets::parse(value),
@@ -267,20 +269,14 @@ fn extract_frontmatter(fields: &[(Spanned<String>, Spanned<YamlValue>)]) -> Fron
     frontmatter
 }
 
-fn string_value(
-    value: &Spanned<YamlValue>,
-    location: serde_saphyr::Location,
-) -> Option<Located<String>> {
+fn string_value(value: &Spanned<YamlValue>, location: serde_saphyr::Location) -> Option<Located<String>> {
     match &value.value {
         YamlValue::String(value) => Some(Located::at(value.clone(), location)),
         _ => None,
     }
 }
 
-fn bool_value(
-    value: &Spanned<YamlValue>,
-    location: serde_saphyr::Location,
-) -> Option<Located<bool>> {
+fn bool_value(value: &Spanned<YamlValue>, location: serde_saphyr::Location) -> Option<Located<bool>> {
     match value.value {
         YamlValue::Bool(value) => Some(Located::at(value, location)),
         _ => None,
@@ -292,22 +288,14 @@ enum ReadLine {
     LimitExceeded,
 }
 
-fn read_bounded_line(
-    reader: &mut impl BufRead,
-    line: &mut Vec<u8>,
-    consumed: &mut usize,
-) -> io::Result<ReadLine> {
+fn read_bounded_line(reader: &mut impl BufRead, line: &mut Vec<u8>, consumed: &mut usize) -> io::Result<ReadLine> {
     let remaining = MAX_FRONTMATTER_BYTES.saturating_sub(*consumed);
     if remaining == 0 {
         return Ok(ReadLine::LimitExceeded);
     }
     let read = reader.take((remaining + 1) as u64).read_until(b'\n', line)?;
     *consumed = consumed.saturating_add(read);
-    if *consumed > MAX_FRONTMATTER_BYTES {
-        Ok(ReadLine::LimitExceeded)
-    } else {
-        Ok(ReadLine::Complete(read))
-    }
+    if *consumed > MAX_FRONTMATTER_BYTES { Ok(ReadLine::LimitExceeded) } else { Ok(ReadLine::Complete(read)) }
 }
 
 fn delimiter_contents(line: &[u8]) -> Option<&[u8]> {
@@ -320,13 +308,7 @@ fn delimiter_contents(line: &[u8]) -> Option<&[u8]> {
 fn missing_delimiter(path: &Path, line: u64, message: &'static str) -> FrontmatterParse {
     FrontmatterParse {
         frontmatter: None,
-        diagnostics: vec![Diagnostic::error(
-            "FRONTMATTER_DELIMITER_MISSING",
-            path,
-            line,
-            1,
-            message,
-        )],
+        diagnostics: vec![Diagnostic::error("FRONTMATTER_DELIMITER_MISSING", path, line, 1, message)],
     }
 }
 

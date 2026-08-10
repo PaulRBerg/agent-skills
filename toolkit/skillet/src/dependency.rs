@@ -1,12 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
-use std::path::Path;
-use std::str::FromStr;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+    path::Path,
+    str::FromStr,
+};
 
 use serde::Serialize;
 
-use crate::diagnostic::{Diagnostic, sort_diagnostics};
-use crate::frontmatter::{DependencyList, Frontmatter, Located};
+use crate::{
+    diagnostic::{Diagnostic, sort_diagnostics},
+    frontmatter::{DependencyList, Frontmatter, Located},
+};
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
@@ -14,11 +18,10 @@ pub struct SkillName(String);
 
 impl SkillName {
     pub fn parse(value: &str) -> Result<Self, InvalidSkillName> {
-        let valid = !value.is_empty()
-            && value.len() <= 64
-            && value.split('-').all(|part| {
-                !part.is_empty()
-                    && part.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        let valid = !value.is_empty() &&
+            value.len() <= 64 &&
+            value.split('-').all(|part| {
+                !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
             });
         if valid { Ok(Self(value.to_owned())) } else { Err(InvalidSkillName) }
     }
@@ -70,22 +73,16 @@ pub enum DependencyIdentifier {
 impl DependencyIdentifier {
     pub fn parse(value: &str) -> Result<Self, InvalidDependencyIdentifier> {
         if !value.contains('/') && !value.contains('#') {
-            return SkillName::parse(value)
-                .map(Self::Internal)
-                .map_err(|_| InvalidDependencyIdentifier);
+            return SkillName::parse(value).map(Self::Internal).map_err(|_| InvalidDependencyIdentifier);
         }
 
-        let (repository_path, skill) = value
-            .split_once('#')
-            .filter(|(_, skill)| !skill.contains('#'))
-            .ok_or(InvalidDependencyIdentifier)?;
+        let (repository_path, skill) =
+            value.split_once('#').filter(|(_, skill)| !skill.contains('#')).ok_or(InvalidDependencyIdentifier)?;
         let (owner, repository) = repository_path
             .split_once('/')
             .filter(|(owner, repository)| !owner.contains('/') && !repository.contains('/'))
             .ok_or(InvalidDependencyIdentifier)?;
-        if !valid_repository_component(owner)
-            || !valid_repository_component(repository)
-            || repository.ends_with(".git")
+        if !valid_repository_component(owner) || !valid_repository_component(repository) || repository.ends_with(".git")
         {
             return Err(InvalidDependencyIdentifier);
         }
@@ -121,11 +118,9 @@ impl fmt::Display for DependencyIdentifier {
 
 fn valid_repository_component(value: &str) -> bool {
     let bytes = value.as_bytes();
-    !bytes.is_empty()
-        && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
-        && bytes
-            .iter()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+    !bytes.is_empty() &&
+        bytes.first().is_some_and(u8::is_ascii_alphanumeric) &&
+        bytes.iter().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -239,9 +234,7 @@ pub fn validate_dependencies(
                     path,
                     *line,
                     *column,
-                    format!(
-                        "bare skill dependency does not resolve in the scanned roots: {target}"
-                    ),
+                    format!("bare skill dependency does not resolve in the scanned roots: {target}"),
                 ));
             }
         }
@@ -249,9 +242,7 @@ pub fn validate_dependencies(
 
     let identifiers: Vec<_> = parsed.iter().map(|(identifier, _, _)| identifier).collect();
     let mut expected = identifiers.clone();
-    expected.sort_by_key(|identifier| {
-        (identifier.target_name().as_str().replace('-', ""), identifier.as_identifier())
-    });
+    expected.sort_by_key(|identifier| (identifier.target_name().as_str().replace('-', ""), identifier.as_identifier()));
     if identifiers != expected {
         result.diagnostics.push(Diagnostic::error(
             "SKILL_DEPENDENCIES_ORDER",
@@ -262,10 +253,8 @@ pub fn validate_dependencies(
         ));
     }
 
-    result.dependencies = parsed
-        .into_iter()
-        .map(|(identifier, line, column)| DeclaredDependency { identifier, line, column })
-        .collect();
+    result.dependencies =
+        parsed.into_iter().map(|(identifier, line, column)| DeclaredDependency { identifier, line, column }).collect();
     sort_diagnostics(&mut result.diagnostics);
     result
 }

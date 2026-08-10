@@ -1,23 +1,19 @@
 [package]
-authors = ["Paul Razvan Berg"]
+authors.workspace = true
 description = "Prepare immutable Git snapshots and commit them safely in shared working trees"
-edition = "2024"
-homepage = "https://github.com/PaulRBerg/ai-commit"
-license = "MIT"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
 name = "ai-commit"
-repository = "https://github.com/PaulRBerg/ai-commit"
-version = "0.1.0"
+repository.workspace = true
+version.workspace = true
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
+clap.workspace = true
 fs2 = "0.4"
-rand = "0.9"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tempfile = "3.20"
-toml = "0.9"
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+toml.workspace = true
 wait-timeout = "0.2"
-
-[profile.release]
-lto = "thin"
-strip = true

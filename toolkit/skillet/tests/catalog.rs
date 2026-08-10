@@ -1,13 +1,14 @@
 mod common;
 
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
-use ai_skillet::catalog::Catalog;
-use ai_skillet::dependency::{DependencyIdentifier, SkillName};
-use ai_skillet::frontmatter::{InstallTargets, parse_skill_file};
-use ai_skillet::hash::{sha256_file, sha256_tree};
-use ai_skillet::traversal::{ExposureScope, RootRequest};
+use ai_skillet::{
+    catalog::Catalog,
+    dependency::{DependencyIdentifier, SkillName},
+    frontmatter::{InstallTargets, parse_skill_file},
+    hash::{sha256_file, sha256_tree},
+    traversal::{ExposureScope, RootRequest},
+};
 use tempfile::TempDir;
 
 #[test]
@@ -22,31 +23,15 @@ fn parses_only_leading_multiline_frontmatter_with_field_locations() {
 
     let catalog = Catalog::load(&[RootRequest::explicit(temporary.path())]).unwrap();
     assert!(catalog.diagnostics.is_empty(), "{:?}", catalog.diagnostics);
-    let alpha = catalog
-        .skills
-        .iter()
-        .find(|skill| skill.name.as_ref().map(SkillName::as_str) == Some("alpha"))
-        .unwrap();
+    let alpha =
+        catalog.skills.iter().find(|skill| skill.name.as_ref().map(SkillName::as_str) == Some("alpha")).unwrap();
     let frontmatter = alpha.frontmatter.as_ref().unwrap();
     assert_eq!(
-        frontmatter
-            .fields
-            .iter()
-            .map(|field| (field.name.as_str(), field.line))
-            .collect::<Vec<_>>(),
-        [
-            ("name", 2),
-            ("compatibility", 3),
-            ("metadata", 6),
-            ("skill-dependencies", 8),
-            ("description", 10),
-        ]
+        frontmatter.fields.iter().map(|field| (field.name.as_str(), field.line)).collect::<Vec<_>>(),
+        [("name", 2), ("compatibility", 3), ("metadata", 6), ("skill-dependencies", 8), ("description", 10),]
     );
     assert_eq!(frontmatter.name.as_ref().unwrap().value, "alpha");
-    assert_eq!(
-        frontmatter.install_targets.as_ref().unwrap().value,
-        Some(InstallTargets::ClaudeCodeAndCodex)
-    );
+    assert_eq!(frontmatter.install_targets.as_ref().unwrap().value, Some(InstallTargets::ClaudeCodeAndCodex));
     assert_eq!(alpha.dependencies[0].line, 9);
     assert_eq!(alpha.dependencies[0].identifier.to_string(), "beta");
 }
@@ -86,11 +71,8 @@ fn dependency_validation_covers_shape_uniqueness_self_resolution_and_order() {
     common::write(second.path().join("skills/beta/SKILL.md"), common::skill("beta", ""));
     common::write(second.path().join("skills/gamma/SKILL.md"), common::skill("gamma", ""));
 
-    let catalog =
-        Catalog::load(&[RootRequest::explicit(first.path()), RootRequest::explicit(second.path())])
-            .unwrap();
-    let codes: Vec<_> =
-        catalog.diagnostics.iter().map(|diagnostic| diagnostic.code.as_str()).collect();
+    let catalog = Catalog::load(&[RootRequest::explicit(first.path()), RootRequest::explicit(second.path())]).unwrap();
+    let codes: Vec<_> = catalog.diagnostics.iter().map(|diagnostic| diagnostic.code.as_str()).collect();
     for expected in [
         "SKILL_DEPENDENCY_DUPLICATE",
         "SKILL_DEPENDENCY_INVALID",
@@ -101,19 +83,10 @@ fn dependency_validation_covers_shape_uniqueness_self_resolution_and_order() {
     ] {
         assert!(codes.contains(&expected), "missing {expected}: {codes:?}");
     }
-    assert_eq!(
-        DependencyIdentifier::parse("Acme/Tools#beta").unwrap().target_name().as_str(),
-        "beta"
-    );
-    for invalid in [
-        "",
-        "two--hyphens",
-        "owner/repo",
-        "owner/repo#",
-        "/repo#skill",
-        "owner//repo#skill",
-        "owner/repo#Bad",
-    ] {
+    assert_eq!(DependencyIdentifier::parse("Acme/Tools#beta").unwrap().target_name().as_str(), "beta");
+    for invalid in
+        ["", "two--hyphens", "owner/repo", "owner/repo#", "/repo#skill", "owner//repo#skill", "owner/repo#Bad"]
+    {
         assert!(DependencyIdentifier::parse(invalid).is_err(), "{invalid}");
     }
 }
@@ -141,10 +114,7 @@ fn dependency_order_ignores_hyphens_in_target_skill_names() {
             "skill-dependencies:\n  - PaulRBerg/dot-agents#codebase-design\n  - code-polish\n  - commit\n",
         ),
     );
-    common::write(
-        temporary.path().join("skills/code-polish/SKILL.md"),
-        common::skill("code-polish", ""),
-    );
+    common::write(temporary.path().join("skills/code-polish/SKILL.md"), common::skill("code-polish", ""));
     common::write(temporary.path().join("skills/commit/SKILL.md"), common::skill("commit", ""));
 
     let catalog = Catalog::load(&[RootRequest::explicit(temporary.path())]).unwrap();
@@ -153,19 +123,11 @@ fn dependency_order_ignores_hyphens_in_target_skill_names() {
 
 #[test]
 fn external_dependency_repository_policy_preserves_case_and_allows_trailing_punctuation() {
-    for valid in [
-        "Org./Repository-#target-skill",
-        "Org_/Repository.#target-skill",
-        "Org-/Repository_#target-skill",
-    ] {
+    for valid in ["Org./Repository-#target-skill", "Org_/Repository.#target-skill", "Org-/Repository_#target-skill"] {
         let parsed = DependencyIdentifier::parse(valid).unwrap_or_else(|_| panic!("{valid}"));
         assert_eq!(parsed.to_string(), valid);
     }
-    for invalid in [
-        "_Org/Repository#target-skill",
-        "Org/_Repository#target-skill",
-        "Org/Repository.git#target-skill",
-    ] {
+    for invalid in ["_Org/Repository#target-skill", "Org/_Repository#target-skill", "Org/Repository.git#target-skill"] {
         assert!(DependencyIdentifier::parse(invalid).is_err(), "{invalid}");
     }
 }
@@ -173,10 +135,7 @@ fn external_dependency_repository_policy_preserves_case_and_allows_trailing_punc
 #[test]
 fn dependency_field_must_be_a_non_empty_array() {
     let temporary = TempDir::new().unwrap();
-    common::write(
-        temporary.path().join("skills/empty/SKILL.md"),
-        common::skill("empty", "skill-dependencies: []\n"),
-    );
+    common::write(temporary.path().join("skills/empty/SKILL.md"), common::skill("empty", "skill-dependencies: []\n"));
     common::write(
         temporary.path().join("skills/scalar/SKILL.md"),
         common::skill("scalar", "skill-dependencies: beta\n"),
@@ -203,8 +162,7 @@ fn discovers_direct_catalog_client_and_recognized_symlink_exposures() {
     let target = TempDir::new().unwrap();
     common::write(target.path().join("SKILL.md"), common::skill("shared", ""));
     #[cfg(unix)]
-    std::os::unix::fs::symlink(target.path(), temporary.path().join(".claude/skills/shared"))
-        .unwrap();
+    std::os::unix::fs::symlink(target.path(), temporary.path().join(".claude/skills/shared")).unwrap();
     #[cfg(unix)]
     std::os::unix::fs::symlink(target.path(), temporary.path().join("arbitrary-link")).unwrap();
 
@@ -215,20 +173,15 @@ fn discovers_direct_catalog_client_and_recognized_symlink_exposures() {
     assert!(scopes.contains(&ExposureScope::Agents));
     assert!(scopes.contains(&ExposureScope::Claude));
     assert!(scopes.contains(&ExposureScope::Codex));
-    let catalog_root =
-        Catalog::load(&[RootRequest::explicit(temporary.path().join("skills"))]).unwrap();
+    let catalog_root = Catalog::load(&[RootRequest::explicit(temporary.path().join("skills"))]).unwrap();
     assert_eq!(catalog_root.skill_names().len(), 1);
-    let client_root =
-        Catalog::load(&[RootRequest::explicit(temporary.path().join(".agents/skills"))]).unwrap();
+    let client_root = Catalog::load(&[RootRequest::explicit(temporary.path().join(".agents/skills"))]).unwrap();
     assert_eq!(client_root.skill_names().len(), 1);
     #[cfg(unix)]
     {
         assert_eq!(catalog.skills.len(), 6);
-        let shared = catalog
-            .skills
-            .iter()
-            .find(|skill| skill.name.as_ref().map(SkillName::as_str) == Some("shared"))
-            .unwrap();
+        let shared =
+            catalog.skills.iter().find(|skill| skill.name.as_ref().map(SkillName::as_str) == Some("shared")).unwrap();
         assert_ne!(shared.skill_path(), shared.resolved_skill_path());
         assert!(shared.exposure.directory_symlink_target.is_some());
     }

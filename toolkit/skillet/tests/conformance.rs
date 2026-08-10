@@ -8,12 +8,7 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 fn finding_codes(report: &Value) -> BTreeSet<&str> {
-    report["findings"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|finding| finding["code"].as_str().unwrap())
-        .collect()
+    report["findings"].as_array().unwrap().iter().map(|finding| finding["code"].as_str().unwrap()).collect()
 }
 
 fn write_skill(root: &std::path::Path, name: &str, fields: &str, description: &str) {
@@ -27,8 +22,7 @@ fn write_skill(root: &std::path::Path, name: &str, fields: &str, description: &s
 
 #[test]
 fn exit_contract_distinguishes_usage_operations_findings_and_fix_failures() {
-    let usage = ai_skillet::run_from(["ai-skillet", "map", "--root"])
-        .expect_err("missing value must be rejected");
+    let usage = ai_skillet::run_from(["ai-skillet", "map", "--root"]).expect_err("missing value must be rejected");
     assert!(matches!(usage, InvocationError::Arguments(_)));
     assert_eq!(usage.exit_code(), 2);
 
@@ -55,10 +49,7 @@ fn exit_contract_distinguishes_usage_operations_findings_and_fix_failures() {
 #[test]
 fn doctor_reports_all_durable_metadata_finding_families() {
     let root = TempDir::new().unwrap();
-    common::write(
-        root.path().join("skills/missing/SKILL.md"),
-        "---\nmodel: sonnet\n---\n\n# missing\n",
-    );
+    common::write(root.path().join("skills/missing/SKILL.md"), "---\nmodel: sonnet\n---\n\n# missing\n");
     common::write(
         root.path().join("skills/typed/SKILL.md"),
         format!(
@@ -74,12 +65,8 @@ fn doctor_reports_all_durable_metadata_finding_families() {
     common::write(root.path().join("skills/policy-missing/agents/openai.yaml"), "policy: {}\n");
     write_skill(root.path(), "cli-missing", "", "valid");
 
-    let output = common::ai_skillet()
-        .args(["doctor", "--root"])
-        .arg(root.path())
-        .args(["--format", "json"])
-        .output()
-        .unwrap();
+    let output =
+        common::ai_skillet().args(["doctor", "--root"]).arg(root.path()).args(["--format", "json"]).output().unwrap();
     assert_eq!(output.status.code(), Some(1));
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
     let found = finding_codes(&report);
@@ -112,12 +99,7 @@ fn text_paths_are_escaped_and_json_is_valid_for_newline_roots() {
     let root = base.path().join("catalog with\nnewline");
     write_skill(&root, "alpha", "", "alpha");
 
-    let map = common::ai_skillet()
-        .args(["map", "--root"])
-        .arg(&root)
-        .args(["--format", "json"])
-        .output()
-        .unwrap();
+    let map = common::ai_skillet().args(["map", "--root"]).arg(&root).args(["--format", "json"]).output().unwrap();
     assert!(map.status.success());
     let _: Value = serde_json::from_slice(&map.stdout).unwrap();
 

@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
 use assert_cmd::Command;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub fn ai_skillet() -> Command {
     Command::cargo_bin("ai-skillet").expect("binary should be built for integration tests")

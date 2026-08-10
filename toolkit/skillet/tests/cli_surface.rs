@@ -12,7 +12,7 @@ fn version_reports_the_package_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::is_match(r"^ai-skillet 0\.1\.0\n$").unwrap());
+        .stdout(predicate::str::is_match(r"^ai-skillet 1\.0\.0\n$").unwrap());
 }
 
 #[test]
@@ -70,17 +70,8 @@ fn map_supports_repeatable_roots_and_skills() {
 
 #[test]
 fn doctor_supports_repeatable_roots() {
-    let cli = Cli::try_parse_from([
-        "ai-skillet",
-        "doctor",
-        "--root",
-        "first",
-        "--root",
-        "second",
-        "--format",
-        "json",
-    ])
-    .expect("doctor arguments should parse");
+    let cli = Cli::try_parse_from(["ai-skillet", "doctor", "--root", "first", "--root", "second", "--format", "json"])
+        .expect("doctor arguments should parse");
 
     let Command::Doctor(args) = cli.command else {
         panic!("expected doctor command");

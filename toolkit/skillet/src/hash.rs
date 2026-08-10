@@ -1,24 +1,17 @@
-use std::fs::{self, File, Metadata};
-use std::io::{BufReader, Read};
-use std::path::{Component, Path, PathBuf};
+use std::{
+    fmt::Write as _,
+    fs::{self, File, Metadata},
+    io::{BufReader, Read},
+    path::{Component, Path, PathBuf},
+};
 
 use sha2::{Digest, Sha256};
 
 use crate::error::Error;
 
 const COPY_BUFFER_BYTES: usize = 1024 * 1024;
-const IGNORED_DIRECTORY_NAMES: &[&str] = &[
-    ".git",
-    ".next",
-    ".venv",
-    "build",
-    "coverage",
-    "dist",
-    "node_modules",
-    "out",
-    "target",
-    "vendor",
-];
+const IGNORED_DIRECTORY_NAMES: &[&str] =
+    &[".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"];
 
 pub fn sha256_file(path: &Path) -> Result<String, Error> {
     let file = File::open(path).map_err(|error| Error::io("hash", path, error))?;
@@ -32,7 +25,7 @@ pub fn sha256_file(path: &Path) -> Result<String, Error> {
         }
         digest.update(&buffer[..read]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(finalize_hex(digest))
 }
 
 pub fn sha256_tree(directory: &Path) -> Result<String, Error> {
@@ -64,20 +57,27 @@ pub fn sha256_tree(directory: &Path) -> Result<String, Error> {
             let file = File::open(&path).map_err(|error| Error::io("hash", &path, error))?;
             let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file);
             loop {
-                let read =
-                    reader.read(&mut buffer).map_err(|error| Error::io("hash", &path, error))?;
+                let read = reader.read(&mut buffer).map_err(|error| Error::io("hash", &path, error))?;
                 if read == 0 {
                     break;
                 }
                 digest.update(&buffer[..read]);
             }
         } else if file_type.is_symlink() {
-            let target = fs::read_link(&path)
-                .map_err(|error| Error::io("read symlink while hashing", &path, error))?;
+            let target = fs::read_link(&path).map_err(|error| Error::io("read symlink while hashing", &path, error))?;
             hash_field(&mut digest, target.as_os_str().as_encoded_bytes());
         }
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(finalize_hex(digest))
+}
+
+fn finalize_hex(digest: Sha256) -> String {
+    let bytes = digest.finalize();
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(output, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    output
 }
 
 fn collect_entries(
@@ -86,8 +86,7 @@ fn collect_entries(
     entries: &mut Vec<(PathBuf, PathBuf, Metadata)>,
 ) -> Result<(), Error> {
     let current = directory.join(relative_directory);
-    let children =
-        fs::read_dir(&current).map_err(|error| Error::io("read skill tree", &current, error))?;
+    let children = fs::read_dir(&current).map_err(|error| Error::io("read skill tree", &current, error))?;
     for child in children {
         let child = child.map_err(|error| Error::io("read skill tree", &current, error))?;
         let relative = relative_directory.join(child.file_name());
@@ -95,8 +94,8 @@ fn collect_entries(
             continue;
         }
         let path = child.path();
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|error| Error::io("inspect skill tree entry", &path, error))?;
+        let metadata =
+            fs::symlink_metadata(&path).map_err(|error| Error::io("inspect skill tree entry", &path, error))?;
         let is_directory = metadata.file_type().is_dir();
         entries.push((relative.clone(), path, metadata));
         if is_directory {
@@ -108,10 +107,7 @@ fn collect_entries(
 
 fn tree_path_is_ignored(relative: &Path) -> bool {
     let parts: Vec<_> = relative.components().map(Component::as_os_str).collect();
-    if parts
-        .iter()
-        .any(|part| part.to_str().is_some_and(|part| IGNORED_DIRECTORY_NAMES.contains(&part)))
-    {
+    if parts.iter().any(|part| part.to_str().is_some_and(|part| IGNORED_DIRECTORY_NAMES.contains(&part))) {
         return true;
     }
 
@@ -120,16 +116,15 @@ fn tree_path_is_ignored(relative: &Path) -> bool {
             (
                 Some(".claude"),
                 Some(
-                    "backups" | "debug" | "file-history" | "image-cache" | "logs" | "paste-cache"
-                    | "plans" | "projects" | "session-env" | "shell-snapshots" | "statsig"
-                    | "tasks" | "todos",
+                    "backups" | "debug" | "file-history" | "image-cache" | "logs" | "paste-cache" | "plans" |
+                    "projects" | "session-env" | "shell-snapshots" | "statsig" | "tasks" | "todos",
                 ),
-            )
-            | (
+            ) |
+            (
                 Some(".codex"),
                 Some(
-                    ".tmp" | "archived_sessions" | "backups" | "cache" | "generated_images" | "log"
-                    | "logs" | "sessions" | "shell_snapshots" | "sqlite" | "threads" | "tmp",
+                    ".tmp" | "archived_sessions" | "backups" | "cache" | "generated_images" | "log" | "logs" |
+                    "sessions" | "shell_snapshots" | "sqlite" | "threads" | "tmp",
                 ),
             ) => return true,
             _ => {}
@@ -139,22 +134,19 @@ fn tree_path_is_ignored(relative: &Path) -> bool {
     if parts.windows(2).any(|pair| {
         matches!(
             (pair[0].to_str(), pair[1].to_str()),
-            (Some(".claude"), Some("history.jsonl" | "remote-settings.json" | "stats-cache.json"))
-                | (Some(".codex"), Some("history.jsonl" | "session_index.jsonl"))
+            (Some(".claude"), Some("history.jsonl" | "remote-settings.json" | "stats-cache.json")) |
+                (Some(".codex"), Some("history.jsonl" | "session_index.jsonl"))
         )
     }) {
         return true;
     }
-    let in_codex = parts
-        .iter()
-        .position(|part| *part == ".codex")
-        .is_some_and(|index| index + 1 < parts.len());
+    let in_codex = parts.iter().position(|part| *part == ".codex").is_some_and(|index| index + 1 < parts.len());
     let file = parts.last().and_then(|part| part.to_str()).unwrap_or_default();
-    in_codex
-        && (file.ends_with(".sqlite")
-            || file.ends_with(".sqlite-shm")
-            || file.ends_with(".sqlite-wal")
-            || file.ends_with(".bak"))
+    in_codex &&
+        (file.ends_with(".sqlite") ||
+            file.ends_with(".sqlite-shm") ||
+            file.ends_with(".sqlite-wal") ||
+            file.ends_with(".bak"))
 }
 
 fn encoded_path(path: &Path) -> &[u8] {

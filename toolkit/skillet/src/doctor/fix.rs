@@ -1,8 +1,10 @@
-use std::ffi::OsString;
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    ffi::OsString,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use regex::Regex;
 
@@ -29,15 +31,13 @@ fn replace_policy_value(original: &str, expected: bool) -> Option<String> {
     let mut offset = 0usize;
     for line in original.split_inclusive('\n') {
         let content = line.trim_end_matches(['\n', '\r']);
-        let top_level = !content.is_empty()
-            && !content.starts_with([' ', '\t', '#'])
-            && content != "---"
-            && content != "...";
+        let top_level =
+            !content.is_empty() && !content.starts_with([' ', '\t', '#']) && content != "---" && content != "...";
         if policy_start.is_none() {
-            if top_level
-                && content.strip_prefix("policy:").is_some_and(|tail| {
-                    tail.trim().is_empty() || tail.trim_start().starts_with('#')
-                })
+            if top_level &&
+                content
+                    .strip_prefix("policy:")
+                    .is_some_and(|tail| tail.trim().is_empty() || tail.trim_start().starts_with('#'))
             {
                 policy_start = Some(offset + line.len());
             }
@@ -49,10 +49,8 @@ fn replace_policy_value(original: &str, expected: bool) -> Option<String> {
     }
     let start = policy_start?;
     let policy = &original[start..policy_end];
-    let pattern = Regex::new(
-        r"(?m)^([ \t]+allow_implicit_invocation:[ \t]*)(true|false)([ \t]*(?:#[^\r\n]*)?\r?)$",
-    )
-    .expect("static policy regex is valid");
+    let pattern = Regex::new(r"(?m)^([ \t]+allow_implicit_invocation:[ \t]*)(true|false)([ \t]*(?:#[^\r\n]*)?\r?)$")
+        .expect("static policy regex is valid");
     let mut captures = pattern.captures_iter(policy);
     let first = captures.next()?;
     if captures.next().is_some() {
@@ -75,9 +73,9 @@ enum WriteMode {
 }
 
 fn atomic_write(path: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()> {
-    let parent = path.parent().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "metadata path has no parent directory")
-    })?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "metadata path has no parent directory"))?;
     let created_parent = if parent.exists() {
         if !parent.is_dir() {
             return Err(io::Error::new(
@@ -98,12 +96,7 @@ fn atomic_write(path: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()>
     result
 }
 
-fn stage_and_rename(
-    path: &Path,
-    parent: &Path,
-    contents: &[u8],
-    mode: WriteMode,
-) -> io::Result<()> {
+fn stage_and_rename(path: &Path, parent: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()> {
     match mode {
         WriteMode::Create if path.exists() => {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, "target appeared during fix"));
@@ -129,16 +122,10 @@ fn stage_and_rename(
 
         match mode {
             WriteMode::Create if path.exists() => {
-                return Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    "target appeared during fix",
-                ));
+                return Err(io::Error::new(io::ErrorKind::AlreadyExists, "target appeared during fix"));
             }
             WriteMode::Replace if !path.is_file() => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "target disappeared during fix",
-                ));
+                return Err(io::Error::new(io::ErrorKind::NotFound, "target disappeared during fix"));
             }
             _ => {}
         }
@@ -186,10 +173,7 @@ fn create_temporary(parent: &Path, path: &Path) -> io::Result<(PathBuf, fs::File
             Err(error) => return Err(error),
         }
     }
-    Err(io::Error::new(
-        io::ErrorKind::AlreadyExists,
-        "could not allocate a unique temporary metadata file",
-    ))
+    Err(io::Error::new(io::ErrorKind::AlreadyExists, "could not allocate a unique temporary metadata file"))
 }
 
 #[cfg(test)]

@@ -1,12 +1,12 @@
-use std::env;
-use std::ffi::OsString;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    env,
+    ffi::OsString,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
-use crate::cli::MapArgs;
-use crate::error::Error;
-use crate::traversal::RootRequest;
+use crate::{cli::MapArgs, error::Error, traversal::RootRequest};
 
 use super::model::{PortfolioRecord, UserRootRecord};
 

@@ -1,9 +1,6 @@
-use std::collections::BTreeSet;
-use std::fmt::Write as _;
-use std::path::Path;
+use std::{collections::BTreeSet, fmt::Write as _, path::Path};
 
-use crate::cli::MapFormat;
-use crate::error::Error;
+use crate::{cli::MapFormat, error::Error};
 
 use super::model::{EdgeType, MapReport, Provenance};
 
@@ -11,8 +8,8 @@ pub fn render(report: &MapReport, format: MapFormat) -> Result<String, Error> {
     match format {
         MapFormat::Text => Ok(render_text(report)),
         MapFormat::Json => {
-            let mut output = serde_json::to_string_pretty(report)
-                .map_err(|error| Error::Serialization(error.to_string()))?;
+            let mut output =
+                serde_json::to_string_pretty(report).map_err(|error| Error::Serialization(error.to_string()))?;
             output.push('\n');
             Ok(output)
         }
@@ -72,8 +69,7 @@ fn render_text(report: &MapReport) -> String {
         }
     }
 
-    let dependencies: Vec<_> =
-        report.edges.iter().filter(|edge| edge.edge_type == EdgeType::Dependency).collect();
+    let dependencies: Vec<_> = report.edges.iter().filter(|edge| edge.edge_type == EdgeType::Dependency).collect();
     if !dependencies.is_empty() {
         writeln!(output, "\nDependencies:").unwrap();
         for edge in dependencies {
@@ -96,13 +92,11 @@ fn render_text(report: &MapReport) -> String {
         }
     }
 
-    let external: Vec<_> =
-        report.edges.iter().filter(|edge| edge.edge_type == EdgeType::ExternalReference).collect();
+    let external: Vec<_> = report.edges.iter().filter(|edge| edge.edge_type == EdgeType::ExternalReference).collect();
     if !external.is_empty() {
         writeln!(output, "\nExternal references:").unwrap();
         for edge in external {
-            writeln!(output, "- {} ({}:{})", edge.target, display_path(&edge.path), edge.line)
-                .unwrap();
+            writeln!(output, "- {} ({}:{})", edge.target, display_path(&edge.path), edge.line).unwrap();
             if let Some(snippet) = &edge.snippet {
                 writeln!(output, "  {}", display_string(snippet)).unwrap();
             }
@@ -122,17 +116,8 @@ fn render_text(report: &MapReport) -> String {
     if !report.unresolved.is_empty() {
         writeln!(output, "\nUnresolved skill-like references:").unwrap();
         for edge in &report.unresolved {
-            let source =
-                edge.source.as_deref().map(|source| format!("{source} -> ")).unwrap_or_default();
-            writeln!(
-                output,
-                "- {}{} ({}:{})",
-                source,
-                edge.target,
-                display_path(&edge.path),
-                edge.line
-            )
-            .unwrap();
+            let source = edge.source.as_deref().map(|source| format!("{source} -> ")).unwrap_or_default();
+            writeln!(output, "- {}{} ({}:{})", source, edge.target, display_path(&edge.path), edge.line).unwrap();
             if let Some(snippet) = &edge.snippet {
                 writeln!(output, "  {}", display_string(snippet)).unwrap();
             }
@@ -177,8 +162,7 @@ fn render_dot(report: &MapReport) -> String {
         writeln!(output, "  {} -> {};", dot_quote(&source), dot_quote(&target)).unwrap();
     }
     for duplicate in &report.duplicates {
-        writeln!(output, "  {} [shape=box, style=\"dashed\"];", dot_quote(&duplicate.name))
-            .unwrap();
+        writeln!(output, "  {} [shape=box, style=\"dashed\"];", dot_quote(&duplicate.name)).unwrap();
     }
     output.push_str("}\n");
     output

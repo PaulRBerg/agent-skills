@@ -4,27 +4,24 @@ mod model;
 mod render;
 mod resource;
 
-use std::env;
-use std::io::{self, Write};
-use std::path::Path;
+use std::{
+    env,
+    io::{self, Write},
+    path::Path,
+};
 
-use crate::RunOutcome;
-use crate::catalog::Catalog;
-use crate::cli::DoctorArgs;
-use crate::error::Error;
-use crate::traversal::RootRequest;
+use crate::{RunOutcome, catalog::Catalog, cli::DoctorArgs, error::Error, traversal::RootRequest};
 
 pub use model::{Counts, Finding, Fix, Report, RootRecord, Severity};
 
 pub fn run(args: DoctorArgs) -> Result<RunOutcome, Error> {
-    let roots =
-        if args.root.is_empty() {
-            vec![RootRequest::explicit(env::current_dir().map_err(|error| {
-                Error::io("resolve current directory for", Path::new("."), error)
-            })?)]
-        } else {
-            args.root.iter().map(RootRequest::explicit).collect()
-        };
+    let roots = if args.root.is_empty() {
+        vec![RootRequest::explicit(
+            env::current_dir().map_err(|error| Error::io("resolve current directory for", Path::new("."), error))?,
+        )]
+    } else {
+        args.root.iter().map(RootRequest::explicit).collect()
+    };
     let catalog = Catalog::load(&roots)?;
     let report = audit::build_report(&catalog, args.dependencies_only, args.fix_safe);
     let output = render::render(&report, args.format)?;

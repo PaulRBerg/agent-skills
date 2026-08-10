@@ -3,21 +3,25 @@ mod model;
 mod render;
 mod roots;
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::{self, Write},
+    path::{Path, PathBuf},
+};
 
-use crate::catalog::{Catalog, Skill, SkillHashes};
-use crate::cli::MapArgs;
-use crate::dependency::SkillName;
-use crate::error::Error;
-use crate::frontmatter::InstallTargets;
-use crate::traversal::ExposureScope;
+use crate::{
+    catalog::{Catalog, Skill, SkillHashes},
+    cli::MapArgs,
+    dependency::SkillName,
+    error::Error,
+    frontmatter::InstallTargets,
+    traversal::ExposureScope,
+};
 
 use infer::{InferenceOptions, effective_name};
 use model::{
-    Counts, DuplicateRecord, DuplicateType, EdgeType, MapReport, PortfolioRecord, Provenance,
-    RootRecord, SCHEMA_VERSION, SkillKind, SkillLocation, SkillRecord, SkippedRecord,
+    Counts, DuplicateRecord, DuplicateType, EdgeType, MapReport, PortfolioRecord, Provenance, RootRecord,
+    SCHEMA_VERSION, SkillKind, SkillLocation, SkillRecord, SkippedRecord,
 };
 
 pub use model::{EvidenceRecord, MapReport as Report};
@@ -62,16 +66,12 @@ pub fn run(args: MapArgs) -> Result<(), Error> {
         declared_dependencies: inference
             .edges
             .iter()
-            .filter(|edge| {
-                edge.edge_type == EdgeType::Dependency && edge.provenance == Provenance::Declared
-            })
+            .filter(|edge| edge.edge_type == EdgeType::Dependency && edge.provenance == Provenance::Declared)
             .count(),
         inferred_dependencies: inference
             .edges
             .iter()
-            .filter(|edge| {
-                edge.edge_type == EdgeType::Dependency && edge.provenance == Provenance::Inferred
-            })
+            .filter(|edge| edge.edge_type == EdgeType::Dependency && edge.provenance == Provenance::Inferred)
             .count(),
         external_references: inference
             .edges
@@ -110,22 +110,18 @@ fn selected_names(values: &[String]) -> Result<BTreeSet<String>, Error> {
             invalid.insert(value.clone());
         }
     }
-    if invalid.is_empty() {
-        Ok(selected)
-    } else {
-        Err(Error::InvalidSkillFilter(invalid.into_iter().collect()))
-    }
+    if invalid.is_empty() { Ok(selected) } else { Err(Error::InvalidSkillFilter(invalid.into_iter().collect())) }
 }
 
 fn reject_unmappable_diagnostics(catalog: &Catalog) -> Result<(), Error> {
     let fatal = catalog.diagnostics.iter().find(|diagnostic| {
-        diagnostic.code.starts_with("FRONTMATTER_")
-            || matches!(
+        diagnostic.code.starts_with("FRONTMATTER_") ||
+            matches!(
                 diagnostic.code.as_str(),
-                "SKILL_DEPENDENCIES_EMPTY"
-                    | "SKILL_DEPENDENCIES_NOT_ARRAY"
-                    | "SKILL_DEPENDENCY_INVALID"
-                    | "SKILL_DEPENDENCY_NOT_STRING"
+                "SKILL_DEPENDENCIES_EMPTY" |
+                    "SKILL_DEPENDENCIES_NOT_ARRAY" |
+                    "SKILL_DEPENDENCY_INVALID" |
+                    "SKILL_DEPENDENCY_NOT_STRING"
             )
     });
     let Some(diagnostic) = fatal else {
@@ -186,9 +182,7 @@ fn skill_records(
                 .collect(),
         });
     }
-    records.sort_by(|left, right| {
-        (&left.name, &left.exposure_path).cmp(&(&right.name, &right.exposure_path))
-    });
+    records.sort_by(|left, right| (&left.name, &left.exposure_path).cmp(&(&right.name, &right.exposure_path)));
     Ok(records)
 }
 
@@ -196,12 +190,7 @@ fn skill_location(skill: &Skill, portfolio: Option<&PortfolioRecord>) -> SkillLo
     let Some(portfolio) = portfolio else {
         return SkillLocation::ScannedRoot;
     };
-    if portfolio
-        .user_roots
-        .iter()
-        .filter(|root| root.present)
-        .any(|root| skill.skill_path().starts_with(&root.path))
-    {
+    if portfolio.user_roots.iter().filter(|root| root.present).any(|root| skill.skill_path().starts_with(&root.path)) {
         SkillLocation::User
     } else {
         SkillLocation::Repository
@@ -209,11 +198,8 @@ fn skill_location(skill: &Skill, portfolio: Option<&PortfolioRecord>) -> SkillLo
 }
 
 fn skill_kind(skill: &Skill, location: SkillLocation) -> SkillKind {
-    if location == SkillLocation::User
-        || matches!(
-            skill.exposure.scope,
-            ExposureScope::Agents | ExposureScope::Claude | ExposureScope::Codex
-        )
+    if location == SkillLocation::User ||
+        matches!(skill.exposure.scope, ExposureScope::Agents | ExposureScope::Claude | ExposureScope::Codex)
     {
         SkillKind::Install
     } else {
@@ -270,21 +256,11 @@ fn duplicate_records(catalog: &Catalog, selected: &BTreeSet<String>) -> Vec<Dupl
 }
 
 fn skipped_record() -> SkippedRecord {
-    let mut directories: Vec<_> = [
-        ".git",
-        ".next",
-        ".venv",
-        "build",
-        "coverage",
-        "dist",
-        "node_modules",
-        "out",
-        "target",
-        "vendor",
-    ]
-    .into_iter()
-    .map(|name| format!("**/{name}/**"))
-    .collect();
+    let mut directories: Vec<_> =
+        [".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"]
+            .into_iter()
+            .map(|name| format!("**/{name}/**"))
+            .collect();
     directories.extend(
         [
             "**/.claude/backups/**",

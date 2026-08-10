@@ -1,51 +1,42 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::env;
-use std::ffi::OsStr;
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Read};
-use std::path::{Component, Path, PathBuf};
-use std::sync::LazyLock;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+    ffi::OsStr,
+    fs::{self, File},
+    io::{BufRead, BufReader, Read},
+    path::{Component, Path, PathBuf},
+    sync::LazyLock,
+};
 
 use ignore::{DirEntry, WalkBuilder};
 use regex::bytes::Regex;
 
-use crate::catalog::{Catalog, Skill};
-use crate::dependency::DependencyIdentifier;
-use crate::error::Error;
-use crate::traversal::RootMode;
+use crate::{
+    catalog::{Catalog, Skill},
+    dependency::DependencyIdentifier,
+    error::Error,
+    traversal::RootMode,
+};
 
 use super::model::{EdgeType, EvidenceRecord, Provenance};
 
-const EXCLUDED_DIRECTORY_NAMES: &[&str] = &[
-    ".git",
-    ".next",
-    ".venv",
-    "build",
-    "coverage",
-    "dist",
-    "node_modules",
-    "out",
-    "target",
-    "vendor",
-];
+const EXCLUDED_DIRECTORY_NAMES: &[&str] =
+    &[".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"];
 const MATCH_OVERLAP_BYTES: usize = 256;
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 const MAX_SNIPPET_BYTES: usize = 4 * 1024;
 
-static TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"[$/]([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\b").expect("token pattern is valid")
-});
+static TOKEN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[$/]([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\b").expect("token pattern is valid"));
 static PROSE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)[ \t]+skill\b")
-        .expect("prose pattern is valid")
+    Regex::new(r"\b([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)[ \t]+skill\b").expect("prose pattern is valid")
 });
 static SKILL_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?:\.agents/|\.claude/|\.codex/)?skills/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\b")
         .expect("skill path pattern is valid")
 });
 static SIBLING_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\.\./([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)/SKILL\.md\b")
-        .expect("sibling pattern is valid")
+    Regex::new(r"\.\./([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)/SKILL\.md\b").expect("sibling pattern is valid")
 });
 
 pub struct InferenceOptions<'a> {
@@ -60,8 +51,7 @@ pub struct Inference {
 }
 
 pub fn collect(catalog: &Catalog, options: InferenceOptions<'_>) -> Result<Inference, Error> {
-    let known_names: BTreeSet<String> =
-        catalog.skills.iter().map(effective_name).collect::<BTreeSet<_>>();
+    let known_names: BTreeSet<String> = catalog.skills.iter().map(effective_name).collect::<BTreeSet<_>>();
     let mut edges = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
 
@@ -80,10 +70,7 @@ pub fn collect(catalog: &Catalog, options: InferenceOptions<'_>) -> Result<Infer
         )?;
     }
 
-    Ok(Inference {
-        edges: edges.into_iter().collect(),
-        unresolved: unresolved.into_iter().collect(),
-    })
+    Ok(Inference { edges: edges.into_iter().collect(), unresolved: unresolved.into_iter().collect() })
 }
 
 fn collect_declared(
@@ -95,9 +82,9 @@ fn collect_declared(
         let source = effective_name(skill);
         for dependency in &skill.dependencies {
             let target_name = dependency.identifier.target_name().as_str();
-            if !options.selected.is_empty()
-                && !options.selected.contains(&source)
-                && !options.selected.contains(target_name)
+            if !options.selected.is_empty() &&
+                !options.selected.contains(&source) &&
+                !options.selected.contains(target_name)
             {
                 continue;
             }
@@ -106,10 +93,9 @@ fn collect_declared(
             }
             let (target, target_repository) = match &dependency.identifier {
                 DependencyIdentifier::Internal(name) => (name.to_string(), None),
-                DependencyIdentifier::External(external) => (
-                    dependency.identifier.as_identifier(),
-                    Some(format!("{}/{}", external.owner, external.repository)),
-                ),
+                DependencyIdentifier::External(external) => {
+                    (dependency.identifier.as_identifier(), Some(format!("{}/{}", external.owner, external.repository)))
+                }
             };
             edges.insert(EvidenceRecord {
                 edge_type: EdgeType::Dependency,
@@ -189,15 +175,10 @@ fn scan_root(
         .git_exclude(true)
         .follow_links(false)
         .sort_by_file_path(|left, right| left.cmp(right))
-        .filter_entry(move |entry| {
-            reference_entry_allowed(entry, &scan_root, mode, include_catalog_sources)
-        });
+        .filter_entry(move |entry| reference_entry_allowed(entry, &scan_root, mode, include_catalog_sources));
 
     for entry in builder.build() {
-        let entry = entry.map_err(|error| Error::Traversal {
-            path: root.to_path_buf(),
-            message: error.to_string(),
-        })?;
+        let entry = entry.map_err(|error| Error::Traversal { path: root.to_path_buf(), message: error.to_string() })?;
         if !entry.file_type().is_some_and(|file_type| file_type.is_file()) {
             continue;
         }
@@ -230,9 +211,7 @@ fn scan_file(
     let mut known_evidence = BTreeSet::new();
     let mut unresolved_evidence = BTreeSet::new();
     loop {
-        let read = reader
-            .read(&mut chunk)
-            .map_err(|error| Error::io("read reference file", path, error))?;
+        let read = reader.read(&mut chunk).map_err(|error| Error::io("read reference file", path, error))?;
         if read == 0 {
             process_window(
                 &window,
@@ -253,8 +232,7 @@ fn scan_file(
         window.extend_from_slice(&chunk[..read]);
         if let Some(nul) = chunk[..read].iter().position(|byte| *byte == 0) {
             let nul = previous_len + nul;
-            let complete_text =
-                window[..nul].iter().rposition(|byte| *byte == b'\n').map_or(0, |index| index + 1);
+            let complete_text = window[..nul].iter().rposition(|byte| *byte == b'\n').map_or(0, |index| index + 1);
             process_window(
                 &window,
                 complete_text,
@@ -284,8 +262,7 @@ fn scan_file(
             edges,
             unresolved,
         );
-        window_start_line +=
-            window[..stable_end].iter().filter(|byte| **byte == b'\n').count() as u64;
+        window_start_line += window[..stable_end].iter().filter(|byte| **byte == b'\n').count() as u64;
         window.drain(..stable_end);
     }
     Ok(())
@@ -340,28 +317,23 @@ fn process_window(
     let mut cursor = 0usize;
     let mut line = window_start_line;
     for candidate in candidates {
-        line +=
-            window[cursor..candidate.start].iter().filter(|byte| **byte == b'\n').count() as u64;
+        line += window[cursor..candidate.start].iter().filter(|byte| **byte == b'\n').count() as u64;
         cursor = candidate.start;
         let snippet = options
             .include_snippets
             .then(|| String::from_utf8_lossy(&window[candidate.start..candidate.end]).into_owned());
         match candidate.kind {
             CandidateKind::Known => {
-                if !known_evidence.insert((candidate.target.clone(), line))
-                    || (!options.selected.is_empty()
-                        && !options.selected.contains(&candidate.target)
-                        && !source.is_some_and(|source| options.selected.contains(source)))
-                    || (source == Some(candidate.target.as_str()) && !options.include_self)
+                if !known_evidence.insert((candidate.target.clone(), line)) ||
+                    (!options.selected.is_empty() &&
+                        !options.selected.contains(&candidate.target) &&
+                        !source.is_some_and(|source| options.selected.contains(source))) ||
+                    (source == Some(candidate.target.as_str()) && !options.include_self)
                 {
                     continue;
                 }
                 edges.insert(EvidenceRecord {
-                    edge_type: if source.is_some() {
-                        EdgeType::Dependency
-                    } else {
-                        EdgeType::ExternalReference
-                    },
+                    edge_type: if source.is_some() { EdgeType::Dependency } else { EdgeType::ExternalReference },
                     provenance: Provenance::Inferred,
                     identifier: candidate.target.clone(),
                     source: source.map(str::to_owned),
@@ -373,9 +345,8 @@ fn process_window(
                 });
             }
             CandidateKind::Unresolved => {
-                if !unresolved_evidence.insert((candidate.target.clone(), line))
-                    || (!options.selected.is_empty()
-                        && !options.selected.contains(&candidate.target))
+                if !unresolved_evidence.insert((candidate.target.clone(), line)) ||
+                    (!options.selected.is_empty() && !options.selected.contains(&candidate.target))
                 {
                     continue;
                 }
@@ -404,23 +375,15 @@ fn explicit_tokens(line: &[u8]) -> Vec<(String, usize, usize)> {
         let marker = line[whole.start()];
         let previous = whole.start().checked_sub(1).map(|index| line[index]);
         let allowed = if marker == b'$' {
-            previous.is_none_or(|byte| {
-                !byte.is_ascii_alphanumeric() && !matches!(byte, b'_' | b'.' | b'/' | b'-')
-            })
+            previous.is_none_or(|byte| !byte.is_ascii_alphanumeric() && !matches!(byte, b'_' | b'.' | b'/' | b'-'))
         } else {
-            previous.is_none_or(|byte| {
-                byte.is_ascii_whitespace() || matches!(byte, b'`' | b'\'' | b'"' | b'(')
-            })
+            previous.is_none_or(|byte| byte.is_ascii_whitespace() || matches!(byte, b'`' | b'\'' | b'"' | b'('))
         };
         if !allowed {
             continue;
         }
         if let Some(name) = captures.get(1) {
-            targets.insert((
-                String::from_utf8_lossy(name.as_bytes()).into_owned(),
-                whole.start(),
-                whole.end(),
-            ));
+            targets.insert((String::from_utf8_lossy(name.as_bytes()).into_owned(), whole.start(), whole.end()));
         }
     }
     targets.into_iter().collect()
@@ -475,16 +438,14 @@ pub fn effective_name(skill: &Skill) -> String {
 }
 
 fn read_line(path: &Path, requested_line: u64) -> Result<String, Error> {
-    let file =
-        File::open(path).map_err(|error| Error::io("read dependency snippet", path, error))?;
+    let file = File::open(path).map_err(|error| Error::io("read dependency snippet", path, error))?;
     let mut reader = BufReader::new(file);
     let mut current_line = 1u64;
     let mut snippet = Vec::new();
     let mut truncated = false;
     let mut saw_requested_bytes = false;
     loop {
-        let available =
-            reader.fill_buf().map_err(|error| Error::io("read dependency snippet", path, error))?;
+        let available = reader.fill_buf().map_err(|error| Error::io("read dependency snippet", path, error))?;
         if available.is_empty() {
             if current_line == requested_line && saw_requested_bytes {
                 break;
@@ -494,10 +455,8 @@ fn read_line(path: &Path, requested_line: u64) -> Result<String, Error> {
                 path.display()
             )));
         }
-        let consumed = available
-            .iter()
-            .position(|byte| *byte == b'\n')
-            .map_or_else(|| available.len(), |index| index + 1);
+        let consumed =
+            available.iter().position(|byte| *byte == b'\n').map_or_else(|| available.len(), |index| index + 1);
         let complete_line = available[consumed.saturating_sub(1)] == b'\n';
         if current_line == requested_line {
             saw_requested_bytes = true;
@@ -521,37 +480,26 @@ fn read_line(path: &Path, requested_line: u64) -> Result<String, Error> {
     Ok(result)
 }
 
-fn reference_entry_allowed(
-    entry: &DirEntry,
-    scan_root: &Path,
-    mode: RootMode,
-    include_catalog_sources: bool,
-) -> bool {
+fn reference_entry_allowed(entry: &DirEntry, scan_root: &Path, mode: RootMode, include_catalog_sources: bool) -> bool {
     let path = entry.path();
     if path == scan_root {
         return true;
     }
-    if entry.file_type().is_some_and(|file_type| file_type.is_dir())
-        && entry.file_name().to_str().is_some_and(|name| EXCLUDED_DIRECTORY_NAMES.contains(&name))
+    if entry.file_type().is_some_and(|file_type| file_type.is_dir()) &&
+        entry.file_name().to_str().is_some_and(|name| EXCLUDED_DIRECTORY_NAMES.contains(&name))
     {
         return false;
     }
     if agent_state_path(path) {
         return false;
     }
-    if mode == RootMode::Broad
-        && broad_home_path_is_excluded(path, scan_root, include_catalog_sources)
-    {
+    if mode == RootMode::Broad && broad_home_path_is_excluded(path, scan_root, include_catalog_sources) {
         return false;
     }
     true
 }
 
-fn broad_home_path_is_excluded(
-    path: &Path,
-    scan_root: &Path,
-    include_catalog_sources: bool,
-) -> bool {
+fn broad_home_path_is_excluded(path: &Path, scan_root: &Path, include_catalog_sources: bool) -> bool {
     let Some(home) = env::var_os("HOME").map(PathBuf::from) else {
         return false;
     };
@@ -594,35 +542,35 @@ fn agent_state_path(path: &Path) -> bool {
             (
                 Some(".claude"),
                 Some(
-                    "backups"
-                        | "debug"
-                        | "file-history"
-                        | "image-cache"
-                        | "logs"
-                        | "paste-cache"
-                        | "plans"
-                        | "projects"
-                        | "session-env"
-                        | "shell-snapshots"
-                        | "statsig"
-                        | "tasks"
-                        | "todos",
+                    "backups" |
+                        "debug" |
+                        "file-history" |
+                        "image-cache" |
+                        "logs" |
+                        "paste-cache" |
+                        "plans" |
+                        "projects" |
+                        "session-env" |
+                        "shell-snapshots" |
+                        "statsig" |
+                        "tasks" |
+                        "todos",
                 ),
             ) | (
                 Some(".codex"),
                 Some(
-                    ".tmp"
-                        | "archived_sessions"
-                        | "backups"
-                        | "cache"
-                        | "generated_images"
-                        | "log"
-                        | "logs"
-                        | "sessions"
-                        | "shell_snapshots"
-                        | "sqlite"
-                        | "threads"
-                        | "tmp",
+                    ".tmp" |
+                        "archived_sessions" |
+                        "backups" |
+                        "cache" |
+                        "generated_images" |
+                        "log" |
+                        "logs" |
+                        "sessions" |
+                        "shell_snapshots" |
+                        "sqlite" |
+                        "threads" |
+                        "tmp",
                 ),
             )
         )
@@ -632,20 +580,18 @@ fn agent_state_path(path: &Path) -> bool {
     if parts.windows(2).any(|pair| {
         matches!(
             (pair[0].to_str(), pair[1].to_str()),
-            (Some(".claude"), Some("history.jsonl" | "remote-settings.json" | "stats-cache.json"))
-                | (Some(".codex"), Some("history.jsonl" | "session_index.jsonl"))
+            (Some(".claude"), Some("history.jsonl" | "remote-settings.json" | "stats-cache.json")) |
+                (Some(".codex"), Some("history.jsonl" | "session_index.jsonl"))
         )
     }) {
         return true;
     }
-    let in_codex = parts
-        .iter()
-        .position(|part| *part == OsStr::new(".codex"))
-        .is_some_and(|index| index + 1 < parts.len());
+    let in_codex =
+        parts.iter().position(|part| *part == OsStr::new(".codex")).is_some_and(|index| index + 1 < parts.len());
     let file = parts.last().and_then(|part| part.to_str()).unwrap_or_default();
-    in_codex
-        && (file.ends_with(".sqlite")
-            || file.ends_with(".sqlite-shm")
-            || file.ends_with(".sqlite-wal")
-            || file.ends_with(".bak"))
+    in_codex &&
+        (file.ends_with(".sqlite") ||
+            file.ends_with(".sqlite-shm") ||
+            file.ends_with(".sqlite-wal") ||
+            file.ends_with(".bak"))
 }

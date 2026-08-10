@@ -1,5 +1,4 @@
-use std::cmp::Ordering;
-use std::path::PathBuf;
+use std::{cmp::Ordering, path::PathBuf};
 
 use serde::Serialize;
 
@@ -58,28 +57,19 @@ impl Finding {
         fixable: bool,
         message: impl Into<String>,
     ) -> Self {
-        Self {
-            code: code.into(),
-            severity,
-            path: path.into(),
-            line,
-            fixable,
-            message: message.into(),
-        }
+        Self { code: code.into(), severity, path: path.into(), line, fixable, message: message.into() }
     }
 }
 
 impl Ord for Finding {
     fn cmp(&self, other: &Self) -> Ordering {
-        (&self.path, self.line.unwrap_or(u64::MAX), &self.code, &self.message, self.severity).cmp(
-            &(
-                &other.path,
-                other.line.unwrap_or(u64::MAX),
-                &other.code,
-                &other.message,
-                other.severity,
-            ),
-        )
+        (&self.path, self.line.unwrap_or(u64::MAX), &self.code, &self.message, self.severity).cmp(&(
+            &other.path,
+            other.line.unwrap_or(u64::MAX),
+            &other.code,
+            &other.message,
+            other.severity,
+        ))
     }
 }
 
@@ -97,11 +87,7 @@ pub struct Fix {
 }
 
 impl Fix {
-    pub fn new(
-        code: impl Into<String>,
-        path: impl Into<PathBuf>,
-        message: impl Into<String>,
-    ) -> Self {
+    pub fn new(code: impl Into<String>, path: impl Into<PathBuf>, message: impl Into<String>) -> Self {
         Self { code: code.into(), path: path.into(), message: message.into() }
     }
 }

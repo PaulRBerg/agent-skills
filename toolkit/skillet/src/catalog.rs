@@ -1,14 +1,15 @@
-use std::collections::BTreeSet;
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use serde::Serialize;
 
-use crate::dependency::{DeclaredDependency, SkillName, validate_dependencies};
-use crate::diagnostic::{Diagnostic, sort_diagnostics};
-use crate::error::Error;
-use crate::frontmatter::{Frontmatter, parse_skill_file};
-use crate::hash::{sha256_file, sha256_tree};
-use crate::traversal::{RootRequest, ScanRoot, SkillExposure, discover};
+use crate::{
+    dependency::{DeclaredDependency, SkillName, validate_dependencies},
+    diagnostic::{Diagnostic, sort_diagnostics},
+    error::Error,
+    frontmatter::{Frontmatter, parse_skill_file},
+    hash::{sha256_file, sha256_tree},
+    traversal::{RootRequest, ScanRoot, SkillExposure, discover},
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Skill {
@@ -80,9 +81,7 @@ impl Catalog {
 
         let known_local_names: BTreeSet<_> = skills
             .iter()
-            .filter_map(|skill| {
-                SkillName::parse(&skill.directory_name).ok().or_else(|| skill.name.clone())
-            })
+            .filter_map(|skill| SkillName::parse(&skill.directory_name).ok().or_else(|| skill.name.clone()))
             .collect();
         for skill in &mut skills {
             let Some(frontmatter) = skill.frontmatter.as_ref() else {
@@ -109,8 +108,7 @@ impl Catalog {
     }
 
     pub fn exposures_for_resolved_path(&self, path: &Path) -> Vec<&Skill> {
-        let mut skills: Vec<_> =
-            self.skills.iter().filter(|skill| skill.resolved_skill_path() == path).collect();
+        let mut skills: Vec<_> = self.skills.iter().filter(|skill| skill.resolved_skill_path() == path).collect();
         skills.sort_by_key(|skill| skill.skill_path());
         skills
     }
