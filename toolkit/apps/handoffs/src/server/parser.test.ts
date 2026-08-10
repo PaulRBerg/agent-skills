@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { parseHandoff } from "./parser";
@@ -16,7 +18,38 @@ task: Build the handoff viewer
 Body text.
 `;
 
+const TASK_HANDOFF_V1 = readFileSync(
+  new URL("./fixtures/task-handoff-v1.md", import.meta.url),
+  "utf8",
+);
+
 describe("parseHandoff", () => {
+  it("parses the complete task-handoff producer fixture", () => {
+    const parsed = parseHandoff(TASK_HANDOFF_V1, "TASK_HANDOFF_COMPATIBILITY.md");
+
+    expect(parsed).toMatchObject({
+      format: "frontmatter",
+      title: "Validate task handoff compatibility",
+      category: "implementation",
+      created: "2026-08-10T08:00:00Z",
+      frontmatter: {
+        category: "implementation",
+        created: "2026-08-10T08:00:00Z",
+        launch_repo: "/Users/example/projects/app",
+        repos: ["/Users/example/projects/app"],
+        origin: "/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY.md",
+        task: "Validate task handoff compatibility",
+      },
+    });
+    expect(parsed.markdown).toContain("# Validate task handoff compatibility");
+    expect(parsed.markdown).toContain("## Handoff category\n\nCategory: `implementation`");
+    expect(parsed.markdown).toContain("## Execution status");
+    expect(parsed.markdown).toContain("## Handoff cleanup");
+    expect(parsed.markdown).toContain(
+      "handoff='/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY.md'",
+    );
+  });
+
   it("validates and removes a complete leading frontmatter block", () => {
     expect(parseHandoff(VALID_FRONTMATTER, "VIEWER.md")).toEqual({
       format: "frontmatter",
