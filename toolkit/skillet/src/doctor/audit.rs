@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::{
     catalog::{Catalog, Skill},
     diagnostic::Diagnostic,
-    frontmatter::Frontmatter,
+    frontmatter::{Frontmatter, FrontmatterValue, SUPPORTED_FIELDS, markdown_prose},
     traversal::ScanRoot,
 };
 
@@ -50,19 +50,18 @@ pub fn build_report(catalog: &Catalog, dependencies_only: bool, fix_safe: bool) 
                 continue;
             }
         };
-        let raw = raw_frontmatter(&source);
         check_required_frontmatter(skill, frontmatter, dependencies_only, &mut findings);
         check_field_order(skill, frontmatter, dependencies_only, &mut findings);
         if dependencies_only {
             continue;
         }
 
-        check_typed_frontmatter(skill, frontmatter, raw.as_ref(), &mut findings);
+        check_typed_frontmatter(skill, frontmatter, &mut findings);
         check_coordination(skill, frontmatter, &source, &mut findings);
         check_openai(skill, frontmatter, fix_safe, &mut findings, &mut fixes);
         check_cli_version(skill, frontmatter, &mut findings);
         check_resource_links(skill, &source, &mut findings);
-        check_prompt_hygiene(skill, raw.as_ref(), &source, &mut findings);
+        check_prompt_hygiene(skill, frontmatter, &source, &mut findings);
     }
 
     let roots = catalog.roots.iter().map(|root| root_record(root, &catalog.skills)).collect::<Vec<_>>();
@@ -212,118 +211,202 @@ fn check_field_order(skill: &Skill, frontmatter: &Frontmatter, dependencies_only
     }
 }
 
-fn check_typed_frontmatter(skill: &Skill, frontmatter: &Frontmatter, raw: Option<&Value>, findings: &mut Vec<Finding>) {
-    check_string_field(
-        skill,
-        frontmatter,
-        "argument-hint",
-        frontmatter.argument_hint.is_some(),
-        "ARGUMENT_HINT_INVALID",
-        findings,
-    );
-    check_bool_field(
-        skill,
-        frontmatter,
-        "user-invocable",
-        frontmatter.user_invocable.is_some(),
-        "USER_INVOCABLE_INVALID",
-        findings,
-    );
-    check_bool_field(
-        skill,
-        frontmatter,
-        "disable-model-invocation",
-        frontmatter.disable_model_invocation.is_some(),
-        "DISABLE_MODEL_INVOCATION_INVALID",
-        findings,
-    );
-    check_string_field(skill, frontmatter, "context", frontmatter.context.is_some(), "CONTEXT_INVALID", findings);
-    check_string_field(skill, frontmatter, "agent", frontmatter.agent.is_some(), "AGENT_INVALID", findings);
-    check_string_field(
-        skill,
-        frontmatter,
-        "coordination",
-        frontmatter.coordination.is_some(),
-        "COORDINATION_INVALID",
-        findings,
-    );
-
-    if frontmatter.has_field("compatibility") {
-        match frontmatter.compatibility.as_ref() {
-            None => findings.push(typed_finding(
-                skill,
-                frontmatter,
-                "compatibility",
-                "COMPATIBILITY_INVALID",
-                "compatibility must be a string",
-            )),
-            Some(value) if value.value.chars().count() > 500 => findings.push(Finding::new(
-                "COMPATIBILITY_TOO_LONG",
+fn check_typed_frontmatter(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<Finding>) {
+    for field in &frontmatter.fields {
+        if !SUPPORTED_FIELDS.contains(&field.name.as_str()) {
+            findings.push(Finding::new(
+                "FRONTMATTER_UNKNOWN_FIELD",
                 Severity::Error,
                 skill.skill_path(),
-                Some(value.line),
+                Some(field.line),
                 false,
-                format!("compatibility is {} chars; max is 500", value.value.chars().count()),
-            )),
-            Some(_) => {}
+                format!("unknown frontmatter field {:?}", field.name),
+            ));
         }
     }
 
+    for (name, code) in [
+        ("license", "LICENSE_INVALID_TYPE"),
+        ("when_to_use", "WHEN_TO_USE_INVALID_TYPE"),
+        ("argument-hint", "ARGUMENT_HINT_INVALID"),
+        ("model", "MODEL_INVALID_TYPE"),
+        ("effort", "EFFORT_INVALID_TYPE"),
+        ("context", "CONTEXT_INVALID"),
+        ("agent", "AGENT_INVALID"),
+        ("shell", "SHELL_INVALID_TYPE"),
+        ("coordination", "COORDINATION_INVALID"),
+    ] {
+        if frontmatter.value(name).is_some_and(|value| !matches!(&value.value, FrontmatterValue::String(_))) {
+            findings.push(typed_finding(skill, frontmatter, name, code, format!("{name} must be a string")));
+        }
+    }
+    for (name, code) in [
+        ("allowed-tools", "ALLOWED_TOOLS_INVALID_TYPE"),
+        ("arguments", "ARGUMENTS_INVALID_TYPE"),
+        ("disallowed-tools", "DISALLOWED_TOOLS_INVALID_TYPE"),
+        ("paths", "PATHS_INVALID_TYPE"),
+    ] {
+        check_string_or_list_field(skill, frontmatter, name, code, findings);
+    }
+    for (name, valid, code) in [
+        ("user-invocable", frontmatter.user_invocable.is_some(), "USER_INVOCABLE_INVALID"),
+        (
+            "disable-model-invocation",
+            frontmatter.disable_model_invocation.is_some(),
+            "DISABLE_MODEL_INVOCATION_INVALID",
+        ),
+        ("background", frontmatter.background.is_some(), "BACKGROUND_INVALID_TYPE"),
+    ] {
+        check_bool_field(skill, frontmatter, name, valid, code, findings);
+    }
+    check_compatibility(skill, frontmatter, findings);
+    check_metadata(skill, frontmatter, findings);
+
+    if frontmatter.value("hooks").is_some_and(|value| !matches!(&value.value, FrontmatterValue::Mapping(_))) {
+        findings.push(typed_finding(skill, frontmatter, "hooks", "HOOKS_INVALID_TYPE", "hooks must be a mapping"));
+    }
     if let Some(context) = frontmatter.context.as_ref() &&
         context.value != "fork"
     {
-        findings.push(Finding::new(
-            "CONTEXT_INVALID",
-            Severity::Error,
-            skill.skill_path(),
-            Some(context.line),
-            false,
-            "context must be fork when present",
+        findings.push(value_finding(skill, context.line, "CONTEXT_INVALID", "context must be fork when present"));
+    }
+    if let Some(effort) = frontmatter.effort.as_ref() &&
+        !matches!(effort.value.as_str(), "low" | "medium" | "high" | "xhigh" | "max")
+    {
+        findings.push(value_finding(
+            skill,
+            effort.line,
+            "EFFORT_INVALID_VALUE",
+            "effort must be low, medium, high, xhigh, or max",
         ));
+    }
+    if let Some(shell) = frontmatter.shell.as_ref() &&
+        !matches!(shell.value.as_str(), "bash" | "powershell")
+    {
+        findings.push(value_finding(skill, shell.line, "SHELL_INVALID_VALUE", "shell must be bash or powershell"));
     }
     if let Some(coordination) = frontmatter.coordination.as_ref() &&
         coordination.value != "exempt"
     {
-        findings.push(Finding::new(
+        findings.push(value_finding(
+            skill,
+            coordination.line,
             "COORDINATION_INVALID",
-            Severity::Error,
-            skill.skill_path(),
-            Some(coordination.line),
-            false,
             "coordination must be exempt when present",
         ));
     }
     if let Some(targets) = frontmatter.install_targets.as_ref() &&
         targets.value.is_none()
     {
-        findings.push(Finding::new(
+        findings.push(value_finding(
+            skill,
+            targets.line,
             "INSTALL_TARGETS_INVALID",
-            Severity::Error,
-            skill.skill_path(),
-            Some(targets.line),
-            false,
             "metadata.install-targets must be claude-code, codex, or claude-code codex",
         ));
     }
-    if frontmatter.has_field("metadata") &&
-        raw.and_then(Value::as_object)
-            .and_then(|object| object.get("metadata"))
-            .is_some_and(|metadata| !metadata.is_object())
+
+    let forked = frontmatter.context.as_ref().is_some_and(|context| context.value == "fork");
+    if !forked && let Some(agent) = frontmatter.agent.as_ref() {
+        findings.push(value_finding(skill, agent.line, "AGENT_CONTEXT_REQUIRED", "agent requires context: fork"));
+    }
+    if !forked && let Some(background) = frontmatter.background.as_ref() {
+        findings.push(value_finding(
+            skill,
+            background.line,
+            "BACKGROUND_CONTEXT_REQUIRED",
+            "background requires context: fork",
+        ));
+    }
+    if let Some(value) = frontmatter.disable_model_invocation.as_ref() &&
+        !value.value
     {
-        findings.push(typed_finding(skill, frontmatter, "metadata", "METADATA_INVALID", "metadata must be a mapping"));
+        findings.push(warning_finding(
+            skill,
+            value.line,
+            "DISABLE_MODEL_INVOCATION_REDUNDANT_DEFAULT",
+            "disable-model-invocation: false is redundant; omit the field",
+        ));
+    }
+    if let Some(value) = frontmatter.user_invocable.as_ref() &&
+        value.value
+    {
+        findings.push(warning_finding(
+            skill,
+            value.line,
+            "USER_INVOCABLE_REDUNDANT_DEFAULT",
+            "user-invocable: true is redundant; omit the field",
+        ));
     }
 }
 
-fn check_string_field(
+fn check_string_or_list_field(
     skill: &Skill,
     frontmatter: &Frontmatter,
     name: &str,
-    valid: bool,
     code: &str,
     findings: &mut Vec<Finding>,
 ) {
-    if frontmatter.has_field(name) && !valid {
-        findings.push(typed_finding(skill, frontmatter, name, code, format!("{name} must be a string")));
+    let Some(value) = frontmatter.value(name) else {
+        return;
+    };
+    let invalid_line = match &value.value {
+        FrontmatterValue::String(_) => return,
+        FrontmatterValue::Sequence(items) => {
+            items.iter().find(|item| !matches!(&item.value, FrontmatterValue::String(_))).map(|item| item.line)
+        }
+        _ => Some(value.line),
+    };
+    if let Some(line) = invalid_line {
+        findings.push(value_finding(skill, line, code, format!("{name} must be a string or a list of strings")));
+    }
+}
+
+fn check_compatibility(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<Finding>) {
+    if !frontmatter.has_field("compatibility") {
+        return;
+    }
+    match frontmatter.compatibility.as_ref() {
+        None => findings.push(typed_finding(
+            skill,
+            frontmatter,
+            "compatibility",
+            "COMPATIBILITY_INVALID",
+            "compatibility must be a string",
+        )),
+        Some(value) if value.value.is_empty() => findings.push(value_finding(
+            skill,
+            value.line,
+            "COMPATIBILITY_INVALID",
+            "compatibility must be non-empty when present",
+        )),
+        Some(value) if value.value.chars().count() > 500 => findings.push(value_finding(
+            skill,
+            value.line,
+            "COMPATIBILITY_TOO_LONG",
+            format!("compatibility is {} chars; max is 500", value.value.chars().count()),
+        )),
+        Some(_) => {}
+    }
+}
+
+fn check_metadata(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<Finding>) {
+    let Some(value) = frontmatter.value("metadata") else {
+        return;
+    };
+    let FrontmatterValue::Mapping(entries) = &value.value else {
+        findings.push(typed_finding(skill, frontmatter, "metadata", "METADATA_INVALID", "metadata must be a mapping"));
+        return;
+    };
+    for entry in entries {
+        if entry.key.value != "install-targets" && !matches!(&entry.value.value, FrontmatterValue::String(_)) {
+            findings.push(value_finding(
+                skill,
+                entry.value.line,
+                "METADATA_VALUE_INVALID_TYPE",
+                format!("metadata entry {:?} must have a string value", entry.key.value),
+            ));
+        }
     }
 }
 
@@ -357,11 +440,20 @@ fn typed_finding(
     )
 }
 
+fn value_finding(skill: &Skill, line: u64, code: &str, message: impl Into<String>) -> Finding {
+    Finding::new(code, Severity::Error, skill.skill_path(), Some(line), false, message)
+}
+
+fn warning_finding(skill: &Skill, line: u64, code: &str, message: impl Into<String>) -> Finding {
+    Finding::new(code, Severity::Warning, skill.skill_path(), Some(line), false, message)
+}
+
 fn check_coordination(skill: &Skill, frontmatter: &Frontmatter, source: &str, findings: &mut Vec<Finding>) {
     let body_start = frontmatter_ranges(source).map_or(0, |(_, body)| body);
     let body = &source[body_start..];
-    let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mention = coordination_mention().find(body);
+    let prose = markdown_prose(body);
+    let normalized = prose.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mention = coordination_mention().find(&prose);
     let exact = normalized.contains(COORDINATION_EXEMPT_SENTENCE);
     let exempt = frontmatter.coordination.as_ref().is_some_and(|value| value.value == "exempt");
 
@@ -601,17 +693,17 @@ fn check_resource_links(skill: &Skill, source: &str, findings: &mut Vec<Finding>
     }
 }
 
-fn check_prompt_hygiene(skill: &Skill, raw: Option<&Value>, source: &str, findings: &mut Vec<Finding>) {
-    if let Some(model) = raw.and_then(Value::as_object).and_then(|object| object.get("model")).and_then(Value::as_str) &&
-        model.eq_ignore_ascii_case("opus")
+fn check_prompt_hygiene(skill: &Skill, frontmatter: &Frontmatter, source: &str, findings: &mut Vec<Finding>) {
+    if let Some(model) = frontmatter.model.as_ref() &&
+        model.value.eq_ignore_ascii_case("opus")
     {
         findings.push(Finding::new(
             "STALE_MODEL_PIN",
             Severity::Warning,
             skill.skill_path(),
-            line_for(source, "model:"),
+            Some(model.line),
             false,
-            format!("model pin {model:?} is a stale alias; verify that an explicit pin is still needed"),
+            format!("model pin {:?} is a stale alias; verify that an explicit pin is still needed", model.value),
         ));
     }
     if !completion_evidence().is_match(source) {
@@ -805,11 +897,6 @@ fn counts(findings: &[Finding], fixes: &[Fix]) -> Counts {
         fixes: fixes.len(),
         fix_errors: findings.iter().filter(|finding| finding.severity == Severity::FixError).count(),
     }
-}
-
-fn raw_frontmatter(source: &str) -> Option<Value> {
-    let (range, _) = frontmatter_ranges(source)?;
-    serde_saphyr::from_str(&source[range]).ok()
 }
 
 fn frontmatter_ranges(source: &str) -> Option<(std::ops::Range<usize>, usize)> {

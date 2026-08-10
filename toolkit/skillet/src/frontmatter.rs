@@ -15,6 +15,31 @@ use crate::diagnostic::Diagnostic;
 
 const MAX_FRONTMATTER_BYTES: usize = 8 * 1024 * 1024;
 
+pub const SUPPORTED_FIELDS: &[&str] = &[
+    "name",
+    "description",
+    "license",
+    "compatibility",
+    "metadata",
+    "allowed-tools",
+    "when_to_use",
+    "argument-hint",
+    "arguments",
+    "disable-model-invocation",
+    "user-invocable",
+    "disallowed-tools",
+    "model",
+    "effort",
+    "context",
+    "agent",
+    "background",
+    "hooks",
+    "paths",
+    "shell",
+    "coordination",
+    "skill-dependencies",
+];
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Located<T> {
     pub value: T,
@@ -33,6 +58,25 @@ pub struct FrontmatterField {
     pub name: String,
     pub line: u64,
     pub column: u64,
+    #[serde(skip)]
+    pub(crate) value: Located<FrontmatterValue>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum FrontmatterValue {
+    Null,
+    Bool(bool),
+    Integer(i128),
+    String(String),
+    Sequence(Vec<Located<FrontmatterValue>>),
+    Mapping(Vec<FrontmatterMappingEntry>),
+    Other,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct FrontmatterMappingEntry {
+    pub key: Located<String>,
+    pub value: Located<FrontmatterValue>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -70,8 +114,12 @@ pub struct Frontmatter {
     pub argument_hint: Option<Located<String>>,
     pub user_invocable: Option<Located<bool>>,
     pub disable_model_invocation: Option<Located<bool>>,
+    pub model: Option<Located<String>>,
+    pub effort: Option<Located<String>>,
     pub context: Option<Located<String>>,
     pub agent: Option<Located<String>>,
+    pub background: Option<Located<bool>>,
+    pub shell: Option<Located<String>>,
     pub install_targets: Option<Located<Option<InstallTargets>>>,
     pub coordination: Option<Located<String>>,
     pub skill_dependencies: Option<Located<DependencyList>>,
@@ -84,6 +132,10 @@ impl Frontmatter {
 
     pub fn field(&self, name: &str) -> Option<&FrontmatterField> {
         self.fields.iter().find(|field| field.name == name)
+    }
+
+    pub(crate) fn value(&self, name: &str) -> Option<&Located<FrontmatterValue>> {
+        self.field(name).map(|field| &field.value)
     }
 }
 
@@ -209,10 +261,11 @@ fn extract_frontmatter(fields: &[(Spanned<String>, Spanned<YamlValue>)]) -> Fron
     let mut frontmatter = Frontmatter {
         fields: fields
             .iter()
-            .map(|(key, _)| FrontmatterField {
+            .map(|(key, value)| FrontmatterField {
                 name: key.value.clone(),
                 line: key.referenced.line(),
                 column: key.referenced.column(),
+                value: Located::at(frontmatter_value(&value.value), value.referenced),
             })
             .collect(),
         ..Frontmatter::default()
@@ -229,8 +282,12 @@ fn extract_frontmatter(fields: &[(Spanned<String>, Spanned<YamlValue>)]) -> Fron
             "disable-model-invocation" => {
                 frontmatter.disable_model_invocation = bool_value(value, field_location);
             }
+            "model" => frontmatter.model = string_value(value, field_location),
+            "effort" => frontmatter.effort = string_value(value, field_location),
             "context" => frontmatter.context = string_value(value, field_location),
             "agent" => frontmatter.agent = string_value(value, field_location),
+            "background" => frontmatter.background = bool_value(value, field_location),
+            "shell" => frontmatter.shell = string_value(value, field_location),
             "coordination" => frontmatter.coordination = string_value(value, field_location),
             "metadata" => {
                 if let YamlValue::Mapping(metadata) = &value.value &&
@@ -263,6 +320,7 @@ fn extract_frontmatter(fields: &[(Spanned<String>, Spanned<YamlValue>)]) -> Fron
                 };
                 frontmatter.skill_dependencies = Some(Located::at(dependency_list, field_location));
             }
+            "license" | "allowed-tools" | "when_to_use" | "arguments" | "disallowed-tools" | "hooks" | "paths" => {}
             _ => {}
         }
     }
@@ -277,10 +335,146 @@ fn string_value(value: &Spanned<YamlValue>, location: serde_saphyr::Location) ->
 }
 
 fn bool_value(value: &Spanned<YamlValue>, location: serde_saphyr::Location) -> Option<Located<bool>> {
-    match value.value {
-        YamlValue::Bool(value) => Some(Located::at(value, location)),
+    let parsed = match &value.value {
+        YamlValue::Bool(value) => Some(*value),
+        YamlValue::Integer(0) => Some(false),
+        YamlValue::Integer(1) => Some(true),
+        YamlValue::String(value)
+            if value.eq_ignore_ascii_case("false") ||
+                value.eq_ignore_ascii_case("no") ||
+                value.eq_ignore_ascii_case("off") =>
+        {
+            Some(false)
+        }
+        YamlValue::String(value)
+            if value.eq_ignore_ascii_case("true") ||
+                value.eq_ignore_ascii_case("yes") ||
+                value.eq_ignore_ascii_case("on") =>
+        {
+            Some(true)
+        }
         _ => None,
+    };
+    parsed.map(|value| Located::at(value, location))
+}
+
+fn frontmatter_value(value: &YamlValue) -> FrontmatterValue {
+    match value {
+        YamlValue::Null => FrontmatterValue::Null,
+        YamlValue::Bool(value) => FrontmatterValue::Bool(*value),
+        YamlValue::Integer(value) => FrontmatterValue::Integer(*value),
+        YamlValue::String(value) => FrontmatterValue::String(value.clone()),
+        YamlValue::Sequence(values) => FrontmatterValue::Sequence(
+            values.iter().map(|value| Located::at(frontmatter_value(&value.value), value.referenced)).collect(),
+        ),
+        YamlValue::Mapping(values) => FrontmatterValue::Mapping(
+            values
+                .iter()
+                .map(|(key, value)| FrontmatterMappingEntry {
+                    key: Located::at(key.value.clone(), key.referenced),
+                    value: Located::at(frontmatter_value(&value.value), value.referenced),
+                })
+                .collect(),
+        ),
+        YamlValue::Other => FrontmatterValue::Other,
     }
+}
+
+pub(crate) fn markdown_prose(markdown: &str) -> String {
+    let mut visible = markdown.as_bytes().to_vec();
+    let mut offset = 0usize;
+    let mut fence = None;
+    let mut example_level = None;
+
+    for line in markdown.split_inclusive('\n') {
+        let content = line.strip_suffix('\n').unwrap_or(line);
+        let content = content.strip_suffix('\r').unwrap_or(content);
+        let indent = content.bytes().take_while(|byte| *byte == b' ').count();
+        let trimmed = &content[indent.min(content.len())..];
+        let marker = (indent <= 3).then(|| fence_marker(trimmed)).flatten();
+
+        if let Some((kind, width)) = fence {
+            mask(&mut visible, offset, offset + content.len());
+            if marker.is_some_and(|(candidate, candidate_width)| candidate == kind && candidate_width >= width) {
+                fence = None;
+            }
+        } else if let Some(marker) = marker {
+            fence = Some(marker);
+            mask(&mut visible, offset, offset + content.len());
+        } else {
+            let heading = markdown_heading(trimmed);
+            if let Some((level, _)) = heading &&
+                example_level.is_some_and(|example| level <= example)
+            {
+                example_level = None;
+            }
+            if let Some((level, title)) = heading &&
+                is_example_heading(title)
+            {
+                example_level = Some(level);
+            }
+
+            if example_level.is_some() || indent >= 4 || trimmed.starts_with('>') {
+                mask(&mut visible, offset, offset + content.len());
+            } else {
+                mask_inline_code(content.as_bytes(), &mut visible, offset);
+            }
+        }
+        offset += line.len();
+    }
+
+    String::from_utf8(visible).expect("masking Markdown preserves UTF-8")
+}
+
+fn fence_marker(line: &str) -> Option<(u8, usize)> {
+    let kind = *line.as_bytes().first()?;
+    if !matches!(kind, b'`' | b'~') {
+        return None;
+    }
+    let width = line.bytes().take_while(|byte| *byte == kind).count();
+    (width >= 3).then_some((kind, width))
+}
+
+fn markdown_heading(line: &str) -> Option<(usize, &str)> {
+    let level = line.bytes().take_while(|byte| *byte == b'#').count();
+    if !(1..=6).contains(&level) || line.as_bytes().get(level) != Some(&b' ') {
+        return None;
+    }
+    Some((level, line[level + 1..].trim().trim_end_matches('#').trim_end()))
+}
+
+fn is_example_heading(title: &str) -> bool {
+    let title = title.to_ascii_lowercase();
+    matches!(title.as_str(), "example" | "examples") || title.starts_with("example:") || title.starts_with("examples:")
+}
+
+fn mask_inline_code(line: &[u8], visible: &mut [u8], offset: usize) {
+    let mut start = 0usize;
+    while let Some(relative) = line[start..].iter().position(|byte| *byte == b'`') {
+        let opening = start + relative;
+        let width = line[opening..].iter().take_while(|byte| **byte == b'`').count();
+        let mut search = opening + width;
+        let closing = loop {
+            let Some(relative) = line[search..].iter().position(|byte| *byte == b'`') else {
+                break None;
+            };
+            let candidate = search + relative;
+            let candidate_width = line[candidate..].iter().take_while(|byte| **byte == b'`').count();
+            if candidate_width == width {
+                break Some(candidate);
+            }
+            search = candidate + candidate_width;
+        };
+        let Some(closing) = closing else {
+            break;
+        };
+        mask(visible, offset + opening, offset + closing + width);
+        start = closing + width;
+    }
+}
+
+fn mask(bytes: &mut [u8], start: usize, end: usize) {
+    bytes[start..end].fill(b' ');
 }
 
 enum ReadLine {
@@ -342,6 +536,7 @@ fn read_error(path: &Path, line: u64, error: io::Error) -> FrontmatterParse {
 enum YamlValue {
     Null,
     Bool(bool),
+    Integer(i128),
     String(String),
     Sequence(Vec<Spanned<YamlValue>>),
     Mapping(Vec<(Spanned<String>, Spanned<YamlValue>)>),
@@ -378,12 +573,12 @@ impl<'de> Visitor<'de> for YamlValueVisitor {
         Ok(YamlValue::Bool(value))
     }
 
-    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E> {
-        Ok(YamlValue::Other)
+    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
+        Ok(YamlValue::Integer(value.into()))
     }
 
-    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E> {
-        Ok(YamlValue::Other)
+    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
+        Ok(YamlValue::Integer(value.into()))
     }
 
     fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E> {

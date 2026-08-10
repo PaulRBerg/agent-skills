@@ -53,7 +53,7 @@ fn doctor_reports_all_durable_metadata_finding_families() {
     common::write(
         root.path().join("skills/typed/SKILL.md"),
         format!(
-            "---\nagent: 1\nargument-hint: false\ncompatibility: {}\ncontext: inline\ncoordination: managed\ndisable-model-invocation: invalid\nmetadata:\n  install-targets: other\nname: typed\nuser-invocable: invalid\ndescription: typed\n---\n\n# typed\n\n## Completion\n\nReport verification.\n",
+            "---\nagent: 1\nallowed-tools: {{}}\nargument-hint: false\narguments: false\nbackground: invalid\ncompatibility: {}\ncontext: inline\ncoordination: managed\ndisable-model-invocation: invalid\ndisallowed-tools: {{}}\neffort: extreme\nhooks: []\nlicense: false\nmetadata:\n  author: 1\n  install-targets: other\nmodel: []\nname: typed\npaths: false\nshell: zsh\nunexpected-field: true\nuser-invocable: invalid\nwhen_to_use: 1\ndescription: typed\n---\n\n# typed\n\n## Completion\n\nReport verification.\n",
             "x".repeat(501)
         ),
     );
@@ -72,7 +72,10 @@ fn doctor_reports_all_durable_metadata_finding_families() {
     let found = finding_codes(&report);
     for expected in [
         "AGENT_INVALID",
+        "ALLOWED_TOOLS_INVALID_TYPE",
         "ARGUMENT_HINT_INVALID",
+        "ARGUMENTS_INVALID_TYPE",
+        "BACKGROUND_INVALID_TYPE",
         "CLI_VERSION_MISSING",
         "COMPATIBILITY_TOO_LONG",
         "CONTEXT_INVALID",
@@ -81,13 +84,23 @@ fn doctor_reports_all_durable_metadata_finding_families() {
         "DESCRIPTION_MISSING",
         "DESCRIPTION_TOO_LONG",
         "DISABLE_MODEL_INVOCATION_INVALID",
+        "DISALLOWED_TOOLS_INVALID_TYPE",
+        "EFFORT_INVALID_VALUE",
+        "FRONTMATTER_UNKNOWN_FIELD",
+        "HOOKS_INVALID_TYPE",
         "INSTALL_TARGETS_INVALID",
+        "LICENSE_INVALID_TYPE",
+        "METADATA_VALUE_INVALID_TYPE",
+        "MODEL_INVALID_TYPE",
         "NAME_MISSING",
         "OPENAI_METADATA_INVALID",
         "OPENAI_METADATA_MISSING",
         "OPENAI_POLICY_MISSING",
+        "PATHS_INVALID_TYPE",
         "README_MISSING",
+        "SHELL_INVALID_VALUE",
         "USER_INVOCABLE_INVALID",
+        "WHEN_TO_USE_INVALID_TYPE",
     ] {
         assert!(found.contains(expected), "missing {expected}: {found:?}");
     }

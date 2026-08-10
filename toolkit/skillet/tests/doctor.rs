@@ -43,6 +43,10 @@ fn codes(report: &Value) -> BTreeSet<&str> {
     report["findings"].as_array().unwrap().iter().map(|finding| finding["code"].as_str().unwrap()).collect()
 }
 
+fn finding<'a>(report: &'a Value, code: &str) -> &'a Value {
+    report["findings"].as_array().unwrap().iter().find(|finding| finding["code"] == code).unwrap()
+}
+
 #[test]
 fn clean_fixture_has_schema_v1_valid_json_and_text() {
     let root = common::fixture("doctor/catalog");
@@ -73,6 +77,139 @@ fn readme_inventory_accepts_a_skill_only_table() {
     let (output, report) = run_json(root.path(), &[]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(report["findings"], serde_json::json!([]));
+}
+
+#[test]
+fn complete_portable_claude_and_repository_dialect_is_accepted() {
+    let root = TempDir::new().unwrap();
+    common::write(
+        root.path().join("skills/alpha/SKILL.md"),
+        "---\nagent: Explore\nallowed-tools:\n  - Read\n  - Grep\nargument-hint: \"[issue] [branch]\"\narguments: issue branch\nbackground: false\ncompatibility: Requires Git.\ncontext: fork\ncoordination: exempt\ndisable-model-invocation: true\ndisallowed-tools:\n  - AskUserQuestion\neffort: max\nhooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks: []\nlicense: MIT\nmetadata:\n  author: test-suite\n  install-targets: claude-code codex\n  version: \"1\"\nmodel: inherit\nname: alpha\npaths:\n  - \"src/**\"\nshell: bash\nskill-dependencies:\n  - beta\nuser-invocable: false\nwhen_to_use: Use for complete-dialect fixtures.\ndescription: alpha description.\n---\n\n# alpha\n\nThis skill is coordination-exempt: skip the ai-coord gate for its declared work.\n\n## Completion\n\nReport verification.\n",
+    );
+    write_skill(root.path(), "beta", "", "## Completion\n\nReport verification.");
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: false\n");
+    write_metadata(root.path(), "beta", "policy:\n  allow_implicit_invocation: true\n");
+    write_readme(root.path(), &["alpha", "beta"]);
+
+    let (output, report) = run_json(root.path(), &[]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+    assert_eq!(report["schema_version"], 1);
+    assert_eq!(report["findings"], serde_json::json!([]));
+}
+
+#[test]
+fn unknown_fields_invalid_enums_and_fork_cross_fields_are_located_and_deterministic() {
+    let root = TempDir::new().unwrap();
+    common::write(
+        root.path().join("skills/invalid/SKILL.md"),
+        "---\nagent: Explore\nbackground: true\neffort: extreme\nname: invalid\nshell: zsh\nunknown-option: enabled\ndescription: invalid description.\n---\n\n# invalid\n\n## Completion\n\nReport verification.\n",
+    );
+    write_metadata(root.path(), "invalid", "policy:\n  allow_implicit_invocation: true\n");
+    write_readme(root.path(), &["invalid"]);
+
+    let first =
+        common::ai_skillet().args(["doctor", "--root"]).arg(root.path()).args(["--format", "json"]).output().unwrap();
+    let second =
+        common::ai_skillet().args(["doctor", "--root"]).arg(root.path()).args(["--format", "json"]).output().unwrap();
+    assert_eq!(first.status.code(), Some(1));
+    assert_eq!(first.stdout, second.stdout);
+    let report: Value = serde_json::from_slice(&first.stdout).unwrap();
+    for expected in [
+        "AGENT_CONTEXT_REQUIRED",
+        "BACKGROUND_CONTEXT_REQUIRED",
+        "EFFORT_INVALID_VALUE",
+        "FRONTMATTER_UNKNOWN_FIELD",
+        "SHELL_INVALID_VALUE",
+    ] {
+        assert!(codes(&report).contains(expected), "missing {expected}: {}", String::from_utf8_lossy(&first.stdout));
+    }
+    assert_eq!(finding(&report, "AGENT_CONTEXT_REQUIRED")["line"], 2);
+    assert_eq!(finding(&report, "BACKGROUND_CONTEXT_REQUIRED")["line"], 3);
+    assert_eq!(finding(&report, "FRONTMATTER_UNKNOWN_FIELD")["line"], 7);
+    assert_eq!(
+        finding(&report, "FRONTMATTER_UNKNOWN_FIELD")["message"],
+        "unknown frontmatter field \"unknown-option\""
+    );
+
+    common::ai_skillet()
+        .args(["doctor", "--root"])
+        .arg(root.path())
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("FRONTMATTER_UNKNOWN_FIELD"))
+        .stdout(predicate::str::contains("AGENT_CONTEXT_REQUIRED"));
+}
+
+#[test]
+fn explicit_claude_defaults_warn_without_changing_effective_policy() {
+    let root = TempDir::new().unwrap();
+    common::write(
+        root.path().join("skills/defaults/SKILL.md"),
+        "---\ndisable-model-invocation: false\nname: defaults\nuser-invocable: true\ndescription: defaults description.\n---\n\n# defaults\n\n## Completion\n\nReport verification.\n",
+    );
+    write_metadata(root.path(), "defaults", "policy:\n  allow_implicit_invocation: true\n");
+    write_readme(root.path(), &["defaults"]);
+
+    let (output, report) = run_json(root.path(), &[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(report["counts"]["errors"], 0);
+    assert_eq!(report["counts"]["warnings"], 2);
+    assert_eq!(
+        codes(&report),
+        BTreeSet::from(["DISABLE_MODEL_INVOCATION_REDUNDANT_DEFAULT", "USER_INVOCABLE_REDUNDANT_DEFAULT",])
+    );
+    assert_eq!(finding(&report, "DISABLE_MODEL_INVOCATION_REDUNDANT_DEFAULT")["line"], 2);
+    assert_eq!(finding(&report, "USER_INVOCABLE_REDUNDANT_DEFAULT")["line"], 4);
+}
+
+#[test]
+fn coordination_declarations_ignore_markdown_code_quotes_and_example_sections() {
+    let root = TempDir::new().unwrap();
+    let sentence = "This skill is coordination-exempt: skip the ai-coord gate for its declared work.";
+    let fixtures = [
+        ("plain", "", format!("{sentence}\n\n## Completion\n\nReport verification.")),
+        ("inline", "", format!("Documentation: `{sentence}`\n\n## Completion\n\nReport verification.")),
+        ("fenced", "", format!("```markdown\n{sentence}\n```\n\n## Completion\n\nReport verification.")),
+        ("quote", "", format!("> {sentence}\n\n## Completion\n\nReport verification.")),
+        (
+            "example",
+            "",
+            format!("## Example: coordination policy\n\n{sentence}\n\n## Completion\n\nReport verification."),
+        ),
+        ("exempt", "coordination: exempt\n", format!("{sentence}\n\n## Completion\n\nReport verification.")),
+        (
+            "exempt-code",
+            "coordination: exempt\n",
+            format!("```text\n{sentence}\n```\n\n## Completion\n\nReport verification."),
+        ),
+    ];
+    for (name, fields, body) in &fixtures {
+        write_skill(root.path(), name, fields, body);
+        write_metadata(root.path(), name, "policy:\n  allow_implicit_invocation: true\n");
+    }
+    write_readme(root.path(), &fixtures.iter().map(|(name, _, _)| *name).collect::<Vec<_>>());
+
+    let (output, report) = run_json(root.path(), &[]);
+    assert_eq!(output.status.code(), Some(1));
+    let coordination = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["code"].as_str().unwrap().starts_with("COORDINATION_"))
+        .collect::<Vec<_>>();
+    assert_eq!(coordination.len(), 2, "{coordination:#?}");
+    assert!(
+        finding(&report, "COORDINATION_EXEMPT_FRONTMATTER_MISSING")["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("skills/plain/SKILL.md")
+    );
+    assert!(
+        finding(&report, "COORDINATION_EXEMPT_SENTENCE_MISSING")["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("skills/exempt-code/SKILL.md")
+    );
 }
 
 #[test]
