@@ -169,6 +169,23 @@ test("planner rejects frontmatter name that does not match its directory", () =>
   assert.match(result.stderr, /does not match directory/);
 });
 
+test("pure-remove plans mark the only claimed repository canonical", () => {
+  const fixture = createFixture();
+  const lock = readLock(fixture);
+  lock.skills.gone = lockEntry(fixture, "alpha", { skillPath: "skills/gone/SKILL.md" });
+  writeLock(fixture, lock);
+  fs.cpSync(path.join(fixture.sourceRoot, "skills", "alpha"), path.join(fixture.agentsRoot, "skills", "gone"), {
+    recursive: true,
+  });
+
+  const { json, result } = runJson(fixture, "plan", "--json", "--skill", "gone");
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(json.groups.remove, ["gone"]);
+  assert.deepEqual(json.repos, [
+    { canonical: true, paths: [{ path: "skills/gone", scope: "recursive" }], root: fixture.agentsRoot },
+  ]);
+});
+
 test("apply batches one remove and one add per target group, then verifies clean state", () => {
   const fixture = createFixture();
   driftInstalledSkill(fixture, "alpha", "agents");

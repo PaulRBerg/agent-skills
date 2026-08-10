@@ -840,8 +840,11 @@ function buildRepoClaims(plan: Plan): RepoClaim[] {
     }
   }
 
-  const canonicalRoot = plan.groups.shared.length > 0 || plan.groups.codex.length > 0 ? config.agentsRoot : config.claudeRoot;
-  return [...perRoot.keys()].sort().map((root) => ({
+  const roots = [...perRoot.keys()].sort();
+  const preferredRoot =
+    plan.groups.shared.length > 0 || plan.groups.codex.length > 0 ? config.agentsRoot : config.claudeRoot;
+  const canonicalRoot = perRoot.has(preferredRoot) ? preferredRoot : roots[0];
+  return roots.map((root) => ({
     canonical: root === canonicalRoot,
     paths: [...perRoot.get(root)!.entries()]
       .sort(([left], [right]) => compareNames(left, right))
