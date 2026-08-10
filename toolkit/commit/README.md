@@ -40,6 +40,15 @@ ai-commit show <transaction-id>
 ai-commit discard <transaction-id>
 ```
 
+Each `-m` value is a literal paragraph; repeated values are separated by one blank line. For a multi-line paragraph,
+pass real line breaks within that argument. The two-character text `\\n` is rejected so an accidentally escaped list
+does not become a malformed commit message:
+
+```sh
+ai-commit commit <transaction-id> -m 'docs: record constraints' -m '- describe the evidence contract
+- document the approval gate'
+```
+
 Preparation rejects repository operation states and detached HEADs. Named unborn branches are supported: preparation
 uses Git's empty tree and commit creates a transactional parentless root commit. Default mode requires explicit paths;
 `--all` captures the complete worktree/index result, while `--staged` copies the current index exactly. A successful

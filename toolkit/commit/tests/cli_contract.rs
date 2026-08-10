@@ -26,6 +26,29 @@ fn commit_messages_accept_hyphen_leading_paragraphs() {
 }
 
 #[test]
+fn commit_rejects_literal_newline_escapes() {
+    let harness = Harness::new("literal-newline-escape");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    let base = harness.git(["rev-parse", "HEAD"]);
+    harness.write("intended.txt", "changed\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+
+    let rejected = harness.command([
+        "commit",
+        &transaction,
+        "-m",
+        "test: reject escaped newline",
+        "-m",
+        "- first point\\n- second point",
+    ]);
+
+    assert_eq!(exit_code(&rejected), 2, "{}", stderr(&rejected));
+    assert!(stderr(&rejected).contains("literal \\n escape"));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), base);
+}
+
+#[test]
 fn local_config_selects_message_format_and_absence_defaults_to_conventional() {
     let harness = Harness::new("local-config");
     harness.write("intended.txt", "base\n");

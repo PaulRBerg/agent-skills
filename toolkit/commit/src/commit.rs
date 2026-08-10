@@ -20,6 +20,7 @@ use crate::{
 };
 
 pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
+    validate_message_arguments(&args.messages)?;
     Repository::ensure_default_index_env()?;
     let _transaction_lock = store.lock(&args.transaction_id)?;
     let mut transaction = store.load(&args.transaction_id)?;
@@ -327,14 +328,8 @@ fn apply_prepared_delta(
 }
 
 fn write_message(path: &Path, messages: &[String]) -> Result<()> {
-    if messages.is_empty() {
-        return Err(AppError::usage("at least one -m/--message is required"));
-    }
     let mut file = File::create(path)?;
     for (index, message) in messages.iter().enumerate() {
-        if message.contains('\0') {
-            return Err(AppError::usage("commit messages may not contain NUL bytes"));
-        }
         if index > 0 {
             file.write_all(b"\n\n")?;
         }
@@ -342,6 +337,23 @@ fn write_message(path: &Path, messages: &[String]) -> Result<()> {
     }
     file.write_all(b"\n")?;
     file.sync_all()?;
+    Ok(())
+}
+
+fn validate_message_arguments(messages: &[String]) -> Result<()> {
+    if messages.is_empty() {
+        return Err(AppError::usage("at least one -m/--message is required"));
+    }
+    for message in messages {
+        if message.contains('\0') {
+            return Err(AppError::usage("commit messages may not contain NUL bytes"));
+        }
+        if message.contains("\\n") {
+            return Err(AppError::usage(
+                "commit messages may not contain a literal \\n escape; use an actual newline within the -m value",
+            ));
+        }
+    }
     Ok(())
 }
 
