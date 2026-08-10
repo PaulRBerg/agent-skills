@@ -1,7 +1,7 @@
 ---
 argument-hint:
   <polish|create> [path] [target ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run] [--force]
-disable-model-invocation: true
+disable-model-invocation: false
 name: agents-brain
 skill-dependencies:
   - skill-writing
