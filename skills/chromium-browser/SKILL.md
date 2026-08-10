@@ -2,13 +2,13 @@
 compatibility:
   Requires PRB's attach-only Chrome DevTools MCP wrapper at ~/.local/libexec/mcp/chrome-devtools and an existing
   remote-debugging Chromium browser.
-name: chrome-devtools
+name: chromium-browser
 description:
-  Use Chrome DevTools through PRB's shared attach-only MCP browser for page debugging, browser automation, visual
-  inspection, console or network analysis, performance or memory profiling, and screencasts.
+  Use Chrome DevTools through PRB's shared attach-only Chromium browser for browsing, debugging, automation, visual
+  inspection, console or network analysis, performance or memory profiling, screencasts, and Wayback Machine research.
 ---
 
-# Chrome DevTools
+# Chromium Browser
 
 Operate the configured Chrome DevTools MCP against the existing shared browser without disrupting unrelated tabs or
 authenticated state.
@@ -23,6 +23,12 @@ authenticated state.
   relevant to the task and do not surface unrelated tab titles or content.
 - Trust the live tool inventory over remembered server features. An absent tool is unavailable in this session; do not
   advise editing client MCP configuration as a troubleshooting shortcut.
+
+## Reference Routing
+
+For Wayback Machine capture discovery or replay research, read `references/wayback-machine.md` before making any Wayback
+request. Otherwise do not load it. Discover captures through serialized APIs outside Chromium, then open only the
+selected replay when rendered inspection adds evidence.
 
 ## Page Ownership
 

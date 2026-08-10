@@ -22,7 +22,7 @@ bunx skills add PaulRBerg/agent-skills
 | agents-introspection | Retrospect on Codex/Claude Code transcript history                        |
 | autoresearch         | Autonomous experiment loop                                                |
 | claude-handoff       | Delegate approved Claude plans to Sonnet or Opus subagents                |
-| chrome-devtools      | Shared-browser debugging and automation through Chrome DevTools MCP       |
+| chromium-browser     | Shared Chromium browsing, DevTools automation, and Wayback research       |
 | cli-cast             | Foundry cast CLI guidance                                                 |
 | cli-coingecko        | CoinGecko CLI for prices and market data                                  |
 | cli-gh               | GitHub CLI operations                                                     |

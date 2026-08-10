@@ -83,7 +83,7 @@ unsafe_reason() {
   # shellcheck disable=SC2016
   case "$1" in
     250) printf '%s\n' 'Chainscout still lists self-hosted FTMScout at https://ftmscout.com/, but as checked 2026-07-31 its frontend returns HTTP 200 while /api/v2/* data routes return HTTP 500; do not use it for evidence' ;;
-    2020) printf '%s\n' 'Chainscout returns a different network for `2020`; app.roninchain.com blocks scripted access, so verify through chrome-devtools/Chromium instead of curl or WebFetch' ;;
+    2020) printf '%s\n' 'Chainscout returns a different network for `2020`; app.roninchain.com blocks scripted access, so verify with `$chromium-browser` instead of curl or WebFetch' ;;
     *)
       return 1
       ;;

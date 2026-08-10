@@ -128,8 +128,8 @@ Otherwise verify the target's `primaryPublicRpc` with `eth_chainId`, then try
 
 Use the target row's `explorerUrl` plus `references/explorers/explorer-paths.json`. Verify nonstandard explorers in
 their UI; Ronin does not reliably follow Etherscan paths and its chain ID collides with a non-target Chainscout entry.
-Ronin's explorer (`app.roninchain.com`) also blocks scripted access, so open it with `chrome-devtools`/Chromium rather
-than `curl` or `WebFetch`, the same way `references/workflows/blockscan-balances.md` requires Chromium for Blockscan.
+Ronin's explorer (`app.roninchain.com`) also blocks scripted access, so open it with `$chromium-browser` rather than
+`curl` or `WebFetch`, the same way `references/workflows/blockscan-balances.md` requires Chromium for Blockscan.
 
 ## Exceptional History
 

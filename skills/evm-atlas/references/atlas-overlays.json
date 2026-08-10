@@ -325,7 +325,7 @@
       "etherscan": { "support": "unsupported" },
       "blockscout": {
         "status": "unsafe",
-        "notes": "Chainscout returns a different network for `2020`; app.roninchain.com blocks scripted access, so verify through chrome-devtools/Chromium instead of curl or WebFetch"
+        "notes": "Chainscout returns a different network for `2020`; app.roninchain.com blocks scripted access, so verify with `$chromium-browser` instead of curl or WebFetch"
       }
     },
     "scroll": {
