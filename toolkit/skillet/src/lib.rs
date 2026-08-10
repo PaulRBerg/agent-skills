@@ -6,6 +6,7 @@ pub mod dependency;
 pub mod diagnostic;
 pub mod doctor;
 pub mod error;
+mod exclusions;
 pub mod frontmatter;
 pub mod hash;
 pub mod map;

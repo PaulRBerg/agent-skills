@@ -210,10 +210,14 @@ fn broad_scan_streams_unrecognized_roots_but_prunes_dependency_trees() {
     common::write(temporary.path().join("workspace/tool/SKILL.md"), common::skill("tool", ""));
     let dependency = temporary.path().join("node_modules/dependency");
     common::write(dependency.join("SKILL.md"), common::skill("dependency", ""));
+    common::write(temporary.path().join(".codex/state.sqlite/SKILL.md"), common::skill("codex-state", ""));
+    common::write(temporary.path().join(".claude/history.jsonl/SKILL.md"), common::skill("claude-state", ""));
 
     let broad = Catalog::load(&[RootRequest::broad(temporary.path())]).unwrap();
     assert!(broad.skill_names().iter().any(|name| name.as_str() == "tool"));
     assert!(!broad.skill_names().iter().any(|name| name.as_str() == "dependency"));
+    assert!(!broad.skill_names().iter().any(|name| name.as_str() == "codex-state"));
+    assert!(!broad.skill_names().iter().any(|name| name.as_str() == "claude-state"));
 
     let direct = Catalog::load(&[RootRequest::explicit(&dependency)]).unwrap();
     assert!(direct.skill_names().iter().any(|name| name.as_str() == "dependency"));

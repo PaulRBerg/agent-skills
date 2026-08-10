@@ -9,10 +9,10 @@ use std::{
 use ignore::{DirEntry, WalkBuilder};
 use serde::Serialize;
 
-use crate::error::Error;
-
-const BROAD_EXCLUDED_NAMES: &[&str] =
-    &[".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"];
+use crate::{
+    error::Error,
+    exclusions::{agent_state_path, directory_name_is_excluded},
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -277,8 +277,7 @@ fn broad_entry_allowed(entry: &DirEntry, scan_root: &Path, excluded_roots: &[Pat
     if path == scan_root {
         return true;
     }
-    let name = entry.file_name().to_string_lossy();
-    if BROAD_EXCLUDED_NAMES.iter().any(|excluded| name == *excluded) {
+    if directory_name_is_excluded(entry.file_name()) {
         return false;
     }
     if excluded_roots.iter().any(|excluded| !scan_root.starts_with(excluded) && path.starts_with(excluded)) {
@@ -320,47 +319,4 @@ fn broad_excluded_roots(include_catalog_sources: bool) -> Vec<PathBuf> {
         relative_roots.extend(["projects/agent-skills", "sablier/agent-skills", "sablier/sablier-skills"]);
     }
     relative_roots.into_iter().map(|relative| home.join(relative)).collect()
-}
-
-fn agent_state_path(path: &Path) -> bool {
-    let parts: Vec<_> = path.components().map(Component::as_os_str).collect();
-    parts.windows(2).any(|pair| {
-        matches!(
-            (pair[0].to_str(), pair[1].to_str()),
-            (
-                Some(".claude"),
-                Some(
-                    "backups" |
-                        "debug" |
-                        "file-history" |
-                        "image-cache" |
-                        "logs" |
-                        "paste-cache" |
-                        "plans" |
-                        "projects" |
-                        "session-env" |
-                        "shell-snapshots" |
-                        "statsig" |
-                        "tasks" |
-                        "todos"
-                )
-            ) | (
-                Some(".codex"),
-                Some(
-                    ".tmp" |
-                        "archived_sessions" |
-                        "backups" |
-                        "cache" |
-                        "generated_images" |
-                        "log" |
-                        "logs" |
-                        "sessions" |
-                        "shell_snapshots" |
-                        "sqlite" |
-                        "threads" |
-                        "tmp"
-                )
-            )
-        )
-    })
 }

@@ -2,16 +2,17 @@ use std::{
     fmt::Write as _,
     fs::{self, File, Metadata},
     io::{BufReader, Read},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 use sha2::{Digest, Sha256};
 
-use crate::error::Error;
+use crate::{
+    error::Error,
+    exclusions::{agent_state_path, directory_name_is_excluded},
+};
 
 const COPY_BUFFER_BYTES: usize = 1024 * 1024;
-const IGNORED_DIRECTORY_NAMES: &[&str] =
-    &[".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"];
 
 pub fn sha256_file(path: &Path) -> Result<String, Error> {
     let file = File::open(path).map_err(|error| Error::io("hash", path, error))?;
@@ -106,47 +107,8 @@ fn collect_entries(
 }
 
 fn tree_path_is_ignored(relative: &Path) -> bool {
-    let parts: Vec<_> = relative.components().map(Component::as_os_str).collect();
-    if parts.iter().any(|part| part.to_str().is_some_and(|part| IGNORED_DIRECTORY_NAMES.contains(&part))) {
-        return true;
-    }
-
-    for pair in parts.windows(2) {
-        match (pair[0].to_str(), pair[1].to_str()) {
-            (
-                Some(".claude"),
-                Some(
-                    "backups" | "debug" | "file-history" | "image-cache" | "logs" | "paste-cache" | "plans" |
-                    "projects" | "session-env" | "shell-snapshots" | "statsig" | "tasks" | "todos",
-                ),
-            ) |
-            (
-                Some(".codex"),
-                Some(
-                    ".tmp" | "archived_sessions" | "backups" | "cache" | "generated_images" | "log" | "logs" |
-                    "sessions" | "shell_snapshots" | "sqlite" | "threads" | "tmp",
-                ),
-            ) => return true,
-            _ => {}
-        }
-    }
-
-    if parts.windows(2).any(|pair| {
-        matches!(
-            (pair[0].to_str(), pair[1].to_str()),
-            (Some(".claude"), Some("history.jsonl" | "remote-settings.json" | "stats-cache.json")) |
-                (Some(".codex"), Some("history.jsonl" | "session_index.jsonl"))
-        )
-    }) {
-        return true;
-    }
-    let in_codex = parts.iter().position(|part| *part == ".codex").is_some_and(|index| index + 1 < parts.len());
-    let file = parts.last().and_then(|part| part.to_str()).unwrap_or_default();
-    in_codex &&
-        (file.ends_with(".sqlite") ||
-            file.ends_with(".sqlite-shm") ||
-            file.ends_with(".sqlite-wal") ||
-            file.ends_with(".bak"))
+    relative.components().any(|component| directory_name_is_excluded(component.as_os_str())) ||
+        agent_state_path(relative)
 }
 
 fn encoded_path(path: &Path) -> &[u8] {

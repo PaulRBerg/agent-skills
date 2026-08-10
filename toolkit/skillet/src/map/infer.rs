@@ -1,10 +1,9 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     env,
-    ffi::OsStr,
     fs::{self, File},
     io::{BufRead, BufReader, Read},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::LazyLock,
 };
 
@@ -15,13 +14,12 @@ use crate::{
     catalog::{Catalog, Skill},
     dependency::DependencyIdentifier,
     error::Error,
+    exclusions::{agent_state_path, directory_name_is_excluded},
     traversal::RootMode,
 };
 
 use super::model::{EdgeType, EvidenceRecord, Provenance};
 
-const EXCLUDED_DIRECTORY_NAMES: &[&str] =
-    &[".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"];
 const MATCH_OVERLAP_BYTES: usize = 256;
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 const MAX_SNIPPET_BYTES: usize = 4 * 1024;
@@ -479,9 +477,7 @@ fn reference_entry_allowed(entry: &DirEntry, scan_root: &Path, mode: RootMode, i
     if path == scan_root {
         return true;
     }
-    if entry.file_type().is_some_and(|file_type| file_type.is_dir()) &&
-        entry.file_name().to_str().is_some_and(|name| EXCLUDED_DIRECTORY_NAMES.contains(&name))
-    {
+    if entry.file_type().is_some_and(|file_type| file_type.is_dir()) && directory_name_is_excluded(entry.file_name()) {
         return false;
     }
     if agent_state_path(path) {
@@ -526,66 +522,4 @@ fn broad_home_path_is_excluded(path: &Path, scan_root: &Path, include_catalog_so
         .into_iter()
         .map(|relative| home.join(relative))
         .any(|excluded| !scan_root.starts_with(&excluded) && path.starts_with(excluded))
-}
-
-fn agent_state_path(path: &Path) -> bool {
-    let parts: Vec<_> = path.components().map(Component::as_os_str).collect();
-    if parts.windows(2).any(|pair| {
-        matches!(
-            (pair[0].to_str(), pair[1].to_str()),
-            (
-                Some(".claude"),
-                Some(
-                    "backups" |
-                        "debug" |
-                        "file-history" |
-                        "image-cache" |
-                        "logs" |
-                        "paste-cache" |
-                        "plans" |
-                        "projects" |
-                        "session-env" |
-                        "shell-snapshots" |
-                        "statsig" |
-                        "tasks" |
-                        "todos",
-                ),
-            ) | (
-                Some(".codex"),
-                Some(
-                    ".tmp" |
-                        "archived_sessions" |
-                        "backups" |
-                        "cache" |
-                        "generated_images" |
-                        "log" |
-                        "logs" |
-                        "sessions" |
-                        "shell_snapshots" |
-                        "sqlite" |
-                        "threads" |
-                        "tmp",
-                ),
-            )
-        )
-    }) {
-        return true;
-    }
-    if parts.windows(2).any(|pair| {
-        matches!(
-            (pair[0].to_str(), pair[1].to_str()),
-            (Some(".claude"), Some("history.jsonl" | "remote-settings.json" | "stats-cache.json")) |
-                (Some(".codex"), Some("history.jsonl" | "session_index.jsonl"))
-        )
-    }) {
-        return true;
-    }
-    let in_codex =
-        parts.iter().position(|part| *part == OsStr::new(".codex")).is_some_and(|index| index + 1 < parts.len());
-    let file = parts.last().and_then(|part| part.to_str()).unwrap_or_default();
-    in_codex &&
-        (file.ends_with(".sqlite") ||
-            file.ends_with(".sqlite-shm") ||
-            file.ends_with(".sqlite-wal") ||
-            file.ends_with(".bak"))
 }
