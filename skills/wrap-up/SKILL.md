@@ -10,8 +10,8 @@ skill-dependencies:
   - task-handoff
 user-invocable: true
 description:
-  Wind down a long-running session fast when the user must leave — freeze new work, collect wrap-up reports from active
-  subagents, secure finished work, and hand off the remainder via task-handoff.
+  Wind down a long-running session fast when the user must leave — freeze new work, preserve active subagents, secure
+  finished work, and hand off the remainder via task-handoff.
 ---
 
 # Wrap Up
@@ -41,7 +41,7 @@ Immediately and before anything else:
 
 ## Worker Wind-Down
 
-Enumerate active subagents with the host's agent listing, then message every one of them — in Claude Code through
+Enumerate active subagents with the host's agent listing, then message every messageable worker — in Claude Code through
 SendMessage, in Codex CLI through the native subagent messaging tool — with a wrap-up order:
 
 - Finish the smallest safe unit: complete the current edit, leave no file half-written, start nothing new.
@@ -50,9 +50,16 @@ SendMessage, in Codex CLI through the native subagent messaging tool — with a 
   listing only files actually touched, `verification` listing commands run with outcomes plus checks skipped,
   `remaining work`, and `risks/blockers`.
 
-Give workers a soft deadline of two to three minutes, or less when the user's stated deadline demands it. When a worker
-stays silent past the deadline, stop it and reconstruct its state from `git status` and `git diff` within its assigned
-scope; mark that reconstruction as lower-confidence in the synthesis.
+Give messageable workers a soft deadline of two to three minutes, or less when the user's stated deadline demands it.
+The deadline limits how long this skill waits; it is never permission to cancel a worker. When any worker remains active
+at the deadline, leave its agent, subprocess runner, and watcher running under their existing timeouts. Never use a
+stop, interrupt, kill, or termination action merely because wrap-up was invoked, the worker is silent, or it has no
+message channel.
+
+Classify such a worker as `active-unsettled`. Record its assigned scope, last observed activity, and existing timeout or
+settlement condition. On-disk edits and peer messages are provisional while that worker can still write: do not
+reconstruct a final result, launch replacement work, or claim that its scope is complete. If time permits, wait for
+natural settlement and collect the normal result; otherwise defer result reconciliation to the handoff.
 
 Do not assign new work, redesigns, or fixes through these messages, even when a report reveals a problem. A discovered
 problem becomes remaining work in the handoff.
@@ -62,6 +69,10 @@ problem becomes remaining work in the handoff.
 Inventory the working tree with `git status` and `git diff`, and map every change to a workstream using the wrap-up
 reports. Classify each workstream as completed (edits done and validated), partial (edits or validation unfinished), or
 untouched.
+
+Exclude every `active-unsettled` scope from validation, staging, and commits. Preserve its current coordination claims
+and avoid overlapping writes until the worker settles; a snapshot may describe visible paths only as provisional
+evidence, never as a substitute for its result.
 
 Follow the session's existing commit policy: when committing is already authorized for this session, commit each
 completed, validated workstream now as its own small commit so it cannot be lost, and leave partial work uncommitted but
@@ -80,8 +91,12 @@ the validation the resumed agent must run first. Default to one handoff; use coo
 workstreams have independent outcomes or owners. If the task-handoff skill is unavailable, deliver the same
 decision-complete content in the final report instead.
 
+For each `active-unsettled` worker, make settlement and result reconciliation a prerequisite to any resumed edits in its
+scope. Do not turn its still-running assignment into immediately actionable replacement work.
+
 ## Report
 
 Finish with `### 🏁 Hurry-up — session parked` followed by, compactly: completed workstreams with commit hashes when
-committed, partial workstreams and their exact stopping points, the handoff command(s) verbatim from task-handoff's
-report, and an always-present risks line (`none` when empty). Keep it short — the user is walking out the door.
+committed, partial workstreams and their exact stopping points, active-unsettled workers with their settlement
+conditions, the handoff command(s) verbatim from task-handoff's report, and an always-present risks line (`none` when
+empty). Keep it short — the user is walking out the door.
