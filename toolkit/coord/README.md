@@ -29,12 +29,13 @@ additionally requires Bun. Automatic Codex hook trust requires Codex CLI 0.146.0
 accepted only when the required app-server protocol and trust semantics still validate.
 
 ```sh
-cargo install --locked --git 'https://github.com/PaulRBerg/ai-coord.git' ai-coord
+cargo install --locked --git 'https://github.com/PaulRBerg/agent-toolkit' ai-coord
 ai-coord link all
 ai-coord check
 ```
 
-From a source checkout, `just install-cli` builds and installs the release binary, then links the host hooks.
+From the monorepo root, `just install-cli` installs all four workspace binaries. It does not modify hooks; run
+`ai-coord link all` separately when hook installation is intended.
 
 `link` merges owned hooks into `~/.codex/hooks.json` and `~/.claude/settings.json`. It preserves unrelated settings and
 hook commands. Successful Codex links also automatically trust only the exact `ai-coord` hook definitions they own; they
@@ -284,14 +285,14 @@ are never deleted merely because they are old.
 
 ## Development
 
-The CLI, hooks, SQLite state, and dashboard API are a single Rust crate; the React dashboard remains a Bun-managed Vite
-package. Common source-checkout workflows are:
+The CLI, hooks, SQLite state, and dashboard API are a single Rust crate; the React dashboard is the independent
+`apps/coord-dashboard` Bun package. Common monorepo-root workflows are:
 
 ```sh
-cargo test --locked
-just check
+cargo test -p ai-coord --locked
+just rust-check
 just install-cli
-just dev
+just coord-dashboard-dev
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture, validation, and clean-break rules.
@@ -299,17 +300,17 @@ See [AGENTS.md](AGENTS.md) for architecture, validation, and clean-break rules.
 ## Dashboard
 
 The dashboard shows the machine-wide live coordination snapshot: sessions and work grouped by repository, plus messages
-and durable findings. Run both local servers from the repository root:
+and durable findings. Start its Vite development server from the monorepo root:
 
 ```sh
-just dev
+just coord-dashboard-dev
 ```
 
 Or run the API and Vite server separately:
 
 ```sh
 ai-coord serve
-cd dashboard && bun run dev
+cd apps/coord-dashboard && bun run dev
 ```
 
 `ai-coord serve` listens on `127.0.0.1:4477` by default. Vite proxies `/api` requests to that address, so the dashboard

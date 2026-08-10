@@ -1,6 +1,7 @@
 # Development Instructions
 
-`ai-commit` is a single Rust crate. It shells out to native `git`; do not introduce libgit2 or another repository model.
+`ai-commit` is a Rust workspace member. It shells out to native `git`; do not introduce libgit2 or another repository
+model.
 
 ## Architecture
 
@@ -26,6 +27,6 @@
 
 ## Validation
 
-Run `just full-check`, then `just test`. After any Rust source change, finish with `just install-cli` so the
-`ai-commit` binary on `PATH` matches the current checkout. During focused development, use the narrowest relevant
-`cargo test` filter before the aggregate commands.
+From the monorepo root, run the narrowest relevant `cargo test -p ai-commit` filter first, then `just rust-check` for
+the aggregate Rust gate. `just install-cli` installs every workspace binary under `~/.local`; run it only when the task
+requires refreshing the installed CLIs.

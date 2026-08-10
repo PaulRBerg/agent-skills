@@ -4,7 +4,7 @@
 
 ## Status
 
-Version 0.1.0 provides synchronous, no-network `map` and `doctor` engines. JSON reports use the
+Version 1.0.0 provides synchronous, no-network `map` and `doctor` engines. JSON reports use the
 clean Rust schema version 1. The schema preserves the Python tools' consumer contracts, but output
 is not byte-compatible with the Python implementation.
 
@@ -35,17 +35,15 @@ output fixtures.
 
 ## Development
 
-`rust-toolchain.toml` selects the stable Rust channel with the minimal profile plus `clippy` and
-`rustfmt`.
+The monorepo selects nightly Rust with the minimal profile plus `clippy` and `rustfmt`.
 
 ```sh
-just check
-just test
+cargo test -p ai-skillet --locked
+just rust-check
 ```
 
-Install a release build locally with `just install-cli`. It installs only under
-`${CARGO_INSTALL_ROOT:-$HOME/.local}`.
+From the monorepo root, `just install-cli` installs all four workspace binaries under `~/.local`.
 
 ## License
 
-MIT. See [LICENSE.md](LICENSE.md).
+MIT. See [LICENSE.md](../LICENSE.md).

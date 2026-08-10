@@ -17,4 +17,3 @@ Local-only, read-only viewer for agent task handoffs.
 - Prefer the `just` recipes for development, targeted tests, type-checking, builds, and cold-start serving.
 - Keep server behavior behind testable parser, scanner, freshness, and request-handler seams.
 - Run targeted tests while iterating; use `just check` only for aggregate validation.
-

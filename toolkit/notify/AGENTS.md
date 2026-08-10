@@ -11,13 +11,10 @@ Ubuntu with nightly Rust.
 
 ## Development Workflow
 
-- Bootstrap with the rolling nightly toolchain declared in `rust-toolchain.toml`; use the checked-in `Cargo.lock` for
-  every Cargo build, test, and install.
-- Run the checkout with `cargo run --locked -- ...`; `just install-cli` only installs the executable and never links an
-  integration.
-- Prefer the `justfile`: `just check` runs the release gate, `just test [cargo-test args]` runs tests, and `just fmt`
-  formats Rust source. Use `just prettier-check` for a focused documentation/configuration check.
-- Do not run `just install-cli` for ordinary verification; it writes to the user's Cargo installation directory.
+- Use the rolling nightly toolchain and lockfile declared at the monorepo root for every Cargo build, test, and install.
+- Run the package from the monorepo root with `cargo run -p ai-notify --locked -- ...`.
+- Prefer `cargo test -p ai-notify --locked` for focused verification and `just rust-check` for the aggregate Rust gate.
+- Do not run `just install-cli` for ordinary verification; it installs every workspace binary under `~/.local`.
 
 ## Architecture and Invariants
 
@@ -36,8 +33,8 @@ Ubuntu with nightly Rust.
 
 ## Testing
 
-- Keep focused unit tests beside their Rust modules and CLI contract tests in `tests/cli.rs`; use `just test <filter>`
-  for targeted verification.
+- Keep focused unit tests beside their Rust modules and CLI contract tests in `tests/cli.rs`; use
+  `cargo test -p ai-notify --locked <filter>` for targeted verification.
 - Isolate configuration and database paths with temporary directories; tests must not write to the user's actual XDG
   configuration directory.
 - Inject or mock the macOS platform check, `terminal-notifier` discovery, and subprocess calls. Linux CI must not

@@ -17,7 +17,7 @@ COMMITTED 0123456789abcdef 89abcdef...
 Requires Git, Cargo, and the rolling Rust nightly toolchain:
 
 ```sh
-cargo install --git https://github.com/PaulRBerg/ai-commit --locked --root "$HOME/.local"
+cargo install --git https://github.com/PaulRBerg/agent-toolkit ai-commit --locked --root "$HOME/.local"
 ```
 
 For local development, install the current checkout instead:
@@ -75,9 +75,7 @@ Pushes always fetch and compare first; they never pull, merge, or rebase.
 
 The crate targets macOS and Linux with the rolling Rust nightly toolchain.
 
-```console
-just full-check
-just test
-```
+From the monorepo root, run `cargo test -p ai-commit --locked` for package tests or `just rust-check` for the complete
+Rust workspace gate.
 
 Licensed under MIT.

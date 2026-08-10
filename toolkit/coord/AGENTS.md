@@ -3,35 +3,33 @@
 `ai-coord` is advisory coordination infrastructure for parallel Codex and Claude Code agents. It is cooperative, not a
 security boundary or an OS file lock.
 
-## Packages
+## Package boundaries
 
 - [`src/`](src/) is the single Rust crate for the CLI, hook integration, provider inventory, SQLite ledger, coordination
   runtime, and local dashboard API.
-- [`dashboard/`](dashboard/AGENTS.md) is the Bun-managed Vite and React dashboard for the live coordination state.
+- [`../apps/coord-dashboard/`](../apps/coord-dashboard/AGENTS.md) is the independent Bun-managed Vite and React
+  dashboard for the live coordination state.
 
 ## Shared workflow
 
-Run repository-wide tasks from the root `justfile`:
+Run shared tasks from the monorepo root `justfile`:
 
-- `just check` runs the supported Rust and dashboard validation gate; `just full-check` and `just full-write` run checks
-  or fixes without tests.
-- `just test` runs the Rust test suite, and `just install-cli` builds and installs the release binary before linking
-  hooks.
-- `just prettier-check` and `just prettier-write` check or format Markdown, JSON, and dashboard source files.
-- `just dev` starts the local API and dashboard development servers together.
+- `cargo test -p ai-coord --locked` runs package tests; `just rust-check` runs the complete Rust workspace gate.
+- `just install-cli` installs all four workspace binaries and does not link hooks.
+- `just coord-dashboard-check` and `just coord-dashboard-dev` delegate to the dashboard package.
 
-Use Cargo directly when isolating a Rust failure: `cargo test --locked`, `cargo fmt --all -- --check`, and
-`cargo clippy --all-targets --locked -- --deny warnings` are the underlying checks.
+Use package selection when isolating a Rust failure: `cargo test -p ai-coord --locked` and
+`cargo clippy -p ai-coord --all-targets --locked -- --deny warnings` are the focused checks.
 
 Keep modules below 1000 lines and test modules below 2000 lines.
 
 ## Compatibility and breaking changes
 
-This pre-1.0 repository favors one clean current implementation. Unless a task explicitly requests compatibility,
-replace obsolete behavior in one change and remove its production paths, tests, fixtures, and documentation. Do not add
-schema migration ladders, old-format importers, deprecated CLI aliases, dual reads or writes, retired protocol parsers,
-or transitional hook recognition by default. Rejecting an incompatible persisted version with an actionable error is
-required safety behavior, not backward compatibility.
+This package favors one clean current implementation. Unless a task explicitly requests compatibility, replace obsolete
+behavior in one change and remove its production paths, tests, fixtures, and documentation. Do not add schema migration
+ladders, old-format importers, deprecated CLI aliases, dual reads or writes, retired protocol parsers, or transitional
+hook recognition by default. Rejecting an incompatible persisted version with an actionable error is required safety
+behavior, not backward compatibility.
 
 Schema v12 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
 based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced process is removed without

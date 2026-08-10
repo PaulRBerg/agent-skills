@@ -21,29 +21,26 @@ notifications for key events.
 
 ### Installation
 
-The CLI is installed from source:
+Install the CLI directly from the monorepo:
 
 ```bash
-git clone https://github.com/PaulRBerg/ai-notify.git
-cd ai-notify
-rustup toolchain install nightly --component rustfmt --component clippy
-cargo install --path . --locked --force --root "$HOME/.local"
+cargo install --git https://github.com/PaulRBerg/agent-toolkit ai-notify --locked --root "$HOME/.local"
 ```
 
-To update, `git pull` and re-run the `cargo install` command. Installation targets `~/.local/bin`; configure
-integrations separately with `ai-notify link claude` or `ai-notify link codex`.
+Re-run the command to update. Installation targets `~/.local/bin`; configure integrations separately with
+`ai-notify link claude` or `ai-notify link codex`.
 
 ## Development
 
 Use the locked dependency graph for local commands:
 
 ```bash
-cargo build --locked
-just check
-cargo run --locked -- --help
+cargo build -p ai-notify --locked
+cargo test -p ai-notify --locked
+cargo run -p ai-notify --locked -- --help
 ```
 
-`just check` runs Rust formatting, Clippy with warnings denied, tests, and pinned Prettier checks for Markdown and JSON.
+Run `just rust-check` from the monorepo root for the complete Rust workspace gate.
 
 ## Features
 
@@ -325,4 +322,4 @@ See [AGENTS.md](AGENTS.md) for the development workflow and repository-specific 
 
 ## License
 
-MIT License - see [LICENSE.md](LICENSE.md)
+MIT License - see [LICENSE.md](../LICENSE.md)

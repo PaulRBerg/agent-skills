@@ -1,12 +1,12 @@
 # Dashboard package
 
-`dashboard/` is the local live view of ai-coord coordination state.
+`apps/coord-dashboard/` is the local live view of ai-coord coordination state.
 
 ## Stack
 
 Use Bun, Vite, React 19, and strict TypeScript. Styling is Tailwind v4 through `@tailwindcss/vite`, with tokens in
 `@theme inline`; UI primitives are Base UI, icons are Lucide, and variants use `tailwind-variants`. Tests use Vitest.
-There is no router, state library, or React Compiler. Root Prettier formats this package.
+There is no router, state library, or React Compiler.
 
 ## Conventions
 
@@ -21,5 +21,5 @@ Read snapshots from `GET /api/snapshot` and live updates from `GET /api/events`,
 
 ## Verification
 
-Run `bun install`, `bunx tsc --noEmit`, `bun run test`, and `bun run build`. Final visual proof includes rendered
-inspection in both light and dark themes.
+Run `bun install --frozen-lockfile` and `bun run check`. Final visual proof for UI changes includes rendered inspection
+in both light and dark themes.
