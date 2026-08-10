@@ -1,7 +1,6 @@
 ---
 argument-hint: "[path ...]"
 name: stale-comments-audit
-user-invocable: true
 description:
   Audit and fix JavaScript, TypeScript, and Go comments that are verified as stale, orphaned, misleading, or redundant.
 ---

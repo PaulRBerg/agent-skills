@@ -3,11 +3,9 @@ argument-hint: <goal> [--max-runs N] [--max-runtime DURATION]
 compatibility:
   Requires Plan mode to establish or materially change a session contract and a codex-handoff-compatible host for
   implementation.
-disable-model-invocation: false
 name: autoresearch
 skill-dependencies:
   - codex-handoff
-user-invocable: true
 description:
   Use for autoresearch or "optimize X overnight/in a loop"; plans bounded measurable experiment batches, then delegates
   execution through codex-handoff.

@@ -1,8 +1,6 @@
 ---
 compatibility: Designed for Codex and Claude Code; rendered-browser or screenshot tooling is preferred for verification.
-disable-model-invocation: false
 name: frontend-design
-user-invocable: true
 description:
   Use when creating or substantially redesigning web interfaces, landing pages, dashboards, components, or other
   frontend UI where visual direction and implementation quality matter. Produces subject-specific art direction,

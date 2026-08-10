@@ -5,11 +5,9 @@ compatibility:
   `finalize --no-clipboard` does not. Generated cleanup commands use POSIX shell utilities; generated launch commands
   require an authenticated Codex CLI.
 coordination: exempt
-disable-model-invocation: false
 name: task-handoff
 skill-dependencies:
   - codex-handoff
-user-invocable: true
 description:
   Create one decision-complete task handoff in its repository or on the Desktop for cross-repository work, return a
   command for a fresh interactive Codex session, and recommend Codex subagent delegation for complex tasks.

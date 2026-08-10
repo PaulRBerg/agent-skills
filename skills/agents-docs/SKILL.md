@@ -1,9 +1,7 @@
 ---
 compatibility: Requires network access and a URL-capable web fetch or curl.
 coordination: exempt
-disable-model-invocation: false
 name: agents-docs
-user-invocable: true
 description: >-
   Use for current official documentation about Codex, Codex CLI, or Claude Code behavior, configuration, prompting,
   skills, permissions, tools, surfaces, capabilities, troubleshooting, hooks, app-server, or hook trust; fetch the

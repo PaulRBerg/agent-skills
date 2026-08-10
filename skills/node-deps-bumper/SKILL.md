@@ -1,10 +1,8 @@
 ---
 argument-hint: "[--dry-run] [package ...]"
-disable-model-invocation: false
 effort: medium
 model: sonnet
 name: node-deps-bumper
-user-invocable: true
 description: "Use for dependency updates: bump npm/pnpm/yarn/bun packages, check outdated, or run taze."
 ---
 

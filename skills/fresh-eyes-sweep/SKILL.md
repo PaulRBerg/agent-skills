@@ -7,7 +7,6 @@ skill-dependencies:
   - codebase-design
   - code-polish
   - commit
-user-invocable: true
 description:
   Audit an entire repository with fresh eyes for correctness errors, bugs, omissions, duplication, inconsistencies, and
   other evidenced mistakes; fix every safe issue and verify the result.

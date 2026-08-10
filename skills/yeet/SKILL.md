@@ -4,12 +4,10 @@ argument-hint:
   [options]
 compatibility: Authenticated GitHub CLI >= 2.97.0
 coordination: exempt
-disable-model-invocation: false
 effort: high
 name: yeet
 skill-dependencies:
   - cli-gh
-user-invocable: true
 description:
   "Use for GitHub PR/issue/discussion workflows: create/update PRs, issues, or discussions and post issue or discussion
   comments; triggers include yeet."

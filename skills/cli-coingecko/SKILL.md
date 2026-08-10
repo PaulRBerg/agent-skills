@@ -1,6 +1,5 @@
 ---
 coordination: exempt
-disable-model-invocation: false
 name: cli-coingecko
 user-invocable: false
 description:

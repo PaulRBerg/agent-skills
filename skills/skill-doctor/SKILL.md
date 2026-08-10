@@ -1,9 +1,7 @@
 ---
 argument-hint: "[--root PATH ...] [--format text|json] [--fix-safe] [--dependencies-only]"
 compatibility: Requires ai-skillet 0.1.0+.
-disable-model-invocation: false
 name: skill-doctor
-user-invocable: true
 description:
   "Use to audit Agent Skills catalogs or installed skill roots for metadata and doc-link issues; optionally apply
   conservative --fix-safe repairs."

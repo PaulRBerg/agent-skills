@@ -2,7 +2,6 @@
 argument-hint: <new-name> [--dry-run]
 disable-model-invocation: true
 name: repo-rename
-user-invocable: true
 description:
   "Preview or rename a GitHub upstream repo and matching local project folder, update origin, and preserve Codex CLI and
   Claude Code continuity references."

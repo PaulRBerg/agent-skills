@@ -5,7 +5,6 @@ disable-model-invocation: true
 metadata:
   install-targets: claude-code codex
 name: copy-transcript-path
-user-invocable: true
 description: Copy the active Claude Code or Codex CLI chat transcript path to the macOS clipboard.
 ---
 
@@ -30,3 +29,6 @@ bash <skill-dir>/scripts/copy-transcript-path.sh
 
 Return the helper's successful stdout verbatim and stop. Do not infer a transcript from the current project, select a
 recent session, or add explanation.
+
+Successful completion requires the helper to exit 0 and its stdout to be returned verbatim. Report a helper failure as
+the outcome; it does not count as completion.

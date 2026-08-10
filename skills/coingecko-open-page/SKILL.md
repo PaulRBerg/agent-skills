@@ -5,7 +5,6 @@ disable-model-invocation: true
 effort: low
 model: sonnet
 name: coingecko-open-page
-user-invocable: true
 description: Open the CoinGecko historical-data page for a coin/date in Chromium via Chrome DevTools MCP.
 ---
 

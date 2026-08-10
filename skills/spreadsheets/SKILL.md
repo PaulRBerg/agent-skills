@@ -1,8 +1,6 @@
 ---
 argument-hint: "[file]"
-disable-model-invocation: false
 name: spreadsheets
-user-invocable: true
 description:
   "Use when CSV, TSV, or Excel (.xlsx) is the primary input/output: design or review text-table schemas; inspect,
   transform, validate, convert, or recalc formulas; or create/fix spreadsheets. Do not trigger when tabular data is

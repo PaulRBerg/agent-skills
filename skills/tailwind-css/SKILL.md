@@ -1,5 +1,4 @@
 ---
-disable-model-invocation: false
 name: tailwind-css
 user-invocable: false
 description:

@@ -1,7 +1,5 @@
 ---
-disable-model-invocation: false
 name: vitest
-user-invocable: true
 description:
   "Use for Vitest in TypeScript projects (Node, bun, React/Next.js, Effect): write, run, or debug unit/component tests,
   mocks, testing utilities, and coverage."

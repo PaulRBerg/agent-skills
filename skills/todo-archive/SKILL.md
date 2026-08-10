@@ -4,7 +4,6 @@ disable-model-invocation: true
 effort: low
 model: sonnet
 name: todo-archive
-user-invocable: true
 description: Archive checked TODO.md tasks into `.ai/todos/YYYY-MM/DD.md`, leaving unchecked tasks.
 ---
 

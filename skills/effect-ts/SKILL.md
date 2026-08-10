@@ -1,7 +1,5 @@
 ---
-disable-model-invocation: false
 name: effect-ts
-user-invocable: true
 description:
   Use for nontrivial Effect-TS work including services/layers, typed errors, Schema/JSONSchema, Config,
   runtime/concurrency, @effect/vitest, @effect/ai, @effect/sql, or @prb/effect-next.

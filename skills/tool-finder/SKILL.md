@@ -1,8 +1,6 @@
 ---
 coordination: exempt
-disable-model-invocation: false
 name: tool-finder
-user-invocable: true
 description:
   Use to find, compare, and recommend current tools, packages, libraries, CLIs, VSCode extensions, agent skills,
   databases, or infrastructure options for a development task.

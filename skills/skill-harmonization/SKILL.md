@@ -3,7 +3,6 @@ argument-hint: "[task]"
 compatibility: Requires Git and ai-skillet 0.1.0+.
 disable-model-invocation: true
 name: skill-harmonization
-user-invocable: true
 description: Harmonize a repository's skill portfolio across catalog and user-installed skills.
 ---
 

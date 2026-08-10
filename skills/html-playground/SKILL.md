@@ -1,7 +1,5 @@
 ---
-disable-model-invocation: false
 name: html-playground
-user-invocable: true
 description:
   Use to build interactive single-file HTML playgrounds, explorers, or tools with visual controls, live preview, and
   prompt copy-out.

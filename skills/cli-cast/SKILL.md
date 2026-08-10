@@ -1,6 +1,5 @@
 ---
 coordination: exempt
-disable-model-invocation: false
 name: cli-cast
 skill-dependencies:
   - evm-atlas

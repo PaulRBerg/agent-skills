@@ -3,7 +3,6 @@ argument-hint: "[path] [--include-generated]"
 coordination: exempt
 disable-model-invocation: true
 name: large-file-refactor
-user-invocable: true
 description:
   Discover large source-file refactor candidates and propose cohesion- and risk-driven split plans using available
   semantic tooling.

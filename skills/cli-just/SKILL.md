@@ -1,5 +1,4 @@
 ---
-disable-model-invocation: false
 name: cli-just
 user-invocable: false
 description:

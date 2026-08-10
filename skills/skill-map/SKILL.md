@@ -4,9 +4,7 @@ argument-hint:
   [--include-self] [--include-snippets] [--show-skipped]"
 compatibility: Requires ai-skillet 0.1.0+.
 coordination: exempt
-disable-model-invocation: false
 name: skill-map
-user-invocable: true
 description:
   "Use to find agent skill installs, repository skill portfolios, duplicate skills, cross-dependencies, invocations, and
   cross-references across the local machine."

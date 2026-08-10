@@ -93,6 +93,13 @@ Good interfaces make testing natural:
   includes every fact a caller must know.
 - **"Boundary"**: overloaded with DDD's bounded context. Say **seam** or **interface**.
 
+## Output Contract
+
+When applying this vocabulary to a design or review, report the recommended module, interface, and seam; explain how the
+result improves depth, leverage, locality, or testability; and identify material tradeoffs or unresolved evidence. When
+this skill is only supporting another requested artifact, incorporate that analysis into the artifact instead of adding
+a separate report.
+
 ## Going deeper
 
 - **Deepening a cluster given its dependencies** — see [references/DEEPENING.md](references/DEEPENING.md): dependency

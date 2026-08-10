@@ -1,9 +1,7 @@
 ---
 argument-hint: "[file ...]"
 compatibility: Requires macOS, uv, Poppler, qpdf, Ghostscript, OCRmyPDF with Tesseract language data, and img2pdf.
-disable-model-invocation: false
 name: pdf
-user-invocable: true
 description:
   "Use when PDF files are the primary input or output: read, compare, reconcile, extract text/tables/images, OCR scans,
   fill forms, split, merge, rotate, rename, compress, or convert between PDF and images. Optimized for private

@@ -12,7 +12,6 @@ skill-dependencies:
   - agents-brain
   - code-polish
   - commit
-user-invocable: true
 description:
   Orchestrate read-only Codex research in any mode, or one to eight Codex agents to implement approved plans from Claude
   Code or Codex CLI.

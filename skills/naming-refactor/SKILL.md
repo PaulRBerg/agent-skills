@@ -2,7 +2,6 @@
 compatibility: Requires Git, uv, and local command and edit access.
 disable-model-invocation: true
 name: naming-refactor
-user-invocable: true
 description: Refactor naming and repository structure exhaustively while preserving behavior and external contracts.
 ---
 

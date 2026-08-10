@@ -1,8 +1,6 @@
 ---
 argument-hint: "[paths] [--simplify] [--review] [--with-profile <name>] [--skip-profile <name>]"
-disable-model-invocation: false
 name: code-polish
-user-invocable: true
 description:
   "Polish changed code when the user explicitly asks, or when an active workflow requests post-implementation
   simplification and risk-profiled review over a fixed file scope."

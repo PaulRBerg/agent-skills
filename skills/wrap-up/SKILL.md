@@ -8,7 +8,6 @@ disable-model-invocation: true
 name: wrap-up
 skill-dependencies:
   - task-handoff
-user-invocable: true
 description:
   Wind down a long-running session fast when the user must leave — freeze new work, preserve active subagents, secure
   finished work, and hand off the remainder via task-handoff.

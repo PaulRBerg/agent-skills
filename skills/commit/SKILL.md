@@ -1,10 +1,8 @@
 ---
 argument-hint: "[--all] [--staged] [--natural] [--push] [--close <issue_numbers>] [--finding <finding_ids>]"
 compatibility: Requires Git and ai-commit with automatic ai-coord stale-dirt baseline discovery on PATH.
-disable-model-invocation: false
 effort: medium
 name: commit
-user-invocable: true
 description:
   "Commit staged or intended changes: compose a Conventional Prefix or Natural Language message, then use ai-commit —
   with --all, --staged, --close, --finding, or --push."

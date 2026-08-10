@@ -2,11 +2,9 @@
 argument-hint: "<chain-name-or-id|address|transaction-hash|order-id>"
 compatibility: Requires the `routemesh` CLI initialized on macOS with `routemesh init` for RouteMesh requests.
 coordination: exempt
-disable-model-invocation: false
 name: evm-atlas
 skill-dependencies:
   - cli-cast
-user-invocable: true
 description:
   "Use for targeted EVM chain, account, transaction, RPC, explorer, bridge, and DEX evidence: chain name/ID, native
   symbol, RouteMesh, wallet balances via Blockscan in Chromium, token/NFT holdings/transfers, tx history, funding origin

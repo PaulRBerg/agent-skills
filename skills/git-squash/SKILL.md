@@ -3,7 +3,6 @@ argument-hint: "[--subject <line>] [--base <branch>]"
 disable-model-invocation: true
 effort: high
 name: git-squash
-user-invocable: true
 description: "Squash a feature branch into one commit via soft reset to the merge base, ready for a clean PR."
 ---
 
