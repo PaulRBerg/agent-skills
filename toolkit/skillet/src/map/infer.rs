@@ -195,13 +195,7 @@ fn scan_file(
     edges: &mut BTreeSet<EvidenceRecord>,
     unresolved: &mut BTreeSet<EvidenceRecord>,
 ) -> Result<(), Error> {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
-            return Err(Error::io("read reference file", path, error));
-        }
-        Err(error) => return Err(Error::io("read reference file", path, error)),
-    };
+    let file = File::open(path).map_err(|error| Error::io("read reference file", path, error))?;
     let resolved_path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let source = source_for_file(&resolved_path, &catalog.skills);
     let mut reader = BufReader::with_capacity(READ_CHUNK_BYTES, file);
