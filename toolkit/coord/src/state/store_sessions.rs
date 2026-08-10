@@ -1,0 +1,311 @@
+use rusqlite::{OptionalExtension, Row, params};
+use unicode_casefold::UnicodeCaseFold;
+use unicode_normalization::UnicodeNormalization;
+
+use crate::{
+    domain::{Identity, ProcessFingerprint},
+    error::{AppError, Result},
+};
+
+use super::{
+    EndedObservation, SessionRow, SessionUpdate, Store,
+    store::{bump_generation, client_name, parse_client, parse_session_state, session_state_name},
+};
+
+impl Store {
+    pub(crate) fn upsert_session(&mut self, update: &SessionUpdate) -> Result<SessionRow> {
+        self.immediate(|transaction| upsert_session(transaction, update))
+    }
+
+    /// Register a new top-level identity and retire an older identity bound to
+    /// the same strong client process fingerprint in the same transaction.
+    pub(crate) fn upsert_session_superseding(&mut self, update: &SessionUpdate) -> Result<SessionRow> {
+        self.immediate(|transaction| {
+            let mut superseded = Vec::new();
+            if let Some(fingerprint) = update.fingerprint.as_ref().filter(|value| value.start_token.is_some()) {
+                let mut statement = transaction.prepare(
+                    "SELECT client, session_id FROM sessions
+                     WHERE client = ?1 AND session_id != ?2 AND pid = ?3
+                       AND process_start_token = ?4",
+                )?;
+                superseded = statement
+                    .query_map(
+                        params![
+                            client_name(update.identity.client),
+                            update.identity.session_id,
+                            fingerprint.pid,
+                            fingerprint.start_token,
+                        ],
+                        |row| {
+                            Ok(Identity { client: super::store::parse_client(row.get(0)?)?, session_id: row.get(1)? })
+                        },
+                    )?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+            }
+            for identity in &superseded {
+                remove_session(transaction, identity)?;
+            }
+            let row = upsert_session(transaction, update)?;
+            if !superseded.is_empty() {
+                bump_generation(transaction)?;
+            }
+            Ok(row)
+        })
+    }
+
+    /// Replace Claude rows only after a complete, authoritative provider
+    /// inventory. Missing rows are terminal; a failed or malformed inventory
+    /// must never call this method.
+    pub(crate) fn replace_claude_sessions(&mut self, updates: &[SessionUpdate]) -> Result<()> {
+        self.immediate(|transaction| {
+            let existing = {
+                let mut statement = transaction.prepare("SELECT session_id FROM sessions WHERE client = 'claude'")?;
+                statement.query_map([], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            let live = updates
+                .iter()
+                .map(|update| update.identity.session_id.as_str())
+                .collect::<std::collections::HashSet<_>>();
+            for update in updates {
+                if update.identity.client != crate::domain::Client::Claude {
+                    return Err(AppError::usage("authoritative Claude replacement contains a non-Claude row"));
+                }
+                upsert_session(transaction, update)?;
+            }
+            let mut removed = false;
+            for session_id in existing {
+                if !live.contains(session_id.as_str()) {
+                    remove_session(transaction, &Identity { client: crate::domain::Client::Claude, session_id })?;
+                    removed = true;
+                }
+            }
+            if removed {
+                bump_generation(transaction)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub(crate) fn set_session_callsign(&mut self, identity: &Identity, callsign: &str) -> Result<()> {
+        let key = callsign_key(callsign);
+        self.immediate(|transaction| {
+            let current = transaction
+                .query_row(
+                    "SELECT callsign FROM sessions WHERE client = ?1 AND session_id = ?2",
+                    params![client_name(identity.client), identity.session_id],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .optional()?;
+            let Some(current) = current else {
+                return Err(AppError::usage("session is not registered"));
+            };
+            if current.as_deref() == Some(callsign) {
+                return Ok(());
+            }
+            let occupied = transaction.query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sessions
+                    WHERE callsign_key = ?1 AND NOT (client = ?2 AND session_id = ?3)
+                 )",
+                params![key, client_name(identity.client), identity.session_id],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if occupied {
+                return Err(AppError::usage("callsign is already in use"));
+            }
+            transaction.execute(
+                "UPDATE sessions SET callsign = ?1, callsign_key = ?2
+                 WHERE client = ?3 AND session_id = ?4",
+                params![callsign, key, client_name(identity.client), identity.session_id],
+            )?;
+            bump_generation(transaction)
+        })
+    }
+
+    /// End a session from an authoritative SessionEnd event.
+    pub(crate) fn end_session(&mut self, identity: &Identity) -> Result<()> {
+        self.immediate(|transaction| {
+            remove_session(transaction, identity)?;
+            bump_generation(transaction)
+        })
+    }
+
+    /// Remove sessions proven dead by observations of the same stored row revision.
+    ///
+    /// An upsert racing with a liveness probe increments `revision`; the stale probe then
+    /// cannot remove the refreshed row. Unknown or merely old sessions are never removed.
+    pub(crate) fn reconcile_ended(&mut self, observations: &[EndedObservation]) -> Result<usize> {
+        self.immediate(|transaction| {
+            let mut removed = 0;
+            for observation in observations {
+                let stored = transaction
+                    .query_row(
+                        "SELECT pid, process_start_token, revision FROM sessions
+                         WHERE client = ?1 AND session_id = ?2",
+                        params![client_name(observation.identity.client), observation.identity.session_id],
+                        |row| {
+                            let pid = row.get::<_, Option<u32>>(0)?;
+                            let start_token = row.get::<_, Option<String>>(1)?;
+                            let fingerprint = pid.map(|pid| ProcessFingerprint { pid, start_token });
+                            Ok((fingerprint, row.get::<_, i64>(2)?))
+                        },
+                    )
+                    .optional()?;
+                if stored.as_ref() == Some(&(observation.expected_fingerprint.clone(), observation.expected_revision)) {
+                    remove_session(transaction, &observation.identity)?;
+                    removed += 1;
+                }
+            }
+            if removed > 0 {
+                bump_generation(transaction)?;
+            }
+            Ok(removed)
+        })
+    }
+
+    pub(crate) fn session(&self, identity: &Identity) -> Result<Option<SessionRow>> {
+        Ok(self
+            .connection
+            .query_row(
+                &session_select("WHERE client = ?1 AND session_id = ?2"),
+                params![client_name(identity.client), identity.session_id],
+                session_from_row,
+            )
+            .optional()?)
+    }
+
+    pub(crate) fn sessions(&self) -> Result<Vec<SessionRow>> {
+        let mut statement = self.connection.prepare(&session_select("ORDER BY client, started_at, session_id"))?;
+        Ok(statement.query_map([], session_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub(crate) fn identities_for_exact_processes(&self, references: &[ProcessFingerprint]) -> Result<Vec<Identity>> {
+        if references.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .sessions()?
+            .into_iter()
+            .filter(|session| {
+                session.fingerprint.as_ref().is_some_and(|fingerprint| {
+                    fingerprint.start_token.is_some() && references.iter().any(|reference| reference == fingerprint)
+                })
+            })
+            .map(|session| session.identity)
+            .collect())
+    }
+}
+
+fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdate) -> Result<SessionRow> {
+    let old_permission_mode = if update.update_permission_mode {
+        transaction
+            .query_row(
+                "SELECT permission_mode FROM sessions
+                         WHERE client = ?1 AND session_id = ?2",
+                params![client_name(update.identity.client), update.identity.session_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten()
+    } else {
+        None
+    };
+    let (pid, start_token) = fingerprint_values(update.fingerprint.as_ref());
+    transaction.execute(
+        "INSERT INTO sessions(
+                    client, session_id, cwd, repo_root, state, name, waiting_for,
+                    permission_mode, pid, process_start_token, source, started_at, last_seen,
+                    revision
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1)
+                 ON CONFLICT(client, session_id) DO UPDATE SET
+                    cwd = excluded.cwd,
+                    repo_root = excluded.repo_root,
+                    state = excluded.state,
+                    name = COALESCE(excluded.name, sessions.name),
+                    waiting_for = excluded.waiting_for,
+                    permission_mode = CASE WHEN ?14 THEN excluded.permission_mode
+                                           ELSE sessions.permission_mode END,
+                    pid = CASE WHEN excluded.pid IS NULL THEN sessions.pid ELSE excluded.pid END,
+                    process_start_token = CASE
+                        WHEN excluded.pid IS NULL THEN sessions.process_start_token
+                        ELSE excluded.process_start_token END,
+                    source = excluded.source,
+                    last_seen = excluded.last_seen,
+                    revision = sessions.revision + 1",
+        params![
+            client_name(update.identity.client),
+            update.identity.session_id,
+            update.cwd,
+            update.repo_root,
+            session_state_name(update.state),
+            update.name,
+            update.waiting_for,
+            update.permission_mode,
+            pid,
+            start_token,
+            update.source,
+            update.started_at.unwrap_or(update.current),
+            update.current,
+            update.update_permission_mode,
+        ],
+    )?;
+    if update.update_permission_mode && old_permission_mode.as_deref() != update.permission_mode.as_deref() {
+        bump_generation(transaction)?;
+    }
+    Ok(transaction.query_row(
+        &session_select("WHERE client = ?1 AND session_id = ?2"),
+        params![client_name(update.identity.client), update.identity.session_id],
+        session_from_row,
+    )?)
+}
+
+fn remove_session(transaction: &rusqlite::Transaction<'_>, identity: &Identity) -> Result<()> {
+    transaction.execute(
+        "DELETE FROM sessions WHERE client = ?1 AND session_id = ?2",
+        params![client_name(identity.client), identity.session_id],
+    )?;
+    Ok(())
+}
+
+fn fingerprint_values(fingerprint: Option<&ProcessFingerprint>) -> (Option<u32>, Option<&str>) {
+    fingerprint.map_or((None, None), |value| (Some(value.pid), value.start_token.as_deref()))
+}
+
+fn session_select(suffix: &str) -> String {
+    format!(
+        "SELECT client, session_id, cwd, repo_root, state, callsign, name,
+                waiting_for, permission_mode, pid, process_start_token, source, started_at,
+                last_seen, revision
+         FROM sessions {suffix}"
+    )
+}
+
+fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
+    let pid = row.get::<_, Option<u32>>(9)?;
+    let start_token = row.get::<_, Option<String>>(10)?;
+    Ok(SessionRow {
+        identity: Identity { client: parse_client(row.get(0)?)?, session_id: row.get(1)? },
+        cwd: row.get(2)?,
+        repo_root: row.get(3)?,
+        state: parse_session_state(row.get(4)?)?,
+        callsign: row.get(5)?,
+        name: row.get(6)?,
+        waiting_for: row.get(7)?,
+        permission_mode: row.get(8)?,
+        fingerprint: pid.map(|pid| ProcessFingerprint { pid, start_token }),
+        source: row.get(11)?,
+        started_at: row.get(12)?,
+        last_seen: row.get(13)?,
+        revision: row.get(14)?,
+    })
+}
+
+fn callsign_key(callsign: &str) -> String {
+    let whitespace_collapsed = callsign.split_whitespace().collect::<Vec<_>>().join(" ");
+    whitespace_collapsed
+        .nfc()
+        .case_fold()
+        .nfc()
+        .filter(|character| !matches!(character, '\u{fe0e}' | '\u{fe0f}'))
+        .collect()
+}

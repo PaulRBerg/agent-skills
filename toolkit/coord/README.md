@@ -1,0 +1,316 @@
+# ai-coord
+
+Local coordination and durable repository findings for parallel Codex and Claude Code agents, shipped as one Rust
+binary.
+
+`ai-coord` replaces scattered hook scripts and multi-command conflict checks with one work lifecycle:
+
+```sh
+ai-coord start 'update importer' 'src/importer.rs'
+ai-coord wait
+ai-coord done
+```
+
+Planning can persist the same exact scopes without reserving them:
+
+```sh
+ai-coord draft 'update importer' 'src/importer.rs'
+ai-coord start --draft
+```
+
+The coordinator is cooperative rather than an OS lock. It uses a user-owned local SQLite ledger and fails closed when it
+cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
+proceed with a stale-dirt advisory and a captured baseline.
+
+## Installation
+
+Requirements: Rust (the repository pins its development toolchain in `rust-toolchain.toml`) and Cargo. The dashboard
+additionally requires Bun. Automatic Codex hook trust requires Codex CLI 0.146.0 or newer; compatible later versions are
+accepted only when the required app-server protocol and trust semantics still validate.
+
+```sh
+cargo install --locked --git 'https://github.com/PaulRBerg/ai-coord.git' ai-coord
+ai-coord link all
+ai-coord check
+```
+
+From a source checkout, `just install-cli` builds and installs the release binary, then links the host hooks.
+
+`link` merges owned hooks into `~/.codex/hooks.json` and `~/.claude/settings.json`. It preserves unrelated settings and
+hook commands. Successful Codex links also automatically trust only the exact `ai-coord` hook definitions they own; they
+never use a broad trust bypass or manually derived hash. `--dry-run` is fully read-only, including no Codex app-server
+call, and reports `trust=skipped`. Codex `--path` accepts only the active `$CODEX_HOME/hooks.json`, which prevents an
+invocation from trusting hooks in another configuration; Claude `--path` can target one non-default settings file.
+Output retains its TSV columns and adds `trust=updated`, `trust=unchanged`, or `trust=skipped`. `CODEX_HOME` and
+`CLAUDE_CONFIG_DIR` override the corresponding default configuration roots.
+
+When a Claude configuration uses the modular source `~/.claude/settings/hooks.jsonc`, `link` updates that file instead
+of the generated `settings.json`. Run the configuration repository's normal settings merge afterward so Claude Code
+receives the regenerated output.
+
+If Codex cannot inspect or update that narrow trust record, `link codex` fails. `link all` stops before linking Claude;
+the already-written Codex hook file is intentionally not rolled back.
+
+## Coordination workflow
+
+Acquire exact file scopes before editing:
+
+```sh
+ai-coord start 'regenerate 2025 tax year' \
+  'accounting/txs/incomes/2025.tsv' \
+  'accounting/reports/2025/tax-summary.md'
+```
+
+Positional paths are exact leaves. Reserve a directory prefix only when the work really spans an unknown set of files,
+using a repeatable `--recursive` option:
+
+```sh
+ai-coord start --recursive 'accounting/reports/2025' 'regenerate all 2025 reports'
+```
+
+An existing directory passed positionally is rejected with exit 64 before the ledger is opened; re-run it with
+`--recursive` or replace it with the actual files. Existing regular files, literal symlink leaves, and nonexistent
+planned files are valid positional scopes. Existing files and symlinks are rejected for `--recursive`; a nonexistent
+path is accepted there as an explicitly planned subtree. Scopes remain repository-relative and literal. Globs,
+non-printable paths, normalized scopes over 120 characters, and paths outside the repository are rejected.
+
+Both `draft` and direct `start` require at least one scope. `draft` normalizes and atomically remembers the same exact
+scope model as `start`, but performs no provider inventory, Git-dirt arbitration, queue insertion, or peer notification.
+It emits only `DRAFT<TAB><scope-count>`, and status never publishes its literal scopes. Re-running `draft` replaces the
+stored draft. Drafts are non-authoritative temporary coordination state and never grant an edit scope.
+
+Submit a stored draft from the same repository with `ai-coord start --draft`. Promotion revalidates every stored scope
+and then atomically applies normal arbitration. A validation or repository error leaves the draft unchanged. Once
+submitted, the work becomes queued or active and its literal normalized `{ path, kind }` scopes become visible. Direct
+`start LABEL PATH…` remains available, but it is rejected while a draft exists so execution cannot silently diverge.
+
+Provider permissions must allow the state-only `draft` command during planning. Claude otherwise describes Plan mode as
+read-only in its [permission-mode documentation](https://code.claude.com/docs/en/permission-modes); Codex command write
+capability remains governed by its configured permissions and sandbox according to the
+[Codex manual](https://developers.openai.com/codex/codex-manual.md).
+
+`start` emits one tab-separated result:
+
+| Result                     | Exit | Meaning                                                           |
+| -------------------------- | ---: | ----------------------------------------------------------------- |
+| `READY`                    |    0 | The work is active; editing may begin.                            |
+| `BLOCKED`                  |    3 | The work is queued behind active or earlier overlapping work.     |
+| `UNKNOWN coverage`         |    2 | Provider coverage is incomplete; work was not granted.            |
+| `UNKNOWN dirty-settling:…` |    2 | Relevant unattributed dirt is settling; run `ai-coord wait`.      |
+| `ACTIVE`                   |    3 | A requested active-scope expansion failed; the old scope remains. |
+
+Re-running direct `start` atomically replaces the session's full desired scope. Narrowing active work takes effect
+immediately and wakes queued sessions that no longer overlap. Expanding or moving active work succeeds only when
+coverage is complete, relevant dirt is safe, and no active or queued work intersects the newly requested area; otherwise
+`ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged.
+
+Blocked work retains its paths. Narrowing queued work preserves its original submission age; expanding or moving it
+receives a new age so stale broad requests cannot reserve unrelated work. Draft creation never establishes FIFO age:
+promotion does. Waiting therefore needs no repeated session or path arguments:
+
+```sh
+ai-coord wait        # waits up to 300 seconds
+ai-coord wait -t 60  # explicit timeout, capped at one hour
+```
+
+Editing requires `ai-coord start` to return `READY`. Every terminal `start`, `wait`, and `done` outcome also prints one
+concise next-step sentence to stderr while preserving the stdout TSV contract. `wait` checks the SQLite generation
+counter each second and performs full inventory, Git, and arbitration refreshes only when coordination state changes or
+every 20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN`
+exits 2. After any such wake, inspect the reported state and re-arm as needed. `done` idempotently releases draft,
+active, or queued work and notifies overlapping queued holders that their work may now be ready.
+
+FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. Newly blocked work
+reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
+recursive holder is blocking a more targeted request; blocked recursive callers receive a matching stderr hint.
+
+In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its work is promoted,
+a message arrives, the work is released, coverage becomes unknown, or the waker times out. A readiness wake still
+requires `start` to return `READY`; message wakes identify `inbox` as the inspection surface and `start` as the
+ownership recheck. Unknown coverage, timeout, and release state explicitly that no edit scope is owned. Repeated `start`
+calls may launch multiple independent wakers for the same session; each exits on the first terminal outcome. Codex
+sessions use `ai-coord wait` in the foreground.
+
+Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
+planning presence from active implementation work.
+
+When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks byte-for-byte. Run `ai-coord baseline` to
+print their blob OIDs and pass affected paths to the commit skill's baseline exclusion. `baseline` is a stable machine
+contract: zero or more `path<TAB>oid` records, with normalized repository-relative paths and empty output when no
+baselines exist. A session that finishes with uncommitted dirt retains residual ownership and can reclaim it
+immediately.
+
+`ai-coord touched` prints normalized repository-relative paths written by this session's observed post-tool events, one
+per line. `!TRUNCATED` is the first record when the bounded 1,000-path set dropped older observations. Collection is
+best-effort: unsupported tools or hosts that omit usable path fields contribute nothing, and no tool payload content is
+stored.
+
+Repositories may list harness churn in a tracked `.ai-coord.toml`:
+
+```toml
+[dirt]
+benign = ["config.toml"]
+```
+
+Benign prefixes never hold.
+
+## Inventory and communication
+
+```sh
+ai-coord status              # current Git worktree
+ai-coord status --all        # machine-wide
+ai-coord status --json       # versioned JSON schema
+ai-coord name '👩‍💻 Baroness Byte'
+ai-coord msg '019fbf24' 'Changes are committed; your path is clear.'
+ai-coord inbox
+ai-coord inbox --ack '<message-id>'
+```
+
+`status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output marks
+queued work with `work=queued`, renders drafts as `draft · N scopes`, and ends with compact, contextual definitions for
+the states present; it reports only finding counts (`pending`, `triaging`, and `handed-off`), never a backlog, plus
+nonzero `.ai/task-handoffs/*.md` counts without reading file names or contents. `--json` emits public schema v4 with
+`handoffs` records shaped as `{repo_root, count}`. Draft records include only their label, state, timestamps, and scope
+count. Submitted work includes literal normalized scope objects. Status, dashboard snapshots, and message recipient
+discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe
+providers freshly before granting work or reporting installation health.
+
+Session-start registration assigns each session a machine-wide unique callsign. Callsigns contain a letter or number and
+an emoji, are capped at 40 Unicode code points, and are normalized for whitespace, case-insensitive uniqueness, and
+equivalent emoji presentation. `ai-coord name` remains the manual override; immutable session IDs remain the identity
+and fallback everywhere.
+
+Message targets resolve an exact `client/session` or session ID first, then an exact callsign, a unique ID prefix of at
+least four characters, or a unique callsign/label/provider-name substring. `repo` expands to the currently live peers in
+the Git worktree. Messages are recipient-scoped and snapshot both endpoint callsigns when sent, so later renames do not
+rewrite history.
+
+## Findings and autonomous triage
+
+Findings are durable, repository-scoped follow-ups. Add one when work reveals a real issue outside the active scope;
+inspect details with the finding commands or dashboard rather than waking blocked work.
+
+```sh
+ai-coord finding add --kind bug --path src/importer.rs 'CSV importer rejects empty optional fields'
+ai-coord finding list
+ai-coord finding list --all --json
+ai-coord finding show '<finding-id>' --json
+ai-coord finding handoff '<finding-id>' --path '.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md'
+ai-coord finding resolve '<finding-id>' --as fixed --commit '<commit-oid>'
+ai-coord finding resolve '<finding-id>' --as duplicate --canonical '<finding-id>'
+ai-coord finding reopen '<finding-id>'
+```
+
+`add` NFC-normalizes whitespace and records a sighting, Git HEAD, and per-path content hashes. It increments the same
+open record only when repository, normalized summary, and the complete normalized path set match exactly; it preserves
+kind from the original record. Same-path non-exact matches are printed as candidates. Terminal records never deduplicate
+a later recurrence. `handoff` moves a pending record to `handed-off`; `resolve` records `fixed`, `stale`, `rejected`, or
+`duplicate` (which requires a canonical ID); `reopen` returns a terminal record to pending. All JSON forms expose the
+same finding summary: `id`, `repo_root`, `summary`, nullable `kind`, `state`, `paths`, timestamps, nullable terminal
+evidence, `sighting_count`, and live `triaging`.
+
+Autonomous triage is disabled unless the repository-root `.ai-coord.toml` is committed at `HEAD` and sets:
+
+```toml
+[findings]
+auto_triage = true
+```
+
+After `done`, an allowed main-session Stop, or SessionEnd, ai-coord may start one detached batch only when `main` is
+checked out, no normal work is active or queued, pending findings exist, and the 24-hour repository cooldown has
+expired. A batch claims at most 20 findings and expires stale/dead leases. It runs an ephemeral offline, agentless Codex
+Luna/xhigh process for at most 30 minutes with workspace-write access plus the state directory. It never pushes.
+
+The safe tier may make only unambiguous documentation fixes and records a local `Finding-ID` commit. Everything else is
+validated into the deterministic `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md` handoff tier while preserving the exact
+ledger ID in its `Source finding:` marker. Structured output, artifacts, commit trailers, and paths are reconciled
+before state changes. Triagers do not schedule another triager. Run metadata and stdout/stderr live under
+`$XDG_STATE_HOME/ai-coord/triage-runs/` (or `AI_COORD_STATE_DIR`) and are retained for 30 days.
+
+`ai-coord trailer` prints the current Git attribution line:
+
+```text
+Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
+```
+
+## Hooks and health
+
+Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start hooks silently register
+or refresh idle sessions; Codex limits them to startup, resume, and clear so mid-turn compaction cannot mark working
+sessions idle. Prompt hooks inject at most 200 characters of factual peer, queued-work, and unread-message counts.
+Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook report the unread count once, route inspection to
+`ai-coord inbox`, and identify message text as peer-reported data rather than instructions or authority. Peer text, IDs,
+prompts, and tool payloads are never injected. When other live work makes a repository non-quiet, prompt context adds a
+scope-gate reminder only when it fits the 200-character budget. Post-tool hooks also record best-effort touched paths
+and emit one `ai-coord done` nudge per transition to clean owned scopes. Stop hooks require a final `Findings recorded`
+summary with exact IDs for findings added in that turn; they request one bounded continuation when it is absent, then
+remain fail-open. After an allowed main Stop or SessionEnd, autonomous triage may run under its opt-in guards. Subagent
+hooks add read-only parent/child topology and never schedule triage. Claude's filtered `ai-coord waker claude` hook
+handles blocked starts in the background; planning scopes are recorded explicitly with `draft`, not inferred from
+provider-specific plan hooks.
+
+Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
+`ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
+
+### Subagents
+
+Both hosts fire `SubagentStart` and `SubagentStop` with the parent `session_id`. `ai-coord` records delegates under that
+parent; it never creates child sessions or work items, and child tool calls refresh the parent session. Coordination is
+therefore session-scoped: the parent's work covers all delegated work. Subagents must never run lifecycle commands
+(`draft`, `start`, `wait`, or `done`) themselves because their inherited identity would make those commands act as the
+parent.
+
+## Storage and retention
+
+State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
+`AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
+mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
+internal schema v12. Any other nonzero schema, including v11, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema is v4. Close agents and explicitly choose any backup, removal,
+installation, and relinking rollout before retrying with incompatible state.
+
+The SQLite ledger stores bounded session metadata, callsigns, work labels, literal scopes, messages, finding lifecycle
+events, sightings, and complete provider health cache rows. It never stores cached provider errors, hook hashes, plan
+bodies, transcript contents, or arbitrary hook payloads; opt-in triage prompts and model output exist only in the 30-day
+run artifacts described above. Composite session foreign keys cascade draft and submitted work cleanup on authoritative
+session end, dead-process reconciliation, and session supersession.
+
+Messages expire after 48 hours and are capped at 50 per inbox. On macOS and Linux, sessions are bound to a
+kernel-derived process fingerprint containing both PID and process start identity. Normal `SessionEnd` hooks release
+immediately; after terminal closure, Ctrl+C, host crash, or another missed hook, the next fresh coordination probe
+removes a session as soon as that exact process is confirmed gone. PID reuse is treated as a different process. An
+unavailable or ambiguous liveness result fails closed: coverage becomes unknown and the session is retained. Sessions
+are never deleted merely because they are old.
+
+## Development
+
+The CLI, hooks, SQLite state, and dashboard API are a single Rust crate; the React dashboard remains a Bun-managed Vite
+package. Common source-checkout workflows are:
+
+```sh
+cargo test --locked
+just check
+just install-cli
+just dev
+```
+
+See [AGENTS.md](AGENTS.md) for architecture, validation, and clean-break rules.
+
+## Dashboard
+
+The dashboard shows the machine-wide live coordination snapshot: sessions and work grouped by repository, plus messages
+and durable findings. Run both local servers from the repository root:
+
+```sh
+just dev
+```
+
+Or run the API and Vite server separately:
+
+```sh
+ai-coord serve
+cd dashboard && bun run dev
+```
+
+`ai-coord serve` listens on `127.0.0.1:4477` by default. Vite proxies `/api` requests to that address, so the dashboard
+development server can use its own origin.

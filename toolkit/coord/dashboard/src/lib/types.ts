@@ -1,0 +1,135 @@
+export type WorkState = "active" | "draft" | "queued";
+export type WorkScopeKind = "exact" | "recursive";
+
+export interface WorkScope {
+  path: string;
+  kind: WorkScopeKind;
+}
+
+export interface ProviderCoverage {
+  client: string;
+  ok: boolean;
+  source: string;
+  enabled: boolean;
+  dropped: number;
+  error: string | null;
+}
+
+export interface SessionIdentity {
+  client: string;
+  session_id: string;
+}
+
+export interface Session extends SessionIdentity {
+  cwd: string;
+  repo_root: string | null;
+  state: string;
+  callsign?: string | null;
+  name: string | null;
+  waiting_for: string | null;
+  permission_mode?: string | null;
+  delegate_count?: number;
+  pid: number | null;
+  source: string;
+  started_at: number;
+  last_seen: number;
+}
+
+export interface Work extends SessionIdentity {
+  id: number;
+  repo_root: string;
+  label: string;
+  state: WorkState;
+  blocked_reason?: string | null;
+  scope_count?: number;
+  scopes?: WorkScope[];
+  draft_created_at?: number;
+  submitted_at?: number;
+  updated_at: number;
+}
+
+export type FindingState =
+  "pending" | "handed-off" | "fixed" | "stale" | "rejected" | "duplicate";
+
+export type FindingKind = "bug" | "docs" | "improvement";
+
+export interface Finding {
+  id: string;
+  repo_root: string;
+  summary: string;
+  kind: FindingKind | null;
+  state: FindingState;
+  paths: string[];
+  created_at: number;
+  updated_at: number;
+  terminal_at: number | null;
+  handoff_path: string | null;
+  commit_oid: string | null;
+  canonical_id: string | null;
+  sighting_count: number;
+  triaging: boolean;
+}
+
+export interface Delegate {
+  parent_client: string;
+  parent_session_id: string;
+  agent_id: string;
+  agent_type: string | null;
+  state: string;
+  last_seen: number;
+}
+
+export interface Message {
+  id: string;
+  sender_client: string;
+  sender_session_id: string;
+  sender_callsign?: string | null;
+  recipient_client: string;
+  recipient_session_id: string;
+  recipient_callsign?: string | null;
+  repo_root: string | null;
+  text: string;
+  created_at: number;
+  acknowledged_at: number | null;
+}
+
+export interface Snapshot {
+  schema_version: number;
+  complete: boolean;
+  scope: {
+    kind: string;
+    repo_root?: string;
+  };
+  self: SessionIdentity | null;
+  providers: ProviderCoverage[];
+  sessions: Session[];
+  work: Work[];
+  findings: Finding[];
+  handoffs: { repo_root: string; count: number }[];
+  delegates: Delegate[];
+  outside_scope: {
+    sessions: number;
+    directories: number;
+  };
+  messages: Message[];
+  generated_at: string;
+  generation: number;
+}
+
+export interface WorkWithQueuePosition extends Work {
+  queuePosition?: number;
+}
+
+export interface LaneSession {
+  session: Session;
+  work?: WorkWithQueuePosition;
+  delegates: Delegate[];
+}
+
+export interface RepoLaneModel {
+  repoRoot: string;
+  sessions: LaneSession[];
+  unmatchedWork: WorkWithQueuePosition[];
+  lastActivity: number;
+  handoffCount: number;
+}
