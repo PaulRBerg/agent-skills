@@ -142,12 +142,34 @@ fn stage_and_rename(
             }
             _ => {}
         }
-        fs::rename(&temporary, path)
+        publish_staged(&temporary, path, mode)
     })();
     if staged.is_err() {
         let _ = fs::remove_file(&temporary);
     }
     staged
+}
+
+fn publish_staged(temporary: &Path, path: &Path, mode: WriteMode) -> io::Result<()> {
+    match mode {
+        WriteMode::Create => {
+            // `rename` replaces an existing destination on Unix. Link the fully staged
+            // file instead so a target created after our checks is never overwritten.
+            fs::hard_link(temporary, path)?;
+            if let Err(cleanup_error) = fs::remove_file(temporary) {
+                let rollback = fs::remove_file(path);
+                let _ = fs::remove_file(temporary);
+                return match rollback {
+                    Ok(()) => Err(cleanup_error),
+                    Err(rollback_error) => Err(io::Error::other(format!(
+                        "published metadata but could not remove its staging link ({cleanup_error}) or roll back the target ({rollback_error})"
+                    ))),
+                };
+            }
+            Ok(())
+        }
+        WriteMode::Replace => fs::rename(temporary, path),
+    }
 }
 
 fn create_temporary(parent: &Path, path: &Path) -> io::Result<(PathBuf, fs::File)> {
@@ -172,7 +194,11 @@ fn create_temporary(parent: &Path, path: &Path) -> io::Result<(PathBuf, fs::File
 
 #[cfg(test)]
 mod tests {
-    use super::replace_policy_value;
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::{WriteMode, publish_staged, replace_policy_value};
 
     #[test]
     fn replacement_is_scoped_and_byte_preserving() {
@@ -182,5 +208,20 @@ mod tests {
             updated,
             "interface:\n  allow_implicit_invocation: true\npolicy:\n  other: kept\n  allow_implicit_invocation: true # note\nui:\n  title: Demo\n"
         );
+    }
+
+    #[test]
+    fn create_publish_never_replaces_an_existing_target() {
+        let directory = tempdir().unwrap();
+        let temporary = directory.path().join("staged");
+        let target = directory.path().join("openai.yaml");
+        fs::write(&temporary, "new\n").unwrap();
+        fs::write(&target, "existing\n").unwrap();
+
+        let error = publish_staged(&temporary, &target, WriteMode::Create).unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "existing\n");
+        assert_eq!(fs::read_to_string(&temporary).unwrap(), "new\n");
     }
 }

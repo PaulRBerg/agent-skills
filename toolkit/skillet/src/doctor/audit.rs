@@ -12,6 +12,7 @@ use crate::traversal::ScanRoot;
 
 use super::fix;
 use super::model::{Counts, Finding, Fix, Report, RootRecord, SCHEMA_VERSION, Severity};
+use super::resource::resource_target;
 
 const COORDINATION_EXEMPT_SENTENCE: &str =
     "This skill is coordination-exempt: skip the ai-coord gate for its declared work.";
@@ -630,7 +631,17 @@ fn check_resource_links(skill: &Skill, source: &str, findings: &mut Vec<Finding>
             {
                 continue;
             }
-            let target = skill.exposure.exposure_directory().join(raw);
+            let Some(target) = resource_target(skill.exposure.exposure_directory(), raw) else {
+                findings.push(Finding::new(
+                    "RESOURCE_LINK_OUTSIDE_SKILL",
+                    Severity::Error,
+                    skill.skill_path(),
+                    Some(line_at(source, reference.start())),
+                    false,
+                    format!("resource link must stay inside its skill directory: {raw}"),
+                ));
+                continue;
+            };
             if target.exists() {
                 continue;
             }
@@ -685,7 +696,9 @@ fn check_prompt_hygiene(
             continue;
         };
         let raw = clean_reference(reference.as_str());
-        let target = skill.exposure.exposure_directory().join(raw);
+        let Some(target) = resource_target(skill.exposure.exposure_directory(), raw) else {
+            continue;
+        };
         if target.extension().and_then(|extension| extension.to_str()) != Some("md")
             || !target.is_file()
         {

@@ -74,10 +74,11 @@ fn clean_fixture_has_schema_v1_valid_json_and_text() {
 fn full_audit_covers_metadata_coordination_versions_links_readme_and_hygiene() {
     let root = TempDir::new().unwrap();
     let oversized = (0..400).map(|_| "reference\n").collect::<String>();
+    common::write(root.path().join("outside.md"), "outside\n");
     common::write(root.path().join("skills/demo/references/large.md"), oversized);
     common::write(
         root.path().join("skills/demo/SKILL.md"),
-        "---\nname: Wrong_Name\nmodel: opus\nmetadata: nope\ncoordination: exempt\ncompatibility: 42\ndescription: Demo.\n---\n\n# Demo\n\nAlways delete generated files. Never delete generated files.\nAlways read [large](references/large.md) before work.\nSee [missing](scripts/missing.sh).\n",
+        "---\nname: Wrong_Name\nmodel: opus\nmetadata: nope\ncoordination: exempt\ncompatibility: 42\ndescription: Demo.\n---\n\n# Demo\n\nAlways delete generated files. Never delete generated files.\nAlways read [large](references/large.md) before work.\nSee [missing](scripts/missing.sh).\nDo not follow [outside](references/../../../outside.md).\n",
     );
     write_metadata(root.path(), "demo", "policy:\n  allow_implicit_invocation: false\n");
     write_skill(root.path(), "cli-tool", "", "## Completion\n\nReport verification.");
@@ -102,6 +103,7 @@ fn full_audit_covers_metadata_coordination_versions_links_readme_and_hygiene() {
         "OPENAI_POLICY_MISMATCH",
         "README_LISTS_MISSING",
         "README_SKILL_MISSING",
+        "RESOURCE_LINK_OUTSIDE_SKILL",
         "RESOURCE_LINK_MISSING",
         "STALE_MODEL_PIN",
         "UNCONDITIONAL_REFERENCE_OVERSIZED",

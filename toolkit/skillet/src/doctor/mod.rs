@@ -2,6 +2,7 @@ mod audit;
 mod fix;
 mod model;
 mod render;
+mod resource;
 
 use std::env;
 use std::io::{self, Write};
