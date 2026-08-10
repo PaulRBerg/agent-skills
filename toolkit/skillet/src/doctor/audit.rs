@@ -503,15 +503,12 @@ fn check_openai(
     let expected = !frontmatter.disable_model_invocation.as_ref().is_some_and(|value| value.value);
     let path = skill.exposure.exposure_directory().join("agents/openai.yaml");
     if !path.exists() {
+        if skill.exposure.is_installed() {
+            return;
+        }
         if !fix_safe {
-            findings.push(Finding::new(
-                "OPENAI_METADATA_MISSING",
-                Severity::Error,
-                &path,
-                None,
-                true,
-                "missing agents/openai.yaml",
-            ));
+            let message = "missing agents/openai.yaml";
+            findings.push(Finding::new("OPENAI_METADATA_MISSING", Severity::Error, &path, None, true, message));
         } else if let Err(error) = fix::create_metadata(&path, expected) {
             findings.push(Finding::new(
                 "OPENAI_METADATA_FIX_FAILED",

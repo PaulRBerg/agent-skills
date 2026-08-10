@@ -75,6 +75,15 @@ impl SkillExposure {
         self.exposure_path.parent().expect("a discovered SKILL.md always has a parent")
     }
 
+    pub fn is_installed(&self) -> bool {
+        let parts: Vec<_> = self.exposure_path.components().map(Component::as_os_str).collect();
+        parts.windows(4).any(|parts| {
+            matches!(parts[0].to_str(), Some(".agents" | ".claude" | ".codex")) &&
+                parts[1] == OsStr::new("skills") &&
+                parts[3] == OsStr::new("SKILL.md")
+        })
+    }
+
     pub fn resolved_directory(&self) -> &Path {
         self.resolved_path.parent().expect("a discovered SKILL.md always has a parent")
     }

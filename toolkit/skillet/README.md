@@ -23,6 +23,11 @@ section and a Markdown table. The required first column is `Skill` and lists eve
 name; additional columns are optional and ignored by the inventory validator. Conventional
 installed roots named `.agents`, `.claude`, or `.codex` do not require a catalog README inventory.
 
+Skills in ordinary source-catalog `skills/<name>` paths must provide `agents/openai.yaml`.
+Conventional installed exposures beneath `.agents/skills`, `.claude/skills`, or `.codex/skills`
+may omit that file. When an installed exposure provides it, doctor still validates the extended
+`policy.allow_implicit_invocation` contract and can safely update a mismatch.
+
 ## Doctor validation contract
 
 `ai-skillet doctor --root <skill-or-catalog-root>` is the canonical deterministic, offline local

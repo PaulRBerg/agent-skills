@@ -96,6 +96,93 @@ fn installed_root_does_not_require_catalog_readme_inventory() {
 }
 
 #[test]
+fn installed_exposures_allow_missing_openai_metadata() {
+    let parent = TempDir::new().unwrap();
+    for root_name in [".agents", ".claude", ".codex"] {
+        let root = parent.path().join(root_name);
+        write_skill(&root, "alpha", "", "## Completion\n\nReport verification.");
+
+        let (output, report) = run_json(&root, &[]);
+        assert!(output.status.success(), "{root_name}: {}", String::from_utf8_lossy(&output.stderr));
+        assert_eq!(report["findings"], serde_json::json!([]), "{root_name}");
+    }
+}
+
+#[test]
+fn directly_requested_installed_skill_allows_missing_openai_metadata() {
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join(".agents");
+    write_skill(&root, "alpha", "", "## Completion\n\nReport verification.");
+
+    let (output, report) = run_json(&root.join("skills/alpha"), &[]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(report["findings"], serde_json::json!([]));
+}
+
+#[test]
+fn source_catalog_requires_and_safely_creates_openai_metadata() {
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "", "## Completion\n\nReport verification.");
+    write_readme(root.path(), &["alpha"]);
+    let skill = root.path().join("skills/alpha");
+    let metadata = skill.join("agents/openai.yaml");
+
+    for scan_root in [root.path(), skill.as_path()] {
+        let (output, report) = run_json(scan_root, &[]);
+        assert_eq!(output.status.code(), Some(1));
+        assert_eq!(codes(&report), BTreeSet::from(["OPENAI_METADATA_MISSING"]));
+        assert_eq!(finding(&report, "OPENAI_METADATA_MISSING")["fixable"], true);
+        assert!(!metadata.exists());
+    }
+
+    let (output, report) = run_json(root.path(), &["--fix-safe"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(report["counts"]["findings"], 0);
+    assert_eq!(report["counts"]["fixes"], 1);
+    assert_eq!(report["fixes"][0]["code"], "OPENAI_METADATA_CREATED");
+    assert_eq!(fs::read_to_string(metadata).unwrap(), "policy:\n  allow_implicit_invocation: true\n");
+}
+
+#[test]
+fn installed_exposures_validate_and_safely_update_declared_metadata() {
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join(".codex");
+    write_skill(&root, "alpha", "", "## Completion\n\nReport verification.");
+    write_skill(&root, "beta", "disable-model-invocation: true\n", "## Completion\n\nReport verification.");
+    write_metadata(&root, "alpha", "policy:\n  allow_implicit_invocation: not-a-boolean\n");
+    write_metadata(&root, "beta", "policy:\n  allow_implicit_invocation: true\n");
+
+    let (output, report) = run_json(&root, &[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(codes(&report), BTreeSet::from(["OPENAI_POLICY_MISMATCH", "OPENAI_POLICY_MISSING"]));
+
+    let (output, report) = run_json(&root, &["--fix-safe"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(codes(&report), BTreeSet::from(["OPENAI_POLICY_MISSING"]));
+    assert_eq!(report["counts"]["fixes"], 1);
+    assert_eq!(report["fixes"][0]["code"], "OPENAI_POLICY_UPDATED");
+    assert_eq!(
+        fs::read_to_string(root.join("skills/beta/agents/openai.yaml")).unwrap(),
+        "policy:\n  allow_implicit_invocation: false\n"
+    );
+}
+
+#[test]
+fn fix_safe_leaves_missing_installed_metadata_absent() {
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join(".claude");
+    write_skill(&root, "alpha", "", "## Completion\n\nReport verification.");
+    let agents = root.join("skills/alpha/agents");
+
+    let (output, report) = run_json(&root, &["--fix-safe"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(report["counts"]["findings"], 0);
+    assert_eq!(report["counts"]["fixes"], 0);
+    assert!(!agents.exists());
+    assert!(!agents.join("openai.yaml").exists());
+}
+
+#[test]
 fn complete_portable_claude_and_repository_dialect_is_accepted() {
     let root = TempDir::new().unwrap();
     common::write(
