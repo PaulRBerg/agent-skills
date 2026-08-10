@@ -24,6 +24,14 @@ impl DetachedProcessRunner for FakeLauncher {
     }
 }
 
+struct FailingLauncher;
+
+impl DetachedProcessRunner for FailingLauncher {
+    fn spawn(&self, _: &DetachedProcessSpec) -> Result<ProcessFingerprint> {
+        Err(AppError::operational("simulated launch failure"))
+    }
+}
+
 struct FakeClock(f64);
 impl Clock for FakeClock {
     fn wall(&self) -> f64 {
@@ -184,6 +192,27 @@ fn incomplete_coverage_does_not_create_or_launch_a_run() {
     assert!(launcher.specs.lock().unwrap().is_empty());
     let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
     assert!(coordinator.store().unwrap().active_triage_runs(&root).unwrap().is_empty());
+}
+
+#[test]
+fn launch_failure_writes_the_specific_reconcile_detail() {
+    let repo = repository(true);
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+
+    let error = coordinator.schedule_findings_triage_for(repo.path(), &origin, &FailingLauncher).unwrap_err();
+    assert_eq!(error.to_string(), "simulated launch failure");
+
+    let run_root = repo.path().join("state/triage-runs");
+    let run_dirs = fs::read_dir(&run_root).unwrap().collect::<std::io::Result<Vec<_>>>().unwrap();
+    assert_eq!(run_dirs.len(), 1);
+    let run_id = run_dirs[0].file_name().into_string().unwrap();
+    let detail = fs::read_to_string(run_dirs[0].path().join(RECONCILE_LOG_FILE)).unwrap();
+    assert_eq!(detail, "100.000000\tlaunch-failed\tsimulated launch failure\n");
+    assert_eq!(
+        coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap().outcome.as_deref(),
+        Some("launch-failed")
+    );
 }
 
 #[test]

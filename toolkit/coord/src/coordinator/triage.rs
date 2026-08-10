@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet},
     ffi::OsString,
     fs::{self, OpenOptions},
-    io::Write,
+    io::{self, Write},
     path::{Component, Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
     thread,
@@ -37,6 +37,7 @@ const RUN_DEADLINE_SECONDS: f64 = 30.0 * 60.0;
 const HEARTBEAT_SECONDS: f64 = 2.0;
 const HEARTBEAT_GRACE_SECONDS: f64 = 15.0;
 const LOG_RETENTION_SECONDS: f64 = 30.0 * 24.0 * 60.0 * 60.0;
+const RECONCILE_LOG_FILE: &str = "reconcile.log";
 const RESULT_FILE: &str = "result.json";
 const SCHEMA_FILE: &str = "result-schema.json";
 const STDOUT_FILE: &str = "stdout.log";
@@ -171,12 +172,13 @@ impl Coordinator {
         };
         let run_dir = run_root.join(&start.run.id);
         if let Err(error) = fs::create_dir(&run_dir) {
-            let _ = store.finish_triage_run(&start.run.id, "launch-failed", now);
+            finish_failed_schedule_run(&mut store, &start.run.id, &run_dir, "launch-failed", now, &error);
             return Err(error.into());
         }
         let Some(start_head) = git_head_oid(&root) else {
-            let _ = store.finish_triage_run(&start.run.id, "launch-failed", now);
-            return Err(AppError::operational("finding triage requires a current Git HEAD"));
+            let error = AppError::operational("finding triage requires a current Git HEAD");
+            finish_failed_schedule_run(&mut store, &start.run.id, &run_dir, "launch-failed", now, &error);
+            return Err(error);
         };
         let mut metadata = RunMetadata {
             run_id: start.run.id.clone(),
@@ -217,13 +219,20 @@ impl Coordinator {
             Ok(worker) => {
                 metadata.worker = Some(worker);
                 if let Err(error) = write_metadata(&run_dir, &metadata) {
-                    let _ = store.finish_triage_run(&start.run.id, "launch-metadata-failed", now);
+                    finish_failed_schedule_run(
+                        &mut store,
+                        &start.run.id,
+                        &run_dir,
+                        "launch-metadata-failed",
+                        now,
+                        &error,
+                    );
                     return Err(error);
                 }
                 Ok(TriageSchedule::Launched { run_id: start.run.id, finding_count: start.claims.len() })
             }
             Err(error) => {
-                let _ = store.finish_triage_run(&start.run.id, "launch-failed", now);
+                finish_failed_schedule_run(&mut store, &start.run.id, &run_dir, "launch-failed", now, &error);
                 Err(error)
             }
         }
@@ -233,20 +242,35 @@ impl Coordinator {
         let repo_root = path_text(root)?;
         for run in self.store()?.active_triage_runs(&repo_root)? {
             let run_dir = run_root.join(&run.id);
-            let metadata = read_metadata(&run_dir).ok();
+            let metadata = match read_metadata(&run_dir) {
+                Ok(metadata) => Some(metadata),
+                Err(error) => {
+                    record_reconcile_detail(&run_dir, current, "worker-lost", &error);
+                    None
+                }
+            };
             if run_is_live(&run, metadata.as_ref(), self.probe.as_ref(), current) {
                 continue;
             }
-            if let Some(metadata) = metadata.as_ref() {
-                let _ = reconcile_artifacts(self, &run, metadata, root);
+            record_reconcile_detail(&run_dir, current, "worker-lost", &"triage worker is no longer live");
+            if let Some(metadata) = metadata.as_ref() &&
+                let Err(error) = reconcile_artifacts(self, &run, metadata, root)
+            {
+                record_reconcile_detail(&run_dir, current, "worker-lost", &error);
             }
             let mut store = self.store()?;
-            let _ = store.end_session(&triager_identity(&run.id));
-            let _ = store.finish_triage_run(&run.id, "worker-lost", current);
+            if let Err(error) = store.end_session(&triager_identity(&run.id)) {
+                record_reconcile_detail(&run_dir, current, "worker-lost", &error);
+            }
+            if let Err(error) = store.finish_triage_run(&run.id, "worker-lost", current) {
+                record_reconcile_detail(&run_dir, current, "worker-lost", &error);
+            }
             if let Some(mut metadata) = metadata {
                 metadata.finished_at = Some(current);
                 metadata.heartbeat_at = current;
-                let _ = write_metadata(&run_dir, &metadata);
+                if let Err(error) = write_metadata(&run_dir, &metadata) {
+                    record_reconcile_detail(&run_dir, current, "worker-lost", &error);
+                }
             }
         }
         Ok(())
@@ -273,7 +297,9 @@ impl Coordinator {
             return Err(AppError::operational("triage run metadata does not match the ledger"));
         }
 
-        let _ = reconcile_artifacts(self, &run, &metadata, &root);
+        if let Err(error) = reconcile_artifacts(self, &run, &metadata, &root) {
+            record_reconcile_detail(&run_dir, self.clock.wall(), "reconcile-failed", &error);
+        }
         let pending_ids = store.pending_claimed_finding_ids(run_id)?;
         if pending_ids.is_empty() {
             finish_worker(&mut store, &run_dir, &mut metadata, "reconciled", self.clock.wall())?;
@@ -299,11 +325,13 @@ impl Coordinator {
             let outcome = match self.start_for(actor, &format!("triage findings {run_id}"), &paths, &[], &root) {
                 Ok(outcome) => outcome,
                 Err(error) => {
+                    record_reconcile_detail(&run_dir, self.clock.wall(), "scope-failed", &error);
                     finish_worker(&mut store, &run_dir, &mut metadata, "scope-failed", self.clock.wall())?;
                     return Err(error);
                 }
             };
             if outcome.kind != OutcomeKind::Ready {
+                record_reconcile_detail(&run_dir, self.clock.wall(), "scope-unavailable", &outcome.detail);
                 finish_worker(&mut store, &run_dir, &mut metadata, "scope-unavailable", self.clock.wall())?;
                 return Ok(());
             }
@@ -326,16 +354,27 @@ impl Coordinator {
         };
         let execution = runner.run(&request, &mut heartbeat);
         let current = self.clock.wall();
-        let reconciled = reconcile_artifacts(self, &run, &metadata, &root).unwrap_or_default();
-        let outcome = match execution {
-            Err(_) => "runner-failed",
-            Ok(status) if !status.success() => "runner-failed",
+        let reconciled = match reconcile_artifacts(self, &run, &metadata, &root) {
+            Ok(reconciled) => reconciled,
+            Err(error) => {
+                record_reconcile_detail(&run_dir, current, "reconcile-failed", &error);
+                HashSet::new()
+            }
+        };
+        let (outcome, failure_detail) = match execution {
+            Err(error) => ("runner-failed", Some(error.to_string())),
+            Ok(status) if !status.success() => {
+                ("runner-failed", Some(format!("triage runner exited unsuccessfully: {status}")))
+            }
             Ok(_) => match apply_result_file(self, &run, &metadata, &root, &run_dir, &reconciled) {
-                Ok(true) => "completed",
-                Ok(false) => "partial",
-                Err(_) => "invalid-result",
+                Ok(true) => ("completed", None),
+                Ok(false) => ("partial", Some("triage result did not resolve every claimed finding".to_owned())),
+                Err(error) => ("invalid-result", Some(error.to_string())),
             },
         };
+        if let Some(detail) = failure_detail {
+            record_reconcile_detail(&run_dir, current, outcome, &detail);
+        }
         store = self.store()?;
         finish_worker(&mut store, &run_dir, &mut metadata, outcome, current)?;
         Ok(())
@@ -463,7 +502,8 @@ fn apply_result_file(
             complete = false;
             continue;
         }
-        if apply_finding_result(coordinator, run, metadata, root, &result).is_err() {
+        if let Err(error) = apply_finding_result(coordinator, run, metadata, root, &result) {
+            record_reconcile_detail(run_dir, coordinator.clock.wall(), "partial", &error);
             complete = false;
         }
     }
@@ -754,10 +794,58 @@ fn finish_worker(
 ) -> Result<()> {
     metadata.finished_at = Some(current);
     metadata.heartbeat_at = current;
-    write_metadata(run_dir, metadata)?;
-    store.end_session(&triager_identity(&metadata.run_id))?;
-    store.finish_triage_run(&metadata.run_id, outcome, current)?;
+    if let Err(error) = write_metadata(run_dir, metadata) {
+        record_reconcile_detail(run_dir, current, outcome, &error);
+        return Err(error);
+    }
+    if let Err(error) = store.end_session(&triager_identity(&metadata.run_id)) {
+        record_reconcile_detail(run_dir, current, outcome, &error);
+        return Err(error);
+    }
+    if let Err(error) = store.finish_triage_run(&metadata.run_id, outcome, current) {
+        record_reconcile_detail(run_dir, current, outcome, &error);
+        return Err(error);
+    }
     Ok(())
+}
+
+fn finish_failed_schedule_run(
+    store: &mut Store,
+    run_id: &str,
+    run_dir: &Path,
+    outcome: &str,
+    current: f64,
+    cause: &dyn std::fmt::Display,
+) {
+    let finish_error = store.finish_triage_run(run_id, outcome, current).err();
+    record_reconcile_detail(run_dir, current, outcome, cause);
+    if let Some(error) = finish_error {
+        record_reconcile_detail(run_dir, current, outcome, &error);
+    }
+}
+
+fn record_reconcile_detail(run_dir: &Path, current: f64, outcome: &str, error: &dyn std::fmt::Display) {
+    let _ = append_reconcile_detail(run_dir, current, outcome, error);
+}
+
+fn append_reconcile_detail(
+    run_dir: &Path,
+    current: f64,
+    outcome: &str,
+    error: &dyn std::fmt::Display,
+) -> io::Result<()> {
+    let detail = error.to_string().split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(run_dir.join(RECONCILE_LOG_FILE))?;
+    let line = format!("{current:.6}\t{outcome}\t{detail}\n");
+    file.write_all(line.as_bytes())?;
+    file.sync_all()
 }
 
 pub(super) fn triager_identity(run_id: &str) -> Identity {
