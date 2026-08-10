@@ -1,0 +1,295 @@
+use std::{
+    fs,
+    io::Write,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    process::{Command, Output, Stdio},
+};
+
+use rusqlite::Connection;
+use tempfile::TempDir;
+
+struct TestEnv {
+    _root: TempDir,
+    home: PathBuf,
+    xdg: PathBuf,
+    project: PathBuf,
+    bin: PathBuf,
+}
+
+impl TestEnv {
+    fn new() -> Self {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let xdg = root.path().join("xdg");
+        let project = root.path().join("project");
+        let bin = root.path().join("bin");
+        for path in [&home, &xdg, &project, &bin] {
+            fs::create_dir_all(path).unwrap();
+        }
+        Self { _root: root, home, xdg, project, bin }
+    }
+
+    fn config_path(&self) -> PathBuf {
+        self.xdg.join("ai-notify/config.yaml")
+    }
+
+    fn command(&self) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ai-notify"));
+        command
+            .env("HOME", &self.home)
+            .env("XDG_CONFIG_HOME", &self.xdg)
+            .env("PATH", &self.bin)
+            .env("AI_NOTIFY_LOG", "0")
+            .current_dir(&self.project);
+        command
+    }
+
+    fn run(&self, arguments: &[&str], input: &str) -> Output {
+        let mut command = self.command();
+        command.args(arguments).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = command.spawn().unwrap();
+        child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+        child.wait_with_output().unwrap()
+    }
+
+    fn write_runtime_config(&self, database: &Path, log: &Path) {
+        let path = self.config_path();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            path,
+            format!(
+                "cleanup:\n  auto_cleanup_enabled: false\n  export_before_cleanup: false\n\
+                 database:\n  path: {}\n\
+                 logging:\n  level: DEBUG\n  path: {}\n\
+                 notification:\n  threshold_seconds: 0\n",
+                database.display(),
+                log.display()
+            ),
+        )
+        .unwrap();
+    }
+}
+
+fn stdout(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn assert_success(output: &Output) {
+    assert!(output.status.success(), "stdout:\n{}\nstderr:\n{}", stdout(output), stderr(output));
+}
+
+#[test]
+fn version_and_usage_exit_codes_are_stable() {
+    let environment = TestEnv::new();
+    let version = environment.run(&["--version"], "");
+    assert_success(&version);
+    assert_eq!(stdout(&version).trim(), "ai-notify 1.0.0");
+
+    let usage = environment.run(&["codex"], "");
+    assert_eq!(usage.status.code(), Some(2));
+    assert!(stderr(&usage).contains("Missing JSON payload"));
+
+    let invalid = environment.run(&["cleanup", "--days", "0", "--dry-run"], "");
+    assert_eq!(invalid.status.code(), Some(2));
+}
+
+#[test]
+fn config_show_edit_and_reset_are_isolated_and_confirmed() {
+    let environment = TestEnv::new();
+    let config = environment._root.path().join("custom/config.yaml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "notification:\n  threshold_seconds: 17\n").unwrap();
+
+    let show = environment.run(&["config", "show", "--path", config.to_str().unwrap()], "");
+    assert_success(&show);
+    assert!(stdout(&show).contains("Current Configuration"));
+    assert!(stdout(&show).contains("Notification Threshold: 17s"));
+
+    let missing = environment
+        .run(&["config", "show", "--path", environment._root.path().join("missing.yaml").to_str().unwrap()], "");
+    assert_eq!(missing.status.code(), Some(2));
+
+    let editor = environment.bin.join("fake-editor");
+    fs::write(&editor, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o755)).unwrap();
+    let edit_target = environment._root.path().join("edited/config.yaml");
+    let mut edit = environment.command();
+    let edit =
+        edit.env("EDITOR", &editor).args(["config", "edit", "--path", edit_target.to_str().unwrap()]).output().unwrap();
+    assert_success(&edit);
+    assert!(edit_target.exists());
+    assert!(stdout(&edit).contains("Configuration is valid"));
+
+    let cancel = environment.run(&["config", "reset", "--path", config.to_str().unwrap()], "n\n");
+    assert_eq!(cancel.status.code(), Some(1));
+    assert!(fs::read_to_string(&config).unwrap().contains("17"));
+
+    let reset = environment.run(&["config", "reset", "--path", config.to_str().unwrap()], "y\n");
+    assert_success(&reset);
+    assert!(stdout(&reset).contains("reset to defaults"));
+    assert!(fs::read_to_string(config).unwrap().contains("threshold_seconds: 10"));
+}
+
+#[test]
+fn test_notification_succeeds_when_notifier_is_unavailable() {
+    let environment = TestEnv::new();
+    let output = environment.run(&["test"], "");
+    assert_success(&output);
+    assert!(stdout(&output).contains("Test notification"));
+    assert!(stdout(&output).contains("unavailable"));
+}
+
+#[test]
+fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_usage() {
+    let environment = TestEnv::new();
+    let payload = r#"{"type":"agent-turn-complete","input-messages":["hello"],"last-assistant-message":"done"}"#;
+
+    assert_success(&environment.run(&["codex", payload], ""));
+    assert_success(&environment.run(&["codex", "--stdin"], payload));
+
+    let invalid = environment.run(&["codex", "{"], "");
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(stderr(&invalid).contains("Failed to parse JSON"));
+}
+
+#[test]
+fn link_claude_supports_dry_run_updates_and_schema_failures() {
+    let environment = TestEnv::new();
+    let settings = environment.home.join(".claude/settings.json");
+
+    let dry_run = environment.run(&["link", "claude", "--path", settings.to_str().unwrap(), "--dry-run"], "");
+    assert_success(&dry_run);
+    assert!(stdout(&dry_run).contains("Would update hooks"));
+    assert!(!settings.exists());
+
+    let update = environment.run(&["link", "claude", "--path", settings.to_str().unwrap()], "");
+    assert_success(&update);
+    let contents = fs::read_to_string(&settings).unwrap();
+    assert!(contents.contains("ai-notify event stop"));
+    assert!(contents.contains("AskUserQuestion"));
+
+    let malformed = environment.home.join(".claude/bad.json");
+    fs::write(&malformed, r#"{"hooks":[]}"#).unwrap();
+    let failure = environment.run(&["link", "claude", "--path", malformed.to_str().unwrap()], "");
+    assert_eq!(failure.status.code(), Some(1));
+    assert!(stderr(&failure).contains("hooks field must be an object"));
+}
+
+#[test]
+fn link_codex_preserves_conflicts_and_supports_force_and_profiles() {
+    let environment = TestEnv::new();
+    let config = environment.home.join(".codex/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "# keep\nnotify = [\"other\"]\n").unwrap();
+
+    let conflict = environment.run(&["link", "codex", "--path", config.to_str().unwrap()], "");
+    assert_eq!(conflict.status.code(), Some(1));
+    assert!(stdout(&conflict).contains("Refusing to replace"));
+    assert!(fs::read_to_string(&config).unwrap().contains("other"));
+
+    let forced = environment.run(&["link", "codex", "--path", config.to_str().unwrap(), "--force"], "");
+    assert_success(&forced);
+    assert!(fs::read_to_string(&config).unwrap().contains("[\"ai-notify\", \"codex\"]"));
+    assert!(stdout(&forced).contains("Replaced previous notify"));
+
+    let profile = environment.run(&["link", "codex", "--path", config.to_str().unwrap(), "--profile", "quiet"], "");
+    assert_success(&profile);
+    assert!(config.with_file_name("quiet.config.toml").exists());
+}
+
+#[test]
+fn check_treats_missing_as_diagnostic_and_parse_errors_as_failures() {
+    let environment = TestEnv::new();
+    let missing = environment.run(&["check"], "");
+    assert_success(&missing);
+    assert!(stdout(&missing).contains("Claude Code hooks: MISSING"));
+    assert!(stdout(&missing).contains("Codex CLI notify: MISSING"));
+
+    let settings = environment.home.join(".claude/settings.json");
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    fs::write(&settings, "{").unwrap();
+    let claude_error = environment.run(&["check"], "");
+    assert_eq!(claude_error.status.code(), Some(1));
+    assert!(stdout(&claude_error).contains("Errors:"));
+
+    let second = TestEnv::new();
+    let codex = second.home.join(".codex/config.toml");
+    fs::create_dir_all(codex.parent().unwrap()).unwrap();
+    fs::write(codex, "notify = [\"broken\"\n").unwrap();
+    let codex_error = second.run(&["check"], "");
+    assert_eq!(codex_error.status.code(), Some(1));
+    assert!(stdout(&codex_error).contains("Codex CLI notify: ERROR"));
+}
+
+#[test]
+fn cleanup_dry_run_cancellation_and_deletion_use_configured_database() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    let prompt = r#"{"session_id":"cleanup-session","prompt":"old work","cwd":"/tmp/project"}"#;
+    assert_success(&environment.run(&["event", "user-prompt-submit"], prompt));
+    let connection = Connection::open(&database).unwrap();
+    connection.execute("UPDATE sessions SET created_at = datetime('now', '-40 days')", []).unwrap();
+    drop(connection);
+
+    let dry_run = environment.run(&["cleanup", "--days", "30", "--dry-run"], "");
+    assert_success(&dry_run);
+    assert!(stdout(&dry_run).contains("Sessions to delete: 1"));
+
+    let cancel = environment.run(&["cleanup", "--days", "30", "--no-export"], "n\n");
+    assert_success(&cancel);
+    assert!(stdout(&cancel).contains("Cleanup cancelled"));
+
+    let cleanup = environment.run(&["cleanup", "--days", "30", "--no-export"], "y\n");
+    assert_success(&cleanup);
+    assert!(stdout(&cleanup).contains("Sessions deleted: 1"));
+    let remaining: i64 =
+        Connection::open(database).unwrap().query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0)).unwrap();
+    assert_eq!(remaining, 0);
+}
+
+#[test]
+fn every_claude_event_path_runs_with_custom_database_and_log_paths() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("custom/state.db");
+    let log = environment._root.path().join("custom/logs/notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    let mut logged_prompt = environment.command();
+    let mut child = logged_prompt
+        .env("AI_NOTIFY_LOG", "1")
+        .args(["event", "user-prompt-submit"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(br#"{"session_id":"s1","prompt":"do work","cwd":"/tmp/project"}"#).unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_success(&output);
+    assert!(database.exists());
+    assert!(log.exists());
+
+    let cases = [
+        ("stop", r#"{"session_id":"s1","cwd":"/tmp/project","last_assistant_message":"done"}"#),
+        ("user-prompt-submit", r#"{"session_id":"s2","prompt":"retry","cwd":"/tmp/project"}"#),
+        ("stop-failure", r#"{"session_id":"s2","cwd":"/tmp/project","error":"rate limit"}"#),
+        ("notification", r#"{"session_id":"s1","notification_type":"idle_prompt","message":"waiting for input"}"#),
+        ("permission-request", r#"{"cwd":"/tmp/project","tool_name":"Bash","tool_input":{"command":"echo ok"}}"#),
+        ("ask-user-question", r#"{"cwd":"/tmp/project","tool_input":{"questions":[{"question":"Continue?"}]}}"#),
+    ];
+    for (event, payload) in cases {
+        let output = environment.run(&["event", event], payload);
+        assert!(output.status.success(), "event {event}: {}", stderr(&output));
+    }
+
+    let invalid = environment.run(&["event", "stop"], "not json");
+    assert_eq!(invalid.status.code(), Some(2));
+}

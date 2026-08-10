@@ -1,13 +1,7 @@
-# Directories
-__pycache__/
-htmlcov/
-.egg-info/
-.pytest_cache/
-.ruff_cache/
-.venv/
+# Rust build output
+/target/
 
-# Files
-.coverage
+# Local files
 .env
 *.log
-*.pyc
+.DS_Store

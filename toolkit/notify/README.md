@@ -1,6 +1,6 @@
 # ai-notify
 
-Desktop notification system for Claude Code and Codex CLI that tracks Claude Code session activity and sends macOS
+Desktop notification system for Claude Code and Codex CLI. It tracks Claude Code session activity and sends macOS
 notifications for key events.
 
 ![ai-notify notification demo](demo.png)
@@ -13,24 +13,37 @@ notifications for key events.
 
 ### Prerequisites
 
-- Python 3.13+
-- [uv](https://github.com/astral-sh/uv) package manager
+- Rust nightly (including `rustfmt` and Clippy)
 - [terminal-notifier](https://github.com/julienXX/terminal-notifier) app: Install with `brew install terminal-notifier`
-- (optional) [it2](https://github.com/mkusaka/it2) CLI (`uv tool install it2`) with iTerm2's Python API enabled
+- (optional) [it2](https://github.com/mkusaka/it2) CLI with iTerm2's Python API enabled
   (`iTerm2 > Settings > General > Magic > Enable Python API`): lets clicking a notification focus the exact iTerm2
   session that produced it, instead of only activating the app
 
 ### Installation
 
-At the moment, the CLI can only be installed from source. You have to clone the repository and run the install command:
+The CLI is installed from source:
 
 ```bash
 git clone https://github.com/PaulRBerg/ai-notify.git
 cd ai-notify
-uv tool install --force .
+rustup toolchain install nightly --component rustfmt --component clippy
+cargo install --path . --locked --force --root "$HOME/.local"
 ```
 
-To update, `git pull` and re-run the install command.
+To update, `git pull` and re-run the `cargo install` command. Installation targets `~/.local/bin`; configure
+integrations separately with `ai-notify link claude` or `ai-notify link codex`.
+
+## Development
+
+Use the locked dependency graph for local commands:
+
+```bash
+cargo build --locked
+just check
+cargo run --locked -- --help
+```
+
+`just check` runs Rust formatting, Clippy with warnings denied, tests, and pinned Prettier checks for Markdown and JSON.
 
 ## Features
 
@@ -46,7 +59,7 @@ To update, `git pull` and re-run the install command.
 
 Inspired by [CCNotify](https://github.com/dazuiba/CCNotify) with key improvements:
 
-- **Independent CLI** — installable via `uv tool install`, not a script symlink
+- **Independent CLI** — a standalone Rust binary, not a script symlink
 - **Fully configurable** — YAML config with `ai-notify config` commands
 - **More events** — adds `PermissionRequest`, `StopFailure`, and an AskUserQuestion notifier (6 hooks vs 3)
 - **Smart filtering** — configurable duration threshold and prompt exclusion patterns

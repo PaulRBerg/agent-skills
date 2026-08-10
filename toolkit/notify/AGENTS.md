@@ -1,8 +1,8 @@
 # Context
 
-`ai-notify` is a macOS Python CLI that sends `terminal-notifier` alerts for Claude Code hooks and Codex CLI's `notify`
-callback. Keep the notification integration macOS-specific while keeping pure logic and tests platform-independent; CI
-runs on Ubuntu with Python 3.13.
+`ai-notify` is a macOS Rust CLI that sends `terminal-notifier` alerts for Claude Code hooks and Codex CLI's `notify`
+callback. Keep notification delivery macOS-specific while keeping pure logic and tests platform-independent; CI runs on
+Ubuntu with nightly Rust.
 
 ## Upstream Documentation
 
@@ -11,21 +11,20 @@ runs on Ubuntu with Python 3.13.
 
 ## Development Workflow
 
-- Bootstrap the Python 3.13+ environment with `uv sync --extra dev --locked`.
-- Run the checkout directly with `uv run ai-notify ...`; use `just install-cli` only when testing the global install.
-- After editing CLI code, proactively run `just install-cli` to refresh the globally installed `ai-notify` so it
-  reflects the change.
-- Prefer the `justfile`: `just test [pytest args]` runs pytest, while `just fc` runs Prettier, Ruff, and Pyright.
-- Use `just prettier-check`, `just ruff-check`, or `just pyright-check` when a focused check is sufficient.
-- `just fw` rewrites every matching Python, Markdown, and JSON file. Use focused formatter commands for surgical
-  changes.
+- Bootstrap with the rolling nightly toolchain declared in `rust-toolchain.toml`; use the checked-in `Cargo.lock` for
+  every Cargo build, test, and install.
+- Run the checkout with `cargo run --locked -- ...`; `just install-cli` only installs the executable and never links an
+  integration.
+- Prefer the `justfile`: `just check` runs the release gate, `just test [cargo-test args]` runs tests, and `just fmt`
+  formats Rust source. Use `just prettier-check` for a focused documentation/configuration check.
+- Do not run `just install-cli` for ordinary verification; it writes to the user's Cargo installation directory.
 
 ## Architecture and Invariants
 
 - Claude Code commands under `ai-notify event` read hook JSON from stdin. The `ai-notify codex` callback accepts Codex's
   JSON as its final argument or via `--stdin`; it does not create a tracked SQLite session.
-- `claude_hooks.HOOK_SPECS` is the source of truth for installed Claude hooks. `integrations.py` derives its required
-  event set from that list so `link claude` and `check` stay aligned.
+- `integrations::HOOK_SPECS` is the source of truth for installed Claude hooks. The integration inspector derives its
+  required event set from that list so `link claude` and `check` stay aligned.
 - Preserve unrelated settings and hooks when changing integration writers. `link codex` must continue to refuse a
   different root `notify` value unless forced; profile names resolve to sibling `<profile>.config.toml` files.
 - Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. Runtime configuration is cached for
@@ -37,11 +36,11 @@ runs on Ubuntu with Python 3.13.
 
 ## Testing
 
-- Keep feature tests in the corresponding `tests/test_*.py` module and use `just test <path-or-node-id>` for targeted
-  verification.
+- Keep focused unit tests beside their Rust modules and CLI contract tests in `tests/cli.rs`; use `just test <filter>`
+  for targeted verification.
 - Isolate configuration and database paths with temporary directories; tests must not write to the user's actual XDG
   configuration directory.
-- Mock the macOS platform check, `terminal-notifier` discovery, and subprocess calls. Linux CI must not require the real
-  notifier.
+- Inject or mock the macOS platform check, `terminal-notifier` discovery, and subprocess calls. Linux CI must not
+  require the real notifier.
 - For hook or Codex configuration changes, cover idempotence, preservation of unrelated configuration, and conflict
   behavior.

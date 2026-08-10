@@ -13,6 +13,8 @@
 
 ### Changed
 
+- Reimplemented ai-notify as a Rust 1.0.0 binary while preserving its CLI, YAML configuration, SQLite, and integration
+  contracts
 - Make Claude and Codex notifications project-first, with native agent/status subtitles and bounded task plus
   result/error/action context instead of prompt sequence numbers
 - Select the latest active SQLite turn deterministically when prompts share the same timestamp

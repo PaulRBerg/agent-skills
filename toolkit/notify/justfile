@@ -1,87 +1,50 @@
-# See https://just.systems/man/en/settings.html
-set allow-duplicate-recipes
-set allow-duplicate-variables
 set shell := ["bash", "-euo", "pipefail", "-c"]
-set unstable
+prettier_version := "3.5.3"
 
-# ---------------------------------------------------------------------------- #
-#                                   COMMANDS                                   #
-# ---------------------------------------------------------------------------- #
-
-# Install CLI globally
+# Install only the CLI; integrations are configured explicitly with `ai-notify link`.
 @install-cli:
-    uv tool install --force .
+    cargo install --path . --locked --force --root "$HOME/.local"
 alias ic := install-cli
 
-# Run tests with pytest
+# Build the debug binary with the checked-in dependency graph.
+@build:
+    cargo build --locked
+
+# Build the release binary with the checked-in dependency graph.
+@build-release:
+    cargo build --release --locked
+
+# Run Rust tests. Pass a test filter or other cargo-test arguments as needed.
 @test *args:
-    uv run pytest {{ args }}
+    cargo test --locked {{ args }}
 alias t := test
 
-# ---------------------------------------------------------------------------- #
-#                                    CHECKS                                    #
-# ---------------------------------------------------------------------------- #
+# Format Rust source files.
+@fmt:
+    cargo fmt
 
-# Run all code checks
-[group("checks")]
-@full-check:
-    just _run-with-status prettier-check
-    just _run-with-status ruff-check
-    just _run-with-status pyright-check
-    echo ""
-    echo -e '{{ GREEN }}All code checks passed!{{ NORMAL }}'
-alias fc := full-check
+# Check Rust formatting.
+@fmt-check:
+    cargo fmt --check
 
-# Run all code fixes
-[group("checks")]
-@full-write:
-    just _run-with-status prettier-write
-    just _run-with-status ruff-write
-    echo ""
-    echo -e '{{ GREEN }}All code fixes applied!{{ NORMAL }}'
-alias fw := full-write
+# Lint every Rust target, including tests, without allowing warnings.
+@clippy:
+    cargo clippy --all-targets --locked -- -D warnings
 
-# Check Python formatting and linting with ruff
-[group("checks")]
-@ruff-check:
-    uv run ruff check .
-    uv run ruff format --check .
-alias rc := ruff-check
-
-# Auto-fix Python formatting and linting with ruff
-[group("checks")]
-@ruff-write:
-    uv run ruff check --fix .
-    uv run ruff format .
-alias rw := ruff-write
-
-# Check types with pyright
-[group("checks")]
-@pyright-check:
-    PYRIGHT_PYTHON_IGNORE_WARNINGS=1 uv run pyright
-alias pyc := pyright-check
-
-# Check Markdown formatting with prettier (readonly)
-[group("checks")]
+# Check Markdown and JSON with a pinned Prettier release.
 @prettier-check:
-    npx prettier --check "**/*.{json,jsonc,md}"
+    npx --yes prettier@{{ prettier_version }} --check '**/*.{json,jsonc,md}'
 alias pc := prettier-check
 
-# Auto-fix Markdown formatting with prettier
-[group("checks")]
+# Format Markdown and JSON with the pinned Prettier release.
 @prettier-write:
-    npx prettier --write --log-level warn "**/*.{json,jsonc,md}"
+    npx --yes prettier@{{ prettier_version }} --write --log-level warn '**/*.{json,jsonc,md}'
 alias pw := prettier-write
 
-# ---------------------------------------------------------------------------- #
-#                                   UTILITIES                                  #
-# ---------------------------------------------------------------------------- #
-
-# Private recipe to run a check with formatted output
-[no-cd]
-@_run-with-status recipe:
-    echo ""
-    echo -e '{{ CYAN }}→ Running {{ recipe }}...{{ NORMAL }}'
-    just {{ recipe }}
-    echo -e '{{ GREEN }}✓ {{ recipe }} completed{{ NORMAL }}'
-alias rws := _run-with-status
+# Run every release-gate check.
+@check:
+    cargo fmt --check
+    cargo clippy --all-targets --locked -- -D warnings
+    cargo test --locked
+    npx --yes prettier@{{ prettier_version }} --check '**/*.{json,jsonc,md}'
+alias fc := check

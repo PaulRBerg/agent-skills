@@ -18,35 +18,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          components: rustfmt, clippy
 
-      - name: Set up Python
-        run: uv python install 3.13
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Set up just
         uses: extractions/setup-just@v3
 
-      - name: Install dependencies
-        run: uv sync --extra dev --locked
-
-      - name: Run checks
-        id: checks
-        run: just full-check
-
-      - name: Run tests
-        id: tests
-        run: just test
-
-      - name: Generate summary
-        if: always()
-        run: | #shell
-          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Checks | ${{ steps.checks.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ${{ steps.tests.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+      - name: Run release checks
+        run: just check
