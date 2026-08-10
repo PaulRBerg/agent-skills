@@ -270,6 +270,42 @@ fn full_audit_covers_metadata_coordination_versions_links_readme_and_hygiene() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn resource_symlink_escape_is_rejected_without_reclassifying_missing_target() {
+    use std::os::unix::fs::symlink;
+
+    let root = TempDir::new().unwrap();
+    let outside = root.path().join("outside.md");
+    let outside_directory = root.path().join("outside-references");
+    common::write(&outside, (0..400).map(|_| "outside\n").collect::<String>());
+    fs::create_dir_all(&outside_directory).unwrap();
+    write_skill(
+        root.path(),
+        "alpha",
+        "",
+        "Always read [outside](references/outside.md) before work.\nSee [missing](references/external/missing.md).\n\n## Completion\n\nReport verification.",
+    );
+    let references = root.path().join("skills/alpha/references");
+    fs::create_dir_all(&references).unwrap();
+    symlink(outside, references.join("outside.md")).unwrap();
+    symlink(outside_directory, references.join("external")).unwrap();
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: true\n");
+    write_readme(root.path(), &["alpha"]);
+
+    let (output, report) = run_json(root.path(), &[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(codes(&report), BTreeSet::from(["RESOURCE_LINK_MISSING", "RESOURCE_LINK_OUTSIDE_SKILL"]));
+    assert_eq!(
+        finding(&report, "RESOURCE_LINK_OUTSIDE_SKILL")["message"],
+        "resource link must stay inside its skill directory: references/outside.md"
+    );
+    assert_eq!(
+        finding(&report, "RESOURCE_LINK_MISSING")["message"],
+        "referenced resource does not exist: references/external/missing.md"
+    );
+}
+
 #[test]
 fn dependencies_only_uses_all_roots_and_suppresses_unrelated_findings() {
     let first = TempDir::new().unwrap();

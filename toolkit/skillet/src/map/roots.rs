@@ -2,13 +2,19 @@ use std::{
     env,
     ffi::OsString,
     fs,
+    io::{self, Read},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Child, Command, Output, Stdio},
+    sync::mpsc::{self, Receiver, TryRecvError},
+    thread,
+    time::{Duration, Instant},
 };
 
 use crate::{cli::MapArgs, error::Error, traversal::RootRequest};
 
 use super::model::{PortfolioRecord, UserRootRecord};
+
+const GIT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct ResolvedRoots {
     pub requests: Vec<RootRequest>,
@@ -46,18 +52,19 @@ fn resolve_portfolio(requested: &Path) -> Result<ResolvedRoots, Error> {
         return Err(Error::RootNotDirectory(requested));
     }
 
-    let output = Command::new("git")
-        .args(["-C"])
-        .arg(&requested)
-        .args(["rev-parse", "--path-format=absolute", "--show-toplevel"])
-        .output()
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                Error::GitUnavailable
-            } else {
-                Error::io("run Git for", &requested, error)
-            }
-        })?;
+    let output = run_output_timeout(
+        Command::new("git").args(["-C"]).arg(&requested).args([
+            "rev-parse",
+            "--path-format=absolute",
+            "--show-toplevel",
+        ]),
+        GIT_TIMEOUT,
+    )
+    .map_err(|error| match error.kind() {
+        io::ErrorKind::NotFound => Error::GitUnavailable,
+        io::ErrorKind::TimedOut => Error::io("resolve portfolio root", &requested, error),
+        _ => Error::io("run Git for", &requested, error),
+    })?;
     if !output.status.success() {
         return Err(Error::PortfolioNotGit(requested));
     }
@@ -86,6 +93,74 @@ fn resolve_portfolio(requested: &Path) -> Result<ResolvedRoots, Error> {
         requests,
         portfolio: Some(PortfolioRecord { requested_path: requested, repository_root, user_roots }),
     })
+}
+
+fn run_output_timeout(command: &mut Command, timeout: Duration) -> io::Result<Output> {
+    let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    let stdout = child.stdout.take().expect("piped stdout");
+    let stderr = child.stderr.take().expect("piped stderr");
+    let stdout_reader = output_reader(stdout).inspect_err(|_| terminate_child(&mut child))?;
+    let stderr_reader = output_reader(stderr).inspect_err(|_| terminate_child(&mut child))?;
+    let deadline = Instant::now() + timeout;
+    let mut status = None;
+    let mut stdout = None;
+    let mut stderr = None;
+
+    loop {
+        if stdout.is_none() {
+            stdout = cleanup_on_error(poll_output(&stdout_reader), &mut child)?;
+        }
+        if stderr.is_none() {
+            stderr = cleanup_on_error(poll_output(&stderr_reader), &mut child)?;
+        }
+        if status.is_none() {
+            let observed = child.try_wait();
+            status = cleanup_on_error(observed, &mut child)?;
+        }
+        if stdout.is_some() &&
+            stderr.is_some() &&
+            let Some(status) = status &&
+            let Some(stdout) = stdout.take() &&
+            let Some(stderr) = stderr.take()
+        {
+            return Ok(Output { status, stdout, stderr });
+        }
+        if Instant::now() >= deadline {
+            terminate_child(&mut child);
+            return Err(io::Error::new(io::ErrorKind::TimedOut, format!("Git command timed out after {timeout:?}")));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn output_reader(mut output: impl Read + Send + 'static) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
+    let (sender, receiver) = mpsc::sync_channel(1);
+    thread::Builder::new().name("ai-skillet-git-output".to_owned()).spawn(move || {
+        let mut bytes = Vec::new();
+        let result = output.read_to_end(&mut bytes).map(|_| bytes);
+        let _ = sender.send(result);
+    })?;
+    Ok(receiver)
+}
+
+fn poll_output(reader: &Receiver<io::Result<Vec<u8>>>) -> io::Result<Option<Vec<u8>>> {
+    match reader.try_recv() {
+        Ok(result) => result.map(Some),
+        Err(TryRecvError::Empty) => Ok(None),
+        Err(TryRecvError::Disconnected) => Err(io::Error::other("Git output reader stopped")),
+    }
+}
+
+fn cleanup_on_error<T>(result: io::Result<T>, child: &mut Child) -> io::Result<T> {
+    if result.is_err() {
+        terminate_child(child);
+    }
+    result
+}
+
+fn terminate_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn home_directory() -> Result<PathBuf, Error> {
@@ -124,5 +199,26 @@ fn path_from_git_output(mut output: Vec<u8>) -> Result<PathBuf, Error> {
         String::from_utf8(output)
             .map(PathBuf::from)
             .map_err(|_| Error::GitOutput("Git returned a non-UTF-8 repository root".to_owned()))
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::{
+        process::Command,
+        time::{Duration, Instant},
+    };
+
+    use super::run_output_timeout;
+
+    #[test]
+    fn git_output_wait_is_bounded() {
+        let started = Instant::now();
+        let error =
+            run_output_timeout(Command::new("/bin/sh").args(["-c", "sleep 1"]), Duration::from_millis(50)).unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+        assert!(error.to_string().contains("Git command timed out"));
+        assert!(started.elapsed() < Duration::from_millis(500));
     }
 }
