@@ -2,7 +2,7 @@ use std::{
     collections::VecDeque,
     io::Cursor,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     time::Duration,
 };
 
@@ -288,6 +288,13 @@ fn jsonl_client_rejects_timeout_malformed_and_oversized_responses() {
 }
 
 #[test]
+fn jsonl_client_reports_transport_queue_overflow() {
+    let mut server = JsonlAppServer::connect(BurstingTransport::new()).unwrap();
+    let error = server.request("hooks/list", json!({})).unwrap_err();
+    assert_eq!(error.to_string(), QUEUE_OVERFLOW_MESSAGE);
+}
+
+#[test]
 fn version_conflicts_are_retryable_only_for_config_batch_write() {
     let conflict = json!({
         "code": -32600,
@@ -435,6 +442,49 @@ impl JsonlTransport for FakeTransport {
             FakeRead::Timeout => Ok(ReadOutcome::Timeout),
             FakeRead::Eof => Ok(ReadOutcome::Eof),
         }
+    }
+}
+
+struct BurstingTransport {
+    sender: Option<mpsc::SyncSender<ReaderEvent>>,
+    reader: mpsc::Receiver<ReaderEvent>,
+    queue_overflowed: Arc<AtomicBool>,
+    burst: Vec<u8>,
+}
+
+impl BurstingTransport {
+    fn new() -> Self {
+        let (sender, reader) = mpsc::sync_channel(MAX_QUEUED_LINES);
+        sender.try_send(ReaderEvent::Line(serde_json::to_vec(&ok(1, json!({}))).unwrap())).unwrap();
+        let mut burst = Vec::new();
+        for index in 0..=MAX_QUEUED_LINES {
+            serde_json::to_writer(
+                &mut burst,
+                &json!({ "jsonrpc": "2.0", "method": "fake/event", "params": { "index": index } }),
+            )
+            .unwrap();
+            burst.push(b'\n');
+        }
+        Self { sender: Some(sender), reader, queue_overflowed: Arc::new(AtomicBool::new(false)), burst }
+    }
+}
+
+impl JsonlTransport for BurstingTransport {
+    fn write_line(&mut self, line: &[u8]) -> Result<()> {
+        let value: Value = serde_json::from_slice(line).unwrap();
+        if value.get("method").and_then(Value::as_str) == Some("initialized") {
+            let sender = self.sender.take().unwrap();
+            pump_stdout(Cursor::new(std::mem::take(&mut self.burst)), sender, Arc::clone(&self.queue_overflowed));
+        }
+        Ok(())
+    }
+
+    fn read_line(&mut self, timeout: Duration) -> Result<ReadOutcome> {
+        receive_reader_event(&self.reader, timeout)
+    }
+
+    fn queue_overflowed(&self) -> bool {
+        self.queue_overflowed.load(Ordering::Acquire)
     }
 }
 

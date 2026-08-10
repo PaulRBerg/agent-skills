@@ -4,7 +4,11 @@ use std::{
     io::{self, BufRead, BufReader, Write},
     path::{Component, Path, PathBuf},
     process::{Child, ChildStdin, Command, ExitStatus, Stdio},
-    sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -23,6 +27,7 @@ const CODEX_MINIMUM_VERSION_TEXT: &str = "0.146.0";
 const MAX_CONFIG_ATTEMPTS: usize = 3;
 const MAX_JSONL_BYTES: usize = 1024 * 1024;
 const MAX_QUEUED_LINES: usize = 8;
+const QUEUE_OVERFLOW_MESSAGE: &str = "Codex app-server emitted more output than the transport queue holds";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TrustOutcome {
@@ -472,6 +477,14 @@ impl<T: JsonlTransport> JsonlAppServer<T> {
         }
         self.transport.write_line(&encoded)
     }
+
+    fn response_failure(&self, fallback: &str) -> CodexTrustError {
+        if self.transport.queue_overflowed() {
+            CodexTrustError::new(QUEUE_OVERFLOW_MESSAGE)
+        } else {
+            CodexTrustError::new(fallback)
+        }
+    }
 }
 
 impl<T: JsonlTransport> RpcClient for JsonlAppServer<T> {
@@ -488,15 +501,15 @@ impl<T: JsonlTransport> RpcClient for JsonlAppServer<T> {
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                return Err(CodexTrustError::new("Codex app-server response timed out"));
+                return Err(self.response_failure("Codex app-server response timed out"));
             }
             let line = match self.transport.read_line(remaining)? {
                 ReadOutcome::Line(line) => line,
                 ReadOutcome::Timeout => {
-                    return Err(CodexTrustError::new("Codex app-server response timed out"));
+                    return Err(self.response_failure("Codex app-server response timed out"));
                 }
                 ReadOutcome::Eof => {
-                    return Err(CodexTrustError::new("Codex app-server closed stdout"));
+                    return Err(self.response_failure("Codex app-server closed stdout"));
                 }
             };
             let response = parse_jsonrpc_line(&line)?;
@@ -542,6 +555,10 @@ fn is_config_version_conflict(error: &Value) -> bool {
 trait JsonlTransport {
     fn write_line(&mut self, line: &[u8]) -> Result<()>;
     fn read_line(&mut self, timeout: Duration) -> Result<ReadOutcome>;
+
+    fn queue_overflowed(&self) -> bool {
+        false
+    }
 }
 
 enum ReadOutcome {
@@ -554,6 +571,7 @@ struct ChildTransport {
     child: Child,
     stdin: Option<ChildStdin>,
     reader: Receiver<ReaderEvent>,
+    queue_overflowed: Arc<AtomicBool>,
     reader_thread: Option<JoinHandle<()>>,
 }
 
@@ -570,8 +588,10 @@ impl ChildTransport {
         let stdout =
             child.stdout.take().ok_or_else(|| CodexTrustError::new("Codex app-server stdout is unavailable"))?;
         let (sender, receiver) = mpsc::sync_channel(MAX_QUEUED_LINES);
-        let reader_thread = thread::spawn(move || pump_stdout(BufReader::new(stdout), sender));
-        Ok(Self { child, stdin: Some(stdin), reader: receiver, reader_thread: Some(reader_thread) })
+        let queue_overflowed = Arc::new(AtomicBool::new(false));
+        let reader_overflowed = Arc::clone(&queue_overflowed);
+        let reader_thread = thread::spawn(move || pump_stdout(BufReader::new(stdout), sender, reader_overflowed));
+        Ok(Self { child, stdin: Some(stdin), reader: receiver, queue_overflowed, reader_thread: Some(reader_thread) })
     }
 }
 
@@ -585,13 +605,11 @@ impl JsonlTransport for ChildTransport {
     }
 
     fn read_line(&mut self, timeout: Duration) -> Result<ReadOutcome> {
-        match self.reader.recv_timeout(timeout) {
-            Ok(ReaderEvent::Line(line)) => Ok(ReadOutcome::Line(line)),
-            Ok(ReaderEvent::Eof) => Ok(ReadOutcome::Eof),
-            Ok(ReaderEvent::Error(error)) => Err(CodexTrustError::new(error)),
-            Err(RecvTimeoutError::Timeout) => Ok(ReadOutcome::Timeout),
-            Err(RecvTimeoutError::Disconnected) => Ok(ReadOutcome::Eof),
-        }
+        receive_reader_event(&self.reader, timeout)
+    }
+
+    fn queue_overflowed(&self) -> bool {
+        self.queue_overflowed.load(Ordering::Acquire)
     }
 }
 
@@ -614,7 +632,7 @@ enum ReaderEvent {
     Error(String),
 }
 
-fn pump_stdout<R: BufRead>(mut reader: R, sender: SyncSender<ReaderEvent>) {
+fn pump_stdout<R: BufRead>(mut reader: R, sender: SyncSender<ReaderEvent>, queue_overflowed: Arc<AtomicBool>) {
     loop {
         let event = match read_bounded_line(&mut reader) {
             Ok(Some(line)) => ReaderEvent::Line(line),
@@ -624,11 +642,25 @@ fn pump_stdout<R: BufRead>(mut reader: R, sender: SyncSender<ReaderEvent>) {
         let terminal = !matches!(event, ReaderEvent::Line(_));
         match sender.try_send(event) {
             Ok(()) => {}
-            Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => return,
+            Err(TrySendError::Full(_)) => {
+                queue_overflowed.store(true, Ordering::Release);
+                return;
+            }
+            Err(TrySendError::Disconnected(_)) => return,
         }
         if terminal {
             return;
         }
+    }
+}
+
+fn receive_reader_event(reader: &Receiver<ReaderEvent>, timeout: Duration) -> Result<ReadOutcome> {
+    match reader.recv_timeout(timeout) {
+        Ok(ReaderEvent::Line(line)) => Ok(ReadOutcome::Line(line)),
+        Ok(ReaderEvent::Eof) => Ok(ReadOutcome::Eof),
+        Ok(ReaderEvent::Error(error)) => Err(CodexTrustError::new(error)),
+        Err(RecvTimeoutError::Timeout) => Ok(ReadOutcome::Timeout),
+        Err(RecvTimeoutError::Disconnected) => Ok(ReadOutcome::Eof),
     }
 }
 
