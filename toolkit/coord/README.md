@@ -146,7 +146,7 @@ per line. `!TRUNCATED` is the first record when the bounded 1,000-path set dropp
 best-effort: unsupported tools or hosts that omit usable path fields contribute nothing, and no tool payload content is
 stored.
 
-Repositories may list harness churn in a tracked `.agents/coord.toml`:
+Repositories may list harness churn in `.agents/coord.toml`:
 
 ```toml
 [dirt]
