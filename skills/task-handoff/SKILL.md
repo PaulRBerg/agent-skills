@@ -7,10 +7,12 @@ compatibility:
 coordination: exempt
 disable-model-invocation: false
 name: task-handoff
+skill-dependencies:
+  - codex-handoff
 user-invocable: true
 description:
-  Create one decision-complete task handoff in its repository or on the Desktop for cross-repository work, and return a
-  command for a fresh interactive Codex session.
+  Create one decision-complete task handoff in its repository or on the Desktop for cross-repository work, return a
+  command for a fresh interactive Codex session, and recommend Codex subagent delegation for complex tasks.
 ---
 
 # Task Handoff
@@ -23,9 +25,11 @@ skill again through a skill tool.
 Turn one continuation task into one self-contained task handoff for a fresh agent chat. Write the handoff only; do not
 implement, edit tracked files, commit, push, launch Codex, or change ignore configuration.
 
-Task-handoff writes a decision-complete file for a fresh, separate session. Codex-handoff and claude-handoff orchestrate
-implementation within the current session from Plan mode; use task-handoff when work continues later or elsewhere, and
-an in-session handoff skill when implementing an approved plan now.
+Task-handoff writes one decision-complete file for a fresh, separate session. For a simple task, that isolated file is
+enough for direct execution in the receiving session. For a complex task, recommend that the receiving session invoke
+`$codex-handoff` from Plan mode and use the file as its task specification so Codex subagents can implement it.
+Task-handoff still creates exactly one file and never launches orchestration itself. Use task-handoff when work
+continues later or elsewhere, and an in-session handoff skill when implementing an approved plan now.
 
 ## Select the work
 
@@ -49,6 +53,11 @@ task; do not keyword-match it. Select exactly one lowercase category:
   rollback boundaries.
 
 When a task contains supporting work from another category, use the category of its primary deliverable.
+
+Classify its execution approach as `simple` or `complex`. Mark it complex only when delegation would materially improve
+latency, correctness, or verification, such as independently implementable scopes, dependency waves, multiple or
+unfamiliar subsystems, or a brief likely to exceed roughly 25-30 minutes. File and repository count alone are not
+complexity signals. Otherwise mark it simple.
 
 Infer repositories from local paths and relevant context. Do not include the current repository merely because the skill
 runs there when the task selects only other repositories. Create exactly one handoff file, whether the task touches one
@@ -94,6 +103,11 @@ to the named repositories but none of this transcript. Include:
 - exact repository-relative write scopes and a ready-to-run `ai-coord start '<label>' '<path>'...` command derived from
   those scopes, using `--recursive` only when the handoff genuinely cannot enumerate a subtree;
 - assumptions resolved from repository evidence or explicit user decisions.
+
+Add a `## Execution approach` section. For a simple task, direct the receiving session to execute this one isolated
+handoff without invoking an in-session handoff skill. For a complex task, explicitly recommend invoking `$codex-handoff`
+from Plan mode with this file as the decision-complete task specification; let codex-handoff choose the smallest
+effective subagent team instead of prescribing its manifest here.
 
 Tailor the body to its category. An implementation handoff specifies the intended change, data flow, and compatibility.
 An investigation handoff specifies the question or symptom, available evidence, reproduction or observation method, and
@@ -163,7 +177,7 @@ Never create or remove targets yourself. A failed or cancelled run must leave no
 ## Report
 
 On success, finish with `### ✅ Task handoff ready — <task>`. List the final record's handoff path, canonical launch
-repository, category, and both exact commands in one code block, Codex first. Do not repeat the handoff body or mention
-clipboard copying or verification.
+repository, category, selected execution approach, and both exact commands in one code block, Codex first. Do not repeat
+the handoff body or mention clipboard copying or verification.
 
 For a blocker, finish with `### ⛔ Task handoff not written — <reason>` and state that no handoff file was created.
