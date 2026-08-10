@@ -3,7 +3,7 @@ argument-hint: "[task-to-handoff]"
 compatibility:
   Requires Bash 3.2, Git, and local file-write access. Default finalization also requires macOS pbcopy and pbpaste;
   `finalize --no-clipboard` does not. Generated cleanup commands use POSIX shell utilities; generated launch commands
-  require authenticated Codex and Claude CLIs.
+  require an authenticated Codex CLI.
 coordination: exempt
 disable-model-invocation: false
 name: task-handoff
@@ -163,10 +163,9 @@ original spelling:
 ai-coord finding handoff '<original-id>' --path '.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md'
 ```
 
-The final `plan` record contains `handoff=`, canonical `launch_repo=`, `category=`, and the exact command after
-`command=` plus the exact Claude Code command after `claude_command=`. Never execute either command. If a correctable
-draft error occurs, edit the draft and retry. If abandoning or blocking before successful finalization, remove only
-helper-created temporary state with:
+The final `plan` record contains `handoff=`, canonical `launch_repo=`, `category=`, and the exact Codex command after
+`command=`. Never execute the command. If a correctable draft error occurs, edit the draft and retry. If abandoning or
+blocking before successful finalization, remove only helper-created temporary state with:
 
 ```sh
 bash <skill-dir>/scripts/task-handoff.sh cancel '<run-dir>'
@@ -177,7 +176,7 @@ Never create or remove targets yourself. A failed or cancelled run must leave no
 ## Report
 
 On success, finish with `### ✅ Task handoff ready — <task>`. List the final record's handoff path, canonical launch
-repository, category, selected execution approach, and both exact commands in one code block, Codex first. Do not repeat
-the handoff body or mention clipboard copying or verification.
+repository, category, selected execution approach, and exact Codex command in one code block. Do not repeat the handoff
+body or mention clipboard copying or verification.
 
 For a blocker, finish with `### ⛔ Task handoff not written — <reason>` and state that no handoff file was created.
