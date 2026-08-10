@@ -46,6 +46,45 @@ assert_file_contains() {
   grep -Fq -- "$1" "$2" || fail "$3: missing $1"
 }
 
+assert_frontmatter() {
+  _file=$1
+  _category=$2
+  _launch_repo=$3
+  _origin=$4
+  _task=$5
+  _h1=$6
+  shift 6
+
+  _line=1
+  assert_equal '---' "$(sed -n "${_line}p" "$_file")" 'frontmatter opening delimiter'
+  _line=$((_line + 1))
+  assert_equal "category: $(yaml_quote "$_category")" "$(sed -n "${_line}p" "$_file")" \
+    'frontmatter category'
+  _line=$((_line + 1))
+  sed -n "${_line}p" "$_file" | grep -Eq \
+    "^created: '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z'$" ||
+    fail 'frontmatter created timestamp is not UTC ISO-8601'
+  _line=$((_line + 1))
+  assert_equal "launch_repo: $(yaml_quote "$_launch_repo")" "$(sed -n "${_line}p" "$_file")" \
+    'frontmatter launch repository'
+  _line=$((_line + 1))
+  assert_equal 'repos:' "$(sed -n "${_line}p" "$_file")" 'frontmatter repositories key'
+  for _repo in "$@"; do
+    _line=$((_line + 1))
+    assert_equal "  - $(yaml_quote "$_repo")" "$(sed -n "${_line}p" "$_file")" \
+      'frontmatter repository order'
+  done
+  _line=$((_line + 1))
+  assert_equal "origin: $(yaml_quote "$_origin")" "$(sed -n "${_line}p" "$_file")" 'frontmatter origin'
+  _line=$((_line + 1))
+  assert_equal "task: $(yaml_quote "$_task")" "$(sed -n "${_line}p" "$_file")" 'frontmatter task'
+  _line=$((_line + 1))
+  assert_equal '---' "$(sed -n "${_line}p" "$_file")" 'frontmatter closing delimiter'
+  _line=$((_line + 1))
+  assert_equal "# $_h1" "$(sed -n "${_line}p" "$_file")" 'immediate body H1'
+  assert_equal 2 "$(grep -Fxc -- '---' "$_file")" 'frontmatter delimiter count'
+}
+
 expect_failure() {
   _expected_text=$1
   shift
@@ -64,6 +103,12 @@ shell_quote() {
   printf "'"
 }
 
+yaml_quote() {
+  printf "'"
+  printf '%s' "$1" | sed "s/'/''/g"
+  printf "'"
+}
+
 parse_record() {
   _record_line=$1
   # shellcheck disable=SC2294
@@ -73,7 +118,6 @@ parse_record() {
 run_helper() {
   TASK_HANDOFF_TEST_PBCOPY=${TASK_HANDOFF_TEST_PBCOPY:-$fake_bin/pbcopy} \
     TASK_HANDOFF_TEST_PBPASTE=${TASK_HANDOFF_TEST_PBPASTE:-$fake_bin/pbpaste} \
-    TASK_HANDOFF_TEST_TRASH=${TASK_HANDOFF_TEST_TRASH:-$fake_bin/trash} \
     TASK_HANDOFF_TEST_HOOK=${TASK_HANDOFF_TEST_HOOK:-$fake_bin/hook} \
     TASK_HANDOFF_TEST_TMPDIR=${TASK_HANDOFF_TEST_TMPDIR:-$runs_dir} \
     TASK_HANDOFF_TEST_DESKTOP=${TASK_HANDOFF_TEST_DESKTOP:-$desktop} \
@@ -128,11 +172,6 @@ else
 fi
 EOF
 
-cat >"$fake_bin/trash" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-
 cat >"$fake_bin/hook" <<'EOF'
 #!/usr/bin/env bash
 set -eu
@@ -147,7 +186,7 @@ case "${TASK_HANDOFF_TEST_HOOK_MODE:-}:$event" in
     ;;
 esac
 EOF
-chmod 755 "$fake_bin/pbcopy" "$fake_bin/pbpaste" "$fake_bin/trash" "$fake_bin/hook"
+chmod 755 "$fake_bin/pbcopy" "$fake_bin/pbpaste" "$fake_bin/hook"
 
 repo_one=$test_root/repo\ one\ with\ \'quote
 repo_two=$test_root/repo\ two\ with\ spaces
@@ -193,14 +232,22 @@ assert_equal "$single_claude_command" "$single_record_claude_command" 'single ex
 /bin/bash -n -c "$single_record_claude_command" || fail 'single Claude command is not shell-safe'
 assert_equal "$single_command" "$(cat "$clipboard_file")" 'single clipboard bytes'
 
+assert_frontmatter "$single_target" "$single_category" "$repo_one_root" "$single_target" "$single_task" \
+  'Single plan' "$repo_one_root"
 assert_equal 1 "$(grep -Fxc '## Handoff category' "$single_target")" 'handoff category count'
 assert_equal 1 "$(grep -Fxc "Category: \`$single_category\`" "$single_target")" 'handoff category value'
 assert_equal 1 "$(grep -Fxc '## Execution status' "$single_target")" 'execution status count'
 assert_equal 1 "$(grep -Fxc '## Handoff cleanup' "$single_target")" 'handoff cleanup count'
 single_quoted_target=$(shell_quote "$single_target")
-assert_file_contains "Run \`/usr/bin/trash $single_quoted_target\` only after the requested work is complete and" \
-  "$single_target" \
-  'repository-local cleanup command'
+assert_file_contains "handoff=$single_quoted_target" "$single_target" 'repository-local archive source'
+assert_file_contains "archive_root=\$HOME/.local/share/task-handoffs/archive" "$single_target" \
+  'archive root'
+assert_file_contains "origin_name=$(shell_quote "${repo_one_root##*/}")" "$single_target" \
+  'repository-local archive origin'
+assert_file_contains "archive_name=$(shell_quote 'SINGLE_PLAN.md')" "$single_target" \
+  'repository-local archive filename'
+assert_file_contains "archive_target=\"\${archive_dir}/\${archive_stem}_\$(date -u" "$single_target" \
+  'timestamped archive collision path'
 
 # Cross-repository work still produces one Desktop handoff and launches in the stated first repository.
 cross_prepare=$(run_helper prepare \
@@ -231,6 +278,9 @@ assert_equal "codex -C $(shell_quote "$repo_two_root") $(shell_quote "$cross_pro
 assert_equal "cd $(shell_quote "$repo_two_root") && claude $(shell_quote "$cross_prompt")" \
   "$cross_record_claude_command" 'cross exact Claude command'
 assert_equal "$cross_record_command" "$(cat "$clipboard_file")" 'cross clipboard remains Codex-only'
+assert_frontmatter "$cross_target" implementation "$repo_two_root" "$cross_target" \
+  'coordinate both repositories' 'Cross repository plan' "$repo_one_root" "$repo_two_root"
+assert_file_contains "origin_name=$(shell_quote "${desktop##*/}")" "$cross_target" 'Desktop archive origin'
 
 # The helper rejects topology that could publish more than one handoff.
 expect_failure 'prepare creates exactly one handoff plan' run_helper prepare \
@@ -283,6 +333,21 @@ expect_failure 'reserved heading' run_helper finalize "$reserved_run"
 assert_absent "$repo_two_root/.ai/task-handoffs/RESERVED.md" 'reserved draft target'
 run_helper cancel "$reserved_run" >/dev/null
 
+frontmatter_prepare=$(run_helper prepare \
+  --repo "$repo_two" --plan "$repo_two" FRONTMATTER.md audit 'draft frontmatter')
+frontmatter_run=$(extract_run_dir "$frontmatter_prepare")
+printf '%s\n# Body\n' '---' >"$frontmatter_run/plans/0001/draft.md"
+expect_failure 'must not start with YAML frontmatter' run_helper finalize "$frontmatter_run"
+assert_absent "$repo_two_root/.ai/task-handoffs/FRONTMATTER.md" 'frontmatter-prefixed draft target'
+run_helper cancel "$frontmatter_run" >/dev/null
+
+non_h1_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" NON_H1.md audit 'missing H1')
+non_h1_run=$(extract_run_dir "$non_h1_prepare")
+printf 'Body without an H1.\n' >"$non_h1_run/plans/0001/draft.md"
+expect_failure 'must start with an H1 heading' run_helper finalize "$non_h1_run"
+assert_absent "$repo_two_root/.ai/task-handoffs/NON_H1.md" 'non-H1 draft target'
+run_helper cancel "$non_h1_run" >/dev/null
+
 # A target race is not overwritten or removed because the helper did not create it.
 race_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" RACE_TARGET.md audit 'race target')
 race_run=$(extract_run_dir "$race_prepare")
@@ -306,6 +371,23 @@ assert_absent "$clipboard_root/.ai/task-handoffs/CLIPBOARD.md" 'clipboard rollba
 assert_absent "$clipboard_root/.ai" 'now-empty repository rollback directories'
 run_helper cancel "$clipboard_run" >/dev/null
 
+# A handled termination after publication rolls back the target and helper-created directories.
+signal_repo=$test_root/signal-failure-repo
+make_repo "$signal_repo"
+signal_root=$(git -C "$signal_repo" rev-parse --show-toplevel)
+signal_prepare=$(run_helper \
+  prepare --repo "$signal_repo" --plan "$signal_repo" SIGNAL.md operations 'signal rollback')
+signal_run=$(extract_run_dir "$signal_prepare")
+write_draft "$signal_run/plans/0001/draft.md" 'Signal rollback'
+set +e
+TASK_HANDOFF_TEST_HOOK_MODE=terminate run_helper finalize "$signal_run" >/dev/null 2>&1
+signal_rc=$?
+set -e
+assert_equal 143 "$signal_rc" 'handled termination status'
+assert_absent "$signal_root/.ai/task-handoffs/SIGNAL.md" 'signal rollback target'
+assert_absent "$signal_root/.ai" 'signal rollback directories'
+run_helper cancel "$signal_run" >/dev/null
+
 # Noninteractive findings publication stays in its repository without clipboard tools.
 finding_prepare=$(run_helper prepare \
   --repo "$repo_one" \
@@ -324,5 +406,49 @@ case $finding_result in
   "plan handoff="*" command="*" claude_command="*) ;;
   *) fail 'no-clipboard finalize omitted its plan record' ;;
 esac
+
+# The generated POSIX cleanup snippet archives without overwriting and recomputes colliding timestamps.
+archive_script=$test_root/archive-cleanup.sh
+awk '
+  /^## Handoff cleanup$/ { cleanup = 1; next }
+  cleanup && /^```sh$/ { snippet = 1; next }
+  snippet && /^```$/ { exit }
+  snippet { print }
+' "$single_target" >"$archive_script"
+/bin/sh -n "$archive_script" || fail 'generated archive cleanup snippet is not POSIX shell syntax'
+archive_home=$test_root/archive-home
+archive_root=$archive_home/.local/share/task-handoffs/archive
+archive_origin=${repo_one_root##*/}
+archive_dir=$archive_root/$archive_origin
+archive_collision_one=${archive_dir}/SINGLE_PLAN_2026_08_10_120001.md
+archive_destination=${archive_dir}/SINGLE_PLAN_2026_08_10_120002.md
+mkdir -p "$archive_dir" "$fake_bin/archive-tools"
+touch "$archive_dir/SINGLE_PLAN.md" "$archive_collision_one"
+archive_date_state=$test_root/archive-date-state
+cat >"$fake_bin/archive-tools/date" <<'EOF'
+#!/usr/bin/env sh
+count=0
+[ ! -f "$TASK_HANDOFF_TEST_DATE_STATE" ] || count=$(sed -n '1p' "$TASK_HANDOFF_TEST_DATE_STATE")
+count=$((count + 1))
+printf '%s\n' "$count" >"$TASK_HANDOFF_TEST_DATE_STATE"
+if [ "$count" -eq 1 ]; then
+  printf '%s\n' '2026_08_10_120001'
+else
+  printf '%s\n' '2026_08_10_120002'
+fi
+EOF
+cat >"$fake_bin/archive-tools/sleep" <<'EOF'
+#!/usr/bin/env sh
+exit 0
+EOF
+chmod 755 "$fake_bin/archive-tools/date" "$fake_bin/archive-tools/sleep"
+HOME=$archive_home \
+  PATH=$fake_bin/archive-tools:$PATH \
+  TASK_HANDOFF_TEST_DATE_STATE=$archive_date_state \
+  /bin/sh "$archive_script"
+assert_exists "$archive_destination" 'timestamped archive publication'
+assert_exists "$archive_dir/SINGLE_PLAN.md" 'base archive destination preservation'
+assert_exists "$archive_collision_one" 'colliding archive destination preservation'
+assert_absent "$single_target" 'archived handoff origin removal'
 
 printf 'task-handoff tests passed\n'

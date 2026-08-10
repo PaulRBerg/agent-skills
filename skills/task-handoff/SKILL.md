@@ -1,8 +1,9 @@
 ---
 argument-hint: "[task-to-handoff]"
 compatibility:
-  Requires Bash 3.2, Git, local file-write access, and macOS trash. Default finalization also requires macOS pbcopy and
-  pbpaste; `finalize --no-clipboard` does not. Generated launch commands require authenticated Codex and Claude CLIs.
+  Requires Bash 3.2, Git, and local file-write access. Default finalization also requires macOS pbcopy and pbpaste;
+  `finalize --no-clipboard` does not. Generated cleanup commands use POSIX shell utilities; generated launch commands
+  require authenticated Codex and Claude CLIs.
 coordination: exempt
 disable-model-invocation: false
 name: task-handoff
@@ -79,7 +80,8 @@ filenames, and required macOS tools before creating mode-0700 temporary state. U
 and `plan` records as authoritative; the `plan` record gives its launch repository, repository-relative handoff path,
 absolute target, category, and draft path. The helper also verifies that a repository-local target is ignored.
 
-Write only the semantic handoff body to the draft. Never add `## Handoff category`, `## Execution status`, or
+Write only the semantic handoff body to the draft, beginning immediately with one H1 heading. Do not add YAML
+frontmatter or begin the draft with `---`. Never add `## Handoff category`, `## Execution status`, or
 `## Handoff cleanup`; `finalize` reserves and appends them. Make every body decision-complete for an agent with access
 to the named repositories but none of this transcript. Include:
 
@@ -115,10 +117,15 @@ After the body is complete, run:
 bash <skill-dir>/scripts/task-handoff.sh finalize '<run-dir>'
 ```
 
-`finalize` re-runs preflight, rejects an empty or reserved-heading draft, appends the fixed category, execution-status,
-and cleanup contracts, validates the complete structure, publishes the new handoff without overwriting, and copies and
-byte-verifies the Codex command. It rolls back helper-created targets and now-empty directories on handled errors,
-`INT`, or `TERM`; it cannot make publication atomic across filesystems or survive power loss or `SIGKILL`.
+`finalize` re-runs preflight, rejects an empty, frontmatter-prefixed, non-H1, or reserved-heading draft, constructs the
+complete staged file with YAML metadata plus the fixed category, execution-status, and archive cleanup contracts,
+validates the complete structure, publishes the new handoff without overwriting, and copies and byte-verifies the Codex
+command. The metadata records the finalization time, launch repository, repositories in their stored order, absolute
+published origin, category, and task. The cleanup contract archives only the completed handoff under
+`$HOME/.local/share/task-handoffs/archive/<origin-name>/`, where `<origin-name>` is the basename of the directory
+containing `.ai`; it uses a UTC `_YYYY_MM_DD_HHMMSS` suffix and waits for a new timestamp when a destination already
+exists. It rolls back helper-created targets and now-empty directories on handled errors, `INT`, or `TERM`; it cannot
+make publication atomic across filesystems or survive power loss or `SIGKILL`.
 
 For noninteractive ai-coord findings triage, uppercase the finding ID only in the deterministic filename
 `FINDING_<UPPERCASE_ID>.md`. Preserve the ledger ID's original spelling in the exact machine-readable line

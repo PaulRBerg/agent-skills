@@ -39,6 +39,12 @@ shell_quote() {
   printf "'"
 }
 
+yaml_quote() {
+  printf "'"
+  printf '%s' "$1" | sed "s/'/''/g"
+  printf "'"
+}
+
 valid_plan_filename() {
   printf '%s\n' "$1" | LC_ALL=C grep -Eq '^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*[.]md$'
 }
@@ -117,7 +123,6 @@ write_state_value() {
 
 resolve_tools() {
   _use_clipboard=$1
-  trash_bin=${TASK_HANDOFF_TEST_TRASH:-/usr/bin/trash}
   test_hook=${TASK_HANDOFF_TEST_HOOK:-}
 
   if [ "$_use_clipboard" = true ]; then
@@ -128,8 +133,6 @@ resolve_tools() {
       [ -x "$_tool" ] || die "required executable is unavailable: $_tool"
     done
   fi
-  has_line_break "$trash_bin" && die 'tool paths must not contain line breaks'
-  [ -x "$trash_bin" ] || die "required executable is unavailable: $trash_bin"
   if [ -n "$test_hook" ]; then
     has_line_break "$test_hook" && die 'test hook path must not contain line breaks'
     [ -x "$test_hook" ] || die "test hook is not executable: $test_hook"
@@ -537,6 +540,9 @@ validate_drafts() {
     _draft=${plan_drafts[$_index]}
     _filename=${plan_filenames[$_index]}
     LC_ALL=C grep -q '[^[:space:]]' "$_draft" || die "plan draft is empty: $_filename"
+    [ "$(sed -n '1p' "$_draft")" != '---' ] || die "plan draft must not start with YAML frontmatter: $_filename"
+    LC_ALL=C sed -n '1p' "$_draft" | grep -Eq '^# [^[:space:]]' ||
+      die "plan draft must start with an H1 heading: $_filename"
     if grep -F -e '## Handoff category' -e '## Execution status' -e '## Handoff cleanup' "$_draft" >/dev/null; then
       die "plan draft contains a reserved heading: $_filename"
     fi
@@ -560,11 +566,40 @@ ensure_target_directory() {
   done
 }
 
+write_frontmatter() {
+  _frontmatter=$1
+  _category=$2
+  _created=$3
+  _owner=$4
+  _target=$5
+  _task=$6
+
+  {
+    printf '%s\n' '---'
+    printf 'category: %s\n' "$(yaml_quote "$_category")"
+    printf 'created: %s\n' "$(yaml_quote "$_created")"
+    printf 'launch_repo: %s\n' "$(yaml_quote "$_owner")"
+    printf '%s\n' 'repos:'
+    for _root in "${repo_roots[@]}"; do
+      printf '  - %s\n' "$(yaml_quote "$_root")"
+    done
+    printf 'origin: %s\n' "$(yaml_quote "$_target")"
+    printf 'task: %s\n' "$(yaml_quote "$_task")"
+    printf '%s\n' '---'
+  } >"$_frontmatter"
+}
+
 write_footer() {
   _footer=$1
   _target=$2
   _category=$3
+  _origin_name=$4
+  _archive_name=${_target##*/}
+  _archive_stem=${_archive_name%.md}
   _quoted_target=$(shell_quote "$_target")
+  _quoted_origin_name=$(shell_quote "$_origin_name")
+  _quoted_archive_name=$(shell_quote "$_archive_name")
+  _quoted_archive_stem=$(shell_quote "$_archive_stem")
 
   {
     cat <<'EOF'
@@ -586,22 +621,47 @@ action.
 
 ## Handoff cleanup
 
+Archive this handoff only after the requested work is complete and task-scoped validation passes:
+
+```sh
 EOF
-    printf '%s%s%s\n' 'Run `/usr/bin/trash ' "$_quoted_target" \
-      '` only after the requested work is complete and task-scoped validation passes.'
+    printf 'handoff=%s\n' "$_quoted_target"
+    printf '%s\n' "archive_root=\$HOME/.local/share/task-handoffs/archive"
+    printf 'origin_name=%s\n' "$_quoted_origin_name"
+    printf 'archive_name=%s\n' "$_quoted_archive_name"
+    printf 'archive_stem=%s\n' "$_quoted_archive_stem"
     cat <<'EOF'
+archive_dir=$archive_root/$origin_name
+archive_target=$archive_dir/$archive_name
+mkdir -p "$archive_dir" || exit 1
+if [ -e "$archive_target" ]; then
+  while :; do
+    archive_target="${archive_dir}/${archive_stem}_$(date -u '+%Y_%m_%d_%H%M%S').md"
+    [ ! -e "$archive_target" ] && break
+    sleep 1
+  done
+fi
+mv "$handoff" "$archive_target"
+```
+
 A broader required check may remain non-green only when evidence attributes every failure to pre-existing or unrelated
 work outside this task's scope. Record each non-green command, its outcome, and that attribution in the final report,
 then verify the original path no longer exists. Keep this handoff when work remains, task-scoped validation fails or is
-skipped, or any broader failure may have been caused by this task. Never trash `.ai/task-handoffs/` or any other handoff.
+skipped, or any broader failure may have been caused by this task. Archive only this handoff, never
+`.ai/task-handoffs/` or any other handoff.
 EOF
   } >"$_footer"
 }
 
 validate_complete_file() {
   _complete=$1
-  _footer=$2
-  _category=$3
+  _frontmatter=$2
+  _footer=$3
+  _category=$4
+  _frontmatter_bytes=$(wc -c <"$_frontmatter" | tr -d '[:space:]')
+  head -c "$_frontmatter_bytes" "$_complete" | cmp -s - "$_frontmatter" || return 1
+  _h1_line=$(($(wc -l <"$_frontmatter" | tr -d '[:space:]') + 1))
+  LC_ALL=C sed -n "${_h1_line}p" "$_complete" | grep -Eq '^# [^[:space:]]' || return 1
   [ "$(grep -Fxc '## Handoff category' "$_complete")" = 1 ] || return 1
   [ "$(grep -Fxc "Category: \`$_category\`" "$_complete")" = 1 ] || return 1
   [ "$(grep -Fxc '## Execution status' "$_complete")" = 1 ] || return 1
@@ -616,27 +676,35 @@ build_staged_plans() {
   while [ "$_index" -lt "${#plan_drafts[@]}" ]; do
     _filename=${plan_filenames[$_index]}
     _category=${plan_categories[$_index]}
+    _owner=${plan_owners[$_index]}
+    _task=${plan_tasks[$_index]}
     _target=${plan_targets[$_index]}
     _draft=${plan_drafts[$_index]}
     _target_dir=$handoff_root
+    _origin_name=${handoff_base##*/}
     ensure_target_directory
 
     _stage=$(mktemp "$_target_dir/.task-handoff.$_filename.XXXXXX") || die "cannot stage plan: $_filename"
     stage_files[${#stage_files[@]}]=$_stage
     printf -v _id '%04d' "$((_index + 1))"
+    _frontmatter=$run_dir/.frontmatter.$_id
+    run_temp_files[${#run_temp_files[@]}]=$_frontmatter
     _footer=$run_dir/.footer.$_id
     run_temp_files[${#run_temp_files[@]}]=$_footer
-    write_footer "$_footer" "$_target" "$_category" || die "cannot build plan footer: $_filename"
+    _created=$(date -u '+%Y-%m-%dT%H:%M:%SZ') || die "cannot create plan timestamp: $_filename"
+    write_frontmatter "$_frontmatter" "$_category" "$_created" "$_owner" "$_target" "$_task" ||
+      die "cannot build plan frontmatter: $_filename"
+    write_footer "$_footer" "$_target" "$_category" "$_origin_name" ||
+      die "cannot build plan footer: $_filename"
 
-    cat "$_draft" >"$_stage" || die "cannot stage plan body: $_filename"
+    cat "$_frontmatter" >"$_stage" || die "cannot stage plan frontmatter: $_filename"
+    cat "$_draft" >>"$_stage" || die "cannot stage plan body: $_filename"
     _last_byte=$(tail -c 1 "$_draft" | od -An -tx1 | tr -d '[:space:]')
     [ "$_last_byte" = 0a ] || printf '\n' >>"$_stage" || die "cannot terminate plan body: $_filename"
     printf '\n' >>"$_stage" || die "cannot separate plan footer: $_filename"
     cat "$_footer" >>"$_stage" || die "cannot append plan footer: $_filename"
-    validate_complete_file "$_stage" "$_footer" "$_category" || die "staged plan failed structural validation: $_filename"
-
-    rm -f "$_footer" || die "cannot remove temporary footer: $_filename"
-    run_temp_files[_index]=
+    validate_complete_file "$_stage" "$_frontmatter" "$_footer" "$_category" ||
+      die "staged plan failed structural validation: $_filename"
     _index=$((_index + 1))
   done
 }
