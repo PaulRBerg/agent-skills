@@ -80,6 +80,22 @@ fn readme_inventory_accepts_a_skill_only_table() {
 }
 
 #[test]
+fn installed_root_does_not_require_catalog_readme_inventory() {
+    let parent = TempDir::new().unwrap();
+    for root_name in [".agents", ".claude", ".codex"] {
+        let root = parent.path().join(root_name);
+        write_skill(&root, "alpha", "", "## Completion\n\nReport verification.");
+        write_metadata(&root, "alpha", "policy:\n  allow_implicit_invocation: true\n");
+        common::write(root.join("README.md"), "# Installed agent state\n");
+
+        let (output, report) = run_json(&root, &[]);
+        assert!(output.status.success(), "{root_name}: {}", String::from_utf8_lossy(&output.stderr));
+        assert_eq!(report["roots"][0]["active_skills"], 1);
+        assert_eq!(report["findings"], serde_json::json!([]));
+    }
+}
+
+#[test]
 fn complete_portable_claude_and_repository_dialect_is_accepted() {
     let root = TempDir::new().unwrap();
     common::write(

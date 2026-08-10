@@ -781,6 +781,9 @@ fn check_prompt_hygiene(skill: &Skill, frontmatter: &Frontmatter, source: &str, 
 }
 
 fn check_readme(root: &ScanRoot, skills: &[Skill], findings: &mut Vec<Finding>) {
+    if matches!(root.exposure_path.file_name().and_then(|name| name.to_str()), Some(".agents" | ".claude" | ".codex")) {
+        return;
+    }
     let skills_directory = root.exposure_path.join("skills");
     if !skills_directory.is_dir() {
         return;

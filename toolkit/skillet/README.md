@@ -20,7 +20,8 @@ ai-skillet --version
 
 A catalog root that exposes `skills/` must provide a `README.md` with an exact `## Skills`
 section and a Markdown table. The required first column is `Skill` and lists every active skill
-name; additional columns are optional and ignored by the inventory validator.
+name; additional columns are optional and ignored by the inventory validator. Conventional
+installed roots named `.agents`, `.claude`, or `.codex` do not require a catalog README inventory.
 
 ## Doctor validation contract
 
