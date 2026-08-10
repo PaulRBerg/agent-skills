@@ -1,0 +1,20 @@
+set shell := ["zsh", "-cu"]
+
+dev:
+    bun run dev
+
+build:
+    bun run build
+
+test *args:
+    bun run test -- {{args}}
+
+tsc-check:
+    bun run tsc-check
+
+check:
+    bun run check
+
+start:
+    bun run start
+
