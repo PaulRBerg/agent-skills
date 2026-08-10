@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      coord-dashboard: ${{ steps.filter.outputs['coord-dashboard'] }}
+      handoffs: ${{ steps.filter.outputs.handoffs }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            rust:
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'rustfmt.toml'
+              - 'justfile'
+              - 'LICENSE.md'
+              - '.github/workflows/ci.yml'
+              - '.gitignore'
+              - '.prettierignore'
+              - 'commit/**'
+              - 'coord/**'
+              - 'notify/**'
+              - 'skillet/**'
+            coord-dashboard:
+              - 'apps/coord-dashboard/**'
+              - 'justfile'
+              - 'LICENSE.md'
+              - '.github/workflows/ci.yml'
+              - '.gitignore'
+              - '.prettierignore'
+            handoffs:
+              - 'apps/handoffs/**'
+              - 'justfile'
+              - 'LICENSE.md'
+              - '.github/workflows/ci.yml'
+              - '.gitignore'
+              - '.prettierignore'
+
+  rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v4
+      - run: just rust-check
+
+  coord-dashboard:
+    needs: changes
+    if: needs.changes.outputs['coord-dashboard'] == 'true'
+    name: Coordination dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Install dependencies
+        working-directory: apps/coord-dashboard
+        run: bun install --frozen-lockfile
+      - name: Run checks
+        working-directory: apps/coord-dashboard
+        run: bun run check
+
+  handoffs:
+    needs: changes
+    if: needs.changes.outputs.handoffs == 'true'
+    name: Handoffs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Install dependencies
+        working-directory: apps/handoffs
+        run: bun install --frozen-lockfile
+      - name: Run checks
+        working-directory: apps/handoffs
+        run: bun run check

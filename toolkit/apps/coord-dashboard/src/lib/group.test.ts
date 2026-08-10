@@ -7,7 +7,7 @@ describe("groupSnapshotByRepo", () => {
     const lanes = groupSnapshotByRepo(sampleSnapshot);
 
     expect(lanes.map((lane) => lane.repoRoot)).toEqual([
-      "/Users/prb/projects/ai-coord",
+      "/Users/prb/projects/agent-toolkit",
       "/Users/prb/projects/agent-skills",
     ]);
     expect(lanes[0]?.sessions).toHaveLength(4);

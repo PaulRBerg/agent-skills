@@ -42,7 +42,7 @@ export function ApiErrorState({
           <p className="mt-1 text-xs/5 text-ink-secondary">
             Start the local server with{" "}
             <code className="font-mono text-danger">ai-coord serve</code> or{" "}
-            <code className="font-mono text-danger">just dev</code>, then leave
+            <code className="font-mono text-danger">just coord-dashboard-dev</code>, then leave
             this page open.
           </p>
           <p className="mt-2 font-mono text-[10px]/4 text-muted">{detail}</p>

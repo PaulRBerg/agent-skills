@@ -18,7 +18,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Install dependencies with Bun
 @install:
-    bun install
+    bun install --frozen-lockfile
 
 # Run tests with Vitest
 @test:
@@ -26,4 +26,4 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Check types with tsc
 @tsc-check:
-    bunx tsc --noEmit
+    bun run typecheck

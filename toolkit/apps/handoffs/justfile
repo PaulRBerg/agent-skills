@@ -18,3 +18,5 @@ check:
 start:
     bun run start
 
+install:
+    bun install --frozen-lockfile
