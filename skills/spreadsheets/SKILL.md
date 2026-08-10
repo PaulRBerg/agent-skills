@@ -4,8 +4,9 @@ disable-model-invocation: false
 name: spreadsheets
 user-invocable: true
 description:
-  "Use when CSV, TSV, or Excel (.xlsx) is the primary input/output: inspect, transform, validate, convert, recalc
-  formulas, or create/fix spreadsheets. Do not trigger when tabular data is incidental."
+  "Use when CSV, TSV, or Excel (.xlsx) is the primary input/output: design or review text-table schemas; inspect,
+  transform, validate, convert, or recalc formulas; or create/fix spreadsheets. Do not trigger when tabular data is
+  incidental."
 ---
 
 # Spreadsheets
@@ -46,34 +47,37 @@ formula-capable consumer. With that flag, formula-prefix cells affect `status`; 
 
 ## Tool Routing
 
-| Need                                       | Tool                                             |
-| ------------------------------------------ | ------------------------------------------------ |
-| Fast structural preview/validation         | `uv run scripts/peek.py <file>`                  |
-| Factual local quality profile              | `uv run scripts/profile.py <file>`               |
-| Counts, stats, frequencies, select, dedupe | `qsv`                                            |
-| Joins, pivots, aggregation, conversion     | DuckDB with `all_varchar = true`                 |
-| Exact custom transforms                    | `uv run` Python, stdlib `csv`, `decimal.Decimal` |
-| Any `.xlsx`/`.xlsm` input or output        | Read `references/xlsx.md` first                  |
-| Exact transformation/validation recipes    | Read `references/recipes.md` only when needed    |
+| Need                                        | Tool                                             |
+| ------------------------------------------- | ------------------------------------------------ |
+| Fast structural preview/validation          | `uv run scripts/peek.py <file>`                  |
+| Factual local quality profile               | `uv run scripts/profile.py <file>`               |
+| Counts, stats, frequencies, select, dedupe  | `qsv`                                            |
+| Joins, pivots, aggregation, conversion      | DuckDB with `all_varchar = true`                 |
+| Exact custom transforms                     | `uv run` Python, stdlib `csv`, `decimal.Decimal` |
+| New text table or intentional schema change | Read `references/text-table-design.md` first     |
+| Any `.xlsx`/`.xlsm` input or output         | Read `references/xlsx.md` first                  |
+| Exact transformation/validation recipes     | Read `references/recipes.md` only when needed    |
 
 Prefer `qsv --cache-threshold 0` where supported. When qsv stdout must remain TSV, use `-o out.tsv`; stdout otherwise
 defaults to CSV.
 
 ## Workflow
 
-1. Inspect with `peek.py`; add `profile.py` when cardinality, formula prefixes, metadata, or available tooling matters.
+1. For a new text table or intentional schema change, read `references/text-table-design.md` and record the intended
+   table interface plus migration surface.
+2. Inspect with `peek.py`; add `profile.py` when cardinality, formula prefixes, metadata, or available tooling matters.
    For a no-shape-change edit, save the peek JSON. For intentional row/schema changes, record the expected width and
    invariants.
-2. Decide whether formula-prefix cells are dangerous from provenance and output context. Decide the smallest tool that
+3. Decide whether formula-prefix cells are dangerous from provenance and output context. Decide the smallest tool that
    preserves values and formatting. Avoid pandas unless necessary; if used, load every column as strings.
-3. Apply the transformation atomically. For idempotent appends with legitimate duplicate rows, use multiset difference
+4. Apply the transformation atomically. For idempotent appends with legitimate duplicate rows, use multiset difference
    rather than set deduplication.
-4. Validate:
+5. Validate:
    - unchanged shape: `peek.py --strict --expect-like <before-report>`;
    - changed shape: `peek.py --strict --expect-columns <n>` plus task-specific counts/keys;
    - authored house TSV: add `--house`;
    - formulas: `uv run scripts/recalc.py <file.xlsx>` and require success.
-5. Report paths, row/column effects, validation, and any workbook features that could not be preserved.
+6. Report paths, row/column effects, validation, and any workbook features that could not be preserved.
 
 For human output, lead with `### 📊 Spreadsheet — ✅ updated` only after the write and required validation pass, or
 `### 📊 Spreadsheet — 🔎 inspected, no files written` for read-only work. On required validation failure, use
@@ -89,4 +93,5 @@ materially support the task or were requested. Perform an external-disclosure re
 outside the agent workspace.
 
 Completion requires the requested artifact, an intentional diff, atomic replacement where applicable, and structural
-plus domain validation evidence.
+plus domain validation evidence. A new or changed text-table schema also requires a defined table interface and a
+complete migration of affected producers, consumers, existing rows, generated artifacts, and validators.
