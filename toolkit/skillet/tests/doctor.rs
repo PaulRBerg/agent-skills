@@ -31,10 +31,11 @@ fn write_metadata(root: &std::path::Path, name: &str, contents: &str) {
 }
 
 fn write_readme(root: &std::path::Path, names: &[&str]) {
-    let rows = names.iter().map(|name| format!("| {name} | {name} |\n")).collect::<String>();
+    let rows =
+        names.iter().map(|name| format!("| {name} | [SKILL.md](/skills/{name}/SKILL.md) |\n")).collect::<String>();
     common::write(
         root.join("README.md"),
-        format!("# Catalog\n\n## Skills\n\n| Skill | Description |\n| --- | --- |\n{rows}"),
+        format!("# Catalog\n\n## Skills\n\n| Skill | Entry point |\n| --- | --- |\n{rows}"),
     );
 }
 
@@ -60,6 +61,18 @@ fn clean_fixture_has_schema_v1_valid_json_and_text() {
         .success()
         .stdout(predicate::str::contains("ai-skillet doctor: 0 error(s)"))
         .stdout(predicate::str::contains("Roots:"));
+}
+
+#[test]
+fn readme_inventory_accepts_a_skill_only_table() {
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "", "## Completion\n\nReport verification.");
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: true\n");
+    common::write(root.path().join("README.md"), "# Catalog\n\n## Skills\n\n| Skill |\n| --- |\n| alpha |\n");
+
+    let (output, report) = run_json(root.path(), &[]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(report["findings"], serde_json::json!([]));
 }
 
 #[test]

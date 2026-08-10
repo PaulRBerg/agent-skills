@@ -18,6 +18,10 @@ ai-skillet --version
 
 `doctor --dependencies-only` limits diagnostics to skill-dependency declarations.
 
+A catalog root that exposes `skills/` must provide a `README.md` with an exact `## Skills`
+section and a Markdown table. The required first column is `Skill` and lists every active skill
+name; additional columns are optional and ignored by the inventory validator.
+
 ## Conformance contract
 
 | Area         | Required contract                                                                                                                                          | Intentional version 1 behavior                                                                          |
