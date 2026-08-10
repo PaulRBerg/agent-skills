@@ -88,12 +88,22 @@ Analyze the single prepared full diff. Do not prepare again to get different evi
 Compose one subject paragraph, an optional body paragraph, and one final trailer paragraph containing all issue and
 Agent-Session lines.
 
+`ai-commit` receives every `-m` value verbatim. Do not write `\\n` inside a quoted message: it is not a line break and
+the CLI rejects it. For a multi-line body, keep the shell quote open across real line breaks.
+
 ## 4. Commit the Transaction
 
 Run:
 
 ```bash
 ai-commit commit <transaction-id> -m '<subject>' [-m '<body>'] [-m '<trailers>'] [--push]
+```
+
+For example, a two-item body is one `-m` argument containing a physical newline:
+
+```bash
+ai-commit commit <transaction-id> -m '<subject>' -m '- first material change
+- second material change' [-m '<trailers>'] [--push]
 ```
 
 Append `--push` when explicitly requested or authorized by standing instructions. The same command handles default,
