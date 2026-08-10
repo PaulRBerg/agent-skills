@@ -80,8 +80,9 @@ filenames, and required macOS tools before creating mode-0700 temporary state. U
 and `plan` records as authoritative; the `plan` record gives its launch repository, repository-relative handoff path,
 absolute target, category, and draft path. The helper also verifies that a repository-local target is ignored.
 
-Write only the semantic handoff body to the draft, beginning immediately with one H1 heading. Do not add YAML
-frontmatter or begin the draft with `---`. Never add `## Handoff category`, `## Execution status`, or
+The helper reports the draft path but does not create the file, so write it as a new file in one write; never expect an
+existing empty draft. Write only the semantic handoff body to the draft, beginning immediately with one H1 heading. Do
+not add YAML frontmatter or begin the draft with `---`. Never add `## Handoff category`, `## Execution status`, or
 `## Handoff cleanup`; `finalize` reserves and appends them. Make every body decision-complete for an agent with access
 to the named repositories but none of this transcript. Include:
 

@@ -208,6 +208,7 @@ single_prepare=$(TASK_HANDOFF_TEST_DESKTOP=$test_root/missing-desktop run_helper
   --plan "$repo_alias" SINGLE_PLAN.md "$single_category" "$single_task")
 assert_equal 1 "$(printf '%s\n' "$single_prepare" | grep -c '^repo ')" 'symlink root deduplication'
 single_run=$(extract_run_dir "$single_prepare")
+assert_absent "$single_run/plans/0001/draft.md" 'prepare pre-created the draft'
 write_draft "$single_run/plans/0001/draft.md" 'Single plan'
 single_result=$(run_helper finalize "$single_run")
 single_target=$repo_one_root/.ai/task-handoffs/SINGLE_PLAN.md
@@ -318,9 +319,18 @@ expect_failure 'plan target already exists' run_helper prepare \
 assert_equal 'pre-existing' "$(cat "$repo_two_root/.ai/task-handoffs/EXISTING.md")" \
   'existing repository target changed during prepare'
 
+# An unwritten draft fails without publishing and remains cancellable.
+missing_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" MISSING_DRAFT.md research 'missing draft')
+missing_run=$(extract_run_dir "$missing_prepare")
+expect_failure 'plan draft was not written' run_helper finalize "$missing_run"
+assert_absent "$repo_two_root/.ai/task-handoffs/MISSING_DRAFT.md" 'missing draft target'
+run_helper cancel "$missing_run" >/dev/null
+assert_absent "$missing_run" 'missing draft cancellation'
+
 # Empty and reserved-heading drafts fail without publishing and remain cancellable.
 empty_prepare=$(run_helper prepare --repo "$repo_two" --plan "$repo_two" EMPTY_DRAFT.md research 'empty draft')
 empty_run=$(extract_run_dir "$empty_prepare")
+: >"$empty_run/plans/0001/draft.md"
 expect_failure 'plan draft is empty' run_helper finalize "$empty_run"
 assert_absent "$repo_two_root/.ai/task-handoffs/EMPTY_DRAFT.md" 'empty draft target'
 run_helper cancel "$empty_run" >/dev/null

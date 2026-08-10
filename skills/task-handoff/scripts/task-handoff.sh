@@ -328,7 +328,6 @@ prepare() {
     write_state_value "$_plan_dir/task" "${plan_tasks[$_index]}" || die 'cannot write plan task state'
     write_state_value "$_plan_dir/relative" "${plan_relpaths[$_index]}" || die 'cannot write plan path state'
     write_state_value "$_plan_dir/target" "${plan_targets[$_index]}" || die 'cannot write plan target state'
-    : >"$_plan_dir/draft.md" || die 'cannot create plan draft'
     plan_drafts[${#plan_drafts[@]}]=$_plan_dir/draft.md
     _index=$((_index + 1))
   done
@@ -375,7 +374,7 @@ validate_run_dir() {
   [ "$(wc -l <"$_marker" | tr -d '[:space:]')" = 4 ] || die 'run marker has an invalid shape'
   _marker_version=$(sed -n '1p' "$_marker")
   case $_marker_version in
-    task-handoff-run-v4) _plan_state_entries=7 ;;
+    task-handoff-run-v4) _plan_metadata_entries=6 ;;
     *) die 'run marker version is incompatible with the current handoff placement policy' ;;
   esac
   [ "$(sed -n '2p' "$_marker")" = "$_candidate_run_dir" ] || die 'run marker path does not match'
@@ -426,7 +425,13 @@ validate_run_dir() {
     printf -v _id '%04d' "$((_index + 1))"
     _plan_dir=$_candidate_run_dir/plans/$_id
     [ -d "$_plan_dir" ] && [ ! -L "$_plan_dir" ] || die "invalid plan state directory: $_plan_dir"
-    [ "$(entry_count "$_plan_dir")" = "$_plan_state_entries" ] ||
+    _draft=$_plan_dir/draft.md
+    _plan_entries=$_plan_metadata_entries
+    if [ -e "$_draft" ] || [ -L "$_draft" ]; then
+      [ -f "$_draft" ] && [ ! -L "$_draft" ] || die "invalid plan draft: $_draft"
+      _plan_entries=$((_plan_metadata_entries + 1))
+    fi
+    [ "$(entry_count "$_plan_dir")" = "$_plan_entries" ] ||
       die "plan state contains unexpected entries: $_plan_dir"
     _owner=$(read_state_value "$_plan_dir/owner") || die "invalid plan launch repository state: $_plan_dir"
     _filename=$(read_state_value "$_plan_dir/filename") || die "invalid plan filename state: $_plan_dir"
@@ -434,8 +439,6 @@ validate_run_dir() {
     _task=$(read_state_value "$_plan_dir/task") || die "invalid plan task state: $_plan_dir"
     _relative=$(read_state_value "$_plan_dir/relative") || die "invalid plan path state: $_plan_dir"
     _target=$(read_state_value "$_plan_dir/target") || die "invalid plan target state: $_plan_dir"
-    _draft=$_plan_dir/draft.md
-    [ -f "$_draft" ] && [ ! -L "$_draft" ] || die "invalid plan draft: $_draft"
 
     plan_owners[${#plan_owners[@]}]=$_owner
     plan_filenames[${#plan_filenames[@]}]=$_filename
@@ -539,6 +542,7 @@ validate_drafts() {
   while [ "$_index" -lt "${#plan_drafts[@]}" ]; do
     _draft=${plan_drafts[$_index]}
     _filename=${plan_filenames[$_index]}
+    [ -f "$_draft" ] && [ ! -L "$_draft" ] || die "plan draft was not written: $_draft"
     LC_ALL=C grep -q '[^[:space:]]' "$_draft" || die "plan draft is empty: $_filename"
     [ "$(sed -n '1p' "$_draft")" != '---' ] || die "plan draft must not start with YAML frontmatter: $_filename"
     LC_ALL=C sed -n '1p' "$_draft" | grep -Eq '^# [^[:space:]]' ||
