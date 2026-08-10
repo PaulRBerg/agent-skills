@@ -14,6 +14,8 @@ use crate::{
     error::{AppError, Result},
 };
 
+use super::hex_bytes;
+
 const MAX_ANCESTORS: usize = 16;
 
 #[derive(Clone, Debug)]
@@ -307,16 +309,6 @@ fn host_matches(name: &str, client: &str) -> bool {
                 part.starts_with(&format!("{client}@")) ||
                 (client == "claude" && (part == "claude-code" || part.starts_with("claude-code@")))
         })
-}
-
-fn hex_bytes(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        encoded.push(HEX[(byte >> 4) as usize] as char);
-        encoded.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    encoded
 }
 
 #[cfg(target_os = "linux")]

@@ -7,7 +7,7 @@ use crate::{
 
 use super::{
     Store,
-    store::{client_name, new_id},
+    store::{client_name, invalid_value, new_id},
 };
 
 pub(crate) const TRIAGE_BATCH_LIMIT: usize = 20;
@@ -240,25 +240,18 @@ fn run_is_open(transaction: &Transaction<'_>, run_id: &str) -> Result<bool> {
 }
 
 fn parse_stored_origin(value: &str) -> rusqlite::Result<Identity> {
-    let value = value.strip_prefix("triage:").ok_or_else(|| invalid_value("missing triage role"))?;
-    let (client, session_id) = value.split_once('/').ok_or_else(|| invalid_value("missing triage origin"))?;
+    let value = value.strip_prefix("triage:").ok_or_else(|| invalid_value("missing triage role".to_owned()))?;
+    let (client, session_id) =
+        value.split_once('/').ok_or_else(|| invalid_value("missing triage origin".to_owned()))?;
     if session_id.is_empty() {
-        return Err(invalid_value("empty triage origin session"));
+        return Err(invalid_value("empty triage origin session".to_owned()));
     }
     let client = match client {
         "codex" => Client::Codex,
         "claude" => Client::Claude,
-        _ => return Err(invalid_value("invalid triage origin client")),
+        _ => return Err(invalid_value("invalid triage origin client".to_owned())),
     };
     Ok(Identity { client, session_id: session_id.to_owned() })
-}
-
-fn invalid_value(message: &str) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(
-        0,
-        rusqlite::types::Type::Text,
-        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, message)),
-    )
 }
 
 #[cfg(test)]

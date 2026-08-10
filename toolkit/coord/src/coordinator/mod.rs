@@ -134,8 +134,13 @@ impl Coordinator {
         }
     }
 
+    /// Resolves the caller's identity, which `identity(true)` guarantees is `Some` on success.
+    fn required_identity(&self) -> Result<Identity> {
+        Ok(self.identity(true)?.expect("required identity"))
+    }
+
     pub(crate) fn start(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf], cwd: &Path) -> Result<Outcome> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         self.start_for(identity, label, files, recursive, cwd)
     }
 
@@ -182,7 +187,7 @@ impl Coordinator {
     }
 
     pub(crate) fn draft(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf], cwd: &Path) -> Result<Outcome> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         self.draft_for(identity, label, files, recursive, cwd)
     }
 
@@ -214,7 +219,7 @@ impl Coordinator {
     }
 
     pub(crate) fn promote_draft(&self, cwd: &Path) -> Result<Outcome> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         self.promote_draft_for(&identity, cwd)
     }
 
@@ -236,7 +241,7 @@ impl Coordinator {
     }
 
     pub(crate) fn wait(&self, timeout_seconds: u64, poll_seconds: f64) -> Result<Outcome> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         self.wait_for(&identity, timeout_seconds, poll_seconds, false)
     }
 
@@ -310,7 +315,7 @@ impl Coordinator {
     }
 
     pub(crate) fn done(&self) -> Result<Outcome> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let outcome = self.done_for(&identity)?;
         if let Ok(cwd) = std::env::current_dir() {
             let _ = self.schedule_findings_triage(&cwd);
@@ -354,7 +359,7 @@ impl Coordinator {
     }
 
     pub(crate) fn baselines(&self) -> Result<Vec<BaselineRow>> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let store = self.store()?;
         Ok(if store.work(&identity)?.is_some_and(|work| work.state == WorkState::Active) {
             store.baselines(&identity)?
@@ -364,7 +369,7 @@ impl Coordinator {
     }
 
     pub(crate) fn touched(&self, cwd: &Path) -> Result<TouchedPaths> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let root = git_root(cwd).ok_or_else(|| AppError::operational("touched requires a Git worktree"))?;
         self.store()?.touched(&identity, &path_text(&root)?)
     }
@@ -409,7 +414,7 @@ impl Coordinator {
     }
 
     pub(crate) fn name(&self, callsign: &str, cwd: &Path) -> Result<String> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let callsign = normalize_callsign(callsign)?;
         let cwd = resolved(cwd);
         let root = git_root(&cwd).ok_or_else(|| AppError::operational("name requires a Git worktree"))?;
@@ -420,7 +425,7 @@ impl Coordinator {
     }
 
     pub(crate) fn send(&self, target: &str, text: &str, cwd: &Path) -> Result<(Vec<String>, usize)> {
-        let sender = self.identity(true)?.expect("required identity");
+        let sender = self.required_identity()?;
         let text = sanitize(text, MAX_MESSAGE_CHARS);
         if text.is_empty() {
             return Err(AppError::usage("message must contain printable text"));
@@ -441,17 +446,17 @@ impl Coordinator {
     }
 
     pub(crate) fn inbox(&self, pending_only: bool) -> Result<Vec<MessageRow>> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         self.store()?.inbox(&identity, pending_only)
     }
 
     pub(crate) fn acknowledge(&self, message_id: Option<&str>) -> Result<usize> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         self.store()?.acknowledge(&identity, message_id, self.clock.wall())
     }
 
     pub(crate) fn trailer(&self) -> Result<String> {
-        Ok(format!("Agent-Session: {}", identity_key(&self.identity(true)?.expect("required identity"))))
+        Ok(format!("Agent-Session: {}", identity_key(&self.required_identity()?)))
     }
 
     pub(crate) fn generation_with_reconcile(&self) -> Result<u64> {

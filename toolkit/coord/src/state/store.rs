@@ -205,7 +205,7 @@ pub(super) fn parse_work_state(value: String) -> rusqlite::Result<WorkState> {
     }
 }
 
-fn invalid_value(message: String) -> rusqlite::Error {
+pub(super) fn invalid_value(message: String) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(
         0,
         rusqlite::types::Type::Text,

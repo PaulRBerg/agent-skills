@@ -26,7 +26,7 @@ impl Coordinator {
         text: &str,
         cwd: &Path,
     ) -> Result<FindingAddResult> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let root = finding_root(cwd)?;
         let summary = normalize_summary(text)?;
         let paths = normalize_paths(paths, &root)?;
@@ -66,7 +66,7 @@ impl Coordinator {
     }
 
     pub(crate) fn handoff_finding(&self, id: &str, path: &Path, cwd: &Path) -> Result<FindingSummary> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let root = finding_root(cwd)?;
         let paths = normalize_paths(&[path.to_owned()], &root)?;
         let path = paths.first().ok_or_else(|| AppError::usage("handoff path is required"))?;
@@ -81,7 +81,7 @@ impl Coordinator {
         canonical_id: Option<&str>,
         cwd: &Path,
     ) -> Result<FindingSummary> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let root = finding_root(cwd)?;
         if let Some(oid) = commit_oid {
             validate_commit_oid(oid)?;
@@ -100,7 +100,7 @@ impl Coordinator {
     }
 
     pub(crate) fn reopen_finding(&self, id: &str, cwd: &Path) -> Result<FindingSummary> {
-        let identity = self.identity(true)?.expect("required identity");
+        let identity = self.required_identity()?;
         let root = finding_root(cwd)?;
         self.store()?.reopen_finding(&path_text(&root)?, id, &identity, self.clock.wall())
     }

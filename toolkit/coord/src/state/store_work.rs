@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkRow, WorkUpdate,
-    store::{bump_generation, client_name, parse_client, parse_work_state, work_state_name},
+    store::{bump_generation, client_name, invalid_value, parse_client, parse_work_state, work_state_name},
     store_communications::add_message,
 };
 
@@ -496,10 +496,6 @@ fn parse_scope_kind(value: String) -> rusqlite::Result<ScopeKind> {
     match value.as_str() {
         "exact" => Ok(ScopeKind::Exact),
         "recursive" => Ok(ScopeKind::Recursive),
-        _ => Err(rusqlite::Error::FromSqlConversionFailure(
-            0,
-            rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("invalid scope kind {value:?}"))),
-        )),
+        _ => Err(invalid_value(format!("invalid scope kind {value:?}"))),
     }
 }

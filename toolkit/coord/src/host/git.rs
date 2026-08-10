@@ -13,6 +13,8 @@ use crate::{
     error::{AppError, Result},
 };
 
+use super::home_dir;
+
 pub(crate) const MAX_SCOPE_CHARS: usize = 120;
 pub(crate) const UNHASHABLE_BLOB_HASH: &str = "<deleted-or-unhashable>";
 
@@ -365,10 +367,6 @@ fn expand_user(path: &Path) -> PathBuf {
         return home.join(suffix);
     }
     path.to_owned()
-}
-
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").filter(|value| !value.is_empty()).map(PathBuf::from)
 }
 
 fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {

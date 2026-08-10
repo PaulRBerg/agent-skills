@@ -12,7 +12,7 @@ use crate::domain::{
     Client, Identity, InventoryResult, ProcessFingerprint, ProcessProbe, ProviderReport, SessionState,
 };
 
-use super::{git_root, run_output_timeout};
+use super::{git_root, hex_bytes, home_dir, run_output_timeout};
 
 pub(crate) const INVENTORY_CACHE_SECONDS: f64 = 2.0;
 pub(crate) const CLAUDE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -337,16 +337,6 @@ fn provider_context_key(
     hex_bytes(&digest.finalize())
 }
 
-fn hex_bytes(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        encoded.push(HEX[(byte >> 4) as usize] as char);
-        encoded.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    encoded
-}
-
 fn resolved_context_path(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| {
         if path.is_absolute() {
@@ -373,10 +363,6 @@ fn is_executable(path: &Path) -> bool {
     {
         true
     }
-}
-
-fn home_dir() -> Option<PathBuf> {
-    env::var_os("HOME").filter(|value| !value.is_empty()).map(PathBuf::from)
 }
 
 fn bounded_detail(value: &str) -> String {

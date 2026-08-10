@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     CurrentTurnFinding, FindingAdd, FindingAddResult, FindingCounts, FindingResolution, Store,
-    store::{bump_generation, client_name, new_id},
+    store::{bump_generation, client_name, invalid_value, new_id},
 };
 
 impl Store {
@@ -598,14 +598,6 @@ fn parse_finding_state(value: String) -> rusqlite::Result<FindingState> {
         "duplicate" => Ok(FindingState::Duplicate),
         _ => Err(invalid_value(format!("invalid finding state {value:?}"))),
     }
-}
-
-fn invalid_value(message: String) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(
-        0,
-        rusqlite::types::Type::Text,
-        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, message)),
-    )
 }
 
 fn count_value(value: i64) -> Result<usize> {
