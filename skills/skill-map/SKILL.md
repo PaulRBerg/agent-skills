@@ -2,6 +2,7 @@
 argument-hint:
   "[--skill NAME] [--root PATH | --portfolio-root PATH] [--format text|json|dot] [--include-catalog-sources]
   [--include-self] [--include-snippets] [--show-skipped]"
+compatibility: Requires ai-skillet 0.1.0+.
 coordination: exempt
 disable-model-invocation: false
 name: skill-map
@@ -35,16 +36,16 @@ cache, dependency, and backup noise.
 
 ## Workflow
 
-1. Resolve the skill directory, then run the helper from that directory:
+1. Require `ai-skillet` 0.1.0 or newer on `PATH`, then run:
 
    ```sh
-   uv run scripts/skill-map.py "$ARGUMENTS"
+   ai-skillet map "$ARGUMENTS"
    ```
 
 2. If no arguments were provided, run the default machine scan:
 
    ```sh
-   uv run scripts/skill-map.py
+   ai-skillet map
    ```
 
 3. Use `--format json` when another command or agent will consume the result.
@@ -71,30 +72,34 @@ labels sparingly and keep snippets, local paths, exact edges, commands, and diag
 
 ## Output Semantics
 
-- `dependency`: a skill declares another skill in `skill-dependencies`, or a skill file or support file references
-  another discovered skill. Declared edges use their canonical bare or `ORG/REPO#SKILL` target and include
-  `declared: true`; a declaration supersedes inferred prose evidence for the same source and target skill name.
-- `external-reference`: a non-skill file references a discovered skill.
-- `duplicate-install`: multiple discovered `SKILL.md` files declare or resolve to the same skill name.
-- `unresolved-like-reference`: explicit `$kebab-name` or `/kebab-name` tokens that do not match a discovered skill.
+`ai-skillet map` emits schema version 1. Text is human-readable; JSON is structured for consumers; DOT is Graphviz
+input. Keep JSON and DOT byte-valid and undecorated.
 
-JSON `counts.declared_dependencies` reports the number of emitted declared edges. Skill filters match declaration
-sources and target skill names, including the name after `#` for external identifiers. Invalid declaration fields stop
-the mapper with a path-specific parse error.
+- Every edge includes `type`, `provenance`, `identifier`, `source`, `target`, `path`, and `line`. Dependency evidence
+  uses `provenance: declared` or `inferred`; declared and inferred evidence remain independent records even when they
+  describe the same source and target. Declared identifiers preserve their bare or `ORG/REPO#SKILL` form.
+- `external-reference` records references outside a discovered skill, and `unresolved-like-reference` records explicit
+  `$kebab-name` or `/kebab-name` tokens that did not match a discovered skill.
+- `counts` separates declared dependencies, inferred dependencies, external references, duplicates, and unresolved
+  references. A missing `--skill` filter writes a warning to stderr and returns an empty filtered report.
+- Skill filters match declaration sources and target skill names, including the name after `#` for external identifiers.
+  Invalid declaration fields stop the mapper with a path-specific error.
+- Every skill record includes `skill_sha256` and `tree_sha256`. The tree hash covers sorted relative paths, entry types,
+  regular-file executable bits, streamed file bytes, and un-followed symlink targets.
 
-Portfolio JSON preserves those fields and adds:
+Portfolio JSON additionally includes:
 
 - `portfolio.repository_root` and present/missing user roots, including the client exposed by each root.
 - Per-skill lexical `exposure_path` beside resolved `realpath`; `directory_name`; repository/user `location`;
   install/catalog `kind`; and applicable `clients`.
 - `is_symlink` and the lexical `symlink_target` for recognized skill-directory symlinks. Exposures that resolve to one
-  real directory remain separate skill entries, while duplicate installs still require distinct real directories.
-- `skill_sha256` for `SKILL.md` bytes and `tree_sha256` for the complete filtered skill tree. Tree hashes cover sorted
-  relative paths, entry types, regular-file executable bits, streamed file bytes, and un-followed symlink targets.
+  real directory remain separate skill entries, while duplicate installs still require distinct real directories. The
+  automatically selected user roots behave like explicit roots: the broad-home ignore policy does not suppress an
+  explicit `~/.agents/skills` or `~/.claude/skills` root. Portfolio traversal follows symlinks only when the symlink is
+  a direct child of a recognized repository or user skill root; other repository symlinks remain untraversed.
 
-The automatically selected user roots behave like explicit roots: the broad-home ignore policy does not suppress an
-explicit `~/.agents/skills` or `~/.claude/skills` root. Portfolio traversal follows symlinks only when the symlink is a
-direct child of a recognized repository or user skill root; other repository symlinks remain untraversed.
+Use `--show-skipped` to include configured ignored directories, files, protected home paths, caches, and catalog-source
+exclusions in text or JSON output.
 
 ## Related Skills
 
@@ -105,13 +110,13 @@ direct child of a recognized repository or user skill root; other repository sym
 
 ## Guard Rails
 
-- Do not search transcript or backup directories manually after the helper excludes them unless the user explicitly
-  requests transcript/history analysis.
+- Do not search transcript or backup directories manually after `ai-skillet map` excludes them unless the user
+  explicitly requests transcript/history analysis.
 - Do not broaden home-directory scans into macOS protected paths such as `~/Library` or `~/.Trash`; pass narrower
   explicit roots instead when a broad scan needs more coverage.
 - Treat local skill catalog source checkouts as false positives during broad machine scans; pass them explicitly as
   `--root` when auditing catalog contents.
 - Keep reports high-signal: include snippets only when exact evidence materially helps or the user explicitly requests
   it. Before copying output into a public or third-party artifact, perform an external-disclosure review.
-- Prefer adding ignore rules in the helper and documenting the rationale in `references/ignore-policy.md` instead of ad
-  hoc shell filters.
+- Prefer maintaining ignore rules in ai-skillet and documenting the rationale in `references/ignore-policy.md` instead
+  of ad hoc shell filters.

@@ -137,6 +137,18 @@ Treat these as out of scope unless the request explicitly names them:
 
 Verification is prose comparison of the in-scope blocks; there is no extractable helper data.
 
+### Ai-ai-skillet CLI consumers
+
+Files:
+
+- `skills/skill-map/SKILL.md`
+- `skills/skill-doctor/SKILL.md`
+- `skills/skill-harmonization/SKILL.md`
+
+Keep the same ai-skillet minimum version, `0.1.0+`. Each consumer must invoke its appropriate ai-skillet subcommand
+directly (`map` for skill-map and skill-harmonization; `doctor` for skill-doctor), with no retired Python, uv, ripgrep,
+helper-resolution, wrapper, or fallback path.
+
 ## Workflow
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop and tell the user to run from a git

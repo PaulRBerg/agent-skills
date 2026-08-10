@@ -1,10 +1,8 @@
 ---
 argument-hint: "[task]"
-compatibility: Requires Git, ripgrep (rg), uv, and an installed skill-map skill with --portfolio-root support.
+compatibility: Requires Git and ai-skillet 0.1.0+.
 disable-model-invocation: true
 name: skill-harmonization
-skill-dependencies:
-  - skill-map
 user-invocable: true
 description: Harmonize a repository's skill portfolio across catalog and user-installed skills.
 ---
@@ -27,7 +25,10 @@ findings, recommendations, validation, and deliberate no-change conclusions.
 `[task]` is optional free-form guidance. Use it to narrow the question, desired outcome, or authorized implementation
 scope. If it is absent, infer intent from the surrounding request; an invocation without write intent is read-only.
 
-1. Require `git` on `PATH`, then resolve the current repository with `git rev-parse --show-toplevel`. Do not read Git
+1. Require `ai-skillet` 0.1.0 or newer on `PATH`. If it is unavailable or too old, stop and ask the user to install or
+   upgrade it.
+
+2. Require `git` on `PATH`, then resolve the current repository with `git rev-parse --show-toplevel`. Do not read Git
    history. If Git is unavailable, stop with:
 
    ```text
@@ -39,16 +40,6 @@ scope. If it is absent, infer intent from the surrounding request; an invocation
    ```text
    skill-harmonization: run from inside a Git repository.
    ```
-
-2. Resolve the installed `skill-map` directory from the host's disclosed skill inventory or the standard user skill
-   roots. Do not search the rest of the home directory. Verify its helper advertises `--portfolio-root`. If the skill or
-   extended interface is unavailable, stop with:
-
-   ```text
-   skill-harmonization: installed skill-map with --portfolio-root support is required; install or publish the current skill-map skill, then retry.
-   ```
-
-3. Require `rg` and `uv` before running helpers. Name the missing command and stop if either is unavailable.
 
 ## Authority and Mode
 
@@ -66,19 +57,18 @@ Derive behavior from the user's task and the host's authority rules; this skill 
 
 ## Build the Portfolio
 
-Run the helper path resolved from the installed `skill-map`:
+Run the installed CLI directly:
 
 ```sh
-uv run <resolved-skill-map-helper> --portfolio-root <repo-root> --format json
+ai-skillet map --portfolio-root <repo-root> --format json
 ```
 
 Require valid JSON and retain its repository root, present and missing user roots, lexical exposures, resolved targets,
 locations, kinds, clients, symlink identity, hashes, references, and duplicate records. Do not substitute a duplicated
-inventory helper or broaden the roots.
+inventory command or broaden the roots.
 
-When `skill-doctor` is installed, optionally run its helper in JSON mode against the repository and present user skill
-roots. Consume its metadata and doc-link findings as additional evidence; its absence is not a blocker and its warnings
-are not conclusions by themselves.
+When metadata or doc-link evidence is needed, optionally run `ai-skillet doctor --format json` against the repository
+and present user skill roots. Consume its findings as additional evidence; warnings are not conclusions by themselves.
 
 ## Evidence Boundary
 
@@ -87,7 +77,7 @@ Use only static repository evidence needed to understand skills and their workfl
 - discovered `SKILL.md` files and their skill-local scripts, references, agents metadata, examples, and assets;
 - applicable `AGENTS.md` or `CLAUDE.md`, repository-facing documentation, and repo-private agent runbooks;
 - automation directly referenced by those artifacts, including install, generation, validation, sync, and publication
-  helpers.
+  commands.
 
 Do not inspect transcripts, Git history, TODO files, caches, agent state, or unrelated source code. Never use absence of
 references as evidence that a skill is unused. Treat inventory edges as leads; open only allowed evidence that bears on
