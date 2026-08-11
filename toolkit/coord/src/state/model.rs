@@ -10,6 +10,7 @@ pub(crate) struct SessionRow {
     pub(crate) name: Option<String>,
     pub(crate) waiting_for: Option<String>,
     pub(crate) permission_mode: Option<String>,
+    pub(crate) coordination_waived: bool,
     pub(crate) fingerprint: Option<ProcessFingerprint>,
     pub(crate) source: String,
     pub(crate) started_at: f64,
@@ -28,6 +29,8 @@ pub(crate) struct SessionUpdate {
     pub(crate) waiting_for: Option<String>,
     pub(crate) permission_mode: Option<String>,
     pub(crate) update_permission_mode: bool,
+    /// `None` preserves the current prompt-scoped coordination waiver.
+    pub(crate) coordination_waived: Option<bool>,
     pub(crate) fingerprint: Option<ProcessFingerprint>,
     pub(crate) started_at: Option<f64>,
     pub(crate) current: f64,

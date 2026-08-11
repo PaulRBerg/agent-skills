@@ -106,6 +106,7 @@ function validateSession(value: unknown, path: string): void {
   nullableString(row.waiting_for, `${path}.waiting_for`);
   if (row.permission_mode !== undefined)
     nullableString(row.permission_mode, `${path}.permission_mode`);
+  boolean(row.coordination_waived, `${path}.coordination_waived`);
   if (row.delegate_count !== undefined)
     integer(row.delegate_count, `${path}.delegate_count`);
   if (row.pid !== null) integer(row.pid, `${path}.pid`);
@@ -215,8 +216,8 @@ function validateMessage(value: unknown, path: string): void {
 
 export function parseSnapshot(value: unknown): Snapshot {
   const snapshot = record(value, "snapshot");
-  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 4) {
-    throw new Error("snapshot.schema_version must be 4");
+  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 5) {
+    throw new Error("snapshot.schema_version must be 5");
   }
   boolean(snapshot.complete, "snapshot.complete");
 

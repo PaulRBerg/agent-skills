@@ -13,7 +13,9 @@ use tempfile::TempDir;
 
 use super::{Clock, Coordinator, inventory::StaticInventory, normalize_callsign};
 use crate::{
-    domain::{Client, Identity, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe, SessionState},
+    domain::{
+        Client, Identity, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe, SessionState, WorkState,
+    },
     error::Result,
     state::{SessionUpdate, Store},
 };
@@ -86,6 +88,7 @@ fn add_session(store: &mut Store, identity: &Identity, root: &Path, pid: u32, cu
             waiting_for: None,
             permission_mode: None,
             update_permission_mode: false,
+            coordination_waived: None,
             fingerprint: Some(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) }),
             started_at: Some(current),
             current,
@@ -198,4 +201,51 @@ fn blocker_details_prefer_the_holders_callsign() {
     let blocked = coordinator.start_for(waiter, "waiter", &scope, &[], repo.path()).unwrap();
     assert_eq!(blocked.detail, "🧱 Brick Boss");
     assert_eq!(blocked.holders, ["🧱 Brick Boss"]);
+}
+
+#[test]
+fn draft_and_all_start_paths_clear_waivers_without_releasing_existing_work() {
+    let repo = repo();
+    let mut store = Store::open(repo.path().join("state.db")).unwrap();
+    let owner = identity("owner");
+    let empty = identity("empty");
+    add_session(&mut store, &owner, repo.path(), 60, 1.0);
+    add_session(&mut store, &empty, repo.path(), 61, 1.0);
+    store.set_coordination_waived(&owner, true).unwrap();
+    store.set_coordination_waived(&empty, true).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(60, ProcessLiveness::Alive);
+    probe.set(61, ProcessLiveness::Alive);
+    let coordinator = coordinator(store, probe, Arc::new(AtomicUsize::new(0)));
+    let scope = ["src/lib.rs".into()];
+
+    coordinator.draft_for(owner.clone(), "planned", &scope, &[], repo.path()).unwrap();
+    let store = coordinator.store().unwrap();
+    assert!(!store.session(&owner).unwrap().unwrap().coordination_waived);
+    assert_eq!(store.work(&owner).unwrap().unwrap().state, WorkState::Draft);
+    drop(store);
+
+    coordinator.store().unwrap().set_coordination_waived(&owner, true).unwrap();
+    assert!(coordinator.start_for(owner.clone(), "direct", &scope, &[], repo.path()).is_err());
+    let store = coordinator.store().unwrap();
+    assert!(!store.session(&owner).unwrap().unwrap().coordination_waived);
+    assert_eq!(store.work(&owner).unwrap().unwrap().state, WorkState::Draft);
+    drop(store);
+
+    coordinator.store().unwrap().set_coordination_waived(&owner, true).unwrap();
+    assert_eq!(coordinator.promote_draft_for(&owner, repo.path()).unwrap().kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(!store.session(&owner).unwrap().unwrap().coordination_waived);
+    assert_eq!(store.work(&owner).unwrap().unwrap().state, WorkState::Active);
+    drop(store);
+
+    coordinator.store().unwrap().set_coordination_waived(&owner, true).unwrap();
+    assert!(coordinator.draft_for(owner.clone(), "blocked", &scope, &[], repo.path()).is_err());
+    let store = coordinator.store().unwrap();
+    assert!(!store.session(&owner).unwrap().unwrap().coordination_waived);
+    assert_eq!(store.work(&owner).unwrap().unwrap().state, WorkState::Active);
+    drop(store);
+
+    assert!(coordinator.promote_draft_for(&empty, repo.path()).is_err());
+    assert!(!coordinator.store().unwrap().session(&empty).unwrap().unwrap().coordination_waived);
 }

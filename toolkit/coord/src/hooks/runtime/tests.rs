@@ -274,6 +274,164 @@ fn prompt_presence_is_counts_only() {
 }
 
 #[test]
+fn noc_matching_is_case_sensitive_and_requires_an_exact_trimmed_line() {
+    for prompt in ["#noc", "  #noc\t", "before\r\n\t#noc  \r\nafter", "```\n#noc\n```"] {
+        assert!(prompt_waives_coordination(prompt), "{prompt:?}");
+    }
+    for prompt in ["`#noc`", "#nocache", "#NOC", "before #noc", "#noc after", ""] {
+        assert!(!prompt_waives_coordination(prompt), "{prompt:?}");
+    }
+}
+
+#[test]
+fn noc_waives_both_hosts_until_the_next_valid_untagged_prompt() {
+    for (client, client_kind) in [("codex", Client::Codex), ("claude", Client::Claude)] {
+        let temp = TempDir::new().unwrap();
+        let (coordinator, repo) = runtime(&temp);
+        let runtime = HookRuntime::new(&coordinator);
+        let identity = Identity { client: client_kind, session_id: "self".into() };
+
+        let tagged = runtime.ingest(
+            client,
+            &json!({
+                "session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit",
+                "prompt":"context\r\n  #noc \r\n"
+            }),
+        );
+        assert_eq!(tagged, WAIVED_CONTEXT);
+        assert!(coordinator.store().unwrap().session(&identity).unwrap().unwrap().coordination_waived);
+
+        let repeated = runtime.ingest(
+            client,
+            &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"#noc"}),
+        );
+        assert_eq!(repeated, WAIVED_CONTEXT);
+
+        let untagged = runtime.ingest(
+            client,
+            &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"continue"}),
+        );
+        assert_eq!(untagged, WAIVER_ENDED_CONTEXT);
+        assert!(!coordinator.store().unwrap().session(&identity).unwrap().unwrap().coordination_waived);
+    }
+}
+
+#[test]
+fn malformed_prompt_preserves_an_active_waiver_without_leaking_payload() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let identity = Identity { client: Client::Codex, session_id: "self".into() };
+    runtime.ingest(
+        "codex",
+        &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"#noc"}),
+    );
+
+    let output = runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit",
+            "prompt":{"secret":"PRIVATE"}
+        }),
+    );
+    assert_eq!(output, WAIVED_CONTEXT);
+    assert!(!output.contains("PRIVATE"));
+    assert!(coordinator.store().unwrap().session(&identity).unwrap().unwrap().coordination_waived);
+}
+
+#[test]
+fn noc_context_appends_only_complete_compact_counts_and_suppresses_the_gate_reminder() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"peer", "cwd":repo, "hook_event_name":"SessionStart"}));
+    fs::write(repo.join("unattributed"), "dirty").unwrap();
+
+    let output = runtime.ingest(
+        "codex",
+        &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"#noc"}),
+    );
+    assert_eq!(output, format!("{WAIVED_CONTEXT} Peers: 1; queued: 0; unread: 0."));
+    assert!(output.chars().count() <= MAX_PRESENCE_CHARS);
+    assert!(!output.contains("Acquire scopes"));
+
+    let identity = Identity { client: Client::Codex, session_id: "self".into() };
+    record_finding(&coordinator, &repo, &identity, "private finding");
+    let repeated = runtime.ingest(
+        "codex",
+        &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"#noc"}),
+    );
+    assert!(repeated.ends_with("Peers: 1; queued: 0; unread: 0."));
+    assert!(!repeated.contains("Findings p/t/h"), "the complete second fragment does not fit: {repeated:?}");
+    assert!(repeated.chars().count() <= MAX_PRESENCE_CHARS);
+}
+
+#[test]
+fn noc_context_includes_compact_finding_counts_when_they_fit() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let identity = Identity { client: Client::Codex, session_id: "self".into() };
+    runtime.ingest(
+        "codex",
+        &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"#noc"}),
+    );
+    record_finding(&coordinator, &repo, &identity, "private finding");
+
+    let output = runtime.ingest(
+        "codex",
+        &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"#noc"}),
+    );
+    assert_eq!(output, format!("{WAIVED_CONTEXT} Findings p/t/h: 1/0/0."));
+    assert!(output.chars().count() <= MAX_PRESENCE_CHARS);
+}
+
+#[test]
+fn waived_sessions_keep_messages_touched_paths_findings_and_lifecycle_hooks_active() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let identity = Identity { client: Client::Codex, session_id: "self".into() };
+    let peer = Identity { client: Client::Claude, session_id: "peer".into() };
+    runtime.ingest(
+        "codex",
+        &json!({"session_id":"self", "cwd":repo, "hook_event_name":"UserPromptSubmit", "prompt":"#noc"}),
+    );
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    coordinator
+        .store()
+        .unwrap()
+        .send_message(&peer, std::slice::from_ref(&identity), "peer data", Some(&root), 100.0)
+        .unwrap();
+
+    let nudge = runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolUse",
+            "tool_name":"apply_patch",
+            "tool_input":{"command":"*** Begin Patch\n*** Update File: README.md\n*** End Patch"}
+        }),
+    );
+    assert!(nudge.contains("1 unread peer messages"));
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.touched(&identity, &root).unwrap().paths, ["README.md"]);
+    assert!(store.session(&identity).unwrap().unwrap().coordination_waived);
+    drop(store);
+
+    let finding_id = record_finding(&coordinator, &repo, &identity, "waived finding");
+    let stop = runtime.ingest(
+        "codex",
+        &json!({"session_id":"self", "cwd":repo, "hook_event_name":"Stop", "last_assistant_message":"done"}),
+    );
+    assert_eq!(serde_json::from_str::<Value>(&stop).unwrap()["decision"], "block");
+    assert!(stop.contains(&finding_id));
+    assert!(coordinator.store().unwrap().session(&identity).unwrap().unwrap().coordination_waived);
+
+    runtime.ingest("codex", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionEnd"}));
+    assert!(coordinator.store().unwrap().session(&identity).unwrap().is_none());
+}
+
+#[test]
 fn session_start_assigns_unique_normalized_callsigns() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);
@@ -298,6 +456,7 @@ fn session_start_assigns_unique_normalized_callsigns() {
             waiting_for: None,
             permission_mode: None,
             update_permission_mode: false,
+            coordination_waived: None,
             fingerprint: None,
             started_at: None,
             current: 100.0,
@@ -606,6 +765,7 @@ fn clean_scope_release_nudge_emits_once_per_transition() {
             waiting_for: None,
             permission_mode: None,
             update_permission_mode: false,
+            coordination_waived: None,
             fingerprint: Some(ProcessFingerprint { pid: std::process::id(), start_token: Some("test".into()) }),
             started_at: Some(100.0),
             current: 100.0,

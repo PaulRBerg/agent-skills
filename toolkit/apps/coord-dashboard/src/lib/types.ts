@@ -28,6 +28,7 @@ export interface Session extends SessionIdentity {
   name: string | null;
   waiting_for: string | null;
   permission_mode?: string | null;
+  coordination_waived: boolean;
   delegate_count?: number;
   pid: number | null;
   source: string;

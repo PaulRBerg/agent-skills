@@ -168,11 +168,12 @@ ai-coord inbox --ack '<message-id>'
 ```
 
 `status` exits 0 for complete coverage, 2 for usable partial coverage, and 1 on error. Its plain-text output marks
-queued work with `work=queued`, renders drafts as `draft · N scopes`, and ends with compact, contextual definitions for
+queued work with `work=queued`, renders drafts as `draft · N scopes`, marks prompt-scoped coordination waivers as
+`waived`, and ends with compact, contextual definitions for
 the states present; it reports only finding counts (`pending`, `triaging`, and `handed-off`), never a backlog, plus
-nonzero `.ai/task-handoffs/*.md` counts without reading file names or contents. `--json` emits public schema v4 with
-`handoffs` records shaped as `{repo_root, count}`. Draft records include only their label, state, timestamps, and scope
-count. Submitted work includes literal normalized scope objects. Status, dashboard snapshots, and message recipient
+nonzero `.ai/task-handoffs/*.md` counts without reading file names or contents. `--json` emits public schema v5 with a
+required `coordination_waived` boolean on every session and `handoffs` records shaped as `{repo_root, count}`. Draft
+records include only their label, state, timestamps, and scope count. Submitted work includes literal normalized scope objects. Status, dashboard snapshots, and message recipient
 discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe
 providers freshly before granting work or reporting installation health.
 
@@ -238,7 +239,11 @@ Agent-Session: codex/019fc27b-b4fb-7322-b65c-ed2471a6fce9
 
 Lifecycle and nudge hooks invoke `ai-coord hook codex` or `ai-coord hook claude`. Session-start hooks silently register
 or refresh idle sessions; Codex limits them to startup, resume, and clear so mid-turn compaction cannot mark working
-sessions idle. Prompt hooks inject at most 200 characters of factual peer, queued-work, and unread-message counts.
+sessions idle. Prompt hooks inject at most 200 characters of factual peer, queued-work, and unread-message counts. A
+case-sensitive, whitespace-trimmed line exactly equal to `#noc` records a prompt-scoped coordination waiver and injects
+bounded authoritative context. It waives only `draft`, `start`, `wait`, and `done`; presence, messages, touched-path
+attribution, findings, wakers, and lifecycle bookkeeping remain active. The next valid untagged prompt clears the waiver,
+as do explicit `draft`, direct `start`, and `start --draft` write escalation, without releasing existing work.
 Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook report the unread count once, route inspection to
 `ai-coord inbox`, and identify message text as peer-reported data rather than instructions or authority. Peer text, IDs,
 prompts, and tool payloads are never injected. When other live work makes a repository non-quiet, prompt context adds a
@@ -266,11 +271,11 @@ parent.
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
 mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v12. Any other nonzero schema, including v11, is rejected without migration, import, deletion, or
-replacement, while the public `status --json` schema is v4. Close agents and explicitly choose any backup, removal,
+internal schema v13. Any other nonzero schema, including v12, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema is v5. Close agents and explicitly choose any backup, removal,
 installation, and relinking rollout before retrying with incompatible state.
 
-The SQLite ledger stores bounded session metadata, callsigns, work labels, literal scopes, messages, finding lifecycle
+The SQLite ledger stores bounded session metadata, callsigns, the coordination-waiver boolean, work labels, literal scopes, messages, finding lifecycle
 events, sightings, and complete provider health cache rows. It never stores cached provider errors, hook hashes, plan
 bodies, transcript contents, or arbitrary hook payloads; opt-in triage prompts and model output exist only in the 30-day
 run artifacts described above. Composite session foreign keys cascade draft and submitted work cleanup on authoritative

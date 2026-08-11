@@ -31,6 +31,7 @@ fn session_update(identity: &Identity, current: f64) -> SessionUpdate {
         waiting_for: None,
         permission_mode: None,
         update_permission_mode: false,
+        coordination_waived: None,
         fingerprint: Some(ProcessFingerprint { pid: 42, start_token: Some("boot:42".to_owned()) }),
         started_at: None,
         current,
@@ -55,7 +56,7 @@ fn work_update(identity: &Identity) -> WorkUpdate {
 }
 
 #[test]
-fn new_store_has_exact_v12_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v13_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -76,6 +77,7 @@ fn new_store_has_exact_v12_schema_and_runtime_pragmas() {
     assert!(session_columns.is_superset(&HashSet::from([
         "callsign_key".to_owned(),
         "process_start_token".to_owned(),
+        "coordination_waived".to_owned(),
         "revision".to_owned(),
     ])));
     assert!(work_columns.is_superset(&HashSet::from([
@@ -142,21 +144,21 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let connection = Connection::open(&path).unwrap();
     connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)", []).unwrap();
     connection.execute("INSERT INTO sentinel VALUES ('preserved')", []).unwrap();
-    connection.pragma_update(None, "user_version", 10).unwrap();
+    connection.pragma_update(None, "user_version", 12).unwrap();
     drop(connection);
 
     let error = Store::open(&path).err().unwrap();
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 10 is incompatible with required schema 12 at {}; \
+            "state schema 12 is incompatible with required schema 13 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
     );
 
     let connection = Connection::open(path).unwrap();
-    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 10);
+    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 12);
     assert_eq!(
         connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
         "preserved"
@@ -183,6 +185,29 @@ fn initialization_is_concurrency_safe() {
         handle.join().unwrap();
     }
     assert_eq!(Store::open(path).unwrap().generation().unwrap(), 0);
+}
+
+#[test]
+fn prompt_waiver_updates_are_atomic_and_observers_preserve_them() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    let mut prompt = session_update(&owner, 1.0);
+    prompt.coordination_waived = Some(true);
+    store.upsert_session(&prompt).unwrap();
+    assert!(store.session(&owner).unwrap().unwrap().coordination_waived);
+
+    let generation = store.generation().unwrap();
+    let observer = session_update(&owner, 2.0);
+    store.upsert_session(&observer).unwrap();
+    assert!(store.session(&owner).unwrap().unwrap().coordination_waived);
+    assert_eq!(store.generation().unwrap(), generation);
+
+    let mut untagged = session_update(&owner, 3.0);
+    untagged.coordination_waived = Some(false);
+    store.upsert_session(&untagged).unwrap();
+    assert!(!store.session(&owner).unwrap().unwrap().coordination_waived);
+    assert_eq!(store.generation().unwrap(), generation + 1);
 }
 
 #[test]

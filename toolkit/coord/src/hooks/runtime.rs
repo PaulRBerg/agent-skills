@@ -18,6 +18,9 @@ use crate::{
 use super::specs::{Client as HookClient, hook_specs};
 
 const MAX_PRESENCE_CHARS: usize = 200;
+const WAIVED_CONTEXT: &str = "ai-coord: #noc waives draft/start/wait/done for this prompt; skip them unless work may write, then re-enter the gate before editing. Existing work is unchanged.";
+const WAIVER_ENDED_CONTEXT: &str =
+    "ai-coord: the previous #noc waiver ended; the normal coordination gate applies to this prompt.";
 const MAX_FINDING_REASON_CHARS: usize = 8_000;
 const MAX_FINDING_SUMMARY_CHARS: usize = 160;
 const WAKER_TIMEOUT_SECONDS: u64 = 3_480;
@@ -107,6 +110,12 @@ impl<'a> HookRuntime<'a> {
         }
 
         let existing = store.session(&identity)?;
+        let prompt_waiver = if event == "UserPromptSubmit" {
+            payload.get("prompt").and_then(Value::as_str).map(prompt_waives_coordination)
+        } else {
+            None
+        };
+        let waiver_ended = existing.as_ref().is_some_and(|row| row.coordination_waived) && prompt_waiver == Some(false);
         let (update_permission_mode, permission_mode) = permission_mode(payload);
         let fingerprint = host_process_reference(client, None)
             .ok()
@@ -122,18 +131,20 @@ impl<'a> HookRuntime<'a> {
             waiting_for: None,
             permission_mode,
             update_permission_mode,
+            coordination_waived: prompt_waiver,
             fingerprint,
             started_at: existing.as_ref().map(|row| row.started_at),
             current: self.coordinator.now(),
         };
-        if event == "SessionStart" {
+        let session = if event == "SessionStart" {
             let session = store.upsert_session_superseding(&update)?;
             if session.callsign.is_none() {
                 assign_auto_callsign(&mut store, &identity);
             }
+            session
         } else {
-            store.upsert_session(&update)?;
-        }
+            store.upsert_session(&update)?
+        };
 
         if event == "UserPromptSubmit" {
             store.begin_turn(&identity, payload.get("turn_id").and_then(Value::as_str), self.coordinator.now())?;
@@ -226,7 +237,14 @@ impl<'a> HookRuntime<'a> {
 
         store.hook_success(client, event, self.coordinator.now())?;
         if event == "UserPromptSubmit" {
-            return prompt_context(&store, &identity, root.as_deref(), self.coordinator.now());
+            return prompt_context(
+                &store,
+                &identity,
+                root.as_deref(),
+                self.coordinator.now(),
+                session.coordination_waived,
+                waiver_ended,
+            );
         }
         Ok(noop_stdout(client_name(client), event))
     }
@@ -294,8 +312,16 @@ fn prompt_context(
     identity: &Identity,
     root: Option<&Path>,
     current: f64,
+    coordination_waived: bool,
+    waiver_ended: bool,
 ) -> Result<String> {
-    let mut parts = Vec::new();
+    let mut context = if coordination_waived {
+        WAIVED_CONTEXT.to_owned()
+    } else if waiver_ended {
+        WAIVER_ENDED_CONTEXT.to_owned()
+    } else {
+        String::new()
+    };
     if let Some(root) = root {
         let dirty = git_dirty_paths(root).unwrap_or_default();
         let root = path_text(root)?;
@@ -317,29 +343,57 @@ fn prompt_context(
                 work.identity != *identity && matches!(work.state, WorkState::Active | WorkState::Queued)
             });
         let findings = store.finding_counts(&root, current)?;
-        if peers > 0 || unread > 0 || queued > 0 || findings != Default::default() {
-            let mut presence = Vec::new();
-            if findings != Default::default() {
-                presence.push(format!(
-                    "Findings: pending={}; triaging={}; handed-off={}.",
-                    findings.pending, findings.triaging, findings.handed_off
-                ));
+        let findings_fragment = (findings != Default::default()).then(|| {
+            format!(
+                "Findings: pending={}; triaging={}; handed-off={}.",
+                findings.pending, findings.triaging, findings.handed_off
+            )
+        });
+        let peers_fragment = (peers > 0 || unread > 0 || queued > 0)
+            .then(|| format!("Peers: {peers}; queued work: {queued}; unread messages: {unread}."));
+        let reminder = "Acquire scopes with `ai-coord start` before the first edit.";
+        if coordination_waived {
+            if peers_fragment.is_some() {
+                append_presence_fragment(&mut context, &format!("Peers: {peers}; queued: {queued}; unread: {unread}."));
             }
-            if peers > 0 || unread > 0 || queued > 0 {
-                presence.push(format!("Peers: {peers}; queued work: {queued}; unread messages: {unread}."));
+            if findings_fragment.is_some() {
+                append_presence_fragment(
+                    &mut context,
+                    &format!("Findings p/t/h: {}/{}/{}.", findings.pending, findings.triaging, findings.handed_off),
+                );
             }
-            let presence = presence.join(" ");
-            parts.push(if parts.is_empty() { format!("ai-coord: {presence}") } else { presence });
-        }
-        if gate_needed {
-            let reminder = "Acquire scopes with `ai-coord start` before the first edit.";
-            let candidate = format!("{} {reminder}", parts.join(" "));
-            if candidate.chars().count() <= MAX_PRESENCE_CHARS {
-                parts.push(reminder.to_owned());
+        } else if waiver_ended {
+            for fragment in findings_fragment.iter().chain(peers_fragment.iter()) {
+                append_presence_fragment(&mut context, fragment);
+            }
+            if gate_needed {
+                append_presence_fragment(&mut context, reminder);
+            }
+        } else {
+            let presence = findings_fragment.into_iter().chain(peers_fragment).collect::<Vec<_>>().join(" ");
+            if !presence.is_empty() {
+                context = format!("ai-coord: {presence}");
+            }
+            if gate_needed {
+                let candidate = format!("{context} {reminder}");
+                if candidate.chars().count() <= MAX_PRESENCE_CHARS {
+                    context = if context.is_empty() { reminder.to_owned() } else { candidate };
+                }
             }
         }
     }
-    Ok(sanitize(&parts.join(" "), MAX_PRESENCE_CHARS))
+    Ok(sanitize(&context, MAX_PRESENCE_CHARS))
+}
+
+fn prompt_waives_coordination(prompt: &str) -> bool {
+    prompt.lines().any(|line| line.trim() == "#noc")
+}
+
+fn append_presence_fragment(context: &mut String, fragment: &str) {
+    let candidate = if context.is_empty() { format!("ai-coord: {fragment}") } else { format!("{context} {fragment}") };
+    if candidate.chars().count() <= MAX_PRESENCE_CHARS {
+        *context = candidate;
+    }
 }
 
 fn assign_auto_callsign(store: &mut crate::state::Store, identity: &Identity) {

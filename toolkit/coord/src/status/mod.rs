@@ -122,6 +122,7 @@ fn is_named(session: &SnapshotSessionV2, work: Option<&SnapshotWorkV2>) -> bool 
         session.name.is_some() ||
         work.is_some() ||
         session.permission_mode.as_deref() == Some("plan") ||
+        session.coordination_waived ||
         session.delegate_count.unwrap_or_default() > 0
 }
 
@@ -134,6 +135,9 @@ fn session_line(
     let mut detail = Vec::new();
     if session.permission_mode.as_deref() == Some("plan") {
         detail.push("planning".to_owned());
+    }
+    if session.coordination_waived {
+        detail.push("waived".to_owned());
     }
     if let Some(count) = session.delegate_count.filter(|count| *count > 0) {
         detail.push(format!("delegates={count}"));
@@ -215,7 +219,7 @@ mod tests {
 
     fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {
         SnapshotV2 {
-            schema_version: 4,
+            schema_version: 5,
             complete: true,
             scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Repo, repo_root: Some("/repo".into()) },
             self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
@@ -246,6 +250,7 @@ mod tests {
             name: None,
             waiting_for: None,
             permission_mode: None,
+            coordination_waived: false,
             delegate_count: None,
             pid: None,
             source: "test".into(),
@@ -291,13 +296,14 @@ mod tests {
     }
 
     #[test]
-    fn json_keeps_the_v4_schema_and_omits_draft_paths() {
+    fn json_keeps_the_v5_schema_and_omits_draft_paths() {
         let payload: serde_json::Value = serde_json::from_str(
             &snapshot_json(&snapshot(vec![session("self")], vec![work("self", WorkState::Draft)])).unwrap(),
         )
         .unwrap();
-        assert_eq!(payload["schema_version"], 4);
+        assert_eq!(payload["schema_version"], 5);
         assert_eq!(payload["self"]["session_id"], "self");
+        assert_eq!(payload["sessions"][0]["coordination_waived"], false);
         assert_eq!(payload["work"][0]["scope_count"], 1);
         assert!(payload["work"][0].get("scopes").is_none());
         assert!(payload["work"][0].get("blocked_reason").is_none());
@@ -327,6 +333,19 @@ mod tests {
         assert!(!rendered.contains('\u{1b}'));
         assert!(rendered.contains("\tcount=2\t/repo\t"));
         assert!(!rendered.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn rendering_keeps_waived_anonymous_sessions_separate() {
+        let mut first = session("waived-one");
+        first.coordination_waived = true;
+        let mut second = session("waived-two");
+        second.coordination_waived = true;
+
+        let rendered = render_status_at(&snapshot(vec![first, second], vec![]), 2_000.0);
+        assert!(rendered.contains("waived-one\t/repo\twaived"));
+        assert!(rendered.contains("waived-two\t/repo\twaived"));
+        assert!(!rendered.contains("count=2"));
     }
 
     #[test]

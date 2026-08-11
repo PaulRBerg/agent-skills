@@ -163,6 +163,8 @@ impl Coordinator {
             return Err(AppError::usage("at least one scope is required"));
         }
         let mut store = self.store()?;
+        self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
+        store.set_coordination_waived(&identity, false)?;
         if let Some(existing) = store.work(&identity)? {
             if existing.state == WorkState::Draft {
                 return Err(AppError::operational(
@@ -174,7 +176,6 @@ impl Coordinator {
                     .with_paths(existing.scopes.into_iter().map(|scope| scope.path).collect()));
             }
         }
-        self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         let inventory = self.refresh_inventory(&mut store, false)?;
         WorkCoordinator { store: &mut store }.start_direct(
             &identity,
@@ -210,10 +211,11 @@ impl Coordinator {
             return Err(AppError::usage("at least one scope is required"));
         }
         let mut store = self.store()?;
+        self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
+        store.set_coordination_waived(&identity, false)?;
         if store.work(&identity)?.is_some_and(|work| work.state != WorkState::Draft) {
             return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
         }
-        self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         store.save_draft(&identity, &path_text(&root)?, &label, &scopes, self.clock.wall())?;
         Ok(Outcome::new(OutcomeKind::Draft, 0, scopes.len().to_string()))
     }
@@ -227,6 +229,8 @@ impl Coordinator {
         let cwd = resolved(cwd);
         let root = git_root(&cwd).ok_or_else(|| AppError::operational("start --draft requires a Git worktree"))?;
         let mut store = self.store()?;
+        self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
+        store.set_coordination_waived(identity, false)?;
         let draft = store
             .work(identity)?
             .filter(|work| work.state == WorkState::Draft)
@@ -235,7 +239,6 @@ impl Coordinator {
             return Err(AppError::operational("draft belongs to another repository"));
         }
         revalidate_draft_scopes(&draft.scopes, &root)?;
-        self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
         let inventory = self.refresh_inventory(&mut store, false)?;
         WorkCoordinator { store: &mut store }.promote_draft(identity, &root, draft, &inventory, self.clock.wall())
     }
@@ -482,6 +485,7 @@ impl Coordinator {
             waiting_for: existing.as_ref().and_then(|row| row.waiting_for.clone()),
             permission_mode: None,
             update_permission_mode: false,
+            coordination_waived: None,
             fingerprint,
             started_at: existing.as_ref().map(|row| row.started_at),
             current: self.clock.wall(),
@@ -536,6 +540,7 @@ impl Coordinator {
                         waiting_for: row.waiting_for,
                         permission_mode: None,
                         update_permission_mode: false,
+                        coordination_waived: None,
                         fingerprint: row.fingerprint,
                         started_at: Some(row.started_at),
                         current: self.clock.wall(),
@@ -640,6 +645,7 @@ fn build_snapshot(
             name: row.name,
             waiting_for: row.waiting_for,
             permission_mode: row.permission_mode,
+            coordination_waived: row.coordination_waived,
             delegate_count: delegate_counts.get(&row.identity).copied().filter(|count| *count > 0),
             pid: row.fingerprint.map(|value| value.pid),
             source: row.source,
@@ -689,7 +695,7 @@ fn build_snapshot(
     let outside_directories = outside.iter().map(|row| row.cwd.clone()).collect::<HashSet<_>>().len();
     let handoffs = snapshot_handoffs(handoff_roots);
     Ok(SnapshotV2 {
-        schema_version: 4,
+        schema_version: 5,
         complete: inventory.complete,
         scope: if machine {
             SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None }

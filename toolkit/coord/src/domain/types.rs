@@ -207,6 +207,7 @@ pub(crate) struct SnapshotSessionV2 {
     pub(crate) name: Option<String>,
     pub(crate) waiting_for: Option<String>,
     pub(crate) permission_mode: Option<String>,
+    pub(crate) coordination_waived: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) delegate_count: Option<usize>,
     pub(crate) pid: Option<u32>,

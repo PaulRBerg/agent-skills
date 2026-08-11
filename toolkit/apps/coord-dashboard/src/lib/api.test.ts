@@ -39,7 +39,17 @@ describe("parseSnapshot", () => {
   test("rejects the pre-break status schema", () => {
     const legacy = { ...sampleSnapshot, schema_version: 1 };
     expect(() => parseSnapshot(legacy)).toThrow(
-      "snapshot.schema_version must be 4",
+      "snapshot.schema_version must be 5",
+    );
+  });
+
+  test("requires the coordination waiver on every session", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<string, unknown>;
+    const sessions = malformed.sessions as Array<Record<string, unknown>>;
+    delete sessions[0]?.coordination_waived;
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.sessions[0].coordination_waived",
     );
   });
 

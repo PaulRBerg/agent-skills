@@ -3,7 +3,7 @@ import type { Snapshot } from "@/lib/types";
 export const SAMPLE_NOW = 1_785_833_730;
 
 export const sampleSnapshot = {
-  schema_version: 4,
+  schema_version: 5,
   complete: false,
   scope: { kind: "machine" },
   self: {
@@ -38,6 +38,8 @@ export const sampleSnapshot = {
       callsign: "👩‍💻 Baroness Byte",
       name: "live-coordination-dashboard",
       waiting_for: null,
+      permission_mode: "plan",
+      coordination_waived: true,
       pid: 32548,
       source: "observer",
       started_at: 1_785_832_480,
@@ -52,6 +54,7 @@ export const sampleSnapshot = {
       callsign: "🦊 Patch Fox",
       name: null,
       waiting_for: null,
+      coordination_waived: false,
       pid: 64058,
       source: "hook",
       started_at: 1_785_833_578,
@@ -66,6 +69,7 @@ export const sampleSnapshot = {
       callsign: "🐢 Queue Kid",
       name: null,
       waiting_for: null,
+      coordination_waived: false,
       pid: 62706,
       source: "hook",
       started_at: 1_785_833_535,
@@ -80,6 +84,7 @@ export const sampleSnapshot = {
       callsign: null,
       name: null,
       waiting_for: null,
+      coordination_waived: false,
       pid: 49938,
       source: "hook",
       started_at: 1_785_833_052,
@@ -94,6 +99,7 @@ export const sampleSnapshot = {
       callsign: "🧭 Chain Scout",
       name: null,
       waiting_for: null,
+      coordination_waived: false,
       pid: 99440,
       source: "hook",
       started_at: 1_785_832_320,

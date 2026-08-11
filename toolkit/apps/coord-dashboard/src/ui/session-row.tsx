@@ -122,6 +122,11 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
                 planning
               </span>
             ) : null}
+            {session.coordination_waived ? (
+              <span className="inline-flex border border-accent bg-accent-wash px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold uppercase tracking-wide text-accent">
+                waived
+              </span>
+            ) : null}
             <AnimatedValue
               className="min-w-0 flex-1 overflow-hidden text-sm font-semibold"
               value={label}

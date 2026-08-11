@@ -122,6 +122,30 @@ impl Store {
         })
     }
 
+    pub(crate) fn set_coordination_waived(&mut self, identity: &Identity, waived: bool) -> Result<()> {
+        self.immediate(|transaction| {
+            let current = transaction
+                .query_row(
+                    "SELECT coordination_waived FROM sessions WHERE client = ?1 AND session_id = ?2",
+                    params![client_name(identity.client), identity.session_id],
+                    |row| row.get::<_, bool>(0),
+                )
+                .optional()?;
+            let Some(current) = current else {
+                return Err(AppError::usage("session is not registered"));
+            };
+            if current == waived {
+                return Ok(());
+            }
+            transaction.execute(
+                "UPDATE sessions SET coordination_waived = ?1, revision = revision + 1
+                 WHERE client = ?2 AND session_id = ?3",
+                params![waived, client_name(identity.client), identity.session_id],
+            )?;
+            bump_generation(transaction)
+        })
+    }
+
     /// End a session from an authoritative SessionEnd event.
     pub(crate) fn end_session(&mut self, identity: &Identity) -> Result<()> {
         self.immediate(|transaction| {
@@ -197,16 +221,15 @@ impl Store {
 }
 
 fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdate) -> Result<SessionRow> {
-    let old_permission_mode = if update.update_permission_mode {
+    let old_values = if update.update_permission_mode || update.coordination_waived.is_some() {
         transaction
             .query_row(
-                "SELECT permission_mode FROM sessions
+                "SELECT permission_mode, coordination_waived FROM sessions
                          WHERE client = ?1 AND session_id = ?2",
                 params![client_name(update.identity.client), update.identity.session_id],
-                |row| row.get::<_, Option<String>>(0),
+                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, bool>(1)?)),
             )
             .optional()?
-            .flatten()
     } else {
         None
     };
@@ -214,17 +237,19 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
     transaction.execute(
         "INSERT INTO sessions(
                     client, session_id, cwd, repo_root, state, name, waiting_for,
-                    permission_mode, pid, process_start_token, source, started_at, last_seen,
+                    permission_mode, coordination_waived, pid, process_start_token, source, started_at, last_seen,
                     revision
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE(?9, 0), ?10, ?11, ?12, ?13, ?14, 1)
                  ON CONFLICT(client, session_id) DO UPDATE SET
                     cwd = excluded.cwd,
                     repo_root = excluded.repo_root,
                     state = excluded.state,
                     name = COALESCE(excluded.name, sessions.name),
                     waiting_for = excluded.waiting_for,
-                    permission_mode = CASE WHEN ?14 THEN excluded.permission_mode
+                    permission_mode = CASE WHEN ?15 THEN excluded.permission_mode
                                            ELSE sessions.permission_mode END,
+                    coordination_waived = CASE WHEN ?9 IS NULL THEN sessions.coordination_waived
+                                                ELSE excluded.coordination_waived END,
                     pid = CASE WHEN excluded.pid IS NULL THEN sessions.pid ELSE excluded.pid END,
                     process_start_token = CASE
                         WHEN excluded.pid IS NULL THEN sessions.process_start_token
@@ -241,6 +266,7 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
             update.name,
             update.waiting_for,
             update.permission_mode,
+            update.coordination_waived,
             pid,
             start_token,
             update.source,
@@ -249,7 +275,12 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
             update.update_permission_mode,
         ],
     )?;
-    if update.update_permission_mode && old_permission_mode.as_deref() != update.permission_mode.as_deref() {
+    let permission_changed = update.update_permission_mode &&
+        old_values.as_ref().and_then(|(permission, _)| permission.as_deref()) != update.permission_mode.as_deref();
+    let waiver_changed = update.coordination_waived.is_some() &&
+        old_values.as_ref().map(|(_, waived)| *waived).unwrap_or(false) !=
+            update.coordination_waived.unwrap_or(false);
+    if permission_changed || waiver_changed {
         bump_generation(transaction)?;
     }
     Ok(transaction.query_row(
@@ -274,15 +305,15 @@ fn fingerprint_values(fingerprint: Option<&ProcessFingerprint>) -> (Option<u32>,
 fn session_select(suffix: &str) -> String {
     format!(
         "SELECT client, session_id, cwd, repo_root, state, callsign, name,
-                waiting_for, permission_mode, pid, process_start_token, source, started_at,
+                waiting_for, permission_mode, coordination_waived, pid, process_start_token, source, started_at,
                 last_seen, revision
          FROM sessions {suffix}"
     )
 }
 
 fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
-    let pid = row.get::<_, Option<u32>>(9)?;
-    let start_token = row.get::<_, Option<String>>(10)?;
+    let pid = row.get::<_, Option<u32>>(10)?;
+    let start_token = row.get::<_, Option<String>>(11)?;
     Ok(SessionRow {
         identity: Identity { client: parse_client(row.get(0)?)?, session_id: row.get(1)? },
         cwd: row.get(2)?,
@@ -292,11 +323,12 @@ fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
         name: row.get(6)?,
         waiting_for: row.get(7)?,
         permission_mode: row.get(8)?,
+        coordination_waived: row.get(9)?,
         fingerprint: pid.map(|pid| ProcessFingerprint { pid, start_token }),
-        source: row.get(11)?,
-        started_at: row.get(12)?,
-        last_seen: row.get(13)?,
-        revision: row.get(14)?,
+        source: row.get(12)?,
+        started_at: row.get(13)?,
+        last_seen: row.get(14)?,
+        revision: row.get(15)?,
     })
 }
 

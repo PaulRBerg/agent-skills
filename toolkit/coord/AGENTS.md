@@ -31,7 +31,7 @@ ladders, old-format importers, deprecated CLI aliases, dual reads or writes, ret
 hook recognition by default. Rejecting an incompatible persisted version with an actionable error is required safety
 behavior, not backward compatibility.
 
-Schema v12 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
+Schema v13 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
 based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced process is removed without
 an age grace period, while unknown liveness fails closed and never deletes the record.
 
@@ -51,7 +51,8 @@ normalized repository-relative `path<TAB>oid` record per line, or empty output w
 `ai-coord touched` is a best-effort cross-check of normalized repository-relative paths observed in this session's
 file-mutating post-tool payloads. Its stable output is one path per line, with a leading `!TRUNCATED` record when its
 1,000-path cap dropped older records; an empty complete set exits successfully with no output. It stores no payload
-content. Status schema v4 exposes nonzero repository task-handoff counts as `{repo_root, count}` records; guidance stays
+content. Status schema v5 exposes required session `coordination_waived` booleans and nonzero repository task-handoff
+counts as `{repo_root, count}` records; guidance stays
 here while README remains human-facing tool documentation.
 
 ## Upstream documentation

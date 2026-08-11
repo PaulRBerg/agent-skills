@@ -437,6 +437,7 @@ fn register_triager_session(
         waiting_for: None,
         permission_mode: None,
         update_permission_mode: false,
+        coordination_waived: None,
         fingerprint: Some(fingerprint),
         started_at: Some(metadata.started_at),
         current,
