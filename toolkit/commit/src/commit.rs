@@ -553,6 +553,8 @@ impl HookSnapshot {
         if materialized_tree != prepared_tree {
             return Err(AppError::operational("temporary hook worktree materialization changed the prepared tree"));
         }
+        fs::write(worktree.path().join(".git"), format!("gitdir: {}\n", git_dir.display()))
+            .map_err(|error| AppError::retry(format!("cannot configure temporary hook worktree: {error}")))?;
         copy_file(index, validation_index)?;
         Ok(Self { worktree, validation_index: validation_index.to_path_buf() })
     }

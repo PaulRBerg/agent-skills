@@ -40,7 +40,7 @@ fn baseline_exclusion_runs_strict_hook_against_snapshot() {
     let hook_log = harness.root.join("snapshot-hook.log");
     write_executable(
         &harness.repo.join(".git/hooks/pre-commit"),
-        "#!/bin/sh\nset -eu\nstaged=$(git diff --cached --name-only)\nunstaged=$(git diff --name-only)\nfor file in $staged; do\n  case \"\n$unstaged\n\" in *\"\n$file\n\"*) printf 'partially staged files are unsafe in the shared worktree: %s\\n' \"$file\" >&2; exit 88;; esac\ndone\ntest -f sibling.txt\nprintf '%s\\t%s\\t%s\\t%s\\t%s\\n' \"$(pwd -P)\" \"${GIT_WORK_TREE:-}\" \"${GIT_INDEX_FILE:-}\" \"${AI_COMMIT_HOOK_MODE:-}\" \"${AI_COMMIT_ORIGINAL_WORKTREE:-}\" > \"$HOOK_LOG\"\n",
+        "#!/bin/sh\nset -eu\nhook_work_tree=$GIT_WORK_TREE\nhook_index=$GIT_INDEX_FILE\nunset GIT_DIR GIT_WORK_TREE\ntest \"$(git rev-parse --show-toplevel)\" = \"$(pwd -P)\"\nstaged=$(git diff --cached --name-only)\nunstaged=$(git diff --name-only)\nfor file in $staged; do\n  case \"\n$unstaged\n\" in *\"\n$file\n\"*) printf 'partially staged files are unsafe in the shared worktree: %s\\n' \"$file\" >&2; exit 88;; esac\ndone\ntest -f sibling.txt\nprintf '%s\\t%s\\t%s\\t%s\\t%s\\n' \"$(pwd -P)\" \"$hook_work_tree\" \"$hook_index\" \"${AI_COMMIT_HOOK_MODE:-}\" \"${AI_COMMIT_ORIGINAL_WORKTREE:-}\" > \"$HOOK_LOG\"\n",
     );
 
     let specification = format!("intended.txt={baseline_oid}");
