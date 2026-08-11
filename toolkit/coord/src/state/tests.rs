@@ -786,6 +786,35 @@ fn provider_cache_hook_health_and_dirt_observations_round_trip() {
     assert_eq!(changed[0].first_seen, 3.0);
 }
 
+#[test]
+fn partial_dirt_observation_retains_omitted_dirty_paths_and_residual_owners() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    let initial = [("relevant.rs".to_owned(), "one".to_owned()), ("omitted.rs".to_owned(), "two".to_owned())];
+    store.observe_dirt("/repo", &initial, 1.0).unwrap();
+    store.record_residual_owners("/repo", &["omitted.rs".to_owned()], &owner, 1.5).unwrap();
+
+    let still_dirty = ["relevant.rs".to_owned(), "omitted.rs".to_owned()];
+    let observations = store
+        .observe_dirt_subset("/repo", &still_dirty, &[("relevant.rs".to_owned(), "updated".to_owned())], 2.0)
+        .unwrap();
+    let omitted = observations.iter().find(|observation| observation.path == "omitted.rs").unwrap();
+    assert_eq!(omitted.first_seen, 1.0);
+    assert_eq!(store.residual_owners("/repo").unwrap()[0].identity, owner);
+
+    let pruned = store
+        .observe_dirt_subset(
+            "/repo",
+            &["relevant.rs".to_owned()],
+            &[("relevant.rs".to_owned(), "updated".to_owned())],
+            3.0,
+        )
+        .unwrap();
+    assert_eq!(pruned.iter().map(|observation| observation.path.as_str()).collect::<Vec<_>>(), ["relevant.rs"]);
+    assert!(store.residual_owners("/repo").unwrap().is_empty());
+}
+
 fn table_columns(connection: &Connection, table: &str) -> HashSet<String> {
     let mut statement = connection.prepare(&format!("PRAGMA table_info({table})")).unwrap();
     statement.query_map([], |row| row.get::<_, String>(1)).unwrap().collect::<rusqlite::Result<_>>().unwrap()

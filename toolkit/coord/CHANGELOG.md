@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Bound Git blob hashing to fixed-size batches and limit start-time hashing to dirt within the requested scopes.
 - Break the internal ledger at schema v13 and public status at schema v5; add the prompt-scoped `#noc` coordination
   waiver, best-effort touched-path tracking, task-handoff counts, contextual gate and release nudges, and
   outcome-specific stderr protocol guidance.

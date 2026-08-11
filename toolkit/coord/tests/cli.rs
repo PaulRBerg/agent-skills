@@ -4,7 +4,7 @@ use std::{
     fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
     thread,
     time::{Duration, Instant},
@@ -82,6 +82,22 @@ impl Fixture {
 
     fn output_with_path(&self, arguments: &[&str], executable_path: &std::path::Path) -> Output {
         self.command().env("PATH", executable_path).args(arguments).output().expect("run ai-coord with PATH")
+    }
+
+    fn output_as_with_hash_log(
+        &self,
+        session_id: &str,
+        arguments: &[&str],
+        executable_path: &str,
+        log: &Path,
+    ) -> Output {
+        self.command()
+            .env("AI_COORD_SESSION_ID", session_id)
+            .env("AI_COORD_HASH_OBJECT_LOG", log)
+            .env("PATH", executable_path)
+            .args(arguments)
+            .output()
+            .expect("run ai-coord with Git hash-object logger")
     }
 
     fn json_status(&self) -> (i32, Value) {
@@ -479,6 +495,79 @@ fn promotion_queues_on_unknown_coverage_and_wait_preserves_submitted_work() {
 }
 
 #[test]
+fn blocked_draft_promotion_hashes_only_dirt_in_the_requested_exact_scope() {
+    let fixture = Fixture::new();
+    fs::write(fixture.root.join(".gitignore"), "target/\n").unwrap();
+    commit_paths(&fixture, &[".gitignore"]);
+    assert!(git_status(&fixture).is_empty(), "holder must start from clean Git dirt");
+
+    let mut holder = spawn_synthetic_host(&fixture, "hash-holder");
+    let mut contender = spawn_synthetic_host(&fixture, "hash-contender");
+    assert_strong_session(&fixture, "hash-holder");
+    assert_strong_session(&fixture, "hash-contender");
+    assert_eq!(
+        String::from_utf8_lossy(&fixture.output_as("hash-holder", &["name", "🧱 Holder"]).stdout),
+        "NAMED\t🧱 Holder\n"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&fixture.output_as("hash-holder", &["start", "ignore owner", ".gitignore"]).stdout),
+        "READY\t.gitignore\n"
+    );
+
+    fs::create_dir(fixture.root.join("unrelated")).unwrap();
+    for index in 0..300 {
+        fs::write(fixture.root.join(format!("unrelated/file-{index:03}.txt")), format!("{index}\n")).unwrap();
+    }
+    fs::write(fixture.root.join(".gitignore"), "target/\nbuild/\n").unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(
+            &fixture.output_as("hash-contender", &["draft", "promote blocked ignore", ".gitignore"]).stdout
+        ),
+        "DRAFT\t1\n"
+    );
+
+    let (executable_path, log) = install_hash_object_logger(&fixture);
+    let promoted = fixture.output_as_with_hash_log("hash-contender", &["start", "--draft"], &executable_path, &log);
+    assert_eq!(promoted.status.code(), Some(3));
+    assert_eq!(String::from_utf8_lossy(&promoted.stdout), "BLOCKED\t🧱 Holder\t.gitignore\n");
+    assert_eq!(hash_object_invocations(&log), 1);
+
+    for child in [&mut holder, &mut contender] {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+#[test]
+fn recursive_scope_dirty_settling_uses_bounded_hash_object_batches() {
+    let fixture = Fixture::new();
+    let mut host = spawn_synthetic_host(&fixture, "hash-recursive");
+    assert_strong_session(&fixture, "hash-recursive");
+    fs::create_dir(fixture.root.join("bulk")).unwrap();
+    for index in 0..300 {
+        fs::write(fixture.root.join(format!("bulk/file-{index:03}.txt")), format!("{index}\n")).unwrap();
+    }
+
+    let (executable_path, log) = install_hash_object_logger(&fixture);
+    let started = fixture.output_as_with_hash_log(
+        "hash-recursive",
+        &["start", "bulk dirt", "--recursive", "bulk"],
+        &executable_path,
+        &log,
+    );
+    assert_eq!(started.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&started.stdout).starts_with("UNKNOWN\tdirty-settling:bulk/file-000.txt"),
+        "{}",
+        String::from_utf8_lossy(&started.stdout)
+    );
+    assert!((1..=3).contains(&hash_object_invocations(&log)));
+
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
+#[test]
 fn fifo_age_begins_at_draft_promotion_not_draft_creation() {
     let fixture = Fixture::new();
     let mut holder = spawn_synthetic_host(&fixture, "fifo-holder");
@@ -724,6 +813,44 @@ fn send_signal(child: &Child, signal: libc::c_int) {
     // SAFETY: the child PID is live and `kill` has no pointer preconditions.
     let result = unsafe { libc::kill(child.id() as libc::pid_t, signal) };
     assert_eq!(result, 0, "signal child: {}", std::io::Error::last_os_error());
+}
+
+fn install_hash_object_logger(fixture: &Fixture) -> (String, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let bin = fixture._temporary.path().join("git-wrapper-bin");
+    let log = fixture._temporary.path().join("hash-object.log");
+    fs::create_dir(&bin).unwrap();
+    let git = bin.join("git");
+    fs::write(
+        &git,
+        "#!/bin/sh\nfor argument in \"$@\"; do\n  if [ \"$argument\" = \"hash-object\" ]; then\n    printf '%s\\n' hash-object >> \"$AI_COORD_HASH_OBJECT_LOG\"\n    break\n  fi\ndone\nexec /usr/bin/git \"$@\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&git, fs::Permissions::from_mode(0o700)).unwrap();
+    (format!("{}:/usr/bin:/bin", bin.display()), log)
+}
+
+fn hash_object_invocations(log: &Path) -> usize {
+    fs::read_to_string(log).unwrap_or_default().lines().count()
+}
+
+fn commit_paths(fixture: &Fixture, paths: &[&str]) {
+    let added =
+        Command::new("/usr/bin/git").arg("add").arg("--").args(paths).current_dir(&fixture.root).output().unwrap();
+    assert!(added.status.success(), "git add: {}", String::from_utf8_lossy(&added.stderr));
+    let committed = Command::new("/usr/bin/git")
+        .args(["-c", "user.name=ai-coord test", "-c", "user.email=test@invalid", "commit", "--quiet", "-m", "fixture"])
+        .current_dir(&fixture.root)
+        .output()
+        .unwrap();
+    assert!(committed.status.success(), "git commit: {}", String::from_utf8_lossy(&committed.stderr));
+}
+
+fn git_status(fixture: &Fixture) -> String {
+    let output = Command::new("/usr/bin/git").args(["status", "--short"]).current_dir(&fixture.root).output().unwrap();
+    assert!(output.status.success(), "git status: {}", String::from_utf8_lossy(&output.stderr));
+    String::from_utf8(output.stdout).unwrap()
 }
 
 fn spawn_synthetic_host(fixture: &Fixture, session_id: &str) -> Child {

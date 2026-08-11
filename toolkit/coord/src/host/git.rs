@@ -21,6 +21,7 @@ pub(crate) const UNHASHABLE_BLOB_HASH: &str = "<deleted-or-unhashable>";
 const GIT_ROOT_TIMEOUT: Duration = Duration::from_secs(5);
 const GIT_INSPECTION_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_COMMAND_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+const GIT_BLOB_HASH_BATCH_SIZE: usize = 128;
 
 #[derive(Debug)]
 pub(super) struct CommandOutput {
@@ -303,7 +304,65 @@ pub(crate) fn git_dirty_paths(root: &Path) -> Result<Vec<String>> {
     Ok(dirty)
 }
 
+#[cfg(test)]
 pub(crate) fn git_blob_hash(root: &Path, path: &str, write: bool) -> String {
+    git_blob_hashes(root, &[path.to_owned()], write)
+        .pop()
+        .map(|(_, hash)| hash)
+        .unwrap_or_else(|| UNHASHABLE_BLOB_HASH.to_owned())
+}
+
+pub(crate) fn git_blob_hashes(root: &Path, paths: &[String], write: bool) -> Vec<(String, String)> {
+    let mut hashes = vec![None; paths.len()];
+    let mut eligible = Vec::new();
+
+    for (index, path) in paths.iter().enumerate() {
+        match std::fs::symlink_metadata(root.join(path)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                hashes[index] = Some(UNHASHABLE_BLOB_HASH.to_owned());
+            }
+            Ok(_) | Err(_) => eligible.push(index),
+        }
+    }
+
+    for batch in eligible.chunks(GIT_BLOB_HASH_BATCH_SIZE) {
+        let batch_paths = batch.iter().map(|index| paths[*index].as_str()).collect::<Vec<_>>();
+        let batch_hashes = git_blob_hash_batch(root, &batch_paths, write)
+            .unwrap_or_else(|| batch_paths.iter().map(|path| git_blob_hash_single(root, path, write)).collect());
+        for (index, hash) in batch.iter().zip(batch_hashes) {
+            hashes[*index] = Some(hash);
+        }
+    }
+
+    paths
+        .iter()
+        .cloned()
+        .zip(hashes.into_iter().map(|hash| hash.unwrap_or_else(|| UNHASHABLE_BLOB_HASH.to_owned())))
+        .collect()
+}
+
+fn git_blob_hash_batch(root: &Path, paths: &[&str], write: bool) -> Option<Vec<String>> {
+    if paths.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut command = Command::new("git");
+    command.args(["-C"]).arg(root).arg("hash-object");
+    if write {
+        command.arg("-w");
+    }
+    let output = run_output_timeout(command.arg("--").args(paths), GIT_INSPECTION_TIMEOUT);
+    let Ok(output) = output else {
+        return None;
+    };
+    if !output.status.success() {
+        return None;
+    }
+    let output = std::str::from_utf8(&output.stdout).ok()?;
+    let hashes = output.lines().map(str::to_owned).collect::<Vec<_>>();
+    (hashes.len() == paths.len() && hashes.iter().all(|hash| !hash.is_empty())).then_some(hashes)
+}
+
+fn git_blob_hash_single(root: &Path, path: &str, write: bool) -> String {
     let mut command = Command::new("git");
     command.args(["-C"]).arg(root).arg("hash-object");
     if write {
@@ -469,6 +528,124 @@ mod tests {
         assert_ne!(git_blob_hash(root, "nested/file.txt", false), UNHASHABLE_BLOB_HASH);
         assert_eq!(git_blob_hash(root, "missing", false), UNHASHABLE_BLOB_HASH);
         assert_eq!(relevant_dirty(&[scope("nested", true)], &["nested/file.txt".to_owned()]), vec!["nested/file.txt"]);
+    }
+
+    #[test]
+    fn hashes_more_than_one_batch_in_input_order() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        let paths = (0..129)
+            .map(|index| {
+                let path = format!("file-{index}.txt");
+                fs::write(root.join(&path), format!("content-{index}\n")).unwrap();
+                path
+            })
+            .collect::<Vec<_>>();
+
+        let hashes = git_blob_hashes(root, &paths, false);
+
+        assert_eq!(hashes.len(), paths.len());
+        assert_eq!(hashes.iter().map(|(path, _)| path).collect::<Vec<_>>(), paths.iter().collect::<Vec<_>>());
+        assert!(hashes.iter().all(|(_, hash)| hash != UNHASHABLE_BLOB_HASH));
+    }
+
+    #[test]
+    fn hashes_duplicates_special_names_and_missing_inputs_in_order() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("with spaces.txt"), "spaces\n").unwrap();
+        fs::write(root.join("with\nnewline.txt"), "newline\n").unwrap();
+        fs::write(root.join("deleted.txt"), "deleted\n").unwrap();
+        assert!(Command::new("git").args(["add", "deleted.txt"]).current_dir(root).status().unwrap().success());
+        fs::remove_file(root.join("deleted.txt")).unwrap();
+        let paths = vec![
+            "with spaces.txt".to_owned(),
+            "missing.txt".to_owned(),
+            "with spaces.txt".to_owned(),
+            "deleted.txt".to_owned(),
+            "with\nnewline.txt".to_owned(),
+        ];
+
+        let hashes = git_blob_hashes(root, &paths, false);
+
+        assert_eq!(hashes.iter().map(|(path, _)| path).collect::<Vec<_>>(), paths.iter().collect::<Vec<_>>());
+        assert_ne!(hashes[0].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes[1].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes[2].1, hashes[0].1);
+        assert_eq!(hashes[3].1, UNHASHABLE_BLOB_HASH);
+        assert_ne!(hashes[4].1, UNHASHABLE_BLOB_HASH);
+    }
+
+    #[test]
+    fn batch_failure_falls_back_without_losing_path_mapping() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("first.txt"), "first\n").unwrap();
+        fs::create_dir(root.join("not-a-blob")).unwrap();
+        fs::write(root.join("last.txt"), "last\n").unwrap();
+        let paths = vec!["first.txt".to_owned(), "not-a-blob".to_owned(), "last.txt".to_owned()];
+
+        let hashes = git_blob_hashes(root, &paths, false);
+
+        assert_eq!(hashes.iter().map(|(path, _)| path).collect::<Vec<_>>(), paths.iter().collect::<Vec<_>>());
+        assert_ne!(hashes[0].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes[1].1, UNHASHABLE_BLOB_HASH);
+        assert_ne!(hashes[2].1, UNHASHABLE_BLOB_HASH);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hashes_valid_and_broken_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("target.txt"), "target\n").unwrap();
+        symlink("target.txt", root.join("valid-link")).unwrap();
+        symlink("missing-target.txt", root.join("broken-link")).unwrap();
+        let paths = vec!["valid-link".to_owned(), "broken-link".to_owned()];
+
+        let hashes = git_blob_hashes(root, &paths, false);
+
+        assert_ne!(hashes[0].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes[1].1, UNHASHABLE_BLOB_HASH);
+    }
+
+    #[test]
+    fn read_mode_does_not_write_blobs_but_write_mode_persists_them() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("file.txt"), "content\n").unwrap();
+        let paths = vec!["file.txt".to_owned()];
+
+        let read_hash = git_blob_hashes(root, &paths, false)[0].1.clone();
+        assert_ne!(read_hash, UNHASHABLE_BLOB_HASH);
+        assert!(
+            !Command::new("git")
+                .args(["cat-file", "-e"])
+                .arg(format!("{read_hash}^{{blob}}"))
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        let write_hash = git_blob_hashes(root, &paths, true)[0].1.clone();
+        assert_eq!(write_hash, read_hash);
+        assert!(
+            Command::new("git")
+                .args(["cat-file", "-e"])
+                .arg(format!("{write_hash}^{{blob}}"))
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
     }
 
     #[test]

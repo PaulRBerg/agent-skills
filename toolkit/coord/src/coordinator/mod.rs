@@ -26,7 +26,7 @@ use crate::{
     },
     error::{AppError, Result},
     host::{
-        INVENTORY_CACHE_SECONDS, NativeProcessProbe, any_overlap, from_environment, git_blob_hash, git_dirty_paths,
+        INVENTORY_CACHE_SECONDS, NativeProcessProbe, any_overlap, from_environment, git_blob_hashes, git_dirty_paths,
         git_root, host_process_reference, identity_key, normalize_work_scopes, process_ancestors, process_sweep,
         relevant_dirty,
     },
@@ -334,7 +334,7 @@ impl Coordinator {
         if let Some(work) = work.as_ref().filter(|work| work.state == WorkState::Active && !work.scopes.is_empty()) {
             let root = PathBuf::from(&work.repo_root);
             let dirty = git_dirty_paths(&root).unwrap_or_default();
-            let hashes = dirty.iter().map(|path| (path.clone(), git_blob_hash(&root, path, false))).collect::<Vec<_>>();
+            let hashes = git_blob_hashes(&root, &dirty, false);
             let _ = store.observe_dirt(&work.repo_root, &hashes, self.clock.wall());
             let residual = relevant_dirty(&work.scopes, &dirty);
             residual_paths = residual.clone();
@@ -398,8 +398,7 @@ impl Coordinator {
         for value in observation_roots {
             let root = PathBuf::from(&value);
             if let Ok(dirty) = git_dirty_paths(&root) {
-                let hashes =
-                    dirty.iter().map(|path| (path.clone(), git_blob_hash(&root, path, false))).collect::<Vec<_>>();
+                let hashes = git_blob_hashes(&root, &dirty, false);
                 let _ = store.observe_dirt(&value, &hashes, self.clock.wall());
             }
         }

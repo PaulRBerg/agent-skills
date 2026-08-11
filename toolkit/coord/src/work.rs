@@ -10,7 +10,7 @@ use crate::{
     domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, ScopeKind, WorkState, client_name, sanitize},
     error::{AppError, Result},
     host::{
-        UNHASHABLE_BLOB_HASH, any_overlap, git_blob_hash, git_dirty_paths, normalize_scopes, overlapping_paths,
+        UNHASHABLE_BLOB_HASH, any_overlap, git_blob_hashes, git_dirty_paths, normalize_scopes, overlapping_paths,
         overlaps_outside_coverage, relevant_dirty, scopes_cover, scopes_overlap,
     },
     state::{BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkRow, WorkUpdate},
@@ -78,8 +78,7 @@ impl WorkCoordinator<'_> {
             return self.update_active(identity, root, &repo_root, label, scopes, inventory, active.clone(), current);
         }
 
-        let (dirty, observations) = observe_git_dirt(self.store, root, current)?;
-        let relevant = relevant_dirty(&scopes, &dirty);
+        let (relevant, _, observations) = observe_git_dirt(self.store, root, &scopes, current)?;
         let benign = benign_dirt_scopes(root);
         let existing_scopes = existing.as_ref().map(|work| work.scopes.as_slice()).unwrap_or_default();
         let preserved_submission = if draft_revision.is_some() {
@@ -217,102 +216,146 @@ impl WorkCoordinator<'_> {
             return Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes)));
         }
 
-        let (dirty, observations) = observe_git_dirt(self.store, root, current)?;
+        let (relevant, dirty, observations) = observe_git_dirt(self.store, root, &scopes, current)?;
         let narrowing = scopes_cover(&existing.scopes, &scopes);
-        let relevant = relevant_dirty(&scopes, &dirty);
         let benign = benign_dirt_scopes(root);
-        let mut advisory = Vec::new();
-        let outcome = self.store.with_work_transaction(|transaction| {
-            let current_work = transaction.work(identity)?;
-            let Some(current_work) = current_work.filter(|work| {
-                work.state == WorkState::Active &&
-                    work.revision == existing.revision &&
-                    same_scopes(&work.scopes, &existing.scopes)
-            }) else {
-                return Err(AppError::retry("active work changed during scope update"));
-            };
+        let existing_relevant = relevant_dirty(&existing.scopes, &dirty);
+        let mut attempted_baselines = HashSet::new();
+        let mut prepared_baselines = Vec::new();
 
-            let work = transaction.works(repo_root)?;
-            let residuals = transaction.residual_owners(repo_root)?;
-            let active = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Active);
-            let queued = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Queued);
-            let unattributed = unattributed_dirty(&relevant, &work);
-            let (fresh, stale) = partition_dirty(&unattributed, &observations, &residuals, &benign, identity, current);
-            advisory = stale;
+        loop {
+            let step = self.store.with_work_transaction(|transaction| {
+                let current_work = transaction.work(identity)?;
+                let Some(current_work) = current_work.filter(|work| {
+                    work.state == WorkState::Active &&
+                        work.revision == existing.revision &&
+                        same_scopes(&work.scopes, &existing.scopes)
+                }) else {
+                    return Err(AppError::retry("active work changed during scope update"));
+                };
 
-            if !narrowing && !inventory.complete {
-                return Ok(Outcome::new(OutcomeKind::Active, 3, "update-unknown:coverage")
-                    .with_paths(scope_paths(&existing.scopes)));
-            }
-            if !narrowing && !fresh.is_empty() {
-                return Ok(Outcome::new(
-                    OutcomeKind::Active,
-                    3,
-                    format!("update-unknown:dirty-settling:{}", fresh.join(",")),
-                )
-                .with_paths(scope_paths(&existing.scopes)));
-            }
-            if !narrowing && (!active.is_empty() || !queued.is_empty()) {
-                let mut contenders = active;
-                contenders.extend(queued);
-                let mut decision = blocked_outcome(&scopes, &contenders, transaction)?;
-                decision.kind = OutcomeKind::Active;
-                decision.detail = format!("update-blocked:{}", decision.holders.join(","));
-                decision.paths = scope_paths(&existing.scopes);
-                return Ok(decision);
-            }
+                let work = transaction.works(repo_root)?;
+                let residuals = transaction.residual_owners(repo_root)?;
+                let active = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Active);
+                let queued = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Queued);
+                let unattributed = unattributed_dirty(&relevant, &work);
+                let (fresh, advisory) =
+                    partition_dirty(&unattributed, &observations, &residuals, &benign, identity, current);
 
-            let released = relevant_dirty(&existing.scopes, &dirty)
-                .into_iter()
-                .filter(|path| relevant_dirty(&scopes, std::slice::from_ref(path)).is_empty())
-                .collect::<Vec<_>>();
-            let mut baselines = transaction
-                .baselines(identity)?
-                .into_iter()
-                .filter(|row| !relevant_dirty(&scopes, std::slice::from_ref(&row.path)).is_empty())
-                .collect::<Vec<_>>();
-            merge_baselines(&mut baselines, write_baselines(root, &advisory));
-            let waiters = work
-                .iter()
-                .filter(|work| {
-                    work.state == WorkState::Queued &&
-                        any_overlap(&existing.scopes, &work.scopes) &&
-                        !any_overlap(&scopes, &work.scopes)
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            transaction.save_work(&WorkUpdate {
-                identity: identity.clone(),
-                repo_root: repo_root.to_owned(),
-                label: label.to_owned(),
-                state: WorkState::Active,
-                blocked_reason: None,
-                scopes: scopes.clone(),
-                baselines: Some(baselines),
-                residual_paths: released,
-                draft_created_at: current_work.draft_created_at,
-                submitted_at: current_work.submitted_at,
-                updated_at: current,
-                expected_revision: Some(current_work.revision),
+                if !narrowing && !inventory.complete {
+                    return Ok(ActiveUpdateStep::Complete(
+                        Outcome::new(OutcomeKind::Active, 3, "update-unknown:coverage")
+                            .with_paths(scope_paths(&existing.scopes)),
+                    ));
+                }
+                if !narrowing && !fresh.is_empty() {
+                    return Ok(ActiveUpdateStep::Complete(
+                        Outcome::new(
+                            OutcomeKind::Active,
+                            3,
+                            format!("update-unknown:dirty-settling:{}", fresh.join(",")),
+                        )
+                        .with_paths(scope_paths(&existing.scopes)),
+                    ));
+                }
+                if !narrowing && (!active.is_empty() || !queued.is_empty()) {
+                    let mut contenders = active;
+                    contenders.extend(queued);
+                    let mut decision = blocked_outcome(&scopes, &contenders, transaction)?;
+                    decision.kind = OutcomeKind::Active;
+                    decision.detail = format!("update-blocked:{}", decision.holders.join(","));
+                    decision.paths = scope_paths(&existing.scopes);
+                    return Ok(ActiveUpdateStep::Complete(decision));
+                }
+
+                let missing = advisory
+                    .iter()
+                    .filter(|path| !attempted_baselines.contains(path.as_str()))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !missing.is_empty() {
+                    return Ok(ActiveUpdateStep::Prepare(missing));
+                }
+
+                let released = existing_relevant
+                    .iter()
+                    .filter(|path| relevant_dirty(&scopes, std::slice::from_ref(path)).is_empty())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let mut baselines = transaction
+                    .baselines(identity)?
+                    .into_iter()
+                    .filter(|row| !relevant_dirty(&scopes, std::slice::from_ref(&row.path)).is_empty())
+                    .collect::<Vec<_>>();
+                let advisory = advisory.iter().collect::<HashSet<_>>();
+                merge_baselines(
+                    &mut baselines,
+                    prepared_baselines
+                        .iter()
+                        .filter(|row: &&BaselineRow| advisory.contains(&row.path))
+                        .cloned()
+                        .collect(),
+                );
+                let waiters = work
+                    .iter()
+                    .filter(|work| {
+                        work.state == WorkState::Queued &&
+                            any_overlap(&existing.scopes, &work.scopes) &&
+                            !any_overlap(&scopes, &work.scopes)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                transaction.save_work(&WorkUpdate {
+                    identity: identity.clone(),
+                    repo_root: repo_root.to_owned(),
+                    label: label.to_owned(),
+                    state: WorkState::Active,
+                    blocked_reason: None,
+                    scopes: scopes.clone(),
+                    baselines: Some(baselines),
+                    residual_paths: released,
+                    draft_created_at: current_work.draft_created_at,
+                    submitted_at: current_work.submitted_at,
+                    updated_at: current,
+                    expected_revision: Some(current_work.revision),
+                })?;
+                let message = sanitize(
+                    &format!("Narrowed work '{}'; your queued work may now be ready.", existing.label),
+                    MAX_MESSAGE_CHARS,
+                );
+                for waiter in waiters {
+                    transaction.send_message(identity, &waiter.identity, &message, Some(repo_root), current)?;
+                }
+                Ok(ActiveUpdateStep::Complete(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes))))
             })?;
-            let message = sanitize(
-                &format!("Narrowed work '{}'; your queued work may now be ready.", existing.label),
-                MAX_MESSAGE_CHARS,
-            );
-            for waiter in waiters {
-                transaction.send_message(identity, &waiter.identity, &message, Some(repo_root), current)?;
+
+            match step {
+                ActiveUpdateStep::Complete(outcome) => return Ok(outcome),
+                ActiveUpdateStep::Prepare(paths) => {
+                    merge_baselines(&mut prepared_baselines, write_baselines(root, &paths));
+                    attempted_baselines.extend(paths);
+                }
             }
-            Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes)))
-        })?;
-        Ok(outcome)
+        }
     }
 }
 
-fn observe_git_dirt(store: &mut Store, root: &Path, current: f64) -> Result<(Vec<String>, Vec<DirtObservationRow>)> {
+enum ActiveUpdateStep {
+    Complete(Outcome),
+    Prepare(Vec<String>),
+}
+
+fn observe_git_dirt(
+    store: &mut Store,
+    root: &Path,
+    scopes: &[Scope],
+    current: f64,
+) -> Result<(Vec<String>, Vec<String>, Vec<DirtObservationRow>)> {
     let dirty = git_dirty_paths(root)?;
-    let hashes = dirty.iter().map(|path| (path.clone(), git_blob_hash(root, path, false))).collect::<Vec<_>>();
-    let observations = store.observe_dirt(&path_text(root)?, &hashes, current)?;
-    Ok((dirty, observations))
+    let relevant = relevant_dirty(scopes, &dirty);
+    let hashes = git_blob_hashes(root, &relevant, false);
+    let observations = store.observe_dirt_subset(&path_text(root)?, &dirty, &hashes, current)?;
+    Ok((relevant, dirty, observations))
 }
 
 fn blockers(
@@ -499,12 +542,9 @@ fn benign_dirt_scopes(root: &Path) -> Vec<Scope> {
 }
 
 fn write_baselines(root: &Path, paths: &[String]) -> Vec<BaselineRow> {
-    paths
-        .iter()
-        .filter_map(|path| {
-            let oid = git_blob_hash(root, path, true);
-            (oid != UNHASHABLE_BLOB_HASH).then(|| BaselineRow { path: path.clone(), oid })
-        })
+    git_blob_hashes(root, paths, true)
+        .into_iter()
+        .filter_map(|(path, oid)| (oid != UNHASHABLE_BLOB_HASH).then_some(BaselineRow { path, oid }))
         .collect()
 }
 

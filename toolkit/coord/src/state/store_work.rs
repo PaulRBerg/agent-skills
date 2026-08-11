@@ -170,8 +170,21 @@ impl Store {
         blob_hashes: &[(String, String)],
         current: f64,
     ) -> Result<Vec<DirtObservationRow>> {
+        let dirty_paths = blob_hashes.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>();
+        self.observe_dirt_subset(repo_root, &dirty_paths, blob_hashes, current)
+    }
+
+    /// Reconciles observations against the complete Git dirt set while only
+    /// refreshing hashes that are relevant to the caller's current scopes.
+    pub(crate) fn observe_dirt_subset(
+        &mut self,
+        repo_root: &str,
+        dirty_paths: &[String],
+        blob_hashes: &[(String, String)],
+        current: f64,
+    ) -> Result<Vec<DirtObservationRow>> {
         self.immediate(|transaction| {
-            let desired = blob_hashes.iter().map(|(path, _)| path.as_str()).collect::<HashSet<_>>();
+            let desired = dirty_paths.iter().map(String::as_str).collect::<HashSet<_>>();
             let existing = {
                 let mut statement = transaction.prepare("SELECT path FROM dirt_observations WHERE repo_root = ?1")?;
                 statement
