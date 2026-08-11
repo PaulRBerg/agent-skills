@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+fresh_limit_seconds=86400
 stale_limit_seconds=604800
 lock_wait_seconds=35
 stale_lock_seconds=60
@@ -10,7 +11,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage: fetch-doc.sh [--refresh] <codex-manual|codex-config-schema>
 
-Fetch and conditionally revalidate a fixed Codex documentation artifact.
+Reuse fresh cached artifacts and conditionally revalidate older fixed Codex documentation artifacts.
 Prints the absolute cached file path on stdout.
 EOF
 }
@@ -196,6 +197,20 @@ if [ "$current_format" = 1 ] && [ -n "$current_validated_utc" ] && \
     ''|*[!0-9]*) ;;
     *) have_valid_cache=true ;;
   esac
+fi
+
+cache_age=''
+if [ "$have_valid_cache" = true ]; then
+  now_epoch=$(date -u +%s)
+  cache_age=$((now_epoch - current_validated_epoch))
+fi
+
+if [ "$refresh" = false ] && [ "$have_valid_cache" = true ] && \
+  [ "$cache_age" -ge 0 ] && [ "$cache_age" -le "$fresh_limit_seconds" ]; then
+  printf 'agents-docs: cached %s last validated at %s (%s)\n' \
+    "$artifact" "$current_validated_utc" "$current_effective_url" >&2
+  printf '%s\n' "$body_file"
+  exit 0
 fi
 
 headers_tmp=$(mktemp "$cache_root/.fetch-doc.headers.XXXXXX")

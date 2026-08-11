@@ -1,11 +1,13 @@
 ---
-compatibility: Requires network access, curl, and a writable user cache directory; topic research needs URL fetch.
+compatibility:
+  Requires curl and a writable user cache directory; network populates or refreshes fixed artifacts and fetches uncached
+  topic pages.
 coordination: exempt
 name: agents-docs
 description: >-
   Use for current official documentation about Codex, Codex CLI, or Claude Code behavior, configuration, prompting,
-  skills, permissions, tools, surfaces, capabilities, troubleshooting, hooks, app-server, or hook trust; fetch the
-  relevant official URL before answering.
+  skills, permissions, tools, surfaces, capabilities, troubleshooting, hooks, app-server, or hook trust; consult the
+  relevant official source before answering.
 ---
 
 # Agents Docs
@@ -17,7 +19,7 @@ This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 Before doing any work, identify the current chat host. If it is not Claude Code or Codex CLI, stop with this error:
 `This skill only works in Claude Code or Codex CLI.`
 
-Answer Codex and Claude Code product questions from the narrowest relevant live official documentation.
+Answer Codex and Claude Code product questions from the narrowest relevant official documentation.
 
 ## Classify the request
 
@@ -27,22 +29,38 @@ pricing, authentication, model selection, migration, or managed-agent workflows.
 
 ## Route official sources
 
-- For Codex, start only at `https://developers.openai.com`. Start broad product research at
-  `https://developers.openai.com/codex/codex-manual.md`; the fixed manual and schema endpoints may redirect to their
-  exact `https://learn.chatgpt.com/docs/` counterparts.
+- For Codex, start only at `https://developers.openai.com`. Resolve `scripts/fetch-doc.sh` relative to this skill
+  directory, run `fetch-doc.sh codex-manual`, search the returned path narrowly with `rg`, and read only the matching
+  heading range into context. The fixed manual and schema endpoints may redirect to their exact
+  `https://learn.chatgpt.com/docs/` counterparts.
 - For Claude Code, use only `https://code.claude.com`. Start broad product research at
   `https://code.claude.com/docs/en/overview.md`.
-- For a specific topic, run a compact domain-restricted web search for the exact official page, then fetch its Markdown
-  representation when available. Retrieve only the page or section needed for the answer; never fetch a complete
-  documentation inventory as a discovery shortcut.
-- For broad Codex synthesis, resolve `scripts/fetch-doc.sh` relative to this skill directory and run
-  `fetch-doc.sh codex-manual`. Search the returned cache path with `rg` and read only the matching heading range into
-  context. Use `--refresh` when freshness is materially disputed, including release/change questions or a conflict
-  between documentation and observed local behavior.
+- For Codex, accept a `cached` manual for ordinary product questions. Use `--refresh` for release/change questions,
+  materially disputed freshness, schema/config discrepancies, conflicts with observed local behavior, and other
+  explicitly unstable cases.
+- When the Codex manual contains sufficient supporting text and identifies the final topic-specific official URL, answer
+  from that evidence and cite the topic URL. When it identifies the topic page but lacks enough detail, fetch that exact
+  Markdown page directly. Run one compact domain-restricted search only when the exact official page remains unknown.
+  Never search merely to rediscover a URL already identified by the manual.
+- For a specific Claude Code topic, run a compact domain-restricted web search for the exact official page, then fetch
+  its Markdown representation when available. Retrieve only the page or section needed for the answer; never fetch a
+  complete documentation inventory as a discovery shortcut.
 - Prefer the current client's URL-capable fetch for narrow topic pages. Use the helper only for its two fixed Codex
   artifacts.
 - For comparisons, complete both provider routes independently. Never infer one product's behavior from the other's
   documentation.
+
+Interpret helper diagnostics precisely:
+
+- `cached` means an integrity-valid artifact was validated no more than 24 hours ago and reused without network access;
+  the validation timestamp did not advance.
+- `revalidated` means an older artifact received a successful conditional `304` response and had its validation metadata
+  refreshed.
+- `fetched` means a successful `200` response supplied integrity-valid content that replaced the prior artifact
+  atomically.
+- `stale` means ordinary revalidation failed and the helper fell back to an integrity-valid artifact no more than seven
+  days old. Disclose its validation timestamp and the retrieval failure. Do not describe `cached` or `stale` evidence as
+  fetched live.
 
 Follow redirects only within the matching official domain, except for the helper's exact Codex artifact redirects to
 `https://learn.chatgpt.com/docs/`. Cite the final page URL reported by the helper or live fetch.
@@ -65,8 +83,8 @@ Do not turn this into a full feature inventory: investigate only the key or feat
 
 ## Answer from evidence
 
-- Treat live official documentation as authoritative for published product claims. Do not answer current or unstable
-  product facts from memory when the relevant page can be fetched.
+- Treat official documentation returned under the bounded cache policy or retrieved live as authoritative for published
+  product claims. Do not answer current or unstable product facts from memory when the relevant page can be refreshed.
 - Cite the exact official page supporting each material claim, not a broad entry point when a topic-specific page was
   used. Prefer short paraphrases; quote only when exact wording matters.
 - If verified local commands, versions, configuration, or callable capabilities conflict with the latest docs, report
@@ -87,16 +105,16 @@ observations distinct in the answer; do not turn a local implementation detail i
 
 ## Bound failures
 
-If live retrieval fails, try the direct URL and one domain-restricted search, then stop expanding sources. The helper
-may return a cache entry validated within the previous seven days after an ordinary retrieval failure; when it reports
-`stale`, disclose its validation timestamp and do not describe it as live. Forced refreshes, expired entries, and
-integrity failures fail closed. State the bounded uncertainty. Use local `--help`, `--version`, configuration, or
+If topic-page retrieval fails, try the direct URL and one domain-restricted search, then stop expanding sources. The
+helper may return a cache entry validated within the previous seven days after an ordinary retrieval failure; when it
+reports `stale`, disclose its validation timestamp and do not describe it as live. Forced refreshes, expired entries,
+and integrity failures fail closed. State the bounded uncertainty. Use local `--help`, `--version`, configuration, or
 observed behavior only when relevant and label it as local evidence. Never silently substitute third-party sources,
 another provider's docs, or bundled knowledge.
 
 For comparisons, answer a supported side even if the other provider is unavailable; mark the unsupported side unknown
 instead of manufacturing symmetry. In network-disabled sessions, use only a helper cache entry that satisfies the
-bounded fallback policy; otherwise fail transparently. Never create caches in a repository or skill installation.
+bounded fresh or stale policy; otherwise fail transparently. Never create caches in a repository or skill installation.
 
 ## Completion
 

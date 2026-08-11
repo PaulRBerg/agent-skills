@@ -194,37 +194,63 @@ teardown() {
   rm -rf "$test_root"
 }
 
-@test 'fetches and conditionally revalidates the Codex manual' {
+age_manual_cache() {
+  age_seconds=$1
+  now_epoch=$(date -u +%s)
+  aged_epoch=$((now_epoch - age_seconds))
+  sed "s/^validated_at_epoch=.*/validated_at_epoch=$aged_epoch/" "$cache_dir/codex-manual.meta" >"$test_root/meta.next"
+  mv "$test_root/meta.next" "$cache_dir/codex-manual.meta"
+}
+
+@test 'fetches and reuses a fresh Codex manual without revalidation' {
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
   [[ "$output" == *'fetched codex-manual'* ]]
   [ -s "$cache_dir/codex-manual.md" ]
+  validated_epoch=$(sed -n 's/^validated_at_epoch=//p' "$cache_dir/codex-manual.meta")
+
+  run "$helper" codex-manual
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'cached codex-manual last validated at'* ]]
+  [ "$(sed -n 's/^validated_at_epoch=//p' "$cache_dir/codex-manual.meta")" = "$validated_epoch" ]
+  [ "$(cat "$fake_state/count")" -eq 1 ]
+  grep -Fq 'version=v1' "$cache_dir/codex-manual.md"
+}
+
+@test 'conditionally revalidates an older Codex manual with its ETag' {
+  run "$helper" codex-manual
+  [ "$status" -eq 0 ]
+  age_manual_cache 86401
 
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
   [[ "$output" == *'revalidated codex-manual'* ]]
   grep -Fq 'If-None-Match: "v1"' "$fake_state/requests"
-  grep -Fq 'version=v1' "$cache_dir/codex-manual.md"
+  [ "$(cat "$fake_state/count")" -eq 2 ]
 }
 
-@test 'uses Last-Modified when no ETag is available' {
+@test 'conditionally revalidates an older Codex manual with Last-Modified when no ETag is available' {
   export FAKE_CURL_MODE=last-modified
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
+  age_manual_cache 86401
 
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
   [[ "$output" == *'revalidated codex-manual'* ]]
   grep -Fq 'If-Modified-Since: Tue, 11 Aug 2026 08:00:00 GMT' "$fake_state/requests"
+  [ "$(cat "$fake_state/count")" -eq 2 ]
 }
 
 @test 'atomically replaces changed content and metadata' {
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
 
+  age_manual_cache 86401
   export FAKE_CURL_MODE=updated
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
+  [[ "$output" == *'fetched codex-manual'* ]]
   grep -Fq 'version=v2' "$cache_dir/codex-manual.md"
   grep -Fq 'etag="v2"' "$cache_dir/codex-manual.meta"
 }
@@ -234,15 +260,17 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"$cache_dir/config-schema.json"* ]]
   grep -Fq "\"\$schema\":" "$cache_dir/config-schema.json"
+
+  run "$helper" codex-config-schema
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'cached codex-config-schema last validated at'* ]]
+  [ "$(cat "$fake_state/count")" -eq 1 ]
 }
 
 @test 'uses a recently validated cache after retrieval failure' {
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
-  now_epoch=$(date -u +%s)
-  recent_epoch=$((now_epoch - 604700))
-  sed "s/^validated_at_epoch=.*/validated_at_epoch=$recent_epoch/" "$cache_dir/codex-manual.meta" >"$cache_dir/meta.next"
-  mv "$cache_dir/meta.next" "$cache_dir/codex-manual.meta"
+  age_manual_cache 86401
 
   export FAKE_CURL_MODE=failure
   run "$helper" codex-manual
@@ -254,10 +282,7 @@ teardown() {
 @test 'rejects expired fallback entries and forced-refresh failures' {
   run "$helper" codex-manual
   [ "$status" -eq 0 ]
-  now_epoch=$(date -u +%s)
-  expired_epoch=$((now_epoch - 604900))
-  sed "s/^validated_at_epoch=.*/validated_at_epoch=$expired_epoch/" "$cache_dir/codex-manual.meta" >"$cache_dir/meta.next"
-  mv "$cache_dir/meta.next" "$cache_dir/codex-manual.meta"
+  age_manual_cache 604900
 
   export FAKE_CURL_MODE=failure
   run "$helper" codex-manual
@@ -314,9 +339,9 @@ teardown() {
 
   [ "$first_rc" -eq 0 ]
   [ "$second_rc" -eq 0 ]
-  [ "$(cat "$fake_state/count")" -eq 2 ]
+  [ "$(cat "$fake_state/count")" -eq 1 ]
   grep -Fq 'version=v1' "$cache_dir/codex-manual.md"
-  grep -Fq 'revalidated codex-manual' "$test_root/second.err"
+  grep -Fq 'cached codex-manual' "$test_root/second.err"
 }
 
 @test 'rejects unknown artifacts' {
