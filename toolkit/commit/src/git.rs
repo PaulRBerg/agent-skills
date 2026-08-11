@@ -109,6 +109,13 @@ impl Repository {
         Ok(if path.is_absolute() { path } else { self.root.join(path) })
     }
 
+    pub fn git_dir(&self) -> Result<PathBuf> {
+        let value = self.text(["rev-parse", "--absolute-git-dir"], None)?;
+        PathBuf::from(&value).canonicalize().map_err(|error| {
+            AppError::operational(format!("cannot resolve physical Git directory {}: {error}", value.trim()))
+        })
+    }
+
     pub fn text<I, S>(&self, args: I, index: Option<&Path>) -> Result<String>
     where
         I: IntoIterator<Item = S>,
@@ -146,6 +153,60 @@ impl Repository {
         command.output().map_err(|error| AppError::operational(format!("cannot execute git: {error}")))
     }
 
+    pub fn raw_in_worktree<I, S>(&self, args: I, index: Option<&Path>, worktree: &Path) -> Result<Output>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut command = self.command_in_worktree(index, worktree)?;
+        command.args(args);
+        command.output().map_err(|error| AppError::operational(format!("cannot execute git: {error}")))
+    }
+
+    pub fn bytes_in_worktree<I, S>(&self, args: I, index: Option<&Path>, worktree: &Path) -> Result<Vec<u8>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let output = self.raw_in_worktree(args, index, worktree)?;
+        if output.status.success() { Ok(output.stdout) } else { Err(git_error(output)) }
+    }
+
+    pub fn checked_in_worktree<I, S>(&self, args: I, index: Option<&Path>, worktree: &Path) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let output = self.raw_in_worktree(args, index, worktree)?;
+        if output.status.success() { Ok(()) } else { Err(git_error(output)) }
+    }
+
+    pub fn run_snapshot_hook(
+        &self,
+        hook: &str,
+        arguments: &[&str],
+        index: &Path,
+        worktree: &Path,
+    ) -> Result<Option<Output>> {
+        let hook_path = self.git_path("hooks")?.join(hook);
+        if !is_executable(&hook_path)? {
+            return Ok(None);
+        }
+        let output = Command::new(&hook_path)
+            .args(arguments)
+            .current_dir(worktree)
+            .env_remove("GIT_INDEX_FILE")
+            .env("GIT_INDEX_FILE", index)
+            .env("GIT_DIR", self.git_dir()?)
+            .env("GIT_WORK_TREE", worktree)
+            .env_remove("GIT_PREFIX")
+            .env("AI_COMMIT_HOOK_MODE", "snapshot-check")
+            .env("AI_COMMIT_ORIGINAL_WORKTREE", &self.root)
+            .output()
+            .map_err(|error| AppError::operational(format!("cannot execute hook {}: {error}", hook_path.display())))?;
+        Ok(Some(output))
+    }
+
     pub fn with_input<I, S>(&self, args: I, input: &[u8], index: Option<&Path>) -> Result<Output>
     where
         I: IntoIterator<Item = S>,
@@ -161,11 +222,32 @@ impl Repository {
 
     pub fn command(&self, index: Option<&Path>) -> Command {
         let mut command = Command::new("git");
-        command.arg("-C").arg(&self.root).env_remove("GIT_INDEX_FILE");
+        command
+            .arg("-C")
+            .arg(&self.root)
+            .env_remove("GIT_INDEX_FILE")
+            .env_remove("AI_COMMIT_HOOK_MODE")
+            .env_remove("AI_COMMIT_ORIGINAL_WORKTREE");
         if let Some(index) = index {
             command.env("GIT_INDEX_FILE", index);
         }
         command
+    }
+
+    fn command_in_worktree(&self, index: Option<&Path>, worktree: &Path) -> Result<Command> {
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(worktree)
+            .env_remove("GIT_INDEX_FILE")
+            .env("GIT_DIR", self.git_dir()?)
+            .env("GIT_WORK_TREE", worktree)
+            .env_remove("AI_COMMIT_HOOK_MODE")
+            .env_remove("AI_COMMIT_ORIGINAL_WORKTREE");
+        if let Some(index) = index {
+            command.env("GIT_INDEX_FILE", index);
+        }
+        Ok(command)
     }
 
     pub fn tree_entry(&self, tree: &str, path: &str) -> Result<Option<TreeEntry>> {
@@ -250,6 +332,29 @@ impl Repository {
         input.push_str("prepare\ncommit\n");
         let output = self.with_input(["update-ref", "--stdin"], input.as_bytes(), None)?;
         if output.status.success() { Ok(()) } else { Err(git_error(output)) }
+    }
+}
+
+fn is_executable(path: &Path) -> Result<bool> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(AppError::operational(format!("cannot inspect configured hook {}: {error}", path.display())));
+        }
+    };
+    if !metadata.is_file() {
+        return Ok(false);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        Ok(metadata.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(true)
     }
 }
 

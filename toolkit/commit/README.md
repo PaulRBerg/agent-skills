@@ -60,6 +60,21 @@ pre-existing portions of those files automatically. Explicit `--exclude-baseline
 path. Use `--no-auto-baseline` to disable ambient discovery while retaining explicit exclusions; `--staged` always
 skips discovery because it captures the index exactly.
 
+Before verification hooks run, `commit` compares the transaction's intended paths in the prepared index with the
+physical shared worktree. Unrelated dirty paths do not affect hook execution. When every intended path matches, hooks
+retain their normal behavior: tracked changes they stage can enter the commit, and newly added paths are reported as
+`HOOK_ADDED`. When an intended path differs, `pre-commit`, `prepare-commit-msg`, and `commit-msg` instead run from a
+temporary materialization of the complete prepared index beneath the repository's physical Git directory. They receive
+the existing alternate `GIT_INDEX_FILE`, `GIT_WORK_TREE` pointing to that materialization,
+`AI_COMMIT_HOOK_MODE=snapshot-check`, and `AI_COMMIT_ORIGINAL_WORKTREE` pointing to the canonical physical repository
+root.
+
+Snapshot-check hooks may edit the commit message, but any tracked-content or prepared-index change stops the commit
+with `snapshot-check hook modified prepared content`, lists the affected paths, and leaves the transaction prepared for
+explicit recovery. Ordinary hook failures remain retryable. Temporary hook state is removed on success or failure, and
+`post-commit` always runs through the physical worktree without snapshot-check markers. This isolates conventional
+relative Git and worktree operations; it does not constrain hooks that deliberately perform external side effects.
+
 State defaults to `$XDG_STATE_HOME/ai-commit` or `~/.local/state/ai-commit`; `AI_COMMIT_STATE_DIR` overrides it.
 Message format configuration is repository-local at `<git-root>/.agents/commit.toml`:
 

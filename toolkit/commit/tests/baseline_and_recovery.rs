@@ -29,6 +29,222 @@ fn baseline_exclusion_commits_only_baseline_to_worktree_delta() {
 }
 
 #[test]
+fn baseline_exclusion_runs_strict_hook_against_snapshot() {
+    let harness = Harness::new("baseline-snapshot-hook");
+    harness.write("intended.txt", BASE);
+    harness.write("sibling.txt", "available to hooks\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", BASELINE);
+    let baseline_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+    harness.write("intended.txt", WORKTREE);
+    let hook_log = harness.root.join("snapshot-hook.log");
+    write_executable(
+        &harness.repo.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nset -eu\nstaged=$(git diff --cached --name-only)\nunstaged=$(git diff --name-only)\nfor file in $staged; do\n  case \"\n$unstaged\n\" in *\"\n$file\n\"*) printf 'partially staged files are unsafe in the shared worktree: %s\\n' \"$file\" >&2; exit 88;; esac\ndone\ntest -f sibling.txt\nprintf '%s\\t%s\\t%s\\t%s\\t%s\\n' \"$(pwd -P)\" \"${GIT_WORK_TREE:-}\" \"${GIT_INDEX_FILE:-}\" \"${AI_COMMIT_HOOK_MODE:-}\" \"${AI_COMMIT_ORIGINAL_WORKTREE:-}\" > \"$HOOK_LOG\"\n",
+    );
+
+    let specification = format!("intended.txt={baseline_oid}");
+    let prepared =
+        harness.success(["prepare", "--porcelain", "--exclude-baseline", &specification, "--", "intended.txt"]);
+    let transaction = prepared_id(&stdout(&prepared));
+    let hook_log_text = hook_log.to_string_lossy().into_owned();
+    let committed = harness
+        .command_with_env(["commit", &transaction, "-m", "test: strict snapshot hook"], [("HOOK_LOG", &hook_log_text)]);
+    assert!(committed.status.success(), "{}", stderr(&committed));
+
+    let fields: Vec<_> = fs::read_to_string(&hook_log).unwrap().trim_end().split('\t').map(str::to_owned).collect();
+    assert_eq!(fields.len(), 5, "unexpected hook log: {fields:?}");
+    assert_eq!(fields[0], fields[1]);
+    assert!(!fields[2].is_empty());
+    assert!(!fields[2].ends_with(".lock"));
+    assert_eq!(fields[3], "snapshot-check");
+    assert_eq!(fields[4], harness.repo.canonicalize().unwrap().to_string_lossy());
+    let snapshot = std::path::Path::new(&fields[1]);
+    assert!(snapshot.starts_with(harness.repo.join(".git").canonicalize().unwrap()));
+    assert!(!snapshot.exists(), "snapshot worktree was not cleaned: {}", snapshot.display());
+
+    let committed_file = harness.git(["show", "HEAD:intended.txt"]);
+    assert!(committed_file.contains("line 02 original"));
+    assert!(committed_file.contains("line 11 agent"));
+    assert_eq!(harness.read("intended.txt"), WORKTREE);
+    assert_eq!(harness.git(["status", "--short"]), " M intended.txt");
+}
+
+#[test]
+fn snapshot_mode_selection_only_considers_intended_paths() {
+    let unrelated = Harness::new("snapshot-unrelated-dirty");
+    unrelated.write("intended.txt", "base\n");
+    unrelated.write("unrelated.txt", "base\n");
+    unrelated.commit_all("base");
+    unrelated.write("intended.txt", "prepared\n");
+    let (transaction, _) = unrelated.prepare(&["intended.txt"]);
+    unrelated.write("unrelated.txt", "dirty later\n");
+    let hook_log = unrelated.root.join("ordinary-hook.log");
+    write_executable(
+        &unrelated.repo.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nset -eu\nprintf '%s\\t%s\\n' \"${AI_COMMIT_HOOK_MODE:-}\" \"$(pwd -P)\" > \"$HOOK_LOG\"\n",
+    );
+    let hook_log_text = hook_log.to_string_lossy().into_owned();
+    let output = unrelated
+        .command_with_env(["commit", &transaction, "-m", "test: unrelated dirt"], [("HOOK_LOG", &hook_log_text)]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(
+        fs::read_to_string(&hook_log).unwrap(),
+        format!("\t{}\n", unrelated.repo.canonicalize().unwrap().display())
+    );
+    assert_eq!(unrelated.read("unrelated.txt"), "dirty later\n");
+
+    let changed = Harness::new("snapshot-intended-changed");
+    changed.write("intended.txt", "base\n");
+    changed.commit_all("base");
+    changed.write("intended.txt", "prepared\n");
+    let (transaction, _) = changed.prepare(&["intended.txt"]);
+    changed.write("intended.txt", "changed after prepare\n");
+    let hook_log = changed.root.join("snapshot-hook.log");
+    write_executable(
+        &changed.repo.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nset -eu\nprintf '%s\\t%s\\n' \"${AI_COMMIT_HOOK_MODE:-}\" \"${GIT_WORK_TREE:-}\" > \"$HOOK_LOG\"\n",
+    );
+    let hook_log_text = hook_log.to_string_lossy().into_owned();
+    let output = changed.command_with_env(
+        ["commit", &transaction, "-m", "test: intended path changed"],
+        [("HOOK_LOG", &hook_log_text)],
+    );
+    assert!(output.status.success(), "{}", stderr(&output));
+    let log = fs::read_to_string(&hook_log).unwrap();
+    let (mode, snapshot) = log.trim_end().split_once('\t').unwrap();
+    assert_eq!(mode, "snapshot-check");
+    assert_ne!(snapshot, changed.repo.canonicalize().unwrap().to_string_lossy());
+    assert!(!std::path::Path::new(snapshot).exists());
+    assert_eq!(changed.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(changed.read("intended.txt"), "changed after prepare\n");
+}
+
+#[test]
+fn snapshot_hook_content_drift_is_rejected_without_shared_state_changes() {
+    let cases = [
+        ("staged", "printf 'hook staged\\n' > intended.txt\ngit add -- intended.txt\n", "intended.txt"),
+        ("added", "printf 'hook added\\n' > hook-added.txt\ngit add -- hook-added.txt\n", "hook-added.txt"),
+        ("deleted", "rm -- intended.txt\ngit add -u -- intended.txt\n", "intended.txt"),
+        ("unstaged", "printf 'hook unstaged\\n' > intended.txt\n", "intended.txt"),
+    ];
+
+    for (name, mutation, affected) in cases {
+        let harness = Harness::new(&format!("snapshot-drift-{name}"));
+        harness.write("intended.txt", BASE);
+        harness.commit_all("base");
+        harness.write("intended.txt", BASELINE);
+        let baseline_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+        harness.write("intended.txt", WORKTREE);
+        let specification = format!("intended.txt={baseline_oid}");
+        let prepared =
+            harness.success(["prepare", "--porcelain", "--exclude-baseline", &specification, "--", "intended.txt"]);
+        let transaction = prepared_id(&stdout(&prepared));
+        let hook_log = harness.root.join("snapshot-path.log");
+        let hook = format!("#!/bin/sh\nset -eu\nprintf '%s\\n' \"$GIT_WORK_TREE\" > \"$HOOK_LOG\"\n{mutation}");
+        write_executable(&harness.repo.join(".git/hooks/pre-commit"), &hook);
+        let head_before = harness.git(["rev-parse", "HEAD"]);
+        let index_before = harness.git(["hash-object", ".git/index"]);
+        let status_before = harness.git(["status", "--short"]);
+        let hook_log_text = hook_log.to_string_lossy().into_owned();
+
+        let failed = harness.command_with_env(
+            ["commit", &transaction, "-m", "test: reject snapshot drift"],
+            [("HOOK_LOG", &hook_log_text)],
+        );
+        assert_eq!(exit_code(&failed), 1, "{name}: {}", stderr(&failed));
+        let diagnostic = stderr(&failed);
+        assert!(diagnostic.contains("snapshot-check hook modified prepared content"), "{name}: {diagnostic}");
+        assert!(diagnostic.contains(affected), "{name}: {diagnostic}");
+        assert!(diagnostic.contains("unchanged retry will repeat"), "{name}: {diagnostic}");
+        assert!(diagnostic.contains(&format!("ai-commit discard {transaction}")), "{name}: {diagnostic}");
+        assert!(diagnostic.contains("excluded baseline"), "{name}: {diagnostic}");
+        assert!(diagnostic.contains("owner"), "{name}: {diagnostic}");
+        assert!(stdout(&harness.success(["show", &transaction])).starts_with(&format!("PREPARED {transaction}\n")));
+        assert_eq!(harness.git(["rev-parse", "HEAD"]), head_before, "{name}");
+        assert_eq!(harness.git(["hash-object", ".git/index"]), index_before, "{name}");
+        assert_eq!(harness.git(["status", "--short"]), status_before, "{name}");
+        assert_eq!(harness.read("intended.txt"), WORKTREE, "{name}");
+        assert!(!harness.repo.join("hook-added.txt").exists(), "{name}");
+        let snapshot = fs::read_to_string(&hook_log).unwrap();
+        assert!(!std::path::Path::new(snapshot.trim()).exists(), "{name}: snapshot was not cleaned");
+    }
+}
+
+#[test]
+fn snapshot_hook_failure_is_retryable_and_cleans_materialized_worktree() {
+    let harness = Harness::new("snapshot-hook-failure");
+    harness.write("intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("intended.txt", BASELINE);
+    let baseline_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+    harness.write("intended.txt", WORKTREE);
+    let specification = format!("intended.txt={baseline_oid}");
+    let prepared =
+        harness.success(["prepare", "--porcelain", "--exclude-baseline", &specification, "--", "intended.txt"]);
+    let transaction = prepared_id(&stdout(&prepared));
+    let hook_log = harness.root.join("failed-snapshot.log");
+    write_executable(
+        &harness.repo.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$GIT_WORK_TREE\" > \"$HOOK_LOG\"\nprintf 'intentional snapshot hook failure\\n' >&2\nexit 1\n",
+    );
+    let head_before = harness.git(["rev-parse", "HEAD"]);
+    let index_before = harness.git(["hash-object", ".git/index"]);
+    let hook_log_text = hook_log.to_string_lossy().into_owned();
+    let failed = harness.command_with_env(
+        ["commit", &transaction, "-m", "test: snapshot hook failure"],
+        [("HOOK_LOG", &hook_log_text)],
+    );
+    assert_eq!(exit_code(&failed), 1);
+    assert!(stderr(&failed).contains("intentional snapshot hook failure"), "{}", stderr(&failed));
+    assert!(stdout(&harness.success(["show", &transaction])).starts_with(&format!("PREPARED {transaction}\n")));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), head_before);
+    assert_eq!(harness.git(["hash-object", ".git/index"]), index_before);
+    assert_eq!(harness.read("intended.txt"), WORKTREE);
+    let snapshot = fs::read_to_string(&hook_log).unwrap();
+    assert!(!std::path::Path::new(snapshot.trim()).exists(), "snapshot was not cleaned");
+}
+
+#[test]
+fn snapshot_materialization_failure_cleans_temporary_state_and_is_retryable() {
+    let harness = Harness::new("snapshot-materialization-failure");
+    harness.write("intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("intended.txt", BASELINE);
+    let baseline_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+    harness.write("intended.txt", WORKTREE);
+    let specification = format!("intended.txt={baseline_oid}");
+    let prepared =
+        harness.success(["prepare", "--porcelain", "--exclude-baseline", &specification, "--", "intended.txt"]);
+    let transaction = prepared_id(&stdout(&prepared));
+    let head_before = harness.git(["rev-parse", "HEAD"]);
+    let index_before = harness.git(["hash-object", ".git/index"]);
+
+    let failed = harness.command_with_env(
+        ["commit", &transaction, "-m", "test: injected materialization failure"],
+        [("AI_COMMIT_TEST_FAIL_SNAPSHOT_MATERIALIZATION", "1")],
+    );
+    assert_eq!(exit_code(&failed), 3);
+    assert!(stderr(&failed).contains("snapshot"));
+    assert!(stdout(&harness.success(["show", &transaction])).starts_with(&format!("PREPARED {transaction}\n")));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), head_before);
+    assert_eq!(harness.git(["hash-object", ".git/index"]), index_before);
+    assert_eq!(harness.read("intended.txt"), WORKTREE);
+    let snapshots: Vec<_> = fs::read_dir(harness.repo.join(".git"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name.to_string_lossy().starts_with("ai-commit-hook-"))
+        .collect();
+    assert!(snapshots.is_empty(), "snapshot temporary state remained: {snapshots:?}");
+
+    harness.success(["commit", &transaction, "-m", "test: retry materialization"]);
+    let committed = harness.git(["show", "HEAD:intended.txt"]);
+    assert!(committed.contains("line 02 original"));
+    assert!(committed.contains("line 11 agent"));
+    assert_eq!(harness.read("intended.txt"), WORKTREE);
+}
+
+#[test]
 fn auto_baseline_is_applied_and_disclosed_in_both_output_modes() {
     let harness = Harness::new("auto-baseline");
     harness.write("intended.txt", BASE);

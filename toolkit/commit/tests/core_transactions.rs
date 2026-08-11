@@ -98,7 +98,7 @@ fn formatter_hook_uses_isolated_index_and_preserves_shared_staging() {
     let unrelated_oid = harness.git(["rev-parse", ":unrelated.txt"]);
     let hook_log = harness.root.join("hook-index.log");
     let hook = format!(
-        "#!/bin/sh\nset -eu\ncase \"${{GIT_INDEX_FILE:-}}\" in ''|*.lock) exit 91;; esac\nprintf '%s\\n' \"$GIT_INDEX_FILE\" > '{}'\nprintf 'formatted\\n' > intended.txt\ngit add -- intended.txt\n",
+        "#!/bin/sh\nset -eu\ncase \"${{GIT_INDEX_FILE:-}}\" in ''|*.lock) exit 91;; esac\nprintf '%s\\n%s\\n' \"$GIT_INDEX_FILE\" \"${{AI_COMMIT_HOOK_MODE-unset}}\" > '{}'\nprintf 'formatted\\n' > intended.txt\ngit add -- intended.txt\n",
         hook_log.display()
     );
     write_executable(&harness.repo.join(".git/hooks/pre-commit"), &hook);
@@ -106,7 +106,10 @@ fn formatter_hook_uses_isolated_index_and_preserves_shared_staging() {
     let (transaction, _) = harness.prepare(&["intended.txt"]);
     harness.success(["commit", &transaction, "-m", "test: formatter hook"]);
     assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "formatted");
-    assert!(!fs::read_to_string(hook_log).unwrap().trim().ends_with(".lock"));
+    let hook_log = fs::read_to_string(hook_log).unwrap();
+    let mut hook_log = hook_log.lines();
+    assert!(!hook_log.next().unwrap().ends_with(".lock"));
+    assert_eq!(hook_log.next(), Some("unset"));
     assert_eq!(harness.git(["rev-parse", ":unrelated.txt"]), unrelated_oid);
     assert_eq!(harness.git(["diff", "--cached", "--name-only"]), "unrelated.txt");
 }
@@ -117,20 +120,88 @@ fn hook_added_paths_are_committed_reported_and_reconciled() {
     harness.write("intended.txt", "base\n");
     harness.commit_all("base");
     harness.write("intended.txt", "changed\n");
+    let hook_log = harness.root.join("hook-mode.log");
     write_executable(
         &harness.repo.join(".git/hooks/pre-commit"),
-        "#!/bin/sh\nset -eu\nprintf 'from hook\\n' > hook-added.txt\ngit add -- hook-added.txt\n",
+        &format!(
+            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"${{AI_COMMIT_HOOK_MODE-unset}}\" > '{}'\nprintf 'from hook\\n' > hook-added.txt\ngit add -- hook-added.txt\n",
+            hook_log.display()
+        ),
     );
 
     let (transaction, _) = harness.prepare(&["intended.txt"]);
     let output = harness.success(["commit", &transaction, "-m", "test: hook addition"]);
     assert!(stdout(&output).contains("HOOK_ADDED hook-added.txt"));
+    assert_eq!(fs::read_to_string(hook_log).unwrap(), "unset\n");
     assert_eq!(harness.git(["show", "HEAD:hook-added.txt"]), "from hook");
     assert!(harness.git(["diff", "--cached", "--name-only"]).is_empty());
     harness.git(["switch", "--quiet", "-c", "receipt-replay"]);
     let replay = harness.success(["commit", &transaction, "-m", "ignored on replay"]);
     assert!(stdout(&replay).contains("HOOK_ADDED hook-added.txt"));
     assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "2");
+}
+
+#[test]
+fn unrelated_dirty_paths_do_not_select_snapshot_hook_mode() {
+    let harness = Harness::new("unrelated-dirty-hook");
+    harness.write("intended.txt", "base\n");
+    harness.write("unrelated.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    harness.write("unrelated.txt", "unrelated dirty worktree\n");
+    let hook_log = harness.root.join("hook-environment.log");
+    write_executable(
+        &harness.repo.join(".git/hooks/pre-commit"),
+        &format!(
+            "#!/bin/sh\nset -eu\nprintf '%s\\n%s\\n%s\\n%s\\n' \"$PWD\" \"${{GIT_WORK_TREE-unset}}\" \"${{AI_COMMIT_HOOK_MODE-unset}}\" \"${{AI_COMMIT_ORIGINAL_WORKTREE-unset}}\" > '{}'\n",
+            hook_log.display()
+        ),
+    );
+
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    harness.success(["commit", &transaction, "-m", "test: ignore unrelated dirt"]);
+
+    assert_eq!(
+        fs::read_to_string(hook_log).unwrap(),
+        format!("{}\nunset\nunset\nunset\n", harness.repo.canonicalize().unwrap().display())
+    );
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "changed");
+    assert_eq!(harness.read("unrelated.txt"), "unrelated dirty worktree\n");
+    assert_eq!(harness.git(["status", "--short"]), " M unrelated.txt");
+}
+
+#[test]
+fn post_commit_uses_physical_worktree_without_snapshot_marker() {
+    let harness = Harness::new("post-commit-physical");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    harness.write("intended.txt", "later physical worktree\n");
+
+    write_executable(
+        &harness.repo.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nset -eu\n[ \"${AI_COMMIT_HOOK_MODE:-}\" = snapshot-check ]\n",
+    );
+    let post_commit_log = harness.root.join("post-commit-environment.log");
+    write_executable(
+        &harness.repo.join(".git/hooks/post-commit"),
+        &format!(
+            "#!/bin/sh\nset -eu\nprintf '%s\\n%s\\n%s\\n%s\\n' \"$PWD\" \"${{GIT_WORK_TREE-unset}}\" \"${{AI_COMMIT_HOOK_MODE-unset}}\" \"${{AI_COMMIT_ORIGINAL_WORKTREE-unset}}\" > '{}'\ncat intended.txt >> '{}'\n",
+            post_commit_log.display(),
+            post_commit_log.display()
+        ),
+    );
+
+    harness.success(["commit", &transaction, "-m", "test: physical post commit"]);
+
+    assert_eq!(
+        fs::read_to_string(post_commit_log).unwrap(),
+        format!("{}\nunset\nunset\nunset\nlater physical worktree\n", harness.repo.canonicalize().unwrap().display())
+    );
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(harness.read("intended.txt"), "later physical worktree\n");
+    assert_eq!(harness.git(["status", "--short"]), " M intended.txt");
 }
 
 #[test]

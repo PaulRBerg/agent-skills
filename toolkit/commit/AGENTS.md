@@ -20,6 +20,10 @@ model.
   preparation, explicit exclusions win by path, and staged capture never consults ambient coordination state.
 - Prepared objects remain pinned until a terminal receipt expires or a prepared transaction is discarded.
 - A commit is built from the prepared tree, with only clean current-HEAD movement and hook-staged changes admitted.
+- When an intended prepared path differs from the physical worktree, verification hooks run against a temporary
+  materialization of the complete prepared index. Those hooks may edit the message but must not modify tracked content.
+- Normal verification hooks retain their existing physical-worktree behavior, and `post-commit` always runs from the
+  physical worktree without the snapshot-check environment.
 - Never remove an index lock that this process did not create. Hold the owned lock through ref CAS and index
   reconciliation.
 - A post-ref-update failure must remain replayable without creating a second commit.

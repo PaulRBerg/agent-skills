@@ -14,7 +14,7 @@ use tempfile::Builder;
 use crate::{
     cli::CommitArgs,
     error::{AppError, Result},
-    git::{RefUpdate, Repository, copy_file, decode_nul_paths, git_error},
+    git::{RefUpdate, Repository, copy_file, decode_nul_paths, git_error, literal_pathspec},
     push::{self, PushOutcome},
     state::{PendingCommit, Store, Transaction, TransactionStatus, now_seconds},
 };
@@ -94,14 +94,55 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     let message_file = temporary.path().join("commit-message");
     write_message(&message_file, &args.messages)?;
 
+    let hook_snapshot = if intended_paths_differ_from_worktree(
+        &repository,
+        &commit_index,
+        &transaction.paths,
+        &temporary.path().join("worktree-comparison-index"),
+    )? {
+        Some(HookSnapshot::materialize(
+            &repository,
+            &commit_index,
+            &before_hook_tree,
+            &temporary.path().join("snapshot-validation-index"),
+        )?)
+    } else {
+        None
+    };
+
     if !args.no_verify {
-        run_hook(&repository, &commit_index, "pre-commit", &[])?;
+        run_verification_hook(
+            &repository,
+            &commit_index,
+            hook_snapshot.as_ref(),
+            &before_hook_tree,
+            &transaction.id,
+            "pre-commit",
+            &[],
+        )?;
     }
     let message_path = message_file.to_string_lossy().into_owned();
-    run_hook(&repository, &commit_index, "prepare-commit-msg", &[&message_path, "message"])?;
+    run_verification_hook(
+        &repository,
+        &commit_index,
+        hook_snapshot.as_ref(),
+        &before_hook_tree,
+        &transaction.id,
+        "prepare-commit-msg",
+        &[&message_path, "message"],
+    )?;
     if !args.no_verify {
-        run_hook(&repository, &commit_index, "commit-msg", &[&message_path])?;
+        run_verification_hook(
+            &repository,
+            &commit_index,
+            hook_snapshot.as_ref(),
+            &before_hook_tree,
+            &transaction.id,
+            "commit-msg",
+            &[&message_path],
+        )?;
     }
+    drop(hook_snapshot);
     ensure_nonempty_message(&message_file)?;
     let commit_tree = repository.text(["write-tree"], Some(&commit_index))?;
     if commit_tree == current_base {
@@ -373,6 +414,156 @@ fn run_hook(repository: &Repository, index: &Path, hook: &str, arguments: &[&str
     }
     let output = repository.raw(command_arguments, Some(index))?;
     if output.status.success() { Ok(()) } else { Err(git_error(output)) }
+}
+
+fn run_verification_hook(
+    repository: &Repository,
+    index: &Path,
+    snapshot: Option<&HookSnapshot>,
+    prepared_tree: &str,
+    transaction_id: &str,
+    hook: &str,
+    arguments: &[&str],
+) -> Result<()> {
+    let Some(snapshot) = snapshot else {
+        return run_hook(repository, index, hook, arguments);
+    };
+    if let Some(output) = repository.run_snapshot_hook(hook, arguments, index, snapshot.root())? &&
+        !output.status.success()
+    {
+        return Err(git_error(output));
+    }
+    let drift = snapshot_drift_paths(repository, index, snapshot, prepared_tree)?;
+    if drift.is_empty() {
+        return Ok(());
+    }
+    Err(snapshot_drift_error(transaction_id, &drift))
+}
+
+fn intended_paths_differ_from_worktree(
+    repository: &Repository,
+    index: &Path,
+    intended_paths: &[String],
+    comparison_index: &Path,
+) -> Result<bool> {
+    let tree = repository.text(["write-tree"], Some(index))?;
+    let entries = repository.tree_file_entries(&tree, intended_paths)?;
+    for path in intended_paths {
+        if entries.contains_key(path) {
+            continue;
+        }
+        match fs::symlink_metadata(repository.root.join(path)) {
+            Ok(_) => return Ok(true),
+            Err(error) if matches!(error.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory) => {}
+            Err(error) => {
+                return Err(AppError::operational(format!(
+                    "cannot compare prepared path {path} with the physical worktree: {error}"
+                )));
+            }
+        }
+    }
+    copy_file(index, comparison_index)?;
+    let capture_paths = intended_paths.iter().filter(|path| entries.contains_key(*path)).collect::<Vec<_>>();
+    if !capture_paths.is_empty() {
+        let mut capture_arguments = vec!["add".to_owned(), "-A".to_owned(), "--".to_owned()];
+        capture_arguments.extend(capture_paths.into_iter().map(|path| literal_pathspec(path)));
+        let captured = repository.raw_in_worktree(capture_arguments, Some(comparison_index), &repository.root)?;
+        if !captured.status.success() {
+            return Err(git_error(captured));
+        }
+    }
+    let worktree_tree = repository.text(["write-tree"], Some(comparison_index))?;
+    Ok(tree != worktree_tree)
+}
+
+fn snapshot_drift_paths(
+    repository: &Repository,
+    index: &Path,
+    snapshot: &HookSnapshot,
+    prepared_tree: &str,
+) -> Result<Vec<String>> {
+    let current_tree = repository.text(["write-tree"], Some(index))?;
+    let mut paths = diff_paths(repository, prepared_tree, &current_tree)?.into_iter().collect::<BTreeSet<_>>();
+    paths.extend(worktree_diff_paths(repository, snapshot.validation_index(), snapshot.root(), &[])?);
+    Ok(paths.into_iter().collect())
+}
+
+fn worktree_diff_paths(
+    repository: &Repository,
+    index: &Path,
+    worktree: &Path,
+    paths: &[String],
+) -> Result<Vec<String>> {
+    let mut arguments = vec![
+        "diff-files".to_owned(),
+        "--name-only".to_owned(),
+        "--no-renames".to_owned(),
+        "-z".to_owned(),
+        "--".to_owned(),
+    ];
+    arguments.extend(paths.iter().map(|path| literal_pathspec(path)));
+    let bytes = repository.bytes_in_worktree(arguments, Some(index), worktree)?;
+    decode_nul_paths(&bytes)
+}
+
+fn snapshot_drift_error(transaction_id: &str, paths: &[String]) -> AppError {
+    AppError::operational(format!(
+        "snapshot-check hook modified prepared content: {}\n\
+         an unchanged retry will repeat; run `ai-commit discard {transaction_id}`, apply only owned hook-required \
+         changes without altering excluded baseline bytes, then prepare a new transaction. If satisfying the hook \
+         would change baseline-owned bytes, wait for or contact the owner instead.",
+        paths.join(", ")
+    ))
+}
+
+struct HookSnapshot {
+    worktree: tempfile::TempDir,
+    validation_index: PathBuf,
+}
+
+impl HookSnapshot {
+    fn materialize(
+        repository: &Repository,
+        index: &Path,
+        prepared_tree: &str,
+        validation_index: &Path,
+    ) -> Result<Self> {
+        let git_dir = repository.git_dir()?;
+        let mut builder = Builder::new();
+        builder.prefix("ai-commit-hook-");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            builder.permissions(fs::Permissions::from_mode(0o700));
+        }
+        let worktree = builder.tempdir_in(&git_dir).map_err(|error| {
+            AppError::retry(format!("cannot create temporary hook worktree under {}: {error}", git_dir.display()))
+        })?;
+        if env::var_os("AI_COMMIT_TEST_FAIL_SNAPSHOT_MATERIALIZATION").is_some() {
+            return Err(AppError::retry("injected snapshot materialization failure"));
+        }
+        repository
+            .checked_in_worktree(["checkout-index", "--all", "--force"], Some(index), worktree.path())
+            .map_err(|error| AppError::retry(format!("cannot materialize temporary hook worktree: {error}")))?;
+        repository
+            .checked_in_worktree(["update-index", "--refresh"], Some(index), worktree.path())
+            .map_err(|error| AppError::retry(format!("cannot validate temporary hook worktree: {error}")))?;
+        let materialized_tree = repository.text(["write-tree"], Some(index))?;
+        if materialized_tree != prepared_tree {
+            return Err(AppError::operational("temporary hook worktree materialization changed the prepared tree"));
+        }
+        copy_file(index, validation_index)?;
+        Ok(Self { worktree, validation_index: validation_index.to_path_buf() })
+    }
+
+    fn root(&self) -> &Path {
+        self.worktree.path()
+    }
+
+    fn validation_index(&self) -> &Path {
+        &self.validation_index
+    }
 }
 
 fn create_commit(
