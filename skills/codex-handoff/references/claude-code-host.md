@@ -13,7 +13,7 @@ For each research agent selected by the shared contract, resolve `../scripts/run
 and use the implementation launch template with `--read-only`. Give every agent separate `<agent-id>.progress.jsonl`,
 `<agent-id>.result.json`, and `<agent-id>.stderr.log` artifacts. Start all selected agents as background Bash tasks
 (`run_in_background: true`) in the same turn, then watch the wave through the implementation watcher and Monitor flow
-below. The runner-enforced read-only sandbox legitimizes this launch in any mode, including Plan mode.
+below. The runner-enforced read-only sandbox permits this launch in any host mode.
 
 Give each research agent a self-contained prompt containing the open questions, exact investigation scope, read-only
 boundary, relevant repository constraints, and stopping rule from the shared prompt contract. Require every field in

@@ -30,10 +30,9 @@ other active workers when reported. Split a wider manifest into dependency-prese
 limit is total implementation agents, not concurrent width. With no reported concurrency cap, launch one worker at a
 time.
 
-Codex subagents inherit the parent sandbox and approval policy: Plan-mode research stays under the parent's read-only
-controls, and implementation cannot bypass the permissions selected for the approved parent turn. For a research-only
-handoff outside Plan mode, the shared prompt's strict no-edit boundary is mandatory; treat any reported edit as a
-contract violation.
+Codex subagents inherit the parent sandbox and approval policy: research stays under the parent's read-only controls,
+and implementation cannot bypass the permissions selected for the approved parent turn. For every research-only handoff,
+the shared prompt's strict no-edit boundary is mandatory; treat any reported edit as a contract violation.
 
 ## Research Mechanics
 
@@ -65,7 +64,7 @@ the parent owns the coordination claim for every delegated write scope and subag
 `ai-coord wait`, or `ai-coord done`. Include this fact in every worker prompt so the parent's claim is treated as
 authorization rather than a conflict; unrelated claims on the exact assigned scope can still block work.
 
-After plan approval and exit from Plan mode, call `spawn_agent` for each implementation worker with:
+After plan approval, call `spawn_agent` for each implementation worker with:
 
 - `fork_turns: "none"`;
 - the model and `reasoning_effort` from its approved manifest row;

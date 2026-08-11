@@ -1,9 +1,8 @@
 ---
 argument-hint: "[task]"
 compatibility:
-  Requires Plan mode for implementation handoffs, but research-only handoffs may run in any mode. The Claude Code host
-  also requires Git, /bin/bash, Python 3, and an authenticated Codex CLI with dangerous bypass support; the Codex CLI
-  host requires native subagents.
+  The Claude Code host requires Git, /bin/bash, Python 3, and an authenticated Codex CLI with dangerous bypass support;
+  the Codex CLI host requires native subagents.
 disable-model-invocation: true
 metadata:
   install-targets: claude-code codex
@@ -19,8 +18,8 @@ description:
 
 # Codex Handoff
 
-Codex-handoff orchestrates read-only investigation in any mode, or implementation within the current session from Plan
-mode. Task-handoff instead writes a decision-complete file for a fresh, separate session; use it when work continues
+Codex-handoff orchestrates read-only investigation or implementation within the current session after explicit plan
+approval. Task-handoff instead writes a decision-complete file for a fresh, separate session; use it when work continues
 later or elsewhere, and use an in-session handoff skill to implement an approved plan now.
 
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
@@ -45,8 +44,8 @@ cannot weaken this shared contract.
 ## Contract
 
 - Run only after explicit invocation. Research-only = requested outcome is findings/evidence/assessment only, no repo
-  changes or plan requested; may run in any mode. Every other task requires Plan mode — if inactive, ask the user to
-  switch and stop.
+  changes or plan requested. All handoffs may run in any host mode; implementation handoffs must pass through the Plan
+  Phase and receive explicit user approval before launch.
 - The parent owns decisions, the final plan, and orchestration; for complex tasks, delegate investigation to read-only
   research agents before writing the plan.
 - Research agents gather evidence and report findings only — never edit files, make design decisions, or return plans.
@@ -101,7 +100,7 @@ do not produce an implementation plan or begin edits.
 
 ## Plan Phase
 
-Enter this phase only for an implementation handoff in Plan mode.
+Enter this phase only for an implementation handoff.
 
 Produce a decision-complete plan with this section and the selected adapter's exact manifest table:
 
@@ -144,8 +143,8 @@ CLAUDE.md, a durable context doc, or an existing project-installed skill under `
 under `skills/` stay outside that workflow. Mark both passes required when both trigger rules apply; mark neither when
 neither applies.
 
-Do not launch implementation agents until the user approves the plan and the host leaves Plan mode. Read-only research
-is the only pre-approval exception.
+Do not launch implementation agents until the user approves the plan. Read-only research is the only pre-approval
+exception.
 
 ## Implementation Prompt Contract
 

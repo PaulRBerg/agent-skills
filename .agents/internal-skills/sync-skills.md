@@ -66,8 +66,8 @@ adapters specialize runtime mechanics. `claude-handoff` remains Claude Code only
 semantically identical between the two entrypoints, adjusted only for the parent/agent noun and runtime — do not restate
 their content here, the sync run reads both skills directly:
 
-1. Plan-mode gate for implementation handoffs, the research-only any-mode exception, and the stop-before-planning
-   boundary.
+1. Any-host-mode support for every handoff, the explicit plan-approval gate before implementation launch, and the
+   research-only stop-before-planning boundary.
 2. Parent ownership of decisions/plan/orchestration; implementation-agent no-redesign rule.
 3. Smallest-effective-team rule + eight-implementation-agent limit; brief-sizing rule splitting any brief likely to
    exceed roughly 25-30 minutes.
