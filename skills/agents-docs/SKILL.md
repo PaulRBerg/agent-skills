@@ -1,5 +1,5 @@
 ---
-compatibility: Requires network access and a URL-capable web fetch or curl.
+compatibility: Requires network access, curl, and a writable user cache directory; topic research needs URL fetch.
 coordination: exempt
 name: agents-docs
 description: >-
@@ -27,29 +27,33 @@ pricing, authentication, model selection, migration, or managed-agent workflows.
 
 ## Route official sources
 
-- For Codex, use only `https://developers.openai.com`. Start broad product research at
-  `https://developers.openai.com/codex/codex-manual.md`.
+- For Codex, start only at `https://developers.openai.com`. Start broad product research at
+  `https://developers.openai.com/codex/codex-manual.md`; the fixed manual and schema endpoints may redirect to their
+  exact `https://learn.chatgpt.com/docs/` counterparts.
 - For Claude Code, use only `https://code.claude.com`. Start broad product research at
   `https://code.claude.com/docs/en/overview.md`.
 - For a specific topic, run a compact domain-restricted web search for the exact official page, then fetch its Markdown
   representation when available. Retrieve only the page or section needed for the answer; never fetch a complete
   documentation inventory as a discovery shortcut.
-- For broad Codex synthesis, fetch the consolidated manual to an operating-system temporary location, search it with
-  `rg`, and read only the matching heading range into context. Do not write it or a cache into the repository or skill
-  installation.
-- Prefer the current client's URL-capable fetch. If it cannot fetch a known URL, use `curl -fsSL`.
+- For broad Codex synthesis, resolve `scripts/fetch-doc.sh` relative to this skill directory and run
+  `fetch-doc.sh codex-manual`. Search the returned cache path with `rg` and read only the matching heading range into
+  context. Use `--refresh` when freshness is materially disputed, including release/change questions or a conflict
+  between documentation and observed local behavior.
+- Prefer the current client's URL-capable fetch for narrow topic pages. Use the helper only for its two fixed Codex
+  artifacts.
 - For comparisons, complete both provider routes independently. Never infer one product's behavior from the other's
   documentation.
 
-Follow redirects only within the matching official domain and cite the final page URL.
+Follow redirects only within the matching official domain, except for the helper's exact Codex artifact redirects to
+`https://learn.chatgpt.com/docs/`. Cite the final page URL reported by the helper or live fetch.
 
 ## Investigate under-documented Codex configuration
 
 When a Codex feature or `config.toml` key is missing from the prose documentation, use this bounded procedure:
 
 1. Record the installed client and effective feature state with `codex --version` and `codex features list`.
-2. Fetch the official `config-schema.json` to an operating-system temporary location, then search only the relevant
-   definition or path. Do not cache the schema in the repository or skill installation.
+2. Resolve the bundled helper relative to this skill directory and run `fetch-doc.sh --refresh codex-config-schema`,
+   then search only the relevant definition or path in the returned file.
 3. Compare the schema with the current prose config reference. Treat schema-only fields as under-documented, not as
    behavior guaranteed by every client.
 4. Validate candidate syntax against the installed client with `codex --strict-config --help`; use one-off `-c`
@@ -83,13 +87,16 @@ observations distinct in the answer; do not turn a local implementation detail i
 
 ## Bound failures
 
-If retrieval fails, try the direct URL and one domain-restricted search, then stop expanding sources. State the bounded
-uncertainty. Use local `--help`, `--version`, configuration, or observed behavior only when relevant and label it as
-local evidence. Never silently substitute third-party sources, another provider's docs, or bundled knowledge.
+If live retrieval fails, try the direct URL and one domain-restricted search, then stop expanding sources. The helper
+may return a cache entry validated within the previous seven days after an ordinary retrieval failure; when it reports
+`stale`, disclose its validation timestamp and do not describe it as live. Forced refreshes, expired entries, and
+integrity failures fail closed. State the bounded uncertainty. Use local `--help`, `--version`, configuration, or
+observed behavior only when relevant and label it as local evidence. Never silently substitute third-party sources,
+another provider's docs, or bundled knowledge.
 
 For comparisons, answer a supported side even if the other provider is unavailable; mark the unsupported side unknown
-instead of manufacturing symmetry. In network-disabled sessions, fail transparently without creating repository files or
-persistent caches.
+instead of manufacturing symmetry. In network-disabled sessions, use only a helper cache entry that satisfies the
+bounded fallback policy; otherwise fail transparently. Never create caches in a repository or skill installation.
 
 ## Completion
 
