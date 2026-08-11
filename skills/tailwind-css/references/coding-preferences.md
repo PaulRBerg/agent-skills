@@ -1,7 +1,23 @@
-# Coding Preferences
+# Tailwind Engineering Preferences
 
 > When to read: when writing or fixing Tailwind utility class usage, layout, spacing, typography, color, border,
-> gradient, arbitrary value, class-merging, image-sizing, z-index, or dark-mode patterns.
+> arbitrary value, class-merging, image-sizing, z-index, dark-mode, or custom-style patterns.
+
+These are fallback preferences. The target project's established design system, components, and conventions take
+precedence.
+
+## Abstraction Ladder
+
+Use the first level that solves the problem cleanly:
+
+1. Compose existing utilities in markup.
+2. Extract repeated markup into the project's native component, partial, include, or template abstraction.
+3. Promote a repeated product value into an `@theme` token when it belongs to the shared design language.
+4. Add an `@utility` primitive when a repeated low-level behavior is missing from Tailwind.
+5. Write scoped custom CSS for a stable named UI primitive or markup the application does not control.
+
+Do not create a token, utility, or component class for a genuine one-off. Repetition alone does not justify CSS
+abstraction when extracting the markup produces a clearer API.
 
 ## Layout and Spacing
 
@@ -107,19 +123,7 @@ Tailwind v4 supports inline line height modifiers with the `text-{size}/{leading
 | `text-lg`   | 18px |
 | `text-xl`   | 20px |
 
-## Colors and Opacity
-
-**Use opacity modifier syntax, not separate opacity utilities:**
-
-All `*-opacity-*` utilities were removed in Tailwind v4. Use the modifier syntax instead.
-
-```typescript
-// ✅ Good: opacity modifier
-<div className="bg-red-500/60">
-
-// ❌ Bad: removed in v4
-<div className="bg-red-500 bg-opacity-60">
-```
+## Colors
 
 **Prefer design tokens over arbitrary hex values:**
 
@@ -131,45 +135,6 @@ Check the project's `@theme` configuration before using arbitrary color values.
 
 // ❌ Avoid: arbitrary hex (check theme first)
 <div className="bg-[#4f46e5]">
-```
-
-## Border Radius
-
-Tailwind v4 renamed border radius utilities:
-
-| v3           | v4 (equivalent) | Size |
-| ------------ | --------------- | ---- |
-| `rounded-sm` | `rounded-xs`    | 2px  |
-| `rounded`    | `rounded-sm`    | 4px  |
-| `rounded-md` | `rounded`       | 6px  |
-| `rounded-lg` | `rounded-md`    | 8px  |
-
-Use the v4 names when writing new code.
-
-## Gradients
-
-Tailwind v4 renamed gradient utilities and added new gradient types.
-
-**Use `bg-linear-*`, not `bg-gradient-*`:**
-
-```typescript
-// ✅ Good: v4 syntax
-<div className="bg-linear-to-r from-blue-500 to-purple-500">
-
-// ❌ Bad: removed in v4
-<div className="bg-gradient-to-r from-blue-500 to-purple-500">
-```
-
-**New gradient types:**
-
-- `bg-radial` - Radial gradients
-- `bg-conic` - Conic gradients
-
-**Example:**
-
-```typescript
-<div className="bg-radial from-blue-500 to-purple-500">
-<div className="bg-conic from-red-500 via-yellow-500 to-green-500">
 ```
 
 ## Arbitrary Values
@@ -280,3 +245,12 @@ Write light mode styles first, then add dark mode overrides.
 // ❌ Avoid: dark mode first (less readable)
 <div className="dark:bg-gray-900 dark:text-white bg-white text-gray-900">
 ```
+
+## Uncontrolled and Transformed Markup
+
+- Scope rich text, CMS output, generated markup, and third-party widgets under a dedicated wrapper or the project's
+  typography integration. Do not add global element styles to fix one content region.
+- Target the final rendered DOM when JavaScript replaces placeholders, injects wrappers, or rewrites classes. Verify
+  hover, focus, motion, and nested selectors against that DOM.
+- Use `@apply` only as a narrow adapter when custom CSS must reuse project utilities. Do not use it to hide ordinary
+  utility composition or recreate a component system in CSS.
