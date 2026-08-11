@@ -4,6 +4,24 @@ Retry the existing immutable transaction. Do not run `prepare` again after a com
 reconciliation failure: `ai-commit commit <transaction-id> ...` is idempotent and recovers a commit created before an
 interruption without duplicating it.
 
+## Prepared Snapshot Drift
+
+The exact diagnostic prefix `snapshot-check hook modified prepared content` is the only exception to immutable retry. An
+unchanged retry repeats because a verification hook tried to change the validation-only prepared snapshot.
+
+1. Do not retry the transaction, add `--no-verify`, or make the shared worktree temporarily match the prepared index.
+2. Record the repository-relative paths named by the diagnostic, then run `ai-commit discard <transaction-id>`.
+3. Apply only the named deterministic formatter or generator change to session-owned content. Preserve every stale-dirt
+   baseline byte; do not stage the whole physical file or restore excluded hunks temporarily.
+4. Prepare once from the corrected worktree and continue with the new transaction.
+
+If the hook-required change would alter baseline-owned bytes, stop and wait for or contact that baseline's owner instead
+of discarding their work.
+
+The legacy `partially staged files are unsafe in the shared worktree` diagnostic on a prepared path is a deterministic
+compatibility failure, not index contention. Never respond with `--no-verify`, temporary hunk restoration, or a
+sleep/retry loop; surface the incompatible `ai-commit`/hook path and update it before preparing another transaction.
+
 - **Index lock:** wait and retry the same command only when the diagnostic names the default-index lock or `ai-commit`
   reports its lock refusal. Never delete a lock.
 - **Hook failure:** a bare lint-staged `Failed to get staged files!` or `"lint-staged" exited with code 1` does not

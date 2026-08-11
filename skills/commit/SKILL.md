@@ -111,6 +111,9 @@ Transactions are idempotent. After an interruption, lock race, or retryable exit
 message arguments; do not prepare a replacement from newer mutable state. A replay recovers or returns the retained
 receipt without creating a duplicate commit. Never delete an index lock.
 
+The exact `snapshot-check hook modified prepared content` diagnostic is the one exception: do not retry that
+transaction. Follow the discard, owned-content correction, and single reprepare procedure in the recovery reference.
+
 Read [references/failure-recovery.md](references/failure-recovery.md) before adding `--no-verify` or `--no-gpg-sign`.
 Those are explicit per-attempt recovery options, not first-attempt defaults.
 
