@@ -1,6 +1,6 @@
 mod common;
 
-use std::fs;
+use std::{fs, process::Command};
 
 use common::{Harness, exit_code, stderr, stdout, write_executable};
 
@@ -327,6 +327,31 @@ fn staged_and_opt_out_skip_auto_query_and_missing_binary_is_tolerated() {
 }
 
 #[test]
+fn unchanged_head_loads_prepared_tree_without_patch_replay() {
+    let harness = Harness::new("unchanged-head-prepared-tree");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let apply_marker = harness.root.join("apply-called");
+    let real_git = git_binary();
+    write_executable(
+        &harness.shim.join("git"),
+        "#!/bin/sh\nset -eu\ncase \" $* \" in\n  *\" apply \"*)\n    : > \"$APPLY_MARKER\"\n    exit 97\n  ;;\nesac\nexec \"$REAL_GIT\" \"$@\"\n",
+    );
+
+    let committed = harness.command_with_env(
+        ["commit", &transaction, "-m", "test: load unchanged prepared tree"],
+        [("APPLY_MARKER", apply_marker.to_str().unwrap()), ("REAL_GIT", real_git.to_str().unwrap())],
+    );
+    assert!(committed.status.success(), "{}", stderr(&committed));
+    assert!(!apply_marker.exists());
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(harness.read("intended.txt"), "prepared\n");
+    assert_eq!(harness.git(["status", "--short"]), "");
+}
+
+#[test]
 fn non_overlapping_head_movement_is_applied_and_conflict_is_safe() {
     let clean = Harness::new("head-disjoint");
     clean.write("intended.txt", BASE);
@@ -503,4 +528,10 @@ fn advance_head(harness: &Harness, contents: &str, message: &str) -> String {
     let commit = harness.git(["commit-tree", &tree, "-p", &parent, "-m", message]);
     harness.git(["update-ref", "HEAD", &commit, &parent]);
     commit
+}
+
+fn git_binary() -> std::path::PathBuf {
+    let output = Command::new("sh").args(["-c", "command -v git"]).output().unwrap();
+    assert!(output.status.success());
+    std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }

@@ -88,8 +88,12 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         None => repository.empty_tree()?,
     };
     let commit_index = temporary.path().join("commit-index");
-    repository.checked(["read-tree", &current_base], Some(&commit_index))?;
-    apply_prepared_delta(&repository, &transaction, &current_base, &commit_index)?;
+    if current_base == transaction.base_head {
+        repository.checked(["read-tree", &transaction.prepared_tree], Some(&commit_index))?;
+    } else {
+        repository.checked(["read-tree", &current_base], Some(&commit_index))?;
+        apply_prepared_delta(&repository, &transaction, &current_base, &commit_index)?;
+    }
     let before_hook_tree = repository.text(["write-tree"], Some(&commit_index))?;
     let message_file = temporary.path().join("commit-message");
     write_message(&message_file, &args.messages)?;
