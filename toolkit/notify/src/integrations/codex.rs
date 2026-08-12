@@ -211,8 +211,28 @@ fn notify_equals(item: &Item, command: &[&str]) -> bool {
     let Some(array) = item.as_value().and_then(Value::as_array) else {
         return false;
     };
-    array.len() == command.len() &&
-        array.iter().zip(command).all(|(actual, expected)| actual.as_str() == Some(*expected))
+    (array.len() == command.len() &&
+        array.iter().zip(command).all(|(actual, expected)| actual.as_str() == Some(*expected))) ||
+        desktop_wrapper_previous_notify_equals(array, command)
+}
+
+/// Codex Desktop wraps a pre-existing callback in `SkyComputerUseClient`, retaining it as
+/// a JSON-encoded argument after `--previous-notify`.
+fn desktop_wrapper_previous_notify_equals(array: &Array, command: &[&str]) -> bool {
+    if array.len() != 4 {
+        return false;
+    }
+    array.get(0).and_then(Value::as_str).is_some_and(|value| value.ends_with("/SkyComputerUseClient")) &&
+        array.get(1).and_then(Value::as_str) == Some("turn-ended") &&
+        array.get(2).and_then(Value::as_str) == Some("--previous-notify") &&
+        array.get(3).and_then(Value::as_str).is_some_and(|value| previous_notify_equals(value, command))
+}
+
+fn previous_notify_equals(value: &str, command: &[&str]) -> bool {
+    let Ok(previous) = serde_json::from_str::<Vec<String>>(value) else {
+        return false;
+    };
+    previous.len() == command.len() && previous.iter().zip(command).all(|(actual, expected)| actual == expected)
 }
 
 fn render_item(item: &Item) -> String {
@@ -265,6 +285,27 @@ mod tests {
         assert!(output.contains("# keep"));
         assert!(output.contains("# old"));
         assert!(output.contains("notify = [\"nested\"]"));
+    }
+
+    #[test]
+    fn preserves_codex_desktop_wrapper_with_ai_notify_as_previous_notify() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        let config = concat!(
+            "notify = [\n",
+            "  \"/Applications/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\",\n",
+            "  \"turn-ended\",\n",
+            "  \"--previous-notify\",\n",
+            "  \"[\\\"ai-notify\\\",\\\"codex\\\"]\",\n",
+            "]\n"
+        );
+        fs::write(&path, config).unwrap();
+
+        let update = set_codex_notify(&path, CODEX_NOTIFY_COMMAND, None, false).unwrap();
+
+        assert!(!update.changed);
+        assert!(!update.conflict);
+        assert_eq!(fs::read_to_string(path).unwrap(), config);
     }
 
     #[test]
