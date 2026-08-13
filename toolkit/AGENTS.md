@@ -14,4 +14,5 @@ Use the root justfile for workspace changes: run the narrowest relevant check fi
 
 - Preserve each tool's documented command, output, and persisted-data contracts. Do not add compatibility paths, migrations, aliases, or dual formats unless explicitly requested; reject incompatible persisted versions with actionable errors.
 - Changes that can invalidate live ai-coord agents, state, hooks, or CLI installation require explicit authorization and an isolated `AI_COORD_STATE_DIR` for development and validation. Never reset coordination state or replace global hooks from this checkout implicitly.
+- Updating the installed CLIs (`just install-cli`) is pre-authorized when the committed changes preserve the documented command, output, and persisted-data contracts, or when `ai-coord` shows no other live agent sessions on this machine. Otherwise ask the user to close the other agents before installing.
 - Keep both Bun applications local-only. In particular, handoffs must remain read-only and bound to loopback; the coordination dashboard must not make external requests.
