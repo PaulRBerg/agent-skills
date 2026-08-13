@@ -406,7 +406,7 @@ mod macos {
         }
 
         fn inspect(&self, pid: u32, identify_host: bool) -> std::result::Result<NativeProcess, InspectionError> {
-            let info = pidinfo::<BSDInfo>(pid as libc::c_int, 0).map_err(|_| last_inspection_error())?;
+            let info = pidinfo::<BSDInfo>(pid as libc::c_int, 0).map_err(classify_libproc_error)?;
             let state = match info.pbi_status {
                 SZOMB => NativeState::Dead,
                 SIDL | SRUN | SSLEEP | SSTOP => NativeState::Alive,
@@ -416,7 +416,7 @@ mod macos {
             if identify_host {
                 names.push(c_char_array(&info.pbi_comm));
                 names.push(c_char_array(&info.pbi_name));
-                if let Ok(executable) = pidpath(pid as libc::c_int) {
+                if let Ok(executable) = pidpath(pid as libc::c_int).map_err(classify_libproc_error) {
                     names.push(executable);
                 }
                 if let Ok(arguments) = process_arguments(pid) {
@@ -525,6 +525,28 @@ mod macos {
             _ => InspectionError::Other(error.to_string()),
         }
     }
+
+    pub(super) fn classify_libproc_error(error: String) -> InspectionError {
+        let full_error = error;
+        let Some((return_code, error)) =
+            full_error.as_str().strip_prefix("return code = ").and_then(|error| error.split_once(", errno = "))
+        else {
+            return InspectionError::Other(full_error);
+        };
+        let Some((errno, message)) = return_code.parse::<i32>().ok().and_then(|_| {
+            error
+                .split_once(", message = '")
+                .and_then(|(errno, message)| Some((errno.parse::<i32>().ok()?, message.strip_suffix("'")?)))
+        }) else {
+            return InspectionError::Other(full_error);
+        };
+
+        match errno {
+            libc::ESRCH => InspectionError::Missing,
+            libc::EPERM | libc::EACCES => InspectionError::Permission(message.to_owned()),
+            _ => InspectionError::Other(message.to_owned()),
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -555,6 +577,25 @@ mod tests {
 
     use super::*;
     use crate::domain::Client;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn classifies_libproc_errors_from_embedded_errno() {
+        assert!(matches!(
+            macos::classify_libproc_error("return code = -1, errno = 3, message = 'No such process'".to_owned()),
+            InspectionError::Missing
+        ));
+        assert!(matches!(
+            macos::classify_libproc_error(
+                "return code = -1, errno = 1, message = 'Operation not permitted'".to_owned()
+            ),
+            InspectionError::Permission(message) if message == "Operation not permitted"
+        ));
+        assert!(matches!(
+            macos::classify_libproc_error("unexpected libproc error".to_owned()),
+            InspectionError::Other(message) if message == "unexpected libproc error"
+        ));
+    }
 
     #[derive(Debug)]
     struct FakeBackend {
