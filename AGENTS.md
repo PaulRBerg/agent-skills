@@ -81,8 +81,12 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
 
 ## Rules
 
-- When asked to create, edit, or remove an installable catalog skill while the current working directory is this repo,
-  modify the skill under `skills/` here only, not the installed copy under `~/.agents`.
+- In this repository, an unqualified request to create, scaffold, or initialize a skill means an installable catalog
+  skill under `skills/<name>/`. Never route it to `.agents/skills/` or the `skill-writing` workflow.
+- Create a repo-private internal skill under `.agents/internal-skills/<name>.md` only when the user explicitly requests
+  an internal skill.
+- When asked to edit or remove an installable catalog skill while the current working directory is this repo, modify the
+  skill under `skills/` here only, not the installed copy under `~/.agents`.
 - Changes here are not live until installed into every target declared by the skill. By default, `publish-skills`
   reconciles all current source-owned drift; an explicit commit range narrows that reconciliation to the affected skill
   names (scope rules: `@publish-skills`).
@@ -92,8 +96,8 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
   follow-on agent will publish the accumulated changes automatically. Otherwise, if the task was super complex or the
   working tree has ongoing dirty changes, recommend `@publish-skills` instead. The agent must make the complexity
   assessment.
-- When creating, renaming, or deleting a catalog or internal skill, follow `@skill-lifecycle`;
-  `just readme-skills-check` must pass.
+- When creating, renaming, or deleting a catalog or internal skill, follow `@skill-lifecycle`. For catalog creation,
+  also follow `@skill-authoring`. `just readme-skills-check` must pass.
 - Before creating or editing `SKILL.md` frontmatter, `agents/openai.yaml`, `metadata.install-targets`, or
   `skill-dependencies`, read `@skill-authoring` — it is the authoritative metadata reference; do not guess field
   semantics.

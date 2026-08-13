@@ -2,14 +2,15 @@
 argument-hint: <skill-name>
 name: skill-writing
 description:
-  Use to create/scaffold/init a new agent skill under `.agents/skills` in the working directory where invoked.
+  Create/scaffold/init a project-local agent skill under `.agents/skills` in an ordinary repository; defer to repository
+  instructions that define a source catalog and lifecycle.
 ---
 
 # Skill Writing
 
-Bootstrap a skill with a small observable contract, then symlink it into `.claude/skills/` so Claude Code can discover
-it. Keep invariant workflow guidance in `SKILL.md`; move deterministic mechanics and conditional detail into scripts and
-references.
+Bootstrap a project-local skill with a small observable contract, then symlink it into `.claude/skills/` so Claude Code
+can discover it. Keep invariant workflow guidance in `SKILL.md`; move deterministic mechanics and conditional detail
+into scripts and references.
 
 ## Model Optimization
 
@@ -32,6 +33,12 @@ orchestration-heavy skill because their recommendations may evolve.
 
 Reject `--global`, explicit destination paths, and other scope overrides. The invocation working directory is the only
 supported scope.
+
+## Repository Catalog Guard
+
+Before resolving project-local paths, read the repository instructions applicable to the invocation working directory.
+If they define a source catalog and lifecycle for skill creation, stop this workflow and follow that repository-owned
+workflow. Do not create `.agents/skills/` or `.claude/skills/` paths in that repository.
 
 ## Resolved Paths
 

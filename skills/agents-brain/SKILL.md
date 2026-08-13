@@ -51,13 +51,16 @@ before complex, long-running, multi-tool, or orchestration-heavy context work be
 
 Choose exactly one workflow and read only its reference.
 
-| User intent                                                     | Workflow                     | Reference                                 |
-| --------------------------------------------------------------- | ---------------------------- | ----------------------------------------- |
-| Update, refresh, sync, prune, polish, repair, or fix context    | `polish`                     | `references/polish.md`                    |
-| Create, initialize, generate, or regenerate context files       | `create`                     | `references/create-docs.md`               |
-| Audit, check, review, inspect, or suggest changes without edits | `polish` in `--dry-run` mode | `references/polish.md`                    |
-| Create or scaffold a skill                                      | Stop                         | Refer to `skills/skill-writing`           |
-| Install, discover, remove, or rename a skill                    | Stop                         | Use a dedicated skill-management workflow |
+For skill creation, first inspect applicable repository instructions. When they define a source catalog and lifecycle,
+stop and follow that repository-owned workflow. Use `skill-writing` only when no catalog-specific workflow exists.
+
+| User intent                                                     | Workflow                     | Reference                                           |
+| --------------------------------------------------------------- | ---------------------------- | --------------------------------------------------- |
+| Update, refresh, sync, prune, polish, repair, or fix context    | `polish`                     | `references/polish.md`                              |
+| Create, initialize, generate, or regenerate context files       | `create`                     | `references/create-docs.md`                         |
+| Audit, check, review, inspect, or suggest changes without edits | `polish` in `--dry-run` mode | `references/polish.md`                              |
+| Create or scaffold a skill                                      | Stop                         | Use repository catalog lifecycle or `skill-writing` |
+| Install, discover, remove, or rename a skill                    | Stop                         | Use a dedicated skill-management workflow           |
 
 If the intent is unclear, select `polish` in `--dry-run` mode and report the smallest useful planned change set.
 
