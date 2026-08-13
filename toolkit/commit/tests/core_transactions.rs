@@ -68,6 +68,27 @@ fn intended_snapshot_preserves_later_index_and_unrelated_staging() {
 }
 
 #[test]
+fn newly_staged_ignored_paths_can_be_prepared_explicitly_and_with_all() {
+    let harness = Harness::new("staged-ignored");
+    harness.write("base.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("staged.txt", "staged before ignore rule\n");
+    harness.git(["add", "staged.txt"]);
+    harness.write(".gitignore", "staged.txt\n");
+    harness.git(["add", ".gitignore"]);
+    let index_before = harness.git(["hash-object", ".git/index"]);
+
+    let (_, explicit_preview) = harness.prepare(&["staged.txt"]);
+    assert!(explicit_preview.contains("CHANGE\tA\\tstaged.txt"));
+
+    let all = harness.success(["prepare", "--all", "--porcelain"]);
+    let all_preview = stdout(&all);
+    assert!(all_preview.contains("CHANGE\tA\\t.gitignore"));
+    assert!(all_preview.contains("CHANGE\tA\\tstaged.txt"));
+    assert_eq!(harness.git(["hash-object", ".git/index"]), index_before);
+}
+
+#[test]
 fn case_only_file_and_directory_renames_keep_exact_spelling() {
     let harness = Harness::new("case-rename");
     harness.git(["config", "core.ignorecase", "true"]);

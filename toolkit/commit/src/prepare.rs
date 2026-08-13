@@ -306,7 +306,7 @@ fn stage_worktree(repository: &Repository, index: &Path, base_head: &str, all: b
         repository.checked(arguments, Some(index))?;
     }
     for paths in worktree_paths.chunks(PATH_BATCH_SIZE) {
-        let mut arguments = vec!["add".to_owned(), "--".to_owned()];
+        let mut arguments = vec!["add".to_owned(), "--force".to_owned(), "--".to_owned()];
         arguments.extend(paths.iter().map(|path| literal_pathspec(path)));
         let output = repository.raw(arguments, Some(index))?;
         if !output.status.success() {
