@@ -77,7 +77,7 @@ a:focus-visible {
 .category-operations { color: #3e776f; background: #eaf5f1; }
 .category-uncategorized { color: #6b665d; background: #f2f0eb; }
 .record-state { color: #746f65; border-color: #d7d0c5; background: transparent; }
-.document-header h2 { max-width: 16ch; margin: .85rem 0 .55rem; color: #29251f; font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; font-size: clamp(2rem, 5vw, 4.25rem); font-weight: 600; letter-spacing: -.05em; line-height: .98; text-wrap: balance; }
+.document-header h2 { max-width: 16ch; margin: .85rem 0 .55rem; color: #29251f; font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; font-size: clamp(2rem, 5vw, 3.75rem); font-weight: 600; letter-spacing: -.05em; line-height: .98; text-wrap: balance; }
 .document-summary { margin: 0; color: #716a60; font-size: .86rem; line-height: 1.5; }
 .document-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(11.25rem, 13.5rem); gap: clamp(2rem, 6vw, 5.5rem); padding-top: clamp(1.75rem, 4vw, 3.5rem); }
 
