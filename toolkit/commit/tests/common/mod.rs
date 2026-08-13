@@ -105,6 +105,7 @@ impl Harness {
             .env_remove("GIT_DIR")
             .env_remove("GIT_WORK_TREE")
             .env_remove("AI_COMMIT_CONFIG")
+            .env_remove("AI_COMMIT_TEST_COORD_TIMEOUT_MS")
             .env_remove("AI_COMMIT_TEST_FAIL_AFTER_REF_UPDATE")
             .env("PATH", &self.search_path)
             .args(args);
@@ -128,6 +129,7 @@ impl Harness {
             .env_remove("GIT_DIR")
             .env_remove("GIT_WORK_TREE")
             .env_remove("AI_COMMIT_CONFIG")
+            .env_remove("AI_COMMIT_TEST_COORD_TIMEOUT_MS")
             .env_remove("AI_COMMIT_TEST_FAIL_AFTER_REF_UPDATE")
             .env("PATH", &self.search_path)
             .args(args)

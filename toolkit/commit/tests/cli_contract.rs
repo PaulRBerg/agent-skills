@@ -143,7 +143,10 @@ fn trailer_is_bounded_and_accepts_only_one_agent_session_line() {
     let invalid = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
     assert!(!stdout(&invalid).contains("TRAILER\t"));
 
-    write_executable(&harness.shim.join("ai-coord"), "#!/bin/sh\nsleep 5\nprintf 'Agent-Session: late\\n'\n");
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        "#!/bin/sh\nif [ \"$1\" = trailer ]; then\n  while :; do :; done\nfi\nexit 1\n",
+    );
     let started = Instant::now();
     let timed_out = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
     assert!(started.elapsed().as_secs_f32() < 2.5, "trailer command was not bounded");

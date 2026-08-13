@@ -28,6 +28,8 @@ struct Baseline {
 }
 
 const PATH_BATCH_SIZE: usize = 32;
+const AI_COORD_BASELINE_TIMEOUT: Duration = Duration::from_secs(5);
+const AI_COORD_TRAILER_TIMEOUT: Duration = Duration::from_millis(750);
 
 pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
     Repository::ensure_default_index_env()?;
@@ -434,7 +436,7 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
 }
 
 fn bounded_baselines(repository_root: &Path) -> Vec<(String, String)> {
-    let Some(bytes) = bounded_ai_coord(repository_root, "baseline", 64 * 1024) else {
+    let Some(bytes) = bounded_ai_coord(repository_root, "baseline", 64 * 1024, AI_COORD_BASELINE_TIMEOUT) else {
         return Vec::new();
     };
     let Ok(text) = String::from_utf8(bytes) else {
@@ -532,7 +534,7 @@ fn allocate_id(store: &Store) -> Result<String> {
 }
 
 fn bounded_trailer(repository_root: &Path) -> Option<String> {
-    let bytes = bounded_ai_coord(repository_root, "trailer", 512)?;
+    let bytes = bounded_ai_coord(repository_root, "trailer", 512, AI_COORD_TRAILER_TIMEOUT)?;
     let text = String::from_utf8(bytes).ok()?;
     let line = text.trim_end_matches(['\r', '\n']);
     if line.is_empty() ||
@@ -547,7 +549,13 @@ fn bounded_trailer(repository_root: &Path) -> Option<String> {
     Some(line.to_owned())
 }
 
-fn bounded_ai_coord(repository_root: &Path, subcommand: &str, limit: u64) -> Option<Vec<u8>> {
+fn bounded_ai_coord(repository_root: &Path, subcommand: &str, limit: u64, timeout: Duration) -> Option<Vec<u8>> {
+    let timeout = env::var("AI_COMMIT_TEST_COORD_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|milliseconds| *milliseconds > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(timeout);
     let mut child = Command::new("ai-coord")
         .arg(subcommand)
         .current_dir(repository_root)
@@ -562,7 +570,7 @@ fn bounded_ai_coord(repository_root: &Path, subcommand: &str, limit: u64) -> Opt
         stdout.take(limit + 1).read_to_end(&mut bytes).ok()?;
         Some(bytes)
     });
-    let status = match child.wait_timeout(Duration::from_millis(750)).ok()? {
+    let status = match child.wait_timeout(timeout).ok()? {
         Some(status) => status,
         None => {
             let _ = child.kill();

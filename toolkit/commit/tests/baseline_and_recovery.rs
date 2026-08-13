@@ -271,6 +271,26 @@ fn auto_baseline_is_applied_and_disclosed_in_both_output_modes() {
 }
 
 #[test]
+fn auto_baseline_timeout_is_advisory() {
+    let harness = Harness::new("auto-baseline-timeout");
+    harness.write("intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("intended.txt", WORKTREE);
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        "#!/bin/sh\nif [ \"$1\" = baseline ]; then\n  while :; do :; done\nfi\nexit 1\n",
+    );
+
+    let output = harness.command_with_env(
+        ["prepare", "--porcelain", "--", "intended.txt"],
+        [("AI_COMMIT_TEST_COORD_TIMEOUT_MS", "25")],
+    );
+    assert_eq!(exit_code(&output), 0);
+    assert!(!stdout(&output).contains("AUTO_BASELINE\t"));
+    assert!(stdout(&output).contains("PATH\tintended.txt\n"));
+}
+
+#[test]
 fn explicit_baseline_wins_and_malformed_auto_records_are_ignored() {
     let harness = Harness::new("auto-precedence");
     harness.write("intended.txt", BASE);
