@@ -1,6 +1,6 @@
 import { Drawer } from "@base-ui/react/drawer";
 import rehypeShiki from "@shikijs/rehype";
-import { Archive, FileText, FolderOpen, Menu, RefreshCw, X } from "lucide-react";
+import { Archive, FileText, FolderGit2, FolderOpen, Menu, RefreshCw, X } from "lucide-react";
 import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MarkdownHooks } from "react-markdown";
@@ -132,13 +132,21 @@ function IndexSection({
       ) : (
         groups.map((group) => (
           <section className="repository-group" key={`${group.root}\u0000${group.repository}`}>
-            <h3>
-              <span>{group.repository}</span>
-              <span className="repository-count">{group.handoffs.length}</span>
-            </h3>
-            <p className="repository-root" title={group.root}>
-              {friendlyRoot(group.root)}
-            </p>
+            <header className="repository-header">
+              <div className="repository-title-row">
+                <FolderGit2 aria-hidden="true" size={15} strokeWidth={1.8} />
+                <h3 title={group.repository}>{group.repository}</h3>
+                <span
+                  className="repository-count"
+                  aria-label={`${group.handoffs.length} handoff${group.handoffs.length === 1 ? "" : "s"}`}
+                >
+                  {group.handoffs.length}
+                </span>
+              </div>
+              <p className="repository-root" title={group.root}>
+                {friendlyRoot(group.root)}
+              </p>
+            </header>
             <ul>
               {group.handoffs.map((handoff) => (
                 <li key={handoff.path}>
