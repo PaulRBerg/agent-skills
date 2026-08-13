@@ -82,6 +82,12 @@ Define the outcome, authority boundaries, stopping conditions, and completion ev
 execution path when several safe paths satisfy the same contract. For user-facing workflows, also define which kickoff,
 progress, decision, blocker, and completion events deserve a message and the smallest useful shape for each.
 
+Express outcomes, invariants, and completion evidence as positive, observable acceptance criteria; when affirmative
+evidence is available, require it instead of accepting only the absence of listed failures or adding negative examples,
+inverse restatements, or long blacklists. Retain a negative instruction only for an explicit user-requested exclusion or
+when it is the clearest concise guard for a consequential safety, authority, destructive-action, scope, or likely model
+failure boundary that positive criteria cannot enforce equivalently.
+
 ## When to Split Content
 
 ### Use `scripts/` when
