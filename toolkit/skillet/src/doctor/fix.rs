@@ -1,14 +1,15 @@
 use std::{
-    ffi::OsString,
-    fs::{self, OpenOptions},
+    fs,
     io::{self, Write},
-    path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    path::Path,
 };
 
-use regex::Regex;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
-static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+use regex::Regex;
+#[cfg(test)]
+use tempfile::NamedTempFile;
 
 pub fn create_metadata(path: &Path, expected: bool) -> io::Result<()> {
     let contents = format!("policy:\n  allow_implicit_invocation: {expected}\n");
@@ -89,14 +90,14 @@ fn atomic_write(path: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()>
         true
     };
 
-    let result = stage_and_rename(path, parent, contents, mode);
+    let result = stage_and_persist(path, parent, contents, mode);
     if result.is_err() && created_parent {
         let _ = fs::remove_dir(parent);
     }
     result
 }
 
-fn stage_and_rename(path: &Path, parent: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()> {
+fn stage_and_persist(path: &Path, parent: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()> {
     match mode {
         WriteMode::Create if path.exists() => {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, "target appeared during fix"));
@@ -111,14 +112,16 @@ fn stage_and_rename(path: &Path, parent: &Path, contents: &[u8], mode: WriteMode
         WriteMode::Replace => Some(fs::metadata(path)?.permissions()),
         WriteMode::Create => None,
     };
-    let (temporary, mut file) = create_temporary(parent, path)?;
-    let staged = (|| {
-        file.write_all(contents)?;
+    let mut builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    builder.permissions(fs::Permissions::from_mode(0o666));
+    let mut temporary = builder.tempfile_in(parent)?;
+    (|| {
+        temporary.write_all(contents)?;
         if let Some(permissions) = permissions {
-            file.set_permissions(permissions)?;
+            temporary.as_file().set_permissions(permissions)?;
         }
-        file.sync_all()?;
-        drop(file);
+        temporary.as_file().sync_all()?;
 
         match mode {
             WriteMode::Create if path.exists() => {
@@ -129,51 +132,28 @@ fn stage_and_rename(path: &Path, parent: &Path, contents: &[u8], mode: WriteMode
             }
             _ => {}
         }
-        publish_staged(&temporary, path, mode)
-    })();
-    if staged.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    staged
+        match mode {
+            WriteMode::Create => temporary.persist_noclobber(path).map(|_| ()).map_err(|error| error.error),
+            WriteMode::Replace => temporary.persist(path).map(|_| ()).map_err(|error| error.error),
+        }
+    })()
 }
 
+#[cfg(test)]
 fn publish_staged(temporary: &Path, path: &Path, mode: WriteMode) -> io::Result<()> {
+    let file = fs::OpenOptions::new().read(true).write(true).open(temporary)?;
+    let temporary = NamedTempFile::from_parts(file, tempfile::TempPath::try_from_path(temporary)?);
     match mode {
-        WriteMode::Create => {
-            // `rename` replaces an existing destination on Unix. Link the fully staged
-            // file instead so a target created after our checks is never overwritten.
-            fs::hard_link(temporary, path)?;
-            if let Err(cleanup_error) = fs::remove_file(temporary) {
-                let rollback = fs::remove_file(path);
-                let _ = fs::remove_file(temporary);
-                return match rollback {
-                    Ok(()) => Err(cleanup_error),
-                    Err(rollback_error) => Err(io::Error::other(format!(
-                        "published metadata but could not remove its staging link ({cleanup_error}) or roll back the target ({rollback_error})"
-                    ))),
-                };
+        WriteMode::Create => match temporary.persist_noclobber(path) {
+            Ok(_) => Ok(()),
+            Err(error) => {
+                let source = error.error;
+                let _ = error.file.keep();
+                Err(source)
             }
-            Ok(())
-        }
-        WriteMode::Replace => fs::rename(temporary, path),
+        },
+        WriteMode::Replace => temporary.persist(path).map(|_| ()).map_err(|error| error.error),
     }
-}
-
-fn create_temporary(parent: &Path, path: &Path) -> io::Result<(PathBuf, fs::File)> {
-    let file_name = path.file_name().unwrap_or_default();
-    for _ in 0..100 {
-        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let mut name = OsString::from(".");
-        name.push(file_name);
-        name.push(format!(".ai-skillet-{}-{sequence}.tmp", std::process::id()));
-        let temporary = parent.join(name);
-        match OpenOptions::new().write(true).create_new(true).open(&temporary) {
-            Ok(file) => return Ok((temporary, file)),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
-        }
-    }
-    Err(io::Error::new(io::ErrorKind::AlreadyExists, "could not allocate a unique temporary metadata file"))
 }
 
 #[cfg(test)]

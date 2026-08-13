@@ -14,14 +14,16 @@ categories = ["command-line-utilities", "development-tools"]
 [dependencies]
 clap.workspace = true
 ignore = "0.4"
+pulldown-cmark = "0.13"
 regex = "1"
 serde.workspace = true
 serde-saphyr = "1"
 serde_json.workspace = true
 sha2.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
+wait-timeout.workspace = true
 
 [dev-dependencies]
-assert_cmd = "2"
-predicates = "3"
-tempfile.workspace = true
+assert_cmd.workspace = true
+predicates.workspace = true

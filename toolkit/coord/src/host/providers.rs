@@ -2,9 +2,11 @@ use std::{
     env,
     path::{Path, PathBuf},
     process::Command,
+    str::FromStr,
     time::Duration,
 };
 
+use jiff::Timestamp;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -384,66 +386,13 @@ fn timestamp(value: &Value) -> Option<f64> {
 }
 
 fn parse_iso_timestamp(value: &str) -> Option<f64> {
-    let (date, rest) = value.split_once(['T', ' '])?;
-    let mut date_parts = date.split('-');
-    let year = date_parts.next()?;
-    if year.len() != 4 || !year.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    let year = year.parse::<i32>().ok()?;
-    let month = date_parts.next()?.parse::<u32>().ok()?;
-    let day = date_parts.next()?.parse::<u32>().ok()?;
-    if date_parts.next().is_some() || month == 0 || month > 12 || day == 0 || day > days_in_month(year, month) {
-        return None;
-    }
-    let (time, offset_seconds) = if let Some(time) = rest.strip_suffix(['Z', 'z']) {
-        (time, 0_i64)
-    } else if let Some(index) =
-        rest.char_indices().skip(1).find_map(|(index, value)| matches!(value, '+' | '-').then_some(index))
-    {
-        let sign = if rest.as_bytes()[index] == b'+' { 1_i64 } else { -1_i64 };
-        let offset = &rest[index + 1..];
-        let (hours, minutes) = offset.split_once(':')?;
-        let hours = hours.parse::<i64>().ok()?;
-        let minutes = minutes.parse::<i64>().ok()?;
-        if hours > 23 || minutes > 59 {
-            return None;
-        }
-        (&rest[..index], sign * (hours * 3600 + minutes * 60))
-    } else {
-        (rest, 0_i64)
+    let value = value.replace(' ', "T");
+    let timestamp = match Timestamp::from_str(&value) {
+        Ok(timestamp) => timestamp,
+        // Offset-less datetimes are interpreted as UTC.
+        Err(_) => jiff::civil::DateTime::from_str(&value).ok()?.to_zoned(jiff::tz::TimeZone::UTC).ok()?.timestamp(),
     };
-    let mut time_parts = time.split(':');
-    let hour = time_parts.next()?.parse::<u32>().ok()?;
-    let minute = time_parts.next()?.parse::<u32>().ok()?;
-    let second = time_parts.next()?.parse::<f64>().ok()?;
-    if time_parts.next().is_some() || hour > 23 || minute > 59 || !(0.0..60.0).contains(&second) || !second.is_finite()
-    {
-        return None;
-    }
-    let days = days_from_civil(year, month, day);
-    Some(days as f64 * 86_400.0 + hour as f64 * 3600.0 + minute as f64 * 60.0 + second - offset_seconds as f64)
-}
-
-fn days_in_month(year: i32, month: u32) -> u32 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
-        2 => 28,
-        _ => 0,
-    }
-}
-
-// Howard Hinnant's civil-date conversion, returning days since 1970-01-01.
-fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
-    let year = year - i32::from(month <= 2);
-    let era = if year >= 0 { year } else { year - 399 } / 400;
-    let year_of_era = year - era * 400;
-    let month = month as i32;
-    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day as i32 - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    (era * 146_097 + day_of_era - 719_468) as i64
+    Some(timestamp.as_nanosecond() as f64 / 1_000_000_000.0)
 }
 
 #[cfg(test)]
@@ -584,6 +533,7 @@ mod tests {
     #[test]
     fn iso_timestamp_honors_offsets_and_leap_days() {
         assert_eq!(parse_iso_timestamp("1970-01-01T01:00:00+01:00"), Some(0.0));
+        assert_eq!(parse_iso_timestamp("1970-01-01 00:00:00"), Some(0.0));
         assert_eq!(parse_iso_timestamp("2024-02-29T00:00:00Z"), Some(1_709_164_800.0));
         assert_eq!(parse_iso_timestamp("2023-02-29T00:00:00Z"), None);
         assert_eq!(parse_iso_timestamp("2147483647-01-01T00:00:00Z"), None);

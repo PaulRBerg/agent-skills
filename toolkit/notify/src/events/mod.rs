@@ -370,38 +370,7 @@ fn is_internal_agent_notification(prompt: &str) -> bool {
 }
 
 fn strip_terminal_controls(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut result = String::new();
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == 0x1b && index + 1 < bytes.len() {
-            index += 2;
-            if bytes[index - 1] == b']' {
-                while index < bytes.len() &&
-                    bytes[index] != 0x07 &&
-                    !(bytes[index] == 0x1b && bytes.get(index + 1) == Some(&b'\\'))
-                {
-                    index += 1;
-                }
-                index += usize::from(index < bytes.len());
-                if bytes.get(index - 1) == Some(&0x1b) {
-                    index += 1;
-                }
-            } else {
-                while index < bytes.len() && !(0x40..=0x7e).contains(&bytes[index]) {
-                    index += 1;
-                }
-                index += usize::from(index < bytes.len());
-            }
-            continue;
-        }
-        let character = value[index..].chars().next().expect("index is a character boundary");
-        if !character.is_control() {
-            result.push(character);
-        }
-        index += character.len_utf8();
-    }
-    result
+    strip_ansi_escapes::strip_str(value).chars().filter(|character| !character.is_control()).collect()
 }
 
 #[cfg(test)]

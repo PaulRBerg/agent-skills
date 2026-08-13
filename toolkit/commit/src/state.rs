@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use fs2::FileExt;
+use fs4::FileExt;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
@@ -165,17 +165,17 @@ impl Store {
             .truncate(false)
             .open(&path)
             .map_err(|error| AppError::operational(format!("cannot open transaction lock {id}: {error}")))?;
-        match file.try_lock_exclusive() {
+        match FileExt::try_lock(&file) {
             Ok(()) => {
                 file.set_len(0)?;
                 writeln!(file, "{}", std::process::id())?;
                 file.sync_all()?;
                 Ok(TransactionLock { file })
             }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                Err(AppError::retry(format!("transaction is already in use: {id}")))
+            Err(fs4::TryLockError::WouldBlock) => Err(AppError::retry(format!("transaction is already in use: {id}"))),
+            Err(fs4::TryLockError::Error(error)) => {
+                Err(AppError::operational(format!("cannot lock transaction {id}: {error}")))
             }
-            Err(error) => Err(AppError::operational(format!("cannot lock transaction {id}: {error}"))),
         }
     }
 

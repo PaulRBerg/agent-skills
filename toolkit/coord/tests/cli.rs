@@ -10,11 +10,23 @@ use std::{
     time::{Duration, Instant},
 };
 
+use assert_cmd::assert::Assert;
+use predicates::prelude::*;
 use rusqlite::Connection;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
 const BINARY: &str = env!("CARGO_BIN_EXE_ai-coord");
+
+trait OutputAssertExt {
+    fn assert(&self) -> Assert;
+}
+
+impl OutputAssertExt for Output {
+    fn assert(&self) -> Assert {
+        Assert::new(Output { status: self.status, stdout: self.stdout.clone(), stderr: self.stderr.clone() })
+    }
+}
 
 struct Fixture {
     _temporary: TempDir,
@@ -118,25 +130,25 @@ fn parser_and_semantic_usage_keep_distinct_exit_codes() {
     let fixture = Fixture::new();
 
     let help = fixture.output(&["--help"]);
-    assert_eq!(help.status.code(), Some(0));
+    help.assert().success();
     assert!(String::from_utf8_lossy(&help.stdout).contains("Coordinate parallel Codex and Claude Code agents"));
 
     let parser_error = fixture.output(&["wait", "--timeout-seconds", "0"]);
-    assert_eq!(parser_error.status.code(), Some(2));
-    assert!(parser_error.stdout.is_empty());
+    parser_error.assert().failure().code(2);
+    parser_error.assert().stdout(predicate::str::is_empty());
     assert!(String::from_utf8_lossy(&parser_error.stderr).starts_with("error: invalid value '0'"));
 
     let semantic_error = fixture.output(&["finding", "add", "   "]);
-    assert_eq!(semantic_error.status.code(), Some(64));
-    assert!(semantic_error.stdout.is_empty());
+    semantic_error.assert().failure().code(64);
+    semantic_error.assert().stdout(predicate::str::is_empty());
     assert_eq!(String::from_utf8_lossy(&semantic_error.stderr), "error: finding summary must contain text\n");
 
     let removed_note = fixture.output(&["note", "old"]);
-    assert_eq!(removed_note.status.code(), Some(2));
+    removed_note.assert().failure().code(2);
     assert!(String::from_utf8_lossy(&removed_note.stderr).contains("unrecognized subcommand 'note'"));
 
     let conflicting_inbox = fixture.output(&["inbox", "--ack", "abc", "--ack-all"]);
-    assert_eq!(conflicting_inbox.status.code(), Some(64));
+    conflicting_inbox.assert().failure().code(64);
     assert_eq!(String::from_utf8_lossy(&conflicting_inbox.stderr), "error: use only one of --ack or --ack-all\n");
 }
 
@@ -145,15 +157,15 @@ fn identity_commands_and_state_are_fully_isolated() {
     let fixture = Fixture::new();
 
     let named = fixture.output(&["name", "🦀 Ferris Test"]);
-    assert_eq!(named.status.code(), Some(0));
+    named.assert().success();
     assert_eq!(String::from_utf8_lossy(&named.stdout), "NAMED\t🦀 Ferris Test\n");
 
     let trailer = fixture.output(&["trailer"]);
-    assert_eq!(trailer.status.code(), Some(0));
+    trailer.assert().success();
     assert_eq!(String::from_utf8_lossy(&trailer.stdout), "Agent-Session: codex/cli-test\n");
 
     let finding = fixture.output(&["finding", "add", "--kind", "bug", "--path", "src/lib.rs", "integration finding"]);
-    assert_eq!(finding.status.code(), Some(0));
+    finding.assert().success();
     assert!(String::from_utf8_lossy(&finding.stdout).starts_with("ADDED\t"));
 
     let (code, status) = fixture.json_status();
@@ -180,21 +192,21 @@ fn hook_input_is_fail_open_and_never_echoes_payload() {
     let fixture = Fixture::new();
 
     let malformed = run_with_stdin(fixture.command(), &["hook", "codex"], b"not json");
-    assert_eq!(malformed.status.code(), Some(0));
-    assert!(malformed.stdout.is_empty());
-    assert!(malformed.stderr.is_empty());
+    malformed.assert().success();
+    malformed.assert().stdout(predicate::str::is_empty());
+    malformed.assert().stderr(predicate::str::is_empty());
 
     let stop =
         run_with_stdin(fixture.command(), &["hook", "codex"], br#"{"hook_event_name":"Stop","private":"do not leak"}"#);
-    assert_eq!(stop.status.code(), Some(0));
+    stop.assert().success();
     assert_eq!(String::from_utf8_lossy(&stop.stdout), "{}\n");
     assert!(!String::from_utf8_lossy(&stop.stdout).contains("do not leak"));
-    assert!(stop.stderr.is_empty());
+    stop.assert().stderr(predicate::str::is_empty());
 
     let waker = run_with_stdin(fixture.command(), &["waker", "claude"], b"not json");
-    assert_eq!(waker.status.code(), Some(0));
-    assert!(waker.stdout.is_empty());
-    assert!(waker.stderr.is_empty());
+    waker.assert().success();
+    waker.assert().stdout(predicate::str::is_empty());
+    waker.assert().stderr(predicate::str::is_empty());
 }
 
 #[test]
@@ -211,23 +223,23 @@ fn coordination_commands_preserve_tsv_outputs_and_embedded_codes() {
     assert_eq!(String::from_utf8_lossy(&recipient_name.stdout), "NAMED\t🐙 Recipient\n");
 
     let start = fixture.output_as("sender-host", &["start", "exact work", "src/app.rs"]);
-    assert_eq!(start.status.code(), Some(0));
+    start.assert().success();
     assert_eq!(String::from_utf8_lossy(&start.stdout), "READY\tsrc/app.rs\n");
 
     let wait = fixture.output_as("sender-host", &["wait", "-t", "1"]);
-    assert_eq!(wait.status.code(), Some(0));
+    wait.assert().success();
     assert_eq!(String::from_utf8_lossy(&wait.stdout), "READY\tsrc/app.rs\n");
 
     let baseline = fixture.output_as("sender-host", &["baseline"]);
-    assert_eq!(baseline.status.code(), Some(0));
-    assert!(baseline.stdout.is_empty());
+    baseline.assert().success();
+    baseline.assert().stdout(predicate::str::is_empty());
 
     let sent = fixture.output_as("sender-host", &["msg", "recipient-host", "ready for review"]);
-    assert_eq!(sent.status.code(), Some(0));
+    sent.assert().success();
     assert!(String::from_utf8_lossy(&sent.stdout).starts_with("SENT\t1\t"));
 
     let inbox = fixture.output_as("recipient-host", &["inbox"]);
-    assert_eq!(inbox.status.code(), Some(0));
+    inbox.assert().success();
     let inbox_text = String::from_utf8_lossy(&inbox.stdout);
     assert!(inbox_text.starts_with("ID\tAGE\tFROM\tTEXT\n"));
     assert!(inbox_text.contains("\t🦀 Sender\tready for review\n"));
@@ -271,7 +283,7 @@ fn finding_commands_deduplicate_sightings_and_enforce_lifecycle_evidence() {
         "docs/a.md",
         "shared failure",
     ]);
-    assert_eq!(first.status.code(), Some(0));
+    first.assert().success();
     let first_id = String::from_utf8_lossy(&first.stdout).trim().strip_prefix("ADDED\t").unwrap().to_owned();
 
     let duplicate = fixture.output(&[
@@ -315,11 +327,11 @@ fn finding_commands_deduplicate_sightings_and_enforce_lifecycle_evidence() {
         String::from_utf8_lossy(&recurrence.stdout).lines().next().unwrap().strip_prefix("ADDED\t").unwrap().to_owned();
     assert_ne!(recurrence_id, first_id);
     let missing_canonical = fixture.output(&["finding", "resolve", &recurrence_id, "--as", "duplicate"]);
-    assert_eq!(missing_canonical.status.code(), Some(64));
+    missing_canonical.assert().failure().code(64);
     assert!(String::from_utf8_lossy(&missing_canonical.stderr).contains("--canonical is required"));
     let marked_duplicate =
         fixture.output(&["finding", "resolve", &recurrence_id, "--as", "duplicate", "--canonical", &first_id]);
-    assert_eq!(marked_duplicate.status.code(), Some(0));
+    marked_duplicate.assert().success();
     assert_eq!(
         String::from_utf8_lossy(&fixture.output(&["finding", "reopen", &first_id]).stdout),
         format!("REOPENED\t{first_id}\n")
@@ -329,7 +341,7 @@ fn finding_commands_deduplicate_sightings_and_enforce_lifecycle_evidence() {
     fs::write(&outside, "outside\n").unwrap();
     std::os::unix::fs::symlink(&outside, fixture.root.join("outside-link")).unwrap();
     let escaped = fixture.output(&["finding", "add", "--path", "outside-link", "must reject escape"]);
-    assert_eq!(escaped.status.code(), Some(64));
+    escaped.assert().failure().code(64);
     assert!(String::from_utf8_lossy(&escaped.stderr).contains("finding path escapes repository"));
 
     let connection = Connection::open(fixture.state.join("state.db")).unwrap();
@@ -352,7 +364,7 @@ fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
     assert_strong_session(&fixture, "draft-host");
 
     let created = fixture.output_as("draft-host", &["draft", "private plan", "src/private.rs", "docs/private.md"]);
-    assert_eq!(created.status.code(), Some(0));
+    created.assert().success();
     assert_eq!(String::from_utf8_lossy(&created.stdout), "DRAFT\t2\n");
 
     let (_, snapshot) = fixture.json_status();
@@ -365,11 +377,11 @@ fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
     let replaced = fixture.output_as("draft-host", &["draft", "revised plan", "--recursive", "src"]);
     assert_eq!(String::from_utf8_lossy(&replaced.stdout), "DRAFT\t1\n");
     let bypass = fixture.output_as("draft-host", &["start", "drifted execution", "src/other.rs"]);
-    assert_eq!(bypass.status.code(), Some(1));
+    bypass.assert().failure().code(1);
     assert!(String::from_utf8_lossy(&bypass.stderr).contains("a draft exists"));
 
     let promoted = fixture.output_as("draft-host", &["start", "--draft"]);
-    assert_eq!(promoted.status.code(), Some(0));
+    promoted.assert().success();
     assert_eq!(String::from_utf8_lossy(&promoted.stdout), "READY\tsrc\n");
     let (_, snapshot) = fixture.json_status();
     let active = snapshot["work"].as_array().unwrap().iter().find(|work| work["session_id"] == "draft-host").unwrap();
@@ -378,7 +390,7 @@ fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
     assert!(active.get("scope_count").is_none());
 
     let rejected = fixture.output_as("draft-host", &["draft", "must release", "src/new.rs"]);
-    assert_eq!(rejected.status.code(), Some(1));
+    rejected.assert().failure().code(1);
     assert!(String::from_utf8_lossy(&rejected.stderr).contains("run ai-coord done"));
     assert_eq!(String::from_utf8_lossy(&fixture.output_as("draft-host", &["done"]).stdout), "DONE\treleased\n");
     assert!(fixture.json_status().1["work"].as_array().unwrap().is_empty());
@@ -392,12 +404,12 @@ fn draft_and_direct_start_require_scopes_and_draft_promotion_is_exclusive() {
     let fixture = Fixture::new();
     for arguments in [["draft", "empty"].as_slice(), ["start", "empty"].as_slice()] {
         let output = fixture.output(arguments);
-        assert_eq!(output.status.code(), Some(64));
+        output.assert().failure().code(64);
         assert_eq!(String::from_utf8_lossy(&output.stderr), "error: at least one scope is required\n");
     }
 
     let conflict = fixture.output(&["start", "--draft", "label"]);
-    assert_eq!(conflict.status.code(), Some(2));
+    conflict.assert().failure().code(2);
     assert!(String::from_utf8_lossy(&conflict.stderr).contains("--draft"));
 }
 
@@ -420,8 +432,8 @@ fn directory_scope_errors_include_copy_paste_ready_recursive_commands() {
         ),
     ] {
         let output = fixture.output(arguments);
-        assert_eq!(output.status.code(), Some(64));
-        assert!(output.stdout.is_empty());
+        output.assert().failure().code(64);
+        output.assert().stdout(predicate::str::is_empty());
         assert!(String::from_utf8_lossy(&output.stderr).contains(expected));
     }
 }
@@ -445,7 +457,7 @@ fn promotion_revalidates_paths_and_repository_without_consuming_the_draft() {
     assert_eq!(String::from_utf8_lossy(&drafted.stdout), "DRAFT\t1\n");
     fs::write(fixture.root.join("planned"), "now a file\n").unwrap();
     let invalid = fixture.output_as("revalidate-host", &["start", "--draft"]);
-    assert_eq!(invalid.status.code(), Some(64));
+    invalid.assert().failure().code(64);
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("recursive scope is not a directory: planned"));
     assert_eq!(work_state(&fixture, "revalidate-host"), Some("draft".to_owned()));
 
@@ -454,7 +466,7 @@ fn promotion_revalidates_paths_and_repository_without_consuming_the_draft() {
     fs::create_dir(&other).unwrap();
     assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&other).status().unwrap().success());
     let mismatch = fixture.output_as_in("revalidate-host", &other, &["start", "--draft"]);
-    assert_eq!(mismatch.status.code(), Some(1));
+    mismatch.assert().failure().code(1);
     assert!(String::from_utf8_lossy(&mismatch.stderr).contains("draft belongs to another repository"));
     assert_eq!(work_state(&fixture, "revalidate-host"), Some("draft".to_owned()));
 
@@ -481,7 +493,7 @@ fn promotion_queues_on_unknown_coverage_and_wait_preserves_submitted_work() {
     );
 
     let promoted = fixture.output_with_path(&["start", "--draft"], std::path::Path::new(&executable_path));
-    assert_eq!(promoted.status.code(), Some(2));
+    promoted.assert().failure().code(2);
     assert_eq!(String::from_utf8_lossy(&promoted.stdout), "UNKNOWN\tcoverage\n");
     assert_eq!(work_state(&fixture, "cli-test"), Some("queued".to_owned()));
     let work = work_item(&fixture, "cli-test").unwrap();
@@ -489,7 +501,7 @@ fn promotion_queues_on_unknown_coverage_and_wait_preserves_submitted_work() {
     assert_eq!(work["scopes"], json!([{"path":"src/unknown.rs", "kind":"exact"}]));
 
     let waited = fixture.output_with_path(&["wait", "-t", "1"], std::path::Path::new(&executable_path));
-    assert_eq!(waited.status.code(), Some(2));
+    waited.assert().failure().code(2);
     assert_eq!(String::from_utf8_lossy(&waited.stdout), "UNKNOWN\tcoverage\n");
     assert_eq!(String::from_utf8_lossy(&fixture.output(&["done"]).stdout), "DONE\treleased\n");
 }
@@ -528,7 +540,7 @@ fn blocked_draft_promotion_hashes_only_dirt_in_the_requested_exact_scope() {
 
     let (executable_path, log) = install_hash_object_logger(&fixture);
     let promoted = fixture.output_as_with_hash_log("hash-contender", &["start", "--draft"], &executable_path, &log);
-    assert_eq!(promoted.status.code(), Some(3));
+    promoted.assert().failure().code(3);
     assert_eq!(String::from_utf8_lossy(&promoted.stdout), "BLOCKED\t🧱 Holder\t.gitignore\n");
     assert_eq!(hash_object_invocations(&log), 1);
 
@@ -555,7 +567,7 @@ fn recursive_scope_dirty_settling_uses_bounded_hash_object_batches() {
         &executable_path,
         &log,
     );
-    assert_eq!(started.status.code(), Some(2));
+    started.assert().failure().code(2);
     assert!(
         String::from_utf8_lossy(&started.stdout).starts_with("UNKNOWN\tdirty-settling:bulk/file-000.txt"),
         "{}",
@@ -606,7 +618,7 @@ fn fifo_age_begins_at_draft_promotion_not_draft_creation() {
     );
     fixture.output_as("fifo-drafted", &["inbox", "--ack-all"]);
     let still_queued = fixture.output_as("fifo-drafted", &["start", "drafted", scope]);
-    assert_eq!(still_queued.status.code(), Some(3));
+    still_queued.assert().failure().code(3);
 
     for child in [&mut holder, &mut drafted, &mut direct] {
         let _ = child.kill();
@@ -621,7 +633,7 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     let path = claude_settings.to_string_lossy();
 
     let preview = fixture.output(&["link", "claude", "--path", &path, "--dry-run"]);
-    assert_eq!(preview.status.code(), Some(0));
+    preview.assert().success();
     assert_eq!(
         String::from_utf8_lossy(&preview.stdout),
         format!("WOULD_UPDATE\tclaude\t{}\ttrust=skipped\n", claude_settings.display())
@@ -629,25 +641,25 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     assert!(!claude_settings.exists());
 
     let linked = fixture.output(&["link", "claude", "--path", &path]);
-    assert_eq!(linked.status.code(), Some(0));
+    linked.assert().success();
     assert!(claude_settings.is_file());
     assert!(String::from_utf8_lossy(&linked.stdout).starts_with("UPDATED\tclaude\t"));
 
     let repeated = fixture.output(&["link", "claude", "--path", &path]);
-    assert_eq!(repeated.status.code(), Some(0));
+    repeated.assert().success();
     assert!(String::from_utf8_lossy(&repeated.stdout).starts_with("OK\tclaude\t"));
 
     let malformed = fixture.claude_home.join("malformed.json");
     fs::write(&malformed, br#"{"hooks":[]}"#).unwrap();
     let rejected = fixture.output(&["link", "claude", "--path", &malformed.to_string_lossy()]);
-    assert_eq!(rejected.status.code(), Some(64));
+    rejected.assert().failure().code(64);
     assert_eq!(
         String::from_utf8_lossy(&rejected.stderr),
         "error: hooks field must be an object; pass --force to replace it\n"
     );
 
     let check = fixture.output(&["check", "--json"]);
-    assert_eq!(check.status.code(), Some(2));
+    check.assert().failure().code(2);
     let reports: Vec<Value> = serde_json::from_slice(&check.stdout).expect("check JSON");
     let state = reports.iter().find(|report| report["component"] == "state").expect("state report");
     assert_eq!(state["schema_version"], 13);
@@ -727,7 +739,7 @@ fn dashboard_snapshot_matches_the_frontend_shape_and_ctrl_c_is_graceful() {
     send_signal(&child, libc::SIGINT);
     wait_for_exit(&mut child, Duration::from_secs(5));
     let output = child.wait_with_output().expect("server output");
-    assert_eq!(output.status.code(), Some(0));
+    output.assert().success();
     assert!(
         String::from_utf8_lossy(&output.stdout).contains(&format!("Serving dashboard API at http://127.0.0.1:{port}"))
     );
@@ -772,8 +784,8 @@ fn status_removes_every_common_host_termination_without_an_age_grace() {
         .to_string()
         .as_bytes(),
     );
-    assert_eq!(ended.status.code(), Some(0));
-    assert!(ended.stdout.is_empty());
+    ended.assert().success();
+    ended.assert().stdout(predicate::str::is_empty());
     assert!(wait_for_session_absence(&fixture, session_id, Duration::from_secs(1)));
     let _ = child.kill();
     let _ = child.wait();

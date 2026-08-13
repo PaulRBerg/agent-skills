@@ -12,8 +12,11 @@ version.workspace = true
 async-stream = "0.3"
 axum = "0.8"
 clap.workspace = true
+hex = "0.4"
+jiff = "0.2"
 rand.workspace = true
 rusqlite.workspace = true
+semver = "1.0"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -23,10 +26,17 @@ tokio = { version = "1.47", features = ["full"] }
 unicode-segmentation = "1.12"
 unicode-casefold = "0.2"
 unicode-normalization = "0.1"
+wait-timeout.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 nix = { version = "0.31", features = ["fs", "process", "signal", "user"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+libproc = "0.14"
+
 [dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
 proptest = "1.7"
+temp-env = "0.3"

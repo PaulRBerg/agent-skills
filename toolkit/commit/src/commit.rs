@@ -9,7 +9,8 @@ use std::{
 };
 
 use rand::random;
-use tempfile::Builder;
+use same_file::Handle;
+use tempfile::{Builder, NamedTempFile, TempPath};
 
 use crate::{
     cli::CommitArgs,
@@ -734,7 +735,7 @@ struct IndexLock {
     index_path: PathBuf,
     lock_path: PathBuf,
     has_index: bool,
-    file: Option<File>,
+    file: Option<NamedTempFile>,
 }
 
 impl IndexLock {
@@ -763,7 +764,16 @@ impl IndexLock {
                             "cannot preserve default Git index permissions: {error}"
                         )));
                     }
-                    return Ok(Self { index_path, lock_path, has_index, file: Some(file) });
+                    let temporary_path = match TempPath::try_from_path(&lock_path) {
+                        Ok(path) => path,
+                        Err(error) => {
+                            drop(file);
+                            let _ = fs::remove_file(&lock_path);
+                            return Err(AppError::operational(format!("cannot track default Git index lock: {error}")));
+                        }
+                    };
+                    let temporary = NamedTempFile::from_parts(file, temporary_path);
+                    return Ok(Self { index_path, lock_path, has_index, file: Some(temporary) });
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && attempt < 5 => {
                     if fs::read(&lock_path).ok().as_deref() == Some(marker.as_bytes()) {
@@ -797,19 +807,28 @@ impl IndexLock {
     fn publish_from(&mut self, source: &Path) -> Result<()> {
         self.ensure_owned()?;
         let bytes = fs::read(source)?;
-        let file = self.file.as_mut().ok_or_else(|| AppError::operational("default Git index lock is not owned"))?;
-        file.seek(SeekFrom::Start(0))?;
-        file.set_len(0)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        fs::rename(&self.lock_path, &self.index_path)?;
-        self.file = None;
-        Ok(())
+        let mut temporary =
+            self.file.take().ok_or_else(|| AppError::operational("default Git index lock is not owned"))?;
+        temporary.as_file_mut().seek(SeekFrom::Start(0))?;
+        temporary.as_file_mut().set_len(0)?;
+        temporary.as_file_mut().write_all(&bytes)?;
+        temporary.as_file_mut().sync_all()?;
+        match temporary.persist(&self.index_path) {
+            Ok(_) => Ok(()),
+            Err(error) => {
+                self.file = Some(error.file);
+                Err(AppError::operational(format!(
+                    "cannot publish default Git index {}: {}",
+                    self.index_path.display(),
+                    error.error
+                )))
+            }
+        }
     }
 
     fn ensure_owned(&self) -> Result<()> {
         let file = self.file.as_ref().ok_or_else(|| AppError::operational("default Git index lock is not owned"))?;
-        if !same_file(file, &self.lock_path) {
+        if !same_file(file.as_file(), &self.lock_path) {
             return Err(AppError::retry(format!(
                 "default Git index lock ownership changed: {}",
                 self.lock_path.display()
@@ -821,26 +840,21 @@ impl IndexLock {
 
 impl Drop for IndexLock {
     fn drop(&mut self) {
-        if self.file.as_ref().is_some_and(|file| same_file(file, &self.lock_path)) {
-            let _ = fs::remove_file(&self.lock_path);
+        if let Some(file) = self.file.take() {
+            if same_file(file.as_file(), &self.lock_path) {
+                let _ = fs::remove_file(&self.lock_path);
+            } else {
+                // The lock on disk is no longer ours; disarm the temporary file so
+                // its Drop cannot delete a lock owned by another process.
+                let _ = file.into_temp_path().keep();
+            }
         }
     }
 }
 
-#[cfg(unix)]
 fn same_file(file: &File, path: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-
-    let Ok(held) = file.metadata() else {
-        return false;
-    };
-    let Ok(current) = fs::metadata(path) else {
-        return false;
-    };
-    held.dev() == current.dev() && held.ino() == current.ino()
-}
-
-#[cfg(not(unix))]
-fn same_file(_file: &File, _path: &Path) -> bool {
-    false
+    match (file.try_clone().and_then(Handle::from_file), Handle::from_path(path)) {
+        (Ok(held), Ok(current)) => held == current,
+        _ => false,
+    }
 }

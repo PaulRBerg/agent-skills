@@ -402,18 +402,12 @@ fn recursion_marker_suppresses_public_scheduler() {
     // The recursion guard is checked before identity resolution, so this must
     // hold regardless of whether the test process has an ambient Codex/Claude
     // session identity to resolve.
-    struct EnvGuard;
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            unsafe { std::env::remove_var("AI_COORD_TRIAGE_ROLE") };
-        }
-    }
-    unsafe { std::env::set_var("AI_COORD_TRIAGE_ROLE", "triager") };
-    let _guard = EnvGuard;
-    let repo = repository(true);
-    let (coordinator, _) = fixture(repo.path(), 100.0);
-    assert_eq!(
-        coordinator.schedule_findings_triage(repo.path()).unwrap(),
-        TriageSchedule::Skipped("triager-lifecycle")
-    );
+    temp_env::with_var("AI_COORD_TRIAGE_ROLE", Some("triager"), || {
+        let repo = repository(true);
+        let (coordinator, _) = fixture(repo.path(), 100.0);
+        assert_eq!(
+            coordinator.schedule_findings_triage(repo.path()).unwrap(),
+            TriageSchedule::Skipped("triager-lifecycle")
+        );
+    });
 }

@@ -1,8 +1,8 @@
 use std::{
     collections::{BTreeMap, HashSet},
-    env, fmt, fs,
+    env, fs,
     io::{self, BufRead, BufReader, Write},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, ExitStatus, Stdio},
     sync::{
         Arc,
@@ -15,6 +15,7 @@ use std::{
 
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
+use wait_timeout::ChildExt;
 
 use super::{
     config::default_hook_path,
@@ -22,7 +23,6 @@ use super::{
 };
 
 const CODEX_TIMEOUT: Duration = Duration::from_secs(10);
-const CODEX_MINIMUM_VERSION: (u64, u64, u64) = (0, 146, 0);
 const CODEX_MINIMUM_VERSION_TEXT: &str = "0.146.0";
 const MAX_CONFIG_ATTEMPTS: usize = 3;
 const MAX_JSONL_BYTES: usize = 1024 * 1024;
@@ -44,7 +44,8 @@ pub(crate) struct HookCheck {
     pub(crate) details: Value,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
 pub(crate) struct CodexTrustError {
     message: String,
     version_conflict: bool,
@@ -59,14 +60,6 @@ impl CodexTrustError {
         Self { message: "Codex config version conflict".to_owned(), version_conflict: true }
     }
 }
-
-impl fmt::Display for CodexTrustError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for CodexTrustError {}
 
 type Result<T> = std::result::Result<T, CodexTrustError>;
 
@@ -347,54 +340,14 @@ fn require_codex_minimum_version(output: &str) -> Result<()> {
         .trim()
         .strip_prefix("codex-cli ")
         .ok_or_else(|| CodexTrustError::new("could not parse `codex --version` output"))?;
-    let (without_build, build) = split_optional(version_text, '+')?;
-    if let Some(build) = build {
-        validate_identifiers(build)?;
-    }
-    let (numbers, prerelease) = split_optional(without_build, '-')?;
-    if let Some(prerelease) = prerelease {
-        validate_identifiers(prerelease)?;
-    }
-    let mut parts = numbers.split('.');
-    let version =
-        (parse_version_part(parts.next())?, parse_version_part(parts.next())?, parse_version_part(parts.next())?);
-    if parts.next().is_some() {
-        return Err(CodexTrustError::new("could not parse `codex --version` output"));
-    }
-    if version < CODEX_MINIMUM_VERSION || (version == CODEX_MINIMUM_VERSION && prerelease.is_some()) {
+    let version = semver::Version::parse(version_text)
+        .map_err(|_| CodexTrustError::new("could not parse `codex --version` output"))?;
+    if version < semver::Version::new(0, 146, 0) {
         return Err(CodexTrustError::new(format!(
             "Codex hook trust requires codex-cli >= {CODEX_MINIMUM_VERSION_TEXT}; found {version_text}"
         )));
     }
     Ok(())
-}
-
-fn split_optional(text: &str, separator: char) -> Result<(&str, Option<&str>)> {
-    let (before, after) = text.split_once(separator).map_or((text, None), |(before, after)| (before, Some(after)));
-    if before.is_empty() || after == Some("") {
-        return Err(CodexTrustError::new("could not parse `codex --version` output"));
-    }
-    Ok((before, after))
-}
-
-fn validate_identifiers(text: &str) -> Result<()> {
-    if text
-        .split('.')
-        .any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'))
-    {
-        return Err(CodexTrustError::new("could not parse `codex --version` output"));
-    }
-    Ok(())
-}
-
-fn parse_version_part(part: Option<&str>) -> Result<u64> {
-    let part = part
-        .filter(|part| !part.is_empty())
-        .ok_or_else(|| CodexTrustError::new("could not parse `codex --version` output"))?;
-    if !part.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(CodexTrustError::new("could not parse `codex --version` output"));
-    }
-    part.parse().map_err(|_| CodexTrustError::new("could not parse `codex --version` output"))
 }
 
 trait Runtime {
@@ -686,17 +639,7 @@ fn read_bounded_line<R: BufRead>(reader: &mut R) -> io::Result<Option<Vec<u8>>> 
 }
 
 fn wait_for_child(child: &mut Child, timeout: Duration) -> io::Result<Option<ExitStatus>> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(Some(status));
-        }
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            return Ok(None);
-        }
-        thread::sleep(remaining.min(Duration::from_millis(10)));
-    }
+    child.wait_timeout(timeout)
 }
 
 fn active_codex_hook_path(path: Option<&Path>) -> Result<PathBuf> {
@@ -708,19 +651,17 @@ fn active_codex_hook_path(path: Option<&Path>) -> Result<PathBuf> {
     Ok(active)
 }
 
-fn expand_tilde(path: &Path) -> Result<PathBuf> {
+fn expand_tilde_strict(path: &Path) -> Result<PathBuf> {
+    let expanded = crate::expand_tilde(path);
     let text = path.as_os_str().to_string_lossy();
-    if text == "~" || text.starts_with("~/") {
-        let home = env::var_os("HOME")
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| CodexTrustError::new("could not determine Codex home"))?;
-        return Ok(PathBuf::from(home).join(text.trim_start_matches("~/")));
+    if (text == "~" || text.starts_with("~/")) && expanded == path {
+        return Err(CodexTrustError::new("could not determine Codex home"));
     }
-    Ok(path.to_path_buf())
+    Ok(expanded)
 }
 
 fn normalized_path(path: &Path) -> Result<PathBuf> {
-    let expanded = expand_tilde(path)?;
+    let expanded = expand_tilde_strict(path)?;
     let absolute = if expanded.is_absolute() {
         expanded
     } else {
@@ -733,24 +674,10 @@ fn normalized_path(path: &Path) -> Result<PathBuf> {
             let suffix = absolute
                 .strip_prefix(ancestor)
                 .map_err(|error| CodexTrustError::new(format!("could not resolve path: {error}")))?;
-            return Ok(lexically_normalized(canonical.join(suffix)));
+            return Ok(crate::lexically_normalized(canonical.join(suffix)));
         }
     }
-    Ok(lexically_normalized(absolute))
-}
-
-fn lexically_normalized(path: PathBuf) -> PathBuf {
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            other => normalized.push(other.as_os_str()),
-        }
-    }
-    normalized
+    Ok(crate::lexically_normalized(absolute))
 }
 
 #[cfg(test)]

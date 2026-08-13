@@ -117,20 +117,14 @@ struct NativeProcess {
     claude_match: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 enum InspectionError {
+    #[error("process does not exist")]
     Missing,
+    #[error("{0}")]
     Permission(String),
+    #[error("{0}")]
     Other(String),
-}
-
-impl fmt::Display for InspectionError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Missing => formatter.write_str("process does not exist"),
-            Self::Permission(detail) | Self::Other(detail) => formatter.write_str(detail),
-        }
-    }
 }
 
 trait ProcessBackend: Send + Sync {
@@ -388,54 +382,20 @@ fn classify_io(error: std::io::Error) -> InspectionError {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use std::{ffi::CStr, mem::MaybeUninit};
+    use std::ffi::CStr;
+
+    use libproc::{
+        bsd_info::BSDInfo,
+        proc_pid::{pidinfo, pidpath},
+    };
 
     use super::*;
 
-    const PROC_PIDTBSDINFO: i32 = 3;
-    const PROC_PIDPATHINFO_MAXSIZE: usize = 4096;
     const SZOMB: u32 = 5;
     const SIDL: u32 = 1;
     const SRUN: u32 = 2;
     const SSLEEP: u32 = 3;
     const SSTOP: u32 = 4;
-
-    #[repr(C)]
-    struct ProcBsdInfo {
-        pbi_flags: u32,
-        pbi_status: u32,
-        pbi_xstatus: u32,
-        pbi_pid: u32,
-        pbi_ppid: u32,
-        pbi_uid: libc::uid_t,
-        pbi_gid: libc::gid_t,
-        pbi_ruid: libc::uid_t,
-        pbi_rgid: libc::gid_t,
-        pbi_svuid: libc::uid_t,
-        pbi_svgid: libc::gid_t,
-        rfu_1: u32,
-        pbi_comm: [libc::c_char; 16],
-        pbi_name: [libc::c_char; 32],
-        pbi_nfiles: u32,
-        pbi_pgid: u32,
-        pbi_pjobc: u32,
-        e_tdev: u32,
-        e_tpgid: u32,
-        pbi_nice: i32,
-        pbi_start_tvsec: u64,
-        pbi_start_tvusec: u64,
-    }
-
-    unsafe extern "C" {
-        fn proc_pidinfo(
-            pid: libc::c_int,
-            flavor: libc::c_int,
-            arg: u64,
-            buffer: *mut libc::c_void,
-            buffer_size: libc::c_int,
-        ) -> libc::c_int;
-        fn proc_pidpath(pid: libc::c_int, buffer: *mut libc::c_void, buffer_size: u32) -> libc::c_int;
-    }
 
     #[derive(Debug)]
     pub(super) struct NativeBackend;
@@ -446,22 +406,7 @@ mod macos {
         }
 
         fn inspect(&self, pid: u32, identify_host: bool) -> std::result::Result<NativeProcess, InspectionError> {
-            let mut info = MaybeUninit::<ProcBsdInfo>::zeroed();
-            // SAFETY: `info` points to a correctly sized writable `proc_bsdinfo` buffer.
-            let read = unsafe {
-                proc_pidinfo(
-                    pid as libc::c_int,
-                    PROC_PIDTBSDINFO,
-                    0,
-                    info.as_mut_ptr().cast(),
-                    size_of::<ProcBsdInfo>() as libc::c_int,
-                )
-            };
-            if read != size_of::<ProcBsdInfo>() as libc::c_int {
-                return Err(last_inspection_error());
-            }
-            // SAFETY: `proc_pidinfo` filled the entire structure above.
-            let info = unsafe { info.assume_init() };
+            let info = pidinfo::<BSDInfo>(pid as libc::c_int, 0).map_err(|_| last_inspection_error())?;
             let state = match info.pbi_status {
                 SZOMB => NativeState::Dead,
                 SIDL | SRUN | SSLEEP | SSTOP => NativeState::Alive,
@@ -471,13 +416,8 @@ mod macos {
             if identify_host {
                 names.push(c_char_array(&info.pbi_comm));
                 names.push(c_char_array(&info.pbi_name));
-                let mut executable = [0_u8; PROC_PIDPATHINFO_MAXSIZE];
-                // SAFETY: the byte array is writable and its supplied size is exact.
-                let length = unsafe {
-                    proc_pidpath(pid as libc::c_int, executable.as_mut_ptr().cast(), executable.len() as u32)
-                };
-                if length > 0 {
-                    names.push(String::from_utf8_lossy(&executable[..length as usize]).into_owned());
+                if let Ok(executable) = pidpath(pid as libc::c_int) {
+                    names.push(executable);
                 }
                 if let Ok(arguments) = process_arguments(pid) {
                     names.extend(arguments.into_iter().take(3));

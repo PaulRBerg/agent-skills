@@ -689,8 +689,12 @@ fn waker_feedback(outcome: &Outcome) -> String {
 fn lexical_absolute(path: &Path) -> Result<PathBuf> {
     let path = expand_tilde(path);
     let absolute = if path.is_absolute() { path } else { std::env::current_dir()?.join(path) };
+    Ok(lexically_normalized(absolute))
+}
+
+pub(crate) fn lexically_normalized(path: PathBuf) -> PathBuf {
     let mut normalized = PathBuf::new();
-    for component in absolute.components() {
+    for component in path.components() {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
@@ -699,17 +703,17 @@ fn lexical_absolute(path: &Path) -> Result<PathBuf> {
             _ => normalized.push(component.as_os_str()),
         }
     }
-    Ok(normalized)
+    normalized
 }
 
-fn expand_tilde(path: &Path) -> PathBuf {
+pub(crate) fn expand_tilde(path: &Path) -> PathBuf {
     let Some(text) = path.to_str() else {
         return path.to_path_buf();
     };
     if (text == "~" || text.starts_with("~/")) &&
-        let Some(home) = std::env::var_os("HOME")
+        let Some(home) = host::home_dir()
     {
-        return PathBuf::from(home).join(text.trim_start_matches("~/"));
+        return home.join(text.trim_start_matches("~/"));
     }
     path.to_path_buf()
 }

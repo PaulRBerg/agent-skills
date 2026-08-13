@@ -5,10 +5,12 @@ use std::{
     io::{self, Read},
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
-    sync::mpsc::{self, Receiver, TryRecvError},
+    sync::mpsc::{self, Receiver},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
+
+use wait_timeout::ChildExt;
 
 use crate::{cli::MapArgs, error::Error, traversal::RootRequest};
 
@@ -101,36 +103,17 @@ fn run_output_timeout(command: &mut Command, timeout: Duration) -> io::Result<Ou
     let stderr = child.stderr.take().expect("piped stderr");
     let stdout_reader = output_reader(stdout).inspect_err(|_| terminate_child(&mut child))?;
     let stderr_reader = output_reader(stderr).inspect_err(|_| terminate_child(&mut child))?;
-    let deadline = Instant::now() + timeout;
-    let mut status = None;
-    let mut stdout = None;
-    let mut stderr = None;
-
-    loop {
-        if stdout.is_none() {
-            stdout = cleanup_on_error(poll_output(&stdout_reader), &mut child)?;
-        }
-        if stderr.is_none() {
-            stderr = cleanup_on_error(poll_output(&stderr_reader), &mut child)?;
-        }
-        if status.is_none() {
-            let observed = child.try_wait();
-            status = cleanup_on_error(observed, &mut child)?;
-        }
-        if stdout.is_some() &&
-            stderr.is_some() &&
-            let Some(status) = status &&
-            let Some(stdout) = stdout.take() &&
-            let Some(stderr) = stderr.take()
-        {
-            return Ok(Output { status, stdout, stderr });
-        }
-        if Instant::now() >= deadline {
+    let status = match child.wait_timeout(timeout) {
+        Ok(Some(status)) => status,
+        Ok(None) => {
             terminate_child(&mut child);
             return Err(io::Error::new(io::ErrorKind::TimedOut, format!("Git command timed out after {timeout:?}")));
         }
-        thread::sleep(Duration::from_millis(10));
-    }
+        Err(error) => return cleanup_on_error(Err(error), &mut child),
+    };
+    let stdout = cleanup_on_error(read_output(&stdout_reader), &mut child)?;
+    let stderr = cleanup_on_error(read_output(&stderr_reader), &mut child)?;
+    Ok(Output { status, stdout, stderr })
 }
 
 fn output_reader(mut output: impl Read + Send + 'static) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
@@ -143,12 +126,8 @@ fn output_reader(mut output: impl Read + Send + 'static) -> io::Result<Receiver<
     Ok(receiver)
 }
 
-fn poll_output(reader: &Receiver<io::Result<Vec<u8>>>) -> io::Result<Option<Vec<u8>>> {
-    match reader.try_recv() {
-        Ok(result) => result.map(Some),
-        Err(TryRecvError::Empty) => Ok(None),
-        Err(TryRecvError::Disconnected) => Err(io::Error::other("Git output reader stopped")),
-    }
+fn read_output(reader: &Receiver<io::Result<Vec<u8>>>) -> io::Result<Vec<u8>> {
+    reader.recv().map_err(|_| io::Error::other("Git output reader stopped"))?
 }
 
 fn cleanup_on_error<T>(result: io::Result<T>, child: &mut Child) -> io::Result<T> {

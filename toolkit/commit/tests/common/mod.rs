@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use assert_cmd::{Command as AssertCommand, prelude::OutputAssertExt};
+use predicates::prelude::*;
 use std::{
     ffi::OsStr,
     fs,
@@ -92,7 +94,7 @@ impl Harness {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_ai-commit"));
+        let mut command = AssertCommand::cargo_bin("ai-commit").expect("binary should be built for integration tests");
         command
             .current_dir(&self.repo)
             .env("HOME", &self.home)
@@ -117,7 +119,8 @@ impl Harness {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        Command::new(env!("CARGO_BIN_EXE_ai-commit"))
+        let mut command = AssertCommand::cargo_bin("ai-commit").expect("binary should be built for integration tests");
+        command
             .current_dir(directory)
             .env("HOME", &self.home)
             .env("AI_COMMIT_STATE_DIR", &self.state)
@@ -132,9 +135,8 @@ impl Harness {
             .env_remove("AI_COMMIT_TEST_COORD_TIMEOUT_MS")
             .env_remove("AI_COMMIT_TEST_FAIL_AFTER_REF_UPDATE")
             .env("PATH", &self.search_path)
-            .args(args)
-            .output()
-            .unwrap()
+            .args(args);
+        command.output().unwrap()
     }
 
     pub fn git_input<I, S>(&self, args: I, input: &[u8]) -> String
@@ -160,8 +162,7 @@ impl Harness {
             .spawn()
             .unwrap();
         child.stdin.take().unwrap().write_all(input).unwrap();
-        let output = child.wait_with_output().unwrap();
-        assert!(output.status.success(), "git failed: {}", String::from_utf8_lossy(&output.stderr));
+        let output = assert_success(child.wait_with_output().unwrap(), "git");
         String::from_utf8(output.stdout).unwrap().trim_end().to_owned()
     }
 
@@ -170,15 +171,7 @@ impl Harness {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let output = self.command(args);
-        assert!(
-            output.status.success(),
-            "command failed ({}):\nstdout:\n{}\nstderr:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        output
+        assert_success(self.command(args), "ai-commit")
     }
 
     pub fn prepare(&self, paths: &[&str]) -> (String, String) {
@@ -200,14 +193,7 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = git_output_at(repository, home, args);
-    assert!(
-        output.status.success(),
-        "git failed ({}):\nstdout:\n{}\nstderr:\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let output = assert_success(git_output_at(repository, home, args), "git");
     String::from_utf8(output.stdout).unwrap().trim_end().to_owned()
 }
 
@@ -251,4 +237,9 @@ pub fn stderr(output: &Output) -> String {
 
 pub fn exit_code(output: &Output) -> i32 {
     output.status.code().expect("process exit code")
+}
+
+fn assert_success(output: Output, command: &'static str) -> Output {
+    let assertion = output.assert().append_context("command", command).code(predicate::eq(0));
+    assertion.get_output().clone()
 }

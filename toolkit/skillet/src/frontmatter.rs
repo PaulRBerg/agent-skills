@@ -5,6 +5,7 @@ use std::{
     path::Path,
 };
 
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{MapAccess, SeqAccess, Visitor},
@@ -382,60 +383,71 @@ fn frontmatter_value(value: &YamlValue) -> FrontmatterValue {
 
 pub(crate) fn markdown_prose(markdown: &str) -> String {
     let mut visible = markdown.as_bytes().to_vec();
-    let mut offset = 0usize;
-    let mut fence = None;
-    let mut example_level = None;
+    let mut code_block_start = None;
+    let mut block_quote_start = None;
+    let mut block_quote_depth = 0usize;
+    let mut example_start = None;
 
-    for line in markdown.split_inclusive('\n') {
-        let content = line.strip_suffix('\n').unwrap_or(line);
-        let content = content.strip_suffix('\r').unwrap_or(content);
-        let indent = content.bytes().take_while(|byte| *byte == b' ').count();
-        let trimmed = &content[indent.min(content.len())..];
-        let marker = (indent <= 3).then(|| fence_marker(trimmed)).flatten();
+    for (event, range) in Parser::new(markdown).into_offset_iter() {
+        match event {
+            Event::Start(Tag::CodeBlock(_)) => code_block_start = Some(range.start),
+            Event::End(TagEnd::CodeBlock) => {
+                if let Some(start) = code_block_start.take() {
+                    mask(&mut visible, start, range.end);
+                }
+            }
+            Event::Start(Tag::BlockQuote(_)) => {
+                if block_quote_depth == 0 {
+                    block_quote_start = Some(range.start);
+                }
+                block_quote_depth += 1;
+            }
+            Event::End(TagEnd::BlockQuote(_)) => {
+                block_quote_depth = block_quote_depth.saturating_sub(1);
+                if block_quote_depth == 0 &&
+                    let Some(start) = block_quote_start.take()
+                {
+                    mask(&mut visible, start, range.end);
+                }
+            }
+            Event::Code(_) => mask(&mut visible, range.start, range.end),
+            Event::Start(Tag::Heading { .. }) => {
+                let start = line_start(markdown, range.start);
+                let line = &markdown[start..line_end(markdown, start)];
+                let Some((level, title)) = markdown_heading(line) else {
+                    continue;
+                };
 
-        if let Some((kind, width)) = fence {
-            mask(&mut visible, offset, offset + content.len());
-            if marker.is_some_and(|(candidate, candidate_width)| candidate == kind && candidate_width >= width) {
-                fence = None;
+                if example_start.is_some_and(|(example_level, _)| level <= example_level) {
+                    let (_, example_start) = example_start.take().expect("example section is present");
+                    mask(&mut visible, example_start, start);
+                }
+                if is_example_heading(title) {
+                    example_start = Some((level, start));
+                }
             }
-        } else if let Some(marker) = marker {
-            fence = Some(marker);
-            mask(&mut visible, offset, offset + content.len());
-        } else {
-            let heading = markdown_heading(trimmed);
-            if let Some((level, _)) = heading &&
-                example_level.is_some_and(|example| level <= example)
-            {
-                example_level = None;
-            }
-            if let Some((level, title)) = heading &&
-                is_example_heading(title)
-            {
-                example_level = Some(level);
-            }
-
-            if example_level.is_some() || indent >= 4 || trimmed.starts_with('>') {
-                mask(&mut visible, offset, offset + content.len());
-            } else {
-                mask_inline_code(content.as_bytes(), &mut visible, offset);
-            }
+            _ => {}
         }
-        offset += line.len();
+    }
+    if let Some((_, start)) = example_start {
+        mask(&mut visible, start, markdown.len());
     }
 
     String::from_utf8(visible).expect("masking Markdown preserves UTF-8")
 }
 
-fn fence_marker(line: &str) -> Option<(u8, usize)> {
-    let kind = *line.as_bytes().first()?;
-    if !matches!(kind, b'`' | b'~') {
-        return None;
-    }
-    let width = line.bytes().take_while(|byte| *byte == kind).count();
-    (width >= 3).then_some((kind, width))
+fn line_start(markdown: &str, offset: usize) -> usize {
+    markdown[..offset].rfind('\n').map_or(0, |newline| newline + 1)
+}
+
+fn line_end(markdown: &str, start: usize) -> usize {
+    markdown[start..].find('\n').map_or(markdown.len(), |relative| start + relative)
 }
 
 fn markdown_heading(line: &str) -> Option<(usize, &str)> {
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+    let line = &line[indent.min(line.len())..];
     let level = line.bytes().take_while(|byte| *byte == b'#').count();
     if !(1..=6).contains(&level) || line.as_bytes().get(level) != Some(&b' ') {
         return None;
@@ -448,33 +460,12 @@ fn is_example_heading(title: &str) -> bool {
     matches!(title.as_str(), "example" | "examples") || title.starts_with("example:") || title.starts_with("examples:")
 }
 
-fn mask_inline_code(line: &[u8], visible: &mut [u8], offset: usize) {
-    let mut start = 0usize;
-    while let Some(relative) = line[start..].iter().position(|byte| *byte == b'`') {
-        let opening = start + relative;
-        let width = line[opening..].iter().take_while(|byte| **byte == b'`').count();
-        let mut search = opening + width;
-        let closing = loop {
-            let Some(relative) = line[search..].iter().position(|byte| *byte == b'`') else {
-                break None;
-            };
-            let candidate = search + relative;
-            let candidate_width = line[candidate..].iter().take_while(|byte| **byte == b'`').count();
-            if candidate_width == width {
-                break Some(candidate);
-            }
-            search = candidate + candidate_width;
-        };
-        let Some(closing) = closing else {
-            break;
-        };
-        mask(visible, offset + opening, offset + closing + width);
-        start = closing + width;
-    }
-}
-
 fn mask(bytes: &mut [u8], start: usize, end: usize) {
-    bytes[start..end].fill(b' ');
+    for byte in &mut bytes[start..end] {
+        if !matches!(*byte, b'\r' | b'\n') {
+            *byte = b' ';
+        }
+    }
 }
 
 enum ReadLine {

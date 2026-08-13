@@ -151,7 +151,7 @@ fn content_sha256(path: &Path) -> Option<String> {
         }
         digest.update(&buffer[..count]);
     }
-    Some(digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect())
+    Some(hex::encode(digest.finalize()))
 }
 
 fn turn_id() -> Option<String> {

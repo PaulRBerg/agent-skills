@@ -3,7 +3,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
-    sync::mpsc::{self, Receiver, TryRecvError},
+    sync::mpsc::{self, Receiver, RecvTimeoutError},
     thread,
     time::{Duration, Instant},
 };
@@ -12,8 +12,7 @@ use crate::{
     domain::{Scope, ScopeKind},
     error::{AppError, Result},
 };
-
-use super::home_dir;
+use wait_timeout::ChildExt;
 
 pub(crate) const MAX_SCOPE_CHARS: usize = 120;
 pub(crate) const UNHASHABLE_BLOB_HASH: &str = "<deleted-or-unhashable>";
@@ -47,39 +46,15 @@ pub(super) fn run_output_timeout(command: &mut Command, timeout: Duration) -> st
         }
     };
     let started = Instant::now();
-    let mut status = None;
-    let mut stdout = None;
-    let mut stderr = None;
-    loop {
-        if stdout.is_none() {
-            stdout = cleanup_on_error(poll_output(&stdout_reader), &mut child)?;
-        }
-        if stderr.is_none() {
-            stderr = cleanup_on_error(poll_output(&stderr_reader), &mut child)?;
-        }
-        if status.is_none() {
-            let observed = child.try_wait();
-            status = cleanup_on_error(observed, &mut child)?;
-        }
-        if stdout.is_some() &&
-            stderr.is_some() &&
-            let Some(status) = status &&
-            let Some(stdout) = stdout.take() &&
-            let Some(stderr) = stderr.take()
-        {
-            return Ok(CommandOutput { status, stdout, stderr });
-        }
-        if started.elapsed() >= timeout {
-            if status.is_none() {
-                terminate_child(&mut child);
-            }
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                format!("command timed out after {} seconds", timeout.as_secs()),
-            ));
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
+    let Some(status) = cleanup_on_error(child.wait_timeout(timeout), &mut child)? else {
+        terminate_child(&mut child);
+        return Err(timeout_error(timeout));
+    };
+    let remaining = timeout.saturating_sub(started.elapsed());
+    let stdout = cleanup_on_error(receive_output(&stdout_reader, remaining, timeout), &mut child)?;
+    let remaining = timeout.saturating_sub(started.elapsed());
+    let stderr = cleanup_on_error(receive_output(&stderr_reader, remaining, timeout), &mut child)?;
+    Ok(CommandOutput { status, stdout, stderr })
 }
 
 fn spawn_output_reader(
@@ -101,12 +76,20 @@ fn read_bounded_output(reader: &mut impl Read, limit: usize) -> std::io::Result<
     Ok(bytes)
 }
 
-fn poll_output(reader: &Receiver<std::io::Result<Vec<u8>>>) -> std::io::Result<Option<Vec<u8>>> {
-    match reader.try_recv() {
-        Ok(result) => result.map(Some),
-        Err(TryRecvError::Empty) => Ok(None),
-        Err(TryRecvError::Disconnected) => Err(std::io::Error::other("command output reader stopped")),
+fn receive_output(
+    reader: &Receiver<std::io::Result<Vec<u8>>>,
+    remaining: Duration,
+    timeout: Duration,
+) -> std::io::Result<Vec<u8>> {
+    match reader.recv_timeout(remaining) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => Err(timeout_error(timeout)),
+        Err(RecvTimeoutError::Disconnected) => Err(std::io::Error::other("command output reader stopped")),
     }
+}
+
+fn timeout_error(timeout: Duration) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::TimedOut, format!("command timed out after {} seconds", timeout.as_secs()))
 }
 
 fn terminate_child(child: &mut Child) {
@@ -146,7 +129,7 @@ pub(crate) fn normalize_scopes(raw_scopes: &[PathBuf], cwd: &Path, root: &Path) 
         if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
             return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
         }
-        let expanded = expand_user(raw_scope);
+        let expanded = crate::expand_tilde(raw_scope);
         let candidate = if expanded.is_absolute() { expanded } else { cwd.join(expanded) };
         let preserve_final_symlink =
             std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink());
@@ -411,21 +394,6 @@ fn push_git_path(paths: &mut Vec<String>, bytes: &[u8]) {
     if !paths.contains(&path) {
         paths.push(path);
     }
-}
-
-fn expand_user(path: &Path) -> PathBuf {
-    let Some(value) = path.to_str() else {
-        return path.to_owned();
-    };
-    if value == "~" {
-        return home_dir().unwrap_or_else(|| path.to_owned());
-    }
-    if let Some(suffix) = value.strip_prefix("~/") &&
-        let Some(home) = home_dir()
-    {
-        return home.join(suffix);
-    }
-    path.to_owned()
 }
 
 fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {

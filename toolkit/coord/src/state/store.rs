@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rusqlite::{Connection, Transaction, TransactionBehavior};
+use rusqlite::{Connection, ErrorCode, Transaction, TransactionBehavior};
 
 use crate::{
     domain::{Client, SessionState, WorkState},
@@ -146,7 +146,7 @@ fn enable_wal(connection: &Connection) -> Result<()> {
 }
 
 fn is_locked(error: &rusqlite::Error) -> bool {
-    error.to_string().to_ascii_lowercase().contains("locked")
+    matches!(error.sqlite_error_code(), Some(ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked))
 }
 
 pub(super) fn bump_generation(transaction: &Transaction<'_>) -> Result<()> {

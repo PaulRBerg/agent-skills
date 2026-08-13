@@ -873,9 +873,9 @@ fn read_worker_metadata(run_dir: &Path) -> Result<RunMetadata> {
 }
 
 fn write_metadata(run_dir: &Path, metadata: &RunMetadata) -> Result<()> {
-    let temporary = run_dir.join("run.json.tmp");
-    write_private(&temporary, serde_json::to_vec_pretty(metadata)?.as_slice())?;
-    fs::rename(temporary, metadata_path(run_dir))?;
+    let temporary = tempfile::NamedTempFile::new_in(run_dir)?;
+    write_private(temporary.path(), serde_json::to_vec_pretty(metadata)?.as_slice())?;
+    temporary.persist(metadata_path(run_dir)).map_err(|error| error.error)?;
     Ok(())
 }
 

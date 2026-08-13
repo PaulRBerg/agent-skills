@@ -195,22 +195,12 @@ fn config_root(variable: &str, fallback: &str) -> PathBuf {
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(".")).join(fallback));
-    expand_tilde(root)
+    crate::expand_tilde(&root)
 }
 
 fn claude_link_path(runtime: PathBuf) -> PathBuf {
     let modular = runtime.parent().expect("settings file has a parent").join("settings/hooks.jsonc");
     if modular.exists() { modular } else { runtime }
-}
-
-fn expand_tilde(path: PathBuf) -> PathBuf {
-    let text = path.to_string_lossy();
-    if (text == "~" || text.starts_with("~/")) &&
-        let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty())
-    {
-        return PathBuf::from(home).join(text.trim_start_matches("~/"));
-    }
-    path
 }
 
 fn read_document(path: &Path) -> Result<JsoncDocument, ConfigError> {
