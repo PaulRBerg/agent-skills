@@ -21,12 +21,13 @@ Set `CLI_CAST_SKILL_DIR` to the absolute directory containing this `SKILL.md`. T
 `https://api.rabby.io/v2/wallet/gas_market`, selects exactly one `slow` entry, and rejects malformed, non-integer,
 incoherent, or incorrectly ordered tiers. Do not reuse a quote for another transaction or a restarted review.
 
-Verify the RPC independently and record the block used:
+Ask `$evm-atlas` for one read packet containing the resolved Ethereum chain ID, latest block number and hash, and that
+block's base fee. Require chain ID `1`, then bind the returned values locally:
 
 ```sh
-test "$(cast chain-id --rpc-url "$RPC_URL")" = '1'
-RABBY_SLOW_BLOCK=$(cast block-number --rpc-url "$RPC_URL")
-RABBY_SLOW_BASE_FEE_WEI=$(cast base-fee "$RABBY_SLOW_BLOCK" --rpc-url "$RPC_URL")
+test "$EVM_ATLAS_CHAIN_ID" = '1'
+RABBY_SLOW_BLOCK="$EVM_ATLAS_BLOCK_NUMBER"
+RABBY_SLOW_BASE_FEE_WEI="$EVM_ATLAS_BASE_FEE_WEI"
 test "$RABBY_SLOW_MAX_FEE_WEI" -ge "$RABBY_SLOW_BASE_FEE_WEI"
 ```
 
@@ -55,6 +56,7 @@ For `cast publish`, inspect the signed transaction first and verify it already c
 cannot be changed after signing. The Rabby quote covers execution gas only, so a blob transaction still needs an
 independently reviewed blob-gas price.
 
-Immediately before broadcast, fetch the latest base fee again. If it exceeds the reviewed max fee, the transaction is
-not currently includable: obtain a new Slow quote, simulate again, and present a revised review. For replacements or
-cancellations, stop when Slow does not satisfy the required fee bump rather than silently increasing the tier.
+Immediately before broadcast, have `$evm-atlas` fetch the latest block and base fee again. If it exceeds the reviewed
+max fee, the transaction is not currently includable: obtain a new Slow quote, simulate again, and present a revised
+review. For replacements or cancellations, stop when Slow does not satisfy the required fee bump rather than silently
+increasing the tier.

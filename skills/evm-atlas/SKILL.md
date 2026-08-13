@@ -27,6 +27,9 @@ boundary.
   authoritative target-mainnet rows.
 - If a chain is absent, do not route through another provider, web search, Chainlist, or an unlisted RPC to work around
   scope. Ask for a feature request at <https://github.com/PaulRBerg/agent-skills>.
+- Own every discrete read handed off by `cli-cast`, including chain, block, fee, nonce, `eth_call`, `eth_estimateGas`,
+  transaction, receipt, log, balance, code, storage, proof, and ENS queries. Complete the read here even when its result
+  will prepare, simulate, or verify later state-changing work.
 - Never sign messages, submit signatures, execute bridge steps, or broadcast transactions. Route state-changing Cast
   work to `cli-cast`.
 - DEX support is historical and evidence-only. Do not discover live quotes, construct or simulate new trades, prepare
@@ -45,45 +48,50 @@ boundary.
 
 ## Routing
 
-1. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
+1. For a discrete JSON-RPC read or batch, including one handed off by `cli-cast`, resolve the chain and read
+   `references/workflows/provider-routing.md`. Return the resolved chain, provider route, result, observed block or
+   checkpoint, and coverage gaps. Do not route the read back to `cli-cast`.
+2. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
    read `references/workflows/blockscan-balances.md` first.
-2. For a specific transaction hash on a named chain, resolve the chain against
+3. For a specific transaction hash on a named chain, resolve the chain against
    `references/generated/target-mainnets.json`, then read `references/workflows/provider-routing.md` directly for the
    transaction facts. Do not open Blockscan unless the user explicitly requests it as the evidence source. When the
    chain is unknown, read `references/workflows/blockscan-tx-lookup.md` once to resolve it. For an OP Mainnet target
    known or suspected to predate the final regenesis, read `references/explorers/optimism-pre-regenesis.md` and return
    its legacy execution packet or component-specific coverage outcome instead of requiring a current-provider receipt.
    Otherwise, acquire the exact provider receipt and logs before DEX or bridge outcome interpretation.
-3. For an address-wide historical-activity or `bootstrap-discovery` sweep, read `references/workflows/address-sweeps.md`
+4. For an address-wide historical-activity or `bootstrap-discovery` sweep, read `references/workflows/address-sweeps.md`
    and use its deterministic plan/evaluate helper. For current holdings, use
    `references/workflows/blockscan-balances.md` first and provider routing for gaps.
-4. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's
+5. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's
    full raw receipt/logs/decoded input, or funding origin, resolve the chain and read
    `references/workflows/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and
    exceptional-chain routing.
-5. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
-6. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
-7. For DEX prompts, wallet-facing DEX history, or suspected DEX transaction evidence, resolve the target chain and read
+6. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
+7. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
+8. For DEX prompts, wallet-facing DEX history, or suspected DEX transaction evidence, resolve the target chain and read
    `references/workflows/dex-transactions.md`. Load only the matching protocol-family reference:
    - Uniswap v1-v4, Universal Router, or Permit2: `references/dexes/uniswap.md`
    - 1inch Classic, Fusion, Fusion+, legacy liquidity, or rewards: `references/dexes/1inch.md`
    - CoW Swap, CoWSwap, CoW Protocol, or GPv2: `references/dexes/cow-protocol.md`
-8. Treat 1inch and CoW as execution protocols. Report any integration wrapper, router, pool, and underlying AMM
+9. Treat 1inch and CoW as execution protocols. Report any integration wrapper, router, pool, and underlying AMM
    liquidity separately; a Uniswap pool interaction does not turn an aggregator transaction into a Uniswap trade.
-9. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
-   only the matching reference:
-   - Across: `references/bridges/across.md`
-   - Bungee / Socket: `references/bridges/bungee.md`
-   - Circle / CCTP / Gateway: `references/bridges/circle.md`
-   - deBridge / DLN: `references/bridges/debridge.md`
-   - Hop: `references/bridges/hop.md`
-   - Layerswap: `references/bridges/layerswap.md`
-   - LayerZero / Stargate / OFT / Aori: `references/bridges/layerzero.md`
-   - LI.FI: `references/bridges/lifi.md`
-   - Relay / Relay.link: `references/bridges/relay.md`
-   - Symbiosis: `references/bridges/symbiosis.md`
-   - 1inch Fusion+: `references/dexes/1inch.md`
-10. Treat bridge and DEX APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
+10. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
+    only the matching reference:
+
+    - Across: `references/bridges/across.md`
+    - Bungee / Socket: `references/bridges/bungee.md`
+    - Circle / CCTP / Gateway: `references/bridges/circle.md`
+    - deBridge / DLN: `references/bridges/debridge.md`
+    - Hop: `references/bridges/hop.md`
+    - Layerswap: `references/bridges/layerswap.md`
+    - LayerZero / Stargate / OFT / Aori: `references/bridges/layerzero.md`
+    - LI.FI: `references/bridges/lifi.md`
+    - Relay / Relay.link: `references/bridges/relay.md`
+    - Symbiosis: `references/bridges/symbiosis.md`
+    - 1inch Fusion+: `references/dexes/1inch.md`
+
+11. Treat bridge and DEX APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
     evidence.
 
 ## Completion
@@ -93,6 +101,9 @@ address sweeps, include each result's fixed finalized/verified checkpoint, selec
 and any requested quorum result. Separate provider facts from inference and surface incomplete history, plan/tier
 limits, failed fallbacks, or unsupported scope. Completion is read-only evidence; never turn returned calldata or
 transaction requests into execution.
+
+For a `cli-cast` handoff, return one read packet with the resolved chain name and ID, exact provider route, result,
+observed block or checkpoint, and non-empty coverage gaps. Do not include a signing or broadcast command.
 
 For DEX evidence, include the interaction class; execution protocol, version, and mode; entrypoint or integration
 wrapper; router and underlying liquidity sources; wallet role; sold and received assets; protocol/integrator fees and

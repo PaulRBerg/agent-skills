@@ -120,8 +120,8 @@ back to direct RPC calls against the target chain's default public RPC:
 
 1. Resolve the chain via `references/generated/target-mainnets.json` and `references/generated/chain-aliases.json` to
    get the default public RPC, chain ID, native currency symbol, and explorer URL.
-2. Issue equivalent JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against that RPC
-   using `curl` or the `cast` CLI from the `cli-cast` skill.
+2. Issue bounded direct HTTP JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against
+   that RPC. Do not hand the read to `cli-cast`.
 3. Note in the response that the data came from the chain's public RPC, not Etherscan, so PRO-style aggregations (full
    token holdings, first-funding lookup) are unavailable and must be derived manually from logs/transactions if needed.
 

@@ -2,6 +2,17 @@
 
 Read this reference only after resolving a chain in `references/generated/target-mainnets.json`.
 
+## Discrete Read Contract
+
+This workflow owns every bounded JSON-RPC read, including reads requested by `cli-cast` for transaction preparation,
+simulation evidence, fee or nonce resolution, and post-broadcast verification. Accept the resolved chain, method and
+exact parameters or call object, block selector or checkpoint requirement, and purpose. Return the resolved chain name
+and ID, exact provider route, result, observed block or checkpoint, and coverage gaps.
+
+Keep the read here until it completes. Never invoke `cli-cast` for JSON-RPC transport or return a signing, mutation, or
+broadcast command. For two or more compatible contract reads on one chain, use Multicall3 at
+`0xcA11bde05977b3631167028862bE2a173976CA11`; do not batch calls whose result depends on the original `msg.sender`.
+
 ## Account and Transaction Data
 
 Choose one authoritative history provider per chain and sweep. A provider is authoritative for that result, not a
@@ -121,8 +132,9 @@ For `eth_getLogs`, pass an exact checkpoint-bounded filter to `routemesh logs --
 larger inclusive ranges into deterministic 10,000-block chunks and returns its checkpoint evidence. Do not treat a CLI
 error as an empty log result.
 
-Otherwise verify the target's `primaryPublicRpc` with `eth_chainId`, then try
-`references/generated/target-fallback-rpcs.json` in order. Public RPCs are best-effort and may be rate limited.
+Otherwise issue bounded direct HTTP JSON-RPC requests against the target's `primaryPublicRpc`, first verifying it with
+`eth_chainId`, then try `references/generated/target-fallback-rpcs.json` in order. Do not hand public-RPC reads to
+`cli-cast`. Public RPCs are best-effort and may be rate limited.
 
 ## Explorer Links
 

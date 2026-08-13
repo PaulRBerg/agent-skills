@@ -32,16 +32,19 @@ cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
   --from "$OWNER" \
   --gas-price "$RABBY_SLOW_MAX_FEE_WEI" \
   --priority-gas-price "$RABBY_SLOW_PRIORITY_FEE_WEI" \
+  --async \
   --browser
 ```
+
+`$RPC_URL` is the reviewed continuous-provider transport selected under `SKILL.md`; never use it for a standalone read.
 
 The fee flags are mandatory for Ethereum mainnet and must contain the approved quote from `ethereum-gas.md`. If Rabby
 offers its own tier selector, never choose Normal or Fast. Leave Slow selected when Rabby recognizes the quote; if it
 labels the exact pair as custom or site-suggested, the reviewed numeric caps remain authoritative. Reject the wallet
 request if it changes either cap.
 
-Do not combine `--browser` with another signer flag. Capture the transaction hash, then verify it with `cast receipt`
-before reporting success.
+Do not combine `--browser` with another signer flag. Capture the transaction hash, then have `$evm-atlas` verify the
+receipt before reporting success.
 
 ## Timing
 
@@ -60,11 +63,11 @@ outrace the printed output. Poll for the receipt separately afterward.
 If the process is killed or times out before printing a hash, its exit status alone does not prove nothing was broadcast
 — the wallet may have submitted the transaction via its own configured RPC provider, independent of the `--rpc-url`
 passed to `cast`, and mempool visibility lags and varies across providers (especially behind a load-balanced RPC
-aggregator). Do not treat a single provider's pending-transaction count or a single `cast tx` miss as proof of
+aggregator). Do not treat a single provider's pending-transaction count or a single provider lookup miss as proof of
 non-broadcast. Before concluding nothing was sent:
 
-- Retry the raw `eth_getTransactionByHash` lookup a few times over 30-60 seconds to allow mempool propagation, rather
-  than accepting one immediate miss as final.
+- Ask `$evm-atlas` to repeat the raw `eth_getTransactionByHash` lookup over 30-60 seconds to allow mempool propagation,
+  rather than accepting one immediate miss as final.
 - Ask the user to check their wallet's own pending-activity view — the wallet knows definitively whether it submitted
   the transaction, independent of any RPC endpoint the agent queries.
 
