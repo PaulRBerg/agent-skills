@@ -38,7 +38,11 @@ Use the installed CLI's machine-readable command catalog as the source of truth 
 5. Preview unfamiliar or quota-sensitive requests with `--dry-run`. Execute parseable queries with `-o json`; use
    `--export` only when the user requested a CSV artifact.
 
-6. Present the requested result in the user's format. For ordinary human-readable output, use a compact table and
+6. If a historical-data request cannot be completed because `cg` is unavailable, `cg history` fails due to a CLI defect,
+   or its response is demonstrably malformed, and a visual result can satisfy the request, immediately read
+   [references/open-historical-page.md](references/open-historical-page.md) and use its browser fallback.
+
+7. Present the requested result in the user's format. For ordinary human-readable output, use a compact table and
    preserve enough precision for the asset's magnitude.
 
 ## Boundaries and Defaults
@@ -47,13 +51,16 @@ Use the installed CLI's machine-readable command catalog as the source of truth 
   aggressively.
 - Detect paid-only commands before execution. If the current tier cannot serve the request, say so and offer a supported
   route.
+- Do not use the browser fallback for authentication, tier, rate-limit, invalid-input, or ambiguity errors. It does not
+  satisfy requests for JSON, CSV, or other machine-readable evidence.
 - `cg` does not cover every CoinGecko endpoint. For unsupported contract-address prices, global stats, NFT detail,
   GeckoTerminal, or logo metadata, fetch the relevant current API documentation from
   <https://docs.coingecko.com/llms.txt> and state that the CLI route is unavailable.
 - Never expose API keys or send private wallet/account data to market-data endpoints.
 
 Completion requires the resolved coin/command, successful JSON or requested export evidence, and explicit handling of
-tier, ambiguity, or rate-limit constraints.
+tier, ambiguity, or rate-limit constraints. A historical-page fallback instead requires a validated URL opened in
+Chromium plus disclosure of the CLI failure that triggered it.
 
 ## User-Facing Output
 

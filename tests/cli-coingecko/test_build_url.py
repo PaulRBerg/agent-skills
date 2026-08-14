@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "skills" / "coingecko-open-page" / "scripts" / "build-url.py"
+SCRIPT = REPO_ROOT / "skills" / "cli-coingecko" / "scripts" / "build-url.py"
 SPEC = importlib.util.spec_from_file_location("build_url", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

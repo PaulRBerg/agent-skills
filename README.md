@@ -31,7 +31,6 @@ bunx skills add PaulRBerg/agent-skills
 | codebase-design      | Shared vocabulary and principles for designing deep modules               |
 | codex-handoff        | Delegate approved plans to Codex agents from Claude Code or Codex CLI     |
 | code-polish          | Simplify and/or risk-profiled review with autofix                         |
-| coingecko-open-page  | Open CoinGecko historical data page in Chromium                           |
 | commit               | Semantic commit messages with deterministic ai-commit mechanics           |
 | copy-transcript-path | Copy the active Claude Code or Codex CLI transcript path                  |
 | skill-writing        | Bootstrap a new agent skill                                               |
