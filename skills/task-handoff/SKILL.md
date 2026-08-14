@@ -24,10 +24,12 @@ Turn one continuation task into one self-contained task handoff for a fresh agen
 implement, edit tracked files, commit, push, launch Codex, or change ignore configuration.
 
 Task-handoff writes one decision-complete file for a fresh, separate session. For a simple task, that isolated file is
-enough for direct execution in the receiving session. For a complex task, recommend that the receiving session invoke
-`$codex-handoff` from Plan mode and use the file as its task specification so Codex subagents can implement it.
-Task-handoff still creates exactly one file and never launches orchestration itself. Use task-handoff when work
-continues later or elsewhere, and an in-session handoff skill when implementing an approved plan now.
+enough for direct execution in the receiving session. For a complex task, resolve `~/.agents/skills/codex-handoff` to
+its expanded absolute directory, require a readable `SKILL.md` there, and embed that absolute skill path in the handoff.
+Direct the receiving session to load it from Plan mode and use the handoff as its task specification so Codex subagents
+can implement it; do not rely on bare `$codex-handoff` discovery. Task-handoff still creates exactly one file and never
+launches orchestration itself. Use task-handoff when work continues later or elsewhere, and an in-session handoff skill
+when implementing an approved plan now.
 
 ## Select the work
 
@@ -103,9 +105,12 @@ to the named repositories but none of this transcript. Include:
 - assumptions resolved from repository evidence or explicit user decisions.
 
 Add a `## Execution approach` section. For a simple task, direct the receiving session to execute this one isolated
-handoff without invoking an in-session handoff skill. For a complex task, explicitly recommend invoking `$codex-handoff`
-from Plan mode with this file as the decision-complete task specification; let codex-handoff choose the smallest
-effective subagent team instead of prescribing its manifest here.
+handoff without invoking an in-session handoff skill. For a complex task, expand and canonicalize
+`~/.agents/skills/codex-handoff`, verify that `<resolved-directory>/SKILL.md` is readable, and write that resolved
+absolute directory path into the execution approach. Explicitly direct the receiving session to enter Plan mode, load
+the skill from that path, and use this file as the decision-complete task specification. Do not name only
+`$codex-handoff`; let codex-handoff choose the smallest effective subagent team instead of prescribing its manifest
+here. Stop before writing the handoff if the installed skill cannot be resolved.
 
 Tailor the body to its category. An implementation handoff specifies the intended change, data flow, and compatibility.
 An investigation handoff specifies the question or symptom, available evidence, reproduction or observation method, and
