@@ -27,12 +27,21 @@ Classify the request as Codex, Claude Code, or a comparison. Activate only for q
 documented behavior. Do not capture unrelated repository mentions, generic agent development, provider APIs, SDKs,
 pricing, authentication, model selection, migration, or managed-agent workflows.
 
+Treat `$imagegen` and Codex image-prompting questions as Codex product questions even when detailed supporting model
+guidance lives in OpenAI's API Cookbook.
+
 ## Route official sources
 
 - For Codex, start only at `https://developers.openai.com`. Resolve `scripts/fetch-doc.sh` relative to this skill
   directory, run `fetch-doc.sh codex-manual`, search the returned path narrowly with `rg`, and read only the matching
   heading range into context. The fixed manual and schema endpoints may redirect to their exact
   `https://learn.chatgpt.com/docs/` counterparts.
+- For `$imagegen` and Codex image-prompting questions, read the manual's exact
+  [Image generation](https://learn.chatgpt.com/docs/image-generation) topic first. When detailed prompting patterns or
+  production examples are needed, also read the
+  [GPT Image Generation Models Prompting Guide](https://developers.openai.com/cookbook/examples/multimodal/image-gen-models-prompting-guide).
+  Apply its prompt-writing guidance to `$imagegen`, but treat model selection, flags, and API parameters as API-only
+  unless Codex documentation confirms the built-in skill exposes them.
 - For Claude Code, use only `https://code.claude.com`. Start broad product research at
   `https://code.claude.com/docs/en/overview.md`.
 - For Codex, accept a `cached` manual for ordinary product questions. Use `--refresh` for release/change questions,
