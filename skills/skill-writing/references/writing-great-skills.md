@@ -45,6 +45,42 @@ Design presentation as part of the observable contract when a skill reports mean
 - Keep decoration in the agent's wrapper unless the requested artifact itself calls for it. Do not inject emoji into
   code, product copy, user-authored prose, external contributions, or structured data by default.
 
+### Long-winded background work
+
+When a skill launches background jobs or agents, decide during authoring whether the wait could feel materially long or
+opaque. Use the work's expected runtime and uncertainty, fan-out or waves, meaningful milestones, and existing
+host-visible state rather than a universal time cutoff. For every branch judged long-winded, bake a polished,
+scan-friendly progress surface into the skill:
+
+- Make the main agent own monitoring and user reporting until every required background unit settles. Announce the
+  kickoff with the units or scope in flight and the evidence that will prove completion.
+- Reuse a native progress surface only when it gives the user meaningful live state; a generic task or transport banner
+  is not enough. Otherwise report meaningful state changes and coherent milestones, with sparse reassurance during quiet
+  periods proportionate to the expected wait.
+- Ground each update in observed facts such as the current phase, elapsed time or budget when useful, settled and total
+  units, last verified activity, and blockers. Say `no recent activity` when that is all the monitor proves. Never turn
+  elapsed time, event counts, or activity into inferred completion.
+- Use the semantic status vocabulary above, tables for repeated background-unit fields, and a progress bar or percentage
+  only when an exact numerator and denominator exist. When the total is unknown, report phase, elapsed time, and
+  evidence without a bar.
+- Finish with a compact terminal report that distinguishes completed, blocked, failed, and timed-out units and links
+  those states to the skill's completion evidence and next action.
+
+Tailor the domain nouns and fields, but use a compact rendered shape such as:
+
+```markdown
+### ⏳ Render wave [████░░░░░░] 40% (2/5 settled) — running
+
+| Unit | State        | Elapsed | Last evidence       |
+| ---- | ------------ | ------- | ------------------- |
+| A1   | ✅ completed | 6m      | output verified     |
+| A2   | ⏳ running   | 8m      | rendering scene 4/7 |
+| A3   | ⚠️ blocked   | 3m      | missing input       |
+```
+
+When no measured denominator exists, replace the bar and percentage with a factual heading such as
+`### ⏳ Rendering scenes — 8m elapsed`.
+
 ## Invocation: two loads
 
 Every skill pays one of two costs:

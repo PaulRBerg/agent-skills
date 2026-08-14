@@ -82,6 +82,12 @@ Define the outcome, authority boundaries, stopping conditions, and completion ev
 execution path when several safe paths satisfy the same contract. For user-facing workflows, also define which kickoff,
 progress, decision, blocker, and completion events deserve a message and the smallest useful shape for each.
 
+When a workflow hands long-winded work to background jobs or agents, make polished progress monitoring part of the
+contract. Judge whether the work is long-winded from its expected runtime and uncertainty, fan-out or waves, meaningful
+milestones, and the visibility the host already provides rather than a universal time cutoff. Name the main agent as the
+reporting owner and follow the long-winded background-work guidance in
+[references/writing-great-skills.md](references/writing-great-skills.md).
+
 Express outcomes, invariants, and completion evidence as positive, observable acceptance criteria; when affirmative
 evidence is available, require it instead of accepting only the absence of listed failures or adding negative examples,
 inverse restatements, or long blacklists. Retain a negative instruction only for an explicit user-requested exclusion or
