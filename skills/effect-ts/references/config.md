@@ -1,50 +1,22 @@
-# Configuration & Environment Variables
+# Config and Secrets
 
-> When to read: pull this in when reading configuration or environment variables via Effect's `Config` module, handling
-> secrets with `Redacted`, providing custom config providers, or validating config values.
+Use Effect `Config` at application boundaries so missing or invalid configuration remains typed. Keep configuration
+descriptions declarative and provide alternate `ConfigProvider`s at the runtime or test boundary.
 
-```typescript
-import { Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
+```ts
+import { Config } from "effect";
 
-// Basic config values
-const port = Config.number("PORT"); // Required number
-const host = Config.string("HOST").pipe(
-  // Optional with default
-  Config.withDefault("localhost"),
-);
-
-// Sensitive values (masked in logs)
-const apiKey = Config.redacted("API_KEY"); // Returns Redacted<string>
-const secret = Redacted.value(yield * apiKey); // Unwrap when needed
-
-// Nested configuration with prefix
-const dbConfig = Config.all({
-  host: Config.string("HOST"),
+const AppConfig = Config.all({
+  host: Config.string("HOST").pipe(Config.withDefault("localhost")),
   port: Config.number("PORT"),
-  name: Config.string("NAME"),
-}).pipe(Config.nested("DATABASE")); // DATABASE_HOST, DATABASE_PORT, etc.
-
-// Using config in effects
-const program = Effect.gen(function* () {
-  const p = yield* Config.number("PORT");
-  const key = yield* Config.redacted("API_KEY");
-  return { port: p, apiKey: Redacted.value(key) };
+  apiKey: Config.redacted("API_KEY"),
 });
-
-// Custom config provider (e.g., from object instead of env)
-const customProvider = ConfigProvider.fromMap(
-  new Map([
-    ["PORT", "3000"],
-    ["API_KEY", "secret"],
-  ]),
-);
-const withCustomConfig = Effect.provide(program, Layer.setConfigProvider(customProvider));
-
-// Config validation and transformation
-const validPort = Config.number("PORT").pipe(
-  Config.validate({
-    message: "Port must be between 1 and 65535",
-    validation: (n) => n >= 1 && n <= 65535,
-  }),
-);
 ```
+
+- Use `Config.redacted` for credentials and tokens. Call `Redacted.value` only at the narrow boundary that passes the
+  secret to a client; never interpolate the value into logs or errors.
+- Use `Config.nested` for stable prefixes instead of repeating environment-variable names.
+- Validate constrained values in the Config description so startup fails before partially constructing the application.
+- For tests, provide a map-backed or custom `ConfigProvider` through `Layer.setConfigProvider`; do not mutate process
+  environment globally when a provider expresses the dependency.
+- Do not turn constants or request data into Config merely because they are values. Config owns deployment-time input.

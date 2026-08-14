@@ -1,226 +1,33 @@
-# Effect-Atom Reference
+# Effect Atom
 
-> When to read: pull this in when using `@effect-atom/*`, React atom state backed by Effect, atom runtimes, atom
-> families, stream-backed atoms, or Effectful mutation results in React.
+Effect Atom separates core atoms from framework bindings. Verify APIs against the installed packages:
 
-Reactive state management library for Effect. Provides atoms (reactive state containers) that integrate with Effect's
-functional programming ecosystem and React.
+- core constructors, Registry, Result, RPC, and HTTP integrations: `@effect-atom/atom/*`;
+- React hooks and Registry provider: `@effect-atom/atom-react`.
 
-**Source code:** https://github.com/tim-smart/effect-atom (open in browser)
-
-## Core API
-
-### Creating Atoms
-
-```typescript
-import { Atom } from "@effect-atom/atom-react";
-
-// Simple value atom
-const countAtom = Atom.make(0);
-
-// Derived atom (computed from other atoms)
-const doubleAtom = Atom.make((get) => get(countAtom) * 2);
-
-// Effectful atom (returns Result type)
-const userAtom = Atom.make(
-  Effect.gen(function* () {
-    const api = yield* Api;
-    return yield* api.fetchUser();
-  }),
-);
-
-// Keep value when component unmounts (prevents reset)
-const persistentAtom = Atom.make(0).pipe(Atom.keepAlive);
+```ts
+import * as Atom from "@effect-atom/atom/Atom";
+import * as Result from "@effect-atom/atom/Result";
+import { RegistryProvider, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 ```
 
-### React Hooks
+## Atom Semantics
 
-```typescript
-import { useAtomValue, useAtomSet, useAtom } from "@effect-atom/atom-react"
+- `Atom.make(value)` creates writable state; `Atom.make(get => value)` creates derived state.
+- An Effect or Stream passed to `Atom.make` produces a `Result`, not the raw success value.
+- Use `Atom.family` for stable parameterized atoms and `Atom.keepAlive` only when state must outlive component mounts.
+- Use `Atom.runtime(layer)` when atoms need an Effect runtime with services.
+- `Atom.fn` creates a writable Effect/Stream function. Its handler receives the written argument and atom context.
+- Use `get.addFinalizer` or a scoped Effect for listeners and resources owned by an atom.
 
-function Counter() {
-  // Read-only access
-  const count = useAtomValue(countAtom)
+## React Boundaries
 
-  // Write-only access
-  const setCount = useAtomSet(countAtom)
+Use `useAtomValue` to read and `useAtomSet` to write. For Effect-backed mutation atoms, select `mode: "promiseExit"`
+when the caller must branch on typed success or failure; do not throw away the `Exit` merely to mimic an untyped async
+callback.
 
-  // Read and write access
-  const [value, setValue] = useAtom(countAtom)
+Render `Result` states explicitly, including initial/waiting and failure. Use suspense hooks only when the surrounding
+React boundary is designed to suspend or surface failures.
 
-  return <button onClick={() => setCount((n) => n + 1)}>{count}</button>
-}
-```
-
-### Atom Families
-
-Generate stable atom references for dynamic keys:
-
-```typescript
-const userAtomFamily = Atom.family((userId: string) =>
-  Atom.make(
-    Effect.gen(function* () {
-      const api = yield* Api;
-      return yield* api.fetchUser(userId);
-    }),
-  ),
-);
-
-// Usage
-const userAtom = userAtomFamily("user-123");
-```
-
-### Atom Functions
-
-Create callable effects:
-
-```typescript
-const incrementFn = Atom.fn(
-  Effect.gen(function* () {
-    const count = yield* Ref.get(counterRef);
-    yield* Ref.set(counterRef, count + 1);
-  }),
-);
-
-// Invoke with useAtomSet
-const increment = useAtomSet(incrementFn);
-increment(); // Returns Promise<Exit<...>>
-```
-
-### Atom Runtime
-
-Create atom runtime from Effect layers for dependency injection:
-
-```typescript
-const runtimeAtom = Atom.runtime(ApiLive)
-
-function App() {
-  return (
-    <AtomProvider runtime={runtimeAtom}>
-      <MyComponent />
-    </AtomProvider>
-  )
-}
-```
-
-## Advanced Features
-
-### URL Search Parameters
-
-Bind atoms to URL search parameters:
-
-```typescript
-const pageAtom = Atom.searchParam("page", {
-  decode: (s) => parseInt(s ?? "1", 10),
-  encode: (n) => n.toString(),
-});
-```
-
-### Local Storage Persistence
-
-```typescript
-const settingsAtom = Atom.kvs({
-  key: "app-settings",
-  defaultValue: { theme: "dark" },
-});
-```
-
-### Scoped Resources
-
-Add finalizers for cleanup when atom rebuilds or unmounts:
-
-```typescript
-const websocketAtom = Atom.make((get) =>
-  Effect.gen(function* () {
-    const ws = yield* WebSocket.connect("wss://...");
-    yield* Effect.addFinalizer(() => ws.close());
-    return ws;
-  }),
-);
-```
-
-### Event Listeners with Self-Update
-
-```typescript
-const windowSizeAtom = Atom.make((get) =>
-  Effect.gen(function* () {
-    const handler = () => get.setSelf({ width: window.innerWidth, height: window.innerHeight });
-
-    window.addEventListener("resize", handler);
-    yield* Effect.addFinalizer(() => Effect.sync(() => window.removeEventListener("resize", handler)));
-
-    return { width: window.innerWidth, height: window.innerHeight };
-  }),
-);
-```
-
-### Reactivity Keys
-
-Trigger cache invalidation:
-
-```typescript
-const dataAtom = Atom.make(
-  Effect.gen(function* () {
-    const keys = yield* Atom.withReactivity(["data-key"]);
-    // Re-runs when "data-key" is invalidated
-    return yield* fetchData();
-  }),
-);
-```
-
-### RPC and HTTP API Integration
-
-```typescript
-// RPC client
-const rpcClient = AtomRpc.Tag();
-
-// HTTP API client
-const httpClient = AtomHttpApi.Tag();
-```
-
-## Result Handling
-
-Effectful atoms return `Result` types. Handle with pattern matching:
-
-```typescript
-function UserProfile() {
-  const userResult = useAtomValue(userAtom)
-
-  return Result.match(userResult, {
-    onSuccess: (user) => <div>{user.name}</div>,
-    onFailure: (error) => <div>Error: {error.message}</div>,
-  })
-}
-```
-
-### Mutation Results
-
-Use `mode: "promiseExit"` for mutation handling:
-
-```typescript
-const saveUser = useAtomSet(saveUserAtom, { mode: "promiseExit" });
-
-const handleSave = async () => {
-  const exit = await saveUser(userData);
-  if (Exit.isSuccess(exit)) {
-    // Handle success
-  }
-};
-```
-
-## Streams
-
-Pull values from streams:
-
-```typescript
-const messagesAtom = Atom.pull(messageStream);
-```
-
-## Best Practices
-
-1. **Use `Atom.family` for dynamic keys** — Generates stable references, avoids memory leaks
-2. **Apply `Atom.keepAlive` for persistent state** — Prevents reset on unmount
-3. **Use `Atom.runtime` for dependency injection** — Integrates Effect layers with React context
-4. **Implement finalizers for cleanup** — Ensures proper resource management
-5. **Use `mode: "promiseExit"` for mutations** — Provides typed success/failure handling
-6. **Prefer derived atoms over component state** — Keeps state logic centralized
+Inspect `AtomRpc`, `AtomHttpApi`, and hydration modules only when the task uses them; do not load their APIs for
+ordinary state work.

@@ -1,63 +1,19 @@
-# Pattern Matching (Match Module)
+# Pattern Matching
 
-> When to read: pull this in when you need Effect's Match module to handle tagged unions, replace nested catchTag
-> chains, or pattern-match on values exhaustively.
+Use `Match` when tagged-union branching should be exhaustive or when a multi-case error handler would otherwise become a
+chain of nested conditionals.
 
-**Default branching tool for tagged unions and complex conditionals.**
-
-```typescript
-import { Match } from "effect";
-
-// Type-safe exhaustive matching on tagged errors
-const handleError = Match.type<AppError>().pipe(
-  Match.tag("UserCancelledError", () => null), // Expected rejection
-  Match.tag("ValidationError", (e) => e.message), // Domain error
-  Match.tag("NetworkError", () => "Connection failed"), // Retryable
-  Match.exhaustive, // Compile error if case missing
-);
-
-// Replace nested catchTag chains
-// BEFORE: effect.pipe(catchTag("A", ...), catchTag("B", ...), catchTag("C", ...))
-// AFTER:
-Effect.catchAll(effect, (error) =>
-  Match.value(error).pipe(Match.tag("A", handleA), Match.tag("B", handleB), Match.tag("C", handleC), Match.exhaustive),
-);
-
-// Match on values (cleaner than if/else)
-const describe = Match.value(status).pipe(
-  Match.when("pending", () => "Loading..."),
-  Match.when("success", () => "Done!"),
-  Match.orElse(() => "Unknown"),
+```ts
+const renderError = Match.type<AppError>().pipe(
+  Match.tag("ValidationError", (error) => error.message),
+  Match.tag("NetworkError", () => "Connection failed"),
+  Match.exhaustive,
 );
 ```
 
-## `Data.taggedEnum` Matching
+Use `Match.value` for one local value and `Match.type` when defining a reusable matcher. Prefer `Match.exhaustive` when
+every variant must be handled; use `Match.orElse` only when the fallback is a real domain case.
 
-Use the constructor `$match` helper for `Data.taggedEnum` unions when you want exhaustiveness and variant-specific
-payload types without casts.
-
-As of `effect@3.21.3`, `$match(value, cases)` preserves generic type parameters inside each arm for generic tagged
-enums.
-
-```typescript
-import { Data } from "effect";
-
-type Tree<A> = Data.TaggedEnum<{
-  Leaf: { readonly value: A };
-  Branch: { readonly children: ReadonlyArray<Tree<A>> };
-}>;
-
-interface TreeDefinition extends Data.TaggedEnum.WithGenerics<1> {
-  readonly taggedEnum: Tree<this["A"]>;
-}
-
-const Tree = Data.taggedEnum<TreeDefinition>();
-
-const collect = <A>(tree: Tree<A>): ReadonlyArray<A> =>
-  Tree.$match(tree, {
-    Leaf: (leaf) => [leaf.value],
-    Branch: (branch) => branch.children.flatMap(collect<A>),
-  });
-```
-
-Prefer this over `switch` plus `as` casts when recursive generic variants are involved.
+For a `Data.taggedEnum`, prefer its `$match` helper when generic variant payloads or recursive unions would otherwise
+require assertions. Verify constructor and matcher signatures against the installed `Data` source before changing a
+generic union.

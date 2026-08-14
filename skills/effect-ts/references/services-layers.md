@@ -1,113 +1,53 @@
 # Services and Layers
 
-> When to read: pull this in when defining or composing Effect services, choosing between `Context.Tag` /
-> `Effect.Service` / `Context.Reference` / `Context.ReadonlyTag`, or writing generator-based effects with `Effect.gen`
-> and `Effect.fn`.
+Use this reference when defining services, choosing Layer boundaries, or composing generator-based business logic.
+Inspect neighboring services first; preserve the project's established tag and layer style when it is type-safe.
 
-## Services and Layers
+## Choose the Service Shape Deliberately
 
-```typescript
-// Pattern 1: Context.Tag (implementation provided separately via Layer)
-class MyService extends Context.Tag("MyService")<MyService, { ... }>() {}
-const MyServiceLive = Layer.succeed(MyService, { ... })
-Effect.provide(effect, MyServiceLive)
+- Use `Context.Tag` when the service interface and its implementations should remain separate.
+- Use `Effect.Service` when a default implementation and dependency Layer belong with the service declaration.
+- Use `Context.Reference` for a context value with a safe default, such as a feature flag or policy value.
+- Use `Effect.provideService` for request-local values such as actor, tenant, locale, or request identifier; do not
+  build a Layer for data that changes per request.
 
-// Pattern 2: Effect.Service (default implementation bundled)
-class UserRepo extends Effect.Service<UserRepo>()("UserRepo", {
-  effect: Effect.gen(function* () {
-    const db = yield* Database
-    return { findAll: db.query("SELECT * FROM users") }
-  }),
-  dependencies: [Database.Default],  // Optional service dependencies
-  accessors: true                     // Auto-generate method accessors
-}) {}
-Effect.provide(effect, UserRepo.Default)  // .Default layer auto-generated
-// Use UserRepo.DefaultWithoutDependencies when deps provided separately
-
-// Effect.Service with parameters (3.16.0+)
-class ConfiguredApi extends Effect.Service<ConfiguredApi>()("ConfiguredApi", {
-  effect: (config: { baseUrl: string }) =>
-    Effect.succeed({ fetch: (path: string) => `${config.baseUrl}/${path}` })
-}) {}
-
-// Pattern 3: Context.Reference (defaultable tags - 3.11.0+)
-class SpecialNumber extends Context.Reference<SpecialNumber>()(
-  "SpecialNumber",
-  { defaultValue: () => 2048 }
-) {}
-// No Layer required if default value suffices
-
-// Pattern 4: Context.ReadonlyTag (covariant - 3.18.0+)
-// Use for functions that consume services without modifying the type
-function effectHandler<I, A, E, R>(service: Context.ReadonlyTag<I, Effect.Effect<A, E, R>>) {
-  // Handler can use service in a covariant position
-}
+```ts
+class UserRepository extends Context.Tag("app/UserRepository")<
+  UserRepository,
+  { readonly findById: (id: string) => Effect.Effect<string, never, never> }
+>() {}
 ```
 
-## Global Context vs Per-Request Context
+Keep stable service identifiers globally unique within the application or package.
 
-Use Layers for long-lived dependencies wired at startup: config, clients, repositories, and services. Use
-`Effect.provideService` for per-request values such as authenticated user, tenant, organization, locale, request id, or
-authorization context.
+## Put Acquisition in the Layer
 
-```typescript
-const handleRequest = (request: Request) =>
-  program.pipe(
-    Effect.provideService(CurrentUserId, extractUserId(request)),
-    Effect.provideService(RequestId, extractRequestId(request)),
-  );
-```
+Choose the constructor by lifecycle:
 
-Avoid constructing a Layer for one request's data. Per-request values are not application services, and wrapping them in
-`Layer.succeed` makes the runtime boundary harder to see.
+- `Layer.succeed` for a ready, pure value;
+- `Layer.effect` for effectful construction without cleanup;
+- `Layer.scoped` for acquisition that registers finalizers;
+- `Layer.unwrapEffect` when an Effect decides which Layer to build.
 
-## Layer Construction
+Do not hide effectful or resourceful construction inside `Layer.succeed`. Provide the completed application Layer at a
+runtime boundary; avoid scattering `Effect.provide` through domain methods unless the local architecture deliberately
+encapsulates a private dependency.
 
-Choose the layer constructor by lifecycle:
+Layers memoize by object identity within a composition. Reuse one Layer value to share an instance. A factory call
+already creates a distinct Layer; use `Layer.fresh` only when deliberately escaping memoization of the same Layer
+object.
 
-```typescript
-Layer.succeed(Tag, value); // Static pure value, common for tests and simple constants
-Layer.effect(Tag, make); // Effectful construction without cleanup
-Layer.scoped(Tag, acquire); // Resourceful construction with cleanup
-Layer.unwrapEffect(makeLayer); // Effectfully builds a Layer
-```
+## Use `Effect.fn` for Reusable Effectful Functions
 
-For live services that read dependencies, config, or allocate resources, prefer `Layer.effect` or `Layer.scoped` over
-prebuilding a value and hiding acquisition in `Layer.succeed`.
+Prefer `Effect.fn("qualifiedName")` for reusable generator functions that benefit from named traces and better stack
+information. Keep a raw `Effect.gen` for one-off program composition.
 
-## Layer Memoization
-
-Layers are memoized by object identity. Reusing the same layer object in one composition shares one instance; creating a
-new layer object creates a distinct instance.
-
-```typescript
-const Shared = Layer.effect(Client, makeClient);
-
-const oneClient = Layer.mergeAll(Shared, Shared);
-
-const twoClients = Layer.mergeAll(Layer.effect(Client, makeClient), Layer.effect(Client, makeClient));
-```
-
-Use `Layer.fresh(layer)` only when you need to escape memoization for the same layer reference, such as a module-level
-constant live layer reused with different test configuration. Do not wrap factory-created test layers in `Layer.fresh`;
-each factory call already returns a new layer object.
-
-## Generator Pattern
-
-```typescript
-Effect.gen(function* () {
-  const a = yield* effectA;
-  const b = yield* effectB;
-  if (error) {
-    return yield* Effect.fail(new MyError());
-  }
-  return result;
+```ts
+const findUser = Effect.fn("UserRepository.findUser")(function* (id: string) {
+  const repository = yield* UserRepository;
+  return yield* repository.findById(id);
 });
-
-// Effect.fn - automatic tracing and telemetry (preferred for named functions)
-const fetchUser = Effect.fn("fetchUser")(function* (id: string) {
-  const db = yield* Database;
-  return yield* db.query(id);
-});
-// Creates spans, captures call sites, provides better stack traces
 ```
+
+Keep service methods domain-oriented. Avoid exporting one accessor wrapper per method when callers can yield the service
+directly.

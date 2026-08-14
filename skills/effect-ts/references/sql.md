@@ -1,86 +1,20 @@
 # Effect SQL
 
-> When to read: pull this in when using `@effect/sql`, `SqlSchema`, repository services, database transactions, or row
-> decoding.
+Use the installed `@effect/sql` package source for exact driver and helper signatures. Keep SQL at repository boundaries
+and return domain values rather than unchecked row shapes.
 
-## Decode Rows with Schema
+## Decode Rows
 
-Prefer `SqlSchema` or explicit Schema decoding over TypeScript type parameters on raw SQL calls. A type parameter can
-describe the row shape, but it does not validate database output.
+Prefer `SqlSchema.findOne`, `SqlSchema.findAll`, or `SqlSchema.single` when their cardinality matches the query. A raw
+SQL type parameter describes a row but does not validate database output.
 
-```typescript
-import { SqlClient, SqlSchema } from "@effect/sql";
-import { Context, Effect, Option, Schema } from "effect";
+Use precise schemas for identifiers, literals, decimals, and encoded values. Keep absence as `Option<A>` when no row is
+normal; translate it to a tagged domain error when the service contract requires existence.
 
-const AccountRow = Schema.Struct({
-  id: AccountId,
-  name: Schema.String,
-  accountType: AccountType,
-});
+## Preserve Repository and Transaction Boundaries
 
-const findById = SqlSchema.findOne({
-  Request: AccountId,
-  Result: AccountRow,
-  execute: (id) =>
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        SELECT id, name, account_type AS "accountType"
-        FROM accounts
-        WHERE id = ${id}
-      `;
-    }),
-});
-```
+Repository services may expose domain errors while retaining driver and decode causes for diagnostics. Map expected SQL
+or decode failures with `Effect.mapError`; do not map defects through `catchAllCause` in ordinary repository code.
 
-Use precise domain schemas for rows. If the database value should be an `AccountId`, `CurrencyCode`, `BigDecimal`, or
-domain literal union, decode it as that type instead of weakening it to `Schema.String` or `Schema.Number`.
-
-## Pick the Right `SqlSchema` Helper
-
-```typescript
-SqlSchema.findOne({ Request, Result, execute }); // Option<A>; zero or one row
-SqlSchema.findAll({ Request, Result, execute }); // Array<A>; zero or more rows
-SqlSchema.single({ Request, Result, execute }); // A; exactly one row
-SqlSchema.void({ Request, execute }); // void; writes with no returned row
-```
-
-Use `findOne` when absence is a normal case, then convert `Option.none` to a domain error at the service boundary if the
-caller requires existence.
-
-## Repository Boundaries
-
-Keep SQL details in repository services. Domain services should depend on repository tags and speak in domain values,
-not raw rows.
-
-```typescript
-class AccountRepository extends Context.Tag("AccountRepository")<
-  AccountRepository,
-  {
-    readonly findById: (id: AccountId) => Effect.Effect<Option.Option<Account>, RepositoryError>;
-    readonly save: (account: Account) => Effect.Effect<void, RepositoryError>;
-  }
->() {}
-```
-
-Map driver and decode errors into repository errors with `Effect.mapError`; do not use `catchAllCause` unless you are at
-a deliberate reporting boundary and want to include defects.
-
-## Transactions
-
-Use the SQL client's transaction API around all writes that must commit atomically. Keep audit, outbox, or ledger writes
-in the same transaction when the product invariant requires them to succeed or fail together.
-
-```typescript
-const createAccount = (account: Account) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-
-    yield* sql.withTransaction(
-      Effect.gen(function* () {
-        yield* insertAccount(account);
-        yield* insertAuditEntry(account);
-      }),
-    );
-  });
-```
+Use the client's transaction API for writes that must commit atomically. Include audit, outbox, or ledger writes in the
+same transaction only when the product invariant requires one commit boundary.

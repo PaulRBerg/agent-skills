@@ -34,7 +34,7 @@ bunx skills add PaulRBerg/agent-skills
 | commit               | Semantic commit messages with deterministic ai-commit mechanics           |
 | copy-transcript-path | Copy the active Claude Code or Codex CLI transcript path                  |
 | skill-writing        | Bootstrap a new agent skill                                               |
-| effect-ts            | Effect-TS patterns and guidance                                           |
+| effect-ts            | Effect 3 patterns and source-aligned guidance                             |
 | evm-atlas            | EVM lookup + DEX transaction/order interpretation                         |
 | frontend-design      | Distinctive, subject-specific frontend design                             |
 | fresh-eyes-sweep     | Meticulous whole-repository audit and verified fixes                      |

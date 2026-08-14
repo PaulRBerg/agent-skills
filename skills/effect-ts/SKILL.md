@@ -1,54 +1,63 @@
 ---
+compatibility:
+  Requires a project using current stable Effect 3 packages; verify exact APIs against the target's installed package
+  source.
 name: effect-ts
 description:
-  Use for nontrivial Effect-TS work including services/layers, typed errors, Schema/JSONSchema, Config,
-  runtime/concurrency, @effect/vitest, @effect/ai, @effect/sql, or @prb/effect-next.
+  Use for nontrivial Effect 3 work including services/layers, typed errors, Schema/JSONSchema, Config,
+  runtime/concurrency, @effect/vitest, @effect/ai, @effect/sql, Effect Atom, or @prb/effect-next.
 ---
 
-# Effect-TS
+# Effect 3
 
-Apply Effect semantics using local project patterns first, then only the task-specific reference and upstream source
-needed to resolve uncertainty.
+Apply Effect 3 semantics from project-local architecture, the narrowest relevant reference, and source matching the
+target's installed packages.
 
-## Fast Path
+## Workflow
 
-Do not activate this workflow merely because a file imports `effect`. For nontrivial Effect changes:
+Do not activate this workflow merely because a file imports `effect`. For nontrivial Effect work:
 
-1. Inspect neighboring services, layers, errors, schemas, runtime boundaries, and tests.
-2. Read `references/critical-rules.md` before editing. In particular, Effect failures are not caught by ordinary
-   `try/catch` inside `Effect.gen`; avoid assertion-driven type escapes; use explicit terminating yields for error
-   branches.
-3. Read only the matching reference rows below.
-4. Implement the least surprising pattern consistent with local code and verify the changed Effect behavior.
+1. Resolve the target package or workspace and its exact installed `effect` and relevant `@effect/*` versions. If
+   `effect` is not 3.x, stop because this skill does not apply.
+2. Inspect neighboring services, layers, errors, schemas, runtime boundaries, and tests. Local conventions decide
+   organization; installed package evidence decides API facts.
+3. Read `references/critical-rules.md`, then only the task-specific references below.
+4. Verify every uncertain import, signature, or behavior against the package installation visible to the target
+   workspace before editing.
+5. Implement the smallest pattern consistent with the project and run the narrowest test or typecheck covering the
+   changed semantics.
+
+## Evidence Order
+
+Use the target workspace's manifest and lockfile to identify versions. Prefer, in order:
+
+1. the installed package's `src/`, README, tests, and changelog;
+2. its emitted declarations when source is not shipped;
+3. the matching official package artifact or source tag.
+
+Do not install or update dependencies solely to obtain documentation. Do not trust an unrelated checkout or a source
+branch that does not match the target's installed version. If exact behavior cannot be verified, stop rather than
+guessing.
 
 ## Reference Router
 
-| Task                                       | Reference                             |
-| ------------------------------------------ | ------------------------------------- |
-| Services, Layers, tags, `Effect.fn`        | `references/services-layers.md`       |
-| Config and secrets                         | `references/config.md`                |
-| Schema, JSON Schema, encoded errors/models | `references/schema-jsonschema.md`     |
-| `@effect/vitest`, clocks, fibers, retries  | `references/testing.md`               |
-| resources, scheduling, refs, concurrency   | `references/runtime.md`               |
-| streams and backpressure                   | `references/streams.md`               |
-| pattern matching and tagged unions         | `references/pattern-matching.md`      |
-| `@effect/ai`                               | `references/ai.md`                    |
-| `@effect/sql`                              | `references/sql.md`                   |
-| platform and RPC                           | `references/platform-rpc.md`          |
-| Next.js / `@prb/effect-next`               | `references/next-js.md`               |
-| Effect Atom                                | `references/effect-atom.md`           |
-| collection operations                      | `references/collection-operations.md` |
-| small utilities and deprecations           | `references/quick-utils.md`           |
-| `Option` at nullable boundaries            | `references/option-null.md`           |
-| recent upstream drift                      | `references/recent-upstream.md`       |
-| constructor/combinator lookup              | `references/quick-reference.md`       |
+| Task                                       | Reference                         |
+| ------------------------------------------ | --------------------------------- |
+| Services, Layers, tags, `Effect.fn`        | `references/services-layers.md`   |
+| Config providers and secrets               | `references/config.md`            |
+| Schema, JSON Schema, encoded errors/models | `references/schema-jsonschema.md` |
+| `@effect/vitest`, clocks, fibers, retries  | `references/testing.md`           |
+| resources, scheduling, refs, concurrency   | `references/runtime.md`           |
+| streams and backpressure                   | `references/streams.md`           |
+| pattern matching and tagged unions         | `references/pattern-matching.md`  |
+| `@effect/ai`                               | `references/ai.md`                |
+| `@effect/sql`                              | `references/sql.md`               |
+| Next.js / `@prb/effect-next`               | `references/next-js.md`           |
+| Effect Atom                                | `references/effect-atom.md`       |
+| `Option` at nullable boundaries            | `references/option-null.md`       |
 
-## Upstream Evidence
-
-Inspect `~/.effect` only when local patterns and the selected reference do not resolve an API, type/runtime, or
-recent-behavior question. If the task requires it and the checkout is missing, stop rather than guessing. Compare the
-project's installed package version with the relevant package source/changelog; do not assume this skill's last-known
-version is authoritative.
+For platform/RPC APIs, collection utilities, deprecations, or constructor lookup, inspect the installed package source
+directly instead of loading a local API inventory.
 
 ## Boundaries
 
@@ -59,9 +68,9 @@ version is authoritative.
   boundary validation is needed.
 - Do not broaden environment requirements merely to replace a small platform call.
 
-For changes, completion requires code consistent with local Effect architecture, selected references/upstream evidence
-where needed, and the narrowest test/typecheck that exercises the changed semantics. Read-only work requires evidence
-for the reported conclusion. Finish with `### ⚡ Effect — ✅ change complete` after verified edits or
+For changes, completion requires code consistent with local Effect architecture, selected references and installed
+source where needed, and the narrowest test/typecheck that exercises the changed semantics. Read-only work requires
+evidence for the reported conclusion. Finish with `### ⚡ Effect — ✅ change complete` after verified edits or
 `### ⚡ Effect — 🔎 reviewed, no files written` for read-only work, one sentence naming the boundary or pattern used,
 and `### 🧪 Verification` with exact scoped commands/results. If required validation is incomplete, use
 `### ⚡ Effect — ⛔ blocked` instead. Add `### ⚠️ Limitation` only for non-blocking caveats. Never decorate typed

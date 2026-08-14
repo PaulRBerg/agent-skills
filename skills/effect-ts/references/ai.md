@@ -1,65 +1,22 @@
 # Effect AI
 
-> When to read: pull this in when defining `@effect/ai` tools, toolkits, provider-defined tools, or OpenAI language
-> model configuration.
+Use installed `@effect/ai` and provider package source for exact model, request, and response configuration. Keep tool
+contracts Schema-driven so parameters and structured output are validated at runtime.
 
 ## Tool Parameters
 
-`@effect/ai@0.36.0` supports no-parameter tools directly. Omit `parameters` for the default empty parameter schema, or
-use `Tool.EmptyParams` when the emptiness needs to be explicit.
+Omit `parameters` for a no-argument tool or use `Tool.EmptyParams` when the closed empty-object contract must be
+explicit. `Tool.EmptyParams` is a record whose values are `Schema.Never`; do not replace it with a loose record.
 
-```typescript
-import { Tool } from "@effect/ai";
-import { Schema } from "effect";
+Use `Tool.Parameters<T>`, `Tool.ParametersEncoded<T>`, and `Tool.ParametersSchema<T>` rather than reconstructing a
+tool's types manually. Use `setParameters` when deriving a tool with another parameter schema.
 
-const GetCurrentTime = Tool.make("GetCurrentTime", {
-  description: "Returns the current timestamp",
-  success: Schema.Number,
-});
+## OpenAI Structured Output
 
-const Ping = Tool.make("Ping", {
-  parameters: Tool.EmptyParams,
-  success: Schema.String,
-});
+The OpenAI language-model configuration supports `strict?: boolean` and enables strict schema handling by default. Set
+`strict: false` only when the selected model or a required schema construct cannot satisfy strict structured-output
+requirements. The provider consumes this option while preparing tools; do not forward it as an unrelated top-level
+request field.
 
-const ReadFile = Tool.make("ReadFile").setParameters({
-  filePath: Schema.String,
-});
-
-const NoArgsAgain = ReadFile.setParameters(Tool.EmptyParams);
-```
-
-`Tool.EmptyParams` is `Schema.Record({ key: Schema.String, value: Schema.Never })`, so generated JSON Schema should be a
-closed empty object shape. Do not replace it with a loose `Record<string, unknown>`.
-
-## Tool Type Extraction
-
-Use the built-in utility types when handlers need the decoded or encoded parameter shape:
-
-```typescript
-type Params = Tool.Parameters<typeof ReadFile>;
-type EncodedParams = Tool.ParametersEncoded<typeof ReadFile>;
-type ParamsSchema = Tool.ParametersSchema<typeof ReadFile>;
-```
-
-## OpenAI Strict Mode
-
-`@effect/ai-openai` exposes `strict?: boolean` on `OpenAiLanguageModel` config.
-
-- Default is strict structured-output behavior for generated tool schemas and JSON Schema response formats.
-- Set `strict: false` only when a model or schema construct cannot satisfy OpenAI strict schema requirements.
-- Recent versions consume `strict` during schema preparation; it should not be sent as a top-level Responses API request
-  parameter.
-
-## OpenAI Prompt Cache Enums
-
-Use `"in_memory"` for prompt cache retention enum values. Older examples that use `"in-memory"` are stale.
-
-```typescript
-const promptCacheRetention = "in_memory";
-```
-
-## Response Output Handling
-
-Recent OpenAI provider versions deduplicate `response.output` items before JSON concatenation. If you see duplicated
-structured output in a pinned project, check `@effect/ai-openai` before working around it at the application layer.
+Use `"in_memory"` for prompt-cache retention. Before adding a provider workaround for request or response behavior,
+inspect the installed provider source and changelog so application code does not duplicate a fixed package concern.

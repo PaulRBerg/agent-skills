@@ -1,175 +1,65 @@
-# Critical Rules for Effect-TS
+# Critical Effect 3 Rules
 
-These rules address common mistakes when working with Effect. Understanding why they matter helps write idiomatic Effect
-code.
+Read this before changing nontrivial Effect code. These rules protect semantics that ordinary TypeScript intuition often
+gets wrong; use the installed package source for exact combinator signatures.
 
-## INEFFECTIVE: try-catch in Effect.gen
+## Effect Failures Are Not Thrown Exceptions
 
-**Avoid `try-catch` blocks inside `Effect.gen` generators for handling Effect failures.**
+An Effect failure yielded inside `Effect.gen` is represented in the Effect error channel. An ordinary `try/catch` around
+`yield*` does not recover it.
 
-Effect failures are returned as exits, not thrown as JavaScript exceptions. Using try-catch will not catch Effect
-failures—it only catches synchronous throws from non-Effect code.
-
-**Problematic:**
-
-```typescript
+```ts
+// Wrong: the catch block does not handle an Effect failure.
 Effect.gen(function* () {
   try {
-    const result = yield* someEffect;
-  } catch (error) {
-    // This catches synchronous throws only, NOT Effect failures
-    // Effect failures bypass this entirely
+    return yield* program;
+  } catch {
+    return fallback;
   }
 });
 ```
 
-**Correct:**
+Use `Effect.catchTag`, `Effect.catchTags`, `Effect.catchAll`, or `Effect.exit` according to whether the caller should
+recover, map, or inspect the failure. Wrap foreign throwing code with `Effect.try` or `Effect.tryPromise` at the
+boundary where it enters Effect.
 
-```typescript
+## Preserve Typed Failures
+
+Model expected failures with tagged domain types rather than the global `Error` class. Use `Schema.TaggedError` when the
+failure crosses an encoding, persistence, API, or documentation boundary; use `Data.TaggedError` for internal-only
+failures.
+
+Do not use `as any`, `as never`, double assertions, or widened `Error` channels to make an Effect typecheck. Fix the
+service, error, or environment type that produced the mismatch. A narrow assertion at a poorly typed external boundary
+needs a documented reason.
+
+## Keep Defects Out of Expected Error Mapping
+
+`Cause` contains expected failures, defects, and interruption. Use `Effect.mapError` or tagged recovery for expected
+failures. Use `catchAllCause` only at a deliberate runtime, reporting, or supervision boundary where handling the whole
+cause is the requirement.
+
+Do not silently convert a required audit, billing, persistence, authorization, or notification effect to `Effect.void`.
+Propagate or translate its expected failure. Fallback values are appropriate only when the product semantics make the
+operation optional.
+
+## Keep Pure Work Pure
+
+Do not wrap safe array transformations, constants, path manipulation, or other deterministic pure work in `Effect.try`.
+Use `Effect.sync` for synchronous observable effects and `Effect.try` only for code that can throw.
+
+## Make Generator Termination Explicit
+
+Use `return yield*` for failures and interruption inside conditional generator branches. The runtime stops on the failed
+yield either way, but the explicit return preserves control-flow clarity and avoids misleading unreachable code.
+
+```ts
 Effect.gen(function* () {
-  const result = yield* Effect.result(someEffect);
-  if (result._tag === "Failure") {
-    // Handle error case
+  if (!isAuthorized) {
+    return yield* Effect.fail("Unauthorized");
   }
+  return yield* performAction;
 });
 ```
 
-Alternative patterns:
-
-- `Effect.catchAll` / `Effect.catchTag` for error recovery
-- `Effect.result` to inspect success/failure
-- `Effect.tryPromise` / `Effect.try` for wrapping external code
-
-## AVOID: Type Assertions
-
-**Avoid `as never`, `as any`, or `as unknown` type assertions.**
-
-These break TypeScript's type safety and hide real type errors. Always fix the underlying type issues instead.
-
-**Patterns to avoid:**
-
-```typescript
-const value = something as any;
-const value = something as never;
-const value = something as unknown;
-```
-
-**Correct approach:**
-
-- Use proper generic type parameters
-- Import correct types from Effect
-- Use proper Effect constructors and combinators
-- Adjust function signatures to match usage
-
-Note: This is general TypeScript guidance. Occasional assertions may be justified when interfacing with poorly-typed
-external libraries, but document the reason.
-
-## AVOID: Global Error in the Effect Error Channel
-
-Do not model expected failures as `Error` in `Effect.Effect<A, Error, R>`. It erases domain information and weakens
-`catchTag`, `Match`, API error mapping, and serialization.
-
-```typescript
-// Avoid
-Effect.fail(new Error("User not found"));
-
-// Prefer for domain/API errors
-class UserNotFound extends Schema.TaggedError<UserNotFound>()("UserNotFound", { userId: UserId }) {}
-
-Effect.fail(new UserNotFound({ userId }));
-```
-
-Use `Data.TaggedError` for internal errors that do not need Schema decoding, encoding, annotations, or HTTP/OpenAPI
-integration.
-
-## AVOID: `catchAllCause` for Error Mapping
-
-`Cause` includes both expected failures and defects. Mapping it into a normal error hides bugs that should stay defects.
-
-```typescript
-// Avoid: catches defects too
-effect.pipe(Effect.catchAllCause((cause) => Effect.fail(new RepositoryError({ cause }))));
-
-// Prefer: transform only expected errors
-effect.pipe(Effect.mapError((error) => new RepositoryError({ cause: error })));
-```
-
-Reach for `catchAllCause` only when you intentionally need full cause inspection at a runtime/reporting boundary.
-
-## AVOID: Silent Error Swallowing
-
-If a side effect matters, let its failure remain visible in the error channel. Audit logging, billing, persistence,
-security checks, and notification guarantees should not quietly become `Effect.void`.
-
-```typescript
-// Avoid for important side effects
-yield * audit.log(entry).pipe(Effect.catchTag("AuditLogError", () => Effect.void));
-
-// Prefer: propagate or map the error
-yield * audit.log(entry).pipe(Effect.mapError((error) => new CreateUserError({ cause: error })));
-```
-
-Fallback values are fine for optional queries; swallowing side-effect failures is not.
-
-## AVOID: Effect Wrappers Around Safe Pure Code
-
-`Effect.try` and `Effect.tryPromise` are boundary constructors. Do not wrap ordinary pure transformations just to make
-them "Effect-shaped".
-
-```typescript
-// Avoid
-const names = Effect.try(() => users.map((user) => user.name));
-
-// Prefer
-const names = users.map((user) => user.name);
-```
-
-Use `Effect.sync` for synchronous effects with observable side effects, and `Effect.try` only for code that can throw.
-
-## RECOMMENDED: return `yield*` for Errors
-
-**Use `return yield*` when yielding errors or interrupts in Effect.gen for clarity.**
-
-The runtime halts on failed yields regardless of `return`, but the explicit `return` makes termination obvious and
-prevents unreachable-code warnings.
-
-**Recommended:**
-
-```typescript
-Effect.gen(function* () {
-  if (someCondition) {
-    return yield* Effect.fail("error message");
-  }
-
-  if (shouldInterrupt) {
-    return yield* Effect.interrupt;
-  }
-
-  const result = yield* someOtherEffect;
-  return result;
-});
-```
-
-**Acceptable but less clear:**
-
-```typescript
-Effect.gen(function* () {
-  if (someCondition) {
-    yield* Effect.fail("error message");
-    // Runtime halts here, but looks like code might continue
-  }
-});
-```
-
-The `return` keyword makes termination explicit and improves code readability.
-
-## Null vs Option<T> Rule
-
-**Use `Option<T>` internally, `T | null` at boundaries.**
-
-- Internal Effect computations → `Option<T>`
-- React state/props → `T | null`
-- JSON serialization → `T | null` or `T | undefined`
-- External API responses → normalize to `Option<T>` at boundary
-
-See `option-null.md` for comprehensive patterns.
+For absence modeling, follow [option-null.md](option-null.md) and normalize once at the system boundary.
