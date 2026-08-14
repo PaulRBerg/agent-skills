@@ -75,9 +75,9 @@ Adapt search queries to the ecosystem and include the current year when recency 
 - `"[task] copilot skill"`
 - `"awesome agent skills" [task]`
 
-Never rely on a single registry for skills. Combine skills.sh, agentskills.io, GitHub topic search
-(`topic:agent-skills`, `topic:claude-skills`), GitHub code search for `path:SKILL.md`, and generic web search.
-Registries miss skills published only on GitHub or in blog posts.
+Never rely on a single registry for skills. Combine skills.sh, GitHub topic search (`topic:agent-skills`,
+`topic:claude-skills`), GitHub code search for `path:SKILL.md`, and generic web search. Registries miss skills published
+only on GitHub or in blog posts.
 
 ### Databases / Infrastructure
 
@@ -93,16 +93,16 @@ Registries miss skills published only on GitHub or in blog posts.
 
 Prioritize sources by ecosystem:
 
-| Ecosystem             | Primary sources                                                                                                                                            |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| JavaScript/TypeScript | npm registry, npm trends, Bundlephobia, GitHub repositories, changelogs, security advisories                                                               |
-| Python                | PyPI, pepy.tech, GitHub repositories, Libraries.io, package docs                                                                                           |
-| Rust                  | crates.io, lib.rs, GitHub repositories, Blessed.rs, docs.rs                                                                                                |
-| Go                    | pkg.go.dev, standard library docs, Awesome Go, go.libhunt.com, GitHub repositories                                                                         |
-| CLI tools             | GitHub repositories, Homebrew analytics, package manager metadata, maintained CLI lists                                                                    |
-| VSCode extensions     | VS Code Marketplace, Open VSX, GitHub repositories, extension changelogs                                                                                   |
-| Agent skills          | skills.sh, agentskills.io, GitHub `topic:agent-skills`, GitHub `topic:claude-skills`, GitHub `path:SKILL.md`, vendor docs, generic web and blog references |
-| All ecosystems        | GitHub stars/activity/issues, security advisories, StackOverflow discussions, Reddit, official benchmarks                                                  |
+| Ecosystem             | Primary sources                                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| JavaScript/TypeScript | npm registry, npm trends, Bundlephobia, GitHub repositories, changelogs, security advisories                                               |
+| Python                | PyPI, pepy.tech, GitHub repositories, Libraries.io, package docs                                                                           |
+| Rust                  | crates.io, lib.rs, GitHub repositories, Blessed.rs, docs.rs                                                                                |
+| Go                    | pkg.go.dev, standard library docs, Awesome Go, go.libhunt.com, GitHub repositories                                                         |
+| CLI tools             | GitHub repositories, Homebrew analytics, package manager metadata, maintained CLI lists                                                    |
+| VSCode extensions     | VS Code Marketplace, Open VSX, GitHub repositories, extension changelogs                                                                   |
+| Agent skills          | skills.sh, GitHub `topic:agent-skills`, GitHub `topic:claude-skills`, GitHub `path:SKILL.md`, vendor docs, generic web and blog references |
+| All ecosystems        | GitHub stars/activity/issues, security advisories, StackOverflow discussions, Reddit, official benchmarks                                  |
 
 ## Evaluation Criteria
 
@@ -357,7 +357,7 @@ User: "Find me an agent skill for writing conventional commits."
 Process:
 
 - Detect agent skill request.
-- Search generic web, skills.sh, agentskills.io, GitHub topics, and GitHub `path:SKILL.md`.
+- Search generic web, skills.sh, GitHub topics, and GitHub `path:SKILL.md`.
 - Compare install counts, GitHub stars, update recency, host-agent compatibility, token footprint, license, and
   bundled-script risk.
 - Provide source links and adoption guidance without assuming the user's host-agent install command.

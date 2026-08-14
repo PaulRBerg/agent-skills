@@ -11,6 +11,20 @@ Authoritative reference for `SKILL.md` frontmatter and the metadata files that m
 or editing frontmatter, `agents/openai.yaml`, `metadata.install-targets`, or `skill-dependencies`; do not guess field
 semantics.
 
+## Portable Specification Cache
+
+Before relying on portable Agent Skills rules, resolve the repository root and run the catalog's cache helper:
+
+```bash
+repo_root=$(git rev-parse --show-toplevel)
+spec_file=$("$repo_root/skills/skill-writing/scripts/fetch-agentskills-spec.sh")
+```
+
+Read the file at `$spec_file` completely. Use `--refresh` for explicitly latest or change-sensitive work, disputed
+guidance, or a conflict with validator behavior. A `stale` result is usable only after reading it; disclose its
+validation timestamp and retrieval failure. Stop before writing if the helper cannot return a valid file, and never
+fetch the specification directly or create its cache in this repository.
+
 ## Skill Frontmatter
 
 Full reference: <https://code.claude.com/docs/en/skills>
@@ -20,8 +34,8 @@ Full reference: <https://code.claude.com/docs/en/skills>
 `ai-skillet doctor --root '<skill-directory>'` is the canonical deterministic local validator. It accepts one extended
 top-level field union:
 
-- Portable [Agent Skills](https://agentskills.io/specification) fields: `name`, `description`, `license`,
-  `compatibility`, `metadata`, and `allowed-tools`.
+- Portable Agent Skills fields from the cached specification: `name`, `description`, `license`, `compatibility`,
+  `metadata`, and `allowed-tools`.
 - [Claude Code](https://code.claude.com/docs/en/skills#frontmatter-reference) fields: `when_to_use`, `argument-hint`,
   `arguments`, `disable-model-invocation`, `user-invocable`, `disallowed-tools`, `model`, `effort`, `context`, `agent`,
   `background`, `hooks`, `paths`, and `shell`.

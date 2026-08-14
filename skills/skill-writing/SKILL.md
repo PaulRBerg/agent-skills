@@ -1,5 +1,7 @@
 ---
 argument-hint: <skill-name>
+compatibility:
+  Requires curl and a writable user cache directory; network populates or refreshes the agentskills.io specification.
 name: skill-writing
 description:
   Create/scaffold/init a project-local agent skill under `.agents/skills` in an ordinary repository; defer to repository
@@ -165,15 +167,21 @@ Inline the basic case in `SKILL.md`, link advanced files for edge cases (`tracke
 
 ## Workflow
 
-### 1. Fetch Format Docs
+### 1. Read Format Docs
 
-Always fetch the latest portable and Claude Code references before authoring frontmatter or content:
+Resolve `scripts/fetch-agentskills-spec.sh` relative to this skill directory, run it once, and read the returned file
+completely. The helper reuses an integrity-valid specification for 24 hours, conditionally revalidates older entries,
+and may return a cache validated within seven days when live retrieval fails. Set `AGENTSKILLS_CACHE_DIR` when the
+default user cache location is unavailable or unwritable.
 
-- https://agentskills.io/specification
-- https://code.claude.com/docs/en/skills#frontmatter-reference
+Use `--refresh` for explicitly latest or change-sensitive work, disputed portable-format guidance, or a conflict with
+validator behavior. A `stale` result is usable only after reading it; disclose its validation timestamp and retrieval
+failure in the completion report. If the helper cannot return a valid file, stop before writing. Never fetch the
+agentskills.io specification directly or create its cache in a repository or skill installation.
 
-Use `WebFetch` to confirm the current field shapes, naming rules, and progressive-disclosure conventions. Do not guess —
-the formats evolve.
+Fetch the current [Claude Code frontmatter reference](https://code.claude.com/docs/en/skills#frontmatter-reference) with
+`WebFetch`. Confirm field shapes, naming rules, and progressive-disclosure conventions from both sources; do not guess
+because the formats evolve.
 
 ### 2. Validate
 
