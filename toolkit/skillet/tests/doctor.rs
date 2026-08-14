@@ -26,6 +26,16 @@ fn write_skill(root: &std::path::Path, name: &str, fields: &str, body: &str) {
     );
 }
 
+fn write_dependent_skill(root: &std::path::Path, name: &str, dependencies: &[&str], body: &str) {
+    let dependencies = dependencies.iter().map(|dependency| format!("  - {dependency}\n")).collect::<String>();
+    common::write(
+        root.join("skills").join(name).join("SKILL.md"),
+        format!(
+            "---\nname: {name}\nskill-dependencies:\n{dependencies}description: {name} description.\n---\n\n# {name}\n\n{body}\n"
+        ),
+    );
+}
+
 fn write_metadata(root: &std::path::Path, name: &str, contents: &str) {
     common::write(root.join("skills").join(name).join("agents/openai.yaml"), contents);
 }
@@ -430,6 +440,236 @@ fn dependencies_only_uses_all_roots_and_suppresses_unrelated_findings() {
     assert!(!codes(&report).contains("OPENAI_METADATA_MISSING"));
     assert!(!codes(&report).contains("COMPLETION_EVIDENCE_MISSING"));
     assert!(!codes(&report).contains("README_MISSING"));
+}
+
+#[test]
+fn targeted_catalog_and_direct_skill_resolve_siblings_without_auditing_them() {
+    let root = TempDir::new().unwrap();
+    write_dependent_skill(root.path(), "alpha", &["beta"], "## Completion\n\nReport verification.");
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: true\n");
+    common::write(root.path().join("skills/beta/SKILL.md"), "# malformed sibling\n");
+
+    let (catalog_output, catalog_report) = run_json(root.path(), &["--skill", "alpha"]);
+    assert!(catalog_output.status.success(), "{}", String::from_utf8_lossy(&catalog_output.stderr));
+    assert_eq!(catalog_report["findings"], serde_json::json!([]));
+    assert_eq!(catalog_report["roots"][0]["active_skills"], 1);
+
+    let direct = root.path().join("skills/alpha");
+    let (direct_output, direct_report) = run_json(&direct, &[]);
+    assert!(direct_output.status.success(), "{}", String::from_utf8_lossy(&direct_output.stderr));
+    assert_eq!(direct_report["findings"], serde_json::json!([]));
+    assert_eq!(direct_report["roots"][0]["path"], serde_json::json!(direct));
+    assert_eq!(direct_report["roots"][0]["active_skills"], 1);
+
+    let (unfiltered_output, unfiltered_report) = run_json(root.path(), &[]);
+    assert_eq!(unfiltered_output.status.code(), Some(1));
+    assert!(codes(&unfiltered_report).contains("FRONTMATTER_DELIMITER_MISSING"));
+}
+
+#[test]
+fn targeted_dependency_resolution_still_reports_missing_dependencies() {
+    let root = TempDir::new().unwrap();
+    write_dependent_skill(root.path(), "alpha", &["missing"], "");
+
+    let (catalog_output, catalog_report) = run_json(root.path(), &["--skill", "alpha", "--dependencies-only"]);
+    assert_eq!(catalog_output.status.code(), Some(1));
+    assert_eq!(codes(&catalog_report), BTreeSet::from(["SKILL_DEPENDENCY_UNRESOLVED"]));
+
+    let (direct_output, direct_report) = run_json(&root.path().join("skills/alpha"), &["--dependencies-only"]);
+    assert_eq!(direct_output.status.code(), Some(1));
+    assert_eq!(codes(&direct_report), BTreeSet::from(["SKILL_DEPENDENCY_UNRESOLVED"]));
+}
+
+#[test]
+fn standalone_skill_root_does_not_infer_a_sibling_resolution_context() {
+    let root = TempDir::new().unwrap();
+    let standalone = root.path().join("alpha");
+    common::write(
+        standalone.join("SKILL.md"),
+        "---\nname: alpha\nskill-dependencies:\n  - beta\ndescription: alpha description.\n---\n# alpha\n",
+    );
+    common::write(root.path().join("beta/SKILL.md"), common::skill("beta", ""));
+
+    let (output, report) = run_json(&standalone, &["--dependencies-only"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(codes(&report), BTreeSet::from(["SKILL_DEPENDENCY_UNRESOLVED"]));
+}
+
+#[test]
+fn ignored_direct_skill_remains_auditable_with_sibling_resolution() {
+    let root = TempDir::new().unwrap();
+    fs::create_dir(root.path().join(".git")).unwrap();
+    common::write(root.path().join(".gitignore"), "skills/alpha/\n");
+    write_dependent_skill(root.path(), "alpha", &["beta"], "");
+    write_skill(root.path(), "beta", "", "");
+
+    let (output, report) = run_json(&root.path().join("skills/alpha"), &["--dependencies-only"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(report["findings"], serde_json::json!([]));
+    assert_eq!(report["roots"][0]["active_skills"], 1);
+}
+
+#[test]
+fn skill_filter_targets_directory_names_despite_frontmatter_mismatch() {
+    let root = TempDir::new().unwrap();
+    common::write(
+        root.path().join("skills/alpha/SKILL.md"),
+        "---\nname: wrong-name\ndescription: alpha description.\n---\n\n# alpha\n\n## Completion\n\nReport verification.\n",
+    );
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: true\n");
+
+    let (output, report) = run_json(root.path(), &["--skill", "alpha"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(codes(&report), BTreeSet::from(["NAME_DIRECTORY_MISMATCH"]));
+    assert!(finding(&report, "NAME_DIRECTORY_MISMATCH")["path"].as_str().unwrap().ends_with("skills/alpha/SKILL.md"));
+}
+
+#[test]
+fn invalid_and_undiscovered_doctor_filters_are_operational_errors() {
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "", "");
+
+    common::ai_skillet()
+        .args(["doctor", "--root"])
+        .arg(root.path())
+        .args(["--skill", "Bad_Name"])
+        .assert()
+        .code(2)
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("ai-skillet: invalid skill name filter: Bad_Name\n"));
+    common::ai_skillet()
+        .args(["doctor", "--root"])
+        .arg(root.path())
+        .args(["--skill", "missing"])
+        .assert()
+        .code(2)
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains(
+            "ai-skillet: doctor skill filter did not match a discovered directory: missing\n",
+        ));
+}
+
+#[test]
+fn dependencies_only_skill_filter_does_not_recursively_audit_dependencies() {
+    let root = TempDir::new().unwrap();
+    write_dependent_skill(root.path(), "alpha", &["beta"], "");
+    write_dependent_skill(root.path(), "beta", &["missing"], "");
+
+    let (alpha_output, alpha_report) = run_json(root.path(), &["--skill", "alpha", "--dependencies-only"]);
+    assert!(alpha_output.status.success(), "{}", String::from_utf8_lossy(&alpha_output.stderr));
+    assert_eq!(alpha_report["findings"], serde_json::json!([]));
+
+    let (beta_output, beta_report) = run_json(root.path(), &["--skill", "beta", "--dependencies-only"]);
+    assert_eq!(beta_output.status.code(), Some(1));
+    assert_eq!(codes(&beta_report), BTreeSet::from(["SKILL_DEPENDENCY_UNRESOLVED"]));
+}
+
+#[test]
+fn fix_safe_skill_filter_changes_only_selected_metadata() {
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "", "## Completion\n\nReport verification.");
+    write_skill(root.path(), "beta", "", "## Completion\n\nReport verification.");
+
+    let (output, report) = run_json(root.path(), &["--skill", "alpha", "--fix-safe"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(report["counts"]["fixes"], 1);
+    assert!(root.path().join("skills/alpha/agents/openai.yaml").is_file());
+    assert!(!root.path().join("skills/beta/agents/openai.yaml").exists());
+}
+
+#[test]
+fn mixed_direct_and_catalog_roots_apply_scope_independently() {
+    let direct_catalog = TempDir::new().unwrap();
+    let full_catalog = TempDir::new().unwrap();
+    write_skill(direct_catalog.path(), "alpha", "", "");
+    common::write(direct_catalog.path().join("skills/hidden/SKILL.md"), "# hidden malformed sibling\n");
+    write_skill(full_catalog.path(), "visible", "", "");
+    common::write(full_catalog.path().join("skills/broken/SKILL.md"), "# audited malformed sibling\n");
+
+    let run = || {
+        common::ai_skillet()
+            .args(["doctor", "--root"])
+            .arg(direct_catalog.path().join("skills/alpha"))
+            .args(["--root"])
+            .arg(full_catalog.path())
+            .args(["--dependencies-only", "--format", "json"])
+            .output()
+            .unwrap()
+    };
+    let first = run();
+    let second = run();
+    assert_eq!(first.status.code(), Some(1));
+    assert_eq!(first.stdout, second.stdout);
+    let report: Value = serde_json::from_slice(&first.stdout).unwrap();
+    let findings = report["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{findings:#?}");
+    assert!(findings[0]["path"].as_str().unwrap().ends_with("skills/broken/SKILL.md"));
+}
+
+#[test]
+fn a_skill_filter_audits_every_matching_exposure() {
+    let first = TempDir::new().unwrap();
+    let second = TempDir::new().unwrap();
+    write_dependent_skill(first.path(), "alpha", &["missing"], "");
+    write_dependent_skill(second.path(), "alpha", &["missing"], "");
+
+    let output = common::ai_skillet()
+        .args(["doctor", "--root"])
+        .arg(first.path())
+        .args(["--root"])
+        .arg(second.path())
+        .args(["--skill", "alpha", "--dependencies-only", "--format", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["findings"].as_array().unwrap().len(), 2);
+    assert!(report["findings"].as_array().unwrap().iter().all(|finding| {
+        finding["code"] == "SKILL_DEPENDENCY_UNRESOLVED" &&
+            finding["path"].as_str().unwrap().ends_with("skills/alpha/SKILL.md")
+    }));
+    assert!(report["roots"].as_array().unwrap().iter().all(|root| root["active_skills"] == 1));
+}
+
+#[cfg(unix)]
+#[test]
+fn repeated_symlinked_direct_and_catalog_roots_are_deterministic() {
+    use std::os::unix::fs::symlink;
+
+    let source = TempDir::new().unwrap();
+    let installed = TempDir::new().unwrap();
+    write_dependent_skill(source.path(), "alpha", &["beta"], "");
+    write_skill(source.path(), "beta", "", "");
+    let installed_root = installed.path().join(".agents");
+    fs::create_dir_all(installed_root.join("skills")).unwrap();
+    symlink(source.path().join("skills/alpha"), installed_root.join("skills/alpha")).unwrap();
+    symlink(source.path().join("skills/beta"), installed_root.join("skills/beta")).unwrap();
+    let direct = installed_root.join("skills/alpha");
+
+    let (direct_output, direct_report) = run_json(&direct, &["--dependencies-only"]);
+    assert!(direct_output.status.success(), "{}", String::from_utf8_lossy(&direct_output.stderr));
+    assert_eq!(direct_report["findings"], serde_json::json!([]));
+
+    let run = || {
+        common::ai_skillet()
+            .args(["doctor", "--root"])
+            .arg(&direct)
+            .args(["--root"])
+            .arg(&installed_root)
+            .args(["--root"])
+            .arg(&direct)
+            .args(["--skill", "alpha", "--skill", "alpha", "--dependencies-only", "--format", "json"])
+            .output()
+            .unwrap()
+    };
+    let first = run();
+    let second = run();
+    assert!(first.status.success(), "{}", String::from_utf8_lossy(&first.stderr));
+    assert_eq!(first.stdout, second.stdout);
+    let report: Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(report["findings"], serde_json::json!([]));
+    assert_eq!(report["roots"].as_array().unwrap().len(), 2);
+    assert!(report["roots"].as_array().unwrap().iter().all(|root| root["active_skills"] == 1));
 }
 
 #[test]

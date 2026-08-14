@@ -16,7 +16,8 @@ ai-skillet doctor [OPTIONS]
 ai-skillet --version
 ```
 
-`doctor --dependencies-only` limits diagnostics to skill-dependency declarations.
+`doctor --dependencies-only` limits diagnostics to skill-dependency declarations. Repeatable
+`doctor --skill <NAME>` filters diagnostics and safe fixes by canonical skill directory name.
 
 A catalog root that exposes `skills/` must provide a `README.md` with an exact `## Skills`
 section and a Markdown table. The required first column is `Skill` and lists every active skill
@@ -31,7 +32,21 @@ may omit that file. When an installed exposure provides it, doctor still validat
 ## Doctor validation contract
 
 `ai-skillet doctor --root <skill-or-catalog-root>` is the canonical deterministic, offline local
-validator for the supported extended skill dialect. It accepts this one top-level field union:
+validator for the supported extended skill dialect. For an explicit targeted audit, pass a catalog
+root with one or more filters:
+
+```sh
+ai-skillet doctor --root '.agents/skills' --skill 'land-search'
+```
+
+A direct `skills/<name>` root is shorthand for auditing only that directory while resolving bare
+dependencies against sibling skills in the owning `skills` directory. This applies equally to
+source catalogs and `.agents`, `.claude`, or `.codex` installed exposures, including directory
+symlinks. A standalone skill outside a `skills/<name>` layout does not infer an owning catalog;
+bare dependencies must still resolve from explicitly supplied roots. Targeted audits omit
+catalog-wide README inventory diagnostics, and `--fix-safe` modifies only selected skills.
+
+Doctor accepts this one top-level field union:
 
 - Portable [Agent Skills](https://agentskills.io/specification): `name`, `description`, `license`,
   `compatibility`, `metadata`, and `allowed-tools`.

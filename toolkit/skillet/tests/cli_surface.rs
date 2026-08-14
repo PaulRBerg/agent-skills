@@ -37,6 +37,7 @@ fn doctor_help_lists_its_supported_options() {
         .assert()
         .success()
         .stdout(predicate::str::contains("--root <PATH>"))
+        .stdout(predicate::str::contains("--skill <NAME>"))
         .stdout(predicate::str::contains("--dependencies-only"))
         .stdout(predicate::str::contains("--fix-safe"))
         .stdout(predicate::str::contains("--format <FORMAT>"));
@@ -69,14 +70,28 @@ fn map_supports_repeatable_roots_and_skills() {
 }
 
 #[test]
-fn doctor_supports_repeatable_roots() {
-    let cli = Cli::try_parse_from(["ai-skillet", "doctor", "--root", "first", "--root", "second", "--format", "json"])
-        .expect("doctor arguments should parse");
+fn doctor_supports_repeatable_roots_and_skills() {
+    let cli = Cli::try_parse_from([
+        "ai-skillet",
+        "doctor",
+        "--root",
+        "first",
+        "--root",
+        "second",
+        "--skill",
+        "alpha",
+        "--skill",
+        "beta",
+        "--format",
+        "json",
+    ])
+    .expect("doctor arguments should parse");
 
     let Command::Doctor(args) = cli.command else {
         panic!("expected doctor command");
     };
     assert_eq!(args.root, [PathBuf::from("first"), PathBuf::from("second")]);
+    assert_eq!(args.skill, ["alpha", "beta"]);
     assert_eq!(args.format, DoctorFormat::Json);
 }
 

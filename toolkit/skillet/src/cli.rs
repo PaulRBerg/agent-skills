@@ -65,9 +65,13 @@ pub enum MapFormat {
 
 #[derive(Debug, Args)]
 pub struct DoctorArgs {
-    /// Catalog root to scan.
+    /// Skill or catalog root to audit.
     #[arg(long, value_name = "PATH")]
     pub root: Vec<PathBuf>,
+
+    /// Restrict diagnostics and fixes to a skill directory name; may be repeated.
+    #[arg(long, value_name = "NAME")]
+    pub skill: Vec<String>,
 
     /// Limit diagnostics to declared skill dependencies.
     #[arg(long, conflicts_with = "fix_safe")]

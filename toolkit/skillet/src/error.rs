@@ -56,6 +56,8 @@ pub enum Error {
     HomeUnavailable,
     #[error("invalid skill name filter: {}", .0.join(", "))]
     InvalidSkillFilter(Vec<String>),
+    #[error("doctor skill filter did not match a discovered directory: {}", .0.join(", "))]
+    DoctorSkillNotDiscovered(Vec<String>),
     #[error("{0}")]
     MapData(String),
     #[error("could not serialize output: {0}")]

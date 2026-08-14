@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    fix,
+    AuditSelection, fix,
     model::{Counts, Finding, Fix, Report, RootRecord, SCHEMA_VERSION, Severity},
     resource::resource_target,
 };
@@ -23,16 +23,18 @@ use super::{
 const COORDINATION_EXEMPT_SENTENCE: &str =
     "This skill is coordination-exempt: skip the ai-coord gate for its declared work.";
 
-pub fn build_report(catalog: &Catalog, dependencies_only: bool, fix_safe: bool) -> Report {
+pub fn build_report(catalog: &Catalog, selection: &AuditSelection, dependencies_only: bool, fix_safe: bool) -> Report {
     let mut findings = catalog
         .diagnostics
         .iter()
+        .filter(|diagnostic| selection.includes(&diagnostic.path))
         .filter(|diagnostic| retained_shared_diagnostic(diagnostic, dependencies_only))
         .map(shared_finding)
         .collect::<Vec<_>>();
     let mut fixes = Vec::new();
+    let skills = catalog.skills.iter().filter(|skill| selection.includes(skill.skill_path())).collect::<Vec<_>>();
 
-    for skill in &catalog.skills {
+    for skill in &skills {
         let Some(frontmatter) = skill.frontmatter.as_ref() else {
             continue;
         };
@@ -64,10 +66,10 @@ pub fn build_report(catalog: &Catalog, dependencies_only: bool, fix_safe: bool) 
         check_prompt_hygiene(skill, frontmatter, &source, &mut findings);
     }
 
-    let roots = catalog.roots.iter().map(|root| root_record(root, &catalog.skills)).collect::<Vec<_>>();
+    let roots = selection.roots.iter().map(|root| root_record(root, &skills)).collect::<Vec<_>>();
     if !dependencies_only {
-        for root in &catalog.roots {
-            check_readme(root, &catalog.skills, &mut findings);
+        for root in selection.roots.iter().filter(|root| selection.checks_readme(root)) {
+            check_readme(root, &skills, &mut findings);
         }
     }
 
@@ -777,7 +779,7 @@ fn check_prompt_hygiene(skill: &Skill, frontmatter: &Frontmatter, source: &str, 
     }
 }
 
-fn check_readme(root: &ScanRoot, skills: &[Skill], findings: &mut Vec<Finding>) {
+fn check_readme(root: &ScanRoot, skills: &[&Skill], findings: &mut Vec<Finding>) {
     if matches!(root.exposure_path.file_name().and_then(|name| name.to_str()), Some(".agents" | ".claude" | ".codex")) {
         return;
     }
@@ -859,7 +861,7 @@ fn readme_skills(source: &str) -> BTreeMap<String, u64> {
     result
 }
 
-fn root_record(root: &ScanRoot, skills: &[Skill]) -> RootRecord {
+fn root_record(root: &ScanRoot, skills: &[&Skill]) -> RootRecord {
     let readme = root.exposure_path.join("README.md");
     RootRecord {
         path: root.exposure_path.clone(),
@@ -868,7 +870,7 @@ fn root_record(root: &ScanRoot, skills: &[Skill]) -> RootRecord {
     }
 }
 
-fn active_skills(root: &ScanRoot, skills: &[Skill]) -> BTreeSet<String> {
+fn active_skills(root: &ScanRoot, skills: &[&Skill]) -> BTreeSet<String> {
     skills
         .iter()
         .filter(|skill| skill_belongs_to_root(root, skill.skill_path()))

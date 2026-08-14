@@ -96,18 +96,22 @@ pub struct Discovery {
 }
 
 pub fn discover(requests: &[RootRequest]) -> Result<Discovery, Error> {
+    let roots = normalize_roots(requests)?;
+    let mut skills = BTreeMap::new();
+    for root in &roots {
+        discover_root(root, &mut skills)?;
+    }
+    Ok(Discovery { roots, skills: skills.into_values().collect() })
+}
+
+pub(crate) fn normalize_roots(requests: &[RootRequest]) -> Result<Vec<ScanRoot>, Error> {
     let mut roots = Vec::new();
     for request in requests {
         roots.push(normalize_root(request)?);
     }
     roots.sort();
     roots.dedup();
-
-    let mut skills = BTreeMap::new();
-    for root in &roots {
-        discover_root(root, &mut skills)?;
-    }
-    Ok(Discovery { roots, skills: skills.into_values().collect() })
+    Ok(roots)
 }
 
 fn normalize_root(request: &RootRequest) -> Result<ScanRoot, Error> {
@@ -227,7 +231,7 @@ fn add_candidate(root: &ScanRoot, path: &Path, skills: &mut BTreeMap<PathBuf, Sk
     Ok(())
 }
 
-fn recognized_skill_file(root: &ScanRoot, path: &Path) -> bool {
+pub(crate) fn recognized_skill_file(root: &ScanRoot, path: &Path) -> bool {
     let Ok(relative) = path.strip_prefix(&root.exposure_path) else {
         return false;
     };
