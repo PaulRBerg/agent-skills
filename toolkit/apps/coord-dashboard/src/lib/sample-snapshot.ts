@@ -3,7 +3,7 @@ import type { Snapshot } from "@/lib/types";
 export const SAMPLE_NOW = 1_785_833_730;
 
 export const sampleSnapshot = {
-  schema_version: 5,
+  schema_version: 6,
   complete: false,
   scope: { kind: "machine" },
   self: {
@@ -128,6 +128,17 @@ export const sampleSnapshot = {
       scopes: [{ path: "apps/coord-dashboard", kind: "recursive" }],
       submitted_at: 1_785_833_606,
       updated_at: 1_785_833_718,
+    },
+    {
+      id: 648,
+      client: "claude",
+      session_id: "7ca88f40-3aed-4f2d-be71-a80e544dd332",
+      repo_root: "/Users/prb/projects/agent-skills",
+      label: "agent-skills-audit",
+      state: "active",
+      scopes: [{ path: "skills", kind: "recursive" }],
+      submitted_at: 1_785_833_650,
+      updated_at: 1_785_833_650,
     },
     {
       id: 645,

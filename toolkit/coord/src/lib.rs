@@ -120,8 +120,9 @@ async fn execute(cli: Cli) -> Result<u8> {
             eprintln!("{}", outcome_guidance(&outcome, coordinator.identity(false)?.map(|value| value.client)));
             Ok(outcome.code)
         }
-        Command::Done => {
-            let outcome = Coordinator::open_default()?.done()?;
+        Command::Done(arguments) => {
+            let coordinator = Coordinator::open_default()?;
+            let outcome = if arguments.all { coordinator.done_all()? } else { coordinator.done()? };
             println!("{}", outcome.line());
             eprintln!("{}", outcome_guidance(&outcome, None));
             Ok(0)

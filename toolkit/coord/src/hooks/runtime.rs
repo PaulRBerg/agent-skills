@@ -99,9 +99,9 @@ impl<'a> HookRuntime<'a> {
         let mut store = self.coordinator.store()?;
 
         if event == "SessionEnd" {
-            store.end_session(&identity)?;
-            store.hook_success(client, event, self.coordinator.now())?;
             drop(store);
+            self.coordinator.end_session_for(&identity)?;
+            self.coordinator.store()?.hook_success(client, event, self.coordinator.now())?;
             // A session end may have made a repository quiescent. The
             // scheduler owns all config, branch, cooldown, and lease guards;
             // lifecycle hooks must remain fail-open if it cannot run.
@@ -204,8 +204,12 @@ impl<'a> HookRuntime<'a> {
             let release_nudge = root
                 .as_deref()
                 .and_then(|root| {
-                    let work = store.work(&identity).ok().flatten()?;
-                    (work.state == WorkState::Active && work.repo_root == path_text(root).ok()?).then_some(work)
+                    let repo_root = path_text(root).ok()?;
+                    store
+                        .work_in_repo(&identity, &repo_root)
+                        .ok()
+                        .flatten()
+                        .filter(|work| work.state == WorkState::Active)
                 })
                 .and_then(|work| {
                     let dirty = git_dirty_paths(Path::new(&work.repo_root)).ok()?;
@@ -261,14 +265,24 @@ impl<'a> HookRuntime<'a> {
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| AppError::usage("missing session id"))?;
             let identity = Identity { client: Client::Claude, session_id: session_id.to_owned() };
+            let cwd = payload
+                .get("cwd")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+                .unwrap_or(std::env::current_dir()?);
+            let cwd = std::fs::canonicalize(&cwd).unwrap_or(cwd);
+            let root = git_root(&cwd).ok_or_else(|| AppError::operational("waker requires a Git worktree"))?;
+            let repo_root = path_text(&root)?;
             let mut store = self.coordinator.store()?;
-            let queued = store.work(&identity)?.is_some_and(|work| work.state == WorkState::Queued);
+            let queued = store.work_in_repo(&identity, &repo_root)?.is_some_and(|work| work.state == WorkState::Queued);
             if !queued {
                 store.hook_success(Client::Claude, event, self.coordinator.now())?;
                 return Ok(None);
             }
             drop(store);
-            let outcome = self.coordinator.wait_for(&identity, WAKER_TIMEOUT_SECONDS, WAKER_POLL_SECONDS, true)?;
+            let outcome =
+                self.coordinator.wait_for_repo(&identity, &root, WAKER_TIMEOUT_SECONDS, WAKER_POLL_SECONDS, true)?;
             self.coordinator.store()?.hook_success(Client::Claude, event, self.coordinator.now())?;
             Ok(Some(outcome))
         })();

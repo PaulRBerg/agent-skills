@@ -11,6 +11,14 @@ function sessionKey(client: string, sessionId: string): string {
   return `${client}:${sessionId}`;
 }
 
+function sessionWorkKey(
+  client: string,
+  sessionId: string,
+  repoRoot: string,
+): string {
+  return `${sessionKey(client, sessionId)}:${repoRoot}`;
+}
+
 function sessionRepo(session: Session): string {
   return session.repo_root ?? session.cwd;
 }
@@ -67,7 +75,10 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
   const roots = new Set<string>();
   const work = withQueuePositions(snapshot.work);
   const workBySession = new Map(
-    work.map((item) => [sessionKey(item.client, item.session_id), item]),
+    work.map((item) => [
+      sessionWorkKey(item.client, item.session_id, item.repo_root),
+      item,
+    ]),
   );
   const delegatesBySession = groupDelegates(snapshot.delegates);
 
@@ -82,7 +93,13 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
   return [...roots]
     .map((repoRoot): RepoLaneModel => {
       const sessions = snapshot.sessions
-        .filter((session) => sessionRepo(session) === repoRoot)
+        .filter(
+          (session) =>
+            sessionRepo(session) === repoRoot ||
+            workBySession.has(
+              sessionWorkKey(session.client, session.session_id, repoRoot),
+            ),
+        )
         .sort(
           (left, right) =>
             right.last_seen - left.last_seen ||
@@ -92,22 +109,29 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
           const key = sessionKey(session.client, session.session_id);
           return {
             session,
-            work: workBySession.get(key),
-            delegates: delegatesBySession.get(key) ?? [],
+            work: workBySession.get(
+              sessionWorkKey(session.client, session.session_id, repoRoot),
+            ),
+            delegates:
+              sessionRepo(session) === repoRoot
+                ? (delegatesBySession.get(key) ?? [])
+                : [],
           };
         });
-      const sessionKeys = new Set(
-        sessions.map(({ session }) =>
+      const liveSessionKeys = new Set(
+        snapshot.sessions.map((session) =>
           sessionKey(session.client, session.session_id),
         ),
       );
       const unmatchedWork = work.filter(
         (item) =>
           item.repo_root === repoRoot &&
-          !sessionKeys.has(sessionKey(item.client, item.session_id)),
+          !liveSessionKeys.has(sessionKey(item.client, item.session_id)),
       );
       const activity = [
-        ...sessions.map(({ session }) => session.last_seen),
+        ...snapshot.sessions
+          .filter((session) => sessionRepo(session) === repoRoot)
+          .map((session) => session.last_seen),
         ...work
           .filter((item) => item.repo_root === repoRoot)
           .map((item) =>

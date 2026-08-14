@@ -22,6 +22,11 @@ The coordinator is cooperative rather than an OS lock. It uses a user-owned loca
 cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
 proceed with a stale-dirt advisory and a captured baseline.
 
+Work is keyed by `(client, session_id, repo_root)`, so one session may retain independent work in multiple repositories.
+`draft`, `start`, `wait`, `baseline`, and ordinary `done` act on the current physical Git root. Acquire new repository
+roots in canonical lexicographic root order; an attempt to add an earlier root is rejected without changing existing
+work or a stored draft. `ai-coord done --all` releases the identity's work in every repository.
+
 ## Installation
 
 Requirements: Rust (the repository pins its development toolchain in `rust-toolchain.toml`) and Cargo. The dashboard
@@ -118,8 +123,10 @@ Editing requires `ai-coord start` to return `READY`. Every terminal `start`, `wa
 concise next-step sentence to stderr while preserving the stdout TSV contract. `wait` checks the SQLite generation
 counter each second and performs full inventory, Git, and arbitration refreshes only when coordination state changes or
 every 20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN`
-exits 2. After any such wake, inspect the reported state and re-arm as needed. `done` idempotently releases draft,
-active, or queued work and notifies overlapping queued holders that their work may now be ready.
+exits 2. After any such wake, inspect the reported state and re-arm as needed. Ordinary `done` idempotently releases
+draft, active, or queued work in the current physical Git root and notifies overlapping queued holders that their work
+may now be ready. `done --all` preflights dirt and residual ownership for every active root before one atomic ledger
+release, so a preflight error cannot partially release the identity.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. Newly blocked work
 reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
@@ -131,6 +138,7 @@ requires `start` to return `READY`; message wakes identify `inbox` as the inspec
 ownership recheck. Unknown coverage, timeout, and release state explicitly that no edit scope is owned. Repeated `start`
 calls may launch multiple independent wakers for the same session; each exits on the first terminal outcome. Codex
 sessions use `ai-coord wait` in the foreground.
+The waker resolves the Git root from its hook payload and observes only that root's queued row.
 
 Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
 planning presence from active implementation work.
@@ -171,9 +179,14 @@ ai-coord inbox --ack '<message-id>'
 queued work with `work=queued`, renders drafts as `draft · N scopes`, marks prompt-scoped coordination waivers as
 `waived`, and ends with compact, contextual definitions for
 the states present; it reports only finding counts (`pending`, `triaging`, and `handed-off`), never a backlog, plus
-nonzero `.ai/task-handoffs/*.md` counts without reading file names or contents. `--json` emits public schema v5 with a
-required `coordination_waived` boolean on every session and `handoffs` records shaped as `{repo_root, count}`. Draft
-records include only their label, state, timestamps, and scope count. Submitted work includes literal normalized scope objects. Status, dashboard snapshots, and message recipient
+nonzero `.ai/task-handoffs/*.md` counts without reading file names or contents. Machine-wide terminal status emits one
+row per work item and adds `repo=<repo_root>` to its detail column; a session with no work is emitted once. `--json`
+emits public schema v6 with a required `coordination_waived` boolean on every session and `handoffs` records shaped as
+`{repo_root, count}`. Draft
+records include only their label, state, timestamps, and scope count. Submitted work includes literal normalized scope
+objects. Repository snapshots include a live session when either its reported root or one of its work rows matches the
+requested root, retain every matching work row, and derive waiting state only from that root's queued row. Status,
+dashboard snapshots, and message recipient
 discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe
 providers freshly before granting work or reporting installation health.
 
@@ -255,6 +268,10 @@ hooks add read-only parent/child topology and never schedule triage. Claude's fi
 handles blocked starts in the background; planning scopes are recorded explicitly with `draft`, not inferred from
 provider-specific plan hooks.
 
+Prompt context and clean-scope release nudges use only work in the hook payload's current Git root. Authoritative
+SessionEnd and confirmed-death cleanup remove all work for the identity, wake affected queued sessions in every root,
+and do not create residual attribution for the ungraceful release.
+
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
 
@@ -271,8 +288,9 @@ parent.
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
 mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v13. Any other nonzero schema, including v12, is rejected without migration, import, deletion, or
-replacement, while the public `status --json` schema is v5. Close agents and explicitly choose any backup, removal,
+internal schema v14. Any other nonzero schema, including v13, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema is v6. This is an isolated-state break with no migration or
+compatibility path. Close agents and explicitly choose any backup, removal,
 installation, and relinking rollout before retrying with incompatible state.
 
 The SQLite ledger stores bounded session metadata, callsigns, the coordination-waiver boolean, work labels, literal scopes, messages, finding lifecycle

@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 13;
+pub(crate) const SCHEMA_VERSION: i64 = 14;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -40,7 +40,7 @@ const STATEMENTS: &[&str] = &[
         submitted_at REAL,
         updated_at REAL NOT NULL,
         revision INTEGER NOT NULL CHECK (revision > 0),
-        UNIQUE (client, session_id),
+        UNIQUE (client, session_id, repo_root),
         FOREIGN KEY (client, session_id)
             REFERENCES sessions(client, session_id) ON DELETE CASCADE,
         CHECK (

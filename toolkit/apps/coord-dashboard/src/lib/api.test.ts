@@ -36,10 +36,10 @@ describe("parseSnapshot", () => {
     expect(parseSnapshot(extended)).toBe(extended);
   });
 
-  test("rejects the pre-break status schema", () => {
-    const legacy = { ...sampleSnapshot, schema_version: 1 };
+  test("rejects the previous status schema", () => {
+    const legacy = { ...sampleSnapshot, schema_version: 5 };
     expect(() => parseSnapshot(legacy)).toThrow(
-      "snapshot.schema_version must be 5",
+      "snapshot.schema_version must be 6",
     );
   });
 

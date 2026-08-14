@@ -35,7 +35,7 @@ use crate::{
         BaselineRow, EndedObservation, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, TouchedPaths,
         WorkRow,
     },
-    work::WorkCoordinator,
+    work::{WorkCoordinator, ensure_canonical_root_order},
 };
 
 #[cfg(test)]
@@ -82,6 +82,12 @@ pub(crate) struct Coordinator {
     inventory: Mutex<Box<dyn ProviderInventory>>,
     probe: Arc<dyn ProcessProbe>,
     clock: Arc<dyn Clock>,
+}
+
+struct ReleasePlan {
+    work: WorkRow,
+    hashes: Vec<(String, String)>,
+    residual_paths: Vec<String>,
 }
 
 impl Coordinator {
@@ -163,18 +169,17 @@ impl Coordinator {
             return Err(AppError::usage("at least one scope is required"));
         }
         let mut store = self.store()?;
+        let repo_root = path_text(&root)?;
+        let existing = store.work_in_repo(&identity, &repo_root)?;
+        if existing.is_none() {
+            ensure_canonical_root_order(&repo_root, &store.works_for_identity(&identity)?)?;
+        }
         self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         store.set_coordination_waived(&identity, false)?;
-        if let Some(existing) = store.work(&identity)? {
-            if existing.state == WorkState::Draft {
-                return Err(AppError::operational(
-                    "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
-                ));
-            }
-            if existing.repo_root != path_text(&root)? {
-                return Ok(Outcome::new(OutcomeKind::Active, 3, "active work belongs to another repository")
-                    .with_paths(existing.scopes.into_iter().map(|scope| scope.path).collect()));
-            }
+        if existing.is_some_and(|work| work.state == WorkState::Draft) {
+            return Err(AppError::operational(
+                "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
+            ));
         }
         let inventory = self.refresh_inventory(&mut store, false)?;
         WorkCoordinator { store: &mut store }.start_direct(
@@ -213,9 +218,6 @@ impl Coordinator {
         let mut store = self.store()?;
         self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         store.set_coordination_waived(&identity, false)?;
-        if store.work(&identity)?.is_some_and(|work| work.state != WorkState::Draft) {
-            return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
-        }
         store.save_draft(&identity, &path_text(&root)?, &label, &scopes, self.clock.wall())?;
         Ok(Outcome::new(OutcomeKind::Draft, 0, scopes.len().to_string()))
     }
@@ -229,15 +231,14 @@ impl Coordinator {
         let cwd = resolved(cwd);
         let root = git_root(&cwd).ok_or_else(|| AppError::operational("start --draft requires a Git worktree"))?;
         let mut store = self.store()?;
+        let repo_root = path_text(&root)?;
+        let draft = store.work_in_repo(identity, &repo_root)?.filter(|work| work.state == WorkState::Draft);
+        if draft.is_some() {
+            ensure_canonical_root_order(&repo_root, &store.works_for_identity(identity)?)?;
+        }
         self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
         store.set_coordination_waived(identity, false)?;
-        let draft = store
-            .work(identity)?
-            .filter(|work| work.state == WorkState::Draft)
-            .ok_or_else(|| AppError::operational("no draft work for this session"))?;
-        if draft.repo_root != path_text(&root)? {
-            return Err(AppError::operational("draft belongs to another repository"));
-        }
+        let draft = draft.ok_or_else(|| AppError::operational("no draft work for this session"))?;
         revalidate_draft_scopes(&draft.scopes, &root)?;
         let inventory = self.refresh_inventory(&mut store, false)?;
         WorkCoordinator { store: &mut store }.promote_draft(identity, &root, draft, &inventory, self.clock.wall())
@@ -245,12 +246,15 @@ impl Coordinator {
 
     pub(crate) fn wait(&self, timeout_seconds: u64, poll_seconds: f64) -> Result<Outcome> {
         let identity = self.required_identity()?;
-        self.wait_for(&identity, timeout_seconds, poll_seconds, false)
+        let cwd = std::env::current_dir()?;
+        let root = git_root(&resolved(&cwd)).ok_or_else(|| AppError::operational("wait requires a Git worktree"))?;
+        self.wait_for_repo(&identity, &root, timeout_seconds, poll_seconds, false)
     }
 
-    pub(crate) fn wait_for(
+    pub(crate) fn wait_for_repo(
         &self,
         identity: &Identity,
+        root: &Path,
         timeout_seconds: u64,
         poll_seconds: f64,
         released_if_missing: bool,
@@ -258,13 +262,14 @@ impl Coordinator {
         if !(1..=3600).contains(&timeout_seconds) {
             return Err(AppError::usage("timeout must be between 1 and 3600 seconds"));
         }
+        let repo_root = path_text(root)?;
         let started = self.clock.monotonic();
         let mut last_generation = None;
         let mut last_full_check = None;
         loop {
             let mut store = self.store()?;
             let process_complete = self.reconcile_processes(&mut store)?.is_empty();
-            let Some(work) = store.work(identity)? else {
+            let Some(work) = store.work_in_repo(identity, &repo_root)? else {
                 return if released_if_missing {
                     Ok(Outcome::new(OutcomeKind::Released, 3, ""))
                 } else {
@@ -280,7 +285,11 @@ impl Coordinator {
                     "draft work must be submitted with ai-coord start --draft before waiting",
                 ));
             }
-            let pending = store.inbox(identity, true)?;
+            let pending = store
+                .inbox(identity, true)?
+                .into_iter()
+                .filter(|message| message.repo_root.as_deref().is_none_or(|root| root == repo_root))
+                .collect::<Vec<_>>();
             if !pending.is_empty() {
                 return Ok(Outcome::new(OutcomeKind::Message, 3, pending.len().to_string()));
             }
@@ -294,7 +303,7 @@ impl Coordinator {
             if due {
                 let mut inventory = self.refresh_inventory(&mut store, false)?;
                 inventory.complete &= process_complete;
-                let root = PathBuf::from(&work.repo_root);
+                let root = PathBuf::from(&repo_root);
                 let outcome = WorkCoordinator { store: &mut store }.start_direct(
                     identity,
                     &root,
@@ -319,53 +328,174 @@ impl Coordinator {
 
     pub(crate) fn done(&self) -> Result<Outcome> {
         let identity = self.required_identity()?;
-        let outcome = self.done_for(&identity)?;
+        let cwd = std::env::current_dir()?;
+        let outcome = self.done_for(&identity, &cwd)?;
         if let Ok(cwd) = std::env::current_dir() {
             let _ = self.schedule_findings_triage(&cwd);
         }
         Ok(outcome)
     }
 
-    pub(crate) fn done_for(&self, identity: &Identity) -> Result<Outcome> {
+    pub(crate) fn done_for(&self, identity: &Identity, cwd: &Path) -> Result<Outcome> {
+        let root = git_root(&resolved(cwd)).ok_or_else(|| AppError::operational("done requires a Git worktree"))?;
+        let repo_root = path_text(&root)?;
         let mut store = self.store()?;
-        let work = store.work(identity)?;
-        let mut waiters = Vec::new();
-        let mut residual_paths = Vec::new();
-        if let Some(work) = work.as_ref().filter(|work| work.state == WorkState::Active && !work.scopes.is_empty()) {
-            let root = PathBuf::from(&work.repo_root);
-            let dirty = git_dirty_paths(&root).unwrap_or_default();
-            let hashes = git_blob_hashes(&root, &dirty, false);
-            let _ = store.observe_dirt(&work.repo_root, &hashes, self.clock.wall());
-            let residual = relevant_dirty(&work.scopes, &dirty);
-            residual_paths = residual.clone();
-            store.record_residual_owners(&work.repo_root, &residual, identity, self.clock.wall())?;
-            waiters = store
-                .works(Some(&work.repo_root))?
-                .into_iter()
-                .filter(|candidate| {
-                    candidate.state == WorkState::Queued && any_overlap(&work.scopes, &candidate.scopes)
-                })
-                .map(|work| work.identity)
-                .collect();
+        let work = store.work_in_repo(identity, &repo_root)?.into_iter().collect();
+        self.release_work(&mut store, identity, work, Some(&repo_root))
+    }
+
+    pub(crate) fn done_all(&self) -> Result<Outcome> {
+        let identity = self.required_identity()?;
+        let outcome = self.done_all_for(&identity)?;
+        if let Ok(cwd) = std::env::current_dir() {
+            let _ = self.schedule_findings_triage(&cwd);
         }
-        let removed = store.delete_work(identity)?;
-        if removed &&
-            !waiters.is_empty() &&
-            let Some(work) = work.as_ref()
-        {
-            let text = format!("Released work '{}'; your queued work may now be ready.", work.label);
+        Ok(outcome)
+    }
+
+    pub(crate) fn done_all_for(&self, identity: &Identity) -> Result<Outcome> {
+        let mut store = self.store()?;
+        let work = store.works_for_identity(identity)?;
+        self.release_work(&mut store, identity, work, None)
+    }
+
+    fn release_work(
+        &self,
+        store: &mut Store,
+        identity: &Identity,
+        work: Vec<WorkRow>,
+        current_repo: Option<&str>,
+    ) -> Result<Outcome> {
+        // Collect every active repository's dirt before ledger writes so an
+        // all-root release uses one complete residual-attribution preflight.
+        let mut plans = Vec::new();
+        for work in work {
+            let (hashes, residual_paths) = if work.state == WorkState::Active && !work.scopes.is_empty() {
+                let root = PathBuf::from(&work.repo_root);
+                let dirty = git_dirty_paths(&root)?;
+                let hashes = git_blob_hashes(&root, &dirty, false);
+                let residual = relevant_dirty(&work.scopes, &dirty);
+                (hashes, residual)
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            plans.push(ReleasePlan { work, hashes, residual_paths });
+        }
+
+        let removed = store.with_work_transaction(|transaction| {
+            let current = match current_repo {
+                Some(repo_root) => transaction.work_in_repo(identity, repo_root)?.into_iter().collect::<Vec<_>>(),
+                None => transaction.works_for_identity(identity)?,
+            };
+            if current.len() != plans.len() ||
+                current
+                    .iter()
+                    .zip(&plans)
+                    .any(|(work, plan)| work.id != plan.work.id || work.revision != plan.work.revision)
+            {
+                return Err(AppError::retry("work changed during release; retry ai-coord done"));
+            }
+            let wakeups = plans
+                .iter()
+                .filter(|plan| plan.work.state != WorkState::Draft)
+                .map(|plan| {
+                    let waiters = transaction
+                        .works(&plan.work.repo_root)?
+                        .into_iter()
+                        .filter(|candidate| {
+                            candidate.identity != *identity &&
+                                candidate.state == WorkState::Queued &&
+                                any_overlap(&plan.work.scopes, &candidate.scopes)
+                        })
+                        .map(|candidate| candidate.identity)
+                        .collect::<Vec<_>>();
+                    Ok((plan, waiters))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            for plan in &plans {
+                if plan.work.state == WorkState::Active {
+                    transaction.observe_dirt(&plan.work.repo_root, &plan.hashes, self.clock.wall())?;
+                    transaction.record_residual_owners(
+                        &plan.work.repo_root,
+                        &plan.residual_paths,
+                        identity,
+                        self.clock.wall(),
+                    )?;
+                }
+            }
+            let removed = match current_repo {
+                Some(repo_root) => usize::from(transaction.delete_work_in_repo(identity, repo_root)?),
+                None => transaction.delete_works(identity)?,
+            };
+            if removed > 0 {
+                for (plan, waiters) in wakeups {
+                    if waiters.is_empty() {
+                        continue;
+                    }
+                    let text = format!("Released work '{}'; your queued work may now be ready.", plan.work.label);
+                    for waiter in &waiters {
+                        transaction.send_message(
+                            identity,
+                            waiter,
+                            &text,
+                            Some(&plan.work.repo_root),
+                            self.clock.wall(),
+                        )?;
+                    }
+                }
+            }
+            Ok(removed)
+        })?;
+        let mut outcome = Outcome::new(OutcomeKind::Done, 0, if removed > 0 { "released" } else { "already clear" });
+        outcome.holders = plans.into_iter().flat_map(|plan| plan.residual_paths).collect();
+        Ok(outcome)
+    }
+
+    /// End an identity authoritatively and wake queued contenders in every
+    /// repository. Ungraceful end cleanup never attributes residual dirt.
+    pub(crate) fn end_session_for(&self, identity: &Identity) -> Result<()> {
+        let mut store = self.store()?;
+        let released = store.works_for_identity(identity)?;
+        let wakeups = released
+            .iter()
+            .filter(|work| work.state != WorkState::Draft)
+            .map(|work| {
+                let waiters = store
+                    .works(Some(&work.repo_root))?
+                    .into_iter()
+                    .filter(|candidate| {
+                        candidate.identity != *identity &&
+                            candidate.state == WorkState::Queued &&
+                            any_overlap(&work.scopes, &candidate.scopes)
+                    })
+                    .map(|candidate| candidate.identity)
+                    .collect::<Vec<_>>();
+                Ok((work.clone(), waiters))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        store.end_session(identity)?;
+        for (work, waiters) in wakeups {
+            if waiters.is_empty() {
+                continue;
+            }
+            let text = format!("Session ended; released work '{}'; your queued work may now be ready.", work.label);
             store.send_message(identity, &waiters, &text, Some(&work.repo_root), self.clock.wall())?;
         }
-        let mut outcome = Outcome::new(OutcomeKind::Done, 0, if removed { "released" } else { "already clear" });
-        outcome.holders = residual_paths;
-        Ok(outcome)
+        Ok(())
     }
 
     pub(crate) fn baselines(&self) -> Result<Vec<BaselineRow>> {
         let identity = self.required_identity()?;
+        let cwd = std::env::current_dir()?;
+        self.baselines_for(&identity, &cwd)
+    }
+
+    pub(crate) fn baselines_for(&self, identity: &Identity, cwd: &Path) -> Result<Vec<BaselineRow>> {
+        let root = git_root(&resolved(cwd)).ok_or_else(|| AppError::operational("baseline requires a Git worktree"))?;
+        let repo_root = path_text(&root)?;
         let store = self.store()?;
-        Ok(if store.work(&identity)?.is_some_and(|work| work.state == WorkState::Active) {
-            store.baselines(&identity)?
+        Ok(if store.work_in_repo(identity, &repo_root)?.is_some_and(|work| work.state == WorkState::Active) {
+            store.baselines_in_repo(identity, &repo_root)?
         } else {
             Vec::new()
         })
@@ -509,7 +639,31 @@ impl Coordinator {
                 expected_revision: revisions[&observation.identity],
             })
             .collect::<Vec<_>>();
+        let released_work = dead
+            .iter()
+            .map(|observation| Ok((observation.identity.clone(), store.works_for_identity(&observation.identity)?)))
+            .collect::<Result<Vec<_>>>()?;
         store.reconcile_ended(&dead)?;
+        for (identity, work) in released_work {
+            if store.session(&identity)?.is_some() {
+                continue;
+            }
+            for work in work.into_iter().filter(|work| work.state != WorkState::Draft) {
+                let waiters = store
+                    .works(Some(&work.repo_root))?
+                    .into_iter()
+                    .filter(|candidate| {
+                        candidate.state == WorkState::Queued && any_overlap(&work.scopes, &candidate.scopes)
+                    })
+                    .map(|candidate| candidate.identity)
+                    .collect::<Vec<_>>();
+                if waiters.is_empty() {
+                    continue;
+                }
+                let text = format!("Session ended; released work '{}'; your queued work may now be ready.", work.label);
+                store.send_message(&identity, &waiters, &text, Some(&work.repo_root), self.clock.wall())?;
+            }
+        }
         Ok(observations
             .iter()
             .filter(|observation| observation.liveness == ProcessLiveness::Unknown)
@@ -619,7 +773,10 @@ fn build_snapshot(
     } else {
         root.map(Path::to_path_buf).into_iter().collect()
     };
-    let work_by_identity = work.iter().map(|work| (work.identity.clone(), work)).collect::<HashMap<_, _>>();
+    let work_by_identity = work.iter().fold(HashMap::<Identity, Vec<&WorkRow>>::new(), |mut rows, work| {
+        rows.entry(work.identity.clone()).or_default().push(work);
+        rows
+    });
     let delegates = store.delegates()?;
     let delegate_counts = delegates.iter().fold(HashMap::<Identity, usize>::new(), |mut counts, row| {
         *counts.entry(row.parent.clone()).or_default() += 1;
@@ -629,13 +786,19 @@ fn build_snapshot(
     let mut scoped = Vec::new();
     let mut outside = Vec::new();
     for row in sessions {
-        let session_work = work_by_identity.get(&row.identity).copied();
-        let in_scope = machine || root_text.as_ref().is_some_and(|root| row.repo_root.as_ref() == Some(root));
+        let matching_work = work_by_identity
+            .get(&row.identity)
+            .into_iter()
+            .flatten()
+            .find(|work| machine || root_text.as_ref().is_some_and(|root| work.repo_root == *root));
+        let in_scope = machine ||
+            root_text.as_ref().is_some_and(|root| row.repo_root.as_ref() == Some(root)) ||
+            matching_work.is_some();
         let snapshot = SnapshotSessionV2 {
             identity: row.identity.clone(),
             cwd: row.cwd,
             repo_root: row.repo_root,
-            state: if session_work.is_some_and(|work| work.state == WorkState::Queued) {
+            state: if !machine && matching_work.is_some_and(|work| work.state == WorkState::Queued) {
                 SessionState::Waiting
             } else {
                 row.state
@@ -694,7 +857,7 @@ fn build_snapshot(
     let outside_directories = outside.iter().map(|row| row.cwd.clone()).collect::<HashSet<_>>().len();
     let handoffs = snapshot_handoffs(handoff_roots);
     Ok(SnapshotV2 {
-        schema_version: 5,
+        schema_version: 6,
         complete: inventory.complete,
         scope: if machine {
             SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None }

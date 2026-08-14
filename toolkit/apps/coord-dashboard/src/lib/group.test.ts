@@ -11,7 +11,7 @@ describe("groupSnapshotByRepo", () => {
       "/Users/prb/projects/agent-skills",
     ]);
     expect(lanes[0]?.sessions).toHaveLength(4);
-    expect(lanes[1]?.sessions).toHaveLength(1);
+    expect(lanes[1]?.sessions).toHaveLength(2);
   });
 
   test("assigns FIFO positions to queued work within a repository", () => {
@@ -41,6 +41,23 @@ describe("groupSnapshotByRepo", () => {
       "a3-dashboard-implementation",
       "a2-serve-api",
     ]);
+  });
+
+  test("shows a session in each work repository but delegates only in its current repository", () => {
+    const lanes = groupSnapshotByRepo(sampleSnapshot);
+    const parentId = "7ca88f40-3aed-4f2d-be71-a80e544dd332";
+    const toolkitParent = lanes[0]?.sessions.find(
+      ({ session }) => session.session_id === parentId,
+    );
+    const skillsParent = lanes[1]?.sessions.find(
+      ({ session }) => session.session_id === parentId,
+    );
+
+    expect(toolkitParent?.work?.label).toBe("monorepo-dashboard-orchestrator");
+    expect(toolkitParent?.delegates).toHaveLength(2);
+    expect(skillsParent?.work?.label).toBe("agent-skills-audit");
+    expect(skillsParent?.delegates).toEqual([]);
+    expect(lanes[1]?.unmatchedWork).toEqual([]);
   });
 
   test("retains work whose session is absent from provider inventory", () => {

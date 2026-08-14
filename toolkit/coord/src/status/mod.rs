@@ -1,14 +1,11 @@
 //! Versioned status JSON and its compact terminal rendering.
 
-use std::{
-    collections::HashMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     domain::{
-        Identity, SessionState, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
-        client_name, terminal_field,
+        SessionState, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState, client_name,
+        terminal_field,
     },
     error::Result,
 };
@@ -26,15 +23,18 @@ pub(crate) fn render_status(snapshot: &SnapshotV2) -> String {
 
 fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
     let mut lines = vec!["CLIENT\tSTATE\tAGE\tCALLSIGN\tNAME/LABEL\tSESSION\tCWD\tDETAIL".to_owned()];
-    let work_by_identity =
-        snapshot.work.iter().map(|work| (work.identity.clone(), work)).collect::<HashMap<Identity, &SnapshotWorkV2>>();
+    let machine_wide = snapshot.scope.kind == SnapshotScopeKindV2::Machine;
     let mut named = Vec::new();
     let mut anonymous: Vec<AnonymousGroup<'_>> = Vec::new();
 
     for session in &snapshot.sessions {
-        let work = work_by_identity.get(&session.identity).copied();
-        if is_named(session, work) {
-            named.push((session, work));
+        let work = snapshot.work.iter().filter(|work| work.identity == session.identity).collect::<Vec<_>>();
+        if !work.is_empty() {
+            named.extend(work.into_iter().map(|work| (session, Some(work))));
+            continue;
+        }
+        if machine_wide || is_named(session, None) {
+            named.push((session, None));
             continue;
         }
 
@@ -47,11 +47,11 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
     }
 
     for (session, work) in named {
-        lines.push(session_line(session, work, now, None));
+        lines.push(session_line(session, work, now, None, machine_wide));
     }
     for group in anonymous {
         let count = group.rows.len();
-        lines.push(session_line(group.rows[0], None, now, (count > 1).then(|| format!("count={count}"))));
+        lines.push(session_line(group.rows[0], None, now, (count > 1).then(|| format!("count={count}")), false));
     }
 
     let coverage = snapshot
@@ -131,6 +131,7 @@ fn session_line(
     work: Option<&SnapshotWorkV2>,
     now: f64,
     session_id: Option<String>,
+    machine_wide: bool,
 ) -> String {
     let mut detail = Vec::new();
     if session.permission_mode.as_deref() == Some("plan") {
@@ -143,6 +144,9 @@ fn session_line(
         detail.push(format!("delegates={count}"));
     }
     if let Some(work) = work {
+        if machine_wide {
+            detail.push(format!("repo={}", work.repo_root));
+        }
         match work.state {
             WorkState::Draft => detail.push(format!("draft · {} scopes", work.scope_count.unwrap_or_default())),
             WorkState::Queued => detail.push("work=queued".to_owned()),
@@ -160,7 +164,12 @@ fn session_line(
     }
     [
         client_name(session.identity.client).to_owned(),
-        state_name(session.state).to_owned(),
+        state_name(if work.is_some_and(|work| work.state == WorkState::Queued) {
+            SessionState::Waiting
+        } else {
+            session.state
+        })
+        .to_owned(),
         age_label(session.last_seen, now),
         session.callsign.clone().unwrap_or_default(),
         work.map(|work| work.label.clone()).or_else(|| session.name.clone()).unwrap_or_default(),
@@ -213,13 +222,13 @@ fn unix_now() -> f64 {
 mod tests {
     use super::*;
     use crate::domain::{
-        Client, FindingState, FindingSummary, OutsideScopeV2, ProviderReport, Scope, ScopeKind, SnapshotScopeV2,
-        SnapshotWorkV2,
+        Client, FindingState, FindingSummary, Identity, OutsideScopeV2, ProviderReport, Scope, ScopeKind,
+        SnapshotScopeV2, SnapshotWorkV2,
     };
 
     fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {
         SnapshotV2 {
-            schema_version: 5,
+            schema_version: 6,
             complete: true,
             scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Repo, repo_root: Some("/repo".into()) },
             self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
@@ -296,12 +305,12 @@ mod tests {
     }
 
     #[test]
-    fn json_keeps_the_v5_schema_and_omits_draft_paths() {
+    fn json_keeps_the_v6_schema_and_omits_draft_paths() {
         let payload: serde_json::Value = serde_json::from_str(
             &snapshot_json(&snapshot(vec![session("self")], vec![work("self", WorkState::Draft)])).unwrap(),
         )
         .unwrap();
-        assert_eq!(payload["schema_version"], 5);
+        assert_eq!(payload["schema_version"], 6);
         assert_eq!(payload["self"]["session_id"], "self");
         assert_eq!(payload["sessions"][0]["coordination_waived"], false);
         assert_eq!(payload["work"][0]["scope_count"], 1);
@@ -333,6 +342,22 @@ mod tests {
         assert!(!rendered.contains('\u{1b}'));
         assert!(rendered.contains("\tcount=2\t/repo\t"));
         assert!(!rendered.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn machine_rendering_keeps_every_repository_work_row() {
+        let mut value = snapshot(vec![session("self")], vec![work("self", WorkState::Active)]);
+        value.scope = SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None };
+        let mut second = work("self", WorkState::Queued);
+        second.id = 2;
+        second.repo_root = "/repo-b".into();
+        second.label = "second root".into();
+        value.work.push(second);
+
+        let rendered = render_status_at(&value, 2_000.0);
+        assert_eq!(rendered.lines().filter(|line| line.starts_with("codex\t")).count(), 2);
+        assert!(rendered.contains("exact files\tself\t/repo\trepo=/repo work=active"));
+        assert!(rendered.contains("second root\tself\t/repo\trepo=/repo-b work=queued"));
     }
 
     #[test]

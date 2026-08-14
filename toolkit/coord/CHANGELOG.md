@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Break the internal ledger at schema v14 and public status at schema v6. Key work by
+  `(client, session_id, repo_root)`, retain independent multi-repository work in canonical root order, make lifecycle
+  commands current-root by default, and add atomic identity-wide `done --all`.
+- Make hooks select work from the payload Git root, while SessionEnd and confirmed death release every owned root and
+  wake affected waiters without residual attribution. Publish every matching status work row and render machine-wide
+  work with repository detail.
 - Bound Git blob hashing to fixed-size batches and limit start-time hashing to dirt within the requested scopes.
 - Break the internal ledger at schema v13 and public status at schema v5; add the prompt-scoped `#noc` coordination
   waiver, best-effort touched-path tracking, task-handoff counts, contextual gate and release nudges, and

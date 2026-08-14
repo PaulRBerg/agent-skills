@@ -33,7 +33,8 @@ impl WorkCoordinator<'_> {
         inventory: &InventoryResult,
         current: f64,
     ) -> Result<Outcome> {
-        let existing = self.store.work(identity)?;
+        let repo_root = path_text(root)?;
+        let existing = self.store.work_in_repo(identity, &repo_root)?;
         if existing.as_ref().is_some_and(|work| work.state == WorkState::Draft) {
             return Err(AppError::operational(
                 "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
@@ -74,6 +75,11 @@ impl WorkCoordinator<'_> {
             return Err(AppError::usage("at least one scope is required"));
         }
         let repo_root = path_text(root)?;
+        let creates_submitted_root =
+            existing.as_ref().is_none_or(|work| !matches!(work.state, WorkState::Queued | WorkState::Active));
+        if creates_submitted_root {
+            ensure_canonical_root_order(&repo_root, &self.store.works_for_identity(identity)?)?;
+        }
         if let Some(active) = existing.as_ref().filter(|work| work.state == WorkState::Active) {
             return self.update_active(identity, root, &repo_root, label, scopes, inventory, active.clone(), current);
         }
@@ -92,7 +98,7 @@ impl WorkCoordinator<'_> {
 
         let mut advisory = Vec::new();
         let outcome = self.store.with_work_transaction(|transaction| {
-            let current_work = transaction.work(identity)?;
+            let current_work = transaction.work_in_repo(identity, &repo_root)?;
             match draft_revision {
                 Some(revision) => {
                     let Some(work) = current_work
@@ -115,6 +121,9 @@ impl WorkCoordinator<'_> {
                         return Err(AppError::retry("work item changed during arbitration"));
                     }
                 }
+            }
+            if creates_submitted_root {
+                ensure_canonical_root_order(&repo_root, &transaction.works_for_identity(identity)?)?;
             }
 
             let submitted_at = match preserved_submission {
@@ -179,7 +188,7 @@ impl WorkCoordinator<'_> {
         })?;
         if outcome.kind == OutcomeKind::Ready && !advisory.is_empty() {
             let baselines = write_baselines(root, &advisory);
-            self.store.replace_baselines(identity, &baselines)?;
+            self.store.replace_baselines_in_repo(identity, &repo_root, &baselines)?;
         }
         Ok(outcome)
     }
@@ -225,7 +234,7 @@ impl WorkCoordinator<'_> {
 
         loop {
             let step = self.store.with_work_transaction(|transaction| {
-                let current_work = transaction.work(identity)?;
+                let current_work = transaction.work_in_repo(identity, repo_root)?;
                 let Some(current_work) = current_work.filter(|work| {
                     work.state == WorkState::Active &&
                         work.revision == existing.revision &&
@@ -283,7 +292,7 @@ impl WorkCoordinator<'_> {
                     .cloned()
                     .collect::<Vec<_>>();
                 let mut baselines = transaction
-                    .baselines(identity)?
+                    .baselines_in_repo(identity, repo_root)?
                     .into_iter()
                     .filter(|row| !relevant_dirty(&scopes, std::slice::from_ref(&row.path)).is_empty())
                     .collect::<Vec<_>>();
@@ -338,6 +347,23 @@ impl WorkCoordinator<'_> {
             }
         }
     }
+}
+
+pub(crate) fn ensure_canonical_root_order(repo_root: &str, work: &[WorkRow]) -> Result<()> {
+    let later_roots = work
+        .iter()
+        .filter(|work| {
+            matches!(work.state, WorkState::Queued | WorkState::Active) && work.repo_root.as_str() > repo_root
+        })
+        .map(|work| work.repo_root.clone())
+        .collect::<Vec<_>>();
+    if later_roots.is_empty() {
+        return Ok(());
+    }
+    Err(AppError::operational(format!(
+        "repository acquisition order requires releasing later roots first: {}",
+        later_roots.join(", ")
+    )))
 }
 
 enum ActiveUpdateStep {

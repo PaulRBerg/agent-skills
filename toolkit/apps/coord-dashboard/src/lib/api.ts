@@ -216,8 +216,8 @@ function validateMessage(value: unknown, path: string): void {
 
 export function parseSnapshot(value: unknown): Snapshot {
   const snapshot = record(value, "snapshot");
-  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 5) {
-    throw new Error("snapshot.schema_version must be 5");
+  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 6) {
+    throw new Error("snapshot.schema_version must be 6");
   }
   boolean(snapshot.complete, "snapshot.complete");
 

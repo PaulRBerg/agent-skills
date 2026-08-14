@@ -47,16 +47,20 @@ impl WorkTransaction<'_> {
             .flatten())
     }
 
-    pub(crate) fn work(&self, identity: &Identity) -> Result<Option<WorkRow>> {
-        work_from(&self.transaction, identity)
+    pub(crate) fn work_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Option<WorkRow>> {
+        work_in_repo_from(&self.transaction, identity, repo_root)
+    }
+
+    pub(crate) fn works_for_identity(&self, identity: &Identity) -> Result<Vec<WorkRow>> {
+        works_for_identity_from(&self.transaction, identity)
     }
 
     pub(crate) fn works(&self, repo_root: &str) -> Result<Vec<WorkRow>> {
         works_from(&self.transaction, Some(repo_root))
     }
 
-    pub(crate) fn baselines(&self, identity: &Identity) -> Result<Vec<BaselineRow>> {
-        baselines_from(&self.transaction, identity)
+    pub(crate) fn baselines_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Vec<BaselineRow>> {
+        baselines_in_repo_from(&self.transaction, identity, repo_root)
     }
 
     pub(crate) fn residual_owners(&self, repo_root: &str) -> Result<Vec<ResidualOwnerRow>> {
@@ -92,6 +96,48 @@ impl WorkTransaction<'_> {
     ) -> Result<String> {
         add_message(&self.transaction, sender, recipient, text, repo_root, current)
     }
+
+    pub(crate) fn observe_dirt(
+        &self,
+        repo_root: &str,
+        blob_hashes: &[(String, String)],
+        current: f64,
+    ) -> Result<Vec<DirtObservationRow>> {
+        let dirty_paths = blob_hashes.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>();
+        observe_dirt_subset_from(&self.transaction, repo_root, &dirty_paths, blob_hashes, current)
+    }
+
+    pub(crate) fn record_residual_owners(
+        &self,
+        repo_root: &str,
+        paths: &[String],
+        identity: &Identity,
+        current: f64,
+    ) -> Result<()> {
+        record_residual_owners_from(&self.transaction, repo_root, paths, identity, current)
+    }
+
+    pub(crate) fn delete_work_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<bool> {
+        let removed = self.transaction.execute(
+            "DELETE FROM work_items WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3",
+            params![client_name(identity.client), identity.session_id, repo_root],
+        )? > 0;
+        if removed {
+            bump_generation(&self.transaction)?;
+        }
+        Ok(removed)
+    }
+
+    pub(crate) fn delete_works(&self, identity: &Identity) -> Result<usize> {
+        let removed = self.transaction.execute(
+            "DELETE FROM work_items WHERE client = ?1 AND session_id = ?2",
+            params![client_name(identity.client), identity.session_id],
+        )?;
+        if removed > 0 {
+            bump_generation(&self.transaction)?;
+        }
+        Ok(removed)
+    }
 }
 
 impl Store {
@@ -110,7 +156,7 @@ impl Store {
         current: f64,
     ) -> Result<WorkRow> {
         self.immediate(|transaction| {
-            let existing = work_from(transaction, identity)?;
+            let existing = work_in_repo_from(transaction, identity, repo_root)?;
             if existing.as_ref().is_some_and(|work| work.state != WorkState::Draft) {
                 return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
             }
@@ -131,12 +177,17 @@ impl Store {
                     expected_revision: existing.map(|work| work.revision),
                 },
             )?;
-            work_from(transaction, identity)?.ok_or_else(|| AppError::retry("draft disappeared during replacement"))
+            work_in_repo_from(transaction, identity, repo_root)?
+                .ok_or_else(|| AppError::retry("draft disappeared during replacement"))
         })
     }
 
-    pub(crate) fn work(&self, identity: &Identity) -> Result<Option<WorkRow>> {
-        work_from(&self.connection, identity)
+    pub(crate) fn work_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Option<WorkRow>> {
+        work_in_repo_from(&self.connection, identity, repo_root)
+    }
+
+    pub(crate) fn works_for_identity(&self, identity: &Identity) -> Result<Vec<WorkRow>> {
+        works_for_identity_from(&self.connection, identity)
     }
 
     pub(crate) fn works(&self, repo_root: Option<&str>) -> Result<Vec<WorkRow>> {
@@ -147,21 +198,8 @@ impl Store {
         residual_owners_from(&self.connection, repo_root)
     }
 
-    pub(crate) fn baselines(&self, identity: &Identity) -> Result<Vec<BaselineRow>> {
-        baselines_from(&self.connection, identity)
-    }
-
-    pub(crate) fn delete_work(&mut self, identity: &Identity) -> Result<bool> {
-        self.immediate(|transaction| {
-            let removed = transaction.execute(
-                "DELETE FROM work_items WHERE client = ?1 AND session_id = ?2",
-                params![client_name(identity.client), identity.session_id],
-            )? > 0;
-            if removed {
-                bump_generation(transaction)?;
-            }
-            Ok(removed)
-        })
+    pub(crate) fn baselines_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Vec<BaselineRow>> {
+        baselines_in_repo_from(&self.connection, identity, repo_root)
     }
 
     pub(crate) fn observe_dirt(
@@ -184,73 +222,22 @@ impl Store {
         current: f64,
     ) -> Result<Vec<DirtObservationRow>> {
         self.immediate(|transaction| {
-            let desired = dirty_paths.iter().map(String::as_str).collect::<HashSet<_>>();
-            let existing = {
-                let mut statement = transaction.prepare("SELECT path FROM dirt_observations WHERE repo_root = ?1")?;
-                statement
-                    .query_map([repo_root], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?
-            };
-            for path in existing {
-                if !desired.contains(path.as_str()) {
-                    transaction.execute(
-                        "DELETE FROM dirt_observations WHERE repo_root = ?1 AND path = ?2",
-                        params![repo_root, path],
-                    )?;
-                }
-            }
-            for (path, blob_hash) in blob_hashes {
-                transaction.execute(
-                    "INSERT INTO dirt_observations(
-                        repo_root, path, blob_hash, first_seen, last_seen
-                     ) VALUES (?1, ?2, ?3, ?4, ?4)
-                     ON CONFLICT(repo_root, path) DO UPDATE SET
-                        blob_hash = excluded.blob_hash,
-                        first_seen = CASE
-                            WHEN dirt_observations.blob_hash = excluded.blob_hash
-                            THEN dirt_observations.first_seen ELSE excluded.first_seen END,
-                        last_seen = excluded.last_seen",
-                    params![repo_root, path, blob_hash, current],
-                )?;
-            }
-            dirt_observations_from(transaction, repo_root)
+            observe_dirt_subset_from(transaction, repo_root, dirty_paths, blob_hashes, current)
         })
     }
 
-    pub(crate) fn record_residual_owners(
+    pub(crate) fn replace_baselines_in_repo(
         &mut self,
-        repo_root: &str,
-        paths: &[String],
         identity: &Identity,
-        current: f64,
+        repo_root: &str,
+        baselines: &[BaselineRow],
     ) -> Result<()> {
-        if paths.is_empty() {
-            return Ok(());
-        }
-        self.immediate(|transaction| {
-            for path in paths {
-                transaction.execute(
-                    "INSERT INTO residual_owners(
-                        repo_root, path, client, session_id, released_at
-                     ) VALUES (?1, ?2, ?3, ?4, ?5)
-                     ON CONFLICT(repo_root, path) DO UPDATE SET
-                        client = excluded.client,
-                        session_id = excluded.session_id,
-                        released_at = excluded.released_at",
-                    params![repo_root, path, client_name(identity.client), identity.session_id, current],
-                )?;
-            }
-            Ok(())
-        })
-    }
-
-    pub(crate) fn replace_baselines(&mut self, identity: &Identity, baselines: &[BaselineRow]) -> Result<()> {
         self.immediate(|transaction| {
             let work_id = transaction
                 .query_row(
                     "SELECT id FROM work_items
-                     WHERE client = ?1 AND session_id = ?2 AND state = 'active'",
-                    params![client_name(identity.client), identity.session_id],
+                     WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3 AND state = 'active'",
+                    params![client_name(identity.client), identity.session_id, repo_root],
                     |row| row.get::<_, i64>(0),
                 )
                 .optional()?;
@@ -271,12 +258,11 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
         Some(revision) => {
             let changed = transaction.execute(
                 "UPDATE work_items SET
-                    repo_root = ?1, label = ?2, state = ?3, blocked_reason = ?4,
-                    draft_created_at = ?5, submitted_at = ?6, updated_at = ?7,
+                    label = ?1, state = ?2, blocked_reason = ?3,
+                    draft_created_at = ?4, submitted_at = ?5, updated_at = ?6,
                     revision = revision + 1
-                 WHERE client = ?8 AND session_id = ?9 AND revision = ?10",
+                 WHERE client = ?7 AND session_id = ?8 AND repo_root = ?9 AND revision = ?10",
                 params![
-                    update.repo_root,
                     update.label,
                     work_state_name(update.state),
                     update.blocked_reason,
@@ -285,6 +271,7 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
                     update.updated_at,
                     client_name(update.identity.client),
                     update.identity.session_id,
+                    update.repo_root,
                     revision,
                 ],
             )?;
@@ -294,8 +281,10 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
         }
         None => {
             let exists = transaction.query_row(
-                "SELECT EXISTS(SELECT 1 FROM work_items WHERE client = ?1 AND session_id = ?2)",
-                params![client_name(update.identity.client), update.identity.session_id],
+                "SELECT EXISTS(
+                    SELECT 1 FROM work_items WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3
+                 )",
+                params![client_name(update.identity.client), update.identity.session_id, update.repo_root],
                 |row| row.get::<_, bool>(0),
             )?;
             if exists {
@@ -321,8 +310,8 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
         }
     }
     let work_id = transaction.query_row(
-        "SELECT id FROM work_items WHERE client = ?1 AND session_id = ?2",
-        params![client_name(update.identity.client), update.identity.session_id],
+        "SELECT id FROM work_items WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3",
+        params![client_name(update.identity.client), update.identity.session_id, update.repo_root],
         |row| row.get::<_, i64>(0),
     )?;
     transaction.execute("DELETE FROM work_scopes WHERE work_id = ?1", [work_id])?;
@@ -358,15 +347,82 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
     Ok(work_id)
 }
 
-fn work_from(connection: &Connection, identity: &Identity) -> Result<Option<WorkRow>> {
+fn work_in_repo_from(connection: &Connection, identity: &Identity, repo_root: &str) -> Result<Option<WorkRow>> {
     let base = connection
         .query_row(
-            &work_select("WHERE client = ?1 AND session_id = ?2"),
-            params![client_name(identity.client), identity.session_id],
+            &work_select("WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3"),
+            params![client_name(identity.client), identity.session_id, repo_root],
             work_base_from_row,
         )
         .optional()?;
     base.map(|base| finish_work(connection, base)).transpose()
+}
+
+fn works_for_identity_from(connection: &Connection, identity: &Identity) -> Result<Vec<WorkRow>> {
+    let mut statement = connection.prepare(&work_select("WHERE client = ?1 AND session_id = ?2 ORDER BY repo_root"))?;
+    let bases = statement
+        .query_map(params![client_name(identity.client), identity.session_id], work_base_from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    bases.into_iter().map(|base| finish_work(connection, base)).collect()
+}
+
+fn observe_dirt_subset_from(
+    connection: &Connection,
+    repo_root: &str,
+    dirty_paths: &[String],
+    blob_hashes: &[(String, String)],
+    current: f64,
+) -> Result<Vec<DirtObservationRow>> {
+    let desired = dirty_paths.iter().map(String::as_str).collect::<HashSet<_>>();
+    let existing = {
+        let mut statement = connection.prepare("SELECT path FROM dirt_observations WHERE repo_root = ?1")?;
+        statement.query_map([repo_root], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    for path in existing {
+        if !desired.contains(path.as_str()) {
+            connection.execute(
+                "DELETE FROM dirt_observations WHERE repo_root = ?1 AND path = ?2",
+                params![repo_root, path],
+            )?;
+        }
+    }
+    for (path, blob_hash) in blob_hashes {
+        connection.execute(
+            "INSERT INTO dirt_observations(
+                repo_root, path, blob_hash, first_seen, last_seen
+             ) VALUES (?1, ?2, ?3, ?4, ?4)
+             ON CONFLICT(repo_root, path) DO UPDATE SET
+                blob_hash = excluded.blob_hash,
+                first_seen = CASE
+                    WHEN dirt_observations.blob_hash = excluded.blob_hash
+                    THEN dirt_observations.first_seen ELSE excluded.first_seen END,
+                last_seen = excluded.last_seen",
+            params![repo_root, path, blob_hash, current],
+        )?;
+    }
+    dirt_observations_from(connection, repo_root)
+}
+
+fn record_residual_owners_from(
+    connection: &Connection,
+    repo_root: &str,
+    paths: &[String],
+    identity: &Identity,
+    current: f64,
+) -> Result<()> {
+    for path in paths {
+        connection.execute(
+            "INSERT INTO residual_owners(
+                repo_root, path, client, session_id, released_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(repo_root, path) DO UPDATE SET
+                client = excluded.client,
+                session_id = excluded.session_id,
+                released_at = excluded.released_at",
+            params![repo_root, path, client_name(identity.client), identity.session_id, current],
+        )?;
+    }
+    Ok(())
 }
 
 fn works_from(connection: &Connection, repo_root: Option<&str>) -> Result<Vec<WorkRow>> {
@@ -391,16 +447,17 @@ fn residual_owners_from(connection: &Connection, repo_root: &str) -> Result<Vec<
     Ok(statement.query_map([repo_root], residual_owner_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-fn baselines_from(connection: &Connection, identity: &Identity) -> Result<Vec<BaselineRow>> {
+fn baselines_in_repo_from(connection: &Connection, identity: &Identity, repo_root: &str) -> Result<Vec<BaselineRow>> {
     let mut statement = connection.prepare(
         "SELECT work_baselines.path, work_baselines.oid
          FROM work_baselines
          JOIN work_items ON work_items.id = work_baselines.work_id
-         WHERE work_items.client = ?1 AND work_items.session_id = ?2 AND work_items.state = 'active'
+         WHERE work_items.client = ?1 AND work_items.session_id = ?2
+           AND work_items.repo_root = ?3 AND work_items.state = 'active'
          ORDER BY work_baselines.path",
     )?;
     Ok(statement
-        .query_map(params![client_name(identity.client), identity.session_id], |row| {
+        .query_map(params![client_name(identity.client), identity.session_id, repo_root], |row| {
             Ok(BaselineRow { path: row.get(0)?, oid: row.get(1)? })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?)

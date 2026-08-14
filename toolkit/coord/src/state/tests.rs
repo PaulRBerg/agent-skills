@@ -56,7 +56,7 @@ fn work_update(identity: &Identity) -> WorkUpdate {
 }
 
 #[test]
-fn new_store_has_exact_v13_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v14_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -144,21 +144,21 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let connection = Connection::open(&path).unwrap();
     connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)", []).unwrap();
     connection.execute("INSERT INTO sentinel VALUES ('preserved')", []).unwrap();
-    connection.pragma_update(None, "user_version", 12).unwrap();
+    connection.pragma_update(None, "user_version", 13).unwrap();
     drop(connection);
 
     let error = Store::open(&path).err().unwrap();
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 12 is incompatible with required schema 13 at {}; \
+            "state schema 13 is incompatible with required schema 14 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
     );
 
     let connection = Connection::open(path).unwrap();
-    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 12);
+    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 13);
     assert_eq!(
         connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
         "preserved"
@@ -275,7 +275,7 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
     };
     assert_eq!(store.reconcile_ended(&[stale]).unwrap(), 0);
     assert!(store.session(&owner).unwrap().is_some());
-    assert!(store.work(&owner).unwrap().is_some());
+    assert!(store.work_in_repo(&owner, "/repo").unwrap().is_some());
 
     let current = EndedObservation {
         identity: owner.clone(),
@@ -284,7 +284,7 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
     };
     assert_eq!(store.reconcile_ended(&[current]).unwrap(), 1);
     assert!(store.session(&owner).unwrap().is_none());
-    assert!(store.work(&owner).unwrap().is_none());
+    assert!(store.work_in_repo(&owner, "/repo").unwrap().is_none());
     assert!(store.delegates().unwrap().is_empty());
     assert_eq!(store.generation().unwrap(), generation + 1);
 }
@@ -319,7 +319,7 @@ fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_sta
     store.upsert_session_superseding(&replacement).unwrap();
 
     assert!(store.session(&stale).unwrap().is_none());
-    assert!(store.work(&stale).unwrap().is_none());
+    assert!(store.work_in_repo(&stale, "/repo").unwrap().is_none());
     assert!(store.delegates().unwrap().is_empty());
     assert!(store.session(&fresh).unwrap().is_some());
 }
@@ -609,7 +609,7 @@ fn work_replacement_is_atomic_across_scopes_baselines_and_residuals() {
     store.observe_dirt("/repo", &[("docs/readme.md".to_owned(), "dirty".to_owned())], 1.0).unwrap();
     let original = work_update(&owner);
     store.save_work(&original).unwrap();
-    let original_row = store.work(&owner).unwrap().unwrap();
+    let original_row = store.work_in_repo(&owner, "/repo").unwrap().unwrap();
 
     let mut invalid = original.clone();
     invalid.expected_revision = Some(original_row.revision);
@@ -618,8 +618,8 @@ fn work_replacement_is_atomic_across_scopes_baselines_and_residuals() {
     invalid.baselines = Some(vec![BaselineRow { path: "replacement".to_owned(), oid: "new".to_owned() }]);
     invalid.residual_paths = vec!["docs/readme.md".to_owned()];
     assert!(store.save_work(&invalid).is_err());
-    assert_eq!(store.work(&owner).unwrap().unwrap().label, original.label);
-    assert_eq!(store.baselines(&owner).unwrap(), original.baselines.clone().unwrap());
+    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap().label, original.label);
+    assert_eq!(store.baselines_in_repo(&owner, "/repo").unwrap(), original.baselines.clone().unwrap());
     assert!(store.residual_owners("/repo").unwrap().is_empty());
 
     let replacement = WorkUpdate {
@@ -633,9 +633,115 @@ fn work_replacement_is_atomic_across_scopes_baselines_and_residuals() {
         ..original
     };
     store.save_work(&replacement).unwrap();
-    assert_eq!(store.work(&owner).unwrap().unwrap().scopes, replacement.scopes);
-    assert_eq!(store.baselines(&owner).unwrap(), replacement.baselines.unwrap());
+    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap().scopes, replacement.scopes);
+    assert_eq!(store.baselines_in_repo(&owner, "/repo").unwrap(), replacement.baselines.unwrap());
     assert_eq!(store.residual_owners("/repo").unwrap()[0].identity, owner);
+}
+
+#[test]
+fn one_identity_retains_repository_isolated_work_and_children() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    store.upsert_session(&session_update(&owner, 0.0)).unwrap();
+
+    let mut first = work_update(&owner);
+    first.repo_root = "/repo-a".to_owned();
+    first.label = "first".to_owned();
+    first.scopes = vec![Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }];
+    first.baselines = Some(vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-old".to_owned() }]);
+    first.residual_paths = vec!["src/lib.rs".to_owned()];
+    store.observe_dirt("/repo-a", &[("src/lib.rs".to_owned(), "a-dirty".to_owned())], 1.0).unwrap();
+    let first_id = store.save_work(&first).unwrap();
+
+    let mut second = work_update(&owner);
+    second.repo_root = "/repo-b".to_owned();
+    second.label = "second".to_owned();
+    second.scopes = vec![Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }];
+    second.baselines = Some(vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "b-old".to_owned() }]);
+    second.residual_paths = vec!["src/lib.rs".to_owned()];
+    store.observe_dirt("/repo-b", &[("src/lib.rs".to_owned(), "b-dirty".to_owned())], 1.0).unwrap();
+    let second_id = store.save_work(&second).unwrap();
+
+    assert_ne!(first_id, second_id);
+    assert_eq!(
+        store.works_for_identity(&owner).unwrap().into_iter().map(|work| work.repo_root).collect::<Vec<_>>(),
+        ["/repo-a", "/repo-b"]
+    );
+    store
+        .with_work_transaction(|transaction| {
+            assert_eq!(transaction.works_for_identity(&owner)?.len(), 2);
+            assert_eq!(transaction.work_in_repo(&owner, "/repo-a")?.unwrap().id, first_id);
+            assert_eq!(transaction.baselines_in_repo(&owner, "/repo-b")?[0].oid, "b-old");
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(store.work_in_repo(&owner, "/repo-a").unwrap().unwrap().label, "first");
+    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().label, "second");
+    assert_eq!(
+        store.baselines_in_repo(&owner, "/repo-a").unwrap(),
+        vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-old".to_owned() }]
+    );
+    assert_eq!(
+        store.baselines_in_repo(&owner, "/repo-b").unwrap(),
+        vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "b-old".to_owned() }]
+    );
+    assert_eq!(store.residual_owners("/repo-a").unwrap()[0].repo_root, "/repo-a");
+    assert_eq!(store.residual_owners("/repo-b").unwrap()[0].repo_root, "/repo-b");
+
+    let a_observations =
+        store.observe_dirt("/repo-a", &[("src/lib.rs".to_owned(), "a-dirty".to_owned())], 2.0).unwrap();
+    let b_observations =
+        store.observe_dirt("/repo-b", &[("src/lib.rs".to_owned(), "b-dirty".to_owned())], 2.0).unwrap();
+    assert_eq!(a_observations[0].blob_hash, "a-dirty");
+    assert_eq!(b_observations[0].blob_hash, "b-dirty");
+
+    let original = store.work_in_repo(&owner, "/repo-a").unwrap().unwrap();
+    first.label = "first replaced".to_owned();
+    first.scopes = vec![Scope { path: "src".to_owned(), kind: ScopeKind::Recursive }];
+    first.baselines = Some(vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-new".to_owned() }]);
+    first.expected_revision = Some(original.revision);
+    assert_eq!(store.save_work(&first).unwrap(), first_id);
+    let replaced = store.work_in_repo(&owner, "/repo-a").unwrap().unwrap();
+    assert_eq!(replaced.id, first_id);
+    assert_eq!(replaced.revision, original.revision + 1);
+    assert_eq!(replaced.scopes, first.scopes);
+    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().id, second_id);
+
+    store
+        .replace_baselines_in_repo(
+            &owner,
+            "/repo-a",
+            &[BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-latest".to_owned() }],
+        )
+        .unwrap();
+    assert_eq!(store.baselines_in_repo(&owner, "/repo-a").unwrap()[0].oid, "a-latest");
+    assert_eq!(store.baselines_in_repo(&owner, "/repo-b").unwrap()[0].oid, "b-old");
+
+    assert!(store.with_work_transaction(|transaction| transaction.delete_work_in_repo(&owner, "/repo-a")).unwrap());
+    assert!(store.work_in_repo(&owner, "/repo-a").unwrap().is_none());
+    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().id, second_id);
+    assert_eq!(store.with_work_transaction(|transaction| transaction.delete_works(&owner)).unwrap(), 1);
+    assert!(store.works_for_identity(&owner).unwrap().is_empty());
+}
+
+#[test]
+fn draft_replacement_only_replaces_work_in_the_same_repository() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    store.upsert_session(&session_update(&owner, 0.0)).unwrap();
+    let scopes = [Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }];
+
+    let first_a = store.save_draft(&owner, "/repo-a", "a1", &scopes, 1.0).unwrap();
+    let first_b = store.save_draft(&owner, "/repo-b", "b1", &scopes, 2.0).unwrap();
+    let second_a = store.save_draft(&owner, "/repo-a", "a2", &scopes, 3.0).unwrap();
+
+    assert_eq!(second_a.id, first_a.id);
+    assert_eq!(second_a.revision, first_a.revision + 1);
+    assert_ne!(first_a.id, first_b.id);
+    assert_eq!(store.work_in_repo(&owner, "/repo-a").unwrap().unwrap().label, "a2");
+    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().label, "b1");
 }
 
 #[test]
@@ -659,7 +765,7 @@ fn draft_replacement_is_atomic_and_advances_its_revision() {
 
     let duplicate = vec![second.scopes[0].clone(), second.scopes[0].clone()];
     assert!(store.save_draft(&owner, "/repo", "rolled back", &duplicate, 3.0).is_err());
-    assert_eq!(store.work(&owner).unwrap().unwrap(), second);
+    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap(), second);
 }
 
 #[test]
@@ -669,7 +775,7 @@ fn work_revision_compare_and_swap_rejects_stale_writers() {
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
     store.save_work(&work_update(&owner)).unwrap();
-    let current = store.work(&owner).unwrap().unwrap();
+    let current = store.work_in_repo(&owner, "/repo").unwrap().unwrap();
     let mut update = work_update(&owner);
     update.label = "winner".to_owned();
     update.expected_revision = Some(current.revision);
@@ -677,7 +783,7 @@ fn work_revision_compare_and_swap_rejects_stale_writers() {
 
     update.label = "stale loser".to_owned();
     assert_eq!(store.save_work(&update).unwrap_err().to_string(), "work item changed during update");
-    assert_eq!(store.work(&owner).unwrap().unwrap().label, "winner");
+    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap().label, "winner");
 }
 
 #[test]
@@ -734,7 +840,7 @@ fn work_schema_constraints_and_session_cascades_are_enforced() {
     );
 
     store.save_work(&work_update(&owner)).unwrap();
-    let work_id = store.work(&owner).unwrap().unwrap().id;
+    let work_id = store.work_in_repo(&owner, "/repo").unwrap().unwrap().id;
     assert!(
         store
             .connection
@@ -793,7 +899,11 @@ fn partial_dirt_observation_retains_omitted_dirty_paths_and_residual_owners() {
     let owner = identity(Client::Codex, "owner");
     let initial = [("relevant.rs".to_owned(), "one".to_owned()), ("omitted.rs".to_owned(), "two".to_owned())];
     store.observe_dirt("/repo", &initial, 1.0).unwrap();
-    store.record_residual_owners("/repo", &["omitted.rs".to_owned()], &owner, 1.5).unwrap();
+    store
+        .with_work_transaction(|transaction| {
+            transaction.record_residual_owners("/repo", &["omitted.rs".to_owned()], &owner, 1.5)
+        })
+        .unwrap();
 
     let still_dirty = ["relevant.rs".to_owned(), "omitted.rs".to_owned()];
     let observations = store

@@ -31,9 +31,11 @@ ladders, old-format importers, deprecated CLI aliases, dual reads or writes, ret
 hook recognition by default. Rejecting an incompatible persisted version with an actionable error is required safety
 behavior, not backward compatibility.
 
-Schema v13 is the Rust implementation's clean break. It never migrates or imports an older ledger. Session liveness is
-based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced process is removed without
-an age grace period, while unknown liveness fails closed and never deletes the record.
+Schema v14 is the Rust implementation's clean break. It never migrates or imports an older ledger. Work is keyed by
+`(client, session_id, repo_root)`; repository-scoped lifecycle commands resolve the current physical Git root, while
+`done --all` is the explicit identity-wide release. New roots must be acquired in canonical lexicographic order.
+Session liveness is based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced
+process is removed without an age grace period, while unknown liveness fails closed and never deletes the record.
 
 Before work that can invalidate live chats, their ledger, hooks, or coordination CLI, require the user to close other
 agents and explicitly authorize the break, then implement it from one fresh session. Use an isolated
@@ -45,14 +47,16 @@ recognizer; ledger replacement and global rollout remain separate explicitly aut
 
 Treat the one-sentence stderr guidance printed for every `start`, `wait`, and `done` outcome as the authoritative next
 step while preserving their stdout TSV as a machine interface. Only `READY` grants editing; release completed work with
-`done`. Preserve `stale-dirt` hunks byte-for-byte. `ai-coord baseline` is a stable machine contract consisting of one
+current-root `done`, or use `done --all` only for an intentional all-root release. Preserve `stale-dirt` hunks
+byte-for-byte. `ai-coord baseline` is a stable current-root machine contract consisting of one
 normalized repository-relative `path<TAB>oid` record per line, or empty output when no baselines exist.
 
 `ai-coord touched` is a best-effort cross-check of normalized repository-relative paths observed in this session's
 file-mutating post-tool payloads. Its stable output is one path per line, with a leading `!TRUNCATED` record when its
 1,000-path cap dropped older records; an empty complete set exits successfully with no output. It stores no payload
-content. Status schema v5 exposes required session `coordination_waived` booleans and nonzero repository task-handoff
-counts as `{repo_root, count}` records; guidance stays
+content. Status schema v6 exposes required session `coordination_waived` booleans, repeated repository-keyed work rows,
+and nonzero repository task-handoff counts as `{repo_root, count}` records. Hooks derive prompt/nudge/waker work from
+the payload's Git root; authoritative end cleanup is identity-wide. Guidance stays
 here while README remains human-facing tool documentation.
 
 ## Upstream documentation

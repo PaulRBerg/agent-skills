@@ -26,7 +26,7 @@ pub(crate) enum Command {
     /// non-readiness wake events.
     Wait(WaitArgs),
     /// Release this session's draft, active, or queued work.
-    Done,
+    Done(DoneArgs),
     /// Print Git blob baselines for this session's active work.
     Baseline,
     /// Print repository-relative paths written by this session's observed tool calls.
@@ -103,6 +103,13 @@ pub(crate) struct WaitArgs {
         value_parser = clap::value_parser!(u64).range(1..=3600)
     )]
     pub(crate) timeout_seconds: u64,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct DoneArgs {
+    /// Release this session's work in every repository.
+    #[arg(long = "all")]
+    pub(crate) all: bool,
 }
 
 #[derive(Debug, Args)]

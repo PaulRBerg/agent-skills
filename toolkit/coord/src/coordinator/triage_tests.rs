@@ -51,11 +51,12 @@ impl TriageRunner for FakeRunner {
         heartbeat()?;
         let metadata = read_metadata(request.run_dir)?;
         let store = Store::open(request.state_dir.join("state.db"))?;
-        let work = store.work(&triager_identity(&metadata.run_id))?;
+        let mut work = store.works_for_identity(&triager_identity(&metadata.run_id))?;
         if metadata.authorized_paths.is_empty() {
-            assert!(work.is_none());
+            assert!(work.is_empty());
         } else {
-            let work = work.expect("safe-document triage owns an exact scope before the model runs");
+            assert_eq!(work.len(), 1);
+            let work = work.pop().expect("safe-document triage owns an exact scope before the model runs");
             assert_eq!(work.state, WorkState::Active);
             assert!(work.scopes.iter().all(|scope| !scope.is_recursive()));
             assert_eq!(
@@ -297,7 +298,7 @@ fn code_only_batch_launches_without_a_tracked_file_scope() {
     assert!(metadata.authorized_paths.is_empty());
     let actor = triager_identity(&run_id);
     let store = coordinator.store().unwrap();
-    assert!(store.work(&actor).unwrap().is_none());
+    assert!(store.works_for_identity(&actor).unwrap().is_empty());
     assert!(store.session(&actor).unwrap().is_none());
 }
 
@@ -320,7 +321,7 @@ fn runner_failure_finishes_run_and_releases_claims() {
     let store = coordinator.store().unwrap();
     assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("runner-failed"));
     assert!(store.triage_claims(&run_id).unwrap().is_empty());
-    assert!(store.work(&actor).unwrap().is_none());
+    assert!(store.works_for_identity(&actor).unwrap().is_empty());
     assert!(store.session(&actor).unwrap().is_none());
 }
 
