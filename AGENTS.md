@@ -91,11 +91,11 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
   reconciles all current source-owned drift; an explicit commit range narrows that reconciliation to the affected skill
   names (scope rules: `@publish-skills`).
 - At the end of a successfully completed user task that edits installable catalog skills, run the `publish-skills`
-  internal skill on the user's behalf. First inspect `ai-coord status --json`: if another agent has a queued claim that
-  overlaps the current session's active claim, do not run this step. Commit and release the claim promptly; the promoted
-  follow-on agent will publish the accumulated changes automatically. Otherwise, if the task was super complex or the
-  working tree has ongoing dirty changes, recommend `@publish-skills` instead. The agent must make the complexity
-  assessment.
+  internal skill on the user's behalf. First inspect `ai-coord status --json`: consider every active work row, and do
+  not run this step if another agent has a queued claim overlapping any active claim. Commit and push catalog source
+  changes under the source-repository claim, then release that claim before acquiring targets: home-directory targets
+  sort before this source repository. Otherwise, if the task was super complex or the working tree has ongoing dirty
+  changes, recommend `@publish-skills` instead. The agent must make the complexity assessment.
 - When creating, renaming, or deleting a catalog or internal skill, follow `@skill-lifecycle`. For catalog creation,
   also follow `@skill-authoring`. `just readme-skills-check` must pass.
 - Before creating or editing `SKILL.md` frontmatter, `agents/openai.yaml`, `metadata.install-targets`, or

@@ -29,27 +29,34 @@ only those paths. `$commit` owns semantic message composition; `ai-commit` owns 
 clean but `main` is ahead, run `ai-commit push`. A `BEHIND` receipt is safe noncompletion, never successful propagation:
 stop before touching global installations and report that branch reconciliation is required.
 
+Keep this work under the source-repository claim through its commit and push, then run `ai-coord done` for that claim
+before acquiring any target. Home-directory target roots sort before this source repository, so retaining the source
+claim would violate atomic root ordering.
+
 ### 2. Plan Once, After the Push
 
 ```bash
 bun run scripts/publish-skills.ts plan --json
 ```
 
-`head` is the guarded apply SHA — no separate `git rev-parse HEAD` step. If `clean` is true and nothing was committed in
-step 1, report the no-op and stop.
+Require planner JSON `version: 2`; retain its `repos` records and `canonical` field unchanged. `head` is the guarded
+apply SHA — no separate `git rev-parse HEAD` step. If `clean` is true and nothing was committed in step 1, report the
+no-op and stop.
 
 Append the resolved `--skill` filters only for explicit commit-range mode (see Scope).
 
-### 3. Claim and Apply
+### 3. Acquire Every Target, Then Apply
 
-The plan's `repos` array IS the claim set: for each entry, claim exactly its `paths` — `--recursive` for
-`scope: "recursive"`, a plain file scope for `scope: "file"` — starting with the entry where `canonical: true`.
-`ai-coord` holds one active claim per session, so serialize repos: claim, act, release, next.
+The plan's `repos` array IS the claim set. Resolve every reported `root` to its canonical physical string with
+`cd <root> && pwd -P`, sort strictly by that string, and acquire each repo in that order. `canonical` is informational:
+never use it for ordering or serialization. In each root, claim exactly every reported `paths` entry — `--recursive` for
+`scope: "recursive"`, a plain file scope for `scope: "file"` — and retain every earlier `READY` claim while acquiring
+later roots.
 
-Require `READY` before apply. Immediately before apply, run `ai-coord status` from every other listed repo root and
-require no intersecting active or queued work — a conflict means wait or re-plan, never apply over contested paths. On a
-dirty-settling hold or conflict, use `ai-coord wait` then re-claim; if the plan changed while waiting, release the
-obsolete claim and re-plan. The CLI state lock is never a claim path or a commit path.
+Require `READY` for every reported target before apply. On `BLOCKED` or `UNKNOWN`, run `ai-coord wait` in that
+repository without releasing any earlier root, then acquire it again. Re-plan only if the source `HEAD` or the planned
+mutation paths changed while waiting; preserve every still-valid earlier claim when doing so. Do not apply over
+contested paths. The CLI process/state lock is outside repository coordination and commits: never claim or commit it.
 
 `repos` already omits shared-skill Claude symlinks that apply cannot mutate — after apply, confirm `~/.claude` shows no
 diff for those skills.
@@ -63,18 +70,17 @@ Never issue separate `bunx skills` commands or edit the CLI lock. The helper req
 at most one add per target group, removes only deleted or stale entries, verifies the result, and prints every global
 path whose final state changed.
 
-If apply fails after partial progress, preserve its completed-command list. Commit and push only its reported paths,
-then re-plan and retry the remainder once with the same expected HEAD. A second failure blocks: report the failed
-command, completed groups, and changed paths.
+If apply fails after partial progress, preserve its completed-command list and retain every target claim. Commit and
+push only its reported paths, then re-plan and retry the remainder once with the same expected HEAD. A second failure
+blocks: report the failed command, completed groups, and changed paths.
 
-### 4. Commit Reported Global Paths
+### 4. Commit Reported Global Paths and Release Claims
 
-Group `Changed global paths` by repo (`~/.agents`, `~/.claude`). Commit serially, one claim at a time: first the repo
-whose claim is still held from step 3, then each remaining repo with a diff. For each, claim exactly its reported skill
-paths (file scope for symlinks) — a dirty-settling hold on paths apply just created is normal, wait it out — then
-`$commit --push` with only those paths, then `ai-coord done`. Never claim unreported skills, unrelated dirty paths, or
-the CLI state lock. Skip repos with no diff. Hold each claim until that repo's changes are committed and pushed, then
-release before claiming the next.
+Group `Changed global paths` by reported repo root. Keep every claim acquired in step 3; never perform a post-apply
+`start`. For each repo with reported changed paths, commit and push only those paths, then run `ai-coord done` in that
+repo. For a repo with no reported diff, first confirm it has no diff, then release its claim. Never claim unreported
+skills, unrelated dirty paths, or the CLI process/state lock. A dirty-settling result on a reported publisher-written
+path is a regression, not expected waiting: preserve all claims and stop with the evidence.
 
 ### 5. Final Check
 
