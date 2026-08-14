@@ -25,8 +25,10 @@ Files:
 - `skills/agents-introspection/SKILL.md`
 - `skills/copy-transcript-path/SKILL.md`
 
-Keep each `## Supported Chat Hosts` block textually identical. The block requires detecting the current chat host before
-any work and stopping unsupported harnesses with `This skill only works in Claude Code or Codex CLI.`
+Keep the shared host-detection guard at the start of each `## Supported Chat Hosts` block textually identical. The guard
+requires detecting the current chat host before any work and stopping unsupported harnesses with
+`This skill only works in Claude Code or Codex CLI.` Preserve any skill-specific prose that follows the guard under the
+same heading.
 
 ### Commit Workflow Semantics
 
