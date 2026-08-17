@@ -1,9 +1,8 @@
 ---
 argument-hint: "[task-to-handoff]"
 compatibility:
-  Requires Bash 3.2, Git, and local file-write access. Default finalization also requires macOS pbcopy and pbpaste;
-  `finalize --no-clipboard` does not. Generated cleanup commands use POSIX shell utilities; generated launch commands
-  require an authenticated Codex CLI.
+  Requires Git, `ai-handoff` on PATH, and local file-write access. Default publication also requires macOS `pbcopy` and
+  `pbpaste`; `create --no-clipboard` does not. Generated launch commands require an authenticated Codex CLI.
 coordination: exempt
 name: task-handoff
 skill-dependencies:
@@ -71,29 +70,13 @@ Choose one meaningful unique filename matching `^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*[.]m
 the target exists, add a semantic qualifier, falling back to `_YYYY_MM_DD_HHMMSS` only when no meaningful qualifier
 distinguishes it.
 
-## Prepare drafts
+## Create the handoff
 
-Resolve `scripts/task-handoff.sh` relative to this loaded `SKILL.md`. Invoke it without reading its implementation:
-
-```sh
-bash <skill-dir>/scripts/task-handoff.sh prepare \
-  --repo '<candidate-repository>' \
-  --plan '<first-repository-to-tackle>' '<HANDOFF_NAME.md>' '<task-category>' '<concise-task>' \
-  [--repo ...]
-```
-
-Pass every involved repository with `--repo`, then exactly one `--plan`. Its repository must be the first one to tackle
-and becomes the Codex launch directory. Pass the inferred category exactly as one of the five values above. The helper
-validates and canonicalizes physical Git roots, the launch repository, the placement-dependent target, categories,
-filenames, and required macOS tools before creating mode-0700 temporary state. Use its shell-quoted `run_dir`, `repo`,
-and `plan` records as authoritative; the `plan` record gives its launch repository, repository-relative handoff path,
-absolute target, category, and draft path. The helper also verifies that a repository-local target is ignored.
-
-The helper reports the draft path but does not create the file, so write it as a new file in one write; never expect an
-existing empty draft. Write only the semantic handoff body to the draft, beginning immediately with one H1 heading. Do
-not add YAML frontmatter or begin the draft with `---`. Never add `## Handoff category`, `## Execution status`, or
-`## Handoff cleanup`; `finalize` reserves and appends them. Make every body decision-complete for an agent with access
-to the named repositories but none of this transcript. Include:
+Compose the semantic draft body in a new scratch file outside every involved repository, for example under `$TMPDIR`.
+Write it in one operation. The draft must be non-empty and begin immediately with one H1 heading. Do not add YAML
+frontmatter or begin the draft with `---`. Never add `## Handoff category`, `## Execution status`, or
+`## Handoff cleanup`; `ai-handoff create` reserves and appends them. Make every body decision-complete for an agent with
+access to the named repositories but none of this transcript. Include:
 
 - objective, success criteria, and explicit exclusions;
 - verified current state, partial changes, and completed prerequisites;
@@ -124,57 +107,83 @@ the repository to tackle first; every item must name the canonical root, role, e
 handoff condition, repository-local validation, and its own ready-to-run `ai-coord start` command. Also state the
 combined acceptance criteria. Use literal repository-relative paths without globs; use directories only with
 `--recursive`. Use direct transcript excerpts when exact wording is material; otherwise summarize relevant context to
-keep the handoff compact. Leave no placeholders, open task choices, or references that require the old chat. `finalize`
-rejects a cross-repository draft without this section.
+keep the handoff compact. Leave no placeholders, open task choices, or references that require the old chat. The CLI
+requires the exact line `## Repository order` in every cross-repository draft.
 
-## Finalize or cancel
-
-After the body is complete, run:
+When placement or the repository set is uncertain, pre-validate before investing in the body. Pass every involved
+repository with `--repo`; for cross-repository work, pass the first repository to tackle as `--launch-repo`. Omit
+`--launch-repo` only when exactly one repository is involved and its default is suitable:
 
 ```sh
-bash <skill-dir>/scripts/task-handoff.sh finalize '<run-dir>'
+ai-handoff create --check \
+  --repo '<candidate-repository>' \
+  [--repo '<additional-repository>' ...] \
+  [--launch-repo '<first-repository-to-tackle>'] \
+  --category '<task-category>' \
+  --task '<concise-task>' \
+  '<HANDOFF_NAME.md>'
 ```
 
-`finalize` re-runs preflight, rejects an empty, frontmatter-prefixed, non-H1, or reserved-heading draft, constructs the
-complete staged file with YAML metadata plus the fixed category, execution-status, and archive cleanup contracts,
-validates the complete structure, publishes the new handoff without overwriting, and copies and byte-verifies the Codex
-command. The metadata records the finalization time, launch repository, repositories in their stored order, absolute
-published origin, category, and task. The cleanup contract archives only the completed handoff under
+This validates the repository roots, optional launch repository, category, filename, target placement, and required
+ignore rule without reading a draft or writing anything. It prints tab-separated `target`, `launch_repo`, and `category`
+rows.
+
+Publish with one call after the body is complete:
+
+```sh
+ai-handoff create \
+  --repo '<candidate-repository>' \
+  [--repo '<additional-repository>' ...] \
+  [--launch-repo '<first-repository-to-tackle>'] \
+  --category '<task-category>' \
+  --task '<concise-task>' \
+  --draft '<scratch-draft-path>' \
+  '<HANDOFF_NAME.md>'
+```
+
+`ai-handoff` canonicalizes each repository to its physical Git toplevel and deduplicates them. The optional launch
+repository must be involved; with exactly one repository it defaults to that repository. It validates the draft, appends
+YAML frontmatter recording `category`, `created`, `launch_repo`, `repos`, `origin`, and `task`, plus the fixed category,
+execution-status, and cleanup contracts, then atomically publishes a new target without overwriting and copies the
+generated Codex command after `pbcopy`/`pbpaste` readback verification. Errors are written to stderr with an
+`ai-handoff: ` prefix; usage errors exit 2 and operational errors exit 1. On a correctable validation error, fix the
+draft or arguments and rerun the same command: failure leaves no handoff behind. There is no temporary run directory,
+cancel command, or manual target cleanup.
+
+The appended `## Handoff cleanup` section contains one command:
+
+```sh
+ai-handoff archive '<absolute-handoff-path>'
+```
+
+The receiving agent runs that command only after completing the handoff. It archives to
 `$HOME/.local/share/task-handoffs/archive/<origin-name>/`, where `<origin-name>` is the basename of the directory
-containing `.ai`; it uses a UTC `_YYYY_MM_DD_HHMMSS` suffix and waits for a new timestamp when a destination already
-exists. It rolls back helper-created targets and now-empty directories on handled errors, `INT`, or `TERM`; it cannot
-make publication atomic across filesystems or survive power loss or `SIGKILL`.
+containing `.ai`; a collision receives a UTC `_YYYY_MM_DD_HHMMSS` suffix. This skill never archives handoffs itself.
 
 For noninteractive ai-coord findings triage, uppercase the finding ID only in the deterministic filename
 `FINDING_<UPPERCASE_ID>.md`. Preserve the ledger ID's original spelling in the exact machine-readable line
-`Source finding: <ID>` in the semantic draft body, then finalize without clipboard access:
+`Source finding: <ID>` in the semantic draft body, then publish without clipboard access:
 
 ```sh
-bash <skill-dir>/scripts/task-handoff.sh finalize --no-clipboard '<run-dir>'
+ai-handoff create --no-clipboard \
+  --repo '<candidate-repository>' \
+  --category '<task-category>' \
+  --task '<concise-task>' \
+  --draft '<scratch-draft-path>' \
+  'FINDING_<UPPERCASE_ID>.md'
 ```
 
-This mode keeps the same publication, structural validation, rollback, cleanup, and final `plan` record, but skips all
-`pbcopy` and `pbpaste` checks, copying, and readback verification. On a handled failure, correct the retained draft and
-retry the same finalize command; if abandoning the handoff, use `cancel` to remove only its temporary run state. Never
-overwrite an existing deterministic finding handoff: resolve the existing handoff before preparing another run.
-
-When creating a finding handoff interactively rather than through the autonomous triage runtime, run the following only
-after successful finalization so the ledger record moves from `pending` to `handed-off`. Preserve the ledger ID's
-original spelling:
+This mode keeps publication and structural validation but skips `pbcopy` and `pbpaste`. Never overwrite an existing
+deterministic finding handoff: resolve the existing handoff before creating another one. When creating a finding handoff
+interactively rather than through the autonomous triage runtime, run the following only after successful publication so
+the ledger record moves from `pending` to `handed-off`. Preserve the ledger ID's original spelling:
 
 ```sh
 ai-coord finding handoff '<original-id>' --path '.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md'
 ```
 
-The final `plan` record contains `handoff=`, canonical `launch_repo=`, `category=`, and the exact Codex command after
-`command=`. Never execute the command. If a correctable draft error occurs, edit the draft and retry. If abandoning or
-blocking before successful finalization, remove only helper-created temporary state with:
-
-```sh
-bash <skill-dir>/scripts/task-handoff.sh cancel '<run-dir>'
-```
-
-Never create or remove targets yourself. A failed or cancelled run must leave no helper-created handoff file.
+Read the tab-separated stdout rows as the final record: `handoff`, `launch_repo`, `category`, and `command`. Never
+execute the command.
 
 ## Report
 
