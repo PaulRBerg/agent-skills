@@ -11,6 +11,17 @@ description: "Use for dependency updates: bump npm/pnpm/yarn/bun packages, check
 Use Taze to build one structured update plan, apply compatible ranged updates, and make major-version decisions as a
 batch.
 
+## Adding Dependencies
+
+For a new package or CLI, use the repository's package manager and existing range convention instead of Taze. Installing
+`package@latest` and retaining the package manager's resulting `^x.y.z` range is allowed. Do not replace a caret range
+with an exact version merely because it can admit future releases.
+
+When an effective package-manager minimum-release-age policy exists, it provides the freshness boundary for candidate
+versions; read [references/conditional-workflows.md](references/conditional-workflows.md). The committed lockfile and
+frozen deployment install provide reproducibility. Exact-pin only when the user or repository requires it, a known
+compatibility constraint justifies it, or the package will run without a committed lockfile and frozen install.
+
 ## Workflow
 
 1. Resolve the skill directory and save the helper plan from the target repository:
@@ -94,6 +105,8 @@ undecorated.
 ## Invariants
 
 - Fixed versions and non-semver protocols remain unchanged unless the user explicitly asks otherwise.
+- Caret ranges are valid for new dependencies and CLIs; do not describe them as unreproducible when a committed lockfile
+  and frozen install control resolution.
 - Package arguments constrain both scan and write phases.
 - The same maturity-period policy applies to scan and write.
 - Bun catalog preview and write use the same accepted Taze plan and selected package set; stale plans never write.

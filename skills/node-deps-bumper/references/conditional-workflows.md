@@ -6,6 +6,13 @@ Both sections below are gated: read only when the triggering condition in `SKILL
 
 Use this mode for projects that configure a package-manager minimum-age policy.
 
+Discover the effective project and user-level package-manager configuration. A configured age gate makes `@latest` a
+valid initial selector and `^x.y.z` a valid retained manifest range: the installer filters out releases inside the
+cooldown. Do not exact-pin solely to impose the same freshness boundary; Bun still age-gates exact requests but they
+bypass its rapid-release stability check. The age gate is not a reproducibility mechanism; commit the lockfile and use
+frozen installs in deployment. If the deployment resolves dependencies without that lockfile, require the same effective
+age policy there or exact-pin for that workflow.
+
 Taze calls this `maturityPeriod`:
 
 - `--maturity-period [days]` filters out package versions newer than the given number of days
