@@ -318,6 +318,8 @@ fn runner_failure_finishes_run_and_releases_claims() {
     let prompt = fs::read_to_string(repo.path().join("state/triage-runs").join(&run_id).join("prompt.txt")).unwrap();
     assert!(prompt.contains("Authorized editable paths:\n[\n  \"README.md\"\n]"));
     assert!(prompt.contains("Do not run ai-coord lifecycle or status commands"));
+    assert!(prompt.contains("$task-handoff"));
+    assert!(prompt.contains("FINDING_<UPPERCASE_ID>.md` with its no-clipboard workflow"));
     let store = coordinator.store().unwrap();
     assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("runner-failed"));
     assert!(store.triage_claims(&run_id).unwrap().is_empty());

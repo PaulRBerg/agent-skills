@@ -18,7 +18,7 @@ pub(super) fn triage_prompt(
          commands. Edit no other tracked path. Run narrow validation. For each canonical finding you fix, create exactly \
          one local commit on main through ai-commit with a `Finding-ID: <ID>` trailer. Never push.\n\
          For everything outside the safe tier, explicitly invoke `$task-handoff` and publish the exact repository-relative \
-         `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md` with its `finalize --no-clipboard` workflow. Preserve the ledger ID's \
+         `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md` with its no-clipboard workflow. Preserve the ledger ID's \
          original spelling in the exact line `Source finding: <ID>`, and never overwrite a mismatched existing file. Leave \
          uncertain work deferred. Do not spawn or delegate to agents.\n\
          Return only the required structured result. Evidence must explain verification; changed_paths and validation \

@@ -22,6 +22,10 @@ const TASK_HANDOFF_V1 = readFileSync(
   new URL("./fixtures/task-handoff-v1.md", import.meta.url),
   "utf8",
 );
+const TASK_HANDOFF_V2 = readFileSync(
+  new URL("./fixtures/task-handoff-v2.md", import.meta.url),
+  "utf8",
+);
 
 describe("parseHandoff", () => {
   it("parses the complete task-handoff producer fixture", () => {
@@ -47,6 +51,32 @@ describe("parseHandoff", () => {
     expect(parsed.markdown).toContain("## Handoff cleanup");
     expect(parsed.markdown).toContain(
       "handoff='/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY.md'",
+    );
+  });
+
+  it("parses the complete task-handoff v2 producer fixture", () => {
+    const parsed = parseHandoff(TASK_HANDOFF_V2, "TASK_HANDOFF_COMPATIBILITY_V2.md");
+
+    expect(parsed).toMatchObject({
+      format: "frontmatter",
+      title: "Validate task handoff compatibility",
+      category: "implementation",
+      created: "2026-08-10T08:00:00Z",
+      frontmatter: {
+        category: "implementation",
+        created: "2026-08-10T08:00:00Z",
+        launch_repo: "/Users/example/projects/app",
+        repos: ["/Users/example/projects/app"],
+        origin: "/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md",
+        task: "Validate task handoff compatibility",
+      },
+    });
+    expect(parsed.markdown).toContain("# Validate task handoff compatibility");
+    expect(parsed.markdown).toContain("## Handoff category\n\nCategory: `implementation`");
+    expect(parsed.markdown).toContain("## Execution status");
+    expect(parsed.markdown).toContain("## Handoff cleanup");
+    expect(parsed.markdown).toContain(
+      "ai-handoff archive '/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'",
     );
   });
 

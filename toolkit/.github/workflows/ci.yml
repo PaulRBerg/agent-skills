@@ -39,6 +39,7 @@ jobs:
               - '.prettierignore'
               - 'commit/**'
               - 'coord/**'
+              - 'handoff/**'
               - 'notify/**'
               - 'skillet/**'
             coord-dashboard:

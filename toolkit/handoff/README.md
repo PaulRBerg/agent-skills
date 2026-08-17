@@ -1,7 +1,7 @@
 # ai-handoff
 
 `ai-handoff` creates immutable task-handoff Markdown files, emits the exact Codex launch command for them, archives
-completed handoffs, and upgrades recognized legacy cleanup blocks without changing the rest of a document.
+completed handoffs without changing the rest of a document.
 
 ## Installation
 
@@ -24,7 +24,6 @@ ai-handoff create [--check] --repo <dir>... [--launch-repo <dir>]
                   --category <category> --task <task> [--draft <body.md>]
                   [--no-clipboard] <FILENAME.md>
 ai-handoff archive <handoff-path>
-ai-handoff upgrade [--dry-run] [<path>...]
 ```
 
 `create` canonicalizes and deduplicates Git worktrees. A single-repository handoff is published below that
@@ -35,5 +34,4 @@ Publication is no-overwrite and atomic, and clipboard commands are copied throug
 without reading a draft or writing files.
 
 `archive` moves a handoff to `$HOME/.local/share/task-handoffs/archive/<origin>/`, adding a UTC timestamp when the
-name is occupied. `upgrade` scans conventional handoff locations, or explicit paths, and replaces only recognized
-legacy or stale cleanup commands. Unrecognized cleanup blocks are reported as skipped and remain untouched.
+name is occupied.

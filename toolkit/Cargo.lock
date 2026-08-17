@@ -60,6 +60,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai-handoff"
+version = "1.0.0"
+dependencies = [
+ "assert_cmd",
+ "chrono",
+ "clap",
+ "predicates",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "ai-notify"
 version = "1.0.0"
 dependencies = [

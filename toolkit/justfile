@@ -47,5 +47,6 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 @install-cli:
     cargo install --path commit --locked --force --root "$HOME/.local"
     cargo install --path coord --locked --force --root "$HOME/.local"
+    cargo install --path handoff --locked --force --root "$HOME/.local"
     cargo install --path notify --locked --force --root "$HOME/.local"
     cargo install --path skillet --locked --force --root "$HOME/.local"

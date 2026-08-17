@@ -8,7 +8,6 @@ checks; do not introduce libgit2 or persisted CLI state.
 - `src/cli.rs` defines the public command line; `src/error.rs` and `src/main.rs` map failures to stable exit classes.
 - `src/create.rs` validates handoff metadata, publishes new handoffs atomically, and verifies clipboard commands.
 - `src/archive.rs` moves completed handoffs into the user archive.
-- `src/upgrade.rs` discovers handoffs and atomically updates recognized cleanup blocks.
 - `src/git.rs` is the only subprocess boundary for Git operations.
 
 ## Invariants
@@ -16,7 +15,6 @@ checks; do not introduce libgit2 or persisted CLI state.
 - Frontmatter has exactly the six documented keys in contract order.
 - Creation never overwrites a target or traverses symlinked handoff directories.
 - Failed creation removes its staged file, published target, and any directories created by that invocation.
-- Upgrade preserves every byte outside the recognized cleanup block and treats unrecognized blocks as skipped.
 - Tests isolate repositories, `HOME`, clipboard commands, and archive storage in temporary directories.
 
 ## Validation
