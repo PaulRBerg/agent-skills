@@ -7,7 +7,7 @@ Agent-oriented command-line tools and local applications for shared-working-tree
 - [ai-handoff](handoff/): create and archive agent task handoffs.
 - [ai-notify](notify/): deliver desktop notifications for Claude Code and Codex CLI.
 - [ai-skillet](skillet/): inspect and maintain agent-skill catalogs.
-- [Coordination dashboard](apps/coord-dashboard/): local live view of ai-coord state.
-- [AI Handoffs](apps/handoffs/): local, read-only task-handoff viewer.
+- [Coordination dashboard](apps/coord-dashboard/): local live view of ai-coord state, running at [http://localhost:4173](http://localhost:4173).
+- [AI Handoffs](apps/handoffs/): local, read-only task-handoff viewer, running at [http://localhost:7777](http://localhost:7777).
 
 For contribution guidance and validation, see [AGENTS.md](AGENTS.md).
