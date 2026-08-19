@@ -47,10 +47,12 @@ cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
 ```
 
 For EIP-1559 transactions, Cast interprets `--gas-price` as the max fee per gas and `--priority-gas-price` as the max
-priority fee per gas. Keep both flags identical across browser (`--browser`), encrypted-keystore, hardware-wallet, and
-environment-backed private-key commands. Use one reviewed signer suffix such as `--browser`,
+priority fee per gas. Start browser (`--browser`), encrypted-keystore, hardware-wallet, and environment-backed
+private-key commands with the same fee pair. Use one reviewed signer suffix such as `--browser`,
 `--keystore "$KEYSTORE_FILE"`, `--ledger`, or `--private-key "$ETH_PRIVATE_KEY"`; the signer preference and approval
-rules in `SKILL.md` still apply. Do not use `--legacy` for this policy.
+rules in `SKILL.md` still apply. For browser signing, these flags are starting values: the user may deliberately edit
+the gas limit or fee caps in the wallet confirmation UI, and the approved final wallet values govern the transaction. Do
+not use `--legacy` for this policy.
 
 For `cast publish`, inspect the signed transaction first and verify it already contains the approved fee pair; fees
 cannot be changed after signing. The Rabby quote covers execution gas only, so a blob transaction still needs an

@@ -38,10 +38,15 @@ cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
 
 `$RPC_URL` is the reviewed continuous-provider transport selected under `SKILL.md`; never use it for a standalone read.
 
-The fee flags are mandatory for Ethereum mainnet and must contain the approved quote from `ethereum-gas.md`. If Rabby
-offers its own tier selector, never choose Normal or Fast. Leave Slow selected when Rabby recognizes the quote; if it
-labels the exact pair as custom or site-suggested, the reviewed numeric caps remain authoritative. Reject the wallet
-request if it changes either cap.
+The fee flags are mandatory for Ethereum mainnet and must contain the approved quote from `ethereum-gas.md` when the
+wallet request opens. The user may deliberately edit the gas limit, max fee per gas, or max priority fee per gas in
+Rabby's confirmation UI, including by selecting a different tier. Treat their approval of the final wallet screen as
+authorization for those gas settings and the resulting maximum transaction cost. Do not reject, stop, request another
+approval, or resimulate solely because those values differ from the reviewed command.
+
+This exception applies only to gas settings changed and approved in the wallet UI. Confirm the chain, account, target,
+calldata, native value, and nonce still match the reviewed transaction; reject the request if any of those fields
+change.
 
 Do not combine `--browser` with another signer flag. Capture the transaction hash, then have `$evm-atlas` verify the
 receipt before reporting success.

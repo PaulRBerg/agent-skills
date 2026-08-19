@@ -62,8 +62,9 @@ preparation.
 
 For an Ethereum mainnet transaction, read [references/ethereum-gas.md](references/ethereum-gas.md), fetch a fresh Rabby
 `slow` quote, and bind its EIP-1559 fee pair to the transaction before simulation. Apply this policy to every signer;
-never let a browser wallet, keystore, hardware wallet, or private-key flow silently select Normal or Fast. Do not reuse
-Ethereum fee values on another chain.
+never let a keystore, hardware-wallet, or private-key flow silently select Normal or Fast. For browser signing, use the
+quote as the initial wallet request; the user may deliberately edit gas settings in the wallet confirmation UI under the
+Review rules below. Do not reuse Ethereum fee values on another chain.
 
 ### Simulate
 
@@ -87,7 +88,15 @@ Before any signature or broadcast, present one concrete review containing:
 
 Lead the review with `### ⚠️ Transaction approval required`. Put repeated fields in a compact table, keep the exact
 command in a fenced block, and state precisely what confirmation authorizes. Stop and require explicit user confirmation
-of this review in a subsequent message. If any reviewed field changes, simulate again and present a revised review.
+of this review in a subsequent message. If any reviewed field changes outside the browser-wallet exception below,
+simulate again and present a revised review.
+
+For browser signing only, the reviewed gas limit and fee caps are starting values. The user may deliberately change the
+gas limit, max fee per gas, or max priority fee per gas in the wallet confirmation UI. Their approval of that final
+wallet screen authorizes those edited gas settings and the resulting maximum transaction cost; do not stop, require a
+second approval, or resimulate solely because they differ from the prepared values. Continue only when the chain,
+sender, target, calldata, native value, nonce, and decoded intent still match the approved review. Wallet changes to any
+of those fields require rejection and a revised review.
 
 ### Sign and Broadcast
 
@@ -98,10 +107,12 @@ only when the user explicitly opts in or no safer method is available; never ask
 `cast send` signs and broadcasts in one command. Run it only after the review approval. Signing a message or typed data
 also requires a review of the exact payload, domain, chain binding, and intended use before approval.
 
-Every Ethereum mainnet transaction command must use the approved Rabby Slow values explicitly as `--gas-price` and
-`--priority-gas-price`, regardless of signer. Before broadcast, recheck that the approved max fee is not below the
-latest base fee. If the quote must change, simulate again and present a revised review; never upgrade to Normal or Fast
-as a fallback. These requirements do not apply to message or typed-data signatures because they consume no gas.
+Every Ethereum mainnet transaction command must start with the approved Rabby Slow values explicitly as `--gas-price`
+and `--priority-gas-price`, regardless of signer. Before opening the signer, recheck that the approved max fee is not
+below the latest base fee. If the quote must change before signing, simulate again and present a revised review; never
+upgrade to Normal or Fast as a fallback. A browser-wallet user may override those starting gas settings in its
+confirmation UI as described under Review. These requirements do not apply to message or typed-data signatures because
+they consume no gas.
 
 After broadcast, capture the transaction hash and have `evm-atlas` verify the receipt on the reviewed chain. Report
 status, block, gas used, and the explorer link under `### ✅ Transaction confirmed` for a successful receipt or
@@ -115,7 +126,8 @@ human wait and the wallet may broadcast via its own RPC provider.
 ## Stop Conditions
 
 Stop before signing when the signer, sender, chain, target, decoded intent, cost ceiling, or simulation result is
-unresolved. Stop before retrying when broadcast outcome is ambiguous. Completion requires either a verified read result,
-a local encoding result, an approved signature artifact, or a mined receipt verified by `evm-atlas` that matches the
-reviewed transaction. Never decorate or truncate addresses, calldata, signatures, hashes, RPC URLs, fee values,
-commands, or safety wording.
+unresolved; for browser signing, the user's approval of final wallet-edited gas settings resolves the cost ceiling. Stop
+before retrying when broadcast outcome is ambiguous. Completion requires either a verified read result, a local encoding
+result, an approved signature artifact, or a mined receipt verified by `evm-atlas` that matches the reviewed transaction
+apart from user-approved browser-wallet gas settings. Never decorate or truncate addresses, calldata, signatures,
+hashes, RPC URLs, fee values, commands, or safety wording.
