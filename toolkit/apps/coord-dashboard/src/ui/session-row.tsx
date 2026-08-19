@@ -2,6 +2,7 @@ import { GitBranch } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { tv } from "tailwind-variants";
 import {
+  displayPath,
   formatRelativeTime,
   getLivenessTier,
   sessionDisplayName,
@@ -144,8 +145,8 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
               </span>
             ))}
             {session.cwd !== repoRoot ? (
-              <span className="truncate" title={session.cwd}>
-                cwd {session.cwd}
+              <span className="truncate" title={displayPath(session.cwd)}>
+                cwd {displayPath(session.cwd)}
               </span>
             ) : null}
           </div>

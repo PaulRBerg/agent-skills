@@ -1,6 +1,10 @@
 import { FolderGit2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { formatRelativeTime, shortSessionId } from "@/lib/format";
+import {
+  displayPath,
+  formatRelativeTime,
+  shortSessionId,
+} from "@/lib/format";
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
 import type { RepoLaneModel } from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
@@ -25,7 +29,7 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
       exit={{ opacity: 0, y: -8 }}
       initial={{ opacity: 0, y: 10 }}
       layout="position"
-      aria-label={lane.repoRoot}
+      aria-label={displayPath(lane.repoRoot)}
       transition={{
         duration: MOTION_DURATION.row,
         ease: MOTION_EASE,
@@ -41,9 +45,9 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
           />
           <h2
             className="min-w-0 break-all font-mono text-xs font-semibold sm:truncate"
-            title={lane.repoRoot}
+            title={displayPath(lane.repoRoot)}
           >
-            {lane.repoRoot}
+            {displayPath(lane.repoRoot)}
           </h2>
         </div>
         <div className="flex shrink-0 items-center gap-3 font-mono text-[11px]/4 text-muted tabular-nums">

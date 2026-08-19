@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
+  displayPath,
   formatRelativeTime,
   formatUpdatedTime,
   getLivenessTier,
   messageEndpointName,
   sessionDisplayName,
+  shortenPath,
 } from "@/lib/format";
 
 describe("formatRelativeTime", () => {
@@ -32,6 +34,24 @@ describe("getLivenessTier", () => {
     [300, "stale"],
   ] as const)("classifies an age of %s seconds as %s", (age, expected) => {
     expect(getLivenessTier(1_000 - age, 1_000)).toBe(expected);
+  });
+});
+
+describe("path display", () => {
+  test.each([
+    ["/Users/prb", "~"],
+    ["/Users/prb/projects/agent-toolkit", "~/projects/agent-toolkit"],
+    ["/Users/prb-work/project", "/Users/prb-work/project"],
+    ["/tmp/project", "/tmp/project"],
+  ])("replaces the home directory in %s", (value, expected) => {
+    expect(displayPath(value)).toBe(expected);
+  });
+
+  test("shortens display paths after replacing the home directory", () => {
+    expect(shortenPath("/Users/prb")).toBe("~");
+    expect(shortenPath("/Users/prb/projects/agent-toolkit")).toBe(
+      "~/projects/agent-toolkit",
+    );
   });
 });
 

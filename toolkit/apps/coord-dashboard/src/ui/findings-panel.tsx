@@ -8,7 +8,7 @@ import {
   groupFindings,
   type FindingFilter,
 } from "@/lib/findings";
-import { formatRelativeTime, shortenPath } from "@/lib/format";
+import { displayPath, formatRelativeTime, shortenPath } from "@/lib/format";
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
 import type { Finding } from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
@@ -105,7 +105,7 @@ function FindingGroup({
       <div className="flex items-start justify-between gap-2">
         <h3
           className="truncate font-mono text-[11px]/4 font-semibold"
-          title={group.repoRoot}
+          title={displayPath(group.repoRoot)}
         >
           {shortenPath(group.repoRoot)}
         </h3>

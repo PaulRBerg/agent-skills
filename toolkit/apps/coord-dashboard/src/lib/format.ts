@@ -2,6 +2,8 @@ import type { Session } from "@/lib/types";
 
 export type LivenessTier = "fresh" | "aging" | "stale";
 
+const HOME_DIRECTORY = "/Users/prb";
+
 export function formatRelativeTime(
   timestamp: number,
   now = Date.now() / 1000,
@@ -35,9 +37,18 @@ export function getLivenessTier(
 }
 
 export function shortenPath(value: string): string {
-  const segments = value.split("/").filter(Boolean);
-  if (segments.length <= 3) return value;
+  const displayValue = displayPath(value);
+  const segments = displayValue.split("/").filter(Boolean);
+  if (segments.length <= 3) return displayValue;
   return `…/${segments.slice(-3).join("/")}`;
+}
+
+export function displayPath(value: string): string {
+  if (value === HOME_DIRECTORY) return "~";
+  if (value.startsWith(`${HOME_DIRECTORY}/`)) {
+    return `~${value.slice(HOME_DIRECTORY.length)}`;
+  }
+  return value;
 }
 
 export function shortSessionId(sessionId: string): string {

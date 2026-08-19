@@ -1,6 +1,7 @@
 import { ArrowRight, Check } from "lucide-react";
 import { motion } from "motion/react";
 import {
+  displayPath,
   formatRelativeTime,
   messageEndpointName,
   shortenPath,
@@ -62,7 +63,7 @@ export function MessageRow({
       {showRepository && message.repo_root ? (
         <p
           className="mt-1 truncate font-mono text-[10px]/4 text-muted"
-          title={message.repo_root}
+          title={displayPath(message.repo_root)}
         >
           {shortenPath(message.repo_root)}
         </p>
