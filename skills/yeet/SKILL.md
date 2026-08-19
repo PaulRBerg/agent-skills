@@ -17,6 +17,8 @@ description:
 
 This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 
+The user has the ChatGPT Pro 20x subscription plan.
+
 Create or update GitHub contributions from repository evidence, using the matching workflow's templates, idempotency
 rules, and Paul's writing voice.
 
