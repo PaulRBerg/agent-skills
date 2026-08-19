@@ -37,8 +37,10 @@ pub(crate) fn run(arguments: CreateArgs) -> Result<()> {
     let launch_text = utf8_path(&launch_repository, "launch repository")?;
     let repository_text =
         repositories.iter().map(|repository| utf8_path(repository, "repository root")).collect::<Result<Vec<_>>>()?;
+    let home = home()?;
+    let home_text = utf8_path(&home, "home directory")?;
     let category = arguments.category.to_string();
-    let contents = compose(&category, launch_text, &repository_text, target_text, &arguments.task, &draft);
+    let contents = compose(&category, launch_text, &repository_text, target_text, &arguments.task, &draft, home_text);
     let command = build_command(
         &category,
         &arguments.task,
@@ -174,6 +176,7 @@ fn compose(
     target: &str,
     task: &str,
     draft: &str,
+    home: &str,
 ) -> Vec<u8> {
     let mut output = String::new();
     output.push_str("---\n");
@@ -189,15 +192,19 @@ fn compose(
     output.push_str("---\n");
     output.push_str(draft.trim_end_matches(['\r', '\n']));
     output.push_str("\n\n");
-    output.push_str(&footer(category, target));
-    output.into_bytes()
+    output.push_str(&footer(category, target, home));
+    abbreviate_home_paths(output, home).into_bytes()
+}
+
+fn abbreviate_home_paths(contents: String, home: &str) -> String {
+    if home == "/" { contents } else { contents.replace(home, "~") }
 }
 
 fn yaml_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-fn footer(category: &str, target: &str) -> String {
+fn footer(category: &str, target: &str, home: &str) -> String {
     format!(
         "## Handoff category\n\n\
 Category: `{category}`\n\n\
@@ -218,8 +225,20 @@ work outside this task's scope. Record each non-green command, its outcome, and 
 then verify the original path no longer exists. Keep this handoff when work remains, task-scoped validation fails or is\n\
 skipped, or any broader failure may have been caused by this task. Archive only this handoff, never\n\
 `.ai/task-handoffs/` or any other handoff.\n",
-        shell_quote(target)
+        shell_path(target, home)
     )
+}
+
+fn shell_path(path: &str, home: &str) -> String {
+    if home != "/" {
+        if path == home {
+            return "~".to_owned();
+        }
+        if let Some(relative) = path.strip_prefix(home).and_then(|suffix| suffix.strip_prefix('/')) {
+            return format!("~/{}", shell_quote(relative));
+        }
+    }
+    shell_quote(path)
 }
 
 fn build_command(

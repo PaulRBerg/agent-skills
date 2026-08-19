@@ -59,6 +59,49 @@ fn creates_single_repository_handoff_and_verifies_clipboard() {
 }
 
 #[test]
+fn create_abbreviates_home_paths_throughout_the_handoff_file() {
+    let harness = Harness::new("home-paths");
+    fs::create_dir(harness.home.join("projects")).unwrap();
+    let repository = harness.repo("home/projects/repo", true);
+    let draft = harness.root.join("draft.md");
+    fs::write(
+        &draft,
+        format!(
+            "# Home paths\n\nRepository: `{}`\n\nTarget: `{}/.ai/task-handoffs/HOME_PATHS.md`\n",
+            repository.display(),
+            repository.display()
+        ),
+    )
+    .unwrap();
+
+    let output = harness.command([
+        "create",
+        "--repo",
+        repository.to_str().unwrap(),
+        "--category",
+        "implementation",
+        "--task",
+        "abbreviate home paths",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--no-clipboard",
+        "HOME_PATHS.md",
+    ]);
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let target = repository.join(".ai/task-handoffs/HOME_PATHS.md");
+    let contents = fs::read_to_string(target).unwrap();
+    assert!(!contents.contains(harness.home.to_str().unwrap()));
+    assert!(contents.contains("launch_repo: '~/projects/repo'"));
+    assert!(contents.contains("repos:\n  - '~/projects/repo'"));
+    assert!(contents.contains("origin: '~/projects/repo/.ai/task-handoffs/HOME_PATHS.md'"));
+    assert!(contents.contains("Repository: `~/projects/repo`"));
+    assert!(contents.contains("Target: `~/projects/repo/.ai/task-handoffs/HOME_PATHS.md`"));
+    assert!(contents.contains("ai-handoff archive ~/'projects/repo/.ai/task-handoffs/HOME_PATHS.md'"));
+    assert!(!contents.contains("archive '~"));
+}
+
+#[test]
 fn create_rejects_existing_and_non_ignored_targets() {
     let harness = Harness::new("create-rejections");
     let repository = harness.repo("ignored", true);

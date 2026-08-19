@@ -31,7 +31,8 @@ repository's ignored `.ai/task-handoffs/` directory. A cross-repository handoff 
 `$HOME/Desktop/.ai/task-handoffs/` and requires an explicit launch repository plus a `## Repository order` section.
 Publication is no-overwrite and atomic, and clipboard commands are copied through `pbcopy` and verified through
 `pbpaste` unless `--no-clipboard` is passed. `--draft` is required except with `--check`, which validates placement
-without reading a draft or writing files.
+without reading a draft or writing files. Generated handoff files abbreviate every occurrence of the active home
+directory as `~`; reported paths and launch commands remain absolute.
 
 `archive` moves a handoff to `$HOME/.local/share/task-handoffs/archive/<origin>/`, adding a UTC timestamp when the
 name is occupied.
