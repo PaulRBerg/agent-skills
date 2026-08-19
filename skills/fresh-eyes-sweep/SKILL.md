@@ -101,8 +101,11 @@ next session.
 - Record each spawned task ID in the ledger reason field for the slice it covers, so a later stop request resolves
   against real IDs instead of guesses.
 - Give writing agents stable IDs, dependency waves, exact non-overlapping write scopes, repository constraints, and
-  required completion evidence. Assign shared manifests, lockfiles, exports, and integration files to one sequential
-  owner.
+  required completion evidence. In every slice brief, completion evidence must include every discovered strict static
+  gate — typecheck, lint, and format/import order — applicable to the languages in the slice's write scope, scoped as
+  narrowly as the tool permits. A gate that only runs repository-wide either runs once at slice settlement when cheap or
+  is explicitly deferred to aggregate validation in the agent's result. Assign shared manifests, lockfiles, exports, and
+  integration files to one sequential owner.
 - Reconcile every wave before starting dependents. Use a fresh-context verifier after each nontrivial wave.
 - Subagents and workers never commit. The coordinating session commits settled slices serially as checkpoint commits, so
   only one process touches the Git index.
@@ -152,10 +155,11 @@ means path accounting, not depth of inspection.
 
 ## Verify and Report
 
-Run the narrowest check proving each fix, then aggregate checks scoped to changed files. Reinspect affected paths and
-repeat until a pass finds no new evidenced issue. During a supplied deadline's validation window, reconcile owned edits
-and run the aggregate format, lint, type, test, build, and invariant checks justified by the final changed-file union.
-Compare final results with the recorded baseline. Audit coverage, fixes, and checks against tool output before claiming
+Run the narrowest check proving each fix, including every discovered typecheck, lint, and format/import-order gate
+applicable to its changed files, then aggregate checks scoped to changed files. Reinspect affected paths and repeat
+until a pass finds no new evidenced issue. During a supplied deadline's validation window, reconcile owned edits and run
+the aggregate format, lint, type, test, build, and invariant checks justified by the final changed-file union. Compare
+final results with the recorded baseline. Audit coverage, fixes, and checks against tool output before claiming
 completion.
 
 Lead with
