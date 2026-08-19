@@ -689,14 +689,7 @@ fn claude_exit_plan_hook_is_obsolete_and_creates_no_work() {
         }),
     );
     let identity = Identity { client: Client::Claude, session_id: "planner".into() };
-    assert!(
-        coordinator
-            .store()
-            .unwrap()
-            .work_in_repo(&identity, fs::canonicalize(repo).unwrap().to_str().unwrap())
-            .unwrap()
-            .is_none()
-    );
+    assert!(coordinator.store().unwrap().work(&identity).unwrap().is_none());
     assert!(coordinator.store().unwrap().session(&identity).unwrap().is_none());
 }
 
@@ -826,7 +819,7 @@ fn clean_scope_release_nudge_emits_once_per_transition() {
 }
 
 #[test]
-fn release_nudge_uses_only_the_hook_repository_work() {
+fn release_nudge_uses_only_the_payload_root_claim() {
     let temp = TempDir::new().unwrap();
     let (coordinator, first) = runtime(&temp);
     let second = additional_repo(&temp, "z-repo");
@@ -850,11 +843,20 @@ fn release_nudge_uses_only_the_hook_repository_work() {
                 .unwrap()
                 .success()
         );
-        assert_eq!(
-            coordinator.start_for(identity.clone(), "work", &[root.join("tracked.txt")], &[], root).unwrap().kind,
-            crate::domain::OutcomeKind::Ready
-        );
     }
+    assert_eq!(
+        coordinator
+            .start_bundle_for(
+                identity.clone(),
+                "work",
+                &[first.join("tracked.txt"), second.join("tracked.txt")],
+                &[],
+                &first,
+            )
+            .unwrap()
+            .kind,
+        crate::domain::OutcomeKind::Ready
+    );
     fs::write(first.join("tracked.txt"), "dirty\n").unwrap();
 
     let output = HookRuntime::new(&coordinator).ingest(
@@ -868,32 +870,41 @@ fn release_nudge_uses_only_the_hook_repository_work() {
 }
 
 #[test]
-fn waker_selects_the_queued_row_from_payload_repository() {
+fn waker_requires_a_payload_root_claim_then_reevaluates_the_whole_bundle() {
     let temp = TempDir::new().unwrap();
     let (coordinator, first) = runtime(&temp);
     let second = additional_repo(&temp, "z-repo");
+    let third = additional_repo(&temp, "zz-repo");
     let holder = Identity { client: Client::Codex, session_id: "holder".into() };
     let waiter = Identity { client: Client::Claude, session_id: "waiter".into() };
     register(&coordinator, &holder, &second, 210);
     register(&coordinator, &waiter, &first, 211);
     let scope = [PathBuf::from("src/lib.rs")];
-    coordinator.start_for(waiter.clone(), "first", &scope, &[], &first).unwrap();
     coordinator.start_for(holder.clone(), "holder", &scope, &[], &second).unwrap();
     assert_eq!(
-        coordinator.start_for(waiter.clone(), "second", &scope, &[], &second).unwrap().kind,
+        coordinator
+            .start_bundle_for(
+                waiter.clone(),
+                "bundle",
+                &[first.join("src/lib.rs"), second.join("src/lib.rs")],
+                &[],
+                &first,
+            )
+            .unwrap()
+            .kind,
         crate::domain::OutcomeKind::Blocked
     );
-    coordinator.done_for(&holder, &second).unwrap();
-    coordinator.store().unwrap().acknowledge(&waiter, None, 100.0).unwrap();
     let runtime = HookRuntime::new(&coordinator);
     assert!(
         runtime
-            .waker("claude", &json!({"session_id":"waiter", "cwd":first, "hook_event_name":"PostToolUseFailure"}),)
+            .waker("claude", &json!({"session_id":"waiter", "cwd":third, "hook_event_name":"PostToolUseFailure"}),)
             .is_none()
     );
+    coordinator.done_for(&holder, &second).unwrap();
+    coordinator.store().unwrap().acknowledge(&waiter, None, 100.0).unwrap();
     assert_eq!(
         runtime
-            .waker("claude", &json!({"session_id":"waiter", "cwd":second, "hook_event_name":"PostToolUseFailure"}),)
+            .waker("claude", &json!({"session_id":"waiter", "cwd":first, "hook_event_name":"PostToolUseFailure"}),)
             .unwrap()
             .kind,
         crate::domain::OutcomeKind::Ready
@@ -901,7 +912,7 @@ fn waker_selects_the_queued_row_from_payload_repository() {
 }
 
 #[test]
-fn session_end_releases_and_wakes_every_repository_without_residuals() {
+fn session_end_cleans_identity_wide_bundle_work_and_deduplicates_wakeup() {
     let temp = TempDir::new().unwrap();
     let (coordinator, first) = runtime(&temp);
     let second = additional_repo(&temp, "z-repo");
@@ -909,32 +920,25 @@ fn session_end_releases_and_wakes_every_repository_without_residuals() {
     let waiter = Identity { client: Client::Claude, session_id: "waiter".into() };
     register(&coordinator, &holder, &first, 220);
     register(&coordinator, &waiter, &first, 221);
-    let scope = [PathBuf::from("src/lib.rs")];
-    for root in [&first, &second] {
-        coordinator.start_for(holder.clone(), "holder", &scope, &[], root).unwrap();
-        assert_eq!(
-            coordinator.start_for(waiter.clone(), "waiter", &scope, &[], root).unwrap().kind,
-            crate::domain::OutcomeKind::Blocked
-        );
-    }
+    let claims = [first.join("src/lib.rs"), second.join("src/lib.rs")];
+    coordinator.start_bundle_for(holder.clone(), "holder", &claims, &[], &first).unwrap();
+    assert_eq!(
+        coordinator.start_bundle_for(waiter.clone(), "waiter", &claims, &[], &first).unwrap().kind,
+        crate::domain::OutcomeKind::Blocked
+    );
 
     HookRuntime::new(&coordinator)
         .ingest("codex", &json!({"session_id":"holder", "cwd":second, "hook_event_name":"SessionEnd"}));
     let store = coordinator.store().unwrap();
-    assert!(store.works_for_identity(&holder).unwrap().is_empty());
-    let wake_roots = store
-        .inbox(&waiter, true)
-        .unwrap()
-        .into_iter()
-        .filter_map(|message| message.repo_root)
-        .collect::<std::collections::HashSet<_>>();
-    assert_eq!(
-        wake_roots,
-        [
-            fs::canonicalize(&first).unwrap().to_string_lossy().into_owned(),
-            fs::canonicalize(&second).unwrap().to_string_lossy().into_owned(),
-        ]
-        .into()
+    assert!(store.work(&holder).unwrap().is_none());
+    let wakeups = store.inbox(&waiter, true).unwrap();
+    assert_eq!(wakeups.len(), 1);
+    assert!(
+        wakeups[0]
+            .repo_root
+            .as_deref()
+            .is_some_and(|root| root == fs::canonicalize(&first).unwrap().to_str().unwrap() ||
+                root == fs::canonicalize(&second).unwrap().to_str().unwrap())
     );
     for root in [&first, &second] {
         assert!(store.residual_owners(fs::canonicalize(root).unwrap().to_str().unwrap()).unwrap().is_empty());

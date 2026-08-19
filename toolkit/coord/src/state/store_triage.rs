@@ -49,7 +49,11 @@ impl Store {
     ) -> Result<Option<TriageRunStart>> {
         self.immediate(|transaction| {
             if transaction.query_row(
-                "SELECT EXISTS(SELECT 1 FROM work_items WHERE repo_root = ?1)",
+                "SELECT EXISTS(
+                    SELECT 1 FROM work_claims
+                    JOIN work_items ON work_items.id = work_claims.work_id
+                    WHERE work_claims.repo_root = ?1
+                 )",
                 [repo_root],
                 |row| row.get::<_, bool>(0),
             )? {
@@ -337,11 +341,19 @@ mod tests {
              VALUES ('codex', 'normal', ?1, ?1, 'working', 'test', 1, 1, 1)",
             [&root],
         ).unwrap();
-        store.connection.execute(
-            "INSERT INTO work_items(client, session_id, repo_root, label, state, draft_created_at, updated_at, revision)
-             VALUES ('codex', 'normal', ?1, 'normal work', 'draft', 1, 1, 1)",
-            [&root],
-        ).unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO work_items(client, session_id, label, state, draft_created_at, updated_at, revision)
+             VALUES ('codex', 'normal', 'normal work', 'draft', 1, 1, 1)",
+                [],
+            )
+            .unwrap();
+        let work_id = store.connection.last_insert_rowid();
+        store
+            .connection
+            .execute("INSERT INTO work_claims(work_id, repo_root) VALUES (?1, ?2)", params![work_id, root])
+            .unwrap();
         assert!(store.begin_triage_run(&root, &identity("origin"), 2.0).unwrap().is_none());
     }
 }

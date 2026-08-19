@@ -1,8 +1,12 @@
 import { Clock3, LockKeyhole } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { tv } from "tailwind-variants";
+import { shortenPath } from "@/lib/format";
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
-import type { WorkWithQueuePosition } from "@/lib/types";
+import type {
+  WorkClaimWithQueuePosition,
+  WorkWithQueuePosition,
+} from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
 
 const chip = tv({
@@ -16,14 +20,78 @@ const chip = tv({
   },
 });
 
+function ClaimDetail({
+  claim,
+  state,
+}: {
+  claim: WorkClaimWithQueuePosition;
+  state: WorkWithQueuePosition["state"];
+}) {
+  return (
+    <motion.div
+      animate={{ opacity: 1, y: 0 }}
+      className="flex min-w-0 flex-wrap items-center gap-1.5"
+      data-motion-item
+      exit={{ opacity: 0, y: -3 }}
+      initial={{ opacity: 0, y: 3 }}
+      layout="position"
+      transition={{ duration: MOTION_DURATION.field, ease: MOTION_EASE }}
+    >
+      <span
+        className="max-w-full truncate font-mono text-[10px]/4 font-semibold uppercase tracking-wide text-muted"
+        title={claim.repo_root}
+      >
+        {shortenPath(claim.repo_root)}
+      </span>
+      {state === "draft" ? (
+        <span className={chip({ state })}>
+          draft · {claim.scope_count} scope{claim.scope_count === 1 ? "" : "s"}
+        </span>
+      ) : (
+        claim.scopes?.map((scope) => (
+          <span
+            className={chip({ state })}
+            key={`${scope.kind}:${scope.path}`}
+            title={`${scope.path} (${scope.kind})`}
+          >
+            <span className="min-w-0 truncate">{scope.path}</span>
+          </span>
+        ))
+      )}
+      {state === "queued" && claim.queuePosition !== undefined ? (
+        <span className="inline-flex items-center gap-1 font-mono text-xs text-queued-ink">
+          <Clock3 aria-hidden="true" className="size-3" />#
+          <AnimatedValue value={claim.queuePosition}>
+            {claim.queuePosition}
+          </AnimatedValue>{" "}
+          in queue
+        </span>
+      ) : null}
+      {claim.blocked_reason ? (
+        <span className="inline-flex min-w-0 items-center gap-1 text-xs text-danger">
+          <LockKeyhole aria-hidden="true" className="size-3 shrink-0" />
+          <span className="truncate" title={claim.blocked_reason}>
+            {claim.blocked_reason}
+          </span>
+        </span>
+      ) : null}
+    </motion.div>
+  );
+}
+
 interface WorkChipsProps {
   work: WorkWithQueuePosition;
 }
 
 export function WorkChips({ work }: WorkChipsProps) {
+  const parentBlocker = work.blocked_reason ?? undefined;
+  const showParentBlocker =
+    parentBlocker !== undefined &&
+    !work.claims.some((claim) => claim.blocked_reason === parentBlocker);
+
   return (
     <motion.div
-      className="flex min-w-0 flex-wrap items-center gap-1.5"
+      className="flex min-w-0 flex-col gap-1.5"
       data-motion-item
       layout
       transition={{ duration: MOTION_DURATION.layout, ease: MOTION_EASE }}
@@ -34,87 +102,18 @@ export function WorkChips({ work }: WorkChipsProps) {
       >
         {work.state}
       </AnimatedValue>
+      {showParentBlocker ? (
+        <span className="inline-flex min-w-0 items-center gap-1 text-xs text-danger">
+          <LockKeyhole aria-hidden="true" className="size-3 shrink-0" />
+          <span className="truncate" title={parentBlocker}>
+            {parentBlocker}
+          </span>
+        </span>
+      ) : null}
       <AnimatePresence initial={false} mode="popLayout">
-        {work.state === "draft" ? (
-          <motion.span
-            animate={{ opacity: 1 }}
-            className={chip({ state: work.state })}
-            data-motion-item
-            exit={{ opacity: 0 }}
-            initial={{ opacity: 0 }}
-            key={`draft:${work.scope_count}`}
-            transition={{ duration: MOTION_DURATION.field }}
-          >
-            draft · {work.scope_count ?? 0} scopes
-          </motion.span>
-        ) : (
-          work.scopes?.map((scope) => (
-            <motion.span
-              animate={{ opacity: 1, scale: 1 }}
-              className={chip({ state: work.state })}
-              data-motion-item
-              exit={{ opacity: 0, scale: 0.96 }}
-              initial={{ opacity: 0, scale: 0.96 }}
-              key={`${work.state}:${scope.kind}:${scope.path}`}
-              layout="position"
-              title={`${scope.path} (${scope.kind})`}
-              transition={{
-                duration: MOTION_DURATION.field,
-                ease: MOTION_EASE,
-                layout: {
-                  duration: MOTION_DURATION.layout,
-                  ease: MOTION_EASE,
-                },
-              }}
-            >
-              <span className="min-w-0 truncate">{scope.path}</span>
-            </motion.span>
-          ))
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence initial={false}>
-        {work.state === "queued" && work.queuePosition !== undefined ? (
-          <motion.span
-            animate={{ opacity: 1, x: 0 }}
-            className="inline-flex items-center gap-1 font-mono text-xs text-queued-ink"
-            data-motion-item
-            exit={{ opacity: 0, x: -4 }}
-            initial={{ opacity: 0, x: -4 }}
-            transition={{
-              duration: MOTION_DURATION.field,
-              ease: MOTION_EASE,
-            }}
-          >
-            <Clock3 aria-hidden="true" className="size-3" />#
-            <AnimatedValue value={work.queuePosition}>
-              {work.queuePosition}
-            </AnimatedValue>{" "}
-            in queue
-          </motion.span>
-        ) : null}
-      </AnimatePresence>
-
-      <AnimatePresence initial={false} mode="wait">
-        {work.blocked_reason ? (
-          <motion.span
-            animate={{ opacity: 1, x: 0 }}
-            className="inline-flex min-w-0 items-center gap-1 text-xs text-danger"
-            data-motion-item
-            exit={{ opacity: 0, x: -4 }}
-            initial={{ opacity: 0, x: -4 }}
-            key={work.blocked_reason}
-            transition={{
-              duration: MOTION_DURATION.field,
-              ease: MOTION_EASE,
-            }}
-          >
-            <LockKeyhole aria-hidden="true" className="size-3 shrink-0" />
-            <span className="truncate" title={work.blocked_reason}>
-              {work.blocked_reason}
-            </span>
-          </motion.span>
-        ) : null}
+        {work.claims.map((claim) => (
+          <ClaimDetail claim={claim} key={claim.repo_root} state={work.state} />
+        ))}
       </AnimatePresence>
     </motion.div>
   );

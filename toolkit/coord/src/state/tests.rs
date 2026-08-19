@@ -13,7 +13,7 @@ use crate::domain::{
 
 use super::{
     BaselineRow, EndedObservation, FindingAdd, FindingCounts, FindingPathObservation, FindingResolution,
-    MAX_INBOX_MESSAGES, ProviderCacheRow, SCHEMA_VERSION, SessionUpdate, Store, WorkUpdate,
+    MAX_INBOX_MESSAGES, ProviderCacheRow, SCHEMA_VERSION, SessionUpdate, Store, WorkClaimUpdate, WorkUpdate,
 };
 
 fn identity(client: Client, session_id: &str) -> Identity {
@@ -41,13 +41,16 @@ fn session_update(identity: &Identity, current: f64) -> SessionUpdate {
 fn work_update(identity: &Identity) -> WorkUpdate {
     WorkUpdate {
         identity: identity.clone(),
-        repo_root: "/repo".to_owned(),
         label: "state work".to_owned(),
         state: WorkState::Active,
         blocked_reason: None,
-        scopes: vec![Scope { path: "src/state".to_owned(), kind: ScopeKind::Recursive }],
-        baselines: Some(vec![BaselineRow { path: "src/state/mod.rs".to_owned(), oid: "old-oid".to_owned() }]),
-        residual_paths: Vec::new(),
+        claims: vec![WorkClaimUpdate {
+            repo_root: "/repo".to_owned(),
+            blocked_reason: None,
+            scopes: vec![Scope { path: "src/state".to_owned(), kind: ScopeKind::Recursive }],
+            baselines: Some(vec![BaselineRow { path: "src/state/mod.rs".to_owned(), oid: "old-oid".to_owned() }]),
+            residual_paths: Vec::new(),
+        }],
         draft_created_at: None,
         submitted_at: Some(1.0),
         updated_at: 1.0,
@@ -55,8 +58,22 @@ fn work_update(identity: &Identity) -> WorkUpdate {
     }
 }
 
+fn work_claim(repo_root: &str, path: &str, oid: &str) -> WorkClaimUpdate {
+    WorkClaimUpdate {
+        repo_root: repo_root.to_owned(),
+        blocked_reason: None,
+        scopes: vec![Scope { path: path.to_owned(), kind: ScopeKind::Exact }],
+        baselines: Some(vec![BaselineRow { path: path.to_owned(), oid: oid.to_owned() }]),
+        residual_paths: Vec::new(),
+    }
+}
+
+fn save_work(store: &mut Store, update: &WorkUpdate) -> crate::error::Result<i64> {
+    store.with_work_transaction(|transaction| transaction.save_work(update))
+}
+
 #[test]
-fn new_store_has_exact_v14_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v15_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -67,7 +84,9 @@ fn new_store_has_exact_v14_schema_and_runtime_pragmas() {
     let synchronous: i64 = store.connection.pragma_query_value(None, "synchronous", |row| row.get(0)).unwrap();
     let session_columns = table_columns(&store.connection, "sessions");
     let work_columns = table_columns(&store.connection, "work_items");
+    let claim_columns = table_columns(&store.connection, "work_claims");
     let scope_columns = table_columns(&store.connection, "work_scopes");
+    let baseline_columns = table_columns(&store.connection, "work_baselines");
     let tables = table_names(&store.connection);
 
     assert_eq!(version, SCHEMA_VERSION);
@@ -80,13 +99,48 @@ fn new_store_has_exact_v14_schema_and_runtime_pragmas() {
         "coordination_waived".to_owned(),
         "revision".to_owned(),
     ])));
-    assert!(work_columns.is_superset(&HashSet::from([
-        "draft_created_at".to_owned(),
-        "submitted_at".to_owned(),
-        "revision".to_owned(),
-    ])));
-    assert!(scope_columns.contains("kind"));
+    assert_eq!(
+        work_columns,
+        HashSet::from([
+            "id".to_owned(),
+            "client".to_owned(),
+            "session_id".to_owned(),
+            "label".to_owned(),
+            "state".to_owned(),
+            "blocked_reason".to_owned(),
+            "draft_created_at".to_owned(),
+            "submitted_at".to_owned(),
+            "updated_at".to_owned(),
+            "revision".to_owned(),
+        ])
+    );
+    assert_eq!(
+        claim_columns,
+        HashSet::from(["id".to_owned(), "work_id".to_owned(), "repo_root".to_owned(), "blocked_reason".to_owned(),])
+    );
+    assert_eq!(scope_columns, HashSet::from(["claim_id".to_owned(), "path".to_owned(), "kind".to_owned()]));
+    assert_eq!(baseline_columns, HashSet::from(["claim_id".to_owned(), "path".to_owned(), "oid".to_owned()]));
+    assert_eq!(
+        foreign_key_targets(&store.connection, "work_items"),
+        HashSet::from([
+            ("client".to_owned(), "sessions".to_owned(), "client".to_owned(), "CASCADE".to_owned()),
+            ("session_id".to_owned(), "sessions".to_owned(), "session_id".to_owned(), "CASCADE".to_owned(),),
+        ])
+    );
+    assert_eq!(
+        foreign_key_targets(&store.connection, "work_claims"),
+        HashSet::from([("work_id".to_owned(), "work_items".to_owned(), "id".to_owned(), "CASCADE".to_owned())])
+    );
+    assert_eq!(
+        foreign_key_targets(&store.connection, "work_scopes"),
+        HashSet::from([("claim_id".to_owned(), "work_claims".to_owned(), "id".to_owned(), "CASCADE".to_owned())])
+    );
+    assert_eq!(
+        foreign_key_targets(&store.connection, "work_baselines"),
+        HashSet::from([("claim_id".to_owned(), "work_claims".to_owned(), "id".to_owned(), "CASCADE".to_owned())])
+    );
     assert!(tables.contains("work_items"));
+    assert!(tables.contains("work_claims"));
     assert!(tables.contains("work_scopes"));
     assert!(tables.contains("work_baselines"));
     assert!(tables.contains("current_turns"));
@@ -144,21 +198,21 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let connection = Connection::open(&path).unwrap();
     connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)", []).unwrap();
     connection.execute("INSERT INTO sentinel VALUES ('preserved')", []).unwrap();
-    connection.pragma_update(None, "user_version", 13).unwrap();
+    connection.pragma_update(None, "user_version", 14).unwrap();
     drop(connection);
 
     let error = Store::open(&path).err().unwrap();
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 13 is incompatible with required schema 14 at {}; \
+            "state schema 14 is incompatible with required schema 15 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
     );
 
     let connection = Connection::open(path).unwrap();
-    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 13);
+    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 14);
     assert_eq!(
         connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
         "preserved"
@@ -262,7 +316,7 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     let first = store.upsert_session(&session_update(&owner, 1.0)).unwrap();
-    store.save_work(&work_update(&owner)).unwrap();
+    save_work(&mut store, &work_update(&owner)).unwrap();
     store.update_delegate(&owner, "child", Some("explorer"), "active", 1.0).unwrap();
     let generation = store.generation().unwrap();
 
@@ -275,7 +329,7 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
     };
     assert_eq!(store.reconcile_ended(&[stale]).unwrap(), 0);
     assert!(store.session(&owner).unwrap().is_some());
-    assert!(store.work_in_repo(&owner, "/repo").unwrap().is_some());
+    assert!(store.work(&owner).unwrap().is_some());
 
     let current = EndedObservation {
         identity: owner.clone(),
@@ -284,7 +338,7 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
     };
     assert_eq!(store.reconcile_ended(&[current]).unwrap(), 1);
     assert!(store.session(&owner).unwrap().is_none());
-    assert!(store.work_in_repo(&owner, "/repo").unwrap().is_none());
+    assert!(store.work(&owner).unwrap().is_none());
     assert!(store.delegates().unwrap().is_empty());
     assert_eq!(store.generation().unwrap(), generation + 1);
 }
@@ -311,7 +365,7 @@ fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_sta
     let stale = identity(Client::Codex, "stale");
     let fresh = identity(Client::Codex, "fresh");
     store.upsert_session(&session_update(&stale, 1.0)).unwrap();
-    store.save_work(&work_update(&stale)).unwrap();
+    save_work(&mut store, &work_update(&stale)).unwrap();
     store.update_delegate(&stale, "child", Some("explorer"), "active", 1.0).unwrap();
 
     let mut replacement = session_update(&fresh, 2.0);
@@ -319,7 +373,7 @@ fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_sta
     store.upsert_session_superseding(&replacement).unwrap();
 
     assert!(store.session(&stale).unwrap().is_none());
-    assert!(store.work_in_repo(&stale, "/repo").unwrap().is_none());
+    assert!(store.work(&stale).unwrap().is_none());
     assert!(store.delegates().unwrap().is_empty());
     assert!(store.session(&fresh).unwrap().is_some());
 }
@@ -601,189 +655,159 @@ fn inbox_is_capped_and_callsigns_are_snapshotted() {
 }
 
 #[test]
-fn work_replacement_is_atomic_across_scopes_baselines_and_residuals() {
+fn one_work_retains_stable_repository_claims_and_isolates_children() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-    store.observe_dirt("/repo", &[("docs/readme.md".to_owned(), "dirty".to_owned())], 1.0).unwrap();
-    let original = work_update(&owner);
-    store.save_work(&original).unwrap();
-    let original_row = store.work_in_repo(&owner, "/repo").unwrap().unwrap();
+    store.observe_dirt("/repo-a", &[("src/a.rs".to_owned(), "dirty-a".to_owned())], 1.0).unwrap();
+    store.observe_dirt("/repo-b", &[("src/b.rs".to_owned(), "dirty-b".to_owned())], 1.0).unwrap();
 
-    let mut invalid = original.clone();
-    invalid.expected_revision = Some(original_row.revision);
-    invalid.label = "must roll back".to_owned();
-    invalid.scopes.push(invalid.scopes[0].clone());
-    invalid.baselines = Some(vec![BaselineRow { path: "replacement".to_owned(), oid: "new".to_owned() }]);
-    invalid.residual_paths = vec!["docs/readme.md".to_owned()];
-    assert!(store.save_work(&invalid).is_err());
-    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap().label, original.label);
-    assert_eq!(store.baselines_in_repo(&owner, "/repo").unwrap(), original.baselines.clone().unwrap());
-    assert!(store.residual_owners("/repo").unwrap().is_empty());
+    let mut update = work_update(&owner);
+    update.claims = vec![work_claim("/repo-b", "src/b.rs", "b-old"), work_claim("/repo-a", "src/a.rs", "a-old")];
+    update.claims[0].blocked_reason = Some("waiting for repo b".to_owned());
+    update.claims[0].residual_paths = vec!["src/b.rs".to_owned()];
+    update.claims[1].scopes.push(Scope { path: "README.md".to_owned(), kind: ScopeKind::Exact });
+    let work_id = save_work(&mut store, &update).unwrap();
+    let original = store.work(&owner).unwrap().unwrap();
 
-    let replacement = WorkUpdate {
-        label: "narrow".to_owned(),
-        scopes: vec![Scope { path: "src/state/store.rs".to_owned(), kind: ScopeKind::Exact }],
-        baselines: Some(vec![BaselineRow { path: "src/state/store.rs".to_owned(), oid: "new".to_owned() }]),
-        residual_paths: vec!["docs/readme.md".to_owned()],
-        submitted_at: Some(2.0),
-        updated_at: 2.0,
-        expected_revision: Some(original_row.revision),
-        ..original
-    };
-    store.save_work(&replacement).unwrap();
-    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap().scopes, replacement.scopes);
-    assert_eq!(store.baselines_in_repo(&owner, "/repo").unwrap(), replacement.baselines.unwrap());
-    assert_eq!(store.residual_owners("/repo").unwrap()[0].identity, owner);
-}
-
-#[test]
-fn one_identity_retains_repository_isolated_work_and_children() {
-    let temporary = tempdir().unwrap();
-    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
-    let owner = identity(Client::Codex, "owner");
-    store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-
-    let mut first = work_update(&owner);
-    first.repo_root = "/repo-a".to_owned();
-    first.label = "first".to_owned();
-    first.scopes = vec![Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }];
-    first.baselines = Some(vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-old".to_owned() }]);
-    first.residual_paths = vec!["src/lib.rs".to_owned()];
-    store.observe_dirt("/repo-a", &[("src/lib.rs".to_owned(), "a-dirty".to_owned())], 1.0).unwrap();
-    let first_id = store.save_work(&first).unwrap();
-
-    let mut second = work_update(&owner);
-    second.repo_root = "/repo-b".to_owned();
-    second.label = "second".to_owned();
-    second.scopes = vec![Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }];
-    second.baselines = Some(vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "b-old".to_owned() }]);
-    second.residual_paths = vec!["src/lib.rs".to_owned()];
-    store.observe_dirt("/repo-b", &[("src/lib.rs".to_owned(), "b-dirty".to_owned())], 1.0).unwrap();
-    let second_id = store.save_work(&second).unwrap();
-
-    assert_ne!(first_id, second_id);
+    assert_eq!(original.id, work_id);
     assert_eq!(
-        store.works_for_identity(&owner).unwrap().into_iter().map(|work| work.repo_root).collect::<Vec<_>>(),
+        original.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<Vec<_>>(),
         ["/repo-a", "/repo-b"]
     );
-    store
-        .with_work_transaction(|transaction| {
-            assert_eq!(transaction.works_for_identity(&owner)?.len(), 2);
-            assert_eq!(transaction.work_in_repo(&owner, "/repo-a")?.unwrap().id, first_id);
-            assert_eq!(transaction.baselines_in_repo(&owner, "/repo-b")?[0].oid, "b-old");
-            Ok(())
-        })
-        .unwrap();
-    assert_eq!(store.work_in_repo(&owner, "/repo-a").unwrap().unwrap().label, "first");
-    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().label, "second");
-    assert_eq!(
-        store.baselines_in_repo(&owner, "/repo-a").unwrap(),
-        vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-old".to_owned() }]
-    );
-    assert_eq!(
-        store.baselines_in_repo(&owner, "/repo-b").unwrap(),
-        vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "b-old".to_owned() }]
-    );
-    assert_eq!(store.residual_owners("/repo-a").unwrap()[0].repo_root, "/repo-a");
+    assert_eq!(original.claim("/repo-b").unwrap().blocked_reason.as_deref(), Some("waiting for repo b"));
+    assert_eq!(original.claim("/repo-a").unwrap().scopes[0].path, "README.md");
+    assert_eq!(store.works().unwrap(), vec![original.clone()]);
+    assert_eq!(store.works_in_repo("/repo-a").unwrap(), vec![original.clone()]);
+    assert!(store.works_in_repo("/missing").unwrap().is_empty());
+    assert_eq!(store.baselines_in_repo(&owner, "/repo-a").unwrap()[0].oid, "a-old");
+    assert_eq!(store.baselines_in_repo(&owner, "/repo-b").unwrap()[0].oid, "b-old");
     assert_eq!(store.residual_owners("/repo-b").unwrap()[0].repo_root, "/repo-b");
 
-    let a_observations =
-        store.observe_dirt("/repo-a", &[("src/lib.rs".to_owned(), "a-dirty".to_owned())], 2.0).unwrap();
-    let b_observations =
-        store.observe_dirt("/repo-b", &[("src/lib.rs".to_owned(), "b-dirty".to_owned())], 2.0).unwrap();
-    assert_eq!(a_observations[0].blob_hash, "a-dirty");
-    assert_eq!(b_observations[0].blob_hash, "b-dirty");
+    let a_id = original.claim("/repo-a").unwrap().id;
+    let b_id = original.claim("/repo-b").unwrap().id;
+    update.label = "replacement".to_owned();
+    update.expected_revision = Some(original.revision);
+    update.updated_at = 2.0;
+    update.claims = vec![work_claim("/repo-c", "src/c.rs", "c-new"), work_claim("/repo-b", "src/b2.rs", "b-new")];
+    update.claims[1].baselines = None;
+    save_work(&mut store, &update).unwrap();
 
-    let original = store.work_in_repo(&owner, "/repo-a").unwrap().unwrap();
-    first.label = "first replaced".to_owned();
-    first.scopes = vec![Scope { path: "src".to_owned(), kind: ScopeKind::Recursive }];
-    first.baselines = Some(vec![BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-new".to_owned() }]);
-    first.expected_revision = Some(original.revision);
-    assert_eq!(store.save_work(&first).unwrap(), first_id);
-    let replaced = store.work_in_repo(&owner, "/repo-a").unwrap().unwrap();
-    assert_eq!(replaced.id, first_id);
+    let replaced = store.work(&owner).unwrap().unwrap();
+    assert_eq!(replaced.id, work_id);
     assert_eq!(replaced.revision, original.revision + 1);
-    assert_eq!(replaced.scopes, first.scopes);
-    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().id, second_id);
-
-    store
-        .replace_baselines_in_repo(
-            &owner,
-            "/repo-a",
-            &[BaselineRow { path: "src/lib.rs".to_owned(), oid: "a-latest".to_owned() }],
-        )
-        .unwrap();
-    assert_eq!(store.baselines_in_repo(&owner, "/repo-a").unwrap()[0].oid, "a-latest");
+    assert_eq!(replaced.claim("/repo-b").unwrap().id, b_id);
+    assert_ne!(replaced.claim("/repo-c").unwrap().id, a_id);
+    assert!(replaced.claim("/repo-a").is_none());
+    assert_eq!(replaced.claim("/repo-b").unwrap().scopes[0].path, "src/b2.rs");
     assert_eq!(store.baselines_in_repo(&owner, "/repo-b").unwrap()[0].oid, "b-old");
-
-    assert!(store.with_work_transaction(|transaction| transaction.delete_work_in_repo(&owner, "/repo-a")).unwrap());
-    assert!(store.work_in_repo(&owner, "/repo-a").unwrap().is_none());
-    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().id, second_id);
-    assert_eq!(store.with_work_transaction(|transaction| transaction.delete_works(&owner)).unwrap(), 1);
-    assert!(store.works_for_identity(&owner).unwrap().is_empty());
+    assert_eq!(store.baselines_in_repo(&owner, "/repo-c").unwrap()[0].oid, "c-new");
+    let removed_children: i64 = store
+        .connection
+        .query_row("SELECT COUNT(*) FROM work_scopes WHERE claim_id = ?1", [a_id], |row| row.get(0))
+        .unwrap();
+    assert_eq!(removed_children, 0);
 }
 
 #[test]
-fn draft_replacement_only_replaces_work_in_the_same_repository() {
+fn work_save_is_atomic_and_cas_rollback_preserves_all_claims() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-    let scopes = [Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }];
+    let initial_generation = store.generation().unwrap();
+    let mut empty = work_update(&owner);
+    empty.claims.clear();
+    assert_eq!(save_work(&mut store, &empty).unwrap_err().to_string(), "at least one repository claim is required");
+    assert!(store.work(&owner).unwrap().is_none());
+    assert_eq!(store.generation().unwrap(), initial_generation);
+    let mut original = work_update(&owner);
+    original.claims.push(work_claim("/repo-b", "src/b.rs", "b-old"));
+    save_work(&mut store, &original).unwrap();
+    let before = store.work(&owner).unwrap().unwrap();
+    let baselines_before = store.baselines_in_repo(&owner, "/repo").unwrap();
+    let generation = store.generation().unwrap();
 
-    let first_a = store.save_draft(&owner, "/repo-a", "a1", &scopes, 1.0).unwrap();
-    let first_b = store.save_draft(&owner, "/repo-b", "b1", &scopes, 2.0).unwrap();
-    let second_a = store.save_draft(&owner, "/repo-a", "a2", &scopes, 3.0).unwrap();
+    let mut invalid = original.clone();
+    invalid.label = "must roll back".to_owned();
+    invalid.expected_revision = Some(before.revision);
+    invalid.claims[0].scopes = vec![Scope { path: "replacement.rs".to_owned(), kind: ScopeKind::Exact }];
+    invalid.claims[0].baselines =
+        Some(vec![BaselineRow { path: "replacement.rs".to_owned(), oid: "replacement".to_owned() }]);
+    invalid.claims[0].residual_paths = vec!["not-observed.rs".to_owned()];
+    assert!(save_work(&mut store, &invalid).is_err());
+    assert_eq!(store.work(&owner).unwrap().unwrap(), before);
+    assert_eq!(store.baselines_in_repo(&owner, "/repo").unwrap(), baselines_before);
+    assert_eq!(store.generation().unwrap(), generation);
 
-    assert_eq!(second_a.id, first_a.id);
-    assert_eq!(second_a.revision, first_a.revision + 1);
-    assert_ne!(first_a.id, first_b.id);
-    assert_eq!(store.work_in_repo(&owner, "/repo-a").unwrap().unwrap().label, "a2");
-    assert_eq!(store.work_in_repo(&owner, "/repo-b").unwrap().unwrap().label, "b1");
+    let mut winner = original.clone();
+    winner.label = "winner".to_owned();
+    winner.expected_revision = Some(before.revision);
+    winner.updated_at = 2.0;
+    save_work(&mut store, &winner).unwrap();
+    let after_winner = store.work(&owner).unwrap().unwrap();
+    let mut stale = original;
+    stale.label = "stale loser".to_owned();
+    stale.expected_revision = Some(before.revision);
+    stale.claims = vec![work_claim("/replacement", "new.rs", "new")];
+    assert_eq!(save_work(&mut store, &stale).unwrap_err().to_string(), "work item changed during update");
+    assert_eq!(store.work(&owner).unwrap().unwrap(), after_winner);
+    assert_eq!(store.generation().unwrap(), generation + 1);
 }
 
 #[test]
-fn draft_replacement_is_atomic_and_advances_its_revision() {
+fn draft_replacement_is_whole_work_only_and_rejects_authoritative_work() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-    let first_scopes = vec![Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }];
-    let first = store.save_draft(&owner, "/repo", "first", &first_scopes, 1.0).unwrap();
+    let first_claims = [work_claim("/repo-b", "b.rs", "ignored"), work_claim("/repo-a", "a.rs", "ignored")];
+    let first = store.save_draft(&owner, "first", &first_claims, 1.0).unwrap();
     assert_eq!(first.state, WorkState::Draft);
-    assert_eq!(first.draft_created_at, Some(1.0));
-    assert_eq!(first.submitted_at, None);
+    assert_eq!(first.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<Vec<_>>(), ["/repo-a", "/repo-b"]);
+    assert!(store.baselines_in_repo(&owner, "/repo-a").unwrap().is_empty());
 
-    let second_scopes = vec![Scope { path: "src".to_owned(), kind: ScopeKind::Recursive }];
-    let second = store.save_draft(&owner, "/repo", "second", &second_scopes, 2.0).unwrap();
+    let retained_id = first.claim("/repo-b").unwrap().id;
+    let second_claims = [work_claim("/repo-c", "c.rs", "ignored"), work_claim("/repo-b", "b2.rs", "ignored")];
+    let second = store.save_draft(&owner, "second", &second_claims, 2.0).unwrap();
     assert_eq!(second.id, first.id);
     assert_eq!(second.revision, first.revision + 1);
-    assert_eq!(second.draft_created_at, Some(2.0));
-    assert_eq!(second.scopes, second_scopes);
+    assert_eq!(second.claim("/repo-b").unwrap().id, retained_id);
+    assert!(second.claim("/repo-a").is_none());
 
-    let duplicate = vec![second.scopes[0].clone(), second.scopes[0].clone()];
-    assert!(store.save_draft(&owner, "/repo", "rolled back", &duplicate, 3.0).is_err());
-    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap(), second);
+    let mut queued = work_update(&owner);
+    queued.state = WorkState::Queued;
+    queued.blocked_reason = Some("blocked".to_owned());
+    queued.submitted_at = Some(3.0);
+    queued.expected_revision = Some(second.revision);
+    save_work(&mut store, &queued).unwrap();
+    let before = store.work(&owner).unwrap().unwrap();
+    assert_eq!(
+        store.save_draft(&owner, "rejected", &first_claims, 4.0).unwrap_err().to_string(),
+        "queued or active work exists; run ai-coord done before drafting"
+    );
+    assert_eq!(store.work(&owner).unwrap().unwrap(), before);
 }
 
 #[test]
-fn work_revision_compare_and_swap_rejects_stale_writers() {
+fn work_generation_advances_once_per_save_or_delete() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-    store.save_work(&work_update(&owner)).unwrap();
-    let current = store.work_in_repo(&owner, "/repo").unwrap().unwrap();
-    let mut update = work_update(&owner);
-    update.label = "winner".to_owned();
-    update.expected_revision = Some(current.revision);
-    store.save_work(&update).unwrap();
-
-    update.label = "stale loser".to_owned();
-    assert_eq!(store.save_work(&update).unwrap_err().to_string(), "work item changed during update");
-    assert_eq!(store.work_in_repo(&owner, "/repo").unwrap().unwrap().label, "winner");
+    let initial = store.generation().unwrap();
+    save_work(&mut store, &work_update(&owner)).unwrap();
+    assert_eq!(store.generation().unwrap(), initial + 1);
+    let revision = store.work(&owner).unwrap().unwrap().revision;
+    let mut replacement = work_update(&owner);
+    replacement.expected_revision = Some(revision);
+    save_work(&mut store, &replacement).unwrap();
+    assert_eq!(store.generation().unwrap(), initial + 2);
+    assert!(store.with_work_transaction(|transaction| transaction.delete_work(&owner)).unwrap());
+    assert_eq!(store.generation().unwrap(), initial + 3);
+    assert!(!store.with_work_transaction(|transaction| transaction.delete_work(&owner)).unwrap());
+    assert_eq!(store.generation().unwrap(), initial + 3);
 }
 
 #[test]
@@ -792,9 +816,7 @@ fn fifo_clock_advances_only_when_submitted_and_breaks_timestamp_ties() {
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-    store
-        .save_draft(&owner, "/repo", "draft", &[Scope { path: "src/lib.rs".to_owned(), kind: ScopeKind::Exact }], 42.0)
-        .unwrap();
+    store.save_draft(&owner, "draft", &[work_claim("/repo", "src/lib.rs", "ignored")], 42.0).unwrap();
     let untouched: i64 = store
         .connection
         .query_row("SELECT value FROM metadata WHERE key = 'submission_clock_micros'", [], |row| row.get(0))
@@ -808,7 +830,7 @@ fn fifo_clock_advances_only_when_submitted_and_breaks_timestamp_ties() {
 }
 
 #[test]
-fn work_schema_constraints_and_session_cascades_are_enforced() {
+fn work_schema_constraints_and_cascades_are_enforced() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
@@ -819,9 +841,9 @@ fn work_schema_constraints_and_session_cascades_are_enforced() {
             .connection
             .execute(
                 "INSERT INTO work_items(
-            client, session_id, repo_root, label, state, blocked_reason,
-            draft_created_at, submitted_at, updated_at, revision
-         ) VALUES ('codex', 'missing', '/repo', 'bad', 'draft', NULL, 1, NULL, 1, 1)",
+                    client, session_id, label, state, blocked_reason,
+                    draft_created_at, submitted_at, updated_at, revision
+                 ) VALUES ('codex', 'missing', 'bad', 'draft', NULL, 1, NULL, 1, 1)",
                 [],
             )
             .is_err()
@@ -831,26 +853,45 @@ fn work_schema_constraints_and_session_cascades_are_enforced() {
             .connection
             .execute(
                 "INSERT INTO work_items(
-            client, session_id, repo_root, label, state, blocked_reason,
-            draft_created_at, submitted_at, updated_at, revision
-         ) VALUES ('codex', 'owner', '/repo', 'bad', 'draft', NULL, NULL, 1, 1, 1)",
+                    client, session_id, label, state, blocked_reason,
+                    draft_created_at, submitted_at, updated_at, revision
+                 ) VALUES ('codex', 'owner', 'bad', 'draft', NULL, NULL, 1, 1, 1)",
                 [],
             )
             .is_err()
     );
 
-    store.save_work(&work_update(&owner)).unwrap();
-    let work_id = store.work_in_repo(&owner, "/repo").unwrap().unwrap().id;
+    save_work(&mut store, &work_update(&owner)).unwrap();
+    let work = store.work(&owner).unwrap().unwrap();
+    let claim_id = work.claim("/repo").unwrap().id;
     assert!(
         store
             .connection
-            .execute("INSERT INTO work_scopes(work_id, path, kind) VALUES (?1, 'bad', 'prefix')", [work_id],)
+            .execute(
+                "INSERT INTO work_items(
+                    client, session_id, label, state, blocked_reason,
+                    draft_created_at, submitted_at, updated_at, revision
+                 ) VALUES ('codex', 'owner', 'duplicate', 'draft', NULL, 2, NULL, 2, 1)",
+                [],
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .connection
+            .execute("INSERT INTO work_scopes(claim_id, path, kind) VALUES (?1, 'bad', 'prefix')", [claim_id])
+            .is_err()
+    );
+    assert!(
+        store
+            .connection
+            .execute("INSERT INTO work_claims(work_id, repo_root) VALUES (?1, '/repo')", [work.id])
             .is_err()
     );
     store.update_delegate(&owner, "child", Some("test"), "active", 1.0).unwrap();
     store.end_session(&owner).unwrap();
 
-    for table in ["work_items", "work_scopes", "work_baselines", "delegates"] {
+    for table in ["work_items", "work_claims", "work_scopes", "work_baselines", "delegates"] {
         let count: i64 =
             store.connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
         assert_eq!(count, 0, "{table} did not cascade");
@@ -934,4 +975,13 @@ fn table_names(connection: &Connection) -> HashSet<String> {
     let mut statement =
         connection.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").unwrap();
     statement.query_map([], |row| row.get::<_, String>(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap()
+}
+
+fn foreign_key_targets(connection: &Connection, table: &str) -> HashSet<(String, String, String, String)> {
+    let mut statement = connection.prepare(&format!("PRAGMA foreign_key_list({table})")).unwrap();
+    statement
+        .query_map([], |row| Ok((row.get(3)?, row.get(2)?, row.get(4)?, row.get(6)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
 }

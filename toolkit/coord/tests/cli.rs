@@ -173,7 +173,7 @@ fn identity_commands_and_state_are_fully_isolated() {
         matches!(code, 0 | 2),
         "status is complete under a detectable Codex ancestor and partial when the test host is unknown"
     );
-    assert_eq!(status["schema_version"], 6);
+    assert_eq!(status["schema_version"], 7);
     assert_eq!(status["scope"]["kind"], "machine");
     assert_eq!(status["sessions"][0]["callsign"], "🦀 Ferris Test");
     assert_eq!(status["sessions"][0]["coordination_waived"], false);
@@ -265,181 +265,135 @@ fn coordination_commands_preserve_tsv_outputs_and_embedded_codes() {
 }
 
 #[test]
-fn multi_repository_cli_lifecycle_status_and_done_all_are_root_keyed() {
+fn bundle_cli_lifecycle_is_atomic_and_uses_v7_claims() {
     let fixture = Fixture::new();
     let second = fixture._temporary.path().join("z-repo");
     fs::create_dir_all(second.join("src")).unwrap();
     assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&second).status().unwrap().success());
     let mut host = spawn_synthetic_host(&fixture, "multi-host");
     assert_strong_session(&fixture, "multi-host");
+    let first_path = fixture.root.join("src/a.rs").to_string_lossy().into_owned();
+    let second_path = second.join("src/b.rs").to_string_lossy().into_owned();
+    let first_root = fs::canonicalize(&fixture.root).unwrap().to_string_lossy().into_owned();
+    let second_root = fs::canonicalize(&second).unwrap().to_string_lossy().into_owned();
+    let expected_first_path = format!("{first_root}/src/a.rs");
+    let expected_second_path = format!("{second_root}/src/b.rs");
 
+    let start =
+        fixture.output_as_in("multi-host", &fixture.root, &["bundle", "start", "two roots", &second_path, &first_path]);
+    start.assert().success();
     assert_eq!(
-        String::from_utf8_lossy(
-            &fixture.output_as_in("multi-host", &fixture.root, &["start", "first root", "src/a.rs"]).stdout
-        ),
-        "READY\tsrc/a.rs\n"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(
-            &fixture.output_as_in("multi-host", &second, &["start", "second root", "src/b.rs"]).stdout
-        ),
-        "READY\tsrc/b.rs\n"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(
-            &fixture.output_as_in("multi-host", &second, &["start", "second replaced", "src/c.rs"]).stdout
-        ),
-        "READY\tsrc/c.rs\n"
+        String::from_utf8_lossy(&start.stdout),
+        format!("READY\t{expected_first_path}\t{expected_second_path}\n")
     );
 
     let repo_status = fixture.output_as_in("multi-host", &fixture.root, &["status", "--json"]);
     assert!(matches!(repo_status.status.code(), Some(0 | 2)));
     let repo_status: Value = serde_json::from_slice(&repo_status.stdout).unwrap();
-    assert_eq!(repo_status["schema_version"], 6);
+    assert_eq!(repo_status["schema_version"], 7);
     assert!(repo_status["sessions"].as_array().unwrap().iter().any(|row| row["session_id"] == "multi-host"));
     let repo_work = repo_status["work"].as_array().unwrap();
     assert_eq!(repo_work.len(), 1);
-    assert_eq!(repo_work[0]["label"], "first root");
+    assert_eq!(repo_work[0]["label"], "two roots");
+    assert_eq!(repo_work[0]["scope_count"], 2);
+    assert_eq!(repo_work[0]["claims"].as_array().unwrap().len(), 2);
+    assert_eq!(repo_work[0]["claims"][0]["repo_root"], first_root);
+    assert_eq!(repo_work[0]["claims"][1]["repo_root"], second_root);
 
     let terminal = fixture.output_as_in("multi-host", &second, &["status", "--all"]);
     assert!(matches!(terminal.status.code(), Some(0 | 2)));
     let terminal = String::from_utf8_lossy(&terminal.stdout);
-    assert_eq!(terminal.lines().filter(|line| line.contains("\tmulti-host\t")).count(), 2);
-    assert!(terminal.contains(&format!("repo={}", fs::canonicalize(&fixture.root).unwrap().display())));
-    assert!(terminal.contains(&format!("repo={}", fs::canonicalize(&second).unwrap().display())));
+    assert_eq!(terminal.lines().filter(|line| line.contains("\tmulti-host\t")).count(), 1);
+    assert!(terminal.contains(&format!("repos={first_root},{second_root}")));
+    assert!(terminal.contains(&format!("paths={expected_first_path},{expected_second_path}")));
 
     assert_eq!(
         String::from_utf8_lossy(&fixture.output_as_in("multi-host", &second, &["done"]).stdout),
         "DONE\treleased\n"
     );
-    let (_, machine) = fixture.json_status();
-    let remaining =
-        machine["work"].as_array().unwrap().iter().filter(|row| row["session_id"] == "multi-host").collect::<Vec<_>>();
-    assert_eq!(remaining.len(), 1);
-    assert_eq!(remaining[0]["label"], "first root");
-
-    fixture.output_as_in("multi-host", &second, &["start", "second again", "src/b.rs"]);
-    let fail_bin = fixture._temporary.path().join("release-fail-bin");
-    fs::create_dir(&fail_bin).unwrap();
-    let git = fail_bin.join("git");
-    fs::write(
-        &git,
-        "#!/bin/sh\nif [ \"$1\" = '-C' ] && [ \"$2\" = \"$AI_COORD_FAIL_ROOT\" ] && [ \"$3\" = 'status' ]; then\n  echo forced dirt failure >&2\n  exit 1\nfi\nexec /usr/bin/git \"$@\"\n",
-    )
-    .unwrap();
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&git, fs::Permissions::from_mode(0o700)).unwrap();
-    }
-    let failed_all = fixture
-        .command()
-        .current_dir(&second)
-        .env("AI_COORD_SESSION_ID", "multi-host")
-        .env("AI_COORD_FAIL_ROOT", fs::canonicalize(&second).unwrap())
-        .env("PATH", format!("{}:/usr/bin:/bin", fail_bin.display()))
-        .args(["done", "--all"])
-        .output()
-        .unwrap();
-    failed_all.assert().failure().code(1);
-    assert!(String::from_utf8_lossy(&failed_all.stderr).contains("could not inspect Git dirt"));
-    assert_eq!(
-        fixture.json_status().1["work"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|row| row["session_id"] == "multi-host")
-            .count(),
-        2,
-        "all-root dirt preflight failure must not partially release work"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&fixture.output_as_in("multi-host", &second, &["done", "--all"]).stdout),
-        "DONE\treleased\n"
-    );
-    assert!(fixture.json_status().1["work"].as_array().unwrap().iter().all(|row| row["session_id"] != "multi-host"));
-    assert_eq!(
-        String::from_utf8_lossy(&fixture.output_as_in("multi-host", &second, &["done", "--all"]).stdout),
-        "DONE\talready clear\n"
-    );
 
     let _ = host.kill();
     let _ = host.wait();
 }
 
 #[test]
-fn earlier_repository_start_and_draft_promotion_preserve_later_root_state() {
-    let fixture = Fixture::new();
-    let later = fixture._temporary.path().join("z-repo");
-    fs::create_dir_all(later.join("src")).unwrap();
-    assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&later).status().unwrap().success());
-    let mut host = spawn_synthetic_host(&fixture, "order-host");
-    assert_strong_session(&fixture, "order-host");
-
-    fixture.output_as_in("order-host", &later, &["start", "later", "src/later.rs"]).assert().success();
-    let rejected = fixture.output_as_in("order-host", &fixture.root, &["start", "earlier", "src/earlier.rs"]);
-    rejected.assert().failure().code(1);
-    assert!(String::from_utf8_lossy(&rejected.stderr).contains(fs::canonicalize(&later).unwrap().to_str().unwrap()));
-    let work = fixture.json_status().1["work"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|row| row["session_id"] == "order-host")
-        .cloned()
-        .collect::<Vec<_>>();
-    assert_eq!(work.len(), 1);
-    assert_eq!(work[0]["label"], "later");
-
-    fixture.output_as_in("order-host", &fixture.root, &["draft", "earlier draft", "src/earlier.rs"]).assert().success();
-    let rejected = fixture.output_as_in("order-host", &fixture.root, &["start", "--draft"]);
-    rejected.assert().failure().code(1);
-    let work = fixture.json_status().1["work"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|row| row["session_id"] == "order-host")
-        .cloned()
-        .collect::<Vec<_>>();
-    assert_eq!(work.len(), 2);
-    assert!(work.iter().any(|row| row["label"] == "later" && row["state"] == "active"));
-    assert!(work.iter().any(|row| row["label"] == "earlier draft" && row["state"] == "draft"));
-    fixture.output_as_in("order-host", &later, &["done", "--all"]);
-
-    let _ = host.kill();
-    let _ = host.wait();
-}
-
-#[test]
-fn wait_promotes_only_the_payload_repository_and_retains_earlier_work() {
+fn bundle_draft_promotion_and_ordinary_mismatch_are_explicit() {
     let fixture = Fixture::new();
     let second = fixture._temporary.path().join("z-repo");
     fs::create_dir_all(second.join("src")).unwrap();
     assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&second).status().unwrap().success());
-    let mut owner = spawn_synthetic_host(&fixture, "wait-owner");
-    let mut holder = spawn_synthetic_host(&fixture, "wait-holder");
-    assert_strong_session(&fixture, "wait-owner");
-    assert_strong_session(&fixture, "wait-holder");
+    let mut host = spawn_synthetic_host(&fixture, "order-host");
+    assert_strong_session(&fixture, "order-host");
+    let first_path = fixture.root.join("src/a.rs").to_string_lossy().into_owned();
+    let second_path = second.join("src/b.rs").to_string_lossy().into_owned();
+    let expected_first_path = format!("{}/src/a.rs", fs::canonicalize(&fixture.root).unwrap().display());
+    let expected_second_path = format!("{}/src/b.rs", fs::canonicalize(&second).unwrap().display());
 
-    fixture.output_as_in("wait-owner", &fixture.root, &["start", "first", "src/lib.rs"]).assert().success();
-    fixture.output_as_in("wait-holder", &second, &["start", "holder", "src/lib.rs"]).assert().success();
-    fixture.output_as_in("wait-owner", &second, &["start", "second", "src/lib.rs"]).assert().failure().code(3);
-    fixture.output_as_in("wait-holder", &second, &["done"]);
-    fixture.output_as_in("wait-owner", &second, &["inbox", "--ack-all"]);
-    let waited = fixture.output_as_in("wait-owner", &second, &["wait", "-t", "1"]);
-    waited.assert().success();
-    assert_eq!(String::from_utf8_lossy(&waited.stdout), "READY\tsrc/lib.rs\n");
+    let draft =
+        fixture.output_as_in("order-host", &fixture.root, &["bundle", "draft", "draft", &first_path, &second_path]);
+    assert_eq!(String::from_utf8_lossy(&draft.stdout), "DRAFT\t2\n");
+    let rejected = fixture.output_as_in("order-host", &fixture.root, &["start", "--draft"]);
+    rejected.assert().failure().code(1);
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("bundle start --draft"));
+    let promoted = fixture.output_as_in("order-host", &fixture.root, &["bundle", "start", "--draft"]);
+    assert_eq!(
+        String::from_utf8_lossy(&promoted.stdout),
+        format!("READY\t{expected_first_path}\t{expected_second_path}\n")
+    );
+    fixture.output_as_in("order-host", &fixture.root, &["done"]);
 
-    let owned = fixture.json_status().1["work"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|row| row["session_id"] == "wait-owner" && row["state"] == "active")
-        .count();
-    assert_eq!(owned, 2);
-    fixture.output_as_in("wait-owner", &second, &["done", "--all"]);
-    for child in [&mut owner, &mut holder] {
-        let _ = child.kill();
-        let _ = child.wait();
+    fixture.output_as_in("order-host", &fixture.root, &["draft", "ordinary", "src/ordinary.rs"]).assert().success();
+    let rejected = fixture.output_as_in("order-host", &fixture.root, &["bundle", "start", "--draft"]);
+    rejected.assert().failure().code(1);
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("ai-coord start --draft"));
+    fixture.output_as_in("order-host", &fixture.root, &["done"]);
+
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
+#[test]
+fn bundle_validation_and_done_all_parser_error_leave_work_unchanged() {
+    let fixture = Fixture::new();
+    let second = fixture._temporary.path().join("z-repo");
+    fs::create_dir_all(second.join("src")).unwrap();
+    assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&second).status().unwrap().success());
+    let first_path = fixture.root.join("src/a.rs").to_string_lossy().into_owned();
+    let second_path = second.join("src/b.rs").to_string_lossy().into_owned();
+    let non_git_path = fixture._temporary.path().join("not-a-repository/file.rs").to_string_lossy().into_owned();
+    let mut host = spawn_synthetic_host(&fixture, "validation-host");
+    assert_strong_session(&fixture, "validation-host");
+    fixture
+        .output_as_in("validation-host", &fixture.root, &["bundle", "draft", "draft", &first_path, &second_path])
+        .assert()
+        .success();
+    let before = fixture.json_status().1["work"].clone();
+    for arguments in [
+        vec!["bundle", "start", "relative", "src/a.rs", "src/b.rs"],
+        vec!["bundle", "start", "one root", &first_path, &fixture.root.join("src/c.rs").to_string_lossy()],
+        vec!["bundle", "start", "non git", &first_path, &non_git_path],
+        vec!["bundle", "start", "empty"],
+        vec![
+            "bundle",
+            "start",
+            "recursive roots",
+            "--recursive",
+            &fixture.root.to_string_lossy(),
+            "--recursive",
+            &second.to_string_lossy(),
+        ],
+    ] {
+        let result = fixture.output_as_in("validation-host", &fixture.root, &arguments);
+        result.assert().failure();
+        assert_eq!(fixture.json_status().1["work"], before);
     }
+    let done_all = fixture.output_as_in("validation-host", &fixture.root, &["done", "--all"]);
+    done_all.assert().failure().code(2);
+    assert!(String::from_utf8_lossy(&done_all.stderr).contains("unexpected argument '--all'"));
+    assert_eq!(fixture.json_status().1["work"], before);
+    fixture.output_as_in("validation-host", &fixture.root, &["done"]);
+    let _ = host.kill();
+    let _ = host.wait();
 }
 
 #[test]
@@ -550,6 +504,8 @@ fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
     assert_eq!(draft["state"], "draft");
     assert_eq!(draft["scope_count"], 2);
     assert!(draft.get("scopes").is_none());
+    assert_eq!(draft["claims"][0]["scope_count"], 2);
+    assert!(draft["claims"][0].get("scopes").is_none());
     assert!(!serde_json::to_string(draft).unwrap().contains("private.rs"));
 
     let replaced = fixture.output_as("draft-host", &["draft", "revised plan", "--recursive", "src"]);
@@ -564,8 +520,8 @@ fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
     let (_, snapshot) = fixture.json_status();
     let active = snapshot["work"].as_array().unwrap().iter().find(|work| work["session_id"] == "draft-host").unwrap();
     assert_eq!(active["state"], "active");
-    assert_eq!(active["scopes"], json!([{"path":"src", "kind":"recursive"}]));
-    assert!(active.get("scope_count").is_none());
+    assert_eq!(active["scope_count"], 1);
+    assert_eq!(active["claims"][0]["scopes"], json!([{"path":"src", "kind":"recursive"}]));
 
     let rejected = fixture.output_as("draft-host", &["draft", "must release", "src/new.rs"]);
     rejected.assert().failure().code(1);
@@ -645,7 +601,7 @@ fn promotion_revalidates_paths_and_repository_without_consuming_the_draft() {
     assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&other).status().unwrap().success());
     let mismatch = fixture.output_as_in("revalidate-host", &other, &["start", "--draft"]);
     mismatch.assert().failure().code(1);
-    assert!(String::from_utf8_lossy(&mismatch.stderr).contains("no draft work for this session"));
+    assert!(String::from_utf8_lossy(&mismatch.stderr).contains("draft belongs to"));
     assert_eq!(work_state(&fixture, "revalidate-host"), Some("draft".to_owned()));
 
     let _ = host.kill();
@@ -675,8 +631,8 @@ fn promotion_queues_on_unknown_coverage_and_wait_preserves_submitted_work() {
     assert_eq!(String::from_utf8_lossy(&promoted.stdout), "UNKNOWN\tcoverage\n");
     assert_eq!(work_state(&fixture, "cli-test"), Some("queued".to_owned()));
     let work = work_item(&fixture, "cli-test").unwrap();
-    assert!(work.get("scope_count").is_none());
-    assert_eq!(work["scopes"], json!([{"path":"src/unknown.rs", "kind":"exact"}]));
+    assert_eq!(work["scope_count"], 1);
+    assert_eq!(work["claims"][0]["scopes"], json!([{"path":"src/unknown.rs", "kind":"exact"}]));
 
     let waited = fixture.output_with_path(&["wait", "-t", "1"], std::path::Path::new(&executable_path));
     waited.assert().failure().code(2);
@@ -840,7 +796,7 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     check.assert().failure().code(2);
     let reports: Vec<Value> = serde_json::from_slice(&check.stdout).expect("check JSON");
     let state = reports.iter().find(|report| report["component"] == "state").expect("state report");
-    assert_eq!(state["schema_version"], 14);
+    assert_eq!(state["schema_version"], 15);
     assert_eq!(state["path"], fixture.state.join("state.db").to_string_lossy().as_ref());
     let codex_hooks = reports.iter().find(|report| report["component"] == "hooks:codex").expect("hook report");
     assert!(codex_hooks["error"].is_null());

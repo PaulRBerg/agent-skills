@@ -2,35 +2,55 @@ import { describe, expect, test } from "vitest";
 import { groupSnapshotByRepo } from "@/lib/group";
 import { sampleSnapshot } from "@/lib/sample-snapshot";
 
+const toolkitRoot = "/Users/prb/projects/agent-toolkit";
+const skillsRoot = "/Users/prb/projects/agent-skills";
+
 describe("groupSnapshotByRepo", () => {
-  test("groups sessions by repository and sorts lanes by most recent activity", () => {
+  test("creates lanes for session and claim roots and sorts them by recent activity", () => {
     const lanes = groupSnapshotByRepo(sampleSnapshot);
 
     expect(lanes.map((lane) => lane.repoRoot)).toEqual([
-      "/Users/prb/projects/agent-toolkit",
-      "/Users/prb/projects/agent-skills",
+      toolkitRoot,
+      skillsRoot,
     ]);
     expect(lanes[0]?.sessions).toHaveLength(4);
-    expect(lanes[1]?.sessions).toHaveLength(2);
+    expect(lanes[1]?.sessions).toHaveLength(1);
   });
 
-  test("assigns FIFO positions to queued work within a repository", () => {
-    const lane = groupSnapshotByRepo(sampleSnapshot)[0];
-    const queued = lane?.sessions
-      .map((row) => row.work)
-      .filter((work) => work?.state === "queued")
-      .sort(
-        (left, right) =>
-          (left?.queuePosition ?? 0) - (right?.queuePosition ?? 0),
-      );
+  test("assigns queue positions separately for every queued claim repository", () => {
+    const lanes = groupSnapshotByRepo(sampleSnapshot);
+    const docs = lanes[0]?.sessions.find(
+      ({ work }) => work?.label === "docs-followup",
+    )?.work;
+    const serveApi = lanes[0]?.sessions.find(
+      ({ work }) => work?.label === "serve-api",
+    )?.work;
 
-    expect(queued?.map((work) => [work?.label, work?.queuePosition])).toEqual([
-      ["serve-api", 1],
-      ["docs-followup", 2],
+    expect(serveApi?.claims.map((claim) => claim.queuePosition)).toEqual([1]);
+    expect(docs?.claims.map((claim) => [claim.repo_root, claim.queuePosition])).toEqual([
+      [toolkitRoot, 2],
+      [skillsRoot, 1],
     ]);
   });
 
-  test("nests delegates under their parent session in latest-first order", () => {
+  test("homes a multi-claim task once in its live session repository", () => {
+    const lanes = groupSnapshotByRepo(sampleSnapshot);
+    const cards = lanes.flatMap((lane) => [
+      ...lane.sessions.flatMap((row) => (row.work ? [row.work] : [])),
+      ...lane.unmatchedWork,
+    ]);
+
+    expect(cards.map((work) => work.id).sort((left, right) => left - right)).toEqual([
+      640, 644, 645, 646, 647,
+    ]);
+    expect(
+      lanes[1]?.sessions.some(
+        ({ work }) => work?.label === "monorepo-dashboard-orchestrator",
+      ),
+    ).toBe(false);
+  });
+
+  test("keeps delegates only beside their live parent session", () => {
     const lane = groupSnapshotByRepo(sampleSnapshot)[0];
     const parent = lane?.sessions.find(
       ({ session }) =>
@@ -43,35 +63,25 @@ describe("groupSnapshotByRepo", () => {
     ]);
   });
 
-  test("shows a session in each work repository but delegates only in its current repository", () => {
-    const lanes = groupSnapshotByRepo(sampleSnapshot);
-    const parentId = "7ca88f40-3aed-4f2d-be71-a80e544dd332";
-    const toolkitParent = lanes[0]?.sessions.find(
-      ({ session }) => session.session_id === parentId,
-    );
-    const skillsParent = lanes[1]?.sessions.find(
-      ({ session }) => session.session_id === parentId,
-    );
-
-    expect(toolkitParent?.work?.label).toBe("monorepo-dashboard-orchestrator");
-    expect(toolkitParent?.delegates).toHaveLength(2);
-    expect(skillsParent?.work?.label).toBe("agent-skills-audit");
-    expect(skillsParent?.delegates).toEqual([]);
-    expect(lanes[1]?.unmatchedWork).toEqual([]);
-  });
-
-  test("retains work whose session is absent from provider inventory", () => {
+  test("homes unmatched multi-claim work in its lexicographically first claim root", () => {
     const orphanedSnapshot = {
       ...sampleSnapshot,
       sessions: sampleSnapshot.sessions.filter(
         (session) =>
-          session.session_id !== "019fcbf1-1a53-7e20-a682-520d66c5b87f",
+          session.session_id !== "7ca88f40-3aed-4f2d-be71-a80e544dd332",
       ),
     };
-    const lane = groupSnapshotByRepo(orphanedSnapshot)[0];
+    const lanes = groupSnapshotByRepo(orphanedSnapshot);
 
-    expect(lane?.unmatchedWork.map((work) => work.label)).toEqual([
-      "docs-followup",
-    ]);
+    expect(
+      lanes.find((lane) => lane.repoRoot === skillsRoot)?.unmatchedWork.map(
+        (work) => work.label,
+      ),
+    ).toContain(
+      "monorepo-dashboard-orchestrator",
+    );
+    expect(
+      lanes.find((lane) => lane.repoRoot === toolkitRoot)?.unmatchedWork,
+    ).toEqual([]);
   });
 });

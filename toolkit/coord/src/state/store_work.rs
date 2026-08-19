@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkRow, WorkUpdate,
+    BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkClaimRow, WorkClaimUpdate, WorkRow, WorkUpdate,
     store::{bump_generation, client_name, invalid_value, parse_client, parse_work_state, work_state_name},
     store_communications::add_message,
 };
@@ -47,16 +47,12 @@ impl WorkTransaction<'_> {
             .flatten())
     }
 
-    pub(crate) fn work_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Option<WorkRow>> {
-        work_in_repo_from(&self.transaction, identity, repo_root)
+    pub(crate) fn work(&self, identity: &Identity) -> Result<Option<WorkRow>> {
+        work_from(&self.transaction, identity)
     }
 
-    pub(crate) fn works_for_identity(&self, identity: &Identity) -> Result<Vec<WorkRow>> {
-        works_for_identity_from(&self.transaction, identity)
-    }
-
-    pub(crate) fn works(&self, repo_root: &str) -> Result<Vec<WorkRow>> {
-        works_from(&self.transaction, Some(repo_root))
+    pub(crate) fn works(&self) -> Result<Vec<WorkRow>> {
+        works_from(&self.transaction, None)
     }
 
     pub(crate) fn baselines_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Vec<BaselineRow>> {
@@ -107,6 +103,16 @@ impl WorkTransaction<'_> {
         observe_dirt_subset_from(&self.transaction, repo_root, &dirty_paths, blob_hashes, current)
     }
 
+    pub(crate) fn observe_dirt_subset(
+        &self,
+        repo_root: &str,
+        dirty_paths: &[String],
+        blob_hashes: &[(String, String)],
+        current: f64,
+    ) -> Result<Vec<DirtObservationRow>> {
+        observe_dirt_subset_from(&self.transaction, repo_root, dirty_paths, blob_hashes, current)
+    }
+
     pub(crate) fn record_residual_owners(
         &self,
         repo_root: &str,
@@ -117,23 +123,12 @@ impl WorkTransaction<'_> {
         record_residual_owners_from(&self.transaction, repo_root, paths, identity, current)
     }
 
-    pub(crate) fn delete_work_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<bool> {
-        let removed = self.transaction.execute(
-            "DELETE FROM work_items WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3",
-            params![client_name(identity.client), identity.session_id, repo_root],
-        )? > 0;
-        if removed {
-            bump_generation(&self.transaction)?;
-        }
-        Ok(removed)
-    }
-
-    pub(crate) fn delete_works(&self, identity: &Identity) -> Result<usize> {
+    pub(crate) fn delete_work(&self, identity: &Identity) -> Result<bool> {
         let removed = self.transaction.execute(
             "DELETE FROM work_items WHERE client = ?1 AND session_id = ?2",
             params![client_name(identity.client), identity.session_id],
-        )?;
-        if removed > 0 {
+        )? > 0;
+        if removed {
             bump_generation(&self.transaction)?;
         }
         Ok(removed)
@@ -141,57 +136,57 @@ impl WorkTransaction<'_> {
 }
 
 impl Store {
-    /// Atomically replaces one work item, all scopes, optional baselines, and residual ownership.
-    pub(crate) fn save_work(&mut self, update: &WorkUpdate) -> Result<i64> {
-        self.immediate(|transaction| save_work(transaction, update))
-    }
-
     /// Create or atomically replace this session's non-authoritative draft.
     pub(crate) fn save_draft(
         &mut self,
         identity: &Identity,
-        repo_root: &str,
         label: &str,
-        scopes: &[Scope],
+        claims: &[WorkClaimUpdate],
         current: f64,
     ) -> Result<WorkRow> {
         self.immediate(|transaction| {
-            let existing = work_in_repo_from(transaction, identity, repo_root)?;
+            let existing = work_from(transaction, identity)?;
             if existing.as_ref().is_some_and(|work| work.state != WorkState::Draft) {
                 return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
             }
+            let claims = claims
+                .iter()
+                .cloned()
+                .map(|claim| WorkClaimUpdate {
+                    blocked_reason: None,
+                    baselines: Some(Vec::new()),
+                    residual_paths: Vec::new(),
+                    ..claim
+                })
+                .collect();
             save_work(
                 transaction,
                 &WorkUpdate {
                     identity: identity.clone(),
-                    repo_root: repo_root.to_owned(),
                     label: label.to_owned(),
                     state: WorkState::Draft,
                     blocked_reason: None,
-                    scopes: scopes.to_vec(),
-                    baselines: Some(Vec::new()),
-                    residual_paths: Vec::new(),
+                    claims,
                     draft_created_at: Some(current),
                     submitted_at: None,
                     updated_at: current,
                     expected_revision: existing.map(|work| work.revision),
                 },
             )?;
-            work_in_repo_from(transaction, identity, repo_root)?
-                .ok_or_else(|| AppError::retry("draft disappeared during replacement"))
+            work_from(transaction, identity)?.ok_or_else(|| AppError::retry("draft disappeared during replacement"))
         })
     }
 
-    pub(crate) fn work_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Option<WorkRow>> {
-        work_in_repo_from(&self.connection, identity, repo_root)
+    pub(crate) fn work(&self, identity: &Identity) -> Result<Option<WorkRow>> {
+        work_from(&self.connection, identity)
     }
 
-    pub(crate) fn works_for_identity(&self, identity: &Identity) -> Result<Vec<WorkRow>> {
-        works_for_identity_from(&self.connection, identity)
+    pub(crate) fn works(&self) -> Result<Vec<WorkRow>> {
+        works_from(&self.connection, None)
     }
 
-    pub(crate) fn works(&self, repo_root: Option<&str>) -> Result<Vec<WorkRow>> {
-        works_from(&self.connection, repo_root)
+    pub(crate) fn works_in_repo(&self, repo_root: &str) -> Result<Vec<WorkRow>> {
+        works_from(&self.connection, Some(repo_root))
     }
 
     pub(crate) fn residual_owners(&self, repo_root: &str) -> Result<Vec<ResidualOwnerRow>> {
@@ -225,34 +220,21 @@ impl Store {
             observe_dirt_subset_from(transaction, repo_root, dirty_paths, blob_hashes, current)
         })
     }
-
-    pub(crate) fn replace_baselines_in_repo(
-        &mut self,
-        identity: &Identity,
-        repo_root: &str,
-        baselines: &[BaselineRow],
-    ) -> Result<()> {
-        self.immediate(|transaction| {
-            let work_id = transaction
-                .query_row(
-                    "SELECT id FROM work_items
-                     WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3 AND state = 'active'",
-                    params![client_name(identity.client), identity.session_id, repo_root],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()?;
-            if let Some(work_id) = work_id {
-                transaction.execute("DELETE FROM work_baselines WHERE work_id = ?1", [work_id])?;
-                insert_baselines(transaction, work_id, baselines)?;
-            }
-            Ok(())
-        })
-    }
 }
 
 fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> {
-    if update.scopes.is_empty() {
-        return Err(AppError::usage("at least one scope is required"));
+    let claims = normalized_claims(&update.claims)?;
+    if update.state == WorkState::Draft {
+        let existing_state = transaction
+            .query_row(
+                "SELECT state FROM work_items WHERE client = ?1 AND session_id = ?2",
+                params![client_name(update.identity.client), update.identity.session_id],
+                |row| parse_work_state(row.get(0)?),
+            )
+            .optional()?;
+        if existing_state.is_some_and(|state| state != WorkState::Draft) {
+            return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
+        }
     }
     match update.expected_revision {
         Some(revision) => {
@@ -261,7 +243,7 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
                     label = ?1, state = ?2, blocked_reason = ?3,
                     draft_created_at = ?4, submitted_at = ?5, updated_at = ?6,
                     revision = revision + 1
-                 WHERE client = ?7 AND session_id = ?8 AND repo_root = ?9 AND revision = ?10",
+                 WHERE client = ?7 AND session_id = ?8 AND revision = ?9",
                 params![
                     update.label,
                     work_state_name(update.state),
@@ -271,7 +253,6 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
                     update.updated_at,
                     client_name(update.identity.client),
                     update.identity.session_id,
-                    update.repo_root,
                     revision,
                 ],
             )?;
@@ -282,9 +263,9 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
         None => {
             let exists = transaction.query_row(
                 "SELECT EXISTS(
-                    SELECT 1 FROM work_items WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3
+                    SELECT 1 FROM work_items WHERE client = ?1 AND session_id = ?2
                  )",
-                params![client_name(update.identity.client), update.identity.session_id, update.repo_root],
+                params![client_name(update.identity.client), update.identity.session_id],
                 |row| row.get::<_, bool>(0),
             )?;
             if exists {
@@ -292,13 +273,12 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
             }
             transaction.execute(
                 "INSERT INTO work_items(
-                    client, session_id, repo_root, label, state, blocked_reason,
+                    client, session_id, label, state, blocked_reason,
                     draft_created_at, submitted_at, updated_at, revision
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1)",
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1)",
                 params![
                     client_name(update.identity.client),
                     update.identity.session_id,
-                    update.repo_root,
                     update.label,
                     work_state_name(update.state),
                     update.blocked_reason,
@@ -310,58 +290,128 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
         }
     }
     let work_id = transaction.query_row(
-        "SELECT id FROM work_items WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3",
-        params![client_name(update.identity.client), update.identity.session_id, update.repo_root],
+        "SELECT id FROM work_items WHERE client = ?1 AND session_id = ?2",
+        params![client_name(update.identity.client), update.identity.session_id],
         |row| row.get::<_, i64>(0),
     )?;
-    transaction.execute("DELETE FROM work_scopes WHERE work_id = ?1", [work_id])?;
-    for scope in &update.scopes {
-        transaction.execute(
-            "INSERT INTO work_scopes(work_id, path, kind) VALUES (?1, ?2, ?3)",
-            params![work_id, scope.path, scope_kind_name(scope.kind)],
-        )?;
+    let mut retained = existing_claim_ids(transaction, work_id)?;
+    for claim in &claims {
+        let claim_id = if let Some(claim_id) = retained.remove(&claim.repo_root) {
+            transaction.execute(
+                "UPDATE work_claims SET blocked_reason = ?1 WHERE id = ?2",
+                params![claim.blocked_reason, claim_id],
+            )?;
+            claim_id
+        } else {
+            transaction.execute(
+                "INSERT INTO work_claims(work_id, repo_root, blocked_reason) VALUES (?1, ?2, ?3)",
+                params![work_id, claim.repo_root, claim.blocked_reason],
+            )?;
+            transaction.last_insert_rowid()
+        };
+
+        transaction.execute("DELETE FROM work_scopes WHERE claim_id = ?1", [claim_id])?;
+        for scope in &claim.scopes {
+            transaction.execute(
+                "INSERT INTO work_scopes(claim_id, path, kind) VALUES (?1, ?2, ?3)",
+                params![claim_id, scope.path, scope_kind_name(scope.kind)],
+            )?;
+        }
+        if let Some(baselines) = &claim.baselines {
+            transaction.execute("DELETE FROM work_baselines WHERE claim_id = ?1", [claim_id])?;
+            insert_baselines(transaction, claim_id, baselines)?;
+        }
+        for path in &claim.residual_paths {
+            transaction.execute(
+                "INSERT INTO residual_owners(
+                    repo_root, path, client, session_id, released_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(repo_root, path) DO UPDATE SET
+                    client = excluded.client,
+                    session_id = excluded.session_id,
+                    released_at = excluded.released_at",
+                params![
+                    claim.repo_root,
+                    path,
+                    client_name(update.identity.client),
+                    update.identity.session_id,
+                    update.updated_at,
+                ],
+            )?;
+        }
     }
-    if let Some(baselines) = &update.baselines {
-        transaction.execute("DELETE FROM work_baselines WHERE work_id = ?1", [work_id])?;
-        insert_baselines(transaction, work_id, baselines)?;
-    }
-    for path in &update.residual_paths {
-        transaction.execute(
-            "INSERT INTO residual_owners(
-                repo_root, path, client, session_id, released_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT(repo_root, path) DO UPDATE SET
-                client = excluded.client,
-                session_id = excluded.session_id,
-                released_at = excluded.released_at",
-            params![
-                update.repo_root,
-                path,
-                client_name(update.identity.client),
-                update.identity.session_id,
-                update.updated_at,
-            ],
-        )?;
+    for claim_id in retained.into_values() {
+        transaction.execute("DELETE FROM work_claims WHERE id = ?1", [claim_id])?;
     }
     bump_generation(transaction)?;
     Ok(work_id)
 }
 
-fn work_in_repo_from(connection: &Connection, identity: &Identity, repo_root: &str) -> Result<Option<WorkRow>> {
+fn normalized_claims(claims: &[WorkClaimUpdate]) -> Result<Vec<WorkClaimUpdate>> {
+    if claims.is_empty() {
+        return Err(AppError::usage("at least one repository claim is required"));
+    }
+    let mut claims = claims.to_vec();
+    for claim in &mut claims {
+        if claim.repo_root.is_empty() {
+            return Err(AppError::usage("repository claim root must not be empty"));
+        }
+        if claim.scopes.is_empty() {
+            return Err(AppError::usage(format!("at least one scope is required for {}", claim.repo_root)));
+        }
+        claim.scopes.sort_by(|left, right| {
+            left.path.cmp(&right.path).then_with(|| scope_kind_name(left.kind).cmp(scope_kind_name(right.kind)))
+        });
+        if claim.scopes.windows(2).any(|pair| pair[0].path == pair[1].path) {
+            return Err(AppError::usage(format!("duplicate scope path in {}", claim.repo_root)));
+        }
+        if let Some(baselines) = &mut claim.baselines {
+            baselines.sort_by(|left, right| left.path.cmp(&right.path));
+            if baselines.windows(2).any(|pair| pair[0].path == pair[1].path) {
+                return Err(AppError::usage(format!("duplicate baseline path in {}", claim.repo_root)));
+            }
+        }
+        claim.residual_paths.sort();
+        claim.residual_paths.dedup();
+    }
+    claims.sort_by(|left, right| left.repo_root.cmp(&right.repo_root));
+    if claims.windows(2).any(|pair| pair[0].repo_root == pair[1].repo_root) {
+        return Err(AppError::usage("duplicate repository claim root"));
+    }
+    Ok(claims)
+}
+
+fn existing_claim_ids(connection: &Connection, work_id: i64) -> Result<BTreeMap<String, i64>> {
+    let mut statement = connection.prepare("SELECT repo_root, id FROM work_claims WHERE work_id = ?1")?;
+    Ok(statement.query_map([work_id], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<rusqlite::Result<_>>()?)
+}
+
+fn work_from(connection: &Connection, identity: &Identity) -> Result<Option<WorkRow>> {
     let base = connection
         .query_row(
-            &work_select("WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3"),
-            params![client_name(identity.client), identity.session_id, repo_root],
+            &work_select("WHERE client = ?1 AND session_id = ?2"),
+            params![client_name(identity.client), identity.session_id],
             work_base_from_row,
         )
         .optional()?;
     base.map(|base| finish_work(connection, base)).transpose()
 }
 
-fn works_for_identity_from(connection: &Connection, identity: &Identity) -> Result<Vec<WorkRow>> {
-    let mut statement = connection.prepare(&work_select("WHERE client = ?1 AND session_id = ?2 ORDER BY repo_root"))?;
+fn works_from(connection: &Connection, repo_root: Option<&str>) -> Result<Vec<WorkRow>> {
+    let (query, arguments) = match repo_root {
+        Some(repo_root) => (
+            work_select(
+                "JOIN work_claims ON work_claims.work_id = work_items.id
+                 WHERE work_claims.repo_root = ?1
+                 ORDER BY COALESCE(submitted_at, draft_created_at), work_items.id",
+            ),
+            vec![repo_root],
+        ),
+        None => (work_select("ORDER BY COALESCE(submitted_at, draft_created_at), work_items.id"), Vec::new()),
+    };
+    let mut statement = connection.prepare(&query)?;
     let bases = statement
-        .query_map(params![client_name(identity.client), identity.session_id], work_base_from_row)?
+        .query_map(rusqlite::params_from_iter(arguments), work_base_from_row)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     bases.into_iter().map(|base| finish_work(connection, base)).collect()
 }
@@ -425,20 +475,6 @@ fn record_residual_owners_from(
     Ok(())
 }
 
-fn works_from(connection: &Connection, repo_root: Option<&str>) -> Result<Vec<WorkRow>> {
-    let (query, arguments) = match repo_root {
-        Some(repo_root) => {
-            (work_select("WHERE repo_root = ?1 ORDER BY COALESCE(submitted_at, draft_created_at), id"), vec![repo_root])
-        }
-        None => (work_select("ORDER BY COALESCE(submitted_at, draft_created_at), id"), Vec::new()),
-    };
-    let mut statement = connection.prepare(&query)?;
-    let bases = statement
-        .query_map(rusqlite::params_from_iter(arguments), work_base_from_row)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    bases.into_iter().map(|base| finish_work(connection, base)).collect()
-}
-
 fn residual_owners_from(connection: &Connection, repo_root: &str) -> Result<Vec<ResidualOwnerRow>> {
     let mut statement = connection.prepare(
         "SELECT repo_root, path, client, session_id, released_at
@@ -451,9 +487,10 @@ fn baselines_in_repo_from(connection: &Connection, identity: &Identity, repo_roo
     let mut statement = connection.prepare(
         "SELECT work_baselines.path, work_baselines.oid
          FROM work_baselines
-         JOIN work_items ON work_items.id = work_baselines.work_id
+         JOIN work_claims ON work_claims.id = work_baselines.claim_id
+         JOIN work_items ON work_items.id = work_claims.work_id
          WHERE work_items.client = ?1 AND work_items.session_id = ?2
-           AND work_items.repo_root = ?3 AND work_items.state = 'active'
+           AND work_claims.repo_root = ?3 AND work_items.state = 'active'
          ORDER BY work_baselines.path",
     )?;
     Ok(statement
@@ -466,7 +503,6 @@ fn baselines_in_repo_from(connection: &Connection, identity: &Identity, repo_roo
 struct WorkBase {
     id: i64,
     identity: Identity,
-    repo_root: String,
     label: String,
     state: WorkState,
     blocked_reason: Option<String>,
@@ -478,7 +514,7 @@ struct WorkBase {
 
 fn work_select(suffix: &str) -> String {
     format!(
-        "SELECT id, client, session_id, repo_root, label, state, blocked_reason,
+        "SELECT work_items.id, client, session_id, label, state, work_items.blocked_reason,
                 draft_created_at, submitted_at, updated_at, revision FROM work_items {suffix}"
     )
 }
@@ -487,30 +523,48 @@ fn work_base_from_row(row: &Row<'_>) -> rusqlite::Result<WorkBase> {
     Ok(WorkBase {
         id: row.get(0)?,
         identity: Identity { client: parse_client(row.get(1)?)?, session_id: row.get(2)? },
-        repo_root: row.get(3)?,
-        label: row.get(4)?,
-        state: parse_work_state(row.get(5)?)?,
-        blocked_reason: row.get(6)?,
-        draft_created_at: row.get(7)?,
-        submitted_at: row.get(8)?,
-        updated_at: row.get(9)?,
-        revision: row.get(10)?,
+        label: row.get(3)?,
+        state: parse_work_state(row.get(4)?)?,
+        blocked_reason: row.get(5)?,
+        draft_created_at: row.get(6)?,
+        submitted_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        revision: row.get(9)?,
     })
 }
 
 fn finish_work(connection: &Connection, base: WorkBase) -> Result<WorkRow> {
-    let mut statement = connection.prepare("SELECT path, kind FROM work_scopes WHERE work_id = ?1 ORDER BY path")?;
-    let scopes = statement
-        .query_map([base.id], |row| Ok(Scope { path: row.get(0)?, kind: parse_scope_kind(row.get(1)?)? }))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let claim_bases = {
+        let mut statement = connection
+            .prepare("SELECT id, repo_root, blocked_reason FROM work_claims WHERE work_id = ?1 ORDER BY repo_root")?;
+        statement
+            .query_map([base.id], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    if claim_bases.is_empty() {
+        return Err(AppError::operational("work item has no repository claims"));
+    }
+    let mut claims = Vec::with_capacity(claim_bases.len());
+    for (id, repo_root, blocked_reason) in claim_bases {
+        let mut statement =
+            connection.prepare("SELECT path, kind FROM work_scopes WHERE claim_id = ?1 ORDER BY path")?;
+        let scopes = statement
+            .query_map([id], |row| Ok(Scope { path: row.get(0)?, kind: parse_scope_kind(row.get(1)?)? }))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if scopes.is_empty() {
+            return Err(AppError::operational(format!("repository claim {repo_root} has no scopes")));
+        }
+        claims.push(WorkClaimRow { id, repo_root, blocked_reason, scopes });
+    }
     Ok(WorkRow {
         id: base.id,
         identity: base.identity,
-        repo_root: base.repo_root,
         label: base.label,
         state: base.state,
         blocked_reason: base.blocked_reason,
-        scopes,
+        claims,
         draft_created_at: base.draft_created_at,
         submitted_at: base.submitted_at,
         updated_at: base.updated_at,
@@ -518,11 +572,11 @@ fn finish_work(connection: &Connection, base: WorkBase) -> Result<WorkRow> {
     })
 }
 
-fn insert_baselines(transaction: &Transaction<'_>, work_id: i64, baselines: &[BaselineRow]) -> Result<()> {
+fn insert_baselines(transaction: &Transaction<'_>, claim_id: i64, baselines: &[BaselineRow]) -> Result<()> {
     for baseline in baselines {
         transaction.execute(
-            "INSERT INTO work_baselines(work_id, path, oid) VALUES (?1, ?2, ?3)",
-            params![work_id, baseline.path, baseline.oid],
+            "INSERT INTO work_baselines(claim_id, path, oid) VALUES (?1, ?2, ?3)",
+            params![claim_id, baseline.path, baseline.oid],
         )?;
     }
     Ok(())

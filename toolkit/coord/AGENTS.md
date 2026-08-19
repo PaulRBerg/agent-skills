@@ -31,9 +31,13 @@ ladders, old-format importers, deprecated CLI aliases, dual reads or writes, ret
 hook recognition by default. Rejecting an incompatible persisted version with an actionable error is required safety
 behavior, not backward compatibility.
 
-Schema v14 is the Rust implementation's clean break. It never migrates or imports an older ledger. Work is keyed by
-`(client, session_id, repo_root)`; repository-scoped lifecycle commands resolve the current physical Git root, while
-`done --all` is the explicit identity-wide release. New roots must be acquired in canonical lexicographic order.
+Schema v15 is the Rust implementation's clean break. It never migrates or imports an older ledger; reject v14 and every
+other nonzero version with actionable replacement guidance. Work is one logical item per `(client, session_id)` with a
+sorted vector of repository claims. Ordinary `draft` and `start` stay current-root compatible and must not implicitly
+append or move a claim. Cross-repository work uses only the explicit atomic `bundle draft` and `bundle start` commands
+with absolute paths and at least two canonical physical Git roots; direct submission, draft promotion, and active
+updates are all-or-none. Queued bundles hold no partial active claims, and one parent FIFO age governs all claims to
+retain repository-local fairness and avoid opposite-order deadlocks.
 Session liveness is based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced
 process is removed without an age grace period, while unknown liveness fails closed and never deletes the record.
 
@@ -46,17 +50,19 @@ recognizer; ledger replacement and global rollout remain separate explicitly aut
 ## Agent-facing protocol
 
 Treat the one-sentence stderr guidance printed for every `start`, `wait`, and `done` outcome as the authoritative next
-step while preserving their stdout TSV as a machine interface. Only `READY` grants editing; release completed work with
-current-root `done`, or use `done --all` only for an intentional all-root release. Preserve `stale-dirt` hunks
-byte-for-byte. `ai-coord baseline` is a stable current-root machine contract consisting of one
-normalized repository-relative `path<TAB>oid` record per line, or empty output when no baselines exist.
+step while preserving their stdout TSV as a machine interface. Only `READY` grants editing. `wait` and `done` from any
+claimed worktree act on the whole bundle; there is no bundle-specific form and `done --all` is removed. Preserve
+`stale-dirt` hunks byte-for-byte. Baselines, touched paths, and hook cleanliness remain current-claim-local; a bundle
+baseline from an unclaimed root must fail. `ai-coord baseline` is a stable machine contract consisting of one normalized
+repository-relative `path<TAB>oid` record per line, or empty output when no baselines exist.
 
 `ai-coord touched` is a best-effort cross-check of normalized repository-relative paths observed in this session's
 file-mutating post-tool payloads. Its stable output is one path per line, with a leading `!TRUNCATED` record when its
 1,000-path cap dropped older records; an empty complete set exits successfully with no output. It stores no payload
-content. Status schema v6 exposes required session `coordination_waived` booleans, repeated repository-keyed work rows,
-and nonzero repository task-handoff counts as `{repo_root, count}` records. Hooks derive prompt/nudge/waker work from
-the payload's Git root; authoritative end cleanup is identity-wide. Guidance stays
+content. Status schema v7 exposes required session `coordination_waived` booleans and complete sorted work `claims`
+vectors; dashboard and terminal status home a logical bundle once, with nested claim blockers and queue positions.
+Hooks derive prompt/nudge/waker work from the payload's Git-root claim; authoritative end cleanup releases the whole
+logical item. Guidance stays
 here while README remains human-facing tool documentation.
 
 ## Upstream documentation

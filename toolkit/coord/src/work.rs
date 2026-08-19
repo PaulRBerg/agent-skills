@@ -1,392 +1,102 @@
 //! Atomic work arbitration over provider, process, and Git evidence.
 
+mod bundle;
+
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
 };
 
 use crate::{
-    domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, ScopeKind, WorkState, client_name, sanitize},
+    domain::{Identity, Scope, ScopeKind, WorkState},
     error::{AppError, Result},
     host::{
-        UNHASHABLE_BLOB_HASH, any_overlap, git_blob_hashes, git_dirty_paths, normalize_scopes, overlapping_paths,
+        UNHASHABLE_BLOB_HASH, WorkClaimRequest, any_overlap, git_blob_hashes, git_dirty_paths, normalize_scopes,
         overlaps_outside_coverage, relevant_dirty, scopes_cover, scopes_overlap,
     },
-    state::{BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkRow, WorkUpdate},
+    state::{BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkRow},
 };
 
 pub(crate) const DIRT_HOLD_SECONDS: f64 = 90.0;
-const MAX_MESSAGE_CHARS: usize = 240;
 
 pub(crate) struct WorkCoordinator<'a> {
     pub(crate) store: &'a mut Store,
 }
 
-impl WorkCoordinator<'_> {
-    pub(crate) fn start_direct(
-        &mut self,
-        identity: &Identity,
-        root: &Path,
-        label: &str,
-        scopes: Vec<Scope>,
-        inventory: &InventoryResult,
-        current: f64,
-    ) -> Result<Outcome> {
-        let repo_root = path_text(root)?;
-        let existing = self.store.work_in_repo(identity, &repo_root)?;
-        if existing.as_ref().is_some_and(|work| work.state == WorkState::Draft) {
-            return Err(AppError::operational(
-                "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
-            ));
-        }
-        self.submit(identity, root, label, scopes, inventory, existing, None, current)
-    }
-
-    pub(crate) fn promote_draft(
-        &mut self,
-        identity: &Identity,
-        root: &Path,
-        draft: WorkRow,
-        inventory: &InventoryResult,
-        current: f64,
-    ) -> Result<Outcome> {
-        if draft.state != WorkState::Draft {
-            return Err(AppError::operational("no draft work for this session"));
-        }
-        let revision = draft.revision;
-        let label = draft.label.clone();
-        self.submit(identity, root, &label, draft.scopes.clone(), inventory, Some(draft), Some(revision), current)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn submit(
-        &mut self,
-        identity: &Identity,
-        root: &Path,
-        label: &str,
-        scopes: Vec<Scope>,
-        inventory: &InventoryResult,
-        existing: Option<WorkRow>,
-        draft_revision: Option<i64>,
-        current: f64,
-    ) -> Result<Outcome> {
-        if scopes.is_empty() {
-            return Err(AppError::usage("at least one scope is required"));
-        }
-        let repo_root = path_text(root)?;
-        let creates_submitted_root =
-            existing.as_ref().is_none_or(|work| !matches!(work.state, WorkState::Queued | WorkState::Active));
-        if creates_submitted_root {
-            ensure_canonical_root_order(&repo_root, &self.store.works_for_identity(identity)?)?;
-        }
-        if let Some(active) = existing.as_ref().filter(|work| work.state == WorkState::Active) {
-            return self.update_active(identity, root, &repo_root, label, scopes, inventory, active.clone(), current);
-        }
-
-        let (relevant, _, observations) = observe_git_dirt(self.store, root, &scopes, current)?;
-        let benign = benign_dirt_scopes(root);
-        let existing_scopes = existing.as_ref().map(|work| work.scopes.as_slice()).unwrap_or_default();
-        let preserved_submission = if draft_revision.is_some() {
-            None
-        } else {
-            existing
-                .as_ref()
-                .filter(|work| work.state == WorkState::Queued && scopes_cover(&work.scopes, &scopes))
-                .and_then(|work| work.submitted_at)
-        };
-
-        let mut advisory = Vec::new();
-        let outcome = self.store.with_work_transaction(|transaction| {
-            let current_work = transaction.work_in_repo(identity, &repo_root)?;
-            match draft_revision {
-                Some(revision) => {
-                    let Some(work) = current_work
-                        .as_ref()
-                        .filter(|work| work.state == WorkState::Draft && work.revision == revision)
-                    else {
-                        return Err(AppError::retry("draft changed during promotion"));
-                    };
-                    if work.repo_root != repo_root {
-                        return Err(AppError::retry("draft repository changed during promotion"));
-                    }
-                }
-                None => {
-                    if current_work.as_ref().is_some_and(|work| work.state == WorkState::Draft) {
-                        return Err(AppError::operational(
-                            "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
-                        ));
-                    }
-                    if current_work.as_ref().map(|work| work.revision) != existing.as_ref().map(|work| work.revision) {
-                        return Err(AppError::retry("work item changed during arbitration"));
-                    }
-                }
-            }
-            if creates_submitted_root {
-                ensure_canonical_root_order(&repo_root, &transaction.works_for_identity(identity)?)?;
-            }
-
-            let submitted_at = match preserved_submission {
-                Some(submitted_at) => submitted_at,
-                None => transaction.next_submission_time(current)?,
-            };
-            let work = transaction.works(&repo_root)?;
-            let residuals = transaction.residual_owners(&repo_root)?;
-            let active = blockers(&work, identity, &scopes, WorkState::Active, None);
-            let earlier = blockers(&work, identity, &scopes, WorkState::Queued, Some(submitted_at));
-            let unattributed = unattributed_dirty(&relevant, &work);
-            let (fresh, stale) = partition_dirty(&unattributed, &observations, &residuals, &benign, identity, current);
-            advisory = stale;
-            let (state, blocked_reason, decision) = if !inventory.complete {
-                (WorkState::Queued, Some("coverage".to_owned()), Outcome::new(OutcomeKind::Unknown, 2, "coverage"))
-            } else if !fresh.is_empty() {
-                (
-                    WorkState::Queued,
-                    Some("dirty".to_owned()),
-                    Outcome::new(OutcomeKind::Unknown, 2, format!("dirty-settling:{}", fresh.join(","))),
-                )
-            } else if !active.is_empty() || !earlier.is_empty() {
-                let contenders = if active.is_empty() { &earlier } else { &active };
-                let reason = if active.is_empty() { "waiter" } else { "overlap" };
-                (WorkState::Queued, Some(reason.to_owned()), blocked_outcome(&scopes, contenders, transaction)?)
-            } else {
-                let detail =
-                    if advisory.is_empty() { String::new() } else { format!("stale-dirt:{}", advisory.join(",")) };
-                (WorkState::Active, None, Outcome::new(OutcomeKind::Ready, 0, detail).with_paths(scope_paths(&scopes)))
-            };
-
-            let should_notify = existing.as_ref().is_none_or(|work| {
-                work.blocked_reason.as_deref() != Some("overlap") || !same_scopes(existing_scopes, &scopes)
-            });
-            let expected_revision = current_work.as_ref().map(|work| work.revision);
-            transaction.save_work(&WorkUpdate {
-                identity: identity.clone(),
-                repo_root: repo_root.clone(),
-                label: label.to_owned(),
-                state,
-                blocked_reason,
-                scopes: scopes.clone(),
-                baselines: None,
-                residual_paths: Vec::new(),
-                draft_created_at: current_work.as_ref().and_then(|work| work.draft_created_at),
-                submitted_at: Some(submitted_at),
-                updated_at: current,
-                expected_revision,
-            })?;
-            if should_notify {
-                for holder in &active {
-                    transaction.send_message(
-                        identity,
-                        &holder.identity,
-                        &blocked_message(label, &scopes, holder),
-                        Some(&repo_root),
-                        current,
-                    )?;
-                }
-            }
-            Ok(decision)
-        })?;
-        if outcome.kind == OutcomeKind::Ready && !advisory.is_empty() {
-            let baselines = write_baselines(root, &advisory);
-            self.store.replace_baselines_in_repo(identity, &repo_root, &baselines)?;
-        }
-        Ok(outcome)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn update_active(
-        &mut self,
-        identity: &Identity,
-        root: &Path,
-        repo_root: &str,
-        label: &str,
-        scopes: Vec<Scope>,
-        inventory: &InventoryResult,
-        existing: WorkRow,
-        current: f64,
-    ) -> Result<Outcome> {
-        if same_scopes(&existing.scopes, &scopes) {
-            if existing.label != label {
-                self.store.save_work(&WorkUpdate {
-                    identity: identity.clone(),
-                    repo_root: repo_root.to_owned(),
-                    label: label.to_owned(),
-                    state: WorkState::Active,
-                    blocked_reason: None,
-                    scopes: scopes.clone(),
-                    baselines: None,
-                    residual_paths: Vec::new(),
-                    draft_created_at: existing.draft_created_at,
-                    submitted_at: existing.submitted_at,
-                    updated_at: current,
-                    expected_revision: Some(existing.revision),
-                })?;
-            }
-            return Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes)));
-        }
-
-        let (relevant, dirty, observations) = observe_git_dirt(self.store, root, &scopes, current)?;
-        let narrowing = scopes_cover(&existing.scopes, &scopes);
-        let benign = benign_dirt_scopes(root);
-        let existing_relevant = relevant_dirty(&existing.scopes, &dirty);
-        let mut attempted_baselines = HashSet::new();
-        let mut prepared_baselines = Vec::new();
-
-        loop {
-            let step = self.store.with_work_transaction(|transaction| {
-                let current_work = transaction.work_in_repo(identity, repo_root)?;
-                let Some(current_work) = current_work.filter(|work| {
-                    work.state == WorkState::Active &&
-                        work.revision == existing.revision &&
-                        same_scopes(&work.scopes, &existing.scopes)
-                }) else {
-                    return Err(AppError::retry("active work changed during scope update"));
-                };
-
-                let work = transaction.works(repo_root)?;
-                let residuals = transaction.residual_owners(repo_root)?;
-                let active = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Active);
-                let queued = expansion_blockers(&work, identity, &scopes, &existing.scopes, WorkState::Queued);
-                let unattributed = unattributed_dirty(&relevant, &work);
-                let (fresh, advisory) =
-                    partition_dirty(&unattributed, &observations, &residuals, &benign, identity, current);
-
-                if !narrowing && !inventory.complete {
-                    return Ok(ActiveUpdateStep::Complete(
-                        Outcome::new(OutcomeKind::Active, 3, "update-unknown:coverage")
-                            .with_paths(scope_paths(&existing.scopes)),
-                    ));
-                }
-                if !narrowing && !fresh.is_empty() {
-                    return Ok(ActiveUpdateStep::Complete(
-                        Outcome::new(
-                            OutcomeKind::Active,
-                            3,
-                            format!("update-unknown:dirty-settling:{}", fresh.join(",")),
-                        )
-                        .with_paths(scope_paths(&existing.scopes)),
-                    ));
-                }
-                if !narrowing && (!active.is_empty() || !queued.is_empty()) {
-                    let mut contenders = active;
-                    contenders.extend(queued);
-                    let mut decision = blocked_outcome(&scopes, &contenders, transaction)?;
-                    decision.kind = OutcomeKind::Active;
-                    decision.detail = format!("update-blocked:{}", decision.holders.join(","));
-                    decision.paths = scope_paths(&existing.scopes);
-                    return Ok(ActiveUpdateStep::Complete(decision));
-                }
-
-                let missing = advisory
-                    .iter()
-                    .filter(|path| !attempted_baselines.contains(path.as_str()))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if !missing.is_empty() {
-                    return Ok(ActiveUpdateStep::Prepare(missing));
-                }
-
-                let released = existing_relevant
-                    .iter()
-                    .filter(|path| relevant_dirty(&scopes, std::slice::from_ref(path)).is_empty())
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let mut baselines = transaction
-                    .baselines_in_repo(identity, repo_root)?
-                    .into_iter()
-                    .filter(|row| !relevant_dirty(&scopes, std::slice::from_ref(&row.path)).is_empty())
-                    .collect::<Vec<_>>();
-                let advisory = advisory.iter().collect::<HashSet<_>>();
-                merge_baselines(
-                    &mut baselines,
-                    prepared_baselines
-                        .iter()
-                        .filter(|row: &&BaselineRow| advisory.contains(&row.path))
-                        .cloned()
-                        .collect(),
-                );
-                let waiters = work
-                    .iter()
-                    .filter(|work| {
-                        work.state == WorkState::Queued &&
-                            any_overlap(&existing.scopes, &work.scopes) &&
-                            !any_overlap(&scopes, &work.scopes)
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>();
-                transaction.save_work(&WorkUpdate {
-                    identity: identity.clone(),
-                    repo_root: repo_root.to_owned(),
-                    label: label.to_owned(),
-                    state: WorkState::Active,
-                    blocked_reason: None,
-                    scopes: scopes.clone(),
-                    baselines: Some(baselines),
-                    residual_paths: released,
-                    draft_created_at: current_work.draft_created_at,
-                    submitted_at: current_work.submitted_at,
-                    updated_at: current,
-                    expected_revision: Some(current_work.revision),
-                })?;
-                let message = sanitize(
-                    &format!("Narrowed work '{}'; your queued work may now be ready.", existing.label),
-                    MAX_MESSAGE_CHARS,
-                );
-                for waiter in waiters {
-                    transaction.send_message(identity, &waiter.identity, &message, Some(repo_root), current)?;
-                }
-                Ok(ActiveUpdateStep::Complete(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(scope_paths(&scopes))))
-            })?;
-
-            match step {
-                ActiveUpdateStep::Complete(outcome) => return Ok(outcome),
-                ActiveUpdateStep::Prepare(paths) => {
-                    merge_baselines(&mut prepared_baselines, write_baselines(root, &paths));
-                    attempted_baselines.extend(paths);
-                }
-            }
-        }
-    }
+#[derive(Clone, Debug)]
+struct RepoEvidence {
+    repo_root: String,
+    dirty: Vec<String>,
+    hashes: Vec<(String, String)>,
+    benign: Vec<Scope>,
+    inspection: Option<String>,
 }
 
-pub(crate) fn ensure_canonical_root_order(repo_root: &str, work: &[WorkRow]) -> Result<()> {
-    let later_roots = work
-        .iter()
-        .filter(|work| {
-            matches!(work.state, WorkState::Queued | WorkState::Active) && work.repo_root.as_str() > repo_root
+fn validate_claim_vector(claims: &[WorkClaimRequest]) -> Result<()> {
+    if claims.is_empty() {
+        return Err(AppError::usage("at least one repository claim is required"));
+    }
+    let mut previous: Option<String> = None;
+    for claim in claims {
+        let repo_root = path_text(&claim.repo_root)?;
+        if !claim.repo_root.is_absolute() {
+            return Err(AppError::usage(format!("repository root must be absolute: {repo_root}")));
+        }
+        if claim.scopes.is_empty() {
+            return Err(AppError::usage(format!("at least one scope is required for {repo_root}")));
+        }
+        if previous.as_deref().is_some_and(|root| root >= repo_root.as_str()) {
+            return Err(AppError::usage("repository claims must be sorted by distinct root"));
+        }
+        previous = Some(repo_root);
+    }
+    Ok(())
+}
+
+fn gather_evidence(
+    claims: &[WorkClaimRequest],
+    existing: Option<&WorkRow>,
+    bundle_operation: bool,
+) -> Result<Vec<RepoEvidence>> {
+    let mut roots = BTreeMap::<String, (PathBuf, Vec<Scope>)>::new();
+    for claim in claims {
+        let repo_root = path_text(&claim.repo_root)?;
+        roots.insert(repo_root, (claim.repo_root.clone(), claim.scopes.clone()));
+    }
+    if let Some(existing) = existing.filter(|work| work.state == WorkState::Active) {
+        for claim in &existing.claims {
+            roots
+                .entry(claim.repo_root.clone())
+                .and_modify(|(_, scopes)| merge_scopes(scopes, &claim.scopes))
+                .or_insert_with(|| (PathBuf::from(&claim.repo_root), claim.scopes.clone()));
+        }
+    }
+
+    roots
+        .into_iter()
+        .map(|(repo_root, (root, scopes))| match git_dirty_paths(&root) {
+            Ok(dirty) => {
+                let relevant = relevant_dirty(&scopes, &dirty);
+                let hashes = git_blob_hashes(&root, &relevant, false);
+                Ok(RepoEvidence { repo_root, dirty, hashes, benign: benign_dirt_scopes(&root), inspection: None })
+            }
+            Err(error) if bundle_operation => Ok(RepoEvidence {
+                repo_root,
+                dirty: Vec::new(),
+                hashes: Vec::new(),
+                benign: benign_dirt_scopes(&root),
+                inspection: Some(error.to_string()),
+            }),
+            Err(error) => Err(error),
         })
-        .map(|work| work.repo_root.clone())
-        .collect::<Vec<_>>();
-    if later_roots.is_empty() {
-        return Ok(());
-    }
-    Err(AppError::operational(format!(
-        "repository acquisition order requires releasing later roots first: {}",
-        later_roots.join(", ")
-    )))
-}
-
-enum ActiveUpdateStep {
-    Complete(Outcome),
-    Prepare(Vec<String>),
-}
-
-fn observe_git_dirt(
-    store: &mut Store,
-    root: &Path,
-    scopes: &[Scope],
-    current: f64,
-) -> Result<(Vec<String>, Vec<String>, Vec<DirtObservationRow>)> {
-    let dirty = git_dirty_paths(root)?;
-    let relevant = relevant_dirty(scopes, &dirty);
-    let hashes = git_blob_hashes(root, &relevant, false);
-    let observations = store.observe_dirt_subset(&path_text(root)?, &dirty, &hashes, current)?;
-    Ok((relevant, dirty, observations))
+        .collect()
 }
 
 fn blockers(
     work: &[WorkRow],
     identity: &Identity,
+    repo_root: &str,
     scopes: &[Scope],
     state: WorkState,
     before: Option<f64>,
@@ -396,7 +106,7 @@ fn blockers(
             work.state == state &&
                 work.identity != *identity &&
                 before.is_none_or(|submitted| work.submitted_at.is_some_and(|age| age < submitted)) &&
-                any_overlap(scopes, &work.scopes)
+                work.claim(repo_root).is_some_and(|claim| any_overlap(scopes, &claim.scopes))
         })
         .cloned()
         .collect()
@@ -405,25 +115,31 @@ fn blockers(
 fn expansion_blockers(
     work: &[WorkRow],
     identity: &Identity,
+    repo_root: &str,
     requested: &[Scope],
     existing: &[Scope],
-    state: WorkState,
 ) -> Vec<WorkRow> {
     work.iter()
         .filter(|work| {
-            work.state == state &&
+            matches!(work.state, WorkState::Active | WorkState::Queued) &&
                 work.identity != *identity &&
-                !overlaps_outside_coverage(requested, &work.scopes, existing).is_empty()
+                work.claim(repo_root)
+                    .is_some_and(|claim| !overlaps_outside_coverage(requested, &claim.scopes, existing).is_empty())
         })
         .cloned()
         .collect()
 }
 
-fn unattributed_dirty(dirty: &[String], work: &[WorkRow]) -> Vec<String> {
+fn work_in_repo(work: &[WorkRow], repo_root: &str) -> Vec<WorkRow> {
+    work.iter().filter(|work| work.claim(repo_root).is_some()).cloned().collect()
+}
+
+fn unattributed_dirty(dirty: &[String], work: &[WorkRow], repo_root: &str) -> Vec<String> {
     let owned = work
         .iter()
         .filter(|work| work.state == WorkState::Active)
-        .flat_map(|work| work.scopes.iter())
+        .filter_map(|work| work.claim(repo_root))
+        .flat_map(|claim| claim.scopes.iter())
         .collect::<Vec<_>>();
     dirty
         .iter()
@@ -462,71 +178,23 @@ fn partition_dirty(
     (fresh, advisory)
 }
 
-fn blocked_outcome(
-    requested: &[Scope],
-    blockers: &[WorkRow],
-    transaction: &crate::state::WorkTransaction<'_>,
-) -> Result<Outcome> {
-    let holders =
-        blockers.iter().map(|work| identity_display(&work.identity, transaction)).collect::<Result<Vec<_>>>()?;
-    let mut paths = blockers.iter().flat_map(|work| overlapping_paths(requested, &work.scopes)).collect::<Vec<_>>();
-    paths.sort();
-    paths.dedup();
-    let broad_paths = blockers
+fn foreign_residuals(
+    dirty: &[String],
+    residuals: &[ResidualOwnerRow],
+    benign: &[Scope],
+    identity: &Identity,
+) -> Vec<ResidualOwnerRow> {
+    residuals
         .iter()
-        .flat_map(|work| {
-            requested
-                .iter()
-                .filter(|requested| {
-                    work.scopes.iter().any(|owned| {
-                        requested.is_recursive() &&
-                            (requested.path == "." || owned.path.starts_with(&format!("{}/", requested.path)))
-                    })
-                })
-                .map(|scope| scope.path.clone())
-                .collect::<Vec<_>>()
+        .filter(|row| {
+            row.identity != *identity &&
+                dirty.contains(&row.path) &&
+                !benign
+                    .iter()
+                    .any(|scope| scopes_overlap(scope, &Scope { path: row.path.clone(), kind: ScopeKind::Exact }))
         })
-        .collect::<HashSet<_>>();
-    Ok(Outcome {
-        kind: OutcomeKind::Blocked,
-        code: 3,
-        detail: holders.join(","),
-        paths,
-        holders,
-        broad_paths: sorted(broad_paths),
-    })
-}
-
-fn identity_display(identity: &Identity, transaction: &crate::state::WorkTransaction<'_>) -> Result<String> {
-    if let Some(callsign) = transaction.callsign(identity)? {
-        return Ok(callsign);
-    }
-    let prefix = identity.session_id.chars().take(8).collect::<String>();
-    Ok(format!("{}/{prefix}", client_name(identity.client)))
-}
-
-fn blocked_message(label: &str, requested: &[Scope], blocker: &WorkRow) -> String {
-    let overlaps = overlapping_paths(requested, &blocker.scopes);
-    let broad = blocker
-        .scopes
-        .iter()
-        .filter(|owned| {
-            requested.iter().any(|requested| {
-                owned.is_recursive() && (owned.path == "." || requested.path.starts_with(&format!("{}/", owned.path)))
-            })
-        })
-        .map(|scope| scope.path.clone())
-        .collect::<Vec<_>>();
-    let message = if broad.is_empty() {
-        format!("Queued behind your work: {label}; overlaps: {}.", overlaps.join(", "))
-    } else {
-        format!(
-            "Narrow broad work {} with ai-coord start if unrelated; queued work '{label}' overlaps: {}.",
-            broad.join(", "),
-            overlaps.join(", ")
-        )
-    };
-    sanitize(&message, MAX_MESSAGE_CHARS)
+        .cloned()
+        .collect()
 }
 
 fn benign_dirt_scopes(root: &Path) -> Vec<Scope> {
@@ -584,16 +252,100 @@ fn merge_baselines(current: &mut Vec<BaselineRow>, additional: Vec<BaselineRow>)
     }
 }
 
+fn merge_scopes(current: &mut Vec<Scope>, additional: &[Scope]) {
+    for scope in additional {
+        if !current.contains(scope) {
+            current.push(scope.clone());
+        }
+    }
+}
+
+fn evidence_for<'a>(evidence: &'a [RepoEvidence], repo_root: &str) -> &'a RepoEvidence {
+    evidence.iter().find(|item| item.repo_root == repo_root).expect("evidence covers every claim")
+}
+
+fn existing_claim_scopes(work: &WorkRow) -> HashMap<String, Vec<Scope>> {
+    work.claims.iter().map(|claim| (claim.repo_root.clone(), claim.scopes.clone())).collect()
+}
+
+fn work_vector_covers_requests(work: &WorkRow, requested: &[WorkClaimRequest]) -> bool {
+    requested.iter().all(|claim| {
+        claim
+            .repo_root
+            .to_str()
+            .is_some_and(|root| work.claim(root).is_some_and(|existing| scopes_cover(&existing.scopes, &claim.scopes)))
+    })
+}
+
+fn same_claim_vector(work: &WorkRow, requested: &[WorkClaimRequest]) -> bool {
+    work.claims.len() == requested.len() &&
+        requested.iter().all(|claim| {
+            claim.repo_root.to_str().is_some_and(|root| {
+                work.claim(root).is_some_and(|existing| same_scopes(&existing.scopes, &claim.scopes))
+            })
+        })
+}
+
+fn same_work_vectors(left: &WorkRow, right: &WorkRow) -> bool {
+    left.claims.len() == right.claims.len() &&
+        left.claims.iter().all(|claim| {
+            right.claim(&claim.repo_root).is_some_and(|other| same_scopes(&claim.scopes, &other.scopes))
+        })
+}
+
 fn same_scopes(left: &[Scope], right: &[Scope]) -> bool {
     left.len() == right.len() && left.iter().all(|scope| right.contains(scope))
 }
 
-fn scope_paths(scopes: &[Scope]) -> Vec<String> {
-    scopes.iter().map(|scope| scope.path.clone()).collect()
+fn work_vectors_overlap(left: &WorkRow, right: &WorkRow) -> bool {
+    left.claims
+        .iter()
+        .any(|claim| right.claim(&claim.repo_root).is_some_and(|other| any_overlap(&claim.scopes, &other.scopes)))
 }
+
+fn request_work_overlap(requested: &[WorkClaimRequest], work: &WorkRow) -> bool {
+    requested.iter().any(|claim| {
+        claim
+            .repo_root
+            .to_str()
+            .is_some_and(|root| work.claim(root).is_some_and(|other| any_overlap(&claim.scopes, &other.scopes)))
+    })
+}
+
+fn request_paths(claims: &[WorkClaimRequest], qualified: bool) -> Vec<String> {
+    claims
+        .iter()
+        .flat_map(|claim| claim.scopes.iter().map(move |scope| output_path(claim, &scope.path, qualified)))
+        .collect()
+}
+
+fn work_paths(work: &WorkRow, qualified: bool) -> Vec<String> {
+    work.claims
+        .iter()
+        .flat_map(|claim| {
+            claim.scopes.iter().map(move |scope| {
+                if qualified { qualify_path(&claim.repo_root, &scope.path) } else { scope.path.clone() }
+            })
+        })
+        .collect()
+}
+
+fn output_path(claim: &WorkClaimRequest, path: &str, qualified: bool) -> String {
+    if qualified { qualify_path(claim.repo_root.to_str().expect("validated root"), path) } else { path.to_owned() }
+}
+
+fn qualify_path(repo_root: &str, path: &str) -> String {
+    if path == "." {
+        repo_root.to_owned()
+    } else {
+        Path::new(repo_root).join(path).to_str().expect("validated repository path").to_owned()
+    }
+}
+
 fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
 }
+
 fn sorted(values: HashSet<String>) -> Vec<String> {
     let mut values = values.into_iter().collect::<Vec<_>>();
     values.sort();
@@ -606,8 +358,8 @@ mod tests {
 
     use super::*;
 
-    fn scope(path: String, recursive: bool) -> Scope {
-        Scope { path, kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }
+    fn scope(path: impl Into<String>, recursive: bool) -> Scope {
+        Scope { path: path.into(), kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }
     }
 
     proptest! {
@@ -626,8 +378,8 @@ mod tests {
 
     #[test]
     fn exact_parent_does_not_cover_child_but_recursive_parent_does() {
-        let child = scope("src/lib.rs".to_owned(), false);
-        assert!(!scopes_overlap(&scope("src".to_owned(), false), &child));
-        assert!(scopes_overlap(&scope("src".to_owned(), true), &child));
+        let child = scope("src/lib.rs", false);
+        assert!(!scopes_overlap(&scope("src", false), &child));
+        assert!(scopes_overlap(&scope("src", true), &child));
     }
 }

@@ -6,6 +6,7 @@ mod triage_config;
 mod triage_paths;
 mod triage_prompt;
 mod triage_schema;
+mod work_lifecycle;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -20,22 +21,17 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::{
     domain::{
-        Client, Identity, InventoryResult, Outcome, OutcomeKind, OutsideScopeV2, ProcessLiveness, ProcessProbe,
-        ProviderReport, Scope, ScopeKind, SessionState, SnapshotDelegateV2, SnapshotHandoffV4, SnapshotScopeKindV2,
-        SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState, sanitize,
+        Identity, InventoryResult, OutsideScopeV2, ProcessProbe, ProviderReport, SessionState, SnapshotDelegateV2,
+        SnapshotHandoffV4, SnapshotScopeKindV2, SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkClaimV2,
+        SnapshotWorkV2, WorkState, sanitize,
     },
     error::{AppError, Result},
     host::{
-        INVENTORY_CACHE_SECONDS, NativeProcessProbe, any_overlap, from_environment, git_blob_hashes, git_dirty_paths,
-        git_root, host_process_reference, identity_key, normalize_work_scopes, process_ancestors, process_sweep,
-        relevant_dirty,
+        INVENTORY_CACHE_SECONDS, NativeProcessProbe, from_environment, git_blob_hashes, git_dirty_paths, git_root,
+        host_process_reference, identity_key, process_ancestors,
     },
     server::{SnapshotMessageV1, SnapshotSource},
-    state::{
-        BaselineRow, EndedObservation, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, TouchedPaths,
-        WorkRow,
-    },
-    work::{WorkCoordinator, ensure_canonical_root_order},
+    state::{MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow},
 };
 
 #[cfg(test)]
@@ -82,12 +78,6 @@ pub(crate) struct Coordinator {
     inventory: Mutex<Box<dyn ProviderInventory>>,
     probe: Arc<dyn ProcessProbe>,
     clock: Arc<dyn Clock>,
-}
-
-struct ReleasePlan {
-    work: WorkRow,
-    hashes: Vec<(String, String)>,
-    residual_paths: Vec<String>,
 }
 
 impl Coordinator {
@@ -145,368 +135,6 @@ impl Coordinator {
         Ok(self.identity(true)?.expect("required identity"))
     }
 
-    pub(crate) fn start(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf], cwd: &Path) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        self.start_for(identity, label, files, recursive, cwd)
-    }
-
-    pub(crate) fn start_for(
-        &self,
-        identity: Identity,
-        label: &str,
-        files: &[PathBuf],
-        recursive: &[PathBuf],
-        cwd: &Path,
-    ) -> Result<Outcome> {
-        let cwd = resolved(cwd);
-        let root = git_root(&cwd).ok_or_else(|| AppError::operational("start requires a Git worktree"))?;
-        let label = sanitize(label, MAX_LABEL_CHARS);
-        if label.is_empty() {
-            return Err(AppError::usage("label must contain printable text"));
-        }
-        let scopes = normalize_work_scopes(files, recursive, &cwd, &root)?;
-        if scopes.is_empty() {
-            return Err(AppError::usage("at least one scope is required"));
-        }
-        let mut store = self.store()?;
-        let repo_root = path_text(&root)?;
-        let existing = store.work_in_repo(&identity, &repo_root)?;
-        if existing.is_none() {
-            ensure_canonical_root_order(&repo_root, &store.works_for_identity(&identity)?)?;
-        }
-        self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
-        store.set_coordination_waived(&identity, false)?;
-        if existing.is_some_and(|work| work.state == WorkState::Draft) {
-            return Err(AppError::operational(
-                "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
-            ));
-        }
-        let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.start_direct(
-            &identity,
-            &root,
-            &label,
-            scopes,
-            &inventory,
-            self.clock.wall(),
-        )
-    }
-
-    pub(crate) fn draft(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf], cwd: &Path) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        self.draft_for(identity, label, files, recursive, cwd)
-    }
-
-    pub(crate) fn draft_for(
-        &self,
-        identity: Identity,
-        label: &str,
-        files: &[PathBuf],
-        recursive: &[PathBuf],
-        cwd: &Path,
-    ) -> Result<Outcome> {
-        let cwd = resolved(cwd);
-        let root = git_root(&cwd).ok_or_else(|| AppError::operational("draft requires a Git worktree"))?;
-        let label = sanitize(label, MAX_LABEL_CHARS);
-        if label.is_empty() {
-            return Err(AppError::usage("label must contain printable text"));
-        }
-        let scopes = normalize_work_scopes(files, recursive, &cwd, &root)?;
-        if scopes.is_empty() {
-            return Err(AppError::usage("at least one scope is required"));
-        }
-        let mut store = self.store()?;
-        self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
-        store.set_coordination_waived(&identity, false)?;
-        store.save_draft(&identity, &path_text(&root)?, &label, &scopes, self.clock.wall())?;
-        Ok(Outcome::new(OutcomeKind::Draft, 0, scopes.len().to_string()))
-    }
-
-    pub(crate) fn promote_draft(&self, cwd: &Path) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        self.promote_draft_for(&identity, cwd)
-    }
-
-    pub(crate) fn promote_draft_for(&self, identity: &Identity, cwd: &Path) -> Result<Outcome> {
-        let cwd = resolved(cwd);
-        let root = git_root(&cwd).ok_or_else(|| AppError::operational("start --draft requires a Git worktree"))?;
-        let mut store = self.store()?;
-        let repo_root = path_text(&root)?;
-        let draft = store.work_in_repo(identity, &repo_root)?.filter(|work| work.state == WorkState::Draft);
-        if draft.is_some() {
-            ensure_canonical_root_order(&repo_root, &store.works_for_identity(identity)?)?;
-        }
-        self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
-        store.set_coordination_waived(identity, false)?;
-        let draft = draft.ok_or_else(|| AppError::operational("no draft work for this session"))?;
-        revalidate_draft_scopes(&draft.scopes, &root)?;
-        let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.promote_draft(identity, &root, draft, &inventory, self.clock.wall())
-    }
-
-    pub(crate) fn wait(&self, timeout_seconds: u64, poll_seconds: f64) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        let cwd = std::env::current_dir()?;
-        let root = git_root(&resolved(&cwd)).ok_or_else(|| AppError::operational("wait requires a Git worktree"))?;
-        self.wait_for_repo(&identity, &root, timeout_seconds, poll_seconds, false)
-    }
-
-    pub(crate) fn wait_for_repo(
-        &self,
-        identity: &Identity,
-        root: &Path,
-        timeout_seconds: u64,
-        poll_seconds: f64,
-        released_if_missing: bool,
-    ) -> Result<Outcome> {
-        if !(1..=3600).contains(&timeout_seconds) {
-            return Err(AppError::usage("timeout must be between 1 and 3600 seconds"));
-        }
-        let repo_root = path_text(root)?;
-        let started = self.clock.monotonic();
-        let mut last_generation = None;
-        let mut last_full_check = None;
-        loop {
-            let mut store = self.store()?;
-            let process_complete = self.reconcile_processes(&mut store)?.is_empty();
-            let Some(work) = store.work_in_repo(identity, &repo_root)? else {
-                return if released_if_missing {
-                    Ok(Outcome::new(OutcomeKind::Released, 3, ""))
-                } else {
-                    Err(AppError::operational("no active or queued work for this session"))
-                };
-            };
-            if work.state == WorkState::Active {
-                return Ok(Outcome::new(OutcomeKind::Ready, 0, "")
-                    .with_paths(work.scopes.into_iter().map(|scope| scope.path).collect()));
-            }
-            if work.state == WorkState::Draft {
-                return Err(AppError::operational(
-                    "draft work must be submitted with ai-coord start --draft before waiting",
-                ));
-            }
-            let pending = store
-                .inbox(identity, true)?
-                .into_iter()
-                .filter(|message| message.repo_root.as_deref().is_none_or(|root| root == repo_root))
-                .collect::<Vec<_>>();
-            if !pending.is_empty() {
-                return Ok(Outcome::new(OutcomeKind::Message, 3, pending.len().to_string()));
-            }
-
-            let generation = store.generation()?;
-            let now = self.clock.monotonic();
-            let refresh_seconds =
-                if work.blocked_reason.as_deref() == Some("dirty") { 1.0 } else { FULL_REFRESH_SECONDS };
-            let due =
-                last_full_check.is_none_or(|last| now - last >= refresh_seconds) || last_generation != Some(generation);
-            if due {
-                let mut inventory = self.refresh_inventory(&mut store, false)?;
-                inventory.complete &= process_complete;
-                let root = PathBuf::from(&repo_root);
-                let outcome = WorkCoordinator { store: &mut store }.start_direct(
-                    identity,
-                    &root,
-                    &work.label,
-                    work.scopes.clone(),
-                    &inventory,
-                    self.clock.wall(),
-                )?;
-                last_full_check = Some(self.clock.monotonic());
-                last_generation = Some(store.generation()?);
-                if outcome.code == 0 || (outcome.code == 2 && !outcome.detail.starts_with("dirty-settling:")) {
-                    return Ok(outcome);
-                }
-            }
-            let elapsed = self.clock.monotonic() - started;
-            if elapsed >= timeout_seconds as f64 {
-                return Ok(Outcome::new(OutcomeKind::Timeout, 3, timeout_seconds.to_string()));
-            }
-            self.clock.sleep(Duration::from_secs_f64(poll_seconds.min(timeout_seconds as f64 - elapsed).max(0.001)));
-        }
-    }
-
-    pub(crate) fn done(&self) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        let cwd = std::env::current_dir()?;
-        let outcome = self.done_for(&identity, &cwd)?;
-        if let Ok(cwd) = std::env::current_dir() {
-            let _ = self.schedule_findings_triage(&cwd);
-        }
-        Ok(outcome)
-    }
-
-    pub(crate) fn done_for(&self, identity: &Identity, cwd: &Path) -> Result<Outcome> {
-        let root = git_root(&resolved(cwd)).ok_or_else(|| AppError::operational("done requires a Git worktree"))?;
-        let repo_root = path_text(&root)?;
-        let mut store = self.store()?;
-        let work = store.work_in_repo(identity, &repo_root)?.into_iter().collect();
-        self.release_work(&mut store, identity, work, Some(&repo_root))
-    }
-
-    pub(crate) fn done_all(&self) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        let outcome = self.done_all_for(&identity)?;
-        if let Ok(cwd) = std::env::current_dir() {
-            let _ = self.schedule_findings_triage(&cwd);
-        }
-        Ok(outcome)
-    }
-
-    pub(crate) fn done_all_for(&self, identity: &Identity) -> Result<Outcome> {
-        let mut store = self.store()?;
-        let work = store.works_for_identity(identity)?;
-        self.release_work(&mut store, identity, work, None)
-    }
-
-    fn release_work(
-        &self,
-        store: &mut Store,
-        identity: &Identity,
-        work: Vec<WorkRow>,
-        current_repo: Option<&str>,
-    ) -> Result<Outcome> {
-        // Collect every active repository's dirt before ledger writes so an
-        // all-root release uses one complete residual-attribution preflight.
-        let mut plans = Vec::new();
-        for work in work {
-            let (hashes, residual_paths) = if work.state == WorkState::Active && !work.scopes.is_empty() {
-                let root = PathBuf::from(&work.repo_root);
-                let dirty = git_dirty_paths(&root)?;
-                let hashes = git_blob_hashes(&root, &dirty, false);
-                let residual = relevant_dirty(&work.scopes, &dirty);
-                (hashes, residual)
-            } else {
-                (Vec::new(), Vec::new())
-            };
-            plans.push(ReleasePlan { work, hashes, residual_paths });
-        }
-
-        let removed = store.with_work_transaction(|transaction| {
-            let current = match current_repo {
-                Some(repo_root) => transaction.work_in_repo(identity, repo_root)?.into_iter().collect::<Vec<_>>(),
-                None => transaction.works_for_identity(identity)?,
-            };
-            if current.len() != plans.len() ||
-                current
-                    .iter()
-                    .zip(&plans)
-                    .any(|(work, plan)| work.id != plan.work.id || work.revision != plan.work.revision)
-            {
-                return Err(AppError::retry("work changed during release; retry ai-coord done"));
-            }
-            let wakeups = plans
-                .iter()
-                .filter(|plan| plan.work.state != WorkState::Draft)
-                .map(|plan| {
-                    let waiters = transaction
-                        .works(&plan.work.repo_root)?
-                        .into_iter()
-                        .filter(|candidate| {
-                            candidate.identity != *identity &&
-                                candidate.state == WorkState::Queued &&
-                                any_overlap(&plan.work.scopes, &candidate.scopes)
-                        })
-                        .map(|candidate| candidate.identity)
-                        .collect::<Vec<_>>();
-                    Ok((plan, waiters))
-                })
-                .collect::<Result<Vec<_>>>()?;
-            for plan in &plans {
-                if plan.work.state == WorkState::Active {
-                    transaction.observe_dirt(&plan.work.repo_root, &plan.hashes, self.clock.wall())?;
-                    transaction.record_residual_owners(
-                        &plan.work.repo_root,
-                        &plan.residual_paths,
-                        identity,
-                        self.clock.wall(),
-                    )?;
-                }
-            }
-            let removed = match current_repo {
-                Some(repo_root) => usize::from(transaction.delete_work_in_repo(identity, repo_root)?),
-                None => transaction.delete_works(identity)?,
-            };
-            if removed > 0 {
-                for (plan, waiters) in wakeups {
-                    if waiters.is_empty() {
-                        continue;
-                    }
-                    let text = format!("Released work '{}'; your queued work may now be ready.", plan.work.label);
-                    for waiter in &waiters {
-                        transaction.send_message(
-                            identity,
-                            waiter,
-                            &text,
-                            Some(&plan.work.repo_root),
-                            self.clock.wall(),
-                        )?;
-                    }
-                }
-            }
-            Ok(removed)
-        })?;
-        let mut outcome = Outcome::new(OutcomeKind::Done, 0, if removed > 0 { "released" } else { "already clear" });
-        outcome.holders = plans.into_iter().flat_map(|plan| plan.residual_paths).collect();
-        Ok(outcome)
-    }
-
-    /// End an identity authoritatively and wake queued contenders in every
-    /// repository. Ungraceful end cleanup never attributes residual dirt.
-    pub(crate) fn end_session_for(&self, identity: &Identity) -> Result<()> {
-        let mut store = self.store()?;
-        let released = store.works_for_identity(identity)?;
-        let wakeups = released
-            .iter()
-            .filter(|work| work.state != WorkState::Draft)
-            .map(|work| {
-                let waiters = store
-                    .works(Some(&work.repo_root))?
-                    .into_iter()
-                    .filter(|candidate| {
-                        candidate.identity != *identity &&
-                            candidate.state == WorkState::Queued &&
-                            any_overlap(&work.scopes, &candidate.scopes)
-                    })
-                    .map(|candidate| candidate.identity)
-                    .collect::<Vec<_>>();
-                Ok((work.clone(), waiters))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        store.end_session(identity)?;
-        for (work, waiters) in wakeups {
-            if waiters.is_empty() {
-                continue;
-            }
-            let text = format!("Session ended; released work '{}'; your queued work may now be ready.", work.label);
-            store.send_message(identity, &waiters, &text, Some(&work.repo_root), self.clock.wall())?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn baselines(&self) -> Result<Vec<BaselineRow>> {
-        let identity = self.required_identity()?;
-        let cwd = std::env::current_dir()?;
-        self.baselines_for(&identity, &cwd)
-    }
-
-    pub(crate) fn baselines_for(&self, identity: &Identity, cwd: &Path) -> Result<Vec<BaselineRow>> {
-        let root = git_root(&resolved(cwd)).ok_or_else(|| AppError::operational("baseline requires a Git worktree"))?;
-        let repo_root = path_text(&root)?;
-        let store = self.store()?;
-        Ok(if store.work_in_repo(identity, &repo_root)?.is_some_and(|work| work.state == WorkState::Active) {
-            store.baselines_in_repo(identity, &repo_root)?
-        } else {
-            Vec::new()
-        })
-    }
-
-    pub(crate) fn touched(&self, cwd: &Path) -> Result<TouchedPaths> {
-        let identity = self.required_identity()?;
-        let root = git_root(cwd).ok_or_else(|| AppError::operational("touched requires a Git worktree"))?;
-        self.store()?.touched(&identity, &path_text(&root)?)
-    }
-
     pub(crate) fn snapshot(&self, machine_wide: bool, cwd: &Path, allow_cached: bool) -> Result<SnapshotV2> {
         let mut store = self.store()?;
         let inventory = self.refresh_inventory(&mut store, allow_cached)?;
@@ -514,11 +142,11 @@ impl Coordinator {
         let cwd = resolved(cwd);
         let root = git_root(&cwd);
         let sessions = store.sessions()?;
-        let work = store.works(None)?;
+        let work = store.works()?;
         let roots = sessions
             .iter()
             .filter_map(|row| row.repo_root.clone())
-            .chain(work.iter().map(|work| work.repo_root.clone()))
+            .chain(work.iter().flat_map(|work| work.claims.iter().map(|claim| claim.repo_root.clone())))
             .collect::<HashSet<_>>();
         let observation_roots = if machine_wide {
             roots.clone()
@@ -565,7 +193,7 @@ impl Coordinator {
         let mut store = self.store()?;
         let _ = self.refresh_inventory(&mut store, true)?;
         let root = git_root(&resolved(cwd));
-        let recipients = resolve_targets(target, &store.sessions()?, &store.works(None)?, root.as_deref(), &sender)?;
+        let recipients = resolve_targets(target, &store.sessions()?, &store.works()?, root.as_deref(), &sender)?;
         let ids = store.send_message(
             &sender,
             &recipients,
@@ -621,54 +249,6 @@ impl Coordinator {
         };
         store.upsert_session(&update)?;
         Ok(())
-    }
-
-    fn reconcile_processes(&self, store: &mut Store) -> Result<HashSet<Client>> {
-        let sessions = store.sessions()?;
-        let observations = process_sweep(
-            self.probe.as_ref(),
-            sessions.iter().map(|row| (row.identity.clone(), row.fingerprint.clone())),
-        );
-        let revisions = sessions.iter().map(|row| (row.identity.clone(), row.revision)).collect::<HashMap<_, _>>();
-        let dead = observations
-            .iter()
-            .filter(|observation| observation.liveness == ProcessLiveness::Dead)
-            .map(|observation| EndedObservation {
-                identity: observation.identity.clone(),
-                expected_fingerprint: observation.expected_fingerprint.clone(),
-                expected_revision: revisions[&observation.identity],
-            })
-            .collect::<Vec<_>>();
-        let released_work = dead
-            .iter()
-            .map(|observation| Ok((observation.identity.clone(), store.works_for_identity(&observation.identity)?)))
-            .collect::<Result<Vec<_>>>()?;
-        store.reconcile_ended(&dead)?;
-        for (identity, work) in released_work {
-            if store.session(&identity)?.is_some() {
-                continue;
-            }
-            for work in work.into_iter().filter(|work| work.state != WorkState::Draft) {
-                let waiters = store
-                    .works(Some(&work.repo_root))?
-                    .into_iter()
-                    .filter(|candidate| {
-                        candidate.state == WorkState::Queued && any_overlap(&work.scopes, &candidate.scopes)
-                    })
-                    .map(|candidate| candidate.identity)
-                    .collect::<Vec<_>>();
-                if waiters.is_empty() {
-                    continue;
-                }
-                let text = format!("Session ended; released work '{}'; your queued work may now be ready.", work.label);
-                store.send_message(&identity, &waiters, &text, Some(&work.repo_root), self.clock.wall())?;
-            }
-        }
-        Ok(observations
-            .iter()
-            .filter(|observation| observation.liveness == ProcessLiveness::Unknown)
-            .map(|observation| observation.identity.client)
-            .collect())
     }
 
     fn refresh_inventory(&self, store: &mut Store, allow_cached: bool) -> Result<InventoryResult> {
@@ -765,7 +345,7 @@ fn build_snapshot(
         sessions
             .iter()
             .filter_map(|row| row.repo_root.as_ref())
-            .chain(work.iter().map(|row| &row.repo_root))
+            .chain(work.iter().flat_map(|row| row.claims.iter().map(|claim| &claim.repo_root)))
             .map(PathBuf::from)
             .collect::<HashSet<_>>()
             .into_iter()
@@ -773,10 +353,7 @@ fn build_snapshot(
     } else {
         root.map(Path::to_path_buf).into_iter().collect()
     };
-    let work_by_identity = work.iter().fold(HashMap::<Identity, Vec<&WorkRow>>::new(), |mut rows, work| {
-        rows.entry(work.identity.clone()).or_default().push(work);
-        rows
-    });
+    let work_by_identity = work.iter().map(|work| (work.identity.clone(), work)).collect::<HashMap<_, _>>();
     let delegates = store.delegates()?;
     let delegate_counts = delegates.iter().fold(HashMap::<Identity, usize>::new(), |mut counts, row| {
         *counts.entry(row.parent.clone()).or_default() += 1;
@@ -788,9 +365,8 @@ fn build_snapshot(
     for row in sessions {
         let matching_work = work_by_identity
             .get(&row.identity)
-            .into_iter()
-            .flatten()
-            .find(|work| machine || root_text.as_ref().is_some_and(|root| work.repo_root == *root));
+            .copied()
+            .filter(|work| machine || root_text.as_ref().is_some_and(|root| work.claim(root).is_some()));
         let in_scope = machine ||
             root_text.as_ref().is_some_and(|root| row.repo_root.as_ref() == Some(root)) ||
             matching_work.is_some();
@@ -818,18 +394,29 @@ fn build_snapshot(
     }
     let scoped_work = work
         .into_iter()
-        .filter(|work| machine || root_text.as_ref() == Some(&work.repo_root))
+        .filter(|work| machine || root_text.as_ref().is_some_and(|root| work.claim(root).is_some()))
         .map(|work| {
             let draft = work.state == WorkState::Draft;
+            let scope_count = work.claims.iter().map(|claim| claim.scopes.len()).sum::<usize>();
+            let mut claims = work
+                .claims
+                .into_iter()
+                .map(|claim| SnapshotWorkClaimV2 {
+                    repo_root: claim.repo_root,
+                    blocked_reason: claim.blocked_reason,
+                    scope_count: claim.scopes.len(),
+                    scopes: (!draft).then_some(claim.scopes),
+                })
+                .collect::<Vec<_>>();
+            claims.sort_by(|left, right| left.repo_root.cmp(&right.repo_root));
             SnapshotWorkV2 {
                 id: work.id,
                 identity: work.identity,
-                repo_root: work.repo_root,
                 label: work.label,
                 state: work.state,
                 blocked_reason: work.blocked_reason,
-                scope_count: draft.then_some(work.scopes.len()),
-                scopes: (!draft).then_some(work.scopes),
+                scope_count,
+                claims,
                 draft_created_at: work.draft_created_at,
                 submitted_at: work.submitted_at,
                 updated_at: work.updated_at,
@@ -857,7 +444,7 @@ fn build_snapshot(
     let outside_directories = outside.iter().map(|row| row.cwd.clone()).collect::<HashSet<_>>().len();
     let handoffs = snapshot_handoffs(handoff_roots);
     Ok(SnapshotV2 {
-        schema_version: 6,
+        schema_version: 7,
         complete: inventory.complete,
         scope: if machine {
             SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None }
@@ -1042,23 +629,6 @@ fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
 }
 
-fn revalidate_draft_scopes(scopes: &[Scope], root: &Path) -> Result<()> {
-    let files = scopes
-        .iter()
-        .filter(|scope| scope.kind == ScopeKind::Exact)
-        .map(|scope| PathBuf::from(&scope.path))
-        .collect::<Vec<_>>();
-    let recursive = scopes
-        .iter()
-        .filter(|scope| scope.kind == ScopeKind::Recursive)
-        .map(|scope| PathBuf::from(&scope.path))
-        .collect::<Vec<_>>();
-    let normalized = normalize_work_scopes(&files, &recursive, root, root)?;
-    if normalized.len() != scopes.len() || normalized.iter().any(|scope| !scopes.contains(scope)) {
-        return Err(AppError::usage("stored draft scopes no longer normalize to the same paths"));
-    }
-    Ok(())
-}
 fn resolved(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
 }

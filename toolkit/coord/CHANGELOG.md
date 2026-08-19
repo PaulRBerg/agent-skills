@@ -2,12 +2,17 @@
 
 ## Unreleased
 
-- Break the internal ledger at schema v14 and public status at schema v6. Key work by
-  `(client, session_id, repo_root)`, retain independent multi-repository work in canonical root order, make lifecycle
-  commands current-root by default, and add atomic identity-wide `done --all`.
-- Make hooks select work from the payload Git root, while SessionEnd and confirmed death release every owned root and
-  wake affected waiters without residual attribution. Publish every matching status work row and render machine-wide
-  work with repository detail.
+- Break the internal ledger at schema v15 and public status at schema v7, with no migration or import. Store one
+  logical work item per `(client, session_id)` with complete sorted repository-claim vectors; reject v14 ledgers.
+- Add explicit atomic multi-repository `bundle draft` and `bundle start` commands using absolute paths grouped by
+  canonical physical Git worktree. Require at least two roots; make draft promotion, direct submission, and active
+  updates all-or-none; retain one parent FIFO age for repository-local fairness and opposite-order deadlock avoidance.
+- Keep ordinary lifecycle commands current-root compatible, reject ordinary/bundle mismatches with guidance, and remove
+  `done --all`. `wait` and `done` from any claimed worktree operate on the whole bundle; baselines, touched paths, and
+  hook cleanliness remain claim-local.
+- Publish bundle work once in terminal status and the dashboard, with nested claims, repository-qualified bundle paths,
+  claim blockers, and queue positions. Session end and confirmed death release the whole logical item and wake affected
+  waiters without residual attribution.
 - Bound Git blob hashing to fixed-size batches and limit start-time hashing to dirt within the requested scopes.
 - Break the internal ledger at schema v13 and public status at schema v5; add the prompt-scoped `#noc` coordination
   waiver, best-effort touched-path tracking, task-handoff counts, contextual gate and release nudges, and

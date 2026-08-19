@@ -120,7 +120,6 @@ function validateWork(value: unknown, path: string): void {
   integer(row.id, `${path}.id`);
   string(row.client, `${path}.client`);
   string(row.session_id, `${path}.session_id`);
-  string(row.repo_root, `${path}.repo_root`);
   string(row.label, `${path}.label`);
   const state = workState(row.state, `${path}.state`);
   if (row.blocked_reason !== undefined)
@@ -128,29 +127,59 @@ function validateWork(value: unknown, path: string): void {
   if (state === "queued" && typeof row.blocked_reason !== "string") {
     throw new Error(`${path}.blocked_reason must describe queued work`);
   }
+  const scopeCount = integer(row.scope_count, `${path}.scope_count`);
+  if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
   if (state === "draft") {
-    const scopeCount = integer(row.scope_count, `${path}.scope_count`);
-    if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
-    if (row.scopes !== undefined)
-      throw new Error(`${path}.scopes must be omitted for draft work`);
     number(row.draft_created_at, `${path}.draft_created_at`);
     if (row.submitted_at !== undefined)
       throw new Error(`${path}.submitted_at must be omitted for draft work`);
   } else {
-    const scopes = array(row.scopes, `${path}.scopes`);
-    if (scopes.length < 1) throw new Error(`${path}.scopes must not be empty`);
-    scopes.forEach((item, index) => {
-      const scope = record(item, `${path}.scopes[${index}]`);
-      string(scope.path, `${path}.scopes[${index}].path`);
-      workScopeKind(scope.kind, `${path}.scopes[${index}].kind`);
-    });
-    if (row.scope_count !== undefined)
-      throw new Error(`${path}.scope_count is draft-only`);
     if (row.draft_created_at !== undefined)
       number(row.draft_created_at, `${path}.draft_created_at`);
     number(row.submitted_at, `${path}.submitted_at`);
   }
+  if (row.scopes !== undefined)
+    throw new Error(`${path}.scopes belongs to a work claim`);
+  const claims = array(row.claims, `${path}.claims`);
+  if (claims.length < 1) throw new Error(`${path}.claims must not be empty`);
+  const claimScopeCount = claims.reduce<number>(
+    (total, value, index) =>
+      total + validateWorkClaim(value, `${path}.claims[${index}]`, state),
+    0,
+  );
+  if (scopeCount !== claimScopeCount) {
+    throw new Error(`${path}.scope_count must equal the claim scope total`);
+  }
   number(row.updated_at, `${path}.updated_at`);
+}
+
+function validateWorkClaim(
+  value: unknown,
+  path: string,
+  state: WorkState,
+): number {
+  const claim = record(value, path);
+  string(claim.repo_root, `${path}.repo_root`);
+  if (claim.blocked_reason !== undefined)
+    nullableString(claim.blocked_reason, `${path}.blocked_reason`);
+  const scopeCount = integer(claim.scope_count, `${path}.scope_count`);
+  if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
+  if (state === "draft") {
+    if (claim.scopes !== undefined)
+      throw new Error(`${path}.scopes must be omitted for draft work`);
+    return scopeCount;
+  }
+  const scopes = array(claim.scopes, `${path}.scopes`);
+  if (scopes.length < 1) throw new Error(`${path}.scopes must not be empty`);
+  scopes.forEach((item, index) => {
+    const scope = record(item, `${path}.scopes[${index}]`);
+    string(scope.path, `${path}.scopes[${index}].path`);
+    workScopeKind(scope.kind, `${path}.scopes[${index}].kind`);
+  });
+  if (scopeCount !== scopes.length) {
+    throw new Error(`${path}.scope_count must match scopes length`);
+  }
+  return scopeCount;
 }
 
 function validateProvider(value: unknown, path: string): void {
@@ -216,8 +245,8 @@ function validateMessage(value: unknown, path: string): void {
 
 export function parseSnapshot(value: unknown): Snapshot {
   const snapshot = record(value, "snapshot");
-  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 6) {
-    throw new Error("snapshot.schema_version must be 6");
+  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 7) {
+    throw new Error("snapshot.schema_version must be 7");
   }
   boolean(snapshot.complete, "snapshot.complete");
 

@@ -107,11 +107,11 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
               }}
             >
               <div className="min-w-0 pl-4">
-                <p className="truncate text-xs font-medium">
-                  Unreported session
+                <p className="truncate text-xs font-medium" title={work.label}>
+                  {work.label}
                 </p>
                 <p className="mt-1 font-mono text-[11px]/4 text-muted">
-                  {work.client}:{shortSessionId(work.session_id)}
+                  Unreported session · {work.client}:{shortSessionId(work.session_id)}
                 </p>
               </div>
               <AnimatedValue

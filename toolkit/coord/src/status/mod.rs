@@ -144,19 +144,42 @@ fn session_line(
         detail.push(format!("delegates={count}"));
     }
     if let Some(work) = work {
-        if machine_wide {
-            detail.push(format!("repo={}", work.repo_root));
+        let bundled = work.claims.len() > 1;
+        if bundled {
+            detail.push(format!(
+                "repos={}",
+                work.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<Vec<_>>().join(",")
+            ));
+        } else if machine_wide {
+            detail.push(format!("repo={}", work.claims[0].repo_root));
         }
         match work.state {
-            WorkState::Draft => detail.push(format!("draft · {} scopes", work.scope_count.unwrap_or_default())),
+            WorkState::Draft => detail.push(format!("draft · {} scopes", work.scope_count)),
             WorkState::Queued => detail.push("work=queued".to_owned()),
             WorkState::Active => detail.push("work=active".to_owned()),
         }
-        if let Some(scopes) = &work.scopes {
-            detail.push(format!(
-                "paths={}",
-                scopes.iter().map(|scope| scope.path.as_str()).collect::<Vec<_>>().join(",")
-            ));
+        let paths = work
+            .claims
+            .iter()
+            .flat_map(|claim| {
+                claim.scopes.iter().flat_map(move |scopes| {
+                    scopes.iter().map(move |scope| {
+                        if bundled {
+                            format!("{}/{}", claim.repo_root.trim_end_matches('/'), scope.path)
+                        } else {
+                            scope.path.clone()
+                        }
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        if !paths.is_empty() {
+            detail.push(format!("paths={}", paths.join(",")));
+        }
+        for claim in &work.claims {
+            if let Some(reason) = &claim.blocked_reason {
+                detail.push(format!("blocked={}:{}", claim.repo_root, reason));
+            }
         }
     }
     if let Some(waiting_for) = &session.waiting_for {
@@ -223,12 +246,12 @@ mod tests {
     use super::*;
     use crate::domain::{
         Client, FindingState, FindingSummary, Identity, OutsideScopeV2, ProviderReport, Scope, ScopeKind,
-        SnapshotScopeV2, SnapshotWorkV2,
+        SnapshotScopeV2, SnapshotWorkClaimV2, SnapshotWorkV2,
     };
 
     fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {
         SnapshotV2 {
-            schema_version: 6,
+            schema_version: 7,
             complete: true,
             scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Repo, repo_root: Some("/repo".into()) },
             self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
@@ -272,13 +295,17 @@ mod tests {
         SnapshotWorkV2 {
             id: 1,
             identity: Identity { client: Client::Codex, session_id: id.into() },
-            repo_root: "/repo".into(),
             label: "exact files".into(),
             state,
             blocked_reason: None,
-            scope_count: (state == WorkState::Draft).then_some(1),
-            scopes: (state != WorkState::Draft)
-                .then_some(vec![Scope { path: "src/lib.rs".into(), kind: ScopeKind::Exact }]),
+            scope_count: 1,
+            claims: vec![SnapshotWorkClaimV2 {
+                repo_root: "/repo".into(),
+                blocked_reason: None,
+                scope_count: 1,
+                scopes: (state != WorkState::Draft)
+                    .then_some(vec![Scope { path: "src/lib.rs".into(), kind: ScopeKind::Exact }]),
+            }],
             draft_created_at: (state == WorkState::Draft).then_some(900.0),
             submitted_at: (state != WorkState::Draft).then_some(950.0),
             updated_at: 1_000.0,
@@ -305,16 +332,16 @@ mod tests {
     }
 
     #[test]
-    fn json_keeps_the_v6_schema_and_omits_draft_paths() {
+    fn json_keeps_the_v7_schema_and_omits_draft_paths() {
         let payload: serde_json::Value = serde_json::from_str(
             &snapshot_json(&snapshot(vec![session("self")], vec![work("self", WorkState::Draft)])).unwrap(),
         )
         .unwrap();
-        assert_eq!(payload["schema_version"], 6);
+        assert_eq!(payload["schema_version"], 7);
         assert_eq!(payload["self"]["session_id"], "self");
         assert_eq!(payload["sessions"][0]["coordination_waived"], false);
         assert_eq!(payload["work"][0]["scope_count"], 1);
-        assert!(payload["work"][0].get("scopes").is_none());
+        assert!(payload["work"][0]["claims"][0].get("scopes").is_none());
         assert!(payload["work"][0].get("blocked_reason").is_none());
         assert!(payload.get("messages").is_none());
     }
@@ -350,7 +377,7 @@ mod tests {
         value.scope = SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None };
         let mut second = work("self", WorkState::Queued);
         second.id = 2;
-        second.repo_root = "/repo-b".into();
+        second.claims[0].repo_root = "/repo-b".into();
         second.label = "second root".into();
         value.work.push(second);
 

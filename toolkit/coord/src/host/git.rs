@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     ffi::OsString,
     io::Read,
     path::{Path, PathBuf},
@@ -21,6 +22,12 @@ const GIT_ROOT_TIMEOUT: Duration = Duration::from_secs(5);
 const GIT_INSPECTION_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_COMMAND_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const GIT_BLOB_HASH_BATCH_SIZE: usize = 128;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct WorkClaimRequest {
+    pub(crate) repo_root: PathBuf,
+    pub(crate) scopes: Vec<Scope>,
+}
 
 #[derive(Debug)]
 pub(super) struct CommandOutput {
@@ -205,6 +212,115 @@ pub(crate) fn normalize_work_scopes(
         .map(|path| Scope { path, kind: ScopeKind::Exact })
         .chain(recursive.into_iter().map(|path| Scope { path, kind: ScopeKind::Recursive }))
         .collect())
+}
+
+/// Normalize an explicit multi-repository claim bundle.
+///
+/// Bundle inputs are absolute because no single working directory or Git root
+/// can give relative paths an unambiguous meaning. Missing leaves are resolved
+/// through their nearest existing ancestor before the physical Git root is
+/// selected.
+pub(crate) fn normalize_work_claim_bundle(files: &[PathBuf], recursive: &[PathBuf]) -> Result<Vec<WorkClaimRequest>> {
+    if files.is_empty() && recursive.is_empty() {
+        return Err(AppError::usage("at least one scope is required"));
+    }
+
+    let mut grouped = BTreeMap::<PathBuf, (Vec<PathBuf>, Vec<PathBuf>)>::new();
+    for (paths, kind) in [(files, ScopeKind::Exact), (recursive, ScopeKind::Recursive)] {
+        for raw in paths {
+            validate_bundle_input(raw)?;
+            let root = bundle_git_root(raw, kind)?;
+            let entry = grouped.entry(root).or_default();
+            match kind {
+                ScopeKind::Exact => entry.0.push(raw.clone()),
+                ScopeKind::Recursive => entry.1.push(raw.clone()),
+            }
+        }
+    }
+    if grouped.len() < 2 {
+        return Err(AppError::usage("a repository bundle requires at least two distinct Git roots"));
+    }
+
+    grouped
+        .into_iter()
+        .map(|(repo_root, (files, recursive))| {
+            let mut scopes = normalize_work_scopes(&files, &recursive, &repo_root, &repo_root)?;
+            if scopes.iter().any(|scope| scope.is_recursive() && scope.path == ".") {
+                return Err(AppError::usage(format!(
+                    "recursive scope cannot be the repository root: {}",
+                    repo_root.display()
+                )));
+            }
+            scopes.sort_by(scope_order);
+            Ok(WorkClaimRequest { repo_root, scopes })
+        })
+        .collect()
+}
+
+fn validate_bundle_input(path: &Path) -> Result<()> {
+    let display = path.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
+    if !path.is_absolute() {
+        return Err(AppError::usage(format!("bundle scope must be absolute: {display}")));
+    }
+    if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
+        return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
+    }
+    if display.chars().any(char::is_control) {
+        return Err(AppError::usage(format!("scope contains non-printable characters: {display:?}")));
+    }
+    Ok(())
+}
+
+fn bundle_git_root(path: &Path, kind: ScopeKind) -> Result<PathBuf> {
+    let metadata = std::fs::symlink_metadata(path).ok();
+    match (kind, metadata.as_ref()) {
+        (ScopeKind::Exact, Some(metadata)) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            return Err(AppError::usage(format!("directory scope requires --recursive: {}", path.display())));
+        }
+        (ScopeKind::Recursive, Some(metadata)) if metadata.file_type().is_symlink() => {
+            return Err(AppError::usage(format!("recursive scope cannot be a symlink: {}", path.display())));
+        }
+        (ScopeKind::Recursive, Some(metadata)) if !metadata.is_dir() => {
+            return Err(AppError::usage(format!("recursive scope is not a directory: {}", path.display())));
+        }
+        _ => {}
+    }
+
+    let mut ancestor = if metadata.as_ref().is_some_and(|metadata| metadata.is_dir()) {
+        path.to_owned()
+    } else {
+        path.parent()
+            .ok_or_else(|| AppError::usage(format!("scope has no existing ancestor: {}", path.display())))?
+            .to_owned()
+    };
+    loop {
+        match std::fs::symlink_metadata(&ancestor) {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                ancestor = ancestor
+                    .parent()
+                    .ok_or_else(|| AppError::usage(format!("scope has no existing ancestor: {}", path.display())))?
+                    .to_owned();
+            }
+            Err(error) => {
+                return Err(AppError::usage(format!("could not inspect scope {}: {error}", path.display())));
+            }
+        }
+    }
+    let ancestor = weakly_canonical(&ancestor)
+        .map_err(|error| AppError::usage(format!("could not resolve scope {}: {error}", path.display())))?;
+    git_root(&ancestor).ok_or_else(|| AppError::usage(format!("scope is not in a Git worktree: {}", path.display())))
+}
+
+fn scope_order(left: &Scope, right: &Scope) -> std::cmp::Ordering {
+    left.path.cmp(&right.path).then_with(|| scope_kind_order(left.kind).cmp(&scope_kind_order(right.kind)))
+}
+
+const fn scope_kind_order(kind: ScopeKind) -> u8 {
+    match kind {
+        ScopeKind::Exact => 0,
+        ScopeKind::Recursive => 1,
+    }
 }
 
 pub(crate) fn scope_covers(covering: &Scope, covered: &Scope) -> bool {
@@ -448,6 +564,83 @@ mod tests {
             normalize_work_scopes(&[PathBuf::from("src/lib.rs")], &[PathBuf::from("src/lib.rs")], root, root,).is_err()
         );
         assert!(normalize_work_scopes(&[PathBuf::from("src")], &[], root, root).is_err());
+    }
+
+    #[test]
+    fn groups_absolute_missing_bundle_scopes_by_physical_root() {
+        let temp = TempDir::new().unwrap();
+        let first = temp.path().join("z-repo");
+        let second = temp.path().join("a-repo");
+        fs::create_dir_all(first.join("src")).unwrap();
+        fs::create_dir_all(second.join("src")).unwrap();
+        for root in [&first, &second] {
+            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        }
+
+        let claims = normalize_work_claim_bundle(
+            &[first.join("src/z.rs"), second.join("src/b.rs"), second.join("src/a.rs")],
+            &[first.join("generated/missing")],
+        )
+        .unwrap();
+
+        assert_eq!(
+            claims.iter().map(|claim| claim.repo_root.clone()).collect::<Vec<_>>(),
+            [second.canonicalize().unwrap(), first.canonicalize().unwrap()]
+        );
+        assert_eq!(claims[0].scopes, [scope("src/a.rs", false), scope("src/b.rs", false)]);
+        assert_eq!(claims[1].scopes, [scope("generated/missing", true), scope("src/z.rs", false)]);
+    }
+
+    #[test]
+    fn bundle_rejects_relative_single_root_and_unsafe_or_mismatched_kinds() {
+        let temp = TempDir::new().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        fs::create_dir_all(first.join("dir")).unwrap();
+        fs::create_dir_all(second.join("dir")).unwrap();
+        fs::write(first.join("file.txt"), "first\n").unwrap();
+        for root in [&first, &second] {
+            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        }
+
+        assert!(normalize_work_claim_bundle(&[PathBuf::from("relative")], &[second.join("missing")]).is_err());
+        assert!(normalize_work_claim_bundle(&[first.join("missing")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[first.join("dir"), second.join("missing")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[second.join("missing")], &[first.join("file.txt")]).is_err());
+        assert!(normalize_work_claim_bundle(&[second.join("missing")], std::slice::from_ref(&first)).is_err());
+    }
+
+    #[test]
+    fn bundle_rejects_cross_kind_duplicates_after_normalization() {
+        let temp = TempDir::new().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        for root in [&first, &second] {
+            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        }
+        let duplicate = first.join("missing");
+        assert!(normalize_work_claim_bundle(&[duplicate.clone(), second.join("other")], &[duplicate]).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundle_rejects_glob_control_and_invalid_utf8_inputs() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp = TempDir::new().unwrap();
+        let invalid = temp.path().join(OsString::from_vec(vec![b'x', 0xff]));
+        assert!(normalize_work_claim_bundle(&[temp.path().join("*.rs"), temp.path().join("other")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[temp.path().join("bad\npath"), temp.path().join("other")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[invalid, temp.path().join("other")], &[]).is_err());
+    }
+
+    #[test]
+    fn bundle_rejects_non_git_inputs() {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        assert!(normalize_work_claim_bundle(&[first.path().join("a"), second.path().join("b")], &[]).is_err());
     }
 
     #[test]

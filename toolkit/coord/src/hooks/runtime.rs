@@ -205,16 +205,11 @@ impl<'a> HookRuntime<'a> {
                 .as_deref()
                 .and_then(|root| {
                     let repo_root = path_text(root).ok()?;
-                    store
-                        .work_in_repo(&identity, &repo_root)
-                        .ok()
-                        .flatten()
-                        .filter(|work| work.state == WorkState::Active)
-                })
-                .and_then(|work| {
-                    let dirty = git_dirty_paths(Path::new(&work.repo_root)).ok()?;
-                    let clean = relevant_dirty(&work.scopes, &dirty).is_empty();
-                    store.update_scopes_clean(&identity, &work.repo_root, clean).ok()?.then_some(clean)
+                    let work = store.work(&identity).ok().flatten()?;
+                    let claim = work.claim(&repo_root).filter(|_| work.state == WorkState::Active)?;
+                    let dirty = git_dirty_paths(Path::new(&claim.repo_root)).ok()?;
+                    let clean = relevant_dirty(&claim.scopes, &dirty).is_empty();
+                    store.update_scopes_clean(&identity, &claim.repo_root, clean).ok()?.then_some(clean)
                 })
                 .is_some();
             store.hook_success(client, event, self.coordinator.now())?;
@@ -275,7 +270,9 @@ impl<'a> HookRuntime<'a> {
             let root = git_root(&cwd).ok_or_else(|| AppError::operational("waker requires a Git worktree"))?;
             let repo_root = path_text(&root)?;
             let mut store = self.coordinator.store()?;
-            let queued = store.work_in_repo(&identity, &repo_root)?.is_some_and(|work| work.state == WorkState::Queued);
+            let queued = store
+                .work(&identity)?
+                .is_some_and(|work| work.state == WorkState::Queued && work.claim(&repo_root).is_some());
             if !queued {
                 store.hook_success(Client::Claude, event, self.coordinator.now())?;
                 return Ok(None);
@@ -345,12 +342,15 @@ fn prompt_context(
             .filter(|row| row.repo_root.as_deref() == Some(&root) && row.identity != *identity)
             .count();
         let unread = store.inbox(identity, true)?.len();
-        let work = store.works(Some(&root))?;
+        let work = store.works_in_repo(&root)?;
         let queued = work.iter().filter(|work| work.state == WorkState::Queued).count();
         let residual = store.residual_owners(&root)?.into_iter().map(|row| row.path).collect::<HashSet<_>>();
         let unattributed_dirt = dirty.iter().any(|path| {
             !residual.contains(path) &&
-                !work.iter().any(|item| !relevant_dirty(&item.scopes, std::slice::from_ref(path)).is_empty())
+                !work.iter().any(|item| {
+                    item.claim(&root)
+                        .is_some_and(|claim| !relevant_dirty(&claim.scopes, std::slice::from_ref(path)).is_empty())
+                })
         });
         let gate_needed = unattributed_dirt ||
             work.iter().any(|work| {

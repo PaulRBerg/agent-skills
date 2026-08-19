@@ -22,10 +22,10 @@ The coordinator is cooperative rather than an OS lock. It uses a user-owned loca
 cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
 proceed with a stale-dirt advisory and a captured baseline.
 
-Work is keyed by `(client, session_id, repo_root)`, so one session may retain independent work in multiple repositories.
-`draft`, `start`, `wait`, `baseline`, and ordinary `done` act on the current physical Git root. Acquire new repository
-roots in canonical lexicographic root order; an attempt to add an earlier root is rejected without changing existing
-work or a stored draft. `ai-coord done --all` releases the identity's work in every repository.
+Each `(client, session_id)` owns at most one logical work item, with one or more repository claims. Ordinary `draft` and
+`start` accept current-worktree paths and can update only a one-claim item; they never silently append or move a claim.
+`baseline` and `touched` select the current physical Git worktree's claim. `wait` and `done` may be run from any claimed
+worktree and act on the whole logical item.
 
 ## Installation
 
@@ -90,6 +90,32 @@ and then atomically applies normal arbitration. A validation or repository error
 submitted, the work becomes queued or active and its literal normalized `{ path, kind }` scopes become visible. Direct
 `start LABEL PATH…` remains available, but it is rejected while a draft exists so execution cannot silently diverge.
 
+### Multi-repository bundles
+
+Reserve a cross-repository change as one explicit atomic bundle rather than acquiring roots incrementally:
+
+```sh
+ai-coord bundle draft 'update shared protocol' \
+  '/absolute/path/to/api/src/protocol.rs' \
+  '/absolute/path/to/client/src/protocol.ts'
+ai-coord bundle start --draft
+
+# Or arbitrate a bundle directly.
+ai-coord bundle start 'update shared protocol' \
+  --recursive '/absolute/path/to/api/src/protocol' \
+  '/absolute/path/to/client/src/protocol.ts'
+```
+
+The forms are `ai-coord bundle draft LABEL ABSOLUTE_PATH... [--recursive ABSOLUTE_DIR]...`,
+`ai-coord bundle start LABEL ABSOLUTE_PATH... [--recursive ABSOLUTE_DIR]...`, and
+`ai-coord bundle start --draft`. Bundle paths must be absolute. They are normalized and grouped by canonical physical
+Git worktree, and must resolve to at least two distinct roots. A draft promotion, direct submission, or update changes
+the full claim vector all-or-none. A queued bundle holds no partial active claims.
+
+There is no bundle `wait` or `done`: run ordinary `ai-coord wait` or `ai-coord done` from any claimed worktree and it
+acts on the whole logical bundle. `done --all` is not supported. One parent FIFO timestamp orders the whole bundle,
+preserves repository-local head-of-line fairness, and avoids opposite-order deadlocks.
+
 Provider permissions must allow the state-only `draft` command during planning. Claude otherwise describes Plan mode as
 read-only in its [permission-mode documentation](https://code.claude.com/docs/en/permission-modes); Codex command write
 capability remains governed by its configured permissions and sandbox according to the
@@ -111,22 +137,26 @@ coverage is complete, relevant dirt is safe, and no active or queued work inters
 `ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged.
 
 Blocked work retains its paths. Narrowing queued work preserves its original submission age; expanding or moving it
-receives a new age so stale broad requests cannot reserve unrelated work. Draft creation never establishes FIFO age:
-promotion does. Waiting therefore needs no repeated session or path arguments:
+receives a new age so stale broad requests cannot reserve unrelated work. This applies to the full bundle claim vector
+as well as ordinary work. Draft creation never establishes FIFO age: promotion does. Waiting therefore needs no
+repeated session or path arguments:
 
 ```sh
 ai-coord wait        # waits up to 300 seconds
 ai-coord wait -t 60  # explicit timeout, capped at one hour
 ```
 
-Editing requires `ai-coord start` to return `READY`. Every terminal `start`, `wait`, and `done` outcome also prints one
-concise next-step sentence to stderr while preserving the stdout TSV contract. `wait` checks the SQLite generation
-counter each second and performs full inventory, Git, and arbitration refreshes only when coordination state changes or
-every 20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN`
-exits 2. After any such wake, inspect the reported state and re-arm as needed. Ordinary `done` idempotently releases
-draft, active, or queued work in the current physical Git root and notifies overlapping queued holders that their work
-may now be ready. `done --all` preflights dirt and residual ownership for every active root before one atomic ledger
-release, so a preflight error cannot partially release the identity.
+Editing requires the matching `ai-coord start` or `ai-coord bundle start` form to return `READY`. Every terminal `start`,
+`wait`, and `done` outcome also prints one concise next-step sentence to stderr while preserving the stdout TSV contract.
+`wait` checks the SQLite generation counter each second and performs full inventory, Git, and arbitration refreshes only
+when coordination state changes or every 20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness
+wakes with exit 3; `UNKNOWN` exits 2. After any such wake, inspect the reported state and re-arm with the matching start
+form as needed. For one-claim work, `done` keeps its idempotent current-root behavior. For a bundle, `done` requires a
+claimed worktree and releases all claims atomically. Both forms notify overlapping queued holders that their work may
+now be ready. Release inspection, baselines, touched paths, and hook cleanliness stay claim-local to the current
+repository; a bundle baseline from an unclaimed root is an error.
+If one bundle repository cannot be inspected during release, its claim is released without residual attribution rather
+than leaving a partial bundle behind.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. Newly blocked work
 reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
@@ -134,10 +164,10 @@ recursive holder is blocking a more targeted request; blocked recursive callers 
 
 In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its work is promoted,
 a message arrives, the work is released, coverage becomes unknown, or the waker times out. A readiness wake still
-requires `start` to return `READY`; message wakes identify `inbox` as the inspection surface and `start` as the
-ownership recheck. Unknown coverage, timeout, and release state explicitly that no edit scope is owned. Repeated `start`
-calls may launch multiple independent wakers for the same session; each exits on the first terminal outcome. Codex
-sessions use `ai-coord wait` in the foreground.
+requires the matching ordinary or bundle start form to return `READY`; message wakes identify `inbox` as the inspection
+surface and the matching start form as the ownership recheck. Unknown coverage, timeout, and release state explicitly
+that no edit scope is owned. Repeated start calls may launch multiple independent wakers for the same session; each exits
+on the first terminal outcome. Codex sessions use `ai-coord wait` in the foreground.
 The waker resolves the Git root from its hook payload and observes only that root's queued row.
 
 Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
@@ -180,13 +210,12 @@ queued work with `work=queued`, renders drafts as `draft · N scopes`, marks pro
 `waived`, and ends with compact, contextual definitions for
 the states present; it reports only finding counts (`pending`, `triaging`, and `handed-off`), never a backlog, plus
 nonzero `.ai/task-handoffs/*.md` counts without reading file names or contents. Machine-wide terminal status emits one
-row per work item and adds `repo=<repo_root>` to its detail column; a session with no work is emitted once. `--json`
-emits public schema v6 with a required `coordination_waived` boolean on every session and `handoffs` records shaped as
-`{repo_root, count}`. Draft
-records include only their label, state, timestamps, and scope count. Submitted work includes literal normalized scope
-objects. Repository snapshots include a live session when either its reported root or one of its work rows matches the
-requested root, retain every matching work row, and derive waiting state only from that root's queued row. Status,
-dashboard snapshots, and message recipient
+row per logical work item, homing a bundle once and showing its repository-qualified paths. `--json` emits public
+schema v7 with a required `coordination_waived` boolean on every session, complete sorted `claims` vectors on work, and
+`handoffs` records shaped as `{repo_root, count}`. Draft records include only their label, state, timestamps, and scope
+count. Submitted claim vectors include literal normalized scope objects. Repository snapshots include a live session
+when either its reported root or one of its claims matches the requested root, retain the logical work item once, and
+derive waiting state from the claim in that root. Status, dashboard snapshots, and message recipient
 discovery may reuse complete provider inventory for up to two seconds. `start`, wait promotion, and `check` always probe
 providers freshly before granting work or reporting installation health.
 
@@ -256,7 +285,7 @@ sessions idle. Prompt hooks inject at most 200 characters of factual peer, queue
 case-sensitive, whitespace-trimmed line exactly equal to `#noc` records a prompt-scoped coordination waiver and injects
 bounded authoritative context. It waives only `draft`, `start`, `wait`, and `done`; presence, messages, touched-path
 attribution, findings, wakers, and lifecycle bookkeeping remain active. The next valid untagged prompt clears the waiver,
-as do explicit `draft`, direct `start`, and `start --draft` write escalation, without releasing existing work.
+as does any explicit ordinary or bundle `draft`/`start` write escalation, without releasing existing work.
 Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook report the unread count once, route inspection to
 `ai-coord inbox`, and identify message text as peer-reported data rather than instructions or authority. Peer text, IDs,
 prompts, and tool payloads are never injected. When other live work makes a repository non-quiet, prompt context adds a
@@ -268,9 +297,9 @@ hooks add read-only parent/child topology and never schedule triage. Claude's fi
 handles blocked starts in the background; planning scopes are recorded explicitly with `draft`, not inferred from
 provider-specific plan hooks.
 
-Prompt context and clean-scope release nudges use only work in the hook payload's current Git root. Authoritative
-SessionEnd and confirmed-death cleanup remove all work for the identity, wake affected queued sessions in every root,
-and do not create residual attribution for the ungraceful release.
+Prompt context and clean-scope release nudges use only the claim in the hook payload's current Git root. Authoritative
+SessionEnd and confirmed-death cleanup release the identity's whole logical item, wake affected queued sessions in every
+root, and do not create residual attribution for the ungraceful release.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
@@ -280,18 +309,18 @@ Hook mode is fail-open. Malformed payloads and storage errors never block the ho
 Both hosts fire `SubagentStart` and `SubagentStop` with the parent `session_id`. `ai-coord` records delegates under that
 parent; it never creates child sessions or work items, and child tool calls refresh the parent session. Coordination is
 therefore session-scoped: the parent's work covers all delegated work. Subagents must never run lifecycle commands
-(`draft`, `start`, `wait`, or `done`) themselves because their inherited identity would make those commands act as the
-parent.
+(`draft`, `start`, `bundle`, `wait`, or `done`) themselves because their inherited identity would make those commands
+act as the parent.
 
 ## Storage and retention
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
-`AI_COORD_STATE_DIR` to isolate tests or an alternate installation. The directory is mode `0700` and the database is
-mode `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v14. Any other nonzero schema, including v13, is rejected without migration, import, deletion, or
-replacement, while the public `status --json` schema is v6. This is an isolated-state break with no migration or
-compatibility path. Close agents and explicitly choose any backup, removal,
-installation, and relinking rollout before retrying with incompatible state.
+`AI_COORD_STATE_DIR` to isolate development and validation. The directory is mode `0700` and the database is mode
+`0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
+internal schema v15. Any other nonzero schema, including v14, is rejected without migration, import, deletion, or
+replacement, while the public `status --json` schema is v7. This is an isolated-state break with no migration or
+compatibility path. Close agents and explicitly choose any backup, removal, installation, and relinking rollout before
+retrying with incompatible state.
 
 The SQLite ledger stores bounded session metadata, callsigns, the coordination-waiver boolean, work labels, literal scopes, messages, finding lifecycle
 events, sightings, and complete provider health cache rows. It never stores cached provider errors, hook hashes, plan
@@ -322,8 +351,9 @@ See [AGENTS.md](AGENTS.md) for architecture, validation, and clean-break rules.
 
 ## Dashboard
 
-The dashboard shows the machine-wide live coordination snapshot: sessions and work grouped by repository, plus messages
-and durable findings. Start its Vite development server from the monorepo root:
+The dashboard shows the machine-wide live coordination snapshot: sessions and logical work items with nested repository
+claims, claim blockers and queue positions, plus messages and durable findings. A bundle is homed once rather than
+duplicated in each repository. Start its Vite development server from the monorepo root:
 
 ```sh
 just coord-dashboard-dev

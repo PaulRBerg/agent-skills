@@ -38,15 +38,21 @@ export interface Session extends SessionIdentity {
 
 export interface Work extends SessionIdentity {
   id: number;
-  repo_root: string;
   label: string;
   state: WorkState;
   blocked_reason?: string | null;
-  scope_count?: number;
-  scopes?: WorkScope[];
+  scope_count: number;
   draft_created_at?: number;
   submitted_at?: number;
   updated_at: number;
+  claims: WorkClaim[];
+}
+
+export interface WorkClaim {
+  repo_root: string;
+  blocked_reason?: string | null;
+  scope_count: number;
+  scopes?: WorkScope[];
 }
 
 export type FindingState =
@@ -118,6 +124,10 @@ export interface Snapshot {
 }
 
 export interface WorkWithQueuePosition extends Work {
+  claims: WorkClaimWithQueuePosition[];
+}
+
+export interface WorkClaimWithQueuePosition extends WorkClaim {
   queuePosition?: number;
 }
 

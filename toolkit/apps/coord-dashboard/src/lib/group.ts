@@ -11,30 +11,24 @@ function sessionKey(client: string, sessionId: string): string {
   return `${client}:${sessionId}`;
 }
 
-function sessionWorkKey(
-  client: string,
-  sessionId: string,
-  repoRoot: string,
-): string {
-  return `${sessionKey(client, sessionId)}:${repoRoot}`;
-}
-
 function sessionRepo(session: Session): string {
   return session.repo_root ?? session.cwd;
 }
 
 function withQueuePositions(work: Work[]): WorkWithQueuePosition[] {
-  const positions = new Map<number, number>();
+  const positions = new Map<string, number>();
   const queuedByRepo = new Map<string, Work[]>();
 
   for (const item of work) {
     if (item.state !== "queued") continue;
-    const queued = queuedByRepo.get(item.repo_root) ?? [];
-    queued.push(item);
-    queuedByRepo.set(item.repo_root, queued);
+    for (const claim of item.claims) {
+      const queued = queuedByRepo.get(claim.repo_root) ?? [];
+      queued.push(item);
+      queuedByRepo.set(claim.repo_root, queued);
+    }
   }
 
-  for (const queued of queuedByRepo.values()) {
+  for (const [repoRoot, queued] of queuedByRepo) {
     queued
       .sort(
         (left, right) =>
@@ -42,14 +36,19 @@ function withQueuePositions(work: Work[]): WorkWithQueuePosition[] {
             (right.submitted_at ?? Number.POSITIVE_INFINITY) ||
           left.id - right.id,
       )
-      .forEach((item, index) => positions.set(item.id, index + 1));
+      .forEach((item, index) =>
+        positions.set(`${item.id}:${repoRoot}`, index + 1),
+      );
   }
 
   return work.map((item) => ({
     ...item,
-    ...(positions.has(item.id)
-      ? { queuePosition: positions.get(item.id) }
-      : {}),
+    claims: item.claims.map((claim) => ({
+      ...claim,
+      ...(positions.has(`${item.id}:${claim.repo_root}`)
+        ? { queuePosition: positions.get(`${item.id}:${claim.repo_root}`) }
+        : {}),
+    })),
   }));
 }
 
@@ -74,16 +73,38 @@ function groupDelegates(delegates: Delegate[]): Map<string, Delegate[]> {
 export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
   const roots = new Set<string>();
   const work = withQueuePositions(snapshot.work);
-  const workBySession = new Map(
-    work.map((item) => [
-      sessionWorkKey(item.client, item.session_id, item.repo_root),
-      item,
+  const sessionsByKey = new Map(
+    snapshot.sessions.map((session) => [
+      sessionKey(session.client, session.session_id),
+      session,
     ]),
+  );
+  const workHome = new Map(
+    work.map((item) => {
+      const session = sessionsByKey.get(sessionKey(item.client, item.session_id));
+      const sessionRoot = session ? sessionRepo(session) : undefined;
+      const home =
+        sessionRoot && item.claims.some((claim) => claim.repo_root === sessionRoot)
+          ? sessionRoot
+          : [...item.claims]
+              .map((claim) => claim.repo_root)
+              .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))[0]!;
+      return [item.id, home];
+    }),
+  );
+  const workBySession = new Map(
+    work.flatMap((item) => {
+      const home = workHome.get(item.id)!;
+      const session = sessionsByKey.get(sessionKey(item.client, item.session_id));
+      return session && sessionRepo(session) === home
+        ? [[sessionKey(item.client, item.session_id), item] as const]
+        : [];
+    }),
   );
   const delegatesBySession = groupDelegates(snapshot.delegates);
 
   snapshot.sessions.forEach((session) => roots.add(sessionRepo(session)));
-  work.forEach((item) => roots.add(item.repo_root));
+  work.forEach((item) => item.claims.forEach((claim) => roots.add(claim.repo_root)));
   snapshot.findings.forEach((finding) => roots.add(finding.repo_root));
   snapshot.handoffs.forEach((handoff) => roots.add(handoff.repo_root));
   snapshot.messages.forEach((message) => {
@@ -93,13 +114,7 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
   return [...roots]
     .map((repoRoot): RepoLaneModel => {
       const sessions = snapshot.sessions
-        .filter(
-          (session) =>
-            sessionRepo(session) === repoRoot ||
-            workBySession.has(
-              sessionWorkKey(session.client, session.session_id, repoRoot),
-            ),
-        )
+        .filter((session) => sessionRepo(session) === repoRoot)
         .sort(
           (left, right) =>
             right.last_seen - left.last_seen ||
@@ -109,31 +124,24 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
           const key = sessionKey(session.client, session.session_id);
           return {
             session,
-            work: workBySession.get(
-              sessionWorkKey(session.client, session.session_id, repoRoot),
-            ),
+            work: workBySession.get(sessionKey(session.client, session.session_id)),
             delegates:
               sessionRepo(session) === repoRoot
                 ? (delegatesBySession.get(key) ?? [])
                 : [],
           };
         });
-      const liveSessionKeys = new Set(
-        snapshot.sessions.map((session) =>
-          sessionKey(session.client, session.session_id),
-        ),
-      );
       const unmatchedWork = work.filter(
         (item) =>
-          item.repo_root === repoRoot &&
-          !liveSessionKeys.has(sessionKey(item.client, item.session_id)),
+          workHome.get(item.id) === repoRoot &&
+          !workBySession.has(sessionKey(item.client, item.session_id)),
       );
       const activity = [
         ...snapshot.sessions
           .filter((session) => sessionRepo(session) === repoRoot)
           .map((session) => session.last_seen),
         ...work
-          .filter((item) => item.repo_root === repoRoot)
+          .filter((item) => item.claims.some((claim) => claim.repo_root === repoRoot))
           .map((item) =>
             Math.max(
               item.draft_created_at ?? Number.NEGATIVE_INFINITY,

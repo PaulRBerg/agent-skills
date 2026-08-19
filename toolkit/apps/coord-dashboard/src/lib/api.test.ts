@@ -3,8 +3,56 @@ import { parseSnapshot } from "@/lib/api";
 import { sampleSnapshot } from "@/lib/sample-snapshot";
 
 describe("parseSnapshot", () => {
-  test("accepts the committed snapshot fixture", () => {
+  test("accepts the committed snapshot fixture with matching parent totals", () => {
     expect(parseSnapshot(sampleSnapshot)).toBe(sampleSnapshot);
+  });
+
+  test("requires a parent scope total", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const work = malformed.work as Array<Record<string, unknown>>;
+    delete work[1]?.scope_count;
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.work[1].scope_count",
+    );
+  });
+
+  test("rejects parent scope totals that differ from their claims", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const work = malformed.work as Array<Record<string, unknown>>;
+    work[1] = { ...work[1], scope_count: 2 };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.work[1].scope_count must equal the claim scope total",
+    );
+  });
+
+  test("accepts matching aggregate scope totals", () => {
+    const valid = structuredClone(sampleSnapshot) as Record<string, unknown>;
+    const work = valid.work as Array<Record<string, unknown>>;
+    const claims = work[1]?.claims as Array<Record<string, unknown>>;
+    work[1] = {
+      ...work[1],
+      scope_count: 2,
+      claims: [
+        {
+          ...claims[0],
+          scope_count: 2,
+          scopes: [
+            { path: "apps/coord-dashboard", kind: "recursive" },
+            { path: "apps/coord-dashboard/src", kind: "recursive" },
+          ],
+        },
+      ],
+    };
+
+    expect(parseSnapshot(valid)).toBe(valid);
   });
 
   test("rejects malformed nested records with a useful field path", () => {
@@ -39,7 +87,7 @@ describe("parseSnapshot", () => {
   test("rejects the previous status schema", () => {
     const legacy = { ...sampleSnapshot, schema_version: 5 };
     expect(() => parseSnapshot(legacy)).toThrow(
-      "snapshot.schema_version must be 6",
+      "snapshot.schema_version must be 7",
     );
   });
 
@@ -73,19 +121,39 @@ describe("parseSnapshot", () => {
     expect(parseSnapshot(withoutCallsigns)).toBe(withoutCallsigns);
   });
 
-  test("requires draft counts without exposing literal scopes", () => {
+  test("requires draft claim counts without exposing literal scopes", () => {
     const malformed = structuredClone(sampleSnapshot) as Record<
       string,
       unknown
     >;
     const work = malformed.work as Array<Record<string, unknown>>;
+    const claims = work[0]?.claims as Array<Record<string, unknown>>;
     work[0] = {
       ...work[0],
-      scopes: [{ path: "private/file", kind: "exact" }],
+      claims: [
+        {
+          ...claims[0],
+          scopes: [{ path: "private/file", kind: "exact" }],
+        },
+      ],
     };
 
     expect(() => parseSnapshot(malformed)).toThrow(
-      "snapshot.work[0].scopes must be omitted for draft work",
+      "snapshot.work[0].claims[0].scopes must be omitted for draft work",
+    );
+  });
+
+  test("rejects malformed nested work claims", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const work = malformed.work as Array<Record<string, unknown>>;
+    const claims = work[1]?.claims as Array<Record<string, unknown>>;
+    work[1] = { ...work[1], claims: [{ ...claims[0], repo_root: 42 }] };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.work[1].claims[0].repo_root",
     );
   });
 

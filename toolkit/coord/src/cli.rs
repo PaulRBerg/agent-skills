@@ -20,6 +20,8 @@ pub(crate) enum Command {
     /// Use --draft to submit the stored draft, or pass LABEL and scopes for a
     /// direct submission. Use --recursive DIR for directory-prefix ownership.
     Start(StartArgs),
+    /// Coordinate one atomic work item spanning multiple Git repositories.
+    Bundle(BundleArgs),
     /// Return when queued work is ready or another wake event occurs.
     ///
     /// Messages, unknown coverage, work release, and timeout are
@@ -95,6 +97,49 @@ pub(crate) struct StartArgs {
 }
 
 #[derive(Debug, Args)]
+pub(crate) struct BundleArgs {
+    #[command(subcommand)]
+    pub(crate) command: BundleCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum BundleCommand {
+    /// Store an atomic multi-repository draft without reserving it.
+    Draft(BundleDraftArgs),
+    /// Acquire or submit an atomic multi-repository work item.
+    Start(BundleStartArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct BundleDraftArgs {
+    /// Explicitly remember an absolute directory prefix; repeat for multiple directories.
+    #[arg(long = "recursive", value_name = "ABSOLUTE_DIR")]
+    pub(crate) recursive_paths: Vec<PathBuf>,
+
+    pub(crate) label: String,
+
+    #[arg(value_name = "ABSOLUTE_PATH")]
+    pub(crate) paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct BundleStartArgs {
+    /// Submit the stored repository bundle draft for arbitration.
+    #[arg(long, conflicts_with_all = ["recursive_paths", "label", "paths"])]
+    pub(crate) draft: bool,
+
+    /// Explicitly reserve an absolute directory prefix; repeat for multiple directories.
+    #[arg(long = "recursive", value_name = "ABSOLUTE_DIR", conflicts_with = "draft")]
+    pub(crate) recursive_paths: Vec<PathBuf>,
+
+    #[arg(required_unless_present = "draft", conflicts_with = "draft")]
+    pub(crate) label: Option<String>,
+
+    #[arg(value_name = "ABSOLUTE_PATH", conflicts_with = "draft")]
+    pub(crate) paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Args)]
 pub(crate) struct WaitArgs {
     #[arg(
         short = 't',
@@ -106,11 +151,7 @@ pub(crate) struct WaitArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct DoneArgs {
-    /// Release this session's work in every repository.
-    #[arg(long = "all")]
-    pub(crate) all: bool,
-}
+pub(crate) struct DoneArgs {}
 
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {

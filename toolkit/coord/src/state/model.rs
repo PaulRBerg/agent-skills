@@ -47,33 +47,52 @@ pub(crate) struct EndedObservation {
 pub(crate) struct WorkRow {
     pub(crate) id: i64,
     pub(crate) identity: Identity,
-    pub(crate) repo_root: String,
     pub(crate) label: String,
     pub(crate) state: WorkState,
     pub(crate) blocked_reason: Option<String>,
-    pub(crate) scopes: Vec<Scope>,
+    pub(crate) claims: Vec<WorkClaimRow>,
     pub(crate) draft_created_at: Option<f64>,
     pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
     pub(crate) revision: i64,
 }
 
-#[derive(Clone, Debug)]
+impl WorkRow {
+    pub(crate) fn claim(&self, repo_root: &str) -> Option<&WorkClaimRow> {
+        self.claims.iter().find(|claim| claim.repo_root == repo_root)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct WorkClaimRow {
+    pub(crate) id: i64,
+    pub(crate) repo_root: String,
+    pub(crate) blocked_reason: Option<String>,
+    pub(crate) scopes: Vec<Scope>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct WorkUpdate {
     pub(crate) identity: Identity,
-    pub(crate) repo_root: String,
     pub(crate) label: String,
     pub(crate) state: WorkState,
     pub(crate) blocked_reason: Option<String>,
-    pub(crate) scopes: Vec<Scope>,
-    /// `None` preserves existing baselines; `Some` replaces all of them.
-    pub(crate) baselines: Option<Vec<BaselineRow>>,
-    pub(crate) residual_paths: Vec<String>,
+    pub(crate) claims: Vec<WorkClaimUpdate>,
     pub(crate) draft_created_at: Option<f64>,
     pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
     /// Compare-and-swap guard for an existing work item.
     pub(crate) expected_revision: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct WorkClaimUpdate {
+    pub(crate) repo_root: String,
+    pub(crate) blocked_reason: Option<String>,
+    pub(crate) scopes: Vec<Scope>,
+    /// `None` preserves retained claim baselines; `Some` replaces all of them.
+    pub(crate) baselines: Option<Vec<BaselineRow>>,
+    pub(crate) residual_paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

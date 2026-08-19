@@ -217,19 +217,26 @@ pub(crate) struct SnapshotSessionV2 {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct SnapshotWorkClaimV2 {
+    pub(crate) repo_root: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) blocked_reason: Option<String>,
+    pub(crate) scope_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) scopes: Option<Vec<Scope>>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct SnapshotWorkV2 {
     pub(crate) id: i64,
     #[serde(flatten)]
     pub(crate) identity: Identity,
-    pub(crate) repo_root: String,
     pub(crate) label: String,
     pub(crate) state: WorkState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) blocked_reason: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) scope_count: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) scopes: Option<Vec<Scope>>,
+    pub(crate) scope_count: usize,
+    pub(crate) claims: Vec<SnapshotWorkClaimV2>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) draft_created_at: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 14;
+pub(crate) const SCHEMA_VERSION: i64 = 15;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -32,7 +32,6 @@ const STATEMENTS: &[&str] = &[
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client TEXT NOT NULL,
         session_id TEXT NOT NULL,
-        repo_root TEXT NOT NULL,
         label TEXT NOT NULL,
         state TEXT NOT NULL CHECK (state IN ('draft', 'queued', 'active')),
         blocked_reason TEXT,
@@ -40,7 +39,7 @@ const STATEMENTS: &[&str] = &[
         submitted_at REAL,
         updated_at REAL NOT NULL,
         revision INTEGER NOT NULL CHECK (revision > 0),
-        UNIQUE (client, session_id, repo_root),
+        UNIQUE (client, session_id),
         FOREIGN KEY (client, session_id)
             REFERENCES sessions(client, session_id) ON DELETE CASCADE,
         CHECK (
@@ -52,17 +51,25 @@ const STATEMENTS: &[&str] = &[
                 AND blocked_reason IS NULL)
         )
     )",
-    "CREATE TABLE work_scopes (
+    "CREATE TABLE work_claims (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_id INTEGER NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+        repo_root TEXT NOT NULL CHECK (repo_root != ''),
+        blocked_reason TEXT,
+        UNIQUE (work_id, repo_root)
+    )",
+    "CREATE INDEX work_claims_repo_idx ON work_claims(repo_root, work_id)",
+    "CREATE TABLE work_scopes (
+        claim_id INTEGER NOT NULL REFERENCES work_claims(id) ON DELETE CASCADE,
         path TEXT NOT NULL,
         kind TEXT NOT NULL CHECK (kind IN ('exact', 'recursive')),
-        PRIMARY KEY (work_id, path)
+        PRIMARY KEY (claim_id, path)
     )",
     "CREATE TABLE work_baselines (
-        work_id INTEGER NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+        claim_id INTEGER NOT NULL REFERENCES work_claims(id) ON DELETE CASCADE,
         path TEXT NOT NULL,
         oid TEXT NOT NULL,
-        PRIMARY KEY (work_id, path)
+        PRIMARY KEY (claim_id, path)
     )",
     "CREATE TABLE touched_paths (
         client TEXT NOT NULL,
