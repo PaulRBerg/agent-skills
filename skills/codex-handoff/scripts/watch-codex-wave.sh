@@ -14,6 +14,19 @@ import time
 from pathlib import Path
 
 
+ACTIVITY_FIELDS = {
+    "agent_message": (),
+    "reasoning": (),
+    "command_execution": ("command", "status"),
+    "file_change": ("status",),
+    "mcp_tool_call": ("server", "tool", "status"),
+    "collab_tool_call": ("tool", "status"),
+    "web_search": (),
+    "todo_list": (),
+    "error": (),
+}
+
+
 def fail(message: str, code: int = 64) -> None:
     print(f"ERROR: {message}", file=sys.stderr)
     raise SystemExit(code)
@@ -153,12 +166,17 @@ def process_line(agent: dict, line: str) -> None:
         settlement()
         return
     agent["events"] += 1
+    if event_type == "error":
+        agent["lastActivity"] = {"type": "error"}
+        return
     item = event.get("item") if isinstance(event.get("item"), dict) else {}
     item_type = item.get("type")
-    if item_type in {"agent_message", "reasoning", "command_execution", "file_change"}:
+    fields = ACTIVITY_FIELDS.get(item_type)
+    if fields is not None:
         activity = {"type": item_type}
-        if item_type in {"command_execution", "file_change"}:
-            activity.update({"command": item.get("command"), "status": item.get("status")})
+        for field in fields:
+            if item.get(field) is not None:
+                activity[field] = item[field]
         agent["lastActivity"] = activity
 
 

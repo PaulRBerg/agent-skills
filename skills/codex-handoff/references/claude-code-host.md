@@ -127,8 +127,8 @@ bash <skill-dir>/scripts/watch-codex-wave.sh \
 ```
 
 The watcher tolerates delayed file creation and emits stable JSONL `watcher.digest`, `watcher.sentinel`, and
-`watcher.settlement` records. It owns elapsed time, event counts, last command or file activity, settled percentage, and
-the ten-cell bar. Set the Monitor `timeout_ms` above the wave's largest budget plus the 120-second no-sentinel grace. On
+`watcher.settlement` records. It owns elapsed time, event counts, last relevant activity, settled percentage, and the
+ten-cell bar. Set the Monitor `timeout_ms` above the wave's largest budget plus the 120-second no-sentinel grace. On
 each digest or settlement, post one short wave-status block using those exact facts. If Monitor is unavailable, run the
 same watcher in a foreground command; do not recreate its loop or arithmetic.
 

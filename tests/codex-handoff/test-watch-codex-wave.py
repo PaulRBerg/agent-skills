@@ -125,11 +125,92 @@ class WatchCodexWaveTests(unittest.TestCase):
             self.assertEqual(sentinels[1]["status"], "completed")
             self.assertEqual(records[-1]["settled"], 2)
 
-    def test_message_and_reasoning_completions_are_activity(self) -> None:
-        for item_type in ("agent_message", "reasoning"):
-            with self.subTest(item_type=item_type), tempfile.TemporaryDirectory() as directory:
-                progress = Path(directory) / f"{item_type}.progress.jsonl"
-                progress.write_text(json.dumps({"type": "item.completed", "item": {"type": item_type}}) + "\n")
+    def test_current_codex_events_are_privacy_minimal_activity(self) -> None:
+        cases = {
+            "agent_message": (
+                {"type": "item.completed", "item": {"type": "agent_message", "text": "private message"}},
+                {"type": "agent_message"},
+            ),
+            "reasoning": (
+                {"type": "item.completed", "item": {"type": "reasoning", "text": "private reasoning"}},
+                {"type": "reasoning"},
+            ),
+            "command_execution": (
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": "just test",
+                        "status": "completed",
+                        "aggregated_output": "private output",
+                    },
+                },
+                {"type": "command_execution", "command": "just test", "status": "completed"},
+            ),
+            "file_change": (
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "file_change",
+                        "status": "completed",
+                        "changes": [{"path": "private.txt", "kind": "update"}],
+                    },
+                },
+                {"type": "file_change", "status": "completed"},
+            ),
+            "mcp_tool_call": (
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "mcp_tool_call",
+                        "server": "github",
+                        "tool": "search",
+                        "status": "completed",
+                        "arguments": {"query": "private query"},
+                        "result": {"content": ["private result"]},
+                    },
+                },
+                {"type": "mcp_tool_call", "server": "github", "tool": "search", "status": "completed"},
+            ),
+            "collab_tool_call": (
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "collab_tool_call",
+                        "tool": "spawn_agent",
+                        "status": "completed",
+                        "prompt": "private prompt",
+                        "sender_thread_id": "sender",
+                        "receiver_thread_ids": ["receiver"],
+                        "agents_states": {"receiver": {"message": "private message"}},
+                    },
+                },
+                {"type": "collab_tool_call", "tool": "spawn_agent", "status": "completed"},
+            ),
+            "web_search": (
+                {"type": "item.completed", "item": {"type": "web_search", "query": "private query"}},
+                {"type": "web_search"},
+            ),
+            "todo_list": (
+                {
+                    "type": "item.completed",
+                    "item": {"type": "todo_list", "items": [{"text": "private task", "completed": False}]},
+                },
+                {"type": "todo_list"},
+            ),
+            "item_error": (
+                {"type": "item.completed", "item": {"type": "error", "message": "private error"}},
+                {"type": "error"},
+            ),
+            "stream_error": (
+                {"type": "error", "message": "private error"},
+                {"type": "error"},
+            ),
+        }
+        for name, (event, expected_activity) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                progress = Path(directory) / f"{name}.progress.jsonl"
+                progress.write_text(json.dumps(event) + "\n")
 
                 def finish() -> None:
                     time.sleep(0.08)
@@ -150,7 +231,12 @@ class WatchCodexWaveTests(unittest.TestCase):
                 records = [json.loads(line) for line in result.stdout.splitlines()]
                 digest = next(record for record in records if record["type"] == "watcher.digest")
                 self.assertFalse(digest["noRecentActivity"])
-                self.assertEqual(digest["lastActivity"], {"type": item_type})
+                self.assertEqual(digest["eventCount"], 1)
+                self.assertEqual(digest["lastActivity"], expected_activity)
+                sentinel_index = next(
+                    index for index, record in enumerate(records) if record["type"] == "watcher.sentinel"
+                )
+                self.assertLess(records.index(digest), sentinel_index)
 
     def test_invariant_exits_emit_watcher_failed(self) -> None:
         cases = {

@@ -73,14 +73,16 @@ After plan approval, call `spawn_agent` for each implementation worker with:
 Start all independent workers that fit the concurrency allowance without waiting between calls. Reconcile the entire
 wave before launching dependents. Never spawn more workers merely because a thread is quiet.
 
-Use `wait_agent` to await mailbox updates and completed results. Codex's native thread UI is the progress surface: do
-not reproduce it with custom dashboards, polling loops, wrapper artifacts, or synthetic percentages. Ground any concise
-user update in an actual agent result or harness state.
+Use `wait_agent` with `timeout_ms: 900000` while any agent is running; it returns early for mailbox updates, completed
+results, or user steering. Codex's native thread UI is the progress surface: do not reproduce it with custom dashboards,
+polling loops, wrapper artifacts, or synthetic percentages. Ground any concise user update in an actual agent result or
+harness state.
 
-Practice wait economy: when `wait_agent` returns without a settled result or an actionable mailbox message, immediately
-call `wait_agent` again — no analysis, narration, or `list_agents` round-trips. Reserve reasoning and user-visible
-status for settlements, steering-worthy evidence, or at most one compact update per roughly fifteen minutes of elapsed
-wave time; every idle wakeup otherwise costs a full model turn.
+Practice wait economy: when `wait_agent` returns without a settled result, an actionable mailbox message, or user
+steering, immediately call it again after the permitted fifteen-minute status update when one is due — no analysis,
+extra narration, or `list_agents` round-trips. Reserve reasoning and user-visible status for settlements,
+steering-worthy evidence, or that one compact update per roughly fifteen minutes of elapsed wave time; every idle wakeup
+otherwise costs a full model turn.
 
 Use `send_message` only to steer a currently running agent when new evidence shows it is off track or missing material
 context. Do not use it for routine check-ins, completed agents, or retries.

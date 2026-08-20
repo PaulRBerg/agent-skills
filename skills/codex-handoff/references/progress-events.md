@@ -12,17 +12,21 @@ the same wrapper controls and a new stdin prompt.
 ## Codex events
 
 One JSON object per line, each with a top-level `type`
-([non-interactive mode docs](https://developers.openai.com/codex/noninteractive)):
+([non-interactive mode docs](https://learn.chatgpt.com/docs/non-interactive-mode)):
 
-| Event                                              | Meaning                                                  |
-| -------------------------------------------------- | -------------------------------------------------------- |
-| `thread.started`, `turn.started`                   | Session/turn lifecycle                                   |
-| `turn.completed`                                   | Turn finished; carries `usage` with `output_tokens` etc. |
-| `turn.failed`                                      | Turn failed; carries error details                       |
-| `item.started` / `item.updated` / `item.completed` | Work items; `item.type` identifies the activity          |
+| Event                                              | Meaning                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------- |
+| `thread.started`, `turn.started`                   | Session/turn lifecycle                                        |
+| `turn.completed`                                   | Turn finished; carries `usage` with `output_tokens` etc.      |
+| `turn.failed`                                      | Turn failed; carries error details                            |
+| `item.started` / `item.updated` / `item.completed` | Work items; `item.type` identifies the activity               |
+| `error`                                            | Unrecoverable stream error; the wrapper still owns settlement |
 
-Item types: `agent_message` (assistant text), `reasoning`, `command_execution` (has `command` and `status`),
-`file_change`, `mcp_tool_call`, `web_search`, plus plan updates. Example:
+Item types in Codex CLI 0.148.0: `agent_message` (assistant text), `reasoning`, `command_execution` (has `command` and
+`status`), `file_change`, `mcp_tool_call`, `collab_tool_call`, `web_search`, `todo_list` (plan updates), and `error`
+(non-fatal item error)
+([0.148 event definitions](https://github.com/openai/codex/blob/rust-v0.148.0/codex-rs/exec/src/exec_events.rs)).
+Example:
 
 ```json
 { "type": "item.completed", "item": { "id": "item_3", "type": "agent_message", "text": "Repo contains docs and sdk." } }
@@ -32,10 +36,10 @@ Item types: `agent_message` (assistant text), `reasoning`, `command_execution` (
 
 The app-server protocol documents separate `model/safetyBuffering/updated` and `model/rerouted` notifications
 ([turn events](https://learn.chatgpt.com/docs/app-server#turn-events)), but they are not part of the documented
-`codex exec --json` event set. Written against Codex CLI 0.144.3; the current version may differ, but the gap may still
-apply — treat the forwarded event set as version-dependent, not guaranteed. Do not invent equivalent JSONL events or
-infer a safety check from silence. A quiet period may be ordinary work or transient buffering, and an independent
-server-side policy reroute may leave the responding model unknowable.
+`codex exec --json` event set. Verified against Codex CLI 0.148.0; later versions may differ, so treat the forwarded
+event set as version-dependent, not guaranteed. Do not invent equivalent JSONL events or infer a safety check from
+silence. A quiet period may be ordinary work or transient buffering, and an independent server-side policy reroute may
+leave the responding model unknowable.
 
 In status digests, say `no recent activity` and keep watching until the wrapper sentinel or approved timeout. Do not
 cancel, retry, extend, downgrade to a suggested faster model, or relaunch because the stream is quiet; preserve normal
@@ -76,3 +80,10 @@ the watcher synthesizes `{"type":"handoff.failed","reason":"no-sentinel"}` and s
 arriving after that settlement is ignored. This only backstops a dead wrapper; the wrapper remains the timeout
 authority. Malformed or otherwise invalid progress emits `watcher.failed` and exits as an invariant failure, not an
 agent result.
+
+`watcher.digest.lastActivity` is deliberately privacy-minimal. It carries only `type` for messages, reasoning, web
+searches, todo lists, and item or stream errors; `type` plus `status` for file changes; `type`, `command`, and `status`
+for command execution; `type`, `server`, `tool`, and `status` for MCP calls; and `type`, `tool`, and `status` for
+collaboration calls. Missing fields are omitted. Never include message or reasoning text, search queries, arguments,
+results, prompts, thread IDs, agent states, or error messages. Neither a stream `error` nor an item `error` settles an
+agent; only the wrapper sentinel does.
