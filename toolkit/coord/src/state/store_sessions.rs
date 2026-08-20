@@ -1,9 +1,9 @@
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{OptionalExtension, Row, Transaction, params};
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::{
-    domain::{Identity, ProcessFingerprint},
+    domain::{Client, Identity, ProcessFingerprint},
     error::{AppError, Result},
 };
 
@@ -237,16 +237,16 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
     transaction.execute(
         "INSERT INTO sessions(
                     client, session_id, cwd, repo_root, state, name, waiting_for,
-                    permission_mode, coordination_waived, pid, process_start_token, source, started_at, last_seen,
-                    revision
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE(?9, 0), ?10, ?11, ?12, ?13, ?14, 1)
+                    permission_mode, coordination_waived, pid, process_start_token, transcript_path,
+                    source, started_at, last_seen, revision
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE(?9, 0), ?10, ?11, ?12, ?13, ?14, ?15, 1)
                  ON CONFLICT(client, session_id) DO UPDATE SET
                     cwd = excluded.cwd,
                     repo_root = excluded.repo_root,
                     state = excluded.state,
                     name = COALESCE(excluded.name, sessions.name),
                     waiting_for = excluded.waiting_for,
-                    permission_mode = CASE WHEN ?15 THEN excluded.permission_mode
+                    permission_mode = CASE WHEN ?16 THEN excluded.permission_mode
                                            ELSE sessions.permission_mode END,
                     coordination_waived = CASE WHEN ?9 IS NULL THEN sessions.coordination_waived
                                                 ELSE excluded.coordination_waived END,
@@ -254,6 +254,7 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
                     process_start_token = CASE
                         WHEN excluded.pid IS NULL THEN sessions.process_start_token
                         ELSE excluded.process_start_token END,
+                    transcript_path = COALESCE(excluded.transcript_path, sessions.transcript_path),
                     source = excluded.source,
                     last_seen = excluded.last_seen,
                     revision = sessions.revision + 1",
@@ -269,6 +270,7 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
             update.coordination_waived,
             pid,
             start_token,
+            update.transcript_path,
             update.source,
             update.started_at.unwrap_or(update.current),
             update.current,
@@ -290,6 +292,75 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
     )?)
 }
 
+/// Replace one Codex root-session generation while preserving the root identity.
+/// The revision guard prevents an older hook from deleting a generation that won
+/// a concurrent replacement race.
+pub(super) fn replace_codex_session_generation(
+    transaction: &Transaction<'_>,
+    update: &SessionUpdate,
+    expected_revision: i64,
+) -> Result<Option<SessionRow>> {
+    if update.identity.client != Client::Codex {
+        return Err(AppError::usage("session generation replacement requires a Codex identity"));
+    }
+    let transcript_path = update
+        .transcript_path
+        .as_deref()
+        .ok_or_else(|| AppError::usage("session generation replacement requires a transcript path"))?;
+    let removed = transaction.execute(
+        "DELETE FROM sessions WHERE client = ?1 AND session_id = ?2 AND revision = ?3",
+        params![client_name(update.identity.client), update.identity.session_id, expected_revision],
+    )?;
+    if removed == 0 {
+        return Ok(None);
+    }
+
+    let (pid, start_token) = fingerprint_values(update.fingerprint.as_ref());
+    transaction.execute(
+        "INSERT INTO sessions(
+            client, session_id, cwd, repo_root, state, permission_mode,
+            coordination_waived, pid, process_start_token, transcript_path,
+            source, started_at, last_seen, revision
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 0), ?8, ?9, ?10, ?11, ?12, ?12, ?13)",
+        params![
+            client_name(update.identity.client),
+            update.identity.session_id,
+            update.cwd,
+            update.repo_root,
+            session_state_name(update.state),
+            update.permission_mode,
+            update.coordination_waived,
+            pid,
+            start_token,
+            transcript_path,
+            update.source,
+            update.current,
+            expected_revision + 1,
+        ],
+    )?;
+    bump_generation(transaction)?;
+    Ok(Some(transaction.query_row(
+        &session_select("WHERE client = ?1 AND session_id = ?2"),
+        params![client_name(update.identity.client), update.identity.session_id],
+        session_from_row,
+    )?))
+}
+
+pub(super) fn end_session_if_revision(
+    transaction: &Transaction<'_>,
+    identity: &Identity,
+    expected_revision: i64,
+) -> Result<bool> {
+    let removed = transaction.execute(
+        "DELETE FROM sessions WHERE client = ?1 AND session_id = ?2 AND revision = ?3",
+        params![client_name(identity.client), identity.session_id, expected_revision],
+    )? > 0;
+    if removed {
+        bump_generation(transaction)?;
+    }
+    Ok(removed)
+}
+
 fn remove_session(transaction: &rusqlite::Transaction<'_>, identity: &Identity) -> Result<()> {
     transaction.execute(
         "DELETE FROM sessions WHERE client = ?1 AND session_id = ?2",
@@ -305,8 +376,8 @@ fn fingerprint_values(fingerprint: Option<&ProcessFingerprint>) -> (Option<u32>,
 fn session_select(suffix: &str) -> String {
     format!(
         "SELECT client, session_id, cwd, repo_root, state, callsign, name,
-                waiting_for, permission_mode, coordination_waived, pid, process_start_token, source, started_at,
-                last_seen, revision
+                waiting_for, permission_mode, coordination_waived, pid, process_start_token, transcript_path,
+                source, started_at, last_seen, revision
          FROM sessions {suffix}"
     )
 }
@@ -325,10 +396,11 @@ fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
         permission_mode: row.get(8)?,
         coordination_waived: row.get(9)?,
         fingerprint: pid.map(|pid| ProcessFingerprint { pid, start_token }),
-        source: row.get(12)?,
-        started_at: row.get(13)?,
-        last_seen: row.get(14)?,
-        revision: row.get(15)?,
+        transcript_path: row.get(12)?,
+        source: row.get(13)?,
+        started_at: row.get(14)?,
+        last_seen: row.get(15)?,
+        revision: row.get(16)?,
     })
 }
 

@@ -2,8 +2,13 @@
 
 ## Unreleased
 
-- Break the internal ledger at schema v15 and public status at schema v7, with no migration or import. Store one
-  logical work item per `(client, session_id)` with complete sorted repository-claim vectors; reject v14 ledgers.
+- Break the internal ledger at schema v16 while retaining public status schema v7, with no migration or import. Store
+  one logical work item per `(client, session_id)` with complete sorted repository-claim vectors and a private nullable
+  opaque transcript identity for lifecycle correlation; reject v15 ledgers.
+- Use Codex's shared root session identity, with `CODEX_SESSION_ID` ahead of the legacy `CODEX_THREAD_ID`. On the first
+  non-end hook whose transcript differs, atomically replace that root's prior generation, cascade its transient state
+  and work, wake overlapping waiters once, and require fresh coordination. Ignore delayed `SessionEnd` hooks from older
+  transcripts and revision-guard current-generation cleanup.
 - Add explicit atomic multi-repository `bundle draft` and `bundle start` commands using absolute paths grouped by
   canonical physical Git worktree. Require at least two roots; make draft promotion, direct submission, and active
   updates all-or-none; retain one parent FIFO age for repository-local fairness and opposite-order deadlock avoidance.

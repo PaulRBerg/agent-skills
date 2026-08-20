@@ -27,6 +27,10 @@ Each `(client, session_id)` owns at most one logical work item, with one or more
 `baseline` and `touched` select the current physical Git worktree's claim. `wait` and `done` may be run from any claimed
 worktree and act on the whole logical item.
 
+For Codex, the session ID is the live session-tree root: CLI commands prefer `CODEX_SESSION_ID` and fall back to the
+legacy `CODEX_THREAD_ID`. Persistent forks retain that root identity, so each forked transcript is a new generation of
+the same coordination identity rather than a second concurrent owner.
+
 ## Installation
 
 Requirements: Rust (the repository pins its development toolchain in `rust-toolchain.toml`) and Cargo. The dashboard
@@ -305,6 +309,15 @@ Prompt context and clean-scope release nudges use only the claim in the hook pay
 SessionEnd and confirmed-death cleanup release the identity's whole logical item, wake affected queued sessions in every
 root, and do not create residual attribution for the ungraceful release.
 
+Codex has no dedicated fork hook. After Double-Esc edits and submits an earlier prompt, the first non-end hook from the
+fork—normally `SessionStart`—reports the same root session with a different opaque `transcript_path`. At that hook,
+`ai-coord` revision-guards an atomic generation replacement: the old generation's draft, queued or active work, touched
+paths, delegates, current-turn state, callsign, start time, and prompt waiver are released or reset, and overlapping
+waiters are notified once. The fork must acquire scopes again with `draft` or `start`; detection does not occur at the
+keypress itself. A delayed `SessionEnd` for an older transcript is ignored, while a matching current-transcript end is
+revision-guarded so it cannot delete a concurrently registered fork. Hooks that omit `transcript_path` never erase a
+known identity, and the legacy both-absent lifecycle remains supported.
+
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
 
@@ -321,16 +334,17 @@ act as the parent.
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate development and validation. The directory is mode `0700` and the database is mode
 `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v15. Any other nonzero schema, including v14, is rejected without migration, import, deletion, or
+internal schema v16. Any other nonzero schema, including v15, is rejected without migration, import, deletion, or
 replacement, while the public `status --json` schema is v7. This is an isolated-state break with no migration or
 compatibility path. Close agents and explicitly choose any backup, removal, installation, and relinking rollout before
 retrying with incompatible state.
 
-The SQLite ledger stores bounded session metadata, callsigns, the coordination-waiver boolean, work labels, literal scopes, messages, finding lifecycle
-events, sightings, and complete provider health cache rows. It never stores cached provider errors, hook hashes, plan
-bodies, transcript contents, or arbitrary hook payloads; opt-in triage prompts and model output exist only in the 30-day
-run artifacts described above. Composite session foreign keys cascade draft and submitted work cleanup on authoritative
-session end, dead-process reconciliation, and session supersession.
+The SQLite ledger stores bounded session metadata, callsigns, the coordination-waiver boolean, private opaque transcript
+paths, work labels, literal scopes, messages, finding lifecycle events, sightings, and complete provider health cache
+rows. Transcript paths are never exposed through public status JSON. The ledger never stores cached provider errors,
+hook hashes, plan bodies, transcript contents, or arbitrary hook payloads; opt-in triage prompts and model output exist
+only in the 30-day run artifacts described above. Composite session foreign keys cascade draft and submitted work
+cleanup on authoritative session end, dead-process reconciliation, and session supersession.
 
 Messages expire after 48 hours and are capped at 50 per inbox. On macOS and Linux, sessions are bound to a
 kernel-derived process fingerprint containing both PID and process start identity. Normal `SessionEnd` hooks release

@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 15;
+pub(crate) const SCHEMA_VERSION: i64 = 16;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -21,6 +21,7 @@ const STATEMENTS: &[&str] = &[
         coordination_waived INTEGER NOT NULL DEFAULT 0 CHECK (coordination_waived IN (0, 1)),
         pid INTEGER,
         process_start_token TEXT,
+        transcript_path TEXT,
         source TEXT NOT NULL,
         started_at REAL NOT NULL,
         last_seen REAL NOT NULL,

@@ -244,6 +244,7 @@ impl Coordinator {
             update_permission_mode: false,
             coordination_waived: None,
             fingerprint,
+            transcript_path: None,
             started_at: existing.as_ref().map(|row| row.started_at),
             current: self.clock.wall(),
         };
@@ -275,6 +276,7 @@ impl Coordinator {
                         update_permission_mode: false,
                         coordination_waived: None,
                         fingerprint: row.fingerprint,
+                        transcript_path: None,
                         started_at: Some(row.started_at),
                         current: self.clock.wall(),
                     })

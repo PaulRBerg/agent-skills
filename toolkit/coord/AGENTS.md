@@ -31,7 +31,7 @@ ladders, old-format importers, deprecated CLI aliases, dual reads or writes, ret
 hook recognition by default. Rejecting an incompatible persisted version with an actionable error is required safety
 behavior, not backward compatibility.
 
-Schema v15 is the Rust implementation's clean break. It never migrates or imports an older ledger; reject v14 and every
+Schema v16 is the Rust implementation's clean break. It never migrates or imports an older ledger; reject v15 and every
 other nonzero version with actionable replacement guidance. Work is one logical item per `(client, session_id)` with a
 sorted vector of repository claims. Ordinary `draft` and `start` stay current-root compatible and must not implicitly
 append or move a claim. Cross-repository work uses only the explicit atomic `bundle draft` and `bundle start` commands
@@ -40,6 +40,10 @@ updates are all-or-none. Queued bundles hold no partial active claims, and one p
 retain repository-local fairness and avoid opposite-order deadlocks.
 Session liveness is based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced
 process is removed without an age grace period, while unknown liveness fails closed and never deletes the record.
+Codex identity uses `CODEX_SESSION_ID` with legacy `CODEX_THREAD_ID` fallback. Persistent fork generations share that
+root identity and are distinguished only by a private opaque transcript path: replace changed transcripts on their first
+non-end hook, release transient session state and work through cascades, and correlate revision-guarded SessionEnd hooks
+without exposing transcript paths in public status.
 
 Before work that can invalidate live chats, their ledger, hooks, or coordination CLI, require the user to close other
 agents and explicitly authorize the break, then implement it from one fresh session. Use an isolated

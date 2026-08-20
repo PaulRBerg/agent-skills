@@ -71,6 +71,7 @@ impl Fixture {
             .env("CLAUDE_CONFIG_DIR", &self.claude_home)
             .env("HOME", self._temporary.path().join("home"))
             .env("PATH", "/usr/bin:/bin")
+            .env_remove("CODEX_SESSION_ID")
             .env_remove("CODEX_THREAD_ID")
             .env_remove("CLAUDE_CODE_SESSION_ID");
     }
@@ -177,6 +178,7 @@ fn identity_commands_and_state_are_fully_isolated() {
     assert_eq!(status["scope"]["kind"], "machine");
     assert_eq!(status["sessions"][0]["callsign"], "🦀 Ferris Test");
     assert_eq!(status["sessions"][0]["coordination_waived"], false);
+    assert!(status["sessions"][0].get("transcript_path").is_none());
     assert!(fixture.state.join("state.db").is_file());
 
     #[cfg(unix)]
@@ -844,7 +846,7 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     check.assert().failure().code(2);
     let reports: Vec<Value> = serde_json::from_slice(&check.stdout).expect("check JSON");
     let state = reports.iter().find(|report| report["component"] == "state").expect("state report");
-    assert_eq!(state["schema_version"], 15);
+    assert_eq!(state["schema_version"], 16);
     assert_eq!(state["path"], fixture.state.join("state.db").to_string_lossy().as_ref());
     let codex_hooks = reports.iter().find(|report| report["component"] == "hooks:codex").expect("hook report");
     assert!(codex_hooks["error"].is_null());

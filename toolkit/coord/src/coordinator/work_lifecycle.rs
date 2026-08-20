@@ -11,7 +11,10 @@ use crate::{
         any_overlap, git_blob_hashes, git_dirty_paths, git_root, normalize_work_claim_bundle, normalize_work_scopes,
         process_sweep, relevant_dirty,
     },
-    state::{BaselineRow, EndedObservation, Store, TouchedPaths, WorkClaimUpdate, WorkRow},
+    state::{
+        BaselineRow, EndedObservation, SessionRow, SessionUpdate, Store, TouchedPaths, WorkClaimUpdate, WorkRow,
+        WorkTransaction,
+    },
     work::WorkCoordinator,
 };
 
@@ -424,6 +427,50 @@ impl Coordinator {
         notify_session_release(&mut store, identity, released.as_ref(), wakeups, self.clock.wall())
     }
 
+    /// Replace one Codex transcript generation and notify overlapping waiters
+    /// atomically. A stale expected revision is a harmless no-op.
+    pub(crate) fn replace_codex_session_generation_for(
+        &self,
+        update: &SessionUpdate,
+        expected_revision: i64,
+    ) -> Result<Option<SessionRow>> {
+        let identity = &update.identity;
+        let mut store = self.store()?;
+        store.with_work_transaction(|transaction| {
+            let released = transaction.work(identity)?;
+            let all_work = transaction.works()?;
+            let wakeups = released
+                .as_ref()
+                .filter(|work| work.state != WorkState::Draft)
+                .map(|work| overlapping_waiters(&all_work, work, identity))
+                .unwrap_or_default();
+            let Some(session) = transaction.replace_codex_session_generation(update, expected_revision)? else {
+                return Ok(None);
+            };
+            notify_session_release_transaction(transaction, identity, released.as_ref(), wakeups, self.clock.wall())?;
+            Ok(Some(session))
+        })
+    }
+
+    /// End only the exact session generation observed by a correlated hook.
+    pub(crate) fn end_session_generation_for(&self, identity: &Identity, expected_revision: i64) -> Result<bool> {
+        let mut store = self.store()?;
+        store.with_work_transaction(|transaction| {
+            let released = transaction.work(identity)?;
+            let all_work = transaction.works()?;
+            let wakeups = released
+                .as_ref()
+                .filter(|work| work.state != WorkState::Draft)
+                .map(|work| overlapping_waiters(&all_work, work, identity))
+                .unwrap_or_default();
+            if !transaction.end_session_if_revision(identity, expected_revision)? {
+                return Ok(false);
+            }
+            notify_session_release_transaction(transaction, identity, released.as_ref(), wakeups, self.clock.wall())?;
+            Ok(true)
+        })
+    }
+
     pub(crate) fn baselines(&self) -> Result<Vec<BaselineRow>> {
         let identity = self.required_identity()?;
         let cwd = std::env::current_dir()?;
@@ -602,6 +649,26 @@ fn notify_session_release(
     );
     for (waiter, repo_root) in wakeups {
         store.send_message(identity, &[waiter], &text, Some(&repo_root), current)?;
+    }
+    Ok(())
+}
+
+fn notify_session_release_transaction(
+    transaction: &WorkTransaction<'_>,
+    identity: &Identity,
+    released: Option<&WorkRow>,
+    wakeups: Vec<(Identity, String)>,
+    current: f64,
+) -> Result<()> {
+    let Some(released) = released else {
+        return Ok(());
+    };
+    let text = sanitize(
+        &format!("Session ended; released work '{}'; your queued work may now be ready.", released.label),
+        super::MAX_MESSAGE_CHARS,
+    );
+    for (waiter, repo_root) in wakeups {
+        transaction.send_message(identity, &waiter, &text, Some(&repo_root), current)?;
     }
     Ok(())
 }

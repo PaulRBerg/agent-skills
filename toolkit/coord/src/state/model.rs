@@ -12,6 +12,7 @@ pub(crate) struct SessionRow {
     pub(crate) permission_mode: Option<String>,
     pub(crate) coordination_waived: bool,
     pub(crate) fingerprint: Option<ProcessFingerprint>,
+    pub(crate) transcript_path: Option<String>,
     pub(crate) source: String,
     pub(crate) started_at: f64,
     pub(crate) last_seen: f64,
@@ -32,6 +33,8 @@ pub(crate) struct SessionUpdate {
     /// `None` preserves the current prompt-scoped coordination waiver.
     pub(crate) coordination_waived: Option<bool>,
     pub(crate) fingerprint: Option<ProcessFingerprint>,
+    /// `None` preserves a previously observed opaque transcript identity.
+    pub(crate) transcript_path: Option<String>,
     pub(crate) started_at: Option<f64>,
     pub(crate) current: f64,
 }

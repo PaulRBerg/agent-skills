@@ -439,6 +439,7 @@ fn register_triager_session(
         update_permission_mode: false,
         coordination_waived: None,
         fingerprint: Some(fingerprint),
+        transcript_path: None,
         started_at: Some(metadata.started_at),
         current,
     })?;

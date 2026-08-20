@@ -187,6 +187,7 @@ fn add_session(store: &mut Store, identity: &Identity, root: &Path, pid: u32, cu
             update_permission_mode: false,
             coordination_waived: None,
             fingerprint: Some(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) }),
+            transcript_path: None,
             started_at: Some(current),
             current,
         })

@@ -33,6 +33,7 @@ fn session_update(identity: &Identity, current: f64) -> SessionUpdate {
         update_permission_mode: false,
         coordination_waived: None,
         fingerprint: Some(ProcessFingerprint { pid: 42, start_token: Some("boot:42".to_owned()) }),
+        transcript_path: None,
         started_at: None,
         current,
     }
@@ -73,7 +74,7 @@ fn save_work(store: &mut Store, update: &WorkUpdate) -> crate::error::Result<i64
 }
 
 #[test]
-fn new_store_has_exact_v15_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v16_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -97,6 +98,7 @@ fn new_store_has_exact_v15_schema_and_runtime_pragmas() {
         "callsign_key".to_owned(),
         "process_start_token".to_owned(),
         "coordination_waived".to_owned(),
+        "transcript_path".to_owned(),
         "revision".to_owned(),
     ])));
     assert_eq!(
@@ -198,21 +200,21 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let connection = Connection::open(&path).unwrap();
     connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)", []).unwrap();
     connection.execute("INSERT INTO sentinel VALUES ('preserved')", []).unwrap();
-    connection.pragma_update(None, "user_version", 14).unwrap();
+    connection.pragma_update(None, "user_version", 15).unwrap();
     drop(connection);
 
     let error = Store::open(&path).err().unwrap();
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 14 is incompatible with required schema 15 at {}; \
+            "state schema 15 is incompatible with required schema 16 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
     );
 
     let connection = Connection::open(path).unwrap();
-    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 14);
+    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 15);
     assert_eq!(
         connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
         "preserved"
@@ -341,6 +343,87 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
     assert!(store.work(&owner).unwrap().is_none());
     assert!(store.delegates().unwrap().is_empty());
     assert_eq!(store.generation().unwrap(), generation + 1);
+}
+
+#[test]
+fn missing_transcript_observation_preserves_the_known_opaque_identity() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    let mut initial = session_update(&owner, 1.0);
+    initial.transcript_path = Some("opaque:first".to_owned());
+    let first = store.upsert_session(&initial).unwrap();
+
+    let second = store.upsert_session(&session_update(&owner, 2.0)).unwrap();
+
+    assert_eq!(second.transcript_path.as_deref(), Some("opaque:first"));
+    assert_eq!(second.revision, first.revision + 1);
+}
+
+#[test]
+fn codex_generation_replacement_resets_transient_state_and_rejects_a_stale_end_revision() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    let peer = identity(Client::Claude, "peer");
+    let mut initial = session_update(&owner, 1.0);
+    initial.name = Some("old name".to_owned());
+    initial.waiting_for = Some("old wait".to_owned());
+    initial.coordination_waived = Some(true);
+    initial.transcript_path = Some("opaque:first".to_owned());
+    let first = store.upsert_session(&initial).unwrap();
+    store.upsert_session(&session_update(&peer, 1.0)).unwrap();
+    store.set_session_callsign(&owner, "🦀 Old Callsign").unwrap();
+    save_work(&mut store, &work_update(&owner)).unwrap();
+    store.record_touched(&owner, "/repo", &["src/state/mod.rs".to_owned()], 1.0).unwrap();
+    store.update_delegate(&owner, "child", Some("explorer"), "active", 1.0).unwrap();
+    store.begin_turn(&owner, Some("turn-old"), 1.0).unwrap();
+    store.send_message(&owner, std::slice::from_ref(&peer), "durable message", Some("/repo"), 1.0).unwrap();
+    let finding = store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".to_owned(),
+            summary: "durable finding".to_owned(),
+            normalized_summary: "durable finding".to_owned(),
+            kind: None,
+            paths: Vec::new(),
+            head_oid: None,
+            observations: Vec::new(),
+            author: owner.clone(),
+            turn_id: Some("turn-old".to_owned()),
+            current: 1.0,
+        })
+        .unwrap()
+        .finding;
+
+    let mut replacement = session_update(&owner, 2.0);
+    replacement.name = Some("must reset".to_owned());
+    replacement.waiting_for = Some("must reset".to_owned());
+    replacement.transcript_path = Some("opaque:fork".to_owned());
+    let replaced = store
+        .with_work_transaction(|transaction| transaction.replace_codex_session_generation(&replacement, first.revision))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(replaced.revision, first.revision + 1);
+    assert_eq!(replaced.transcript_path.as_deref(), Some("opaque:fork"));
+    assert_eq!(replaced.started_at, 2.0);
+    assert_eq!(replaced.callsign, None);
+    assert_eq!(replaced.name, None);
+    assert_eq!(replaced.waiting_for, None);
+    assert!(!replaced.coordination_waived);
+    assert!(store.work(&owner).unwrap().is_none());
+    assert!(store.touched(&owner, "/repo").unwrap().paths.is_empty());
+    assert!(store.delegates().unwrap().is_empty());
+    assert!(store.current_turn_findings(&owner).unwrap().is_empty());
+    assert_eq!(store.inbox(&peer, false).unwrap()[0].text, "durable message");
+    assert!(store.finding("/repo", &finding.id, 2.0).unwrap().is_some());
+
+    assert!(
+        !store
+            .with_work_transaction(|transaction| transaction.end_session_if_revision(&owner, first.revision))
+            .unwrap()
+    );
+    assert_eq!(store.session(&owner).unwrap().unwrap().transcript_path.as_deref(), Some("opaque:fork"));
 }
 
 #[test]

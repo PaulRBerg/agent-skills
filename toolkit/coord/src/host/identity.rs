@@ -36,6 +36,9 @@ fn from_environment_with(mut get: impl FnMut(&str) -> Option<OsString>) -> Optio
 }
 
 fn host_environment(get: &mut impl FnMut(&str) -> Option<OsString>) -> Option<Identity> {
+    if let Some(session_id) = get("CODEX_SESSION_ID").and_then(nonempty_utf8) {
+        return Some(Identity { client: Client::Codex, session_id });
+    }
     if let Some(session_id) = get("CODEX_THREAD_ID").and_then(nonempty_utf8) {
         return Some(Identity { client: Client::Codex, session_id });
     }
@@ -88,6 +91,7 @@ mod tests {
             resolve(&[
                 ("AI_COORD_CLIENT", "claude"),
                 ("AI_COORD_SESSION_ID", "override"),
+                ("CODEX_SESSION_ID", "codex-root"),
                 ("CODEX_THREAD_ID", "codex"),
                 ("CLAUDE_CODE_SESSION_ID", "claude"),
             ]),
@@ -96,15 +100,20 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_or_invalid_override_falls_through_to_codex_then_claude() {
+    fn incomplete_or_invalid_override_falls_through_to_codex_root_then_legacy_thread_then_claude() {
         assert_eq!(
             resolve(&[
                 ("AI_COORD_CLIENT", "invalid"),
                 ("AI_COORD_SESSION_ID", "override"),
-                ("CODEX_THREAD_ID", "codex"),
+                ("CODEX_SESSION_ID", "codex-root"),
+                ("CODEX_THREAD_ID", "codex-thread"),
                 ("CLAUDE_CODE_SESSION_ID", "claude"),
             ]),
-            Some(Identity { client: Client::Codex, session_id: "codex".to_owned() })
+            Some(Identity { client: Client::Codex, session_id: "codex-root".to_owned() })
+        );
+        assert_eq!(
+            resolve(&[("CODEX_THREAD_ID", "codex-thread"), ("CLAUDE_CODE_SESSION_ID", "claude")]),
+            Some(Identity { client: Client::Codex, session_id: "codex-thread".to_owned() })
         );
         assert_eq!(
             resolve(&[("AI_COORD_CLIENT", "codex"), ("CLAUDE_CODE_SESSION_ID", "claude")]),

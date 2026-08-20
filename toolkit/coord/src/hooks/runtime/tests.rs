@@ -109,6 +109,7 @@ fn register(coordinator: &Coordinator, identity: &Identity, repo: &Path, pid: u3
             update_permission_mode: false,
             coordination_waived: None,
             fingerprint: Some(ProcessFingerprint { pid, start_token: Some(format!("test-{pid}")) }),
+            transcript_path: None,
             started_at: Some(100.0),
             current: 100.0,
         })
@@ -194,6 +195,147 @@ fn lifecycle_schedules_only_after_an_allowed_main_stop_or_session_end() {
         scheduler.0.lock().unwrap().last(),
         Some(&(canonical_repo, Identity { client: Client::Codex, session_id: "ending".into() }))
     );
+}
+
+#[test]
+fn duplicate_codex_transcript_hooks_preserve_work_while_a_fork_releases_and_wakes_once() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let holder = Identity { client: Client::Codex, session_id: "root".into() };
+    let waiter = Identity { client: Client::Claude, session_id: "waiter".into() };
+    register(&coordinator, &holder, &repo, 301);
+    register(&coordinator, &waiter, &repo, 302);
+    let first = json!({
+        "session_id":"root", "cwd":repo, "hook_event_name":"SessionStart",
+        "transcript_path":"opaque:first"
+    });
+    runtime.ingest("codex", &first);
+    let scope = repo.join("src/lib.rs");
+    assert_eq!(
+        coordinator.start_for(holder.clone(), "holder", std::slice::from_ref(&scope), &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    assert_eq!(
+        coordinator.start_for(waiter.clone(), "waiter", std::slice::from_ref(&scope), &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Blocked
+    );
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    let mut store = coordinator.store().unwrap();
+    store.set_session_callsign(&holder, "🦀 Custom Root").unwrap();
+    store.set_coordination_waived(&holder, true).unwrap();
+    store.record_touched(&holder, &root, &["src/lib.rs".to_owned()], 100.0).unwrap();
+    store.update_delegate(&holder, "child", Some("worker"), "active", 100.0).unwrap();
+    drop(store);
+
+    runtime.ingest("codex", &first);
+    let store = coordinator.store().unwrap();
+    assert!(store.work(&holder).unwrap().is_some());
+    assert_eq!(store.session(&holder).unwrap().unwrap().callsign.as_deref(), Some("🦀 Custom Root"));
+    drop(store);
+
+    let fork = json!({
+        "session_id":"root", "cwd":repo, "hook_event_name":"SessionStart",
+        "transcript_path":"opaque:fork"
+    });
+    runtime.ingest("codex", &fork);
+    let store = coordinator.store().unwrap();
+    let session = store.session(&holder).unwrap().unwrap();
+    assert_eq!(session.transcript_path.as_deref(), Some("opaque:fork"));
+    assert_ne!(session.callsign.as_deref(), Some("🦀 Custom Root"));
+    assert!(!session.coordination_waived);
+    assert!(store.work(&holder).unwrap().is_none());
+    assert!(store.touched(&holder, &root).unwrap().paths.is_empty());
+    assert!(store.delegates().unwrap().is_empty());
+    assert_eq!(store.inbox(&waiter, true).unwrap().len(), 1);
+    drop(store);
+
+    runtime.ingest("codex", &fork);
+    assert_eq!(coordinator.store().unwrap().inbox(&waiter, true).unwrap().len(), 1);
+}
+
+#[test]
+fn a_non_end_codex_hook_falls_back_to_fork_replacement() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let identity = Identity { client: Client::Codex, session_id: "root".into() };
+    register(&coordinator, &identity, &repo, 303);
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"root", "cwd":repo, "hook_event_name":"SessionStart",
+            "transcript_path":"opaque:first"
+        }),
+    );
+    assert_eq!(
+        coordinator.start_for(identity.clone(), "work", &[repo.join("src/lib.rs")], &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    coordinator.store().unwrap().set_session_callsign(&identity, "🦀 Custom Root").unwrap();
+
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"root", "cwd":repo, "hook_event_name":"PostToolUse",
+            "transcript_path":"opaque:fork", "tool_name":"Read", "tool_input":{}
+        }),
+    );
+
+    let store = coordinator.store().unwrap();
+    let session = store.session(&identity).unwrap().unwrap();
+    assert_eq!(session.transcript_path.as_deref(), Some("opaque:fork"));
+    assert_ne!(session.callsign.as_deref(), Some("🦀 Custom Root"));
+    assert!(store.work(&identity).unwrap().is_none());
+}
+
+#[test]
+fn codex_session_end_ignores_stale_or_missing_transcripts_and_ends_the_current_generation() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let identity = Identity { client: Client::Codex, session_id: "root".into() };
+    register(&coordinator, &identity, &repo, 304);
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"root", "cwd":repo, "hook_event_name":"SessionStart",
+            "transcript_path":"opaque:first"
+        }),
+    );
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"root", "cwd":repo, "hook_event_name":"SessionStart",
+            "transcript_path":"opaque:fork"
+        }),
+    );
+    assert_eq!(
+        coordinator.start_for(identity.clone(), "fork work", &[repo.join("src/lib.rs")], &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+
+    for transcript_path in [Some("opaque:first"), None] {
+        let mut payload = json!({"session_id":"root", "cwd":repo, "hook_event_name":"SessionEnd"});
+        if let Some(transcript_path) = transcript_path {
+            payload["transcript_path"] = json!(transcript_path);
+        }
+        runtime.ingest("codex", &payload);
+        let store = coordinator.store().unwrap();
+        assert!(store.session(&identity).unwrap().is_some());
+        assert!(store.work(&identity).unwrap().is_some());
+    }
+
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"root", "cwd":repo, "hook_event_name":"SessionEnd",
+            "transcript_path":"opaque:fork"
+        }),
+    );
+    let store = coordinator.store().unwrap();
+    assert!(store.session(&identity).unwrap().is_none());
+    assert!(store.work(&identity).unwrap().is_none());
 }
 
 #[test]
@@ -488,6 +630,7 @@ fn session_start_assigns_unique_normalized_callsigns() {
             update_permission_mode: false,
             coordination_waived: None,
             fingerprint: None,
+            transcript_path: None,
             started_at: None,
             current: 100.0,
         })
@@ -797,6 +940,7 @@ fn clean_scope_release_nudge_emits_once_per_transition() {
             update_permission_mode: false,
             coordination_waived: None,
             fingerprint: Some(ProcessFingerprint { pid: std::process::id(), start_token: Some("test".into()) }),
+            transcript_path: None,
             started_at: Some(100.0),
             current: 100.0,
         })

@@ -8,9 +8,11 @@ use crate::{
 };
 
 use super::{
-    BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkClaimRow, WorkClaimUpdate, WorkRow, WorkUpdate,
+    BaselineRow, DirtObservationRow, ResidualOwnerRow, SessionRow, SessionUpdate, Store, WorkClaimRow, WorkClaimUpdate,
+    WorkRow, WorkUpdate,
     store::{bump_generation, client_name, invalid_value, parse_client, parse_work_state, work_state_name},
     store_communications::add_message,
+    store_sessions::{end_session_if_revision, replace_codex_session_generation},
 };
 
 /// State-owned facade for one atomic work arbitration.
@@ -53,6 +55,18 @@ impl WorkTransaction<'_> {
 
     pub(crate) fn works(&self) -> Result<Vec<WorkRow>> {
         works_from(&self.transaction, None)
+    }
+
+    pub(crate) fn replace_codex_session_generation(
+        &self,
+        update: &SessionUpdate,
+        expected_revision: i64,
+    ) -> Result<Option<SessionRow>> {
+        replace_codex_session_generation(&self.transaction, update, expected_revision)
+    }
+
+    pub(crate) fn end_session_if_revision(&self, identity: &Identity, expected_revision: i64) -> Result<bool> {
+        end_session_if_revision(&self.transaction, identity, expected_revision)
     }
 
     pub(crate) fn baselines_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Vec<BaselineRow>> {
