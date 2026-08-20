@@ -26,6 +26,21 @@ auditing and reserve the final 15% for aggregate validation and reporting, clamp
 the total runtime. At that window, settle in-flight slices and do not start new fixes; report an incomplete sweep with
 its ledger rather than overrunning the deadline.
 
+## Overnight Autonomy
+
+At invocation, read the environment's local time. If it is strictly after 22:00 or strictly before 08:00, treat the
+entire run as autonomous even if it later crosses a boundary. Exactly 22:00 and 08:00 are outside this window.
+
+During an autonomous overnight run:
+
+- Do not ask the user any questions or pause for clarification, selection, or approval. This does not broaden the
+  skill's authority: leave destructive, disclosure, purchase, public-contract, and other approval-dependent actions
+  undone.
+- Use the smallest safe reversible interpretation and continue all independent work. Put every ambiguity, blocked issue,
+  and approval-dependent choice on an overnight backlog instead of interrupting the run.
+- Present the backlog at the end with each item's evidence, safe disposition, impact, and decision needed. Phrase the
+  entries as findings, not questions. Omit the section when the backlog is empty.
+
 ## Ledger Interface
 
 Resolve `scripts/sweep-ledger.py` from this `SKILL.md`. Create the scratch ledger outside the repository:
@@ -68,7 +83,8 @@ reimplement ledger arithmetic.
    subsystem slices and continue without asking solely because of file count. Keep the complete requested scope in the
    ledger and preserve cross-slice invariants through the system map and aggregate validation. When a supplied deadline
    cannot cover every slice, stop at its validation window and report the resumable frontier; ask only when no safe
-   partition can preserve a material invariant and the user must choose a narrower outcome.
+   partition can preserve a material invariant and the user must choose a narrower outcome. During an autonomous
+   overnight run, record that choice in the overnight backlog and complete everything that remains independently safe.
 3. Classify generated, vendored, minified, binary, and bulk-data artifacts. Validate them through their generator,
    schema, or invariants when line-by-line review is inappropriate, then mark them with the agent's reason.
 4. Build a compact system map: executable entry points, workspace or package dependency directions, public interfaces,
@@ -167,9 +183,10 @@ Lead with
 when helper `complete` is true; otherwise use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
 counts. Include a compact `Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results.
 When non-empty, also include reverted experiments with the failed evidence, unresolved findings with their evidence,
-risk, and required decision, and residual risk with its next proving check. On `### ⛔ Sweep incomplete`, name the
-ledger path so the next session can resume from `pending`. Do not dump the scratch ledger's contents, unrelated
-pre-existing changes, or bulk data; include task-relevant evidence when it materially supports the report.
+risk, and required decision, the overnight backlog when applicable, and residual risk with its next proving check. On
+`### ⛔ Sweep incomplete`, name the ledger path so the next session can resume from `pending`. Do not dump the scratch
+ledger's contents, unrelated pre-existing changes, or bulk data; include task-relevant evidence when it materially
+supports the report.
 
 Completion requires every mapped path accounted for, every finding fixed and verified or reported with evidence, and
 every relevant check passing or its failure attributed.
