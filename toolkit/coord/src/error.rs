@@ -7,6 +7,7 @@ pub(crate) enum ErrorKind {
     Operational,
     Usage,
     Retry,
+    WaitArbitrationRetry,
 }
 
 impl ErrorKind {
@@ -14,7 +15,7 @@ impl ErrorKind {
         match self {
             Self::Operational => 1,
             Self::Usage => 64,
-            Self::Retry => 3,
+            Self::Retry | Self::WaitArbitrationRetry => 3,
         }
     }
 }
@@ -37,6 +38,10 @@ impl AppError {
 
     pub(crate) fn retry(message: impl Into<String>) -> Self {
         Self { kind: ErrorKind::Retry, message: message.into() }
+    }
+
+    pub(crate) fn wait_arbitration_retry(message: impl Into<String>) -> Self {
+        Self { kind: ErrorKind::WaitArbitrationRetry, message: message.into() }
     }
 }
 

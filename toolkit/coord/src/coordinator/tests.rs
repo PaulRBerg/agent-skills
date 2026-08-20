@@ -12,7 +12,11 @@ use std::{
 
 use tempfile::TempDir;
 
-use super::{Clock, Coordinator, inventory::StaticInventory, normalize_callsign};
+use super::{
+    Clock, Coordinator,
+    inventory::{InventoryObservation, ProviderInventory, StaticInventory},
+    normalize_callsign,
+};
 use crate::{
     domain::{
         Client, Identity, InventoryResult, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe, Scope,
@@ -20,7 +24,7 @@ use crate::{
     },
     error::Result,
     host::{WorkClaimRequest, git_blob_hashes, git_dirty_paths},
-    state::{SessionUpdate, Store},
+    state::{SessionUpdate, Store, WorkClaimUpdate, WorkUpdate},
     work::WorkCoordinator,
 };
 
@@ -62,6 +66,93 @@ impl Clock for FakeClock {
     }
     fn sleep(&self, duration: Duration) {
         *self.value.lock().unwrap() += duration.as_secs_f64();
+    }
+}
+
+enum InventoryMutation {
+    DeleteOnce,
+    ReplaceOnce { label: String, repo_root: String, path: String, submitted_at: f64 },
+    ReviseEveryTime,
+}
+
+struct MutatingInventory {
+    identity: Identity,
+    mutation: InventoryMutation,
+    refreshes: usize,
+}
+
+impl ProviderInventory for MutatingInventory {
+    fn cache_key(&self) -> &str {
+        "mutating"
+    }
+
+    fn refresh(&mut self, store: &Store, _probe: &dyn ProcessProbe) -> Result<InventoryObservation> {
+        let mutate = self.refreshes == 0 || matches!(self.mutation, InventoryMutation::ReviseEveryTime);
+        self.refreshes += 1;
+        if mutate {
+            let mut writer = Store::open(store.path())?;
+            match &self.mutation {
+                InventoryMutation::DeleteOnce => {
+                    writer.with_work_transaction(|transaction| transaction.delete_work(&self.identity).map(|_| ()))?;
+                }
+                InventoryMutation::ReplaceOnce { label, repo_root, path, submitted_at } => {
+                    let current = writer.work(&self.identity)?.expect("queued work to replace");
+                    writer.with_work_transaction(|transaction| {
+                        assert!(transaction.delete_work(&self.identity)?);
+                        transaction.save_work(&WorkUpdate {
+                            identity: self.identity.clone(),
+                            label: label.clone(),
+                            state: WorkState::Queued,
+                            blocked_reason: Some("coverage".to_owned()),
+                            claims: vec![WorkClaimUpdate {
+                                repo_root: repo_root.clone(),
+                                blocked_reason: Some("coverage".to_owned()),
+                                scopes: vec![Scope { path: path.clone(), kind: ScopeKind::Exact }],
+                                baselines: None,
+                                residual_paths: Vec::new(),
+                            }],
+                            draft_created_at: current.draft_created_at,
+                            submitted_at: Some(*submitted_at),
+                            updated_at: 200.0,
+                            expected_revision: None,
+                        })?;
+                        Ok(())
+                    })?;
+                }
+                InventoryMutation::ReviseEveryTime => {
+                    let current = writer.work(&self.identity)?.expect("queued work to revise");
+                    writer.with_work_transaction(|transaction| {
+                        transaction.save_work(&WorkUpdate {
+                            identity: self.identity.clone(),
+                            label: current.label.clone(),
+                            state: current.state,
+                            blocked_reason: current.blocked_reason.clone(),
+                            claims: current
+                                .claims
+                                .iter()
+                                .map(|claim| WorkClaimUpdate {
+                                    repo_root: claim.repo_root.clone(),
+                                    blocked_reason: claim.blocked_reason.clone(),
+                                    scopes: claim.scopes.clone(),
+                                    baselines: None,
+                                    residual_paths: Vec::new(),
+                                })
+                                .collect(),
+                            draft_created_at: current.draft_created_at,
+                            submitted_at: current.submitted_at,
+                            updated_at: 200.0 + self.refreshes as f64,
+                            expected_revision: Some(current.revision),
+                        })?;
+                        Ok(())
+                    })?;
+                }
+            }
+        }
+        Ok(InventoryObservation {
+            result: InventoryResult { complete: true, providers: Vec::new() },
+            claude_sessions: Vec::new(),
+            claude_authoritative: false,
+        })
     }
 }
 
@@ -301,6 +392,177 @@ fn wait_reevaluates_the_whole_bundle_and_preserves_fifo_age() {
     let blocked = coordinator.start_bundle_for(late.clone(), "late", &requested, &[], &roots[1]).unwrap();
     assert_eq!(blocked.kind, OutcomeKind::Blocked);
     assert_eq!(coordinator.store().unwrap().work(&late).unwrap().unwrap().submitted_at, late_age);
+}
+
+#[test]
+fn wait_retries_a_replaced_snapshot_and_preserves_the_replacement() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 33, 1.0);
+    probe.set(33, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let original_id = queued.store().unwrap().work(&owner).unwrap().unwrap().id;
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReplaceOnce {
+                label: "replacement".to_owned(),
+                repo_root: roots[0].to_string_lossy().into_owned(),
+                path: "replacement.rs".to_owned(),
+                submitted_at: 77.0,
+            },
+            refreshes: 0,
+        }),
+        probe,
+        clock.clone(),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    assert_eq!(outcome.paths, ["replacement.rs"]);
+    let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_ne!(work.id, original_id);
+    assert_eq!(work.label, "replacement");
+    assert_eq!(work.submitted_at, Some(77.0));
+    assert_eq!(work.claims[0].scopes[0].path, "replacement.rs");
+    assert!(clock.monotonic() >= 100.1, "a stale snapshot retry must poll instead of busy-looping");
+}
+
+#[test]
+fn wait_returns_released_when_replacement_drops_the_observed_repository_claim() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(2);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 38, 1.0);
+    probe.set(38, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let initial_mismatch = queued.wait_for_repo(&owner, &roots[1], 1, 0.1, false).unwrap_err();
+    assert!(initial_mismatch.to_string().contains("current repository is not claimed"));
+    let original_id = queued.store().unwrap().work(&owner).unwrap().unwrap().id;
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReplaceOnce {
+                label: "other repo".to_owned(),
+                repo_root: roots[1].to_string_lossy().into_owned(),
+                path: "other.rs".to_owned(),
+                submitted_at: 88.0,
+            },
+            refreshes: 0,
+        }),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Released);
+    assert_eq!(outcome.code, 3);
+    assert!(outcome.detail.is_empty());
+    let replacement = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_ne!(replacement.id, original_id);
+    assert_eq!(replacement.label, "other repo");
+    assert_eq!(replacement.submitted_at, Some(88.0));
+    assert_eq!(replacement.claims[0].repo_root, roots[1].to_string_lossy());
+    assert_eq!(replacement.claims[0].scopes[0].path, "other.rs");
+}
+
+#[test]
+fn wait_returns_released_when_done_wins_arbitration_without_recreating_work() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 34, 1.0);
+    probe.set(34, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "queued", &[PathBuf::from("queued.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory { identity: owner.clone(), mutation: InventoryMutation::DeleteOnce, refreshes: 0 }),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Released);
+    assert_eq!(outcome.code, 3);
+    assert!(coordinator.store().unwrap().work(&owner).unwrap().is_none());
+}
+
+#[test]
+fn repeated_wait_arbitration_retries_respect_the_requested_deadline() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 35, 1.0);
+    probe.set(35, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "queued", &[PathBuf::from("queued.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let submitted_at = queued.store().unwrap().work(&owner).unwrap().unwrap().submitted_at;
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReviseEveryTime,
+            refreshes: 0,
+        }),
+        probe,
+        clock.clone(),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.25, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Timeout);
+    assert_eq!(outcome.code, 3);
+    assert_eq!(outcome.detail, "1");
+    assert_eq!(clock.monotonic(), 101.0);
+    assert_eq!(coordinator.store().unwrap().work(&owner).unwrap().unwrap().submitted_at, submitted_at);
+}
+
+#[test]
+fn pending_message_still_wakes_wait_without_rearbitrating() {
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 36), (&waiter, 0, 37)]);
+    let scope = [PathBuf::from("shared.rs")];
+    coordinator.start_for(holder.clone(), "holder", &scope, &[], &roots[0]).unwrap();
+    assert_eq!(
+        coordinator.start_for(waiter.clone(), "waiter", &scope, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Blocked
+    );
+    let before = coordinator.store().unwrap().work(&waiter).unwrap().unwrap();
+    coordinator
+        .store()
+        .unwrap()
+        .send_message(&holder, std::slice::from_ref(&waiter), "recheck", roots[0].to_str(), 100.0)
+        .unwrap();
+
+    let outcome = coordinator.wait_for_repo(&waiter, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Message);
+    assert_eq!(outcome.code, 3);
+    assert_eq!(outcome.detail, "1");
+    assert_eq!(coordinator.store().unwrap().work(&waiter).unwrap().unwrap(), before);
 }
 
 #[test]

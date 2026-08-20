@@ -151,7 +151,11 @@ Editing requires the matching `ai-coord start` or `ai-coord bundle start` form t
 `wait` checks the SQLite generation counter each second and performs full inventory, Git, and arbitration refreshes only
 when coordination state changes or every 20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness
 wakes with exit 3; `UNKNOWN` exits 2. After any such wake, inspect the reported state and re-arm with the matching start
-form as needed. For one-claim work, `done` keeps its idempotent current-root behavior. For a bundle, `done` requires a
+form as needed. Each wait recheck pins the observed work-item ID and revision before Git evidence and again in the
+arbitration transaction. A concurrent lifecycle change is retried within the original timeout instead of recreating or
+overwriting work; if `done` releases work while its wait is in flight, that wait returns `RELEASED`. Neither retry nor
+release grants ownership: only a fresh matching foreground start that returns `READY` authorizes editing. For one-claim
+work, `done` keeps its idempotent current-root behavior. For a bundle, `done` requires a
 claimed worktree and releases all claims atomically. Both forms notify overlapping queued holders that their work may
 now be ready. Release inspection, baselines, touched paths, and hook cleanliness stay claim-local to the current
 repository; a bundle baseline from an unclaimed root is an error.

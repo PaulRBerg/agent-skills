@@ -641,6 +641,54 @@ fn promotion_queues_on_unknown_coverage_and_wait_preserves_submitted_work() {
 }
 
 #[test]
+fn wait_releases_cleanly_when_done_wins_during_git_evidence() {
+    let fixture = Fixture::new();
+    let mut holder = spawn_synthetic_host(&fixture, "race-holder");
+    let mut waiter = spawn_synthetic_host(&fixture, "race-waiter");
+    assert_strong_session(&fixture, "race-holder");
+    assert_strong_session(&fixture, "race-waiter");
+    let scope = "src/race.rs";
+    assert_eq!(
+        String::from_utf8_lossy(&fixture.output_as("race-holder", &["start", "holder", scope]).stdout),
+        format!("READY\t{scope}\n")
+    );
+    let queued = fixture.output_as("race-waiter", &["start", "waiter", scope]);
+    queued.assert().failure().code(3);
+
+    let (executable_path, ready, release) = install_git_status_barrier(&fixture);
+    let mut command = fixture.command();
+    let child = command
+        .env("AI_COORD_SESSION_ID", "race-waiter")
+        .env("AI_COORD_GIT_READY_FIFO", &ready)
+        .env("AI_COORD_GIT_RELEASE_FIFO", &release)
+        .env("PATH", &executable_path)
+        .args(["wait", "-t", "5"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn gated wait");
+
+    assert_eq!(fs::read_to_string(&ready).unwrap(), "ready\n");
+    let done = fixture.output_as("race-waiter", &["done"]);
+    done.assert().success();
+    assert_eq!(String::from_utf8_lossy(&done.stdout), "DONE\treleased\n");
+    fs::write(&release, "continue\n").unwrap();
+    let waited = child.wait_with_output().expect("gated wait output");
+    waited.assert().failure().code(3);
+    assert_eq!(String::from_utf8_lossy(&waited.stdout), "RELEASED\n");
+    let stderr = String::from_utf8_lossy(&waited.stderr);
+    assert!(stderr.contains("`ai-coord status`"), "{stderr}");
+    assert!(stderr.contains("`ai-coord inbox`"), "{stderr}");
+    assert!(stderr.contains("matching `ai-coord start` or `ai-coord bundle start`"), "{stderr}");
+    assert!(work_item(&fixture, "race-waiter").is_none(), "wait must not recreate released work");
+
+    for child in [&mut holder, &mut waiter] {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+#[test]
 fn blocked_draft_promotion_hashes_only_dirt_in_the_requested_exact_scope() {
     let fixture = Fixture::new();
     fs::write(fixture.root.join(".gitignore"), "target/\n").unwrap();
@@ -975,6 +1023,28 @@ fn install_hash_object_logger(fixture: &Fixture) -> (String, PathBuf) {
     .unwrap();
     fs::set_permissions(&git, fs::Permissions::from_mode(0o700)).unwrap();
     (format!("{}:/usr/bin:/bin", bin.display()), log)
+}
+
+fn install_git_status_barrier(fixture: &Fixture) -> (String, PathBuf, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let bin = fixture._temporary.path().join("git-barrier-bin");
+    let ready = fixture._temporary.path().join("git-ready.fifo");
+    let release = fixture._temporary.path().join("git-release.fifo");
+    fs::create_dir(&bin).unwrap();
+    for fifo in [&ready, &release] {
+        let fifo = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).unwrap();
+        // SAFETY: the NUL-terminated path remains alive for the duration of this call.
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    }
+    let git = bin.join("git");
+    fs::write(
+        &git,
+        "#!/bin/sh\nfor argument in \"$@\"; do\n  if [ \"$argument\" = status ] && [ -p \"$AI_COORD_GIT_READY_FIFO\" ]; then\n    printf 'ready\\n' > \"$AI_COORD_GIT_READY_FIFO\"\n    IFS= read -r _ < \"$AI_COORD_GIT_RELEASE_FIFO\"\n    rm -f \"$AI_COORD_GIT_READY_FIFO\" \"$AI_COORD_GIT_RELEASE_FIFO\"\n    break\n  fi\ndone\nexec /usr/bin/git \"$@\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&git, fs::Permissions::from_mode(0o700)).unwrap();
+    (format!("{}:/usr/bin:/bin", bin.display()), ready, release)
 }
 
 fn hash_object_invocations(log: &Path) -> usize {

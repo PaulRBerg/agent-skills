@@ -6,10 +6,10 @@ use std::{
 
 use crate::{
     domain::{Client, Identity, Outcome, OutcomeKind, ProcessLiveness, Scope, ScopeKind, WorkState, sanitize},
-    error::{AppError, Result},
+    error::{AppError, ErrorKind, Result},
     host::{
-        WorkClaimRequest, any_overlap, git_blob_hashes, git_dirty_paths, git_root, normalize_work_claim_bundle,
-        normalize_work_scopes, process_sweep, relevant_dirty,
+        any_overlap, git_blob_hashes, git_dirty_paths, git_root, normalize_work_claim_bundle, normalize_work_scopes,
+        process_sweep, relevant_dirty,
     },
     state::{BaselineRow, EndedObservation, Store, TouchedPaths, WorkClaimUpdate, WorkRow},
     work::WorkCoordinator,
@@ -223,22 +223,27 @@ impl Coordinator {
         let started = self.clock.monotonic();
         let mut last_generation = None;
         let mut last_full_check = None;
+        let mut observed_valid_work = false;
         loop {
             let mut store = self.store()?;
             let process_complete = self.reconcile_processes(&mut store)?.is_empty();
             let Some(work) = store.work(identity)? else {
-                return if released_if_missing {
+                return if released_if_missing || observed_valid_work {
                     Ok(Outcome::new(OutcomeKind::Released, 3, ""))
                 } else {
                     Err(AppError::operational("no active or queued work for this session"))
                 };
             };
             if work.claim(&repo_root).is_none() {
+                if observed_valid_work {
+                    return Ok(Outcome::new(OutcomeKind::Released, 3, ""));
+                }
                 return Err(AppError::operational(format!(
                     "current repository is not claimed by work '{}'; use ai-coord done from a claimed repository",
                     work.label
                 )));
             }
+            observed_valid_work = true;
             let qualified = work.claims.len() > 1;
             if work.state == WorkState::Active {
                 return Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(work_paths(&work, qualified)));
@@ -259,6 +264,11 @@ impl Coordinator {
                 return Ok(Outcome::new(OutcomeKind::Message, 3, pending.len().to_string()));
             }
 
+            let elapsed = self.clock.monotonic() - started;
+            if elapsed >= timeout_seconds as f64 {
+                return Ok(Outcome::new(OutcomeKind::Timeout, 3, timeout_seconds.to_string()));
+            }
+
             let generation = store.generation()?;
             let now = self.clock.monotonic();
             let refresh_seconds =
@@ -268,21 +278,21 @@ impl Coordinator {
             if due {
                 let mut inventory = self.refresh_inventory(&mut store, false)?;
                 inventory.complete &= process_complete;
-                let claims = work
-                    .claims
-                    .iter()
-                    .map(|claim| WorkClaimRequest {
-                        repo_root: PathBuf::from(&claim.repo_root),
-                        scopes: claim.scopes.clone(),
-                    })
-                    .collect();
-                let outcome = WorkCoordinator { store: &mut store }.start_claims(
-                    identity,
-                    &work.label,
-                    claims,
-                    &inventory,
-                    self.clock.wall(),
-                )?;
+                let outcome =
+                    WorkCoordinator { store: &mut store }.wait_recheck(identity, &work, &inventory, self.clock.wall());
+                let outcome = match outcome {
+                    Ok(outcome) => outcome,
+                    Err(error) if error.kind == ErrorKind::WaitArbitrationRetry => {
+                        let elapsed = self.clock.monotonic() - started;
+                        if elapsed < timeout_seconds as f64 {
+                            self.clock.sleep(Duration::from_secs_f64(
+                                poll_seconds.max(0.001).min(timeout_seconds as f64 - elapsed),
+                            ));
+                        }
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
                 last_full_check = Some(self.clock.monotonic());
                 last_generation = Some(store.generation()?);
                 if outcome.code == 0 || (outcome.code == 2 && !outcome.detail.starts_with("dirty-settling:")) {
@@ -293,7 +303,7 @@ impl Coordinator {
             if elapsed >= timeout_seconds as f64 {
                 return Ok(Outcome::new(OutcomeKind::Timeout, 3, timeout_seconds.to_string()));
             }
-            self.clock.sleep(Duration::from_secs_f64(poll_seconds.min(timeout_seconds as f64 - elapsed).max(0.001)));
+            self.clock.sleep(Duration::from_secs_f64(poll_seconds.max(0.001).min(timeout_seconds as f64 - elapsed)));
         }
     }
 

@@ -28,6 +28,7 @@ const MAX_BUNDLE_CONFLICT_PATHS: usize = 32;
 enum Submission {
     Direct,
     Draft(i64),
+    Wait { id: i64, revision: i64 },
 }
 
 enum ArbitrationStep {
@@ -86,12 +87,20 @@ impl WorkCoordinator<'_> {
         if draft.state != WorkState::Draft {
             return Err(AppError::operational("no draft work for this session"));
         }
-        let claims = draft
-            .claims
-            .iter()
-            .map(|claim| WorkClaimRequest { repo_root: PathBuf::from(&claim.repo_root), scopes: claim.scopes.clone() })
-            .collect();
+        let claims = requests_from_work(&draft);
         self.submit(identity, &draft.label, claims, inventory, Submission::Draft(draft.revision), current)
+    }
+
+    pub(crate) fn wait_recheck(
+        &mut self,
+        identity: &Identity,
+        work: &WorkRow,
+        inventory: &InventoryResult,
+        current: f64,
+    ) -> Result<Outcome> {
+        let claims = requests_from_work(work);
+        let submission = Submission::Wait { id: work.id, revision: work.revision };
+        self.submit(identity, &work.label, claims, inventory, submission, current)
     }
 
     fn submit(
@@ -118,18 +127,17 @@ impl WorkCoordinator<'_> {
             {
                 return Err(AppError::retry("draft changed during promotion"));
             }
+            Submission::Wait { id, revision } => verify_wait_submission(existing.as_ref(), id, revision)?,
             _ => {}
         }
-
         if let Some(active) = existing.as_ref().filter(|work| work.state == WorkState::Active) {
             return self.update_active(identity, label, claims, inventory, active, current);
         }
-
         let evidence = gather_evidence(&claims, existing.as_ref(), claims.len() > 1)?;
         let mut submitted_at = existing
             .as_ref()
             .filter(|work| {
-                matches!(submission, Submission::Direct) &&
+                matches!(submission, Submission::Direct | Submission::Wait { .. }) &&
                     work.state == WorkState::Queued &&
                     work_vector_covers_requests(work, &claims)
             })
@@ -252,7 +260,6 @@ impl WorkCoordinator<'_> {
                 Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(request_paths(&claims, qualified)))
             });
         }
-
         let narrowing = work_vector_covers_requests(existing, &claims);
         let evidence = gather_evidence(&claims, Some(existing), qualified)?;
         let mut attempted_baselines = HashMap::<String, HashSet<String>>::new();
@@ -278,7 +285,6 @@ impl WorkCoordinator<'_> {
                     current,
                     (!narrowing).then_some(&existing_scopes),
                 );
-
                 if let Some(inspection) = evidence.iter().find(|item| item.inspection.is_some()) {
                     return Ok(ArbitrationStep::Complete(
                         Outcome::new(
@@ -293,7 +299,6 @@ impl WorkCoordinator<'_> {
                     return blocked_outcome(&claims, &evaluations, transaction, Some((existing, qualified)))
                         .map(ArbitrationStep::Complete);
                 }
-
                 let successful_evaluations = if narrowing {
                     advisory_evaluations(&claims, &evidence, &observations, &residuals, &work, identity, current)
                 } else {
@@ -334,6 +339,13 @@ impl WorkCoordinator<'_> {
     }
 }
 
+fn requests_from_work(work: &WorkRow) -> Vec<WorkClaimRequest> {
+    work.claims
+        .iter()
+        .map(|claim| WorkClaimRequest { repo_root: PathBuf::from(&claim.repo_root), scopes: claim.scopes.clone() })
+        .collect()
+}
+
 fn verify_submission(current: Option<&WorkRow>, expected: Option<&WorkRow>, submission: Submission) -> Result<()> {
     match submission {
         Submission::Draft(revision) => {
@@ -351,10 +363,16 @@ fn verify_submission(current: Option<&WorkRow>, expected: Option<&WorkRow>, subm
                 return Err(AppError::retry("work item changed during arbitration"));
             }
         }
+        Submission::Wait { id, revision } => verify_wait_submission(current, id, revision)?,
     }
     Ok(())
 }
-
+fn verify_wait_submission(current: Option<&WorkRow>, id: i64, revision: i64) -> Result<()> {
+    if !current.is_some_and(|work| work.id == id && work.revision == revision && work.state == WorkState::Queued) {
+        return Err(AppError::wait_arbitration_retry("queued work changed during wait arbitration"));
+    }
+    Ok(())
+}
 fn verify_active(current: Option<&WorkRow>, expected: &WorkRow) -> Result<()> {
     if !current.is_some_and(|work| {
         work.state == WorkState::Active && work.revision == expected.revision && same_work_vectors(work, expected)
@@ -363,7 +381,6 @@ fn verify_active(current: Option<&WorkRow>, expected: &WorkRow) -> Result<()> {
     }
     Ok(())
 }
-
 fn refresh_observations(
     transaction: &WorkTransaction<'_>,
     evidence: &[RepoEvidence],
@@ -379,21 +396,18 @@ fn refresh_observations(
         })
         .collect()
 }
-
 fn read_residuals(
     transaction: &WorkTransaction<'_>,
     claims: &[WorkClaimRequest],
 ) -> Result<HashMap<String, Vec<ResidualOwnerRow>>> {
     read_residuals_for_roots(transaction, claims.iter().map(|claim| claim.repo_root.to_str().expect("validated root")))
 }
-
 fn read_residuals_for_roots<'a>(
     transaction: &WorkTransaction<'_>,
     roots: impl IntoIterator<Item = &'a str>,
 ) -> Result<HashMap<String, Vec<ResidualOwnerRow>>> {
     roots.into_iter().map(|root| transaction.residual_owners(root).map(|rows| (root.to_owned(), rows))).collect()
 }
-
 #[allow(clippy::too_many_arguments)]
 fn evaluate_claims(
     claims: &[WorkClaimRequest],
@@ -891,21 +905,16 @@ fn notify_waiters(
     }
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
-    use crate::domain::{Client, ScopeKind};
-
     use super::*;
-
+    use crate::domain::{Client, ScopeKind};
     fn scope(path: impl Into<String>, recursive: bool) -> Scope {
         Scope { path: path.into(), kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }
     }
-
     fn claim(root: &str, scopes: Vec<Scope>) -> WorkClaimRequest {
         WorkClaimRequest { repo_root: PathBuf::from(root), scopes }
     }
-
     fn work(identity: &str, state: WorkState, claims: Vec<WorkClaimRequest>, submitted_at: f64) -> WorkRow {
         WorkRow {
             id: 1,
@@ -929,7 +938,6 @@ mod tests {
             revision: 1,
         }
     }
-
     #[test]
     fn claim_vector_coverage_is_repository_local() {
         let old = work(

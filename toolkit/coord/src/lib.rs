@@ -27,7 +27,7 @@ use crate::{
     },
     coordinator::Coordinator,
     domain::{Client, FindingKind, FindingState, FindingSummary, Outcome, OutcomeKind, client_name, terminal_field},
-    error::{AppError, Result},
+    error::{AppError, ErrorKind, Result},
     hooks::{
         config::{ConfigError, default_hook_path, inspect_hooks, link_default_hooks},
         runtime::HookRuntime,
@@ -61,11 +61,21 @@ where
         Ok(code) => ExitCode::from(code),
         Err(error) => {
             if !error.message.is_empty() {
-                eprintln!("error: {}", error.message);
+                eprintln!("error: {}", rendered_error(&error));
             }
             ExitCode::from(error.kind.code())
         }
     }
+}
+
+fn rendered_error(error: &AppError) -> String {
+    if matches!(error.kind, ErrorKind::Retry | ErrorKind::WaitArbitrationRetry) {
+        return format!(
+            "transient coordination race: {}\ninspect current coordination state with:\n  ai-coord status\n  ai-coord inbox\nthen retry the matching lifecycle command; only a fresh matching `ai-coord start` or `ai-coord bundle start` returning READY authorizes edits",
+            error.message
+        );
+    }
+    error.message.clone()
 }
 
 async fn execute(cli: Cli) -> Result<u8> {
@@ -148,7 +158,7 @@ async fn execute(cli: Cli) -> Result<u8> {
             let coordinator = Coordinator::open_default()?;
             let outcome = coordinator.wait(arguments.timeout_seconds, 1.0)?;
             println!("{}", outcome.line());
-            eprintln!("{}", outcome_guidance(&outcome, coordinator.identity(false)?.map(|value| value.client)));
+            eprintln!("{}", wait_guidance(&outcome, coordinator.identity(false)?.map(|value| value.client)));
             Ok(outcome.code)
         }
         Command::Done(_) => {
@@ -324,12 +334,19 @@ fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
         OutcomeKind::Message =>
             "ai-coord: A message woke this wait; inspect `ai-coord inbox`, then re-run `ai-coord start` to recheck ownership.".to_owned(),
         OutcomeKind::Released | OutcomeKind::Timeout =>
-            "ai-coord: This wake did not grant an edit scope; inspect current state, then re-run `ai-coord start` because silence is not progress.".to_owned(),
+            "ai-coord: This wake did not grant an edit scope; inspect with `ai-coord status` and `ai-coord inbox`, then re-run the matching `ai-coord start` or `ai-coord bundle start` command and require READY.".to_owned(),
         OutcomeKind::Done if !outcome.holders.is_empty() =>
             "ai-coord: Coordination was released, but uncommitted dirt retains residual ownership until it is resolved.".to_owned(),
         OutcomeKind::Done => "ai-coord: Coordination work is released.".to_owned(),
         _ => "ai-coord: Inspect this outcome before continuing.".to_owned(),
     }
+}
+
+fn wait_guidance(outcome: &Outcome, client: Option<Client>) -> String {
+    if outcome.kind == OutcomeKind::Ready {
+        return "ai-coord: This wait recheck found the work ready but did not grant an edit scope; re-run the matching `ai-coord start` or `ai-coord bundle start` command and require READY.".to_owned();
+    }
+    outcome_guidance(outcome, client)
 }
 
 fn validate_scopes(files: &[PathBuf], recursive: &[PathBuf], operation: &str, label: &str) -> Result<()> {
@@ -804,6 +821,14 @@ mod tests {
     }
 
     #[test]
+    fn wait_ready_still_requires_a_fresh_matching_start() {
+        let guidance = wait_guidance(&Outcome::new(OutcomeKind::Ready, 0, ""), Some(Client::Codex));
+        assert!(guidance.contains("did not grant an edit scope"));
+        assert!(guidance.contains("matching `ai-coord start` or `ai-coord bundle start`"));
+        assert!(guidance.contains("require READY"));
+    }
+
+    #[test]
     fn lexical_paths_collapse_parent_components() {
         let base = std::env::current_dir().unwrap();
         assert_eq!(lexical_absolute(Path::new("one/../two")).unwrap(), base.join("two"));
@@ -839,5 +864,14 @@ mod tests {
             guidance,
             "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and run `ai-coord wait`."
         );
+    }
+
+    #[test]
+    fn retry_errors_keep_the_cause_and_copy_safe_recovery_commands() {
+        let rendered = rendered_error(&AppError::wait_arbitration_retry("work was replaced"));
+        assert!(rendered.starts_with("transient coordination race: work was replaced"));
+        assert!(rendered.contains("\n  ai-coord status\n  ai-coord inbox\n"));
+        assert!(rendered.contains("matching lifecycle command"));
+        assert!(rendered.contains("returning READY authorizes edits"));
     }
 }
