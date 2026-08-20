@@ -457,6 +457,69 @@ fn create_output_frontmatter_footer_and_clipboard_contracts_are_exact() {
 }
 
 #[test]
+fn create_appends_a_validated_before_work_skill_to_the_command() {
+    let harness = Harness::new("before-work-skill");
+    let repository = harness.repo("repo", true);
+    let draft = harness.root.join("draft.md");
+    fs::write(&draft, "# Delegated task\n").unwrap();
+    let skill = harness.root.join("skills/codex-handoff");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), "# Codex handoff\n").unwrap();
+
+    let output = harness.command([
+        "create",
+        "--repo",
+        repository.to_str().unwrap(),
+        "--category",
+        "implementation",
+        "--task",
+        "delegate the implementation",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--before-work-skill",
+        skill.to_str().unwrap(),
+        "COMPLEX_HANDOFF.md",
+    ]);
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let report = stdout(&output);
+    let command = report.lines().find_map(|line| line.strip_prefix("command\t")).unwrap();
+    assert!(command.ends_with(&format!(
+        "Before any task work, load and follow the skill defined at {}/SKILL.md.'",
+        skill.display()
+    )));
+    assert_eq!(fs::read_to_string(&harness.clipboard).unwrap(), command);
+}
+
+#[test]
+fn create_rejects_an_invalid_before_work_skill() {
+    let harness = Harness::new("invalid-before-work-skill");
+    let repository = harness.repo("repo", true);
+    let draft = harness.root.join("draft.md");
+    fs::write(&draft, "# Delegated task\n").unwrap();
+    let skill = harness.root.join("skills/missing-entrypoint");
+    fs::create_dir_all(&skill).unwrap();
+
+    let output = harness.command([
+        "create",
+        "--repo",
+        repository.to_str().unwrap(),
+        "--category",
+        "implementation",
+        "--task",
+        "delegate the implementation",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--before-work-skill",
+        skill.to_str().unwrap(),
+        "INVALID_SKILL.md",
+    ]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("before-work skill entrypoint is not readable"));
+    assert!(!repository.join(".ai/task-handoffs/INVALID_SKILL.md").exists());
+}
+
+#[test]
 fn create_rolls_back_on_clipboard_mismatch_and_no_clipboard_needs_no_tools() {
     let harness = Harness::new("clipboard-rollback");
     let repository = harness.repo("repo", true);

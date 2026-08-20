@@ -43,6 +43,10 @@ pub struct CreateArgs {
     #[arg(long, required_unless_present = "check", value_name = "BODY.md")]
     pub draft: Option<PathBuf>,
 
+    /// Load this skill before any task work in the generated Codex command.
+    #[arg(long, value_name = "DIR")]
+    pub before_work_skill: Option<PathBuf>,
+
     /// Do not copy and verify the Codex command.
     #[arg(long)]
     pub no_clipboard: bool,

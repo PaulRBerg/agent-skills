@@ -20,6 +20,7 @@ pub(crate) fn run(arguments: CreateArgs) -> Result<()> {
     validate_task(&arguments.task)?;
     let repositories = canonical_repositories(&arguments.repo)?;
     let launch_repository = launch_repository(&repositories, arguments.launch_repo.as_deref())?;
+    let before_work_skill = validate_before_work_skill(arguments.before_work_skill.as_deref())?;
     let placement = placement(&repositories, &arguments.filename)?;
     validate_physical_parents(&placement.base)?;
     ensure_absent(&placement.target)?;
@@ -37,6 +38,8 @@ pub(crate) fn run(arguments: CreateArgs) -> Result<()> {
     let launch_text = utf8_path(&launch_repository, "launch repository")?;
     let repository_text =
         repositories.iter().map(|repository| utf8_path(repository, "repository root")).collect::<Result<Vec<_>>>()?;
+    let before_work_skill_text =
+        before_work_skill.as_deref().map(|skill| utf8_path(skill, "before-work skill")).transpose()?;
     let home = home()?;
     let home_text = utf8_path(&home, "home directory")?;
     let category = arguments.category.to_string();
@@ -48,6 +51,7 @@ pub(crate) fn run(arguments: CreateArgs) -> Result<()> {
         target_text,
         &placement.relative,
         repositories.len() == 1,
+        before_work_skill_text,
     );
 
     let mut publication = publish(&placement.base, &placement.target, &contents)?;
@@ -139,6 +143,29 @@ fn validate_task(task: &str) -> Result<()> {
         return Err(Error::usage("task must be a single line"));
     }
     Ok(())
+}
+
+fn validate_before_work_skill(candidate: Option<&Path>) -> Result<Option<PathBuf>> {
+    let Some(candidate) = candidate else {
+        return Ok(None);
+    };
+    if !candidate.is_absolute() {
+        return Err(Error::usage(format!("before-work skill directory must be absolute: {}", candidate.display())));
+    }
+    let directory = candidate.canonicalize().map_err(|error| {
+        Error::operational(format!("cannot resolve before-work skill directory {}: {error}", candidate.display()))
+    })?;
+    let metadata = fs::metadata(&directory).map_err(|error| {
+        Error::operational(format!("cannot inspect before-work skill directory {}: {error}", directory.display()))
+    })?;
+    if !metadata.is_dir() {
+        return Err(Error::usage(format!("before-work skill is not a directory: {}", directory.display())));
+    }
+    let entrypoint = directory.join("SKILL.md");
+    File::open(&entrypoint).map_err(|error| {
+        Error::operational(format!("before-work skill entrypoint is not readable {}: {error}", entrypoint.display()))
+    })?;
+    Ok(Some(directory))
 }
 
 fn validate_draft(path: &Path, cross_repository: bool) -> Result<String> {
@@ -248,6 +275,7 @@ fn build_command(
     target: &str,
     relative: &Path,
     single_repository: bool,
+    before_work_skill: Option<&str>,
 ) -> String {
     let (location, instructions) = if single_repository {
         (
@@ -260,9 +288,12 @@ fn build_command(
             "Start in the selected first repository and follow its stated repository order, outcome, boundaries, authority constraints, and validation requirements.",
         )
     };
-    let prompt = format!(
+    let mut prompt = format!(
         "A previous agent prepared a {category} task handoff for {task} {location}. Read the handoff, then complete its requested {category} task. {instructions}"
     );
+    if let Some(skill) = before_work_skill {
+        prompt.push_str(&format!(" Before any task work, load and follow the skill defined at {skill}/SKILL.md."));
+    }
     format!("codex -C {} {}", shell_quote(launch_repository), shell_quote(&prompt))
 }
 
