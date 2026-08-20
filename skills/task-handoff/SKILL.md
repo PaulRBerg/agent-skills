@@ -93,7 +93,9 @@ handoff without invoking an in-session handoff skill. For a complex task, expand
 absolute directory path into the execution approach. Explicitly direct the receiving session to enter Plan mode, load
 the skill from that path, and use this file as the decision-complete task specification. Do not name only
 `$codex-handoff`; let codex-handoff choose the smallest effective subagent team instead of prescribing its manifest
-here. Stop before writing the handoff if the installed skill cannot be resolved.
+here. Retain the resolved directory for `--before-work-skill` when validating and publishing so the generated Codex
+prompt also names the skill and directs the receiving session to load it before any task work. Stop before writing the
+handoff if the installed skill cannot be resolved.
 
 Tailor the body to its category. An implementation handoff specifies the intended change, data flow, and compatibility.
 An investigation handoff specifies the question or symptom, available evidence, reproduction or observation method, and
@@ -119,13 +121,16 @@ ai-handoff create --check \
   --repo '<candidate-repository>' \
   [--repo '<additional-repository>' ...] \
   [--launch-repo '<first-repository-to-tackle>'] \
+  [--before-work-skill '<resolved-codex-handoff-directory>'] \
   --category '<task-category>' \
   --task '<concise-task>' \
   '<HANDOFF_NAME.md>'
 ```
 
 This validates the repository roots, optional launch repository, category, filename, target placement, and required
-ignore rule without reading a draft or writing anything. It prints tab-separated `target`, `launch_repo`, and `category`
+ignore rule without reading a draft or writing anything. For a complex handoff, include `--before-work-skill` with the
+resolved absolute `codex-handoff` directory; for a simple handoff, omit it. The option validates that the directory is
+absolute and contains a readable `SKILL.md`. The command prints tab-separated `target`, `launch_repo`, and `category`
 rows.
 
 Publish with one call after the body is complete:
@@ -135,6 +140,7 @@ ai-handoff create \
   --repo '<candidate-repository>' \
   [--repo '<additional-repository>' ...] \
   [--launch-repo '<first-repository-to-tackle>'] \
+  [--before-work-skill '<resolved-codex-handoff-directory>'] \
   --category '<task-category>' \
   --task '<concise-task>' \
   --draft '<scratch-draft-path>' \
@@ -142,10 +148,12 @@ ai-handoff create \
 ```
 
 `ai-handoff` canonicalizes each repository to its physical Git toplevel and deduplicates them. The optional launch
-repository must be involved; with exactly one repository it defaults to that repository. It validates the draft, appends
-YAML frontmatter recording `category`, `created`, `launch_repo`, `repos`, `origin`, and `task`, plus the fixed category,
-execution-status, and cleanup contracts, then atomically publishes a new target without overwriting and copies the
-generated Codex command after `pbcopy`/`pbpaste` readback verification. Errors are written to stderr with an
+repository must be involved; with exactly one repository it defaults to that repository. For a complex handoff, pass the
+same `--before-work-skill` value used during validation; this appends a final prompt sentence that directly names
+`<resolved-codex-handoff-directory>/SKILL.md` and requires loading it before any task work. It validates the draft,
+appends YAML frontmatter recording `category`, `created`, `launch_repo`, `repos`, `origin`, and `task`, plus the fixed
+category, execution-status, and cleanup contracts, then atomically publishes a new target without overwriting and copies
+the generated Codex command after `pbcopy`/`pbpaste` readback verification. Errors are written to stderr with an
 `ai-handoff: ` prefix; usage errors exit 2 and operational errors exit 1. On a correctable validation error, fix the
 draft or arguments and rerun the same command: failure leaves no handoff behind. There is no temporary run directory,
 cancel command, or manual target cleanup.
