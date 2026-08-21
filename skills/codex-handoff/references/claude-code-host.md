@@ -154,6 +154,22 @@ continuation through `--resume <session-id>` with a fresh budget and a short ver
 partially edited files. Fall back to one fresh relaunch only when no session ID is recoverable. Returned `blocked`
 results and timeouts are never infrastructure failures.
 
+### Commit Delegated Work
+
+After each delegate's `ai-coord done` or exit, treat dirty-settling then residual blocks held by that wave agent's Codex
+session as handoff-owned work when starting claims to commit reconciled paths. Do not mistake a `residual` or
+`dirty-settling` holder for conflicting work.
+
+Before treating a residual as own work, verify its blocking session ID matches a `thread.started` event in that wave
+agent's progress artifact and its recorded dirt blob hashes match the reconciled diff's post-edit blob OIDs. Run one
+`ai-coord wait`, then a fresh `ai-coord start`. If the verified delegate residual still blocks, report it to the user
+and ask before clearing coordination state. Never silently delete coordination state or bypass an unverified residual.
+
+When committing delegated work, `ai-commit prepare` may auto-apply stale-dirt baselines from the delegates' edits and
+exclude the handoff's own changes. When preparation reports auto-applied baselines whose blob hashes match verified
+delegate edits, re-prepare with `--no-auto-baseline` and disclose that in the commit receipt summary. Leave baselines
+for paths outside the handoff's reconciled scope in force.
+
 ## Status Reporting
 
 These dashboards and the shared completion report are mandatory. Host-rendered background-task and Monitor banners are
