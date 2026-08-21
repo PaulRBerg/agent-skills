@@ -103,6 +103,12 @@ their content here, the sync run reads both skills directly:
     polish invocation, polish skip/failure conditions, cross-repository `$commit` behavior.
 16. Adapter integrity: adapters implement the shared prompt/result/failure/completion contracts without weakening them;
     the shared entrypoint loads exactly one adapter.
+17. Companion-skill composition: a task naming another skill is a composition where the companion defines the work and
+    the handoff owns delegation mechanics; the parent runs the companion's discovery/judgment/planning phases and folds
+    them into the plan; handoff-contract precedence over overlapping companion mechanics with companion user-decision
+    gates still binding; agents never load skills by name — briefs inline the needed companion excerpts;
+    companion-required polish maps onto the Plan Phase passes and runs once; Completion satisfies both report contracts;
+    optional `Companion skills:` plan line after `Research:`.
 
 Out of scope unless the request explicitly names it: host selection, launch, and continuation mechanics; research
 mechanics; Claude-adapter-only content; Codex-adapter-only content; each skill's model defaults and its failed-agent
