@@ -152,6 +152,42 @@ def summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def load_dispositions(path: Path) -> list[tuple[str, str, str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise LedgerError(f"cannot read dispositions file: {exc}") from exc
+
+    dispositions: list[tuple[str, str, str]] = []
+    first_line_by_path: dict[str, int] = {}
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) < 2:
+            raise LedgerError(
+                f"dispositions line {line_number}: expected status<TAB>path<TAB>reason"
+            )
+        if len(fields) > 3:
+            raise LedgerError(f"dispositions line {line_number}: reason cannot contain a tab")
+        status, path = fields[:2]
+        reason = fields[2] if len(fields) == 3 else ""
+        if status not in STATUSES:
+            raise LedgerError(f"dispositions line {line_number}: unknown status: {status}")
+        if not path:
+            raise LedgerError(f"dispositions line {line_number}: path cannot be empty")
+        if path in first_line_by_path:
+            raise LedgerError(
+                f"dispositions line {line_number}: duplicate path: {path} "
+                f"(first seen on line {first_line_by_path[path]})"
+            )
+        if status in REASON_REQUIRED and not reason:
+            raise LedgerError(f"dispositions line {line_number}: {status} status requires a reason")
+        first_line_by_path[path] = line_number
+        dispositions.append((status, path, reason))
+    return dispositions
+
+
 def new_record(
     root: Path,
     path: str,
@@ -193,6 +229,29 @@ def init_command(args: argparse.Namespace) -> dict[str, Any]:
 
 def mark_command(args: argparse.Namespace) -> dict[str, Any]:
     payload = load(args.ledger)
+    if args.from_file is not None:
+        dispositions = load_dispositions(args.from_file)
+        by_path = {item["path"]: item for item in payload["files"]}
+        missing = [path for _, path, _ in dispositions if path not in by_path]
+        if missing and not args.skip_unknown:
+            raise LedgerError(f"paths are not in the ledger: {', '.join(missing)}")
+        skipped = missing if args.skip_unknown else []
+        applicable = [item for item in dispositions if item[1] in by_path]
+        absent_retained = [
+            path
+            for status, path, _ in applicable
+            if status == "retained" and not by_path[path]["present"]
+        ]
+        if absent_retained:
+            raise LedgerError(f"absent paths cannot be retained: {', '.join(absent_retained)}")
+        for status, path, reason in applicable:
+            by_path[path]["status"] = status
+            by_path[path]["reason"] = reason or None
+        if applicable:
+            payload["revision"] += 1
+            atomic_write(args.ledger, payload)
+        return {**summary(payload), "applied": len(applicable), "skipped": skipped}
+
     paths = list(dict.fromkeys(args.path))
     if not paths:
         raise LedgerError("mark requires at least one --path")
@@ -268,9 +327,12 @@ def build_parser() -> argparse.ArgumentParser:
     init.set_defaults(handler=init_command)
     mark = subparsers.add_parser("mark")
     mark.add_argument("--ledger", type=Path, required=True)
-    mark.add_argument("--status", choices=STATUSES, required=True)
+    mark_mode = mark.add_mutually_exclusive_group(required=True)
+    mark_mode.add_argument("--status", choices=STATUSES)
+    mark_mode.add_argument("--from-file", type=Path)
     mark.add_argument("--path", action="append", default=[])
     mark.add_argument("--reason")
+    mark.add_argument("--skip-unknown", action="store_true")
     mark.set_defaults(handler=mark_command)
     pending = subparsers.add_parser("pending")
     pending.add_argument("--ledger", type=Path, required=True)
@@ -286,7 +348,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.command == "mark" and args.from_file is not None and (args.path or args.reason is not None):
+        parser.error("mark --from-file cannot be used with --path or --reason")
+    if args.command == "mark" and args.from_file is None and args.skip_unknown:
+        parser.error("mark --skip-unknown requires --from-file")
     try:
         if getattr(args, "limit", 1) is not None and getattr(args, "limit", 1) < 1:
             raise LedgerError("--limit must be positive")

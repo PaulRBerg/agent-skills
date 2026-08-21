@@ -51,6 +51,19 @@ Use `retained` when the current name is justified, `renamed` when the path or it
 `excluded` for generated, vendored, binary, or bulk artifacts validated through their source or invariant, and `blocked`
 when behavior or contract safety cannot be established. `excluded` and `blocked` require reasons.
 
+For delegated runs, have each subagent write a dispositions TSV outside the repository with one record per line:
+`status<TAB>repo-relative-path<TAB>reason`. Apply each file in one batch:
+
+```sh
+uv run "<skill-dir>/scripts/naming-ledger.py" mark \
+  --ledger <scratch.json> --from-file <dispositions.tsv>
+```
+
+Dispositions paths are relative to the repository root and must match ledger entries exactly. The ledger maps only
+tracked and non-ignored untracked files; gitignored artifacts, cache files, and bare directories are never ledger paths.
+Unknown paths fail the batch closed. Rerun with `--skip-unknown` only after reviewing the reported paths and confirming
+that every skip is intentional, then verify the result's `skipped` list.
+
 ```sh
 uv run "<skill-dir>/scripts/naming-ledger.py" pending --ledger <scratch.json> [--limit <n>]
 uv run "<skill-dir>/scripts/naming-ledger.py" refresh --ledger <scratch.json>

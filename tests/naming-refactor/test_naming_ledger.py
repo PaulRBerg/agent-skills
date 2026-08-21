@@ -129,6 +129,154 @@ class NamingLedgerTests(unittest.TestCase):
             )
             self.assertTrue(unblocked["complete"])
 
+    def test_mark_from_file_applies_mixed_dispositions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = make_repo(root)
+            for path in ("a.py", "b.py", "c.py"):
+                (repo / path).write_text(f"{path} = 1\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-qm", "initial")
+            ledger = root / "ledger.json"
+            self.helper("init", "--root", str(repo), "--ledger", str(ledger))
+
+            (repo / "b.py").unlink()
+            refreshed = json.loads(self.helper("refresh", "--ledger", str(ledger)).stdout)
+            dispositions = root / "dispositions.tsv"
+            dispositions.write_bytes(
+                b"  # delegated results\r\n"
+                b"\r\n"
+                b"retained\ta.py\t\r\n"
+                b"renamed\tb.py\tmoved to clearer.py\r\n"
+                b"excluded\tc.py\tgenerated fixture\r\n"
+            )
+
+            result = json.loads(
+                self.helper(
+                    "mark", "--ledger", str(ledger), "--from-file", str(dispositions)
+                ).stdout
+            )
+            self.assertEqual(result["applied"], 3)
+            self.assertEqual(result["skipped"], [])
+            self.assertEqual(result["revision"], refreshed["revision"] + 1)
+            self.assertEqual(result["counts"]["pending"], 0)
+            self.assertTrue(result["complete"])
+
+            payload = json.loads(ledger.read_text())
+            by_path = {item["path"]: item for item in payload["files"]}
+            self.assertEqual(by_path["a.py"]["status"], "retained")
+            self.assertIsNone(by_path["a.py"]["reason"])
+            self.assertEqual(by_path["b.py"]["status"], "renamed")
+            self.assertEqual(by_path["b.py"]["reason"], "moved to clearer.py")
+            self.assertEqual(by_path["c.py"]["status"], "excluded")
+            self.assertEqual(by_path["c.py"]["reason"], "generated fixture")
+
+    def test_mark_from_file_unknown_paths_fail_closed_or_skip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = make_repo(root)
+            (repo / "a.py").write_text("a = 1\n")
+            (repo / "b.py").write_text("b = 1\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-qm", "initial")
+            ledger = root / "ledger.json"
+            self.helper("init", "--root", str(repo), "--ledger", str(ledger))
+            dispositions = root / "dispositions.tsv"
+            dispositions.write_text(
+                "retained\ta.py\t\n"
+                "excluded\tcache.stats.csv\tignored cache\n"
+                "renamed\tempty-directory\tdelegated path\n"
+            )
+            before = ledger.read_bytes()
+
+            failed = self.helper(
+                "mark",
+                "--ledger",
+                str(ledger),
+                "--from-file",
+                str(dispositions),
+                check=False,
+            )
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("cache.stats.csv", failed.stderr)
+            self.assertIn("empty-directory", failed.stderr)
+            self.assertEqual(ledger.read_bytes(), before)
+
+            result = json.loads(
+                self.helper(
+                    "mark",
+                    "--ledger",
+                    str(ledger),
+                    "--from-file",
+                    str(dispositions),
+                    "--skip-unknown",
+                ).stdout
+            )
+            self.assertEqual(result["applied"], 1)
+            self.assertEqual(result["skipped"], ["cache.stats.csv", "empty-directory"])
+            payload = json.loads(ledger.read_text())
+            by_path = {item["path"]: item for item in payload["files"]}
+            self.assertEqual(by_path["a.py"]["status"], "retained")
+            self.assertEqual(by_path["b.py"]["status"], "pending")
+
+    def test_mark_from_file_rejects_invalid_lines_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = make_repo(root)
+            (repo / "a.py").write_text("a = 1\n")
+            git(repo, "add", "a.py")
+            git(repo, "commit", "-qm", "initial")
+            ledger = root / "ledger.json"
+            self.helper("init", "--root", str(repo), "--ledger", str(ledger))
+            dispositions = root / "dispositions.tsv"
+            before = ledger.read_bytes()
+            invalid_files = (
+                ("retained\n", "line 1"),
+                ("unknown\ta.py\t\n", "line 1"),
+                ("retained\ta.py\t\nrenamed\ta.py\t\n", "line 2"),
+                ("excluded\ta.py\t\n", "line 1"),
+                ("blocked\ta.py\t\n", "line 1"),
+            )
+
+            for contents, expected_error in invalid_files:
+                with self.subTest(contents=contents):
+                    dispositions.write_text(contents)
+                    failed = self.helper(
+                        "mark",
+                        "--ledger",
+                        str(ledger),
+                        "--from-file",
+                        str(dispositions),
+                        check=False,
+                    )
+                    self.assertNotEqual(failed.returncode, 0)
+                    self.assertIn(expected_error, failed.stderr)
+                    self.assertEqual(ledger.read_bytes(), before)
+
+    def test_mark_from_file_is_mutually_exclusive_with_single_status_options(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ledger = root / "ledger.json"
+            dispositions = root / "dispositions.tsv"
+            conflicting_options = (
+                ("--status", "retained"),
+                ("--path", "a.py"),
+                ("--reason", "reviewed"),
+            )
+
+            for options in conflicting_options:
+                with self.subTest(options=options):
+                    failed = self.helper(
+                        "mark",
+                        "--ledger",
+                        str(ledger),
+                        "--from-file",
+                        str(dispositions),
+                        *options,
+                        check=False,
+                    )
+                    self.assertEqual(failed.returncode, 2)
+
     def test_refresh_tracks_both_sides_of_a_move_and_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
