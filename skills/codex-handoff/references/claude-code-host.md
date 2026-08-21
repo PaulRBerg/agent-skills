@@ -72,12 +72,12 @@ user approves the plan and accepts that agents can read, modify, or delete any f
 runner pins every Codex process to the `default` service tier, overriding inherited fast or priority selection without
 changing persisted Codex configuration.
 
-Before launching agents, do not hold a path-scoped session claim over any path in an agent's write scope. Record
-orchestrator intent with a pathless label only; the delegated agents own per-path claims. Tell every agent that the
-orchestrating session's presence authorizes its assigned work and is not a conflict.
+Before implementation wave 1, the Claude parent acquires one ai-coord item over the union of every manifest write scope.
+Name exact files individually and use `--recursive` only for true subtrees. Hold that claim through reconciliation,
+required polish, and commit; the parent claim authorizes each delegate's assigned writes and is not a conflict.
 
-The ai-coord session that performs writes owns the claim. Each separately spawned Codex CLI process registers its own
-session, so each delegate claims its assigned paths rather than the Claude host parent.
+One work item per session requires the full union up front. When follow-on work expands the scope, do so only at a wave
+boundary: run `ai-coord done`, then start a fresh item over the enlarged union before launching the next wave.
 
 For every agent, create separate per-agent artifact paths ending in `<agent-id>.progress.jsonl`,
 `<agent-id>.result.json`, and `<agent-id>.stderr.log` under `${TMPDIR:-/tmp}`. Convert its approved whole-minute timeout
@@ -90,6 +90,7 @@ bash <skill-dir>/scripts/run-codex-handoff.sh \
   --model <agent-model> \
   --effort <agent-effort> \
   --timeout-seconds <agent-minutes-times-60> \
+  --coord-identity claude/<parent-session-id> \
   --progress-file <agent-progress-file> \
   --result-file <agent-result-file> \
   2> <agent-stderr-file> <<'CODEX_PROMPT'
@@ -100,7 +101,14 @@ CODEX_PROMPT
 `--result-file` keeps structured JSON out of stdout, and redirecting stderr keeps wrapper diagnostics out of the
 background task display. Do not set a Bash-tool timeout; the wrapper's `--timeout-seconds` is the sole timeout authority
 and always terminates itself. Start sequential agents only after reconciling their dependencies. Start every agent in a
-parallel wave in the same turn.
+parallel wave in the same turn. Pass the same `--coord-identity` on every fresh or resumed implementation launch.
+Research launches omit it because read-only agents make no writes and remain separately visible.
+
+Delegate prompts contain no ai-coord lifecycle commands. State that coordination is handled by the orchestrating session
+and that its claim authorizes the assigned writes rather than conflicting with them.
+
+Delegate sessions no longer appear as separate `ai-coord status` rows; per-delegate visibility remains in the handoff
+progress artifacts.
 
 Add these host constraints to the shared implementation prompt:
 
@@ -156,19 +164,12 @@ results and timeouts are never infrastructure failures.
 
 ### Commit Delegated Work
 
-After each delegate's `ai-coord done` or exit, treat dirty-settling then residual blocks held by that wave agent's Codex
-session as handoff-owned work when starting claims to commit reconciled paths. Do not mistake a `residual` or
-`dirty-settling` holder for conflicting work.
+Delegated writes are attributed to the parent session, so they cannot create a delegate residual or stale-dirt baseline
+for those paths. Reconcile, perform required polish, and commit under the held parent claim; release it only afterward.
 
-Before treating a residual as own work, verify its blocking session ID matches a `thread.started` event in that wave
-agent's progress artifact and its recorded dirt blob hashes match the reconciled diff's post-edit blob OIDs. Run one
-`ai-coord wait`, then a fresh `ai-coord start`. If the verified delegate residual still blocks, report it to the user
-and ask before clearing coordination state. Never silently delete coordination state or bypass an unverified residual.
-
-When committing delegated work, `ai-commit prepare` may auto-apply stale-dirt baselines from the delegates' edits and
-exclude the handoff's own changes. When preparation reports auto-applied baselines whose blob hashes match verified
-delegate edits, re-prepare with `--no-auto-baseline` and disclose that in the commit receipt summary. Leave baselines
-for paths outside the handoff's reconciled scope in force.
+Legacy troubleshooting: validate an unexpected residual session ID against `thread.started` and its dirt blob hashes
+against the reconciled diff. Ask before clearing coordination state. If matching auto-baselines exclude verified
+delegate edits, re-prepare with `--no-auto-baseline` and disclose it.
 
 ## Status Reporting
 

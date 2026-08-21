@@ -4,11 +4,14 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: run-codex-handoff.sh --model MODEL --effort EFFORT --timeout-seconds SECONDS [--resume SESSION_ID] [--read-only] [--progress-file PATH] [--result-file PATH]
+Usage: run-codex-handoff.sh --model MODEL --effort EFFORT --timeout-seconds SECONDS [--resume SESSION_ID] [--coord-identity CLIENT/SESSION_ID] [--read-only] [--progress-file PATH] [--result-file PATH]
 
 Read an approved implementation prompt from stdin and run one Codex
 implementation turn in the current Git worktree. Sessions persist; use
 --resume SESSION_ID to continue an existing session.
+
+With --coord-identity, the spawned Codex process runs under the specified
+claude or codex ai-coord session identity.
 
 With --read-only, Codex runs a read-only research session instead.
 
@@ -28,6 +31,9 @@ model=""
 effort=""
 timeout_seconds=""
 resume_session=""
+coord_identity=""
+coord_client=""
+coord_session=""
 progress_file=""
 result_output_file=""
 read_only=0
@@ -70,6 +76,17 @@ while [[ $# -gt 0 ]]; do
   --resume=*)
     resume_session="${1#*=}"
     [[ -n "$resume_session" ]] || { echo "ERROR: --resume session ID must be non-empty" >&2; exit 64; }
+    shift
+    ;;
+  --coord-identity)
+    [[ $# -ge 2 ]] || { echo "ERROR: --coord-identity requires a value" >&2; exit 64; }
+    [[ -n "$2" ]] || { echo "ERROR: --coord-identity must be CLIENT/SESSION_ID" >&2; exit 64; }
+    coord_identity="$2"
+    shift 2
+    ;;
+  --coord-identity=*)
+    coord_identity="${1#*=}"
+    [[ -n "$coord_identity" ]] || { echo "ERROR: --coord-identity must be CLIENT/SESSION_ID" >&2; exit 64; }
     shift
     ;;
   --progress-file)
@@ -125,6 +142,26 @@ esac
 if [[ ! "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: --timeout-seconds must be a positive integer" >&2
   exit 64
+fi
+
+if [[ -n "$coord_identity" ]]; then
+  if [[ "$coord_identity" != */* ]]; then
+    echo "ERROR: --coord-identity must be CLIENT/SESSION_ID" >&2
+    exit 64
+  fi
+  coord_client="${coord_identity%%/*}"
+  coord_session="${coord_identity#*/}"
+  case "$coord_client" in
+  claude | codex) ;;
+  *)
+    echo "ERROR: --coord-identity client must be claude or codex" >&2
+    exit 64
+    ;;
+  esac
+  if [[ -z "$coord_session" ]]; then
+    echo "ERROR: --coord-identity session ID must be non-empty" >&2
+    exit 64
+  fi
 fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -291,8 +328,14 @@ if [[ -n "$progress_file" ]]; then
 fi
 codex_args+=(-)
 
-"$codex_bin" "${codex_args[@]}" \
-  <"$prompt_file" >"$codex_stdout" 2>"$stderr_file" &
+if [[ -n "$coord_identity" ]]; then
+  AI_COORD_CLIENT="$coord_client" AI_COORD_SESSION_ID="$coord_session" \
+    "$codex_bin" "${codex_args[@]}" \
+    <"$prompt_file" >"$codex_stdout" 2>"$stderr_file" &
+else
+  "$codex_bin" "${codex_args[@]}" \
+    <"$prompt_file" >"$codex_stdout" 2>"$stderr_file" &
+fi
 codex_pid=$!
 
 started_at=$SECONDS
