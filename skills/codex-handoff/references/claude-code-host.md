@@ -107,8 +107,8 @@ Research launches omit it because read-only agents make no writes and remain sep
 Delegate prompts contain no ai-coord lifecycle commands. State that coordination is handled by the orchestrating session
 and that its claim authorizes the assigned writes rather than conflicting with them.
 
-Delegate sessions no longer appear as separate `ai-coord status` rows; per-delegate visibility remains in the handoff
-progress artifacts.
+Delegate claims and work no longer appear as separate `ai-coord status` work rows; transient Codex thread inventory may
+remain visible while delegates run, and per-delegate progress lives in handoff artifacts.
 
 Add these host constraints to the shared implementation prompt:
 
