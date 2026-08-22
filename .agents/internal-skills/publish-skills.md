@@ -24,10 +24,8 @@ paths matching `skills/<name>/...`, validate and de-duplicate the kebab-case nam
 ### 1. Commit and Push Source
 
 If attributable source changes are uncommitted, run `$commit --push` from the source repository without `--all`, passing
-only those paths. `$commit` owns semantic message composition; `ai-commit` owns deterministic commit and push mechanics
-— the Commit Workflow Semantics group in `@sync-skills` is the canonical statement of that boundary. If the worktree is
-clean but `main` is ahead, run `ai-commit push`. A `BEHIND` receipt is safe noncompletion, never successful propagation:
-stop before touching global installations and report that branch reconciliation is required.
+only those paths. If the worktree is clean but `main` is ahead, run `ai-commit push`. On a `BEHIND` receipt, stop before
+touching global installations and report that branch reconciliation is required.
 
 Keep this work under the source-repository claim through its commit and push, then run `ai-coord done` for that claim
 before acquiring any target. Home-directory target roots sort before this source repository, so retaining the source
@@ -89,7 +87,7 @@ bun run scripts/publish-skills.ts check
 ```
 
 with the same `--skill` filters, plus `just readme-skills-check`. Completion requires zero drift, both checks passing,
-and every commit created here pushed (`BEHIND` = safe noncompletion, never propagation).
+and every commit created here pushed.
 
 ## Report
 

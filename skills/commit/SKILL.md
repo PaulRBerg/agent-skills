@@ -21,10 +21,8 @@ automation that explicitly parses its stable TSV records; the normal skill flow 
 
 Arguments: `$ARGUMENTS`
 
-- By default, `ai-commit` reads `<git-root>/.agents/commit.toml`: `[message] format = "natural"` selects Natural
-  Language Format and `format = "conventional"` selects Conventional Prefix Format. A missing local file defaults to
-  Conventional Prefix Format. Use `--natural` or `--conventional` only as one-off overrides; do not add either flag
-  merely to reproduce repository policy.
+- `ai-commit` selects the message format from repository config; pass `--natural` or `--conventional` only as an
+  explicit one-off override, never to reproduce repository policy.
 - `--all`: capture all worktree and index changes. This intentionally risks including another agent's work.
 - `--staged`: capture exactly the current index; do not add session paths. It conflicts with `--all`.
 - `--natural`: force Natural Language Format for this commit.
@@ -70,7 +68,8 @@ conflicts. If preparation fails, stop with its error and the smallest safe corre
 
 ## 3. Analyze and Compose
 
-Analyze the single prepared full diff. Do not prepare again to get different evidence.
+Analyze the single prepared full diff. Do not prepare again to get different evidence. Oversized per-file sections
+arrive cut with a `DIFF_TRUNCATED` disclosure; their name-status and shortstat evidence still governs the message.
 
 - Use the printed message format and message-format rules. `ai-commit` is the source of those rules; do not load a
   separate Conventional or Natural reference.
@@ -86,8 +85,8 @@ Analyze the single prepared full diff. Do not prepare again to get different evi
 Compose one subject paragraph, an optional body paragraph, and one final trailer paragraph containing all issue and
 Agent-Session lines.
 
-`ai-commit` receives every `-m` value verbatim. Do not write `\\n` inside a quoted message: it is not a line break and
-the CLI rejects it. For a multi-line body, keep the shell quote open across real line breaks.
+`ai-commit` receives every `-m` value verbatim and rejects a literal `\\n`; write real line breaks inside the quoted
+argument, as in the step 4 example.
 
 ## 4. Commit the Transaction
 
@@ -117,26 +116,22 @@ transaction. Follow the discard, owned-content correction, and single reprepare 
 Read [references/failure-recovery.md](references/failure-recovery.md) before adding `--no-verify` or `--no-gpg-sign`.
 Those are explicit per-attempt recovery options, not first-attempt defaults.
 
-After `COMMITTED <transaction-id> <commit-oid>`, resolve every included finding with
-`ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'`. Use the committed OID from the receipt and report
-the resolved finding IDs in the receipt summary.
+After `COMMITTED <transaction-id> <commit-oid>` (the OID is a 12-character abbreviation; pass it as-is), resolve every
+included finding with `ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'` and report the resolved
+finding IDs in the receipt summary.
 
 ## 5. Interpret the Receipt
 
 Keep the receipt compact and forward its outcome lines without decoration:
 
-- `COMMITTED <transaction-id> <commit-oid>` proves commit creation or idempotent recovery.
+- `COMMITTED <transaction-id> <commit-oid>` proves commit creation or idempotent recovery; without push authorization it
+  is completion.
 - `HOOK_ADDED <path>` identifies content introduced by a hook outside the prepared path set. Disclose every such line.
-- `PUSHED <branch>` or `PUSHED_NEW <branch>` proves propagation.
+- `PUSHED <branch>` or `PUSHED_NEW <branch>` proves propagation and completes push-authorized or push-only work.
 - `PUSHED <transaction-id> <commit-oid>` is the retained proof returned when an already-pushed transaction is replayed.
-- `BEHIND <branch> <count>` is safe noncompletion: `ai-commit` fetched and refused to integrate or push. A preceding
-  `COMMITTED` line still proves the local commit, but the push workflow is incomplete until the user reconciles the
-  branch and the same transaction command is replayed. For push-only work, rerun `ai-commit push` after reconciliation.
+- `BEHIND <branch> <count>` is safe noncompletion, never completion: `ai-commit` fetched and refused to integrate or
+  push. A preceding `COMMITTED` still proves the local commit; after the user reconciles the branch, replay the same
+  transaction command (or rerun `ai-commit push` for push-only work).
 
 Do not report unrelated tree state, ahead/behind counts not emitted by the command, staging narration, or successful
 hook activity. Add only a required one-line bypass disclosure from the recovery reference.
-
-## Completion
-
-Without push authorization, completion requires `COMMITTED`. With push authorization, completion also requires `PUSHED`
-or `PUSHED_NEW`; `BEHIND` is not completion. A push-only request completes on `PUSHED` or `PUSHED_NEW`.

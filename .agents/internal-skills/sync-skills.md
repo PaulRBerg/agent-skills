@@ -35,19 +35,14 @@ same heading.
 Files:
 
 - `skills/commit/SKILL.md`
-- `skills/claude-handoff/SKILL.md`
-- `skills/codex-handoff/SKILL.md`
-- `skills/fresh-eyes-sweep/SKILL.md`
-- `skills/repo-harmonization/SKILL.md`
 - `.agents/internal-skills/publish-skills.md`
 
 Treat these as in scope:
 
 - `$commit` owns Conventional Prefix or Natural Language message semantics; `ai-commit` owns deterministic preparation,
-  commit, index, and push mechanics.
-- Orchestrators pass only attributable paths to `$commit`, and push only with explicit or standing authorization.
+  commit, index, and push mechanics. Consumer skills invoke `$commit` scoped to attributable paths instead of restating
+  that boundary or duplicating bypass and recovery rules.
 - Workflows that require propagation treat `BEHIND` as safe noncompletion, never as a successful push.
-- Consumers rely on `ai-commit` diagnostics and `$commit` recovery policy instead of duplicating bypass rules.
 
 Treat these as out of scope unless the request explicitly names them:
 

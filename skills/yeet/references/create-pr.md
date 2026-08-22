@@ -6,12 +6,7 @@ Create GitHub pull requests with semantic change analysis, intelligent defaults,
 
 See `context.md > Auth Validation` for GitHub authentication. The repository context read below is the auth check.
 
-**Check git repository state:**
-
-- `git remote get-url origin` — confirm remote exists
-- `git rev-parse --show-toplevel` — confirm we're in a repo
-
-**Collect repo context once:**
+**Collect repo context once** (also confirms the repo and remote exist):
 
 ```bash
 <skill-dir>/scripts/yeet-context.sh repo
@@ -67,7 +62,8 @@ Use an admonition only for a material warning that would otherwise be missed.
 ## Check for Existing PR
 
 ```bash
-gh pr list --state all --head $(git branch --show-current) --json number,url --jq '.[0]' 2>/dev/null
+BRANCH=$(git branch --show-current)
+gh pr list --state all --head "$BRANCH" --json number,url --jq '.[0]' 2>/dev/null
 ```
 
 IF existing PR found: ERROR "PR already exists for this branch: $URL". Do not create or update.
@@ -77,7 +73,7 @@ IF existing PR found: ERROR "PR already exists for this branch: $URL". Do not cr
 **Push branch:**
 
 ```bash
-git push -u origin "$(git branch --show-current)"
+git push -u origin "$BRANCH"
 ```
 
 **Create PR:**

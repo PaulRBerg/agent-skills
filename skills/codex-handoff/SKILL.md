@@ -253,10 +253,9 @@ placeholder.
   required polish pass that blocks, fails, or writes outside its supported scope blocks later polish and
   cross-repository commits.
 - If approved work changes repositories on this machine other than the one where the handoff began, invoke `$commit`
-  from each additional repository after its work, validation, and required polish complete. `$commit` owns semantic
-  message composition; its `ai-commit` backend owns deterministic transaction, commit, and push mechanics. Scope each
-  invocation to files changed there; do not commit incomplete, blocked, unexpected, or out-of-scope changes. Push only
-  when the user explicitly requested it.
+  from each additional repository after its work, validation, and required polish complete, scoped to files changed
+  there; do not commit incomplete, blocked, unexpected, or out-of-scope changes. Push only when the user explicitly
+  requested it.
 - Finish with the selected adapter's completion report, including strategy, wave and agent counts, each agent's
   requested configuration, status, and summary, plus combined changed files, verification, polish when run (listing each
   pass and outcome), automatic cross-repository commit hashes when any, blockers, and residual risks. Write `none` for
