@@ -77,7 +77,7 @@ labels, assignees, or state."
 
 Only when the user explicitly asks for regeneration ("rewrite the body", "fix the title").
 
-Follow `create-issue.md > Generate Title and Body` and `writing.md > Informal Tone`. Preserve any existing template
+Follow `create-issue.md`'s template and body rules and `writing.md > Informal Tone`. Preserve any existing template
 structure (sections, admonitions, file links). If the issue uses a YAML template's section headers, keep them.
 
 For appends, preserve the existing body verbatim, then append the new content with a separator (blank line) — do not

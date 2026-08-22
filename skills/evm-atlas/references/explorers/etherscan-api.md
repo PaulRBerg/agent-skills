@@ -544,17 +544,7 @@ echo "scale=6; 135499000000 / 1000000" | bc
 
 ## Output Formatting
 
-**Default behavior:** Present results in a Markdown table:
-
-```markdown
-| Address       | Balance (ETH) | Chain    |
-| ------------- | ------------- | -------- |
-| 0xde0B...7BAe | 172,774.40    | Ethereum |
-| 0xabc1...2def | 50.25         | Polygon  |
-```
-
-**User preference:** If the user requests a specific format (JSON, CSV, plain text, etc.), use that format instead. Do
-not generate a Markdown table when the user specifies an alternative output format.
+Use the completion format in `SKILL.md`: preserve full identifiers and use a compact table only when fields repeat.
 
 ## Plan-Gated Capabilities
 

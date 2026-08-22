@@ -15,8 +15,7 @@ description: "Cut a release: bump versions, write changelogs, commit, tag."
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
 
-Release one package or several packages with version bumps, changelog entries, commits, and tags. Supports
-single-package repositories, workspace monorepos, stable releases, beta releases, and dry runs.
+Release one package or several packages with version bumps, changelog entries, commits, and tags.
 
 A non-dry-run invocation authorizes the repository-local version edits, changelogs, commits, and annotated tags defined
 by this workflow. Do not add a generic confirmation gate after the agent derives the release plan. Ask only when an

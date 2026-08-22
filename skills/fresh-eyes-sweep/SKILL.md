@@ -17,8 +17,8 @@ description:
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
 
-Inspect the requested Git scope for evidenced mistakes, fix every safe issue, and continue until every mapped file is
-accounted for and a full pass finds nothing new. A verified no-op is valid only after that coverage.
+Inspect the requested Git scope for evidenced mistakes, fix every safe issue, and account for every mapped file. A
+verified no-op requires that coverage and a full pass that finds nothing new.
 
 `--max-runtime DURATION` is optional: it is a positive integer followed by `m` or `h`, such as `45m` or `3h`. Reject an
 invalid duration, unknown option, or ambiguous positional input. When a deadline is supplied, calculate it before
@@ -110,12 +110,12 @@ next session.
 
 ## Subagents
 
-- Reviewers are read-only and default to model `sonnet`; agents that apply fixes default to model `opus`. Never spawn a
-  subagent that implicitly inherits the session model — always set it explicitly.
+- When the host supports model selection, choose reviewer and fixer models deliberately for the task; otherwise use the
+  host default.
 - Announce the planned fan-out in one line before launching: agent count and the model of each group.
 - Cap concurrent reviewers at 4 unless the user raises it.
-- Record each spawned task ID in the ledger reason field for the slice it covers, so a later stop request resolves
-  against real IDs instead of guesses.
+- Record each spawned task ID in the coordinator's slice plan so a later stop request resolves against real IDs. The
+  ledger's `reason` records exclusions only.
 - Give writing agents stable IDs, dependency waves, exact non-overlapping write scopes, repository constraints, and
   required completion evidence. In every slice brief, completion evidence must include every discovered strict static
   gate — typecheck, lint, and format/import order — applicable to the languages in the slice's write scope, scoped as

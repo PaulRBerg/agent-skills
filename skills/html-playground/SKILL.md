@@ -11,8 +11,8 @@ Build a self-contained interactive HTML explorer with controls, live preview, an
 
 ## Workflow
 
-1. Infer the product context, audience, decisions to explore, and required states. Existing design systems and explicit
-   user requirements override this skill's visual defaults.
+1. Infer the audience, decisions, and required states. Existing design systems and explicit requirements override these
+   defaults.
 2. Read exactly one closest template and adapt it:
    - `templates/design-playground.md`
    - `templates/data-explorer.md`
@@ -29,7 +29,7 @@ Build a self-contained interactive HTML explorer with controls, live preview, an
 Use these when product context does not indicate otherwise:
 
 - controls beside a live preview, with prompt output below;
-- a standard desktop-browser layout; do not implement or inspect responsive/mobile behavior unless the user asks;
+- a desktop-browser layout; do not implement or inspect responsive/mobile behavior unless requested;
 - a polished light theme, system UI font, monospace code/values, minimal chrome;
 - sensible non-empty initial state and 3–5 cohesive named presets;
 - one state object, one update path, and immediate preview/prompt refresh;
@@ -45,7 +45,6 @@ Use these when product context does not indicate otherwise:
 - Presets update controls, preview, and prompt consistently.
 - Do not add controls that do not affect either the preview or the generated prompt.
 
-Completion requires the self-contained file plus rendered, interactive inspection evidence; opening the file without
-exercising it is insufficient. Finish with `### ✨ Playground ready`, the linked artifact, and a compact
-artifact/controls/desktop-browser/copy-fallback table. Keep generated prompts free of decorative icons unless the
-requested prompt content itself needs them; report decoration does not authorize ornament in copied output.
+Completion requires the self-contained file and rendered, interactive inspection evidence. Finish with
+`### ✨ Playground ready`, the linked artifact, and a compact artifact/controls/desktop-browser/copy-fallback table.
+Keep generated prompts free of decorative icons unless the requested content needs them.

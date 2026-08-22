@@ -25,33 +25,27 @@ and change risk. Test files use a relaxed 2000 LOC discovery threshold.
 
 ## Workflow
 
-1. Resolve the skill directory, then run the helper from that directory:
+1. Resolve the skill directory, then run the helper from the target repository:
 
    ```sh
-   uv run scripts/large-file-refactor.py "$ARGUMENTS"
+   uv run "<skill-dir>/scripts/large-file-refactor.py" [path] [--include-generated]
    ```
 
-2. If no arguments were provided, run the default scan:
-
-   ```sh
-   uv run scripts/large-file-refactor.py
-   ```
-
-3. Preserve the helper's Markdown table as the exhaustive report. Do not omit matching rows, even when the refactor plan
+2. Preserve the helper's Markdown table as the exhaustive report. Do not omit matching rows, even when the refactor plan
    only covers a subset.
 
-4. If the helper reports no threshold matches, stop after the report. A match is a candidate, not proof that the file
+3. If the helper reports no threshold matches, stop after the report. A match is a candidate, not proof that the file
    should be split.
 
-5. Draft a refactor plan for the 3 largest files only, unless the user explicitly requested another count.
+4. Draft a refactor plan for the 3 largest files only, unless the user explicitly requested another count.
 
-6. For each candidate, rank split value by mixed responsibilities, change frequency/risk, coupling, and testability. Use
+5. For each candidate, rank split value by mixed responsibilities, change frequency/risk, coupling, and testability. Use
    whichever semantic symbol/reference tooling is available; prefer Serena when installed:
 
    - Inspect symbol overviews, references, imports, and relevant history.
    - Use the evidence to choose extraction boundaries, target module names, migration order, and test coverage.
 
-7. Do not implement the refactor unless the user separately asks for execution.
+6. Do not implement the refactor unless the user separately asks for execution.
 
 ## Refactor Plan Format
 

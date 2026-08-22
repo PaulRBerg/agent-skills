@@ -159,11 +159,10 @@ The agent reads only the variant the user picked — irrelevant providers never 
 
 Inline the basic case in `SKILL.md`, link advanced files for edge cases (`tracked-changes.md`, `ooxml.md`, etc.).
 
-### Do NOT add to a skill
+### Exclude runtime-irrelevant files
 
-- `README.md`, `INSTALLATION.md`, `CHANGELOG.md`, `QUICK_REFERENCE.md` — extraneous.
-- Notes about how the skill was authored, test logs, scratch files.
-- Anything the agent will not use at runtime.
+Do not add repository-style support files (`README.md`, `INSTALLATION.md`, `CHANGELOG.md`, or `QUICK_REFERENCE.md`),
+authoring notes, test logs, scratch files, or anything the agent will not use at runtime.
 
 ## Workflow
 

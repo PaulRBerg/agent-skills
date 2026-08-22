@@ -1,10 +1,10 @@
 # Justfile Patterns & Conventions
 
-Established patterns and conventions for organizing justfiles, based on real-world usage across multiple projects.
+Apply these patterns only when they match the repository's existing conventions and installed Just version.
 
 ## Section Headers
 
-Use centered ASCII art headers to organize justfiles:
+Match existing section headers. For a new standalone justfile, the bundled examples use:
 
 ```just
 # ---------------------------------------------------------------------------- #
@@ -53,7 +53,8 @@ oxlint-check:
     oxlint {{ root_ox_paths }}
 ```
 
-Do not recommend parenthesized, space-joined string assembly for path sets.
+Use list literals for concrete path sets; reserve parenthesized string concatenation for one shell argument assembled
+from fragments.
 
 ### Environment Variables
 

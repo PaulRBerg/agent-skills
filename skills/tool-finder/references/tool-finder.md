@@ -1,6 +1,6 @@
 # Tool Finder Reference
 
-Detailed search, scoring, and reporting guidance for the `tool-finder` skill.
+Source-routing and decision guidance for the `tool-finder` skill.
 
 ## Search Strategy
 
@@ -8,7 +8,7 @@ Adapt search queries to the ecosystem and include the current year when recency 
 
 ### npm / JavaScript / TypeScript
 
-- `"best npm package for [task]" 2025 2026`
+- `"best npm package for [task]" <current-year>`
 - `"[task] javascript typescript library comparison"`
 - `"[task] npm trending"`
 - npm registry package pages
@@ -18,7 +18,7 @@ Adapt search queries to the ecosystem and include the current year when recency 
 
 ### Python
 
-- `"best python library for [task]" 2025 2026`
+- `"best python library for [task]" <current-year>`
 - `"[task] python package comparison pypi"`
 - `"popular [task] python"`
 - PyPI package pages
@@ -28,7 +28,7 @@ Adapt search queries to the ecosystem and include the current year when recency 
 
 ### Rust
 
-- `"best rust crate for [task]" 2025 2026`
+- `"best rust crate for [task]" <current-year>`
 - `"[task] rust library comparison"`
 - `"popular [task] rust crates.io"`
 - crates.io
@@ -38,7 +38,7 @@ Adapt search queries to the ecosystem and include the current year when recency 
 
 ### Go
 
-- `"best go package for [task]" 2025 2026`
+- `"best go package for [task]" <current-year>`
 - `"[task] golang library comparison"`
 - `"popular [task] go module pkg.go.dev"`
 - pkg.go.dev
@@ -48,7 +48,7 @@ Adapt search queries to the ecosystem and include the current year when recency 
 
 ### CLI / System Tools
 
-- `"best [task] cli tool" 2025 2026`
+- `"best [task] cli tool" <current-year>`
 - `"[task] cli tool comparison"`
 - `"modern alternative to [old-tool]"`
 - GitHub repositories
@@ -57,7 +57,7 @@ Adapt search queries to the ecosystem and include the current year when recency 
 
 ### VSCode Extensions
 
-- `"best vscode extension for [task]" 2025 2026`
+- `"best vscode extension for [task]" <current-year>`
 - `"[task] vscode extension comparison"`
 - `"vscode marketplace [task]"`
 - VS Code Marketplace
@@ -81,7 +81,7 @@ only on GitHub or in blog posts.
 
 ### Databases / Infrastructure
 
-- `"best [task] database" 2025 2026`
+- `"best [task] database" <current-year>`
 - `"[task] vs [alternative] comparison"`
 - `"[task] production use cases"`
 - Official docs and product pages

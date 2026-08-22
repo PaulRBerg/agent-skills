@@ -104,8 +104,8 @@ declare: -A: invalid option
 | `${arr[-1]}`            | `${arr[${#arr[@]}-1]}`                         |
 | `cmd \|& other`         | `cmd 2>&1 \| other`                            |
 
-**Pinning a newer interpreter** works on this Apple Silicon/Homebrew profile when the path exists, but keep it explicit
-and guarded because agent sandboxes may expose only `/bin/bash`:
+**Pinning a newer interpreter** works when the path exists. Keep it explicit and guarded because CI or agent sandboxes
+may expose only `/bin/bash`:
 
 ```just
 set shell := ["/opt/homebrew/bin/bash", "-euo", "pipefail", "-c"]

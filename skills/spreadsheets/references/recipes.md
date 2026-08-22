@@ -67,7 +67,7 @@ qsv validate txs.tsv txs.schema.json
 For house TSV validation after edits:
 
 ```sh
-uv run ~/.agents/skills/spreadsheets/scripts/peek.py txs.tsv --strict --house
+uv run "<skill-dir>/scripts/peek.py" txs.tsv --strict --house
 ```
 
 ## Keyed Diff
@@ -86,7 +86,7 @@ Use redaction when a report will be posted, published, or sent to a third party,
 reports may include relevant unredacted samples.
 
 ```sh
-uv run ~/.agents/skills/spreadsheets/scripts/profile.py txs.tsv --markdown --redact-samples
+uv run "<skill-dir>/scripts/profile.py" txs.tsv --markdown --redact-samples
 ```
 
 The profile includes shape, issues, inferred types, null/cardinality signals, formula-prefix cells, and tool
@@ -118,7 +118,7 @@ wb.close()
 Then run:
 
 ```sh
-uv run ~/.agents/skills/spreadsheets/scripts/recalc.py report.xlsx
+uv run "<skill-dir>/scripts/recalc.py" report.xlsx
 ```
 
 Deliver only when the command exits `0` with `"status": "success"`.

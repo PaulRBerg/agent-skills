@@ -1,60 +1,12 @@
 # Automation Workflows
 
-> When to read: Read when the user wants ready-made gh CLI automation patterns — code review workflows, issue triage,
-> daily/weekly reports, bulk operations, CI monitoring, or team collaboration scripts.
+> When to read: Read when the user wants ready-made gh CLI automation patterns for reports, CI monitoring, fork sync,
+> releases, or repository operations.
 
 Common workflow patterns and automation examples using gh CLI.
 
-## Common Workflows
-
-### Code Review Workflow
-
-```bash
-# List PRs assigned to you
-gh pr list --assignee @me
-
-# Checkout PR for testing
-gh pr checkout 123
-
-# Run tests, review code...
-
-# Approve PR
-gh pr review 123 --approve --body "LGTM!"
-
-# Merge PR
-gh pr merge 123 --squash
-```
-
-### Quick PR Creation
-
-```bash
-# Create feature branch, make changes, commit
-git checkout -b feature/new-feature
-# ... make changes ...
-git add .
-git commit -m "Add new feature"
-git push -u origin feature/new-feature
-
-# Create PR from commits
-gh pr create --fill
-
-# View PR
-gh pr view --web
-```
-
-### Issue Triage
-
-```bash
-# List open issues
-gh issue list
-
-# Add labels to issues
-gh issue edit 456 --add-label needs-triage
-gh issue edit 456 --add-label bug
-
-# Assign issue
-gh issue edit 456 --add-assignee @developer
-```
+Use `yeet` for pull request, issue, discussion, or comment creation and updates. This reference covers operational
+automation.
 
 ## Advanced Automation Patterns
 
@@ -74,28 +26,6 @@ gh search prs "reviewed-by:@me created:$(date +%Y-%m-%d)"
 echo ""
 echo "### Issues Closed"
 gh issue list --author @me --state closed --search "closed:$(date +%Y-%m-%d)"
-```
-
-### Auto-label PRs by Files Changed
-
-```bash
-#!/bin/bash
-# Auto-label PR based on changed files
-
-PR_NUMBER=$1
-FILES=$(gh pr diff $PR_NUMBER --name-only)
-
-if echo "$FILES" | grep -q "^docs/"; then
-  gh pr edit $PR_NUMBER --add-label "documentation"
-fi
-
-if echo "$FILES" | grep -q "\.test\."; then
-  gh pr edit $PR_NUMBER --add-label "tests"
-fi
-
-if echo "$FILES" | grep -q "package\.json"; then
-  gh pr edit $PR_NUMBER --add-label "dependencies"
-fi
 ```
 
 ### Sync Fork with Upstream
@@ -132,16 +62,6 @@ gh release create "v$VERSION" --generate-notes
 
 # 5. Upload artifacts
 gh release upload "v$VERSION" dist/*
-```
-
-### Bulk PR Operations
-
-```bash
-#!/bin/bash
-# Approve all PRs from dependabot
-
-gh pr list --author app/dependabot --json number --jq '.[].number' | \
-  xargs -I {} gh pr review {} --approve --body "Auto-approved dependency update"
 ```
 
 ### Monitor CI Status
@@ -196,22 +116,7 @@ gh pr list --json number,title,updatedAt --jq '.[] |
   "\(.number): \(.title)"'
 ```
 
-## Team Collaboration Patterns
-
-### Assign PR Reviewers by Team
-
-```bash
-# Auto-assign team members as reviewers
-gh pr create --reviewer team/backend,team/security --assignee @me
-```
-
-### Bulk Issue Assignment
-
-```bash
-# Assign all bugs to triage team
-gh issue list --label bug --json number --jq '.[].number' | \
-  xargs -I {} gh issue edit {} --add-assignee @triager
-```
+## Team Reporting
 
 ### Weekly Team Report
 

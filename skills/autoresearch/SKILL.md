@@ -54,10 +54,9 @@ reordering hypotheses inside the approved contract is follow-on planning, not a 
 
 ## Delegated Execution
 
-Resolve `references/worker-loop.md` relative to this `SKILL.md`. Every implementation brief must require the worker to
-read it completely and must supply the approved contract, ordered batch, exact paths and commands, current session and
-best-result state or first-batch status, and batch stopping criteria. Codex-handoff owns the remaining prompt and result
-fields.
+Read `references/worker-loop.md` before constructing an implementation brief. Inline its applicable instructions with
+the approved contract, ordered batch, exact paths and commands, current session and best-result state or first-batch
+status, and batch stopping criteria. Codex-handoff owns the remaining prompt and result fields.
 
 The first implementation worker creates the isolation and session artifacts and records the unchanged baseline. Each
 worker leaves detailed measurements and logs in those artifacts and returns only the compact batch receipt required by

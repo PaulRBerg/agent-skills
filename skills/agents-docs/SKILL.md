@@ -23,9 +23,9 @@ Answer Codex and Claude Code product questions from the narrowest relevant offic
 
 ## Classify the request
 
-Classify the request as Codex, Claude Code, or a comparison. Activate only for questions about those products and their
-documented behavior. Do not capture unrelated repository mentions, generic agent development, provider APIs, SDKs,
-pricing, authentication, model selection, migration, or managed-agent workflows.
+Classify the request as Codex, Claude Code, or a comparison. Use this skill only for those products and their documented
+behavior; route generic agent work and provider API, SDK, pricing, authentication, model, migration, or managed-agent
+questions to their relevant source.
 
 Treat `$imagegen` and Codex image-prompting questions as Codex product questions even when detailed supporting model
 guidance lives in OpenAI's API Cookbook.

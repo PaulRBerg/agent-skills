@@ -8,14 +8,13 @@ description:
 
 # Codebase Design
 
-Design **deep modules**: a lot of behaviour behind a small interface, placed at a clean seam, testable through that
-interface. Use this language and these principles wherever code is being designed or restructured. The aim is leverage
-for callers, locality for maintainers, and testability for everyone.
+Design **deep modules**: substantial behaviour behind a small interface at a clean seam, testable through that
+interface. Use this vocabulary when it clarifies a design decision. The aim is leverage for callers, locality for
+maintainers, and testability.
 
 ## Glossary
 
-Use these terms exactly — don't substitute "component," "service," "API," or "boundary." Consistent language is the
-whole point.
+Use these terms consistently where their distinctions matter.
 
 **Module** — anything with an interface and an implementation. Deliberately scale-agnostic: a function, class, package,
 or tier-spanning slice. _Avoid_: unit, component, service.
@@ -73,8 +72,8 @@ When designing an interface, ask:
 
 Good interfaces make testing natural:
 
-- Accept dependencies as parameters; don't construct them inside the module.
-- Prefer returning results over producing side effects.
+- At a real seam, accept the dependency as a parameter instead of constructing it inside the module.
+- Prefer returning results to side effects when that keeps the interface simpler.
 - Keep the surface small: fewer methods and parameters mean fewer, simpler tests.
 
 ## Relationships

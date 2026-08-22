@@ -1,17 +1,5 @@
 # tailwind-variants Best Practices
 
-## Overview
-
-**tailwind-variants** provides a first-class variant API for composable, type-safe component styling with automatic
-Tailwind class conflict resolution.
-
-**Key Benefits:**
-
-- Type-safe variant definitions with full TypeScript support
-- Automatic class conflict resolution (via tailwind-merge)
-- 37-62% faster than alternatives (v2+), 500x faster with v3
-- Framework-agnostic (React, Vue, Svelte, vanilla JS)
-
 ## Installation
 
 ```bash
@@ -435,7 +423,6 @@ tv(options, config);
 
 ## Performance Considerations
 
-- **v3 is 500x faster** when using tailwind-merge (vs v2)
 - **Reuse `tv()` instances** - Define components once
 - **Avoid dynamic class generation** - Pre-define variants
 - **Use compound variants judiciously** - Each adds complexity

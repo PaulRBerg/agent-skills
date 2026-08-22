@@ -103,8 +103,6 @@ implemented fixes.
 
 - Deduplicate overlapping observations without discarding the strongest file:line and mechanical evidence.
 - Keep linked but non-identical observations separate when they require different fixes or decisions.
-- Apply the three-way classification to every finding: confirmed drift to fix, true duplication as a single-source
-  candidate, or deliberate or necessary duplication to document without changing.
 - Do not classify an unverified suspicion; return it to research or record it as an open question.
 - Regenerate suspected generated-copy drift through its build-only path and byte-verify the result with a diff.
 - Preserve the generator's inputs and command output needed to reproduce the verification.

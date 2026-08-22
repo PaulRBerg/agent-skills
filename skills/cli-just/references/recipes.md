@@ -75,7 +75,8 @@ open url:
     open {{ url }}
 ```
 
-This catalog is macOS-first; omit non-Mac OS guards unless the project itself must publish a portable justfile.
+Use an OS guard when a recipe intentionally depends on that OS; otherwise let the project's portability requirements
+determine the recipe design.
 
 ### Script Blocks
 

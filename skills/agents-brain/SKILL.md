@@ -50,21 +50,11 @@ Forced refreshes, expired entries, integrity failures, and unexpected redirects 
 cannot be returned, stop qualifying work before writing instead of substituting memory or another source. Never create
 the cache in a repository or skill installation.
 
-- Keep only agent-facing content that changes a decision, prevents an evidenced mistake, or supplies a non-discoverable
-  constraint. Remove generic advice, tutorials, history, inventories, no-op prose, and mechanics already enforced by
-  scripts, recipes, schemas, or configuration.
-- State each meaning once in an effective load chain. Put shared guidance in the parent and keep descendants to deltas
-  or overrides; preserve repetition when artifacts load independently and need to remain self-contained.
-- Use the narrowest reliable load scope: universal guidance inline, path-specific guidance in nested context, and rare
-  procedures in on-demand context docs or skills. Do not hide required guidance behind an unreliable pointer.
-- Prefer one positive decision rule to enumerated prohibitions. Keep one minimal example only when it encodes an exact
-  requirement or corrects a measured failure; keep tool and command descriptions only when routing, inputs, side
-  effects, outputs, or failure signals matter.
-- Preserve authority, safety, material exceptions, semantic success criteria, exact machine-consumed text, and readable
-  prose. Do not shorten human-facing README.md content merely to reduce agent tokens unless that content also enters
-  agent context.
-- Documentation-only authority does not permit creating or changing helpers or schemas. When none exists, retain the
-  smallest accurate prose and report the extraction opportunity instead of expanding scope.
+Keep only content that changes a decision, prevents an evidenced mistake, or supplies a non-discoverable constraint.
+State each meaning once at the narrowest reliable load scope, except where independently installed artifacts need to
+stay self-contained. Preserve authority, safety, material exceptions, semantic success criteria, and exact
+machine-consumed text. Documentation-only authority does not permit changing helpers or schemas; report an extraction
+opportunity instead.
 
 ## Choose a Workflow
 
@@ -147,11 +137,6 @@ Outside managed agent-config roots, eligible git-tracked `skills/<name>/` source
 
 Snapshot `git status --short` before broad edits. Preserve unrelated pre-existing changes and re-check expected paths
 after generators or broad commands.
-
-## Shared Constraints
-
-Stay inside the resolved repository and preserve unrelated changes. The selected workflow reference is authoritative for
-README.md, AGENTS.md, CLAUDE.md, and skill behavior; do not repeat or broaden its file-specific rules here.
 
 ## Discovery and Tool Routing
 

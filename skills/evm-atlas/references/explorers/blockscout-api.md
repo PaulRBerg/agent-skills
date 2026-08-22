@@ -2,7 +2,7 @@
 
 ## Overview
 
-Query blockchain data across any EVM chain that Blockscout indexes. Blockscout exposes three compatible surfaces:
+Query target-mainnet data that Blockscout indexes. Blockscout exposes three compatible surfaces:
 
 - **Native REST API v2** (`/api/v2/...`) — rich JSON, the recommended surface. Returns balances, full token holdings,
   transactions, and transfers with embedded token/exchange-rate metadata.
@@ -33,10 +33,9 @@ if [ -z "$BLOCKSCOUT_API_KEY" ]; then
 fi
 ```
 
-The key is **only** required for the unified PRO host (`api.blockscout.com`), which returns
-`401 {"error":"Unauthorized"}` without it. Per-instance public hosts (e.g., `eth.blockscout.com`) need **no key** — see
-[Per-Instance Fallback](#per-instance-fallback-any-chain-no-key). If the key is missing, fall back to per-instance hosts
-rather than halting.
+The key is required for the unified PRO host (`api.blockscout.com`), which returns `401 {"error":"Unauthorized"}`
+without it. Keyless per-instance hosts are an exception only for a self-hosted or third-party target instance that the
+gateway does not serve; see [Per-Instance Exception](#per-instance-exception).
 
 ### Plan & Credit Detection
 
@@ -72,10 +71,11 @@ Decide per query:
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Chain is on the PRO host (eth, OP, Polygon, Base, Arbitrum, Gnosis, …) | **Unified PRO** `https://api.blockscout.com/{chain_id}/api/v2/...` + key            |
 | Porting existing Etherscan **V2** code (minimal diff)                  | **Etherscan-V2 alias** `https://api.blockscout.com/v2/api?chain_id={id}&module=...` |
-| Chain returns `404` on the PRO host, or no key available               | **Per-instance** `https://{instance}/api/v2/...` (no key) — resolve via Chainscout  |
+| Gateway does not serve a self-hosted or third-party target instance    | **Per-instance** `https://{instance}/api/v2/...` (no key) — resolve via Chainscout  |
 
-The PRO host fronts major Blockscout-hosted target chains but **not all** of them. On any `404`, fall back to the
-per-instance host resolved through `scripts/resolve-chain.sh`. If the target chain is absent from Chainscout, use
+For Blockscout-hosted targets, keep using the keyed gateway after a `401`, `429`, or transient error; a per-instance
+host is not a fallback for those conditions. If the gateway does not serve a target's self-hosted or third-party
+instance, resolve that instance through `scripts/resolve-chain.sh`. If the target chain is absent from Chainscout, use
 Etherscan (`references/explorers/etherscan-api.md`) or the `primaryPublicRpc` from
 `references/generated/target-mainnets.json`. If the requested chain is not in
 `references/generated/target-mainnets.json`, stop and ask the user to file a feature request in
@@ -125,8 +125,8 @@ curl -s -H "authorization: Bearer $BLOCKSCOUT_API_KEY" "https://api.blockscout.c
 
 ## Native REST API v2
 
-The recommended surface. Base URL is `https://api.blockscout.com/{chain_id}/api/v2` (PRO) or `https://{instance}/api/v2`
-(per-instance). Examples below use the PRO host; swap the base for the per-instance host and drop the key when needed.
+The recommended surface is the keyed `https://api.blockscout.com/{chain_id}/api/v2` gateway. Use
+`https://{instance}/api/v2` only for the per-instance exception described below. Examples use the keyed gateway.
 
 ### Address Overview (native balance + metadata)
 
@@ -268,10 +268,10 @@ Pick the earliest entry where `to == address` (lowercased), `value > 0`, and (no
 tx is the lower `blockNumber` across both lists. Check both because addresses are often funded internally (CEX
 router/proxy withdrawals). Genesis-allocated balances appear in neither list — report explicitly.
 
-## Per-Instance Fallback (any chain, no key)
+## Per-Instance Exception
 
-For chains that `404` on the PRO host, or when no key is set, query the chain's own Blockscout instance directly — no
-key, every chain Blockscout indexes:
+For a target chain whose resolved instance is self-hosted or third-party and the keyed gateway does not serve it, query
+that instance directly without a key:
 
 ```bash
 # 1. Resolve the instance URL
@@ -284,8 +284,9 @@ curl -s "${CS_instance_url}api/v2/addresses/0xADDR/token-balances"
 curl -s "${CS_instance_url}api?module=account&action=balance&address=0xADDR"
 ```
 
-Note `instance_url` already ends in `/`. Per-instance hosts are community-operated for many chains — uptime and indexing
-depth vary. Prefer the PRO host when the chain is available there.
+Note `instance_url` already ends in `/`. Per-instance hosts are community-operated for many chains, so uptime and
+indexing depth vary. Do not use one to bypass missing credentials, rate limits, or transient errors on a
+Blockscout-hosted target.
 
 ## Unit Conversion
 
@@ -299,25 +300,17 @@ echo "scale=18; 9774452722498812330011 / 1000000000000000000" | bc
 
 ## Output Formatting
 
-Default to a Markdown table:
-
-```markdown
-| Address     | Balance  | Token | Chain    |
-| ----------- | -------- | ----- | -------- |
-| 0xde0B…7BAe | 9,774.45 | ETH   | Ethereum |
-```
-
-If the user requests JSON/CSV/plain text, use that instead.
+Use the completion format in `SKILL.md`: preserve full identifiers and use a compact table only when fields repeat.
 
 ## Error Handling
 
-| Symptom                              | Cause / Action                                                                        |
-| ------------------------------------ | ------------------------------------------------------------------------------------- |
-| `401 {"error":"Unauthorized"}`       | Missing/invalid key on PRO host. Set `$BLOCKSCOUT_API_KEY` or use per-instance host.  |
-| `404` on `api.blockscout.com/{id}/…` | Target chain not on PRO host. Resolve instance via Chainscout, use per-instance host. |
-| `429` / `x-ratelimit-remaining: 0`   | Rate limited. Back off until `x-ratelimit-reset` (seconds).                           |
-| `503`                                | Transient PRO-host hiccup. Retry; if persistent, use per-instance.                    |
-| Compat `{"status":"0", …}`           | Etherscan-shaped error (`No transactions found`, bad address, etc.).                  |
+| Symptom                              | Cause / Action                                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `401 {"error":"Unauthorized"}`       | Missing/invalid key on the gateway. Report the coverage gap; do not substitute a hosted per-instance route.       |
+| `404` on `api.blockscout.com/{id}/…` | Resolve the target through Chainscout; use its per-instance route only when it qualifies for the exception above. |
+| `429` / `x-ratelimit-remaining: 0`   | Rate limited. Back off until `x-ratelimit-reset` (seconds); retain the keyed gateway route.                       |
+| `503`                                | Transient gateway error. Retry within the bounded policy; otherwise report a coverage gap.                        |
+| Compat `{"status":"0", …}`           | Etherscan-shaped error (`No transactions found`, bad address, etc.).                                              |
 
 ## Reference Files
 

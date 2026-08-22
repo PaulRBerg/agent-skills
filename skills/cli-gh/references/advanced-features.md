@@ -30,9 +30,6 @@ Direct access to GitHub's REST API through gh CLI.
 # Make API call
 gh api repos/:owner/:repo/issues
 
-# With JSON data
-gh api repos/:owner/:repo/issues -f title="Bug" -f body="Description"
-
 # Paginated results
 gh api --paginate repos/:owner/:repo/issues
 ```
@@ -168,30 +165,6 @@ gh release verify <tag>
 gh release verify-asset <file> --repo owner/repo
 ```
 
-## Issue Types, Sub-Issues & Relationships
-
-Issue types and sub-issues require GitHub.com or GHES 3.17+; blocking relationships require GHES 3.19+.
-
-```bash
-# Set or remove the issue type
-gh issue edit 456 --type Bug
-gh issue edit 456 --remove-type
-
-# Create a sub-issue under a parent
-gh issue create --parent 100
-
-# Organize existing issues into a parent/child hierarchy
-gh issue edit 100 --add-sub-issue 123,124
-gh issue edit 100 --remove-sub-issue 123
-gh issue edit 123 --parent 100
-gh issue edit 123 --remove-parent
-
-# Track blocked-by / blocking relationships
-gh issue create --blocked-by 200,201 --blocking 300
-gh issue edit 123 --add-blocked-by 200 --add-blocking 300,301
-gh issue edit 123 --remove-blocked-by 200 --remove-blocking 301
-```
-
 ## Copilot Agent Tasks
 
 Delegate work to the Copilot coding agent and track its sessions. The `gh agent-task` command set (aliases `gh agent`,
@@ -286,11 +259,4 @@ if gh pr view 123 &>/dev/null; then
 else
   echo "PR not found"
 fi
-```
-
-### Batch Operations
-
-```bash
-# Add label to multiple issues
-gh issue list --assignee @me --json number --jq '.[].number' | xargs -I {} gh issue edit {} --add-label "in-progress"
 ```

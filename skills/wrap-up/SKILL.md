@@ -25,8 +25,7 @@ completed work or a decision-complete handoff, without losing progress. Optimize
 roughly five minutes end to end. Use `$ARGUMENTS` as the user's deadline or departure note when present; a stated
 deadline overrides the default budget.
 
-This skill applies equally to orchestrated sessions with active subagents and to a single agent working alone. In the
-single-agent case, skip Worker Wind-Down and apply the same wrap-up rules to your own in-progress work.
+In a single-agent session, skip Worker Wind-Down and apply the same rules to the session's own in-progress work.
 
 ## Freeze
 

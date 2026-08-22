@@ -46,8 +46,8 @@ cannot weaken this shared contract.
 - Run only after explicit invocation. Research-only = requested outcome is findings/evidence/assessment only, no repo
   changes or plan requested. All handoffs may run in any host mode; implementation handoffs must pass through the Plan
   Phase and receive explicit user approval before launch.
-- The parent owns decisions, the final plan, and orchestration; for complex tasks, delegate investigation to read-only
-  research agents before writing the plan.
+- The parent owns decisions, the final plan, and orchestration. Delegate investigation to read-only research agents only
+  when task and repository evidence make it useful before planning.
 - Research agents gather evidence and report findings only — never edit files, make design decisions, or return plans.
 - Implementation agents implement their assigned part of the approved plan: inspect, edit, validate, never redesign or
   return another plan.

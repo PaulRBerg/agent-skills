@@ -47,8 +47,8 @@ formula-capable consumer. With that flag, formula-prefix cells affect `status`; 
 
 | Need                                        | Tool                                             |
 | ------------------------------------------- | ------------------------------------------------ |
-| Fast structural preview/validation          | `uv run scripts/peek.py <file>`                  |
-| Factual local quality profile               | `uv run scripts/profile.py <file>`               |
+| Fast structural preview/validation          | `uv run "<skill-dir>/scripts/peek.py" <file>`    |
+| Factual local quality profile               | `uv run "<skill-dir>/scripts/profile.py" <file>` |
 | Counts, stats, frequencies, select, dedupe  | `qsv`                                            |
 | Joins, pivots, aggregation, conversion      | DuckDB with `all_varchar = true`                 |
 | Exact custom transforms                     | `uv run` Python, stdlib `csv`, `decimal.Decimal` |
@@ -74,7 +74,7 @@ defaults to CSV.
    - unchanged shape: `peek.py --strict --expect-like <before-report>`;
    - changed shape: `peek.py --strict --expect-columns <n>` plus task-specific counts/keys;
    - authored house TSV: add `--house`;
-   - formulas: `uv run scripts/recalc.py <file.xlsx>` and require success.
+   - formulas: `uv run "<skill-dir>/scripts/recalc.py" <file.xlsx>` and require success.
 6. Report paths, row/column effects, validation, and any workbook features that could not be preserved.
 
 For human output, lead with `### 📊 Spreadsheet — ✅ updated` only after the write and required validation pass, or

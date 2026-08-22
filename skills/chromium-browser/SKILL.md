@@ -21,8 +21,8 @@ authenticated state.
   when attachment fails.
 - Treat the browser as shared, authenticated, and concurrently used by the user and other agents. Inspect only pages
   relevant to the task and do not surface unrelated tab titles or content.
-- Trust the live tool inventory over remembered server features. An absent tool is unavailable in this session; do not
-  advise editing client MCP configuration as a troubleshooting shortcut.
+- Trust the live tool inventory; an absent tool is unavailable in this session. Do not advise editing client MCP
+  configuration as a troubleshooting shortcut.
 
 ## Reference Routing
 
@@ -43,8 +43,8 @@ selected replay when rendered inspection adds evidence.
 
 ## Interaction and Evidence
 
-- Preserve order on a single page: navigate, wait for a known signal when useful, take a fresh snapshot, then interact
-  with identifiers from that snapshot. Refresh the snapshot after navigation or meaningful DOM changes.
+- On one page, navigate, wait for a useful known signal, take a fresh snapshot, then interact with identifiers from that
+  snapshot. Refresh it after navigation or meaningful DOM changes.
 - Prefer `take_snapshot` for structure and automation, `take_screenshot` for visual evidence, and `evaluate_script` for
   information absent from the accessibility tree. Accept wrapper screenshot defaults unless the task requires lossless
   or full-resolution output.

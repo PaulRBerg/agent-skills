@@ -129,7 +129,7 @@ Python libraries write formula strings without computing them; errors only becom
 recalculates. Always finish with:
 
 ```sh
-uv run scripts/recalc.py book.xlsx [timeout-seconds]   # exits nonzero unless status is success
+uv run "<skill-dir>/scripts/recalc.py" book.xlsx [timeout-seconds]   # exits nonzero unless status is success
 ```
 
 The script resolves LibreOffice (`soffice` on `PATH`, else the macOS app bundle under `/Applications` or
@@ -180,7 +180,7 @@ explicitly asked.
 After any `.xlsx` to TSV export, validate the TSV before using or delivering it:
 
 ```sh
-uv run ~/.agents/skills/spreadsheets/scripts/peek.py book.tsv --strict
+uv run "<skill-dir>/scripts/peek.py" book.tsv --strict
 ```
 
 When replacing an existing TSV export and the sheet shape should not change, save a before-report first and finish with

@@ -1,7 +1,8 @@
 # Autoresearch Worker Loop
 
-Read this reference completely only when the parent assigns an implementation batch through codex-handoff. Execute the
-approved hypotheses; do not choose the research direction.
+The parent reads this reference when constructing an implementation batch through codex-handoff and inlines the
+applicable instructions in the worker brief. Workers execute the approved hypotheses; they do not choose the research
+direction.
 
 ## Brief Contract
 

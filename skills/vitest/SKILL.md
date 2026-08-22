@@ -12,8 +12,7 @@ Follow the repository's Vitest configuration and test conventions before introdu
 ## Workflow
 
 1. Inspect package scripts, Vitest config/projects, setup files, neighboring tests, path aliases, environment selection,
-   and repository instructions. Read [references/configuration.md](references/configuration.md) for config anatomy,
-   projects, environments, and setup files.
+   and repository instructions.
 2. Define the behavior or regression the test must prove. Prefer public behavior and observable outcomes over
    implementation details.
 3. Match local file placement, naming, imports/globals, fixtures, cleanup, DOM utilities, and assertion style. Do not

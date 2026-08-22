@@ -18,10 +18,10 @@ Route GitHub CLI work through current `gh` help and load only the reference for 
 
 ## Boundary with `yeet`
 
-Use `yeet` when the requested outcome is to create or update a pull request, issue, issue comment, or discussion. `yeet`
-owns semantic analysis, repository templates, Paul's writing voice, idempotency, and direct posting. Use this skill for
-read-only GitHub inspection, command syntax, searches, workflow operations, codespaces, releases, configuration, and
-other GitHub automation.
+Use `yeet` to author or update a pull request, issue, issue comment, or discussion. `yeet` owns semantic analysis,
+repository templates, Paul's writing voice, idempotency, and direct posting. Use this skill for read-only GitHub
+inspection, command syntax, searches, workflow operations, codespaces, releases, configuration, and automation that does
+not author contribution content.
 
 ## Authority
 

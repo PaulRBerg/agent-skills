@@ -40,23 +40,17 @@ cache, dependency, and backup noise.
    ai-skillet map "$ARGUMENTS"
    ```
 
-2. If no arguments were provided, run the default machine scan:
+2. Use `--format json` when another command or agent will consume the result.
 
-   ```sh
-   ai-skillet map
-   ```
-
-3. Use `--format json` when another command or agent will consume the result.
-
-4. Use `--portfolio-root <repo> --format json` when comparing repository skills with user-installed Codex and Claude
+3. Use `--portfolio-root <repo> --format json` when comparing repository skills with user-installed Codex and Claude
    Code exposures. Do not add broader home roots.
 
-5. Use `--format dot` when the user asks for a graph, Graphviz input, or dependency visualization.
+4. Use `--format dot` when the user asks for a graph, Graphviz input, or dependency visualization.
 
-6. Use `--include-snippets` when exact matching lines materially improve the result, including when the user asks to see
+5. Use `--include-snippets` when exact matching lines materially improve the result, including when the user asks to see
    them.
 
-7. Read [references/ignore-policy.md](references/ignore-policy.md) only when explaining, auditing, or changing the
+6. Read [references/ignore-policy.md](references/ignore-policy.md) only when explaining, auditing, or changing the
    ignore policy.
 
 ## User-Facing Output
@@ -71,7 +65,7 @@ labels sparingly and keep snippets, local paths, exact edges, commands, and diag
 ## Output Semantics
 
 `ai-skillet map` emits schema version 1. Text is human-readable; JSON is structured for consumers; DOT is Graphviz
-input. Keep JSON and DOT byte-valid and undecorated.
+input.
 
 - Every edge includes `type`, `provenance`, `identifier`, `source`, `target`, `path`, and `line`. Dependency evidence
   uses `provenance: declared` or `inferred`; declared and inferred evidence remain independent records even when they

@@ -219,8 +219,8 @@ n := len("hello")  # "5"
 
 ```just
 # Operating system
-os := os()              # "macos" on this catalog's target machine
-family := os_family()   # "unix" on macOS
+os := os()              # e.g. "macos"
+family := os_family()   # e.g. "unix"
 arch := arch()          # "x86_64", "aarch64", etc.
 
 # just version string (v1.55.0+)

@@ -39,8 +39,8 @@ uv run "<skill-dir>/scripts/profile.py" "<input.pdf>"
 The helper emits schema-versioned JSON with integrity, encryption, page geometry/rotation, image counts, and per-page
 text coverage without document text. Stop on `password_required`; password handling is outside this skill.
 
-Render representative pages whenever layout, cropping, OCR quality, signatures, or form placement matters. Include the
-first and last page, every structural boundary, and any page behind a discrepancy.
+When layout, cropping, OCR quality, signatures, or form placement matters, render the first and last page, every
+structural boundary, and any page behind a discrepancy.
 
 ## Route by Evidence
 

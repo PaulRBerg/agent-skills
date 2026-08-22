@@ -36,10 +36,10 @@ Inspect changes against the filesystem, not git.
 
 2. Verify `TODO.md` exists at the root. If it is missing, stop and report the path checked.
 
-3. Run the helper from this skill directory:
+3. Resolve the skill directory and run its helper:
 
    ```sh
-   uv run python scripts/archive_todo.py --root "$repo_root"
+   uv run python "<skill-dir>/scripts/archive_todo.py" --root "$repo_root"
    ```
 
    Pass through `--hint`, `--date`, or `--dry-run` when the user requested them.

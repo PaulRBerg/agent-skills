@@ -28,7 +28,6 @@ Recommend the current option that best fits the user's actual constraints, backe
 ## Defaults
 
 - With no repository evidence, default to JavaScript/TypeScript and Node.js tooling.
-- Prefer standard-library or platform primitives when adequate.
 - For JavaScript installs, prefer the repository's package manager and otherwise `ni`; for macOS CLIs, prefer an
   official or well-maintained Homebrew formula.
 - Prefer registries, official docs, repositories, changelogs, and security advisories over secondary comparisons. For

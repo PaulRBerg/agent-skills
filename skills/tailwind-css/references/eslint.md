@@ -32,5 +32,3 @@ Use `eslint-plugin-better-tailwindcss` for Tailwind CSS v4 class validation and 
 // ✅ Good: size utility
 <div className="size-6">
 ```
-
-Run the project's ESLint check after modifying Tailwind classes to validate all changes across the codebase.

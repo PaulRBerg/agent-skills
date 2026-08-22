@@ -1,6 +1,7 @@
 # Discussions
 
-> When to read: Read when the user asks to list, view, create, edit, or comment on GitHub Discussions.
+> When to read: Read when the user asks to list or view GitHub Discussions, or needs `gh discussion` syntax outside an
+> authored contribution workflow. Use `yeet` to create, update, or comment on a discussion.
 
 The `gh discussion` command set is in preview and subject to change. A discussion is supplied by number (`123`) or URL.
 
@@ -16,20 +17,6 @@ gh discussion view 123
 gh discussion view 123 --comments
 gh discussion view 123 --order oldest
 
-# Create a discussion non-interactively
-gh discussion create --title "My question" --category "Q&A" --body "Details here"
-gh discussion create --title "Notes" --category general --body-file notes.md --label question
-
-# Edit a discussion
-gh discussion edit 123 --title "New title"
-gh discussion edit 123 --add-label answered --remove-label question
-
-# Add a top-level comment or reply to a comment URL/node ID
-gh discussion comment 123 --body "Thanks!"
-gh discussion comment <comment-url-or-id> --body "Reply text"
-
-# Edit a comment or reply
-gh discussion comment <comment-url-or-id> --edit --body "Updated"
 ```
 
 Use `gh discussion list --search` for discussion searches. For JSON, use current fields such as `answerChosenAt`.

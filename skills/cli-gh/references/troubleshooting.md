@@ -166,15 +166,9 @@ gh api rate_limit --jq '.rate.reset' | xargs -I {} date -r {}
 ```bash
 # Find existing PR
 gh pr list --head feature
-
-# Update existing PR instead
-gh pr edit <number> --title "New title" --body "New description"
-
-# Or checkout and update the branch
-gh pr checkout <number>
-git commit --amend
-git push --force-with-lease
 ```
+
+Use `yeet update-pr` to update the existing PR or publish branch changes.
 
 ### Cannot Merge PR
 
@@ -331,22 +325,6 @@ gh repo set-default owner/repo
 
 # Or use --repo flag
 gh pr list --repo owner/repo
-```
-
-### Editor Not Opening
-
-**Problem:** `gh pr create` doesn't open editor
-
-**Solution:**
-
-```bash
-# Set default editor
-gh config set editor vim
-gh config set editor "code --wait"  # VS Code
-gh config set editor "nano"
-
-# Or use EDITOR environment variable
-export EDITOR=vim
 ```
 
 ### Git Protocol Issues

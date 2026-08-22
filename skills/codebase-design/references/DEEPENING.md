@@ -10,8 +10,8 @@ tested across its seam.
 
 ### 1. In-process
 
-Pure computation, in-memory state, no I/O. Always deepenable — merge the modules and test through the new interface
-directly. No adapter needed.
+Pure computation, in-memory state, no I/O. A strong deepening candidate when merging reduces total complexity; test
+through the new interface directly. No adapter is needed.
 
 ### 2. Local-substitutable
 
