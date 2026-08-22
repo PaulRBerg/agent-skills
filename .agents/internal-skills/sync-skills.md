@@ -80,8 +80,9 @@ their content here, the sync run reads both skills directly:
 8. Single-validation-owner rule: aggregate checks run once, every other agent runs only checks proving its own edits,
    failures confined to files outside every agent's scope attribute to unrelated concurrent work.
 9. Polish-selection rules: `$code-polish` risk-trigger list (file count alone is not a trigger); `$agents-brain polish`
-   targets README/AGENTS/CLAUDE.md and project-installed skills under `.agents/skills`, excluding `skills/`; either,
-   both, or neither pass may run.
+   targets README.md, AGENTS.md, CLAUDE.md, durable context docs, project-installed skills under `.agents/skills`, and
+   existing git-tracked source-catalog skills under `skills/` for prose-only edits; installed copies under managed
+   agent-config roots remain excluded; either, both, or neither pass may run.
 10. Before-launch session-claim guidance: orchestrating session's presence authorizes delegated work; claim owner is
     host-specific.
 11. Platform-agnostic agent prompt requirements: outcome + brief, write scope and dirty-work boundaries, validation

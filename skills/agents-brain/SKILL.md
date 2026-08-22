@@ -8,8 +8,8 @@ name: agents-brain
 skill-dependencies:
   - skill-writing
 description:
-  "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.md, installed project skills, and other Markdown
-  context docs."
+  "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.md, project-installed and source-catalog skills, and
+  other Markdown context docs."
 ---
 
 # Agents Brain
@@ -18,9 +18,10 @@ If these instructions are already present in the conversation from a slash or do
 do not invoke this skill again through a skill tool.
 
 Create or polish repo-local context as one coherent system: human-facing README.md files, agent-facing AGENTS.md files
-with companion CLAUDE.md symlinks, existing project-installed skills under `.agents/skills`, and context docs — any
-other Markdown files, under any name or directory, whose content is durable guidance for agents or humans, such as
-conventions, command catalogs, data-format rules, workflow runbooks, and reference material.
+with companion CLAUDE.md symlinks, existing project-installed skills under `.agents/skills`, eligible source-catalog
+skills under `skills/<name>/`, and context docs — any other Markdown files, under any name or directory, whose content
+is durable guidance for agents or humans, such as conventions, command catalogs, data-format rules, workflow runbooks,
+and reference material.
 
 Success means every selected target is grounded in repository evidence, respects its audience and scope, spends agent
 context only on guidance that changes behavior, and passes the narrowest repository-defined validation. Stop after
@@ -94,12 +95,12 @@ If the intent is unclear, select `polish` in `--dry-run` mode and report the sma
 
 ## Arguments
 
-- `path`: Optional repo-relative subtree. Restrict documentation, package-root, project-skill, and context-doc discovery
-  to that subtree.
-- `target ...`: Optional filters during `polish`: existing `.agents/skills/<name>/` skill names, or repo-relative
-  Markdown paths selecting specific context docs.
-- `--root-only`: Select only root README.md, AGENTS.md, and CLAUDE.md targets. Exclude project skills and context docs
-  unless explicitly selected by `target`.
+- `path`: Optional repo-relative subtree. Restrict documentation, package-root, project-skill, source-catalog skill, and
+  context-doc discovery to that subtree.
+- `target ...`: Optional filters during `polish`: skill names from existing `.agents/skills/<name>/` or eligible
+  `skills/<name>/` trees, or repo-relative Markdown paths selecting specific context docs.
+- `--root-only`: Select only root README.md, AGENTS.md, and CLAUDE.md targets. Exclude project-installed skills,
+  source-catalog skills, and context docs unless explicitly selected by `target`.
 - `--dry-run`: Report planned writes and concise diffs without changing files.
 - `--preserve`: During `polish`, keep accurate user-authored prose and structure; fix only drift and obvious noise.
 - `--minimal`: Produce the smallest context that still meets the completion bar.
@@ -141,21 +142,25 @@ exclude the entire installed `skills/` tree from every workflow. Apply the exclu
 or symlink traversal. If `path`, a `target`, or an explicit request would enter that tree, make no writes there and
 report that the skill must be edited in its source catalog. `--force` does not override this boundary.
 
+Outside managed agent-config roots, eligible git-tracked `skills/<name>/` source catalogs are in scope for `polish` per
+`references/polish.md`.
+
 Snapshot `git status --short` before broad edits. Preserve unrelated pre-existing changes and re-check expected paths
 after generators or broad commands.
 
 ## Shared Constraints
 
 Stay inside the resolved repository and preserve unrelated changes. The selected workflow reference is authoritative for
-README.md, AGENTS.md, CLAUDE.md, and project-skill behavior; do not repeat or broaden its file-specific rules here.
+README.md, AGENTS.md, CLAUDE.md, and skill behavior; do not repeat or broaden its file-specific rules here.
 
 ## Discovery and Tool Routing
 
 Use git-aware discovery, canonicalize every candidate beneath `repo_root`, and exclude VCS, dependency, environment, and
-build outputs. Deliberately include ignored `.agents/skills/*/SKILL.md` only when project skills are selected. Parse
-each selected skill's YAML frontmatter and inspect its declared write boundary before deciding whether it qualifies for
-a coordination exemption. Prefer `fd`, fall back once on suspiciously narrow results, and synthesize independent
-repository evidence before writing.
+build outputs. Deliberately include ignored `.agents/skills/*/SKILL.md` only when project skills are selected. Discover
+git-tracked, non-ignored, non-symlinked `skills/*/SKILL.md` only outside managed agent-config roots and only when
+source-catalog skills are selected. Parse each selected skill's YAML frontmatter. Inspect only a project-installed
+skill's declared write boundary before deciding whether it qualifies for a coordination exemption. Prefer `fd`, fall
+back once on suspiciously narrow results, and synthesize independent repository evidence before writing.
 
 Discover context docs by following Markdown links from README.md, AGENTS.md, CLAUDE.md, and SKILL.md files, then by
 scanning remaining tracked Markdown whose content qualifies. Classify by content, never by file name or location.
@@ -166,8 +171,9 @@ candidate.
 ## Completion and Report
 
 After writes, run repository-defined Markdown formatting or checks when present. If skill frontmatter or
-`agents/openai.yaml` changed in a catalog, run its invocation metadata check. Verify changed CLAUDE.md symlinks resolve
-to sibling AGENTS.md. In `--dry-run`, report commands that would depend on planned files instead of running them.
+`agents/openai.yaml` changed in a project-installed skill, run its invocation metadata check. Verify changed CLAUDE.md
+symlinks resolve to sibling AGENTS.md. In `--dry-run`, report commands that would depend on planned files instead of
+running them.
 
 Lead with `### ✅ Context updated` only after writes and required validation pass,
 `### ⚠️ Context updated — validation failed` when files were written but required checks fail,

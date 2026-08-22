@@ -9,8 +9,8 @@ scope, and no unrelated content or user work is disturbed.
 ## Discover and Inspect
 
 Select existing README.md and AGENTS.md files, sibling CLAUDE.md entries, in-scope context docs, and any in-scope
-project-installed `.agents/skills/<name>/SKILL.md` files. Apply `path`, `--root-only`, and `target` filters before
-reading deeply.
+existing skill targets under `.agents/skills/<name>/` or eligible `skills/<name>/` trees. Apply `path`, `--root-only`,
+and `target` filters before reading deeply.
 
 Use the nearest manifests, task runners, lock files, lint and CI configuration, generated-file notices, and relevant
 source files to verify claims. Check paths, commands, scripts, recipes, environment variables, ownership rules, default
@@ -98,6 +98,8 @@ reference material — wherever they live and whatever they are named:
 
 - Verify commands, paths, flags, formats, environment variables, versions, and rules against the repository with the
   same rigor as AGENTS.md.
+- When repository instructions assign a document class to a repository-owned lifecycle or workflow, fix only factual
+  drift in those docs and report structural or placement changes as recommendations.
 - Preserve each doc's audience, depth, structure, and voice; a deep reference stays a deep reference. Do not compress it
   to AGENTS.md terseness or inline it into AGENTS.md.
 - Fix broken links between context docs, README.md, AGENTS.md, and skills. Do not move or rename docs.
@@ -105,13 +107,19 @@ reference material — wherever they live and whatever they are named:
   deep doc nothing links to; perform the move only with explicit confirmation.
 - Report an obsolete doc whose central subject no longer exists as a deletion candidate; never delete or hollow it out.
 
-## Project Skill Decisions
+## Skill Decisions
 
-Only update existing project-installed skills under `.agents/skills`. A minimal factual fix may touch SKILL.md or its
-existing bundled files. Never target catalog `skills/<name>/`, create skill or bundled files, or change a skill's
-purpose or structure.
+Polish only these existing skill classes:
 
-For each selected skill:
+- Project-installed skills under `.agents/skills`. A minimal factual fix may touch SKILL.md or its existing bundled
+  files.
+- Source-catalog skills under `skills/<name>/` when `SKILL.md` is git-tracked, the tree is neither ignored nor
+  symlinked, and the repository root is neither a managed agent-config root nor nested under one, as enforced by the
+  Repository Guard Rail. Edit only the SKILL.md body and existing bundled Markdown, such as files under `references/`.
+
+Never create, delete, or rename skill or bundled files, or change a skill's purpose or structure.
+
+For a project-installed skill:
 
 - Confirm frontmatter parses and `name` matches the directory. Fix only mechanical, unambiguous drift.
 - Classify its declared default write boundary. If it writes no repository files or only repository metadata, add
@@ -121,6 +129,13 @@ For each selected skill:
 - Otherwise, omit `coordination`; remove a stale `coordination: exempt` field and its matching standard body sentence
   when repository evidence establishes that the exemption is unsafe. Do not invent another `coordination` value. Keep
   frontmatter fields alphabetized, with `description` last.
+
+For a source-catalog skill, treat frontmatter, `agents/openai.yaml`, `metadata.install-targets`, the bundled-file set,
+and file structure as report-only. Report drift in those surfaces or in the skill's purpose as recommendations; never
+edit them.
+
+For each selected skill:
+
 - Verify referenced `references/`, `scripts/`, `assets/`, and `examples/` paths relative to the skill directory.
 - Read only the bundled files needed to verify paths, commands, flags, environment variables, versions, symbols,
   ownership, and repository conventions.

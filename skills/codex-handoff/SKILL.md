@@ -162,9 +162,9 @@ Require `$code-polish` for nonlocal invariants, concurrency or state machines, m
 retry or error semantics, and public API or data-contract changes. File count alone is not a trigger.
 
 Require `$agents-brain polish` when approved work changes a target its polish workflow supports: README.md, AGENTS.md or
-CLAUDE.md, a durable context doc, or an existing project-installed skill under `.agents/skills`. Source catalog skills
-under `skills/` stay outside that workflow. Mark both passes required when both trigger rules apply; mark neither when
-neither applies.
+CLAUDE.md, a durable context doc, an existing project-installed skill under `.agents/skills`, or an existing git-tracked
+source-catalog skill under `skills/` where polish is prose-only. Installed copies under managed agent-config roots
+remain excluded. Mark both passes required when both trigger rules apply; mark neither when neither applies.
 
 Do not launch implementation agents until the user approves the plan. Read-only research is the only pre-approval
 exception.
