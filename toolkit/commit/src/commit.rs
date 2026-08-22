@@ -31,7 +31,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         }
         TransactionStatus::Pushed => {
             let oid = transaction.commit_oid.as_deref().unwrap_or("unknown");
-            println!("PUSHED {} {oid}", transaction.id);
+            println!("PUSHED {} {}", transaction.id, short_oid(oid));
             return Ok(());
         }
         TransactionStatus::Prepared | TransactionStatus::Committed => {}
@@ -196,7 +196,8 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     }
     if env::var_os("AI_COMMIT_TEST_FAIL_AFTER_REF_UPDATE").is_some() {
         return Err(AppError::retry(format!(
-            "commit {commit_oid} was created before an injected interruption; retry commit {}",
+            "commit {} was created before an injected interruption; retry commit {}",
+            short_oid(&commit_oid),
             transaction.id
         )));
     }
@@ -204,14 +205,16 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     mark_committed(&mut transaction, &commit_oid);
     store.save(&transaction).map_err(|error| {
         AppError::retry(format!(
-            "commit {commit_oid} was created, but its receipt could not be advanced: {error}; retry commit {}",
+            "commit {} was created, but its receipt could not be advanced: {error}; retry commit {}",
+            short_oid(&commit_oid),
             transaction.id
         ))
     })?;
     reconcile_shared_index(&repository, &transaction, &commit_tree, &final_paths, &mut index_lock, temporary.path())
         .map_err(|error| {
             AppError::retry(format!(
-                "commit {commit_oid} was created, but shared-index reconciliation failed: {error}; retry commit {}",
+                "commit {} was created, but shared-index reconciliation failed: {error}; retry commit {}",
+                short_oid(&commit_oid),
                 transaction.id
             ))
         })?;
@@ -223,7 +226,8 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     transaction.terminal_at = Some(now_seconds());
     store.save(&transaction).map_err(|error| {
         AppError::retry(format!(
-            "commit {commit_oid} was created and reconciled, but its terminal receipt could not be saved: {error}; retry commit {}",
+            "commit {} was created and reconciled, but its terminal receipt could not be saved: {error}; retry commit {}",
+            short_oid(&commit_oid),
             transaction.id
         ))
     })?;
@@ -285,7 +289,8 @@ fn recover_after_ref_update(
         } else {
             return Err(AppError::retry(format!(
                 "commit {} exists but is no longer reachable from branch {}; reconcile the branch before retrying",
-                pending.commit_oid, transaction.branch
+                short_oid(&pending.commit_oid),
+                transaction.branch
             )));
         }
     }
@@ -306,7 +311,7 @@ fn recover_after_ref_update(
             |error| {
                 AppError::retry(format!(
                     "commit {} exists, but shared-index reconciliation still failed: {error}",
-                    pending.commit_oid
+                    short_oid(&pending.commit_oid)
                 ))
             },
         )?;
@@ -319,7 +324,8 @@ fn recover_after_ref_update(
     store.save(transaction).map_err(|error| {
         AppError::retry(format!(
             "commit {} was recovered and reconciled, but its terminal receipt could not be saved: {error}; retry commit {}",
-            pending.commit_oid, transaction.id
+            short_oid(&pending.commit_oid),
+            transaction.id
         ))
     })?;
     Ok(true)
@@ -367,7 +373,8 @@ fn apply_prepared_delta(
     if !output.status.success() {
         let detail = git_error(output).message;
         return Err(AppError::retry(format!(
-            "prepared changes do not apply cleanly to current branch base {current_base}: {detail}"
+            "prepared changes do not apply cleanly to current branch base {}: {detail}",
+            short_oid(current_base)
         )));
     }
     Ok(())
@@ -689,12 +696,18 @@ fn reconcile_shared_index(
     Ok(())
 }
 
+// Receipts and diagnostics abbreviate commit OIDs for display; journal state,
+// refs, and `show` retain full OIDs for CAS and replay.
+fn short_oid(oid: &str) -> &str {
+    oid.get(..12).unwrap_or(oid)
+}
+
 fn print_commit_receipt(transaction: &Transaction) {
     for path in &transaction.hook_added {
         println!("HOOK_ADDED {path}");
     }
     if let Some(oid) = &transaction.commit_oid {
-        println!("COMMITTED {} {oid}", transaction.id);
+        println!("COMMITTED {} {}", transaction.id, short_oid(oid));
     }
 }
 

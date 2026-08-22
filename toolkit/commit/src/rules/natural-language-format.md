@@ -1,63 +1,30 @@
 # Natural Language Format
 
-Use this format only when `--natural` is present. Write a human-readable commit subject in the spirit of Common
-Changelog entries: present-tense, imperative, impact-focused, and self-describing. Do not add a Conventional Commits
-prefix.
+Write a present-tense, imperative, impact-focused subject in the spirit of Common Changelog: `Verb object/context`,
+with no Conventional Commits prefix.
 
-## Verb Selection
+## Verb
 
-Choose the leading verb from the dominant user-visible intent, not the largest file diff or the presence of
-dependency/config churn. Common Changelog's core wording is useful, but do not stop at `Change`, `Add`, `Remove`, and
-`Fix` when a sharper verb exists.
+Choose the leading verb from the dominant user-visible intent, not the largest file diff or dependency/config churn.
+If a dependency bump only enables a migration, refactor, or fix, use that verb instead of `Bump`. Explicit leading
+verb or category keywords in arguments override inference; normalize lowercase or past-tense keywords (`Changed`,
+`Added`, `Removed`, `Fixed`) to these imperative forms.
 
-| Behavior                                            | Leading verb          |
-| --------------------------------------------------- | --------------------- |
-| New functionality                                   | `Add`                 |
-| Bug fix / error handling                            | `Fix`                 |
-| Existing behavior or API change                     | `Change`              |
-| Removed functionality                               | `Remove`              |
-| Deprecated functionality                            | `Deprecate`           |
-| Code migration or API adaptation without new UX/API | `Refactor`            |
-| Code reorganization, no behavior change             | `Refactor`            |
-| Documentation                                       | `Document`            |
-| Tests                                               | `Test`                |
-| Build system or local tooling                       | `Configure`, `Build`  |
-| CI/CD pipelines                                     | `Configure`           |
-| Dependency-only maintenance                         | `Bump`                |
-| Formatting / whitespace only                        | `Format`              |
-| Performance                                         | `Improve`, `Speed up` |
-| Security                                            | `Harden`              |
-| Reverting previous commit                           | `Revert`              |
-| AI config (CLAUDE.md, .claude/, .gemini/, .codex/)  | `Update`              |
-| Other maintenance                                   | `Update`              |
+- `Add` — new functionality; `Fix` — bug fix or error handling
+- `Change` — meaningful behavior or API change only
+- `Remove` — removed functionality; `Deprecate` — deprecated functionality
+- `Refactor` — code migration, API adaptation, or reorganization without behavior change
+- `Document` — documentation; `Test` — tests; `Format` — formatting/whitespace only
+- `Configure`/`Build` — build system, local tooling, CI/CD
+- `Bump` — dependency-only maintenance
+- `Improve`/`Speed up` — performance; `Harden` — security; `Revert` — reverting a previous commit
+- `Update` — AI config (CLAUDE.md, .claude/, .gemini/, .codex/) and other maintenance
 
-Use `Change` only for a meaningful behavior/API change. For maintenance, prefer a more precise verb such as `Configure`,
-`Bump`, `Document`, or `Refactor`.
+## Subject and Body
 
-If a dependency bump only enables a migration/refactor/fix, choose the migration/refactor/fix verb instead of `Bump`.
-
-Explicit leading verb/category keywords in arguments take precedence over inference. Normalize lowercase keywords and
-`Changed`, `Added`, `Removed`, and `Fixed` to the table's imperative forms.
-
-## Subject
-
-- Subject line (\<= 72 chars, prefer \<= 50 when it still reads naturally): `Verb object/context`
-- Capitalize the leading verb and proper nouns only
-- No trailing period
-- Describe what the change does, not which files changed
-- Keep the subject self-describing without relying on a category label
-- Do not add `type:`, `type(scope):`, ticket IDs, or changelog headings
-
-Examples:
-
-- `Add natural-language commit messages`
-- `Fix commit hook retry handling`
-- `Remove stale release helper`
-- `Refactor API client setup`
-- `Bump Foundry from 1.x to 2.x`
-
-## Body
-
-- Use hyphenated lines for distinct changes, focusing on why the change exists
-- Skip the body for trivial changes
+- Subject line (\<= 72 chars, prefer \<= 50 when it still reads naturally), e.g. `Fix commit hook retry handling`
+- Capitalize only the leading verb and proper nouns; no trailing period; no `type:` prefixes, ticket IDs, or
+  changelog headings
+- Describe what the change does, not which files changed; keep the subject self-describing
+- Body: hyphenated lines focused on why the change exists; skip it for trivial changes
 - For breaking changes, add `BREAKING CHANGE:` plus a one-line migration note

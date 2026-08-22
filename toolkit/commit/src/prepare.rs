@@ -103,7 +103,6 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
                 "core.quotePath=false",
                 "diff",
                 "--no-color",
-                "--binary",
                 "--no-ext-diff",
                 "--no-textconv",
                 &base_head,
@@ -114,6 +113,13 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         )?)
     } else {
         None
+    };
+    let (full_diff, diff_truncations) = match full_diff {
+        Some(diff) => {
+            let (kept, truncations) = truncate_full_diff(&diff, DIFF_FILE_LINE_LIMIT);
+            (Some(kept), truncations)
+        }
+        None => (None, Vec::new()),
     };
 
     let id = allocate_id(store)?;
@@ -154,7 +160,7 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         let _ = repository.delete_refs(&transaction.references());
         return Err(error);
     }
-    print_prepared(&transaction, args.porcelain, full_diff.as_deref(), &baselines);
+    print_prepared(&transaction, args.porcelain, full_diff.as_deref(), &diff_truncations, &baselines);
     Ok(())
 }
 
@@ -588,7 +594,55 @@ fn bounded_ai_coord(repository_root: &Path, subcommand: &str, limit: u64, timeou
     Some(bytes)
 }
 
-fn print_prepared(transaction: &Transaction, porcelain: bool, full_diff: Option<&str>, baselines: &[Baseline]) {
+const DIFF_FILE_LINE_LIMIT: usize = 400;
+
+// Display-only cap: over-limit per-file sections are cut with a disclosure record;
+// the prepared tree, name-status, shortstat, and paths stay complete.
+fn truncate_full_diff(diff: &str, limit: usize) -> (String, Vec<(String, usize)>) {
+    let mut output = String::with_capacity(diff.len());
+    let mut truncations: Vec<(String, usize)> = Vec::new();
+    let mut path = String::new();
+    let mut kept = 0usize;
+    let mut omitted = 0usize;
+    for line in diff.lines() {
+        if line.starts_with("diff --git ") {
+            if omitted > 0 {
+                truncations.push((path.clone(), omitted));
+            }
+            path = line
+                .strip_prefix("diff --git a/")
+                .and_then(|rest| rest.split(" b/").next())
+                .unwrap_or_default()
+                .to_owned();
+            kept = 0;
+            omitted = 0;
+        } else if let Some(new_path) = line.strip_prefix("+++ b/") {
+            path = new_path.to_owned();
+        }
+        if kept < limit {
+            output.push_str(line);
+            output.push('\n');
+            kept += 1;
+        } else {
+            omitted += 1;
+        }
+    }
+    if omitted > 0 {
+        truncations.push((path, omitted));
+    }
+    if output.ends_with('\n') {
+        output.pop();
+    }
+    (output, truncations)
+}
+
+fn print_prepared(
+    transaction: &Transaction,
+    porcelain: bool,
+    full_diff: Option<&str>,
+    diff_truncations: &[(String, usize)],
+    baselines: &[Baseline],
+) {
     if porcelain {
         println!("PREPARED\t{}", transaction.id);
         println!("FORMAT\t{}", transaction.message_format.label());
@@ -609,6 +663,9 @@ fn print_prepared(transaction: &Transaction, porcelain: bool, full_diff: Option<
         if let Some(diff) = full_diff {
             for line in diff.lines() {
                 println!("DIFF\t{}", escape_tsv(line));
+            }
+            for (path, omitted) in diff_truncations {
+                println!("DIFF_TRUNCATED\t{}\t{omitted}", escape_tsv(path));
             }
         }
         for path in &transaction.paths {
@@ -635,6 +692,9 @@ fn print_prepared(transaction: &Transaction, porcelain: bool, full_diff: Option<
     println!("\n## shortstat\n{}", transaction.shortstat);
     if let Some(diff) = full_diff {
         println!("\n## diff\n{diff}");
+        for (path, omitted) in diff_truncations {
+            println!("DIFF_TRUNCATED {path} ({omitted} more lines)");
+        }
     }
     println!("\n## commit paths");
     for path in &transaction.paths {

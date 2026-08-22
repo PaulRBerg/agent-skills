@@ -9,7 +9,7 @@ $ ai-commit prepare -- src/main.rs
 PREPARED 0123456789abcdef
 ...
 $ ai-commit commit 0123456789abcdef -m "feat: add safe transactions"
-COMMITTED 0123456789abcdef 89abcdef...
+COMMITTED 0123456789abcdef 89abcdef0123
 ```
 
 ## Installation
@@ -90,6 +90,12 @@ usage error. Explicit `--natural` or `--conventional` always wins for that prepa
 backslash-escaped. Outcome records use `PREPARED`, `COMMITTED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and
 `DISCARDED`. Each automatically applied exclusion is disclosed as `AUTO_BASELINE<tab>path<tab>oid`; the ordinary
 output lists the same pairs under `auto-applied baselines`.
+
+Receipts and retryable diagnostics print a fixed 12-character commit OID abbreviation; `show` and the transaction
+journal retain full OIDs. The `--diff full` display diff omits binary patch payloads and caps each file's section at
+400 lines, disclosing every cut as `DIFF_TRUNCATED<tab>path<tab>omitted-line-count` (ordinary output:
+`DIFF_TRUNCATED path (N more lines)` after the diff). Truncation is display-only: the prepared tree, name-status,
+shortstat, and path records stay complete.
 
 Exit status `0` means success or an idempotent replay, `2` means invalid invocation or configuration, and `3` means the
 repository was left safe but needs a retry or reconciliation. Other Git, hook, signing, and push failures return `1`.

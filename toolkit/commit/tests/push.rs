@@ -136,7 +136,7 @@ fn commit_push_receipt_replays_without_duplicate_commit() {
     assert!(stdout(&output).contains("PUSHED main"));
     let created = harness.git(["rev-parse", "HEAD"]);
     let replay = harness.success(["commit", &transaction, "-m", "ignored", "--push"]);
-    assert!(stdout(&replay).starts_with(&format!("PUSHED {transaction} {created}")));
+    assert!(stdout(&replay).starts_with(&format!("PUSHED {transaction} {}\n", &created[..12])));
     assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "2");
 }
 
@@ -171,7 +171,7 @@ fn commit_push_behind_receipt_retries_push_without_duplicate_commit() {
     let created = harness.git(["rev-parse", "HEAD"]);
     let replay = harness.command(["commit", &transaction, "-m", "ignored", "--push"]);
     assert_eq!(exit_code(&replay), 3);
-    assert!(stdout(&replay).contains(&format!("COMMITTED {transaction} {created}")));
+    assert!(stdout(&replay).contains(&format!("COMMITTED {transaction} {}\n", &created[..12])));
     assert_eq!(harness.git(["rev-parse", "HEAD"]), created);
     assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "2");
 }

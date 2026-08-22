@@ -464,7 +464,7 @@ fn post_ref_interruption_recovers_without_duplicate_commit() {
 
     harness.write("intended.txt", "later worktree\n");
     let recovered = harness.success(["commit", &transaction, "-m", "ignored retry message"]);
-    assert!(stdout(&recovered).contains(&format!("COMMITTED {transaction} {created}")));
+    assert!(stdout(&recovered).contains(&format!("COMMITTED {transaction} {}\n", &created[..12])));
     assert_eq!(harness.git(["rev-parse", "HEAD"]), created);
     assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "2");
     assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
@@ -486,7 +486,7 @@ fn recovery_after_descendant_commit_reconciles_index_to_current_head() {
     let descendant = advance_head(&harness, "descendant\n", "advance after interrupted commit");
 
     let recovered = harness.success(["commit", &transaction, "-m", "ignored retry message"]);
-    assert!(stdout(&recovered).contains(&format!("COMMITTED {transaction} {created}")));
+    assert!(stdout(&recovered).contains(&format!("COMMITTED {transaction} {}\n", &created[..12])));
     assert_eq!(harness.git(["rev-parse", "HEAD"]), descendant);
     assert_eq!(harness.git(["show", ":intended.txt"]), "descendant");
     assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "3");

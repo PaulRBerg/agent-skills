@@ -173,6 +173,25 @@ fn porcelain_is_stable_tsv_with_exact_evidence() {
 }
 
 #[test]
+fn full_diff_caps_each_file_and_discloses_truncation() {
+    let harness = Harness::new("diff-cap");
+    harness.write("big.txt", "base\n");
+    harness.write("small.txt", "base\n");
+    harness.commit_all("base");
+    let big: String = (0..500).map(|index| format!("line {index}\n")).collect();
+    harness.write("big.txt", &big);
+    harness.write("small.txt", "changed\n");
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", "big.txt", "small.txt"]);
+    let output = stdout(&output);
+    let truncated =
+        output.lines().find(|line| line.starts_with("DIFF_TRUNCATED\t")).expect("big file diff is truncated");
+    assert!(truncated.starts_with("DIFF_TRUNCATED\tbig.txt\t"));
+    assert!(output.contains("DIFF\t+changed\n"));
+    assert!(!output.contains("DIFF_TRUNCATED\tsmall.txt"));
+    assert!(!output.contains("DIFF\t+line 499\n"));
+}
+
+#[test]
 fn staged_and_all_modes_capture_their_documented_scope() {
     let staged = Harness::new("staged");
     staged.write("one.txt", "base\n");
