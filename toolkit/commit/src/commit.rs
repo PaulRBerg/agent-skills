@@ -566,7 +566,7 @@ impl HookSnapshot {
         index: &Path,
         prepared_tree: &str,
         validation_index: &Path,
-        include_local_dependencies: bool,
+        include_local_artifacts: bool,
     ) -> Result<Self> {
         let git_dir = repository.git_dir()?;
         let mut builder = Builder::new();
@@ -595,8 +595,8 @@ impl HookSnapshot {
         }
         fs::write(worktree.path().join(".git"), format!("gitdir: {}\n", git_dir.display()))
             .map_err(|error| AppError::retry(format!("cannot configure temporary hook worktree: {error}")))?;
-        if include_local_dependencies {
-            link_ignored_node_modules(repository, index, worktree.path())?;
+        if include_local_artifacts {
+            project_ignored_directories(repository, index, worktree.path())?;
         }
         copy_file(index, validation_index)?;
         Ok(Self { worktree, validation_index: validation_index.to_path_buf() })
@@ -611,69 +611,103 @@ impl HookSnapshot {
     }
 }
 
-fn link_ignored_node_modules(repository: &Repository, index: &Path, worktree: &Path) -> Result<()> {
-    let source = repository.root.join("node_modules");
-    let metadata = match fs::metadata(&source) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(AppError::retry(format!(
-                "cannot inspect local dependency directory {}: {error}",
-                source.display()
-            )));
+fn project_ignored_directories(repository: &Repository, index: &Path, worktree: &Path) -> Result<()> {
+    let untracked = repository.bytes(["ls-files", "--others", "--directory", "-z"], Some(index))?;
+    let mut directory_records = Vec::new();
+    for record in untracked.split(|byte| *byte == 0).filter(|record| record.ends_with(b"/")) {
+        directory_records.extend_from_slice(record);
+        directory_records.push(0);
+    }
+    let mut directories = decode_nul_paths(&directory_records)?;
+    for directory in &mut directories {
+        directory.pop();
+    }
+    directories.sort_by(|left, right| {
+        Path::new(left).components().count().cmp(&Path::new(right).components().count()).then_with(|| left.cmp(right))
+    });
+    let mut roots = Vec::<PathBuf>::new();
+    for directory in directories {
+        let relative = PathBuf::from(&directory);
+        if roots.iter().any(|ancestor| relative.starts_with(ancestor)) {
+            continue;
         }
-    };
-    if !metadata.is_dir() {
-        return Ok(());
+        roots.push(relative);
     }
 
-    let destination = worktree.join("node_modules");
-    match fs::symlink_metadata(&destination) {
-        Ok(_) => return Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => {
-            return Err(AppError::retry(format!(
-                "cannot inspect prepared dependency path {}: {error}",
+    let mut prepared = Vec::<(String, PathBuf, PathBuf)>::new();
+    for relative in roots {
+        let source = repository.root.join(&relative);
+        let metadata = match fs::metadata(&source) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(AppError::retry(format!(
+                    "cannot inspect ignored local directory {}: {error}",
+                    source.display()
+                )));
+            }
+        };
+        if !metadata.is_dir() {
+            continue;
+        }
+
+        let destination = worktree.join(&relative);
+        match fs::symlink_metadata(&destination) {
+            Ok(_) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(AppError::retry(format!(
+                    "cannot inspect prepared local-artifact path {}: {error}",
+                    destination.display()
+                )));
+            }
+        }
+        let Some(parent) = destination.parent() else {
+            continue;
+        };
+        if !parent.is_dir() {
+            continue;
+        }
+
+        fs::create_dir(&destination).map_err(|error| {
+            AppError::retry(format!(
+                "cannot create prepared local-artifact directory {}: {error}",
                 destination.display()
-            )));
-        }
+            ))
+        })?;
+        prepared.push((relative.to_string_lossy().into_owned(), source, destination));
     }
 
-    fs::create_dir(&destination).map_err(|error| {
-        AppError::retry(format!("cannot create prepared dependency directory {}: {error}", destination.display()))
+    let candidates = prepared.iter().map(|(relative, _, _)| relative.clone()).collect::<Vec<_>>();
+    let ignored = repository.ignored_paths_in_worktree(&candidates, index, worktree).map_err(|error| {
+        AppError::retry(format!("cannot inspect ignored local directories for prepared validation: {error}"))
     })?;
-    let ignored =
-        repository.raw_in_worktree(["check-ignore", "--quiet", "--", "node_modules"], Some(index), worktree)?;
-    if ignored.status.code() == Some(1) {
-        fs::remove_dir(&destination).map_err(|error| {
-            AppError::retry(format!(
-                "cannot remove unused prepared dependency directory {}: {error}",
-                destination.display()
-            ))
-        })?;
-        return Ok(());
-    }
-    if !ignored.status.success() {
-        return Err(AppError::retry(format!(
-            "cannot determine whether node_modules is ignored for prepared validation: {}",
-            git_error(ignored)
-        )));
-    }
-
-    for entry in fs::read_dir(&source).map_err(|error| {
-        AppError::retry(format!("cannot read local dependency directory {}: {error}", source.display()))
-    })? {
-        let entry = entry.map_err(|error| {
-            AppError::retry(format!("cannot read local dependency entry under {}: {error}", source.display()))
-        })?;
-        let linked_path = destination.join(entry.file_name());
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(entry.path(), &linked_path).map_err(|error| {
-            AppError::retry(format!(
-                "cannot expose local dependency at {} for prepared validation: {error}",
-                linked_path.display()
-            ))
-        })?;
+    let ignored = ignored.into_iter().collect::<BTreeSet<_>>();
+    for (relative, source, destination) in prepared {
+        if !ignored.contains(&relative) {
+            fs::remove_dir(&destination).map_err(|error| {
+                AppError::retry(format!(
+                    "cannot remove unused prepared local-artifact directory {}: {error}",
+                    destination.display()
+                ))
+            })?;
+            continue;
+        }
+        for entry in fs::read_dir(&source).map_err(|error| {
+            AppError::retry(format!("cannot read ignored local directory {}: {error}", source.display()))
+        })? {
+            let entry = entry.map_err(|error| {
+                AppError::retry(format!("cannot read ignored local entry under {}: {error}", source.display()))
+            })?;
+            let linked_path = destination.join(entry.file_name());
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(entry.path(), &linked_path).map_err(|error| {
+                AppError::retry(format!(
+                    "cannot expose ignored local artifact at {} for prepared validation: {error}",
+                    linked_path.display()
+                ))
+            })?;
+        }
     }
     Ok(())
 }

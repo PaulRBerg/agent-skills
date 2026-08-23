@@ -10,8 +10,8 @@
   worktree, while preserving normal hook mutation behavior for matching transactions.
 - Add an optional repository-local argv-only prepared-tree validation command, frozen at preparation and run directly
   before verification hooks (including with `--no-verify`), with isolated Git state, retryable failure, and rejection
-  of validator content drift. Ignored root `node_modules` dependencies remain resolvable from the materialization.
-  Existing repositories and journals without the option retain their behavior.
+  of validator content drift. Ignored local dependency and evidence directories remain resolvable from the
+  materialization. Existing repositories and journals without the option retain their behavior.
 - Print 12-character commit OID abbreviations in receipts and retryable diagnostics; `show` and the journal keep full
   OIDs.
 - Condense the printed message-format rules and cap the `--diff full` display at 400 lines per file (disclosed via

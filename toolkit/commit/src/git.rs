@@ -181,6 +181,35 @@ impl Repository {
         if output.status.success() { Ok(()) } else { Err(git_error(output)) }
     }
 
+    pub fn ignored_paths_in_worktree(&self, paths: &[String], index: &Path, worktree: &Path) -> Result<Vec<String>> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut input = Vec::new();
+        for path in paths {
+            input.extend_from_slice(path.as_bytes());
+            input.push(0);
+        }
+        let mut command = self.command_in_worktree(Some(index), worktree)?;
+        command
+            .args(["check-ignore", "-z", "--stdin"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = command
+            .spawn()
+            .map_err(|error| AppError::operational(format!("cannot execute git check-ignore: {error}")))?;
+        child.stdin.take().expect("piped stdin").write_all(&input)?;
+        let output = child.wait_with_output().map_err(AppError::from)?;
+        if output.status.success() {
+            return decode_nul_paths(&output.stdout);
+        }
+        if output.status.code() == Some(1) {
+            return Ok(Vec::new());
+        }
+        Err(git_error(output))
+    }
+
     pub fn run_snapshot_hook(
         &self,
         hook: &str,

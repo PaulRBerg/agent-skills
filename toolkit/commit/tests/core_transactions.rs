@@ -352,28 +352,35 @@ fn prepared_validation_runs_directly_in_the_complete_prepared_tree() {
 }
 
 #[test]
-fn prepared_validation_can_resolve_ignored_root_node_modules() {
-    let harness = Harness::new("prepared-validation-node-modules");
+fn prepared_validation_can_resolve_ignored_local_directories() {
+    let harness = Harness::new("prepared-validation-local-directories");
     let validator = harness.root.join("validator");
     write_executable(
         &validator,
-        "#!/bin/sh\nset -eu\ntest \"$PWD\" != \"$AI_COMMIT_ORIGINAL_WORKTREE\"\ntest \"$(cat node_modules/@example/tool/marker.txt)\" = dependency\ntest \"$(git check-ignore node_modules)\" = node_modules\n",
+        "#!/bin/sh\nset -eu\ntest \"$PWD\" != \"$AI_COMMIT_ORIGINAL_WORKTREE\"\ntest \"$(cat node_modules/@example/tool/marker.txt)\" = dependency\ntest \"$(cat .artifacts/reviews/evidence.md)\" = evidence\ntest \"$(cat workspace/bin/tool)\" = tool\ntest \"$(git check-ignore node_modules)\" = node_modules\ntest \"$(git check-ignore .artifacts)\" = .artifacts\ntest \"$(git check-ignore workspace/bin)\" = workspace/bin\n",
     );
     harness.write(".gitignore", "node_modules/\n");
     harness.write("intended.txt", "base\n");
+    harness.write("workspace/owner.txt", "tracked\n");
     harness.write(
         ".agents/commit.toml",
         &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
     );
     harness.commit_all("base");
+    harness.write(".gitignore", "node_modules/\n.artifacts/\nworkspace/bin/\n");
     harness.write("node_modules/@example/tool/marker.txt", "dependency\n");
+    harness.write(".artifacts/reviews/evidence.md", "evidence\n");
+    harness.write("workspace/bin/tool", "tool\n");
     harness.write("intended.txt", "prepared\n");
 
-    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let (transaction, _) = harness.prepare(&[".gitignore", "intended.txt"]);
     harness.success(["commit", &transaction, "-m", "test: resolve ignored dependencies"]);
 
     assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(harness.git(["show", "HEAD:.gitignore"]), "node_modules/\n.artifacts/\nworkspace/bin/");
     assert_eq!(harness.read("node_modules/@example/tool/marker.txt"), "dependency\n");
+    assert_eq!(harness.read(".artifacts/reviews/evidence.md"), "evidence\n");
+    assert_eq!(harness.read("workspace/bin/tool"), "tool\n");
 }
 
 #[test]
