@@ -95,9 +95,11 @@ Git verification hooks, from a temporary complete materialization of the exact p
 worktree has changed and even with `--no-verify`. The validator receives `GIT_DIR` for the physical repository,
 `GIT_WORK_TREE` and `GIT_INDEX_FILE` for the materialization, `AI_COMMIT_VALIDATION_MODE=prepared-tree`, and
 `AI_COMMIT_ORIGINAL_WORKTREE` for the canonical physical root; inherited conflicting Git and ai-commit hook variables
-are cleared or replaced. A nonzero exit, or a validator that changes tracked worktree or staged/index content, admits
-no changes and leaves the transaction prepared for retry. Repositories without `[validation]` retain the existing
-hook, signing, push, receipt, and physical-worktree behavior; journals created before this option remain loadable.
+are cleared or replaced. An ignored `node_modules` at the physical repository root is available in the materialization
+so checked-in task runners can resolve installed tooling; validators must treat those dependencies as read-only. A
+nonzero exit, or a validator that changes tracked worktree or staged/index content, admits no changes and leaves the
+transaction prepared for retry. Repositories without `[validation]` retain the existing hook, signing, push, receipt,
+and physical-worktree behavior; journals created before this option remain loadable.
 
 `prepare --porcelain` emits stable TSV records. Tabs, newlines, carriage returns, and backslashes inside fields are
 backslash-escaped. Outcome records use `PREPARED`, `COMMITTED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and

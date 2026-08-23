@@ -24,7 +24,8 @@ model.
   materialization of the complete prepared index. Those hooks may edit the message but must not modify tracked content.
 - An optional repository validation argv is frozen into the prepared transaction and always runs directly against a
   complete materialization of that prepared tree before verification hooks, including with `--no-verify`. It receives
-  an isolated Git environment; failure or detected tracked/index drift leaves the transaction prepared and retryable.
+  an isolated Git environment; the physical root's ignored `node_modules` remains available for read-only dependency
+  resolution. Failure or detected tracked/index drift leaves the transaction prepared and retryable.
 - Normal verification hooks retain their existing physical-worktree behavior, and `post-commit` always runs from the
   physical worktree without the snapshot-check environment.
 - Never remove an index lock that this process did not create. Hold the owned lock through ref CAS and index

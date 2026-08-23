@@ -113,6 +113,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
             &commit_index,
             &before_hook_tree,
             &temporary.path().join("snapshot-validation-index"),
+            validation_configured,
         )?)
     } else {
         None
@@ -565,6 +566,7 @@ impl HookSnapshot {
         index: &Path,
         prepared_tree: &str,
         validation_index: &Path,
+        include_local_dependencies: bool,
     ) -> Result<Self> {
         let git_dir = repository.git_dir()?;
         let mut builder = Builder::new();
@@ -593,6 +595,9 @@ impl HookSnapshot {
         }
         fs::write(worktree.path().join(".git"), format!("gitdir: {}\n", git_dir.display()))
             .map_err(|error| AppError::retry(format!("cannot configure temporary hook worktree: {error}")))?;
+        if include_local_dependencies {
+            link_ignored_node_modules(repository, index, worktree.path())?;
+        }
         copy_file(index, validation_index)?;
         Ok(Self { worktree, validation_index: validation_index.to_path_buf() })
     }
@@ -604,6 +609,73 @@ impl HookSnapshot {
     fn validation_index(&self) -> &Path {
         &self.validation_index
     }
+}
+
+fn link_ignored_node_modules(repository: &Repository, index: &Path, worktree: &Path) -> Result<()> {
+    let source = repository.root.join("node_modules");
+    let metadata = match fs::metadata(&source) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(AppError::retry(format!(
+                "cannot inspect local dependency directory {}: {error}",
+                source.display()
+            )));
+        }
+    };
+    if !metadata.is_dir() {
+        return Ok(());
+    }
+
+    let destination = worktree.join("node_modules");
+    match fs::symlink_metadata(&destination) {
+        Ok(_) => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(AppError::retry(format!(
+                "cannot inspect prepared dependency path {}: {error}",
+                destination.display()
+            )));
+        }
+    }
+
+    fs::create_dir(&destination).map_err(|error| {
+        AppError::retry(format!("cannot create prepared dependency directory {}: {error}", destination.display()))
+    })?;
+    let ignored =
+        repository.raw_in_worktree(["check-ignore", "--quiet", "--", "node_modules"], Some(index), worktree)?;
+    if ignored.status.code() == Some(1) {
+        fs::remove_dir(&destination).map_err(|error| {
+            AppError::retry(format!(
+                "cannot remove unused prepared dependency directory {}: {error}",
+                destination.display()
+            ))
+        })?;
+        return Ok(());
+    }
+    if !ignored.status.success() {
+        return Err(AppError::retry(format!(
+            "cannot determine whether node_modules is ignored for prepared validation: {}",
+            git_error(ignored)
+        )));
+    }
+
+    for entry in fs::read_dir(&source).map_err(|error| {
+        AppError::retry(format!("cannot read local dependency directory {}: {error}", source.display()))
+    })? {
+        let entry = entry.map_err(|error| {
+            AppError::retry(format!("cannot read local dependency entry under {}: {error}", source.display()))
+        })?;
+        let linked_path = destination.join(entry.file_name());
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(entry.path(), &linked_path).map_err(|error| {
+            AppError::retry(format!(
+                "cannot expose local dependency at {} for prepared validation: {error}",
+                linked_path.display()
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 fn create_commit(

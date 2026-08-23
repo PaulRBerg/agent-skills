@@ -352,6 +352,52 @@ fn prepared_validation_runs_directly_in_the_complete_prepared_tree() {
 }
 
 #[test]
+fn prepared_validation_can_resolve_ignored_root_node_modules() {
+    let harness = Harness::new("prepared-validation-node-modules");
+    let validator = harness.root.join("validator");
+    write_executable(
+        &validator,
+        "#!/bin/sh\nset -eu\ntest \"$PWD\" != \"$AI_COMMIT_ORIGINAL_WORKTREE\"\ntest \"$(cat node_modules/@example/tool/marker.txt)\" = dependency\ntest \"$(git check-ignore node_modules)\" = node_modules\n",
+    );
+    harness.write(".gitignore", "node_modules/\n");
+    harness.write("intended.txt", "base\n");
+    harness.write(
+        ".agents/commit.toml",
+        &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
+    );
+    harness.commit_all("base");
+    harness.write("node_modules/@example/tool/marker.txt", "dependency\n");
+    harness.write("intended.txt", "prepared\n");
+
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    harness.success(["commit", &transaction, "-m", "test: resolve ignored dependencies"]);
+
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(harness.read("node_modules/@example/tool/marker.txt"), "dependency\n");
+}
+
+#[test]
+fn snapshot_hooks_without_validation_do_not_resolve_ignored_root_node_modules() {
+    let harness = Harness::new("snapshot-hook-no-node-modules");
+    harness.write(".gitignore", "node_modules/\n");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("node_modules/@example/tool/marker.txt", "dependency\n");
+    harness.write("intended.txt", "prepared\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    harness.write("intended.txt", "physical worktree changed after prepare\n");
+    write_executable(
+        &harness.repo.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nset -eu\ntest \"${AI_COMMIT_HOOK_MODE:-}\" = snapshot-check\ntest ! -e node_modules/@example/tool/marker.txt\n",
+    );
+
+    harness.success(["commit", &transaction, "-m", "test: preserve snapshot hook dependencies"]);
+
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(harness.read("node_modules/@example/tool/marker.txt"), "dependency\n");
+}
+
+#[test]
 fn prepared_validation_failure_is_retryable_without_shared_state_changes() {
     let harness = Harness::new("prepared-validation-failure");
     harness.write("intended.txt", "base\n");
