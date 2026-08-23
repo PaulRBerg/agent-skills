@@ -5,7 +5,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, ExitStatus, Output, Stdio},
 };
 
 use crate::error::{AppError, Result};
@@ -205,6 +205,39 @@ impl Repository {
             .output()
             .map_err(|error| AppError::operational(format!("cannot execute hook {}: {error}", hook_path.display())))?;
         Ok(Some(output))
+    }
+
+    pub fn run_prepared_validation(&self, argv: &[String], index: &Path, worktree: &Path) -> Result<ExitStatus> {
+        let (program, arguments) = argv
+            .split_first()
+            .ok_or_else(|| AppError::operational("prepared validation command is empty in the transaction journal"))?;
+        let mut command = Command::new(program);
+        command
+            .args(arguments)
+            .current_dir(worktree)
+            .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+            .env_remove("GIT_COMMON_DIR")
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_GRAFT_FILE")
+            .env_remove("GIT_IMPLICIT_WORK_TREE")
+            .env_remove("GIT_INDEX_FILE")
+            .env_remove("GIT_NAMESPACE")
+            .env_remove("GIT_OBJECT_DIRECTORY")
+            .env_remove("GIT_PREFIX")
+            .env_remove("GIT_REPLACE_REF_BASE")
+            .env_remove("GIT_SHALLOW_FILE")
+            .env_remove("GIT_WORK_TREE")
+            .env_remove("AI_COMMIT_HOOK_MODE")
+            .env_remove("AI_COMMIT_ORIGINAL_WORKTREE")
+            .env_remove("AI_COMMIT_VALIDATION_MODE")
+            .env("GIT_DIR", self.git_dir()?)
+            .env("GIT_INDEX_FILE", index)
+            .env("GIT_WORK_TREE", worktree)
+            .env("AI_COMMIT_ORIGINAL_WORKTREE", &self.root)
+            .env("AI_COMMIT_VALIDATION_MODE", "prepared-tree");
+        command.status().map_err(|error| {
+            AppError::operational(format!("cannot execute prepared validation command {program}: {error}"))
+        })
     }
 
     pub fn with_input<I, S>(&self, args: I, input: &[u8], index: Option<&Path>) -> Result<Output>

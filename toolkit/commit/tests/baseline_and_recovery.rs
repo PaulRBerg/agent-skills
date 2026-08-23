@@ -9,6 +9,22 @@ const BASELINE: &str = "line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 
 const WORKTREE: &str = "line 01\nline 02 stray\nline 03\nline 04\nline 05\nline 06 original\nline 07\nline 08\nline 09\nline 10\nline 11 agent\nline 12\nline 13\nline 14\n";
 
 #[test]
+fn legacy_transaction_without_validation_command_remains_loadable() {
+    let harness = Harness::new("legacy-validation-command");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let journal_path = harness.transaction_json(&transaction);
+    let mut journal: serde_json::Value = serde_json::from_str(&fs::read_to_string(&journal_path).unwrap()).unwrap();
+    journal.as_object_mut().unwrap().remove("validation_command");
+    fs::write(&journal_path, serde_json::to_vec_pretty(&journal).unwrap()).unwrap();
+
+    harness.success(["commit", &transaction, "-m", "test: legacy transaction"]);
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+}
+
+#[test]
 fn baseline_exclusion_commits_only_baseline_to_worktree_delta() {
     let harness = Harness::new("baseline");
     harness.write("intended.txt", BASE);

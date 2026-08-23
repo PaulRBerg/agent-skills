@@ -290,6 +290,173 @@ fn no_verify_bypasses_retryable_verification_hooks() {
 }
 
 #[test]
+fn prepared_validation_runs_directly_in_the_complete_prepared_tree() {
+    let harness = Harness::new("prepared-validation-environment");
+    harness.write("intended.txt", "base\n");
+    harness.write("sibling.txt", "base sibling\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    harness.write("sibling.txt", "prepared sibling\n");
+    let validator = harness.root.join("validator");
+    let log = harness.root.join("validation.log");
+    let shell_marker = harness.root.join("must-not-exist");
+    let literal_argument = format!("$VALIDATION_LITERAL; touch {}", shell_marker.display());
+    write_executable(
+        &validator,
+        "#!/bin/sh\nset -eu\ntest \"$1\" = \"$EXPECTED_LITERAL\"\ntest \"$(cat intended.txt)\" = prepared\ntest \"$(cat sibling.txt)\" = 'prepared sibling'\ntest \"$(git diff --cached --name-only)\" = 'intended.txt\nsibling.txt'\ntest -z \"$(git diff --name-only)\"\ntest \"${GIT_INDEX_FILE##*.lock}\" = \"$GIT_INDEX_FILE\"\ntest \"$AI_COMMIT_VALIDATION_MODE\" = prepared-tree\ntest \"$AI_COMMIT_ORIGINAL_WORKTREE\" = \"$EXPECTED_ORIGINAL\"\ntest -z \"${AI_COMMIT_HOOK_MODE:-}\"\ntest -z \"${GIT_PREFIX:-}\"\nprintf '%s\\t%s\\t%s\\t%s\\n' \"$PWD\" \"$GIT_DIR\" \"$GIT_WORK_TREE\" \"$GIT_INDEX_FILE\" > \"$VALIDATION_LOG\"\n",
+    );
+    harness.write(
+        ".agents/commit.toml",
+        &format!(
+            "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\", \"{}\"]\n",
+            validator.display(),
+            literal_argument
+        ),
+    );
+    let (transaction, _) = harness.prepare(&["intended.txt", "sibling.txt"]);
+    harness.write("intended.txt", "physical worktree changed after prepare\n");
+    let log_text = log.to_string_lossy().into_owned();
+    let original = harness.repo.canonicalize().unwrap().to_string_lossy().into_owned();
+    let inherited = "inherited".to_owned();
+    let inherited_prefix = "inherited/".to_owned();
+    let expanded_literal = "expanded".to_owned();
+    harness.success_with_env(
+        ["commit", &transaction, "-m", "test: prepared validation"],
+        [
+            ("VALIDATION_LOG", &log_text),
+            ("EXPECTED_ORIGINAL", &original),
+            ("EXPECTED_LITERAL", &literal_argument),
+            ("VALIDATION_LITERAL", &expanded_literal),
+            ("AI_COMMIT_VALIDATION_MODE", &inherited),
+            ("AI_COMMIT_ORIGINAL_WORKTREE", &inherited),
+            ("AI_COMMIT_HOOK_MODE", &inherited),
+            ("GIT_PREFIX", &inherited_prefix),
+        ],
+    );
+
+    let validation_log = fs::read_to_string(log).unwrap();
+    let fields: Vec<_> = validation_log.trim_end().split('\t').collect();
+    assert_eq!(fields.len(), 4, "unexpected validation log: {fields:?}");
+    assert_ne!(fields[0], original);
+    assert_eq!(fields[0], fields[2]);
+    assert_eq!(fields[1], harness.repo.join(".git").canonicalize().unwrap().to_string_lossy());
+    assert_eq!(
+        std::path::Path::new(fields[3]).file_name().and_then(|name| name.to_str()),
+        Some("snapshot-validation-index")
+    );
+    assert_ne!(fields[3], harness.repo.join(".git/index").to_string_lossy());
+    assert!(!shell_marker.exists());
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(harness.git(["show", "HEAD:sibling.txt"]), "prepared sibling");
+    assert_eq!(harness.read("intended.txt"), "physical worktree changed after prepare\n");
+}
+
+#[test]
+fn prepared_validation_failure_is_retryable_without_shared_state_changes() {
+    let harness = Harness::new("prepared-validation-failure");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let validator = harness.root.join("validator");
+    write_executable(&validator, "#!/bin/sh\nprintf 'intentional validation failure\\n' >&2\nexit 23\n");
+    harness.write(
+        ".agents/commit.toml",
+        &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
+    );
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let head_before = harness.git(["rev-parse", "HEAD"]);
+    let index_before = harness.git(["hash-object", ".git/index"]);
+    let transaction_ref = format!("refs/ai-commit/transactions/{transaction}");
+    let ref_before = harness.git(["rev-parse", &transaction_ref]);
+    let worktree_before = harness.read("intended.txt");
+
+    let failed = harness.command(["commit", &transaction, "-m", "test: validation failure"]);
+    assert_eq!(exit_code(&failed), 1, "{}", stderr(&failed));
+    assert!(stderr(&failed).contains("intentional validation failure"), "{}", stderr(&failed));
+    assert!(stderr(&failed).contains("prepared validation failed with exit status: 23"), "{}", stderr(&failed));
+    assert!(stdout(&harness.success(["show", &transaction])).starts_with(&format!("PREPARED {transaction}\n")));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), head_before);
+    assert_eq!(harness.git(["hash-object", ".git/index"]), index_before);
+    assert_eq!(harness.git(["rev-parse", &transaction_ref]), ref_before);
+    assert_eq!(harness.read("intended.txt"), worktree_before);
+
+    write_executable(&validator, "#!/bin/sh\nexit 0\n");
+    harness.success(["commit", &transaction, "-m", "test: validation retry"]);
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+}
+
+#[test]
+fn prepared_validation_runs_with_no_verify_while_verification_hooks_are_bypassed() {
+    let harness = Harness::new("prepared-validation-no-verify");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let validator = harness.root.join("validator");
+    let validation_marker = harness.root.join("validation-ran");
+    let hook_marker = harness.root.join("hook-ran");
+    write_executable(&validator, "#!/bin/sh\n: > \"$VALIDATION_MARKER\"\n");
+    for hook in ["pre-commit", "commit-msg"] {
+        write_executable(
+            &harness.repo.join(".git/hooks").join(hook),
+            "#!/bin/sh\n: > \"$HOOK_MARKER\"\nprintf 'verification hook should be bypassed\\n' >&2\nexit 91\n",
+        );
+    }
+    harness.write(
+        ".agents/commit.toml",
+        &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
+    );
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let validation_marker_text = validation_marker.to_string_lossy().into_owned();
+    let hook_marker_text = hook_marker.to_string_lossy().into_owned();
+    harness.success_with_env(
+        ["commit", &transaction, "-m", "test: no verify validation", "--no-verify"],
+        [("VALIDATION_MARKER", &validation_marker_text), ("HOOK_MARKER", &hook_marker_text)],
+    );
+    assert!(validation_marker.exists());
+    assert!(!hook_marker.exists());
+}
+
+#[test]
+fn prepared_validation_content_drift_is_rejected_without_admitting_changes() {
+    for (name, mutation) in [
+        ("worktree", "printf 'validation mutation\\n' > intended.txt\n"),
+        ("staged", "printf 'validation mutation\\n' > intended.txt\ngit add -- intended.txt\n"),
+    ] {
+        let harness = Harness::new(&format!("prepared-validation-drift-{name}"));
+        harness.write("intended.txt", "base\n");
+        harness.commit_all("base");
+        harness.write("intended.txt", "prepared\n");
+        let validator = harness.root.join("validator");
+        write_executable(&validator, &format!("#!/bin/sh\nset -eu\n{mutation}"));
+        harness.write(
+            ".agents/commit.toml",
+            &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
+        );
+        let (transaction, _) = harness.prepare(&["intended.txt"]);
+        let head_before = harness.git(["rev-parse", "HEAD"]);
+        let index_before = harness.git(["hash-object", ".git/index"]);
+
+        let failed = harness.command(["commit", &transaction, "-m", "test: reject validation drift"]);
+        assert_eq!(exit_code(&failed), 1, "{name}: {}", stderr(&failed));
+        let diagnostic = stderr(&failed);
+        assert!(
+            diagnostic.contains("prepared validation modified tracked or staged content: intended.txt"),
+            "{name}: {diagnostic}"
+        );
+        assert!(diagnostic.contains("validation changes were not admitted"), "{name}: {diagnostic}");
+        assert!(
+            diagnostic.contains(&format!("transaction {transaction} remains prepared and retryable")),
+            "{name}: {diagnostic}"
+        );
+        assert!(stdout(&harness.success(["show", &transaction])).starts_with(&format!("PREPARED {transaction}\n")));
+        assert_eq!(harness.git(["rev-parse", "HEAD"]), head_before, "{name}");
+        assert_eq!(harness.git(["hash-object", ".git/index"]), index_before, "{name}");
+        assert_eq!(harness.read("intended.txt"), "prepared\n", "{name}");
+        assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "base", "{name}");
+    }
+}
+
+#[test]
 fn directory_expansion_handles_file_directory_replacements() {
     let harness = Harness::new("file-directory");
     harness.write("node/child.txt", "child\n");

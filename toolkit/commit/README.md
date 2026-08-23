@@ -81,10 +81,23 @@ Message format configuration is repository-local at `<git-root>/.agents/commit.t
 ```toml
 [message]
 format = "natural"
+
+[validation]
+command = ["cargo", "test", "--locked"]
 ```
 
 `format` must be `"natural"` or `"conventional"`. An absent file defaults to conventional format; an invalid file is a
 usage error. Explicit `--natural` or `--conventional` always wins for that preparation.
+
+`validation.command` is optional. When configured, it must be one non-empty argv vector (no shell form, empty argv
+elements, or NUL bytes). `prepare` freezes that argv in its journal. Every later `commit` executes it directly before
+Git verification hooks, from a temporary complete materialization of the exact prepared tree—even when the physical
+worktree has changed and even with `--no-verify`. The validator receives `GIT_DIR` for the physical repository,
+`GIT_WORK_TREE` and `GIT_INDEX_FILE` for the materialization, `AI_COMMIT_VALIDATION_MODE=prepared-tree`, and
+`AI_COMMIT_ORIGINAL_WORKTREE` for the canonical physical root; inherited conflicting Git and ai-commit hook variables
+are cleared or replaced. A nonzero exit, or a validator that changes tracked worktree or staged/index content, admits
+no changes and leaves the transaction prepared for retry. Repositories without `[validation]` retain the existing
+hook, signing, push, receipt, and physical-worktree behavior; journals created before this option remain loadable.
 
 `prepare --porcelain` emits stable TSV records. Tabs, newlines, carriage returns, and backslashes inside fields are
 backslash-escaped. Outcome records use `PREPARED`, `COMMITTED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and

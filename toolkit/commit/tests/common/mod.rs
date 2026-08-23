@@ -174,6 +174,17 @@ impl Harness {
         assert_success(self.command(args), "ai-commit")
     }
 
+    pub fn success_with_env<I, S, E, K, V>(&self, args: I, environment: E) -> Output
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+        E: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        assert_success(self.command_with_env(args, environment), "ai-commit")
+    }
+
     pub fn prepare(&self, paths: &[&str]) -> (String, String) {
         let mut arguments = vec!["prepare", "--porcelain", "--"];
         arguments.extend_from_slice(paths);

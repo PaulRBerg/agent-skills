@@ -45,7 +45,7 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
     };
     let intended_paths = normalize_inputs(&repository, &args.paths)?;
     let baselines = parse_baselines(&repository, &args, &intended_paths)?;
-    let format = select_format(&repository, &args)?;
+    let repository_config = config::load(&repository.root, message_format_override(&args))?;
 
     let temporary = Builder::new().prefix("prepare-").tempdir_in(store.temporary())?;
     let shared_index = repository.git_path("index")?;
@@ -132,7 +132,8 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         unborn,
         prepared_tree: prepared_tree.clone(),
         shared_index_tree,
-        message_format: format,
+        message_format: repository_config.message_format,
+        validation_command: repository_config.validation_command,
         trailer,
         paths,
         name_status,
@@ -177,13 +178,13 @@ fn validate_mode(args: &PrepareArgs) -> Result<()> {
     Ok(())
 }
 
-fn select_format(repository: &Repository, args: &PrepareArgs) -> Result<MessageFormat> {
+fn message_format_override(args: &PrepareArgs) -> Option<MessageFormat> {
     if args.natural {
-        Ok(MessageFormat::Natural)
+        Some(MessageFormat::Natural)
     } else if args.conventional {
-        Ok(MessageFormat::Conventional)
+        Some(MessageFormat::Conventional)
     } else {
-        config::message_format(&repository.root)
+        None
     }
 }
 

@@ -88,6 +88,63 @@ fn invalid_local_config_is_a_usage_error_that_identifies_the_path() {
 }
 
 #[test]
+fn validation_command_config_is_argv_only_and_rejects_invalid_shapes() {
+    let harness = Harness::new("validation-config");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let config_path = harness.repo.join(".agents/commit.toml");
+
+    for source in [
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = \"true\"\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = []\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"\"]\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"\\u0000\"]\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"true\"]\nextra = true\n",
+    ] {
+        harness.write(".agents/commit.toml", source);
+        let invalid = harness.command(["prepare", "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        let error = stderr(&invalid);
+        assert!(error.contains("invalid config"), "{error}");
+        assert!(error.contains(&config_path.to_string_lossy().into_owned()), "{error}");
+    }
+}
+
+#[test]
+fn validation_command_is_optional_and_frozen_when_prepared() {
+    let absent = Harness::new("validation-absent");
+    absent.write("intended.txt", "base\n");
+    absent.commit_all("base");
+    absent.write("intended.txt", "changed\n");
+    let (transaction, _) = absent.prepare(&["intended.txt"]);
+    let journal: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(absent.transaction_json(&transaction)).unwrap()).unwrap();
+    assert!(journal["validation_command"].is_null());
+
+    let configured = Harness::new("validation-frozen");
+    configured.write("intended.txt", "base\n");
+    configured.commit_all("base");
+    configured.write("intended.txt", "changed\n");
+    let validator = configured.root.join("validator");
+    let marker = configured.root.join("validator-ran");
+    write_executable(&validator, "#!/bin/sh\nset -eu\nprintf 'ran\\n' > \"$VALIDATION_MARKER\"\n");
+    configured.write(
+        ".agents/commit.toml",
+        &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
+    );
+    let (transaction, _) = configured.prepare(&[".agents/commit.toml", "intended.txt"]);
+    configured.write(".agents/commit.toml", "[message]\nformat = \"conventional\"\n");
+    let marker_text = marker.to_string_lossy().into_owned();
+    configured.success_with_env(
+        ["commit", &transaction, "-m", "test: frozen validation"],
+        [("VALIDATION_MARKER", &marker_text)],
+    );
+    assert_eq!(fs::read_to_string(marker).unwrap(), "ran\n");
+    assert!(configured.git(["show", "HEAD:.agents/commit.toml"]).contains("[validation]"));
+}
+
+#[test]
 fn explicit_format_overrides_local_config() {
     let harness = Harness::new("config-override");
     harness.write("intended.txt", "base\n");
@@ -101,6 +158,31 @@ fn explicit_format_overrides_local_config() {
     harness.write(".agents/commit.toml", "not valid TOML");
     let natural = harness.success(["prepare", "--porcelain", "--natural", "--", "intended.txt"]);
     assert_format(&natural, "natural");
+}
+
+#[test]
+fn explicit_format_does_not_bypass_declared_validation_configuration() {
+    let harness = Harness::new("validation-config-override");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n[validation]\ncommand = [\"true\"]\n");
+    for (flag, format) in [("--natural", "natural"), ("--conventional", "conventional")] {
+        let prepared = harness.success(["prepare", "--porcelain", flag, "--", "intended.txt"]);
+        assert_format(&prepared, format);
+        let transaction = prepared_id(&stdout(&prepared));
+        let journal: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(harness.transaction_json(&transaction)).unwrap()).unwrap();
+        assert_eq!(journal["validation_command"], serde_json::json!(["true"]));
+    }
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n[validation]\ncommand = []\n");
+    for flag in ["--natural", "--conventional"] {
+        let invalid = harness.command(["prepare", "--porcelain", flag, "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        assert!(stderr(&invalid).contains("validation.command"), "{}", stderr(&invalid));
+    }
 }
 
 #[test]

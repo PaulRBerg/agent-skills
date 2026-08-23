@@ -63,6 +63,8 @@ pub struct Transaction {
     pub prepared_tree: String,
     pub shared_index_tree: String,
     pub message_format: MessageFormat,
+    #[serde(default)]
+    pub validation_command: Option<Vec<String>>,
     pub trailer: Option<String>,
     pub paths: Vec<String>,
     pub name_status: String,

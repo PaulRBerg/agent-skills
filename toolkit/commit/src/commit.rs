@@ -99,12 +99,15 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     let message_file = temporary.path().join("commit-message");
     write_message(&message_file, &args.messages)?;
 
-    let hook_snapshot = if intended_paths_differ_from_worktree(
-        &repository,
-        &commit_index,
-        &transaction.paths,
-        &temporary.path().join("worktree-comparison-index"),
-    )? {
+    let validation_configured = transaction.validation_command.is_some();
+    let needs_hook_snapshot = validation_configured ||
+        intended_paths_differ_from_worktree(
+            &repository,
+            &commit_index,
+            &transaction.paths,
+            &temporary.path().join("worktree-comparison-index"),
+        )?;
+    let hook_snapshot = if needs_hook_snapshot {
         Some(HookSnapshot::materialize(
             &repository,
             &commit_index,
@@ -114,6 +117,21 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     } else {
         None
     };
+
+    if let Some(command) = transaction.validation_command.as_deref() {
+        let snapshot = hook_snapshot.as_ref().expect("configured validation requires a complete snapshot");
+        let status = repository.run_prepared_validation(command, snapshot.validation_index(), snapshot.root())?;
+        if !status.success() {
+            return Err(AppError::operational(format!(
+                "prepared validation failed with {status}; transaction {} remains prepared and retryable",
+                transaction.id
+            )));
+        }
+        let drift = snapshot_drift_paths(&repository, snapshot.validation_index(), snapshot, &before_hook_tree)?;
+        if !drift.is_empty() {
+            return Err(prepared_validation_drift_error(&transaction.id, &drift));
+        }
+    }
 
     if !args.no_verify {
         run_verification_hook(
@@ -524,6 +542,14 @@ fn snapshot_drift_error(transaction_id: &str, paths: &[String]) -> AppError {
          an unchanged retry will repeat; run `ai-commit discard {transaction_id}`, apply only owned hook-required \
          changes without altering excluded baseline bytes, then prepare a new transaction. If satisfying the hook \
          would change baseline-owned bytes, wait for or contact the owner instead.",
+        paths.join(", ")
+    ))
+}
+
+fn prepared_validation_drift_error(transaction_id: &str, paths: &[String]) -> AppError {
+    AppError::operational(format!(
+        "prepared validation modified tracked or staged content: {}; validation changes were not admitted and \
+         transaction {transaction_id} remains prepared and retryable",
         paths.join(", ")
     ))
 }
