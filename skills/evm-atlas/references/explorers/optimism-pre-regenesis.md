@@ -106,6 +106,21 @@ Chrome DevTools may run bounded, read-only Dune queries. Executing a query may c
 unsaved by default; saving, publishing, scheduling, or otherwise externally persisting one requires explicit authority.
 Never put a private hash, wallet, position identifier, or financial value into this installable reference.
 
+As of `2026-09-10`, Dune's Free plan is view-only: public dashboards, query source, and data collections remain
+viewable, but exact-hash table lookups and parameterized address-dashboard results require query execution on a paid
+plan. Affected existing accounts received temporary Plus access through `2026-09-24`, with 2,500 trial credits. The
+unsaved browser workflow needs only query execution, so Dune advertises Analyst as sufficient; Plus is not required for
+this route. Never purchase or upgrade without explicit authority.
+
+Treat a missing execution entitlement or exhausted credit balance as a provider-plan coverage gap, not historical
+absence. Chromium does not bypass server-side plan enforcement, and viewing or copying a public query does not produce
+fresh address-parameterized or exact-hash results. Dune's older pricing FAQ and the OVM1 dashboard copy may still
+mention free executions or free credits; resolve entitlement from the live pricing page and the credentialed account.
+
+Separately, Dune's Application Service Addendum directs programmatic interaction to its API service. Chrome DevTools
+automation may be considered programmatic even when it drives the graphical site. Do not represent a paid browser
+workflow as terms-cleared; prefer a supported API or MCP route for repeated automation, or obtain Dune clarification.
+
 ## Deeper Fallback
 
 For the January-July 2021 period, Optimism documents partial loss of transaction execution effects, including emitted
@@ -123,3 +138,5 @@ costly, and may remain incomplete. Do not require it when the Dune packet alread
 - DuneSQL varbinary literals: `https://docs.dune.com/query-engine/datatypes#varbinary`
 - Dune query execution and credit behavior: `https://docs.dune.com/query-engine/query-executions`
 - OVM1 address dashboard: `https://dune.com/optimismfnd/OVM1.0-User-Address-Transactions`
+- Dune pricing: `https://dune.com/pricing`
+- Dune Application Service Addendum: `https://dune.com/application-terms`
