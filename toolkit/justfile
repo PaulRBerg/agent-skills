@@ -43,10 +43,10 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Run all workspace and application checks.
 @check: rust-check coord-dashboard-check handoffs-check
 
+cli_packages := "commit coord handoff notify skillet"
+
 # Install all local CLI packages under ~/.local.
 @install-cli:
-    cargo install --path commit --locked --force --root "$HOME/.local"
-    cargo install --path coord --locked --force --root "$HOME/.local"
-    cargo install --path handoff --locked --force --root "$HOME/.local"
-    cargo install --path notify --locked --force --root "$HOME/.local"
-    cargo install --path skillet --locked --force --root "$HOME/.local"
+    for pkg in {{cli_packages}}; do \
+        cargo install --quiet --path "$pkg" --locked --force --root "$HOME/.local"; \
+    done
