@@ -9,7 +9,7 @@ stale_lock_seconds=60
 
 usage() {
   cat >&2 <<'EOF'
-Usage: fetch-guidance.sh [--refresh] <gpt-5p6|claude-fable-5>
+Usage: fetch-guidance.sh [--refresh] <gpt-6-astra|claude-fable-5-1>
 
 Reuse fresh cached prompting guides and revalidate older fixed official artifacts.
 Prints the absolute cached file path on stdout.
@@ -34,15 +34,15 @@ fi
 
 artifact=$1
 case "$artifact" in
-  gpt-5p6)
-    source_url='https://developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6.md'
-    body_name='gpt-5p6-prompting.md'
-    content_marker='# Prompting guidance for GPT-5.6 Sol'
+  gpt-6-astra)
+    source_url='https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra.md'
+    body_name='gpt-6-astra-prompting.md'
+    content_marker='# Using GPT-6 Astra'
     ;;
-  claude-fable-5)
-    source_url='https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5.md'
-    body_name='claude-fable-5-prompting.md'
-    content_marker='title: Prompting Claude Fable 5'
+  claude-fable-5-1)
+    source_url='https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1.md'
+    body_name='claude-fable-5-1-prompting.md'
+    content_marker='title: Prompting Claude Fable 5.1'
     ;;
   *)
     die "unknown artifact '$artifact'" 64
