@@ -28,8 +28,7 @@ only those paths. If the worktree is clean but `main` is ahead, run `ai-commit p
 touching global installations and report that branch reconciliation is required.
 
 Keep this work under the source-repository claim through its commit and push, then run `ai-coord done` for that claim
-before acquiring any target. Home-directory target roots sort before this source repository, so retaining the source
-claim would violate atomic root ordering.
+before acquiring the target bundle.
 
 ### 2. Plan Once, After the Push
 
@@ -46,14 +45,14 @@ Append the resolved `--skill` filters only for explicit commit-range mode (see S
 ### 3. Acquire Every Target, Then Apply
 
 The plan's `repos` array IS the claim set. Resolve every reported `root` to its canonical physical string with
-`cd <root> && pwd -P`, sort strictly by that string, and acquire each repo in that order. `canonical` is informational:
-never use it for ordering or serialization. In each root, claim exactly every reported `paths` entry — `--recursive` for
-`scope: "recursive"`, a plain file scope for `scope: "file"` — and retain every earlier `READY` claim while acquiring
-later roots.
+`cd <root> && pwd -P`, then combine each root with its reported `paths` entries. Submit every resulting absolute path in
+one `ai-coord bundle start 'publish catalog skills'` command: use repeated `--recursive '<absolute-dir>'` arguments for
+`scope: "recursive"` and plain `'<absolute-file>'` arguments for `scope: "file"`. `canonical` is informational; include
+every reported repository. Do not acquire roots with separate `ai-coord start` calls.
 
-Require `READY` for every reported target before apply. On `BLOCKED` or `UNKNOWN`, run `ai-coord wait` in that
-repository without releasing any earlier root, then acquire it again. Re-plan only if the source `HEAD` or the planned
-mutation paths changed while waiting; preserve every still-valid earlier claim when doing so. Do not apply over
+Require `READY` for the complete bundle before apply. On blocked, dirty-settling, or unknown coverage, run
+`ai-coord wait`, then resubmit the full bundle after each wake; a wake is not authorization. Re-plan only if the source
+`HEAD` or the planned mutation paths changed while waiting, then submit the complete updated bundle. Do not apply over
 contested paths. The CLI process/state lock is outside repository coordination and commits: never claim or commit it.
 
 `repos` already omits shared-skill Claude symlinks that apply cannot mutate — after apply, confirm `~/.claude` shows no
@@ -68,17 +67,19 @@ Never issue separate `bunx skills` commands or edit the CLI lock. The helper req
 at most one add per target group, removes only deleted or stale entries, verifies the result, and prints every global
 path whose final state changed.
 
-If apply fails after partial progress, preserve its completed-command list and retain every target claim. Commit and
-push only its reported paths, then re-plan and retry the remainder once with the same expected HEAD. A second failure
-blocks: report the failed command, completed groups, and changed paths.
+If apply fails after partial progress, preserve its completed-command list and retain the complete target bundle. Commit
+and push only its reported paths, then re-plan and retry the remainder once with the same expected HEAD. A second
+failure blocks: report the failed command, completed groups, and changed paths.
 
 ### 4. Commit Reported Global Paths and Release Claims
 
-Group `Changed global paths` by reported repo root. Keep every claim acquired in step 3; never perform a post-apply
-`start`. For each repo with reported changed paths, commit and push only those paths, then run `ai-coord done` in that
-repo. For a repo with no reported diff, first confirm it has no diff, then release its claim. Never claim unreported
-skills, unrelated dirty paths, or the CLI process/state lock. A dirty-settling result on a reported publisher-written
-path is a regression, not expected waiting: preserve all claims and stop with the evidence.
+Group `Changed global paths` by reported repo root. Retain the complete bundle acquired in step 3 through every target
+commit and push; never perform a post-apply `start`. For each repo with reported changed paths, commit and push only
+those paths. For a repo with no reported diff, confirm its planned paths have no diff. Once every target's changes are
+pushed or verified absent, run `ai-coord done` once to release the entire bundle; it does not release only the current
+repository. Never claim unreported skills, unrelated dirty paths, or the CLI process/state lock. A dirty-settling result
+on a reported publisher-written path is a regression, not expected waiting: preserve the bundle and stop with the
+evidence.
 
 ### 5. Final Check
 
