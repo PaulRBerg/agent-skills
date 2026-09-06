@@ -27,9 +27,9 @@ boundary.
   authoritative target-mainnet rows.
 - If a chain is absent, do not route through another provider, web search, Chainlist, or an unlisted RPC to work around
   scope. Ask for a feature request at <https://github.com/PaulRBerg/agent-skills>.
-- Own every discrete read handed off by `cli-cast`, including chain, block, fee, nonce, `eth_call`, `eth_estimateGas`,
-  transaction, receipt, log, balance, code, storage, proof, and ENS queries. Complete the read here even when its result
-  will prepare, simulate, or verify later state-changing work.
+- Own every discrete read and bounded live subscription handed off by `cli-cast`, including chain, block, fee, nonce,
+  `eth_call`, `eth_estimateGas`, transaction, receipt, log, balance, code, storage, proof, and ENS queries. Complete the
+  read here even when its result will prepare, simulate, or verify later state-changing work.
 - Never sign messages, submit signatures, execute bridge steps, or broadcast transactions. Route state-changing Cast
   work to `cli-cast`.
 - DEX support is historical and evidence-only. Do not discover live quotes, construct or simulate new trades, prepare
@@ -48,9 +48,9 @@ boundary.
 
 ## Routing
 
-1. For a discrete JSON-RPC read or batch, including one handed off by `cli-cast`, resolve the chain and read
-   `references/workflows/provider-routing.md`. Return the resolved chain, provider route, result, observed block or
-   checkpoint, and coverage gaps. Do not route the read back to `cli-cast`.
+1. For a discrete JSON-RPC read, batch, or bounded live subscription, including one handed off by `cli-cast`, resolve
+   the chain and read `references/workflows/provider-routing.md`. Return the resolved chain, provider route, result,
+   observed block or checkpoint, and coverage gaps. Do not route the read back to `cli-cast`.
 2. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
    read `references/workflows/blockscan-balances.md` first.
 3. For a specific transaction hash on a named chain, resolve the chain against

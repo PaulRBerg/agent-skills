@@ -18,10 +18,10 @@ construction.
 
 ## Resolve Chain and Provider
 
-Invoke `$evm-atlas` before every network operation. It owns chain resolution and all discrete reads. Pass the explicit
-chain name or ID, JSON-RPC method and exact parameters or call object, block selector or checkpoint requirement, and why
-the result is needed. Require its read packet containing the resolved chain name and ID, provider route, result,
-observed block or checkpoint, and coverage gaps.
+Invoke `$evm-atlas` before every network operation. It owns chain resolution, discrete reads, and bounded live
+subscriptions. Pass the explicit chain name or ID, JSON-RPC method and exact parameters or call object, block selector
+or checkpoint requirement, and why the result is needed. Require its read packet containing the resolved chain name and
+ID, provider route, result, observed block or checkpoint, and coverage gaps.
 
 If the chain is absent from `evm-atlas`, stop RPC-dependent work. Do not accept an arbitrary RPC URL as an escape hatch
 and never infer Ethereum when the chain is ambiguous.
@@ -114,9 +114,11 @@ upgrade to Normal or Fast as a fallback. A browser-wallet user may override thos
 confirmation UI as described under Review. These requirements do not apply to message or typed-data signatures because
 they consume no gas.
 
-After broadcast, capture the transaction hash and have `evm-atlas` verify the receipt on the reviewed chain. Report
-status, block, gas used, and the explorer link under `### ✅ Transaction confirmed` for a successful receipt or
-`### ↩ Transaction reverted` for a mined failure. For an ambiguous outcome, lead with
+After broadcast, capture the transaction hash and have `evm-atlas` verify the receipt on the reviewed chain. When a
+receipt is still pending, it may use one bounded RouteMesh `newHeads` subscription to wait for the next block before
+checking again. Receipt verification remains required; a pending-transaction or log notification alone cannot confirm
+the transaction. Report status, block, gas used, and the explorer link under `### ✅ Transaction confirmed` for a
+successful receipt or `### ↩ Transaction reverted` for a mined failure. For an ambiguous outcome, lead with
 `### ⛔ Broadcast unresolved — do not retry` and state the evidence still needed. Do not retry a failed or uncertain
 broadcast without first checking whether the transaction exists — for browser-wallet signing specifically, read
 [references/browser-signing.md](references/browser-signing.md)'s Timing and Recovering sections before concluding

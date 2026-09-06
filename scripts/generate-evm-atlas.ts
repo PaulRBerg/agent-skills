@@ -252,7 +252,7 @@ function assertStringArray(value: unknown, name: string): asserts value is strin
 async function discoverRouteMesh(registryChains: RegistryChain[], data: AtlasOverlay): Promise<void> {
   let stdout: string;
   try {
-    ({ stdout } = await execFileAsync("routemesh", ["chains", "--output=json"]));
+    ({ stdout } = await execFileAsync("routemesh", ["chains", "--transport=rpc", "--output=json"]));
   } catch (error) {
     fail(`RouteMesh chains command failed: ${commandErrorMessage(error)}`);
   }

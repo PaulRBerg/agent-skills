@@ -79,17 +79,38 @@ quorum, and report disagreement as unknown.
 
 ## RouteMesh and Public RPC
 
-Use the `routemesh` CLI exclusively for RouteMesh. Use it only when the target row has `routeMesh: true` and
-`routemesh chains` contains the exact chain ID. Never construct a RouteMesh URL or inspect, request, or print an API
-key.
+Use the `routemesh` CLI exclusively for RouteMesh. For HTTP RPC, require the target row's `routeMesh: true` and the
+exact chain ID in `routemesh chains --transport rpc`. The `routeMesh` flag describes HTTP coverage; check WebSocket
+coverage separately with `routemesh chains --transport ws`. Never construct a RouteMesh URL or inspect, request, or
+print an API key.
 
-Assume the user has already run `routemesh init`. If a RouteMesh command reports a credential error, stop that route and
-tell the user to obtain an API key from <https://routeme.sh/app/consumer/api-keys>, run `routemesh init`, then retry. Do
-not run initialization or fall back to a raw RouteMesh endpoint. If `routemesh` is unavailable, report that the CLI is
-required; do not work around it with direct HTTP.
+Assume the user has already run `routemesh init`. On `insufficient_credits`, stop the route and report that the
+RouteMesh account needs credits. For other credential errors, stop that route and tell the user to obtain an API key
+from <https://routeme.sh/app/consumer/api-keys>, run `routemesh init`, then retry. Do not run initialization or fall
+back to a raw RouteMesh endpoint. If `routemesh` is unavailable, report that the CLI is required; do not work around it
+with direct HTTP.
 
 Use `routemesh ping CHAIN_ID` to verify a RouteMesh chain route. Use `routemesh rpc CHAIN_ID METHOD --params=JSON` for
 one read-only JSON-RPC request, or `--json=JSON` for a complete request or batch. Never pass `--allow-write`.
+
+For an activity watch or a bounded wait before rechecking a pending receipt, confirm `routemesh schema subscribe` is
+available and the exact target chain is in `chains --transport ws`, then use:
+
+```sh
+routemesh --timeout 60s subscribe CHAIN_ID newHeads --count 1
+routemesh --timeout 60s subscribe CHAIN_ID logs --json=FILTER --count 1
+routemesh --timeout 30s subscribe CHAIN_ID newPendingTransactions --count 5
+```
+
+`FILTER` accepts only `address` and `topics`; use `--json -` for stdin. Choose the subscription and filter that answer
+the request. Type availability is provider-dependent. If the local CLI lacks `schema subscribe`, report that it needs
+updating. Keep a finite count (1–1000) and timeout; both JSON and NDJSON buffer until the full count arrives. A timeout
+or disconnect fails with no partial stdout and no automatic reconnect. Never interpret it as evidence of no activity.
+
+Preserve reorg heads and logs with `removed: true`. Notifications do not prove finality, historical completeness, or a
+successful transaction. After a notification, verify the relevant receipt, state, or explicit log range through the
+existing evidence commands. A new subscription does not recover events missed while disconnected; subscriptions do not
+replace historical sweeps or bridge-protocol status checks.
 
 RouteMesh routing is method-specific, so a successful command proves only that exact method, parameters, and block. It
 does not establish archive coverage for the key, chain, or another method.
