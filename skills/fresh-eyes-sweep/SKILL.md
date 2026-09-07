@@ -18,7 +18,8 @@ If these instructions are already present in the conversation from a slash or do
 do not invoke this skill again through a skill tool.
 
 Inspect the requested Git scope for evidenced mistakes, fix every safe issue, and account for every mapped file. A
-verified no-op requires that coverage and a full pass that finds nothing new.
+verified no-op requires that coverage and a full pass that finds nothing new. Leave sound work unchanged; edits are not
+required to demonstrate a successful sweep.
 
 `--max-runtime DURATION` is optional: it is a positive integer followed by `m` or `h`, such as `45m` or `3h`. Reject an
 invalid duration, unknown option, or ambiguous positional input. When a deadline is supplied, calculate it before
@@ -131,6 +132,19 @@ next session.
 ## Inspect and Fix
 
 Work through coherent slices so implementation, callers, tests, configuration, and documentation stay visible together.
+For each slice, reason from first principles: identify the intended outcome and required behavior from the user's
+request and repository evidence. Treat the current implementation as something to justify, not as a requirement.
+Interrogate it in this order:
+
+1. What is unnecessary, overly complicated, or based on weak assumptions? Challenge those assumptions against evidence.
+2. What can be deleted entirely while preserving required behavior and contracts? Check consumers and invariants before
+   concluding that a piece is unnecessary.
+3. After removing unnecessary pieces, what remaining logic, interfaces, or workflow can be simplified?
+
+Prefer deleting over simplifying, simplifying over optimizing, and optimizing over automating. Apply confirmed, safe
+improvements within the requested scope; this ordering does not justify dropping requirements or automating needless
+work.
+
 Trace important control, data, concurrency, and error paths end to end. Hunt for concrete bugs, omissions, invalid
 assumptions, unhandled edges, security/reliability failures, inconsistencies, duplication, dead code, stale docs, and
 needless complexity. Also inspect evidenced problems in performance, dependencies, data formats and extensions,
@@ -171,10 +185,11 @@ means path accounting, not depth of inspection.
 
 Run the narrowest check proving each fix, including every discovered typecheck, lint, and format/import-order gate
 applicable to its changed files, then aggregate checks scoped to changed files. Reinspect affected paths and repeat
-until a pass finds no new evidenced issue. During a supplied deadline's validation window, reconcile owned edits and run
-the aggregate format, lint, type, test, build, and invariant checks justified by the final changed-file union. Compare
-final results with the recorded baseline. Audit coverage, fixes, and checks against tool output before claiming
-completion.
+until a pass finds no new evidenced issue. Before declaring completion, revisit the first-principles questions against
+the result, including the sweep's own additions; passing checks alone does not justify unnecessary complexity. During a
+supplied deadline's validation window, reconcile owned edits and run the aggregate format, lint, type, test, build, and
+invariant checks justified by the final changed-file union. Compare final results with the recorded baseline. Audit
+coverage, fixes, and checks against tool output before claiming completion.
 
 Lead with
 `### ✅ Sweep ledger complete — <accounted>/<mapped> files accounted (<inspected> inspected, <excluded> excluded)` only
