@@ -1,16 +1,41 @@
 # Failure Recovery
 
-Retry the existing immutable transaction. Do not run `prepare` again after a commit, hook, signing, lock, receipt, or
-reconciliation failure: `ai-commit commit <transaction-id> ...` is idempotent and recovers a commit created before an
-interruption without duplicating it.
+Classify the failure before choosing recovery. Retry the existing immutable transaction for interruptions, lock races,
+signing failures, receipt or reconciliation failures, and any uncertain commit outcome. An idempotent retry can recover
+a commit created before the failure without duplicating it. A known content failure before commit creation instead
+requires a corrected preparation; retrying the old snapshot cannot include its repair.
+
+## Content Validation Failure
+
+Use this recovery for deterministic validation failures requiring changes to authorized content, including a dependency
+cycle where separately prepared units cannot pass or apply in a valid order. A timeout or transient tool failure alone
+does not justify replacing a preparation.
+
+1. Retain the failed transaction ID, its prepared path set, and the diagnostic proving which content needs correction.
+   Inspect `ai-commit show <transaction-id>` and the failure receipt. Establish that no commit was created; absent or
+   uncertain outcome evidence requires the same-transaction retry path instead. `PREPARED` in `show` alone does not
+   prove this: the display may omit a pending commit.
+2. Identify the smallest coherent correction and preserve unrelated or baseline-owned content. Existing authorization to
+   fix and commit the task covers repairing its failed content and combining interdependent owned changes; a new
+   permission request is needed only when the correction itself exceeds that authority.
+3. Run `ai-commit discard <transaction-id>` only for the superseded, uncommitted preparation and require `DISCARDED`. If
+   it refuses a pending or committed transaction, recover that same ID instead of preparing a replacement. Never rewrite
+   a committed transaction or delete its retained receipt. For multiple dependent preparations, account for each ID and
+   all intended changes before discarding them.
+4. Apply the correction, run the relevant checks, then prepare once from the corrected owned paths. Review the full new
+   evidence and compose its message around the final change. Retain the new ID and follow the normal commit workflow.
+
+Do not bypass a validation failure caused by or plausibly affected by the prepared paths. Keep each new preparation
+immutable; another evidenced content defect requires another explicit diagnosis, not an automatic reprepare loop.
 
 ## Prepared Snapshot Drift
 
-The exact diagnostic prefix `snapshot-check hook modified prepared content` is the only exception to immutable retry. An
-unchanged retry repeats because a verification hook tried to change the validation-only prepared snapshot.
+The exact diagnostic prefix `snapshot-check hook modified prepared content` identifies a content failure before commit
+creation: a verification hook tried to change the validation-only prepared snapshot.
 
 1. Do not retry the transaction, add `--no-verify`, or make the shared worktree temporarily match the prepared index.
-2. Record the repository-relative paths named by the diagnostic, then run `ai-commit discard <transaction-id>`.
+2. Record the repository-relative paths named by the diagnostic, then run `ai-commit discard <transaction-id>` and
+   require `DISCARDED`; a pending or committed transaction still requires same-ID recovery.
 3. Apply only the named deterministic formatter or generator change to session-owned content. Preserve every stale-dirt
    baseline byte; do not stage the whole physical file or restore excluded hunks temporarily.
 4. Prepare once from the corrected worktree and continue with the new transaction.

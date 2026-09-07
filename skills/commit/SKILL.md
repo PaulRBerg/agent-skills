@@ -60,16 +60,21 @@ ai-commit prepare [--all | --staged] [--natural | --conventional] --diff full \
 - `ai-commit prepare` automatically applies this session's ai-coord stale-dirt baselines. Auto-applied exclusions appear
   in the preparation evidence and must be disclosed unchanged. Explicit `--exclude-baseline` remains available for
   overrides, and `--no-auto-baseline` disables discovery for deterministic automation. Never revert unrelated changes.
+  If coordination re-entry records this session's completed edits as a baseline, compare its blob IDs with retained
+  session or preparation evidence. Use `--no-auto-baseline` only when every selected file's entire delta is attributable
+  to the authorized task; preserve exclusions for mixed ownership or uncertain attribution.
 
 Preparation pins the exact tree and delta under the printed transaction ID without changing the shared index. Keep that
 ID. The later commit reuses the transaction instead of recomputing intended content from the mutable worktree or shared
 index. It applies that immutable delta to the locked current branch and fails safely if intervening branch movement
-conflicts. If preparation fails, stop with its error and the smallest safe correction.
+conflicts. If preparation fails before issuing a transaction ID, correct the evidenced argument, attribution, or input
+problem and retry preparation within the authorized scope.
 
 ## 3. Analyze and Compose
 
-Analyze the single prepared full diff. Do not prepare again to get different evidence. Oversized per-file sections
-arrive cut with a `DIFF_TRUNCATED` disclosure; their name-status and shortstat evidence still governs the message.
+Analyze the single prepared full diff. Do not replace a valid preparation merely to get different evidence. Oversized
+per-file sections arrive cut with a `DIFF_TRUNCATED` disclosure; their name-status and shortstat evidence still governs
+the message.
 
 - Use the printed message format and message-format rules. `ai-commit` is the source of those rules; do not load a
   separate Conventional or Natural reference.
@@ -110,17 +115,18 @@ Transactions are idempotent. After an interruption, lock race, or retryable exit
 message arguments; do not prepare a replacement from newer mutable state. A replay recovers or returns the retained
 receipt without creating a duplicate commit. Never delete an index lock.
 
-The exact `snapshot-check hook modified prepared content` diagnostic is the one exception: do not retry that
-transaction. Follow the discard, owned-content correction, and single reprepare procedure in the recovery reference.
+For a deterministic content failure proven to precede commit creation, correct the authorized work and supersede the
+uncommitted preparation using the recovery reference. This includes `snapshot-check hook modified prepared content`; an
+immutable retry cannot repair content pinned in a failed snapshot. Existing task authority covers this recovery.
 
-Read [references/failure-recovery.md](references/failure-recovery.md) before adding `--no-verify` or `--no-gpg-sign`.
-Those are explicit per-attempt recovery options, not first-attempt defaults.
+Read [references/failure-recovery.md](references/failure-recovery.md) before superseding a failed preparation or adding
+`--no-verify` or `--no-gpg-sign`. Bypass flags are explicit per-attempt recovery options, not first-attempt defaults.
 
 After `COMMITTED <transaction-id> <commit-oid>` (the OID is a 12-character abbreviation; pass it as-is), resolve every
 included finding with `ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'` and report the resolved
 finding IDs in the receipt summary.
 
-## 5. Interpret the Receipt
+## 5. Completion and Receipt
 
 Keep the receipt compact and forward its outcome lines without decoration:
 
