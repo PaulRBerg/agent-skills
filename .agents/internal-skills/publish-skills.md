@@ -28,7 +28,7 @@ only those paths. If the worktree is clean but `main` is ahead, run `ai-commit p
 touching global installations and report that branch reconciliation is required.
 
 Keep this work under the source-repository claim through its commit and push, then run `ai-coord done` for that claim
-before acquiring the target bundle.
+before acquiring the target claims.
 
 ### 2. Plan Once, After the Push
 
@@ -37,23 +37,32 @@ bun run scripts/publish-skills.ts plan --json
 ```
 
 Require planner JSON `version: 2`; retain its `repos` records and `canonical` field unchanged. `head` is the guarded
-apply SHA — no separate `git rev-parse HEAD` step. If `clean` is true and nothing was committed in step 1, report the
-no-op and stop.
+apply SHA — no separate `git rev-parse HEAD` step. If `clean` is true, skip to step 5 and report any source commit or
+the no-op.
 
 Append the resolved `--skill` filters only for explicit commit-range mode (see Scope).
 
 ### 3. Acquire Every Target, Then Apply
 
 The plan's `repos` array IS the claim set. Resolve every reported `root` to its canonical physical string with
-`cd <root> && pwd -P`, then combine each root with its reported `paths` entries. Submit every resulting absolute path in
-one `ai-coord bundle start 'publish catalog skills'` command: use repeated `--recursive '<absolute-dir>'` arguments for
-`scope: "recursive"` and plain `'<absolute-file>'` arguments for `scope: "file"`. `canonical` is informational; include
-every reported repository. Do not acquire roots with separate `ai-coord start` calls.
+`cd '<root>' && pwd -P`, preserving all reported `paths` entries. `canonical` is informational; include every reported
+repository. Choose the acquisition command by the number of distinct canonical roots:
 
-Require `READY` for the complete bundle before apply. On blocked, dirty-settling, or unknown coverage, run
-`ai-coord wait`, then resubmit the full bundle after each wake; a wake is not authorization. Re-plan only if the source
-`HEAD` or the planned mutation paths changed while waiting, then submit the complete updated bundle. Do not apply over
-contested paths. The CLI process/state lock is outside repository coordination and commits: never claim or commit it.
+- One root: from that root, run one `ai-coord start 'publish catalog skills'` with every reported repository-relative
+  scope. Use repeated `--recursive '<dir>'` arguments for `scope: "recursive"` and plain `'<file>'` arguments for
+  `scope: "file"`.
+- Two or more roots: combine each root with its reported paths and submit all scopes in one
+  `ai-coord bundle start 'publish catalog skills'`. Use repeated `--recursive '<absolute-dir>'` arguments for recursive
+  scopes and plain `'<absolute-file>'` arguments for file scopes. Do not acquire roots with separate `start` calls.
+- No roots: acquire no repository claim; a non-clean plan may only need CLI metadata cleanup. The helper's process lock
+  protects that work.
+
+For a nonempty claim set, inspect the acquisition result and require `READY` for every scope before issuing apply in a
+separate tool call. An acquisition error must not fall through to apply. On blocked, dirty-settling, or unknown
+coverage, run `ai-coord wait`, then resubmit the same complete claim set with the appropriate command after each wake; a
+wake is not authorization. Re-plan only if the source `HEAD` or the planned mutation paths changed while waiting, then
+submit the complete updated claim set. Do not apply over contested paths. The CLI process/state lock is outside
+repository coordination and commits: never claim or commit it.
 
 `repos` already omits shared-skill Claude symlinks that apply cannot mutate — after apply, confirm `~/.claude` shows no
 diff for those skills.
@@ -67,19 +76,19 @@ Never issue separate `bunx skills` commands or edit the CLI lock. The helper req
 at most one add per target group, removes only deleted or stale entries, verifies the result, and prints every global
 path whose final state changed.
 
-If apply fails after partial progress, preserve its completed-command list and retain the complete target bundle. Commit
-and push only its reported paths, then re-plan and retry the remainder once with the same expected HEAD. A second
-failure blocks: report the failed command, completed groups, and changed paths.
+If apply fails after partial progress, preserve its completed-command list and retain all target claims. Commit and push
+only its reported paths, then re-plan and retry the remainder once with the same expected HEAD. A second failure blocks:
+report the failed command, completed groups, and changed paths.
 
 ### 4. Commit Reported Global Paths and Release Claims
 
-Group `Changed global paths` by reported repo root. Retain the complete bundle acquired in step 3 through every target
-commit and push; never perform a post-apply `start`. For each repo with reported changed paths, commit and push only
-those paths. For a repo with no reported diff, confirm its planned paths have no diff. Once every target's changes are
-pushed or verified absent, run `ai-coord done` once to release the entire bundle; it does not release only the current
-repository. Never claim unreported skills, unrelated dirty paths, or the CLI process/state lock. A dirty-settling result
-on a reported publisher-written path is a regression, not expected waiting: preserve the bundle and stop with the
-evidence.
+Group `Changed global paths` by reported repo root. Retain all claims acquired in step 3 through every target commit and
+push; never perform a post-apply `start`. For each repo with reported changed paths, commit and push only those paths.
+For a repo with no reported diff, confirm its planned paths have no diff. Once every target's changes are pushed or
+verified absent, run `ai-coord done` once if claims were acquired. For a bundle, this releases every target, not only
+the current repository. Never claim unreported skills, unrelated dirty paths, or the CLI process/state lock. A
+dirty-settling result on a reported publisher-written path is a regression, not expected waiting: preserve the claims
+and stop with the evidence.
 
 ### 5. Final Check
 
