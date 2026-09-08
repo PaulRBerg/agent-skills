@@ -7,8 +7,9 @@ model.
 
 - `src/cli.rs` defines the public command line; `src/error.rs` and `src/main.rs` map failures to stable exit classes.
 - `src/prepare.rs` resolves intended paths, constructs immutable trees in alternate indexes, and records transactions.
-- `src/commit.rs` reapplies prepared deltas to locked current HEAD, runs hooks/signing, CAS-updates refs, and reconciles
-  the shared index.
+- `src/validation.rs` reapplies immutable prepared deltas, materializes candidates, and runs frozen validation with
+  drift detection for both `validate` and `commit`.
+- `src/commit.rs` locks the shared index, runs hooks/signing, CAS-updates refs, and reconciles the shared index.
 - `src/push.rs` implements fetch-first, no-integration pushes.
 - `src/state.rs` owns atomic journal records, receipts, retention, and transaction refs.
 - `src/git.rs` is the only subprocess boundary for Git operations.
@@ -23,10 +24,14 @@ model.
 - When an intended prepared path differs from the physical worktree, verification hooks run against a temporary
   materialization of the complete prepared index. Those hooks may edit the message but must not modify tracked content.
 - An optional repository validation argv is frozen into the prepared transaction and always runs directly against a
-  complete materialization of that prepared tree before verification hooks, including with `--no-verify`. It receives
-  an isolated Git environment; ignored local directories remain available for read-only dependency and evidence
-  resolution when their parents exist in the prepared tree. Failure or detected tracked/index drift leaves the
-  transaction prepared and retryable.
+  complete materialization of that prepared candidate before verification hooks, including with `--no-verify`. It
+  receives an isolated Git environment; ignored local directories remain available for read-only dependency and
+  evidence resolution when their parents exist in the candidate tree. Failure or detected tracked/index drift leaves
+  the transaction prepared and retryable.
+- Standalone validation takes only the transaction lock, runs no hooks or commit mutations, reports skipped validation
+  explicitly when no command was frozen, and never lets preflight success bypass commit-time validation.
+- Preserve the validation target's journal and refs, including expired receipts. Pending commits require same-ID
+  commit recovery; preflight must not validate or replace them.
 - Normal verification hooks retain their existing physical-worktree behavior, and `post-commit` always runs from the
   physical worktree without the snapshot-check environment.
 - Never remove an index lock that this process did not create. Hold the owned lock through ref CAS and index

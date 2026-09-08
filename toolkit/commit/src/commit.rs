@@ -15,9 +15,13 @@ use tempfile::{Builder, NamedTempFile, TempPath};
 use crate::{
     cli::CommitArgs,
     error::{AppError, Result},
-    git::{RefUpdate, Repository, copy_file, decode_nul_paths, git_error, literal_pathspec},
+    git::{RefUpdate, Repository, copy_file, git_error},
     push::{self, PushOutcome},
     state::{PendingCommit, Store, Transaction, TransactionStatus, now_seconds},
+    validation::{
+        Candidate, ValidationSnapshot, build_candidate, diff_paths, ensure_branch, finish_snapshot_hook,
+        intended_paths_differ_from_worktree, run_configured, snapshot_drift_paths, transaction_repository,
+    },
 };
 
 pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
@@ -46,10 +50,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         return Ok(());
     }
 
-    let repository = Repository::from_root(&transaction.repository_root)?;
-    if repository.root != transaction.repository_root {
-        return Err(AppError::usage("transaction repository no longer resolves to its prepared physical root"));
-    }
+    let repository = transaction_repository(&transaction)?;
 
     if args.push && !transaction.push_requested {
         transaction.push_requested = true;
@@ -83,19 +84,9 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         return maybe_push(&repository, &mut transaction, store, args.push);
     }
 
-    let current_parent = repository.head_oid()?;
-    let current_base = match &current_parent {
-        Some(head) => head.clone(),
-        None => repository.empty_tree()?,
-    };
     let commit_index = temporary.path().join("commit-index");
-    if current_base == transaction.base_head {
-        repository.checked(["read-tree", &transaction.prepared_tree], Some(&commit_index))?;
-    } else {
-        repository.checked(["read-tree", &current_base], Some(&commit_index))?;
-        apply_prepared_delta(&repository, &transaction, &current_base, &commit_index)?;
-    }
-    let before_hook_tree = repository.text(["write-tree"], Some(&commit_index))?;
+    let Candidate { parent: current_parent, base: current_base, tree: before_hook_tree } =
+        build_candidate(&repository, &transaction, &commit_index)?;
     let message_file = temporary.path().join("commit-message");
     write_message(&message_file, &args.messages)?;
 
@@ -108,7 +99,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
             &temporary.path().join("worktree-comparison-index"),
         )?;
     let hook_snapshot = if needs_hook_snapshot {
-        Some(HookSnapshot::materialize(
+        Some(ValidationSnapshot::materialize(
             &repository,
             &commit_index,
             &before_hook_tree,
@@ -121,17 +112,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
 
     if let Some(command) = transaction.validation_command.as_deref() {
         let snapshot = hook_snapshot.as_ref().expect("configured validation requires a complete snapshot");
-        let status = repository.run_prepared_validation(command, snapshot.validation_index(), snapshot.root())?;
-        if !status.success() {
-            return Err(AppError::operational(format!(
-                "prepared validation failed with {status}; transaction {} remains prepared and retryable",
-                transaction.id
-            )));
-        }
-        let drift = snapshot_drift_paths(&repository, snapshot.validation_index(), snapshot, &before_hook_tree)?;
-        if !drift.is_empty() {
-            return Err(prepared_validation_drift_error(&transaction.id, &drift));
-        }
+        run_configured(&repository, command, snapshot, &before_hook_tree, &transaction.id)?;
     }
 
     if !args.no_verify {
@@ -355,50 +336,6 @@ fn mark_committed(transaction: &mut Transaction, commit_oid: &str) {
     transaction.commit_oid = Some(commit_oid.to_owned());
 }
 
-fn ensure_branch(repository: &Repository, expected: &str) -> Result<()> {
-    let current = repository.branch()?;
-    if current != expected {
-        return Err(AppError::retry(format!(
-            "transaction was prepared on branch {expected}, but current branch is {current}"
-        )));
-    }
-    Ok(())
-}
-
-fn apply_prepared_delta(
-    repository: &Repository,
-    transaction: &Transaction,
-    current_base: &str,
-    commit_index: &Path,
-) -> Result<()> {
-    let patch = repository.bytes(
-        [
-            "diff",
-            "--binary",
-            "--no-renames",
-            "--no-ext-diff",
-            "--no-textconv",
-            &transaction.base_head,
-            &transaction.prepared_tree,
-            "--",
-        ],
-        None,
-    )?;
-    let output = repository.with_input(
-        ["apply", "--cached", "--3way", "--whitespace=nowarn", "-"],
-        &patch,
-        Some(commit_index),
-    )?;
-    if !output.status.success() {
-        let detail = git_error(output).message;
-        return Err(AppError::retry(format!(
-            "prepared changes do not apply cleanly to current branch base {}: {detail}",
-            short_oid(current_base)
-        )));
-    }
-    Ok(())
-}
-
 fn write_message(path: &Path, messages: &[String]) -> Result<()> {
     let mut file = File::create(path)?;
     for (index, message) in messages.iter().enumerate() {
@@ -450,7 +387,7 @@ fn run_hook(repository: &Repository, index: &Path, hook: &str, arguments: &[&str
 fn run_verification_hook(
     repository: &Repository,
     index: &Path,
-    snapshot: Option<&HookSnapshot>,
+    snapshot: Option<&ValidationSnapshot>,
     prepared_tree: &str,
     transaction_id: &str,
     hook: &str,
@@ -459,257 +396,12 @@ fn run_verification_hook(
     let Some(snapshot) = snapshot else {
         return run_hook(repository, index, hook, arguments);
     };
-    if let Some(output) = repository.run_snapshot_hook(hook, arguments, index, snapshot.root())? &&
-        !output.status.success()
-    {
-        return Err(git_error(output));
-    }
-    let drift = snapshot_drift_paths(repository, index, snapshot, prepared_tree)?;
-    if drift.is_empty() {
-        return Ok(());
-    }
-    Err(snapshot_drift_error(transaction_id, &drift))
-}
-
-fn intended_paths_differ_from_worktree(
-    repository: &Repository,
-    index: &Path,
-    intended_paths: &[String],
-    comparison_index: &Path,
-) -> Result<bool> {
-    let tree = repository.text(["write-tree"], Some(index))?;
-    let entries = repository.tree_file_entries(&tree, intended_paths)?;
-    for path in intended_paths {
-        if entries.contains_key(path) {
-            continue;
-        }
-        match fs::symlink_metadata(repository.root.join(path)) {
-            Ok(_) => return Ok(true),
-            Err(error) if matches!(error.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory) => {}
-            Err(error) => {
-                return Err(AppError::operational(format!(
-                    "cannot compare prepared path {path} with the physical worktree: {error}"
-                )));
-            }
-        }
-    }
-    copy_file(index, comparison_index)?;
-    let capture_paths = intended_paths.iter().filter(|path| entries.contains_key(*path)).collect::<Vec<_>>();
-    if !capture_paths.is_empty() {
-        let mut capture_arguments = vec!["add".to_owned(), "-A".to_owned(), "--".to_owned()];
-        capture_arguments.extend(capture_paths.into_iter().map(|path| literal_pathspec(path)));
-        let captured = repository.raw_in_worktree(capture_arguments, Some(comparison_index), &repository.root)?;
-        if !captured.status.success() {
-            return Err(git_error(captured));
-        }
-    }
-    let worktree_tree = repository.text(["write-tree"], Some(comparison_index))?;
-    Ok(tree != worktree_tree)
-}
-
-fn snapshot_drift_paths(
-    repository: &Repository,
-    index: &Path,
-    snapshot: &HookSnapshot,
-    prepared_tree: &str,
-) -> Result<Vec<String>> {
-    let current_tree = repository.text(["write-tree"], Some(index))?;
-    let mut paths = diff_paths(repository, prepared_tree, &current_tree)?.into_iter().collect::<BTreeSet<_>>();
-    paths.extend(worktree_diff_paths(repository, snapshot.validation_index(), snapshot.root(), &[])?);
-    Ok(paths.into_iter().collect())
-}
-
-fn worktree_diff_paths(
-    repository: &Repository,
-    index: &Path,
-    worktree: &Path,
-    paths: &[String],
-) -> Result<Vec<String>> {
-    let mut arguments = vec![
-        "diff-files".to_owned(),
-        "--name-only".to_owned(),
-        "--no-renames".to_owned(),
-        "-z".to_owned(),
-        "--".to_owned(),
-    ];
-    arguments.extend(paths.iter().map(|path| literal_pathspec(path)));
-    let bytes = repository.bytes_in_worktree(arguments, Some(index), worktree)?;
-    decode_nul_paths(&bytes)
-}
-
-fn snapshot_drift_error(transaction_id: &str, paths: &[String]) -> AppError {
-    AppError::operational(format!(
-        "snapshot-check hook modified prepared content: {}\n\
-         an unchanged retry will repeat; run `ai-commit discard {transaction_id}`, apply only owned hook-required \
-         changes without altering excluded baseline bytes, then prepare a new transaction. If satisfying the hook \
-         would change baseline-owned bytes, wait for or contact the owner instead.",
-        paths.join(", ")
-    ))
-}
-
-fn prepared_validation_drift_error(transaction_id: &str, paths: &[String]) -> AppError {
-    AppError::operational(format!(
-        "prepared validation modified tracked or staged content: {}; validation changes were not admitted and \
-         transaction {transaction_id} remains prepared and retryable",
-        paths.join(", ")
-    ))
-}
-
-struct HookSnapshot {
-    worktree: tempfile::TempDir,
-    validation_index: PathBuf,
-}
-
-impl HookSnapshot {
-    fn materialize(
-        repository: &Repository,
-        index: &Path,
-        prepared_tree: &str,
-        validation_index: &Path,
-        include_local_artifacts: bool,
-    ) -> Result<Self> {
-        let git_dir = repository.git_dir()?;
-        let mut builder = Builder::new();
-        builder.prefix("ai-commit-hook-");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            builder.permissions(fs::Permissions::from_mode(0o700));
-        }
-        let worktree = builder.tempdir_in(&git_dir).map_err(|error| {
-            AppError::retry(format!("cannot create temporary hook worktree under {}: {error}", git_dir.display()))
-        })?;
-        if env::var_os("AI_COMMIT_TEST_FAIL_SNAPSHOT_MATERIALIZATION").is_some() {
-            return Err(AppError::retry("injected snapshot materialization failure"));
-        }
-        repository
-            .checked_in_worktree(["checkout-index", "--all", "--force"], Some(index), worktree.path())
-            .map_err(|error| AppError::retry(format!("cannot materialize temporary hook worktree: {error}")))?;
-        repository
-            .checked_in_worktree(["update-index", "--refresh"], Some(index), worktree.path())
-            .map_err(|error| AppError::retry(format!("cannot validate temporary hook worktree: {error}")))?;
-        let materialized_tree = repository.text(["write-tree"], Some(index))?;
-        if materialized_tree != prepared_tree {
-            return Err(AppError::operational("temporary hook worktree materialization changed the prepared tree"));
-        }
-        fs::write(worktree.path().join(".git"), format!("gitdir: {}\n", git_dir.display()))
-            .map_err(|error| AppError::retry(format!("cannot configure temporary hook worktree: {error}")))?;
-        if include_local_artifacts {
-            project_ignored_directories(repository, index, worktree.path())?;
-        }
-        copy_file(index, validation_index)?;
-        Ok(Self { worktree, validation_index: validation_index.to_path_buf() })
-    }
-
-    fn root(&self) -> &Path {
-        self.worktree.path()
-    }
-
-    fn validation_index(&self) -> &Path {
-        &self.validation_index
-    }
-}
-
-fn project_ignored_directories(repository: &Repository, index: &Path, worktree: &Path) -> Result<()> {
-    let untracked = repository.bytes(["ls-files", "--others", "--directory", "-z"], Some(index))?;
-    let mut directory_records = Vec::new();
-    for record in untracked.split(|byte| *byte == 0).filter(|record| record.ends_with(b"/")) {
-        directory_records.extend_from_slice(record);
-        directory_records.push(0);
-    }
-    let mut directories = decode_nul_paths(&directory_records)?;
-    for directory in &mut directories {
-        directory.pop();
-    }
-    directories.sort_by(|left, right| {
-        Path::new(left).components().count().cmp(&Path::new(right).components().count()).then_with(|| left.cmp(right))
-    });
-    let mut roots = Vec::<PathBuf>::new();
-    for directory in directories {
-        let relative = PathBuf::from(&directory);
-        if roots.iter().any(|ancestor| relative.starts_with(ancestor)) {
-            continue;
-        }
-        roots.push(relative);
-    }
-
-    let mut prepared = Vec::<(String, PathBuf, PathBuf)>::new();
-    for relative in roots {
-        let source = repository.root.join(&relative);
-        let metadata = match fs::metadata(&source) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => {
-                return Err(AppError::retry(format!(
-                    "cannot inspect ignored local directory {}: {error}",
-                    source.display()
-                )));
-            }
-        };
-        if !metadata.is_dir() {
-            continue;
-        }
-
-        let destination = worktree.join(&relative);
-        match fs::symlink_metadata(&destination) {
-            Ok(_) => continue,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(AppError::retry(format!(
-                    "cannot inspect prepared local-artifact path {}: {error}",
-                    destination.display()
-                )));
-            }
-        }
-        let Some(parent) = destination.parent() else {
-            continue;
-        };
-        if !parent.is_dir() {
-            continue;
-        }
-
-        fs::create_dir(&destination).map_err(|error| {
-            AppError::retry(format!(
-                "cannot create prepared local-artifact directory {}: {error}",
-                destination.display()
-            ))
-        })?;
-        prepared.push((relative.to_string_lossy().into_owned(), source, destination));
-    }
-
-    let candidates = prepared.iter().map(|(relative, _, _)| relative.clone()).collect::<Vec<_>>();
-    let ignored = repository.ignored_paths_in_worktree(&candidates, index, worktree).map_err(|error| {
-        AppError::retry(format!("cannot inspect ignored local directories for prepared validation: {error}"))
-    })?;
-    let ignored = ignored.into_iter().collect::<BTreeSet<_>>();
-    for (relative, source, destination) in prepared {
-        if !ignored.contains(&relative) {
-            fs::remove_dir(&destination).map_err(|error| {
-                AppError::retry(format!(
-                    "cannot remove unused prepared local-artifact directory {}: {error}",
-                    destination.display()
-                ))
-            })?;
-            continue;
-        }
-        for entry in fs::read_dir(&source).map_err(|error| {
-            AppError::retry(format!("cannot read ignored local directory {}: {error}", source.display()))
-        })? {
-            let entry = entry.map_err(|error| {
-                AppError::retry(format!("cannot read ignored local entry under {}: {error}", source.display()))
-            })?;
-            let linked_path = destination.join(entry.file_name());
-            #[cfg(unix)]
-            std::os::unix::fs::symlink(entry.path(), &linked_path).map_err(|error| {
-                AppError::retry(format!(
-                    "cannot expose ignored local artifact at {} for prepared validation: {error}",
-                    linked_path.display()
-                ))
-            })?;
-        }
-    }
-    Ok(())
+    let hook_error = match repository.run_snapshot_hook(hook, arguments, index, snapshot.root()) {
+        Ok(output) => output.filter(|output| !output.status.success()).map(git_error),
+        Err(error) => Some(error),
+    };
+    let drift = snapshot_drift_paths(repository, index, snapshot, prepared_tree);
+    finish_snapshot_hook(hook_error, drift, transaction_id)
 }
 
 fn create_commit(
@@ -752,12 +444,6 @@ fn hook_added_paths(
 ) -> Result<Vec<String>> {
     let changed = diff_paths(repository, before_hook_tree, commit_tree)?;
     Ok(changed.into_iter().filter(|path| !intended.contains(path)).collect())
-}
-
-fn diff_paths(repository: &Repository, old: &str, new: &str) -> Result<Vec<String>> {
-    let bytes = repository
-        .bytes(["diff", "--no-ext-diff", "--no-textconv", "--name-only", "--no-renames", "-z", old, new, "--"], None)?;
-    decode_nul_paths(&bytes)
 }
 
 fn is_ancestor(repository: &Repository, ancestor: &str, descendant: &str) -> Result<bool> {

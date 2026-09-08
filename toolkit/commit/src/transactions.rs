@@ -34,6 +34,11 @@ pub fn show(store: &Store, id: &str) -> Result<()> {
     for path in transaction.paths {
         println!("path\t{path}");
     }
+    if let Some(pending) = transaction.pending_commit {
+        println!("pending-commit\t{}", pending.commit_oid);
+    } else {
+        println!("pending-commit\t-");
+    }
     Ok(())
 }
 

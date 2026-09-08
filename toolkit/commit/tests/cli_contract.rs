@@ -26,6 +26,50 @@ fn commit_messages_accept_hyphen_leading_paragraphs() {
 }
 
 #[test]
+fn validate_accepts_only_a_transaction_id_and_show_appends_pending_commit() {
+    let transaction = "a9a4f5c260c251a8";
+    let cli = Cli::try_parse_from(["ai-commit", "validate", transaction]).unwrap();
+    let Command::Validate(args) = cli.command else {
+        panic!("expected validate command");
+    };
+    assert_eq!(args.transaction_id, transaction);
+    assert!(Cli::try_parse_from(["ai-commit", "validate"]).is_err());
+    for option in ["--no-verify", "--no-gpg-sign", "--push", "--fix", "--message", "extra-id"] {
+        assert!(Cli::try_parse_from(["ai-commit", "validate", transaction, option]).is_err());
+    }
+
+    let harness = Harness::new("validate-cli-contract");
+    assert!(stdout(&harness.success(["--help"])).contains("validate"));
+    let help = stdout(&harness.success(["validate", "--help"]));
+    assert!(help.contains("validate <TRANSACTION_ID>"));
+    assert!(!help.contains("--no-verify"));
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let (prepared, _) = harness.prepare(&["intended.txt"]);
+    let shown = stdout(&harness.success(["show", &prepared]));
+    assert!(shown.starts_with(&format!("PREPARED {prepared}\nrepository\t")));
+    assert!(shown.contains("branch\t"));
+    assert!(shown.contains("prepared-tree\t"));
+    assert!(shown.contains("path\tintended.txt\n"));
+    assert!(shown.ends_with("pending-commit\t-\n"));
+
+    let interrupted = harness.command_with_env(
+        ["commit", &prepared, "-m", "test: pending show record"],
+        [("AI_COMMIT_TEST_FAIL_AFTER_REF_UPDATE", "1")],
+    );
+    assert_eq!(exit_code(&interrupted), 3, "{}", stderr(&interrupted));
+    let journal: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(harness.transaction_json(&prepared)).unwrap()).unwrap();
+    let pending = journal["pending_commit"]["commit_oid"].as_str().expect("pending commit oid");
+    let shown = stdout(&harness.success(["show", &prepared]));
+    assert!(shown.starts_with(&format!("PREPARED {prepared}\nrepository\t")));
+    assert!(shown.contains("prepared-tree\t"));
+    assert!(shown.contains("path\tintended.txt\n"));
+    assert!(shown.ends_with(&format!("pending-commit\t{pending}\n")));
+}
+
+#[test]
 fn commit_rejects_literal_newline_escapes() {
     let harness = Harness::new("literal-newline-escape");
     harness.write("intended.txt", "base\n");

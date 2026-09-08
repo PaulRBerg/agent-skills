@@ -11,6 +11,8 @@ pub struct Cli {
 pub enum Command {
     /// Capture an immutable transaction without changing the shared index.
     Prepare(PrepareArgs),
+    /// Validate a prepared transaction without creating a commit.
+    Validate(TransactionArgs),
     /// Commit a previously prepared transaction.
     Commit(CommitArgs),
     /// Push the current named branch without integrating remote changes.

@@ -8,6 +8,7 @@ mod push;
 mod rules;
 mod state;
 mod transactions;
+mod validation;
 
 use cli::{Cli, Command};
 use error::Result;
@@ -20,6 +21,10 @@ pub fn execute(cli: Cli) -> Result<()> {
         Command::Prepare(args) => {
             let store = state_store()?;
             prepare::run(args, &store)
+        }
+        Command::Validate(args) => {
+            let store = Store::discover()?;
+            validation::run(args, &store)
         }
         Command::Commit(args) => {
             let store = state_store()?;
