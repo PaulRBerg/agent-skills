@@ -161,8 +161,35 @@ Otherwise issue bounded direct HTTP JSON-RPC requests against the target's `prim
 
 Use the target row's `explorerUrl` plus `references/explorers/explorer-paths.json`. Verify nonstandard explorers in
 their UI; Ronin does not reliably follow Etherscan paths and its chain ID collides with a non-target Chainscout entry.
-Ronin's explorer (`app.roninchain.com`) also blocks scripted access, so open it with `$chromium-browser` rather than
-`curl` or `WebFetch`, the same way `references/workflows/blockscan-balances.md` requires Chromium for Blockscan.
+Use `$chromium-browser` for OKLink and Ronin browser evidence. Browser availability does not establish a supported
+programmatic API route; use documented credentials for API access and never extract or reproduce the site's private
+request-signing headers.
+
+### OKLink historical fallback
+
+For resolved Scroll (`534352`) and Ronin (`2020`) targets, [OKLink](https://www.oklink.com/) is an independent browser
+source for block details and indexed transaction history. Verified on 2026-09-08:
+
+| Target | Browser route and useful evidence                                                                                                                                                                                                                                      | Coverage boundary                                                                                                                                                                            |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scroll | `https://www.oklink.com/scroll/address/<address>/internal` returned historical internal ETH transfers that matched Blockscout transaction hashes.                                                                                                                      | Set the requested date window explicitly and inspect the zero-value filter; a default recent window or value-only list cannot prove complete internal-call history.                          |
+| Ronin  | `https://www.oklink.com/ronin/block/<number>` serves pre-migration blocks, including the linked [2025 cutoff](https://www.oklink.com/ronin/block/51786916) and [successor](https://www.oklink.com/ronin/block/51786917). Address pages use `/ronin/address/<address>`. | Account-history pages disclose a lower bound of [block 25350000](https://www.oklink.com/ronin/block/25350000), 2023-06-27. They cannot prove earlier inactivity or genesis-complete history. |
+
+Record the chain, source URL, observation time, requested range, displayed filters, pagination/caps, and block
+identities. Convert displayed local times to UTC explicitly. Positive rows establish only the facts they show; a
+complete negative still requires every required channel and interval through the fixed cutoff. Do not splice partial
+provider negatives into a complete result.
+
+Scrollscan now serves Blockscout. Its native v2 internal-transaction list can return HTTP 200 with exhausted pagination
+while the compatibility API reports unprocessed internal transactions, even when global indexing indicators report
+completion. Preserve that semantic failure; the native list is useful positive evidence, not an independent fallback or
+proof that the missing traces are empty.
+
+Ronin's [2026 migration announcement](https://blog.roninchain.com/p/ronin-is-home) sunsets the legacy explorer. The new
+`explorer.roninchain.com` Blockscout deployment did not serve the pre-migration 2025 cutoff; the legacy
+`app.roninchain.com/explorer` UI reproduced Skynet 503 responses during the check above. Verify historical coverage
+separately from current-chain availability. OKLink can supply a legacy block boundary without supplying pre-2023 account
+history or exact historical account state.
 
 ## Exceptional History
 
