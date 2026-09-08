@@ -60,8 +60,8 @@ cannot weaken this shared contract.
 - Keep the parent's own implementation work to orchestration, integrity checks, failure handling, and conditional polish
   passes.
 - Treat an explicit user model preference (e.g. GPT-5.6 Luna) as an orchestration constraint on every research and
-  implementation agent unless scoped narrower; don't substitute the adapter's usual Luna/Terra/Sol selection. If the
-  host can't launch that model, report the incompatibility and ask before falling back.
+  implementation agent unless scoped narrower; don't substitute the adapter's usual Luna/Terra/Sol/Astra selection. If
+  the host can't launch that model, report the incompatibility and ask before falling back.
 - Treat the approved outcome — not the initial manifest or its write scopes — as the authorization boundary: when
   implementation reveals a related in-repository fix or evidence change required for that outcome, the parent may extend
   the handoff and launch follow-on agents for the newly discovered scope without asking again. The worker that
