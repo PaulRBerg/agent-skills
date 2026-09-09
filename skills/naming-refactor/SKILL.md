@@ -117,9 +117,9 @@ validated rename group, or marked blocked with concrete evidence.
 After completing the codebase analysis and rename map, present the evidence-backed refactor plan, including its rename
 groups, dependency waves, contract boundaries, risks, and proving checks. Before editing, use the repository's
 coordination mechanism to acquire a claim covering the complete worktree. For `ai-coord`, run
-`ai-coord start 'naming refactor' '.'` and proceed only after it returns `READY`; `BLOCKED`, `UNKNOWN`, and pathless
-`INTENT` results do not authorize edits and cannot be overridden by user confirmation. Hold the claim through final
-verification.
+`ai-coord start 'naming refactor' --recursive '.'` and proceed only after it returns `READY`; `BLOCKED`, `UNKNOWN`, and
+pathless `INTENT` results do not authorize edits and cannot be overridden by user confirmation. Hold the claim through
+final verification.
 
 After acquiring the claim, re-read the current commit and worktree status, refresh the ledger, and compare the
 repository with the recorded baseline. Reinspect every path whose content or presence changed during analysis, then

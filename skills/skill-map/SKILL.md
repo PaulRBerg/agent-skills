@@ -37,8 +37,11 @@ cache, dependency, and backup noise.
 1. Require `ai-skillet` 0.1.0 or newer on `PATH`, then run:
 
    ```sh
-   ai-skillet map "$ARGUMENTS"
+   ai-skillet map
    ```
+
+   Append each parsed invocation option and its value as separate arguments, preserving quoted values. For example,
+   `--root '/path with spaces' --format json` adds two options; use the argument-free form for the defaults.
 
 2. Use `--format json` when another command or agent will consume the result.
 

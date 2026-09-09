@@ -25,8 +25,11 @@ skill roots, then apply only narrow metadata repairs when requested.
 1. Require `ai-skillet` 0.1.0 or newer on `PATH`, then run:
 
    ```sh
-   ai-skillet doctor "$ARGUMENTS"
+   ai-skillet doctor
    ```
+
+   Append each parsed invocation option and its value as separate arguments, preserving quoted values. For example,
+   `--root '/path with spaces' --format json` adds two options; use the argument-free form for the defaults.
 
 2. Use JSON when another command or agent will consume the result:
 

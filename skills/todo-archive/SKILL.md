@@ -12,9 +12,6 @@ description: Archive checked TODO.md tasks into `.ai/todos/YYYY-MM/DD.md`, leavi
 If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
 do not invoke this skill again through a skill tool.
 
-`TODO.md` and `.ai/` are conventionally git-ignored, so they are untracked and `git diff` shows nothing for them.
-Inspect changes against the filesystem, not git.
-
 ## Arguments
 
 - `path` (optional): Repository root or any path inside the repository. Default to the current directory.
@@ -26,13 +23,16 @@ Inspect changes against the filesystem, not git.
 
 ## Workflow
 
-1. Resolve the repository root:
+1. Resolve the supplied `path`, or the current directory when omitted. For an existing file, use its containing
+   directory; for a directory, use that directory. Store the absolute directory as `start_dir`, then resolve its Git
+   root:
 
    ```sh
-   git rev-parse --show-toplevel
+   git -C "$start_dir" rev-parse --show-toplevel
    ```
 
-   If the command fails, use the provided `path` or current directory as the root.
+   Store the result as `repo_root`. When `start_dir` is outside a Git repository, use it as `repo_root`. Stop on a
+   missing input path or another resolution error.
 
 2. Verify `TODO.md` exists at the root. If it is missing, stop and report the path checked.
 
@@ -49,12 +49,8 @@ Inspect changes against the filesystem, not git.
    to it, retaining one matching top-level heading. If the helper reports no checked tasks, treat it as a no-op. If
    `--hint` matches no heading, the helper exits non-zero and lists the available sections; relay them.
 
-5. If useful, inspect only the touched paths. `TODO.md` and `.ai/` are git-ignored, so use the filesystem rather than
-   `git diff`:
-
-   ```sh
-   cat TODO.md && find .ai/todos -type f | sort
-   ```
+5. If useful, inspect only `<repo_root>/TODO.md` and the exact archive path returned by the helper. Verify their
+   contents directly; when Git ignores them, compare filesystem snapshots rather than relying on `git diff`.
 
 ## Helper Behavior
 
