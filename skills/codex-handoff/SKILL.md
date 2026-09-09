@@ -208,8 +208,9 @@ matching the assignment; and pass relevant completed results to dependent agents
 
 After every implementation wave, reconcile all results with the current manifest and visible working tree without
 folding in unrelated concurrent changes. When the parent owns validation, run the assigned aggregate checks once during
-this reconciliation. Attribute aggregate-check failures before blocking: a failure confined to files outside every
-agent's scope is unrelated concurrent work, so confirm the handoff's files still pass and continue. Unexpected
+this reconciliation. Attribute aggregate-check failures before blocking: first rule out effects of the handoff's
+changes, formatters, hooks, and generators, including failures in downstream files outside its write scopes. Continue
+past a failure only when evidence establishes that it is unrelated and the handoff's own checks still pass. Unexpected
 out-of-scope edits, same-wave overlap, or a failure attributable to the handoff are blockers; do not start dependents or
 polish, and do not silently take over implementation.
 

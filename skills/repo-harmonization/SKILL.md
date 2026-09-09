@@ -155,8 +155,9 @@ implemented fixes.
 - Run those checks from the repository whose rules and dependencies they exercise.
 - Run cross-repository invariants once, including regeneration idempotence and source-versus-installed diffs where
   applicable.
-- Attribute an aggregate failure before acting: a failure outside the approved files is concurrent work, not evidence to
-  broaden this change.
+- Attribute an aggregate failure before acting: first rule out effects of this task's changes, formatters, hooks, and
+  generators, including downstream failures outside the approved files. Continue past a failure only when evidence
+  establishes that it is unrelated and the task's own checks still pass.
 - Use `$commit` when available after validation, passing only task files; never bypass it with `git add -A`,
   `git commit -a`, stash, or reset.
 - Inspect each scoped commit before creating the next so an upstream commit remains independently reversible.

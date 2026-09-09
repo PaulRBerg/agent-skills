@@ -77,14 +77,16 @@ their content here, the sync run reads both skills directly:
    decisions/plans, budget capped at three agents (`R1`-`R3`), optional `Research:` traceability line.
 7. Strategy selection: sequential/parallel/hybrid criteria, disjoint-write-scope requirement, wave semantics,
    slowest-agent note, whole-handoff eight-implementation-agent limit with stable IDs and dependencies.
-8. Single-validation-owner rule: aggregate checks run once, every other agent runs only checks proving its own edits,
-   failures confined to files outside every agent's scope attribute to unrelated concurrent work.
+8. Single-validation-owner rule: aggregate checks run once and every other agent runs only checks proving its own edits.
+   Attribute failures by first ruling out the handoff's changes and tool side effects, including downstream failures;
+   continue only past evidenced unrelated failures while the handoff's own checks pass.
 9. Polish-selection rules: `$code-polish` risk-trigger list (file count alone is not a trigger); `$agents-brain polish`
    targets README.md, AGENTS.md, CLAUDE.md, durable context docs, project-installed skills under `.agents/skills`, and
    existing git-tracked source-catalog skills under `skills/` for prose-only edits; installed copies under managed
    agent-config roots remain excluded; either, both, or neither pass may run.
-10. Before-launch session-claim guidance: orchestrating session's presence authorizes delegated work; claim owner is
-    host-specific.
+10. Before-launch session-claim guidance: the parent owns a claim covering every delegated write scope and requires
+    `READY` before implementation launch. Delegates use the parent identity, treat its claim as authorization, and never
+    run coordination lifecycle commands; identity propagation is host-specific.
 11. Platform-agnostic agent prompt requirements: outcome + brief, write scope and dirty-work boundaries, validation
     assignment, soft time budget, authority boundary, delegation context, stopping rule, reporting requirement.
 12. Structured result-field contract: status, summary, changed files, verification (command + outcome), residual risks,

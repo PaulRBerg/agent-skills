@@ -80,11 +80,12 @@ compatibility constraint justifies it, or the package will run without a committ
 
 9. Fix every issue caused by the bump, including required source or configuration migrations, while preserving intended
    behavior. Do not suppress diagnostics, weaken validation, or change expected behavior merely to make checks pass.
-   After each fix, rerun the affected check, then rerun the complete recorded suite until it passes. If no clear safe
-   fix exists within the task's authority, stop with `### ⚠️ Dependency regression decision required`. Present all such
-   issues in one table with the evidence, affected locations, fix and revert options, and likely effects. Do not report
-   completion until the user chooses, the fix is applied or the offending update is reverted, the lockfile is
-   regenerated, and the complete suite passes.
+   After each fix, rerun the affected check, then rerun the complete recorded suite and require no new failures against
+   the accepted baseline. Only unrelated pre-existing failures meeting step 5's comparison requirements may remain. If
+   no clear safe fix exists within the task's authority, stop with `### ⚠️ Dependency regression decision required`.
+   Present all such issues in one table with the evidence, affected locations, fix and revert options, and likely
+   effects. Do not report completion until the user chooses, the fix is applied or the offending update is reverted, the
+   lockfile is regenerated, and the complete suite meets that same baseline-comparison requirement.
 
 ## User-Facing Output
 
