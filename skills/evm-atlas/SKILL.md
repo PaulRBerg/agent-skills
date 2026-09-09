@@ -103,7 +103,8 @@ limits, failed fallbacks, or unsupported scope. Completion is read-only evidence
 transaction requests into execution.
 
 For a `cli-cast` handoff, return one read packet with the resolved chain name and ID, exact provider route, result,
-observed block or checkpoint, and non-empty coverage gaps. Do not include a signing or broadcast command.
+observed block or checkpoint, and coverage gaps, which may be empty when none are observed. Do not include a signing or
+broadcast command.
 
 For DEX evidence, include the interaction class; execution protocol, version, and mode; entrypoint or integration
 wrapper; router and underlying liquidity sources; wallet role; sold and received assets; protocol/integrator fees and

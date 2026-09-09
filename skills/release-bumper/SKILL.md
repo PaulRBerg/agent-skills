@@ -99,10 +99,12 @@ tag. It does not judge importance, wording, or semantic category.
     releases from pushed tags. A filename such as `release.yml` is a hint, not proof. Use `$cli-gh` read-only to check
     whether the repository has an established history of maintained GitHub releases. If it does, offer to create a
     GitHub release for each new tag, pending the user's approval, according to these rules:
-    - One tag and release CI exists: do not offer manual release creation; the tag push should trigger CI.
-    - One tag and no release CI exists: offer to create the release with `$cli-gh`.
-    - Multiple tags will be pushed together: offer to create one release per tag with `$cli-gh` even when release CI
-      exists, because the multi-tag push is not expected to trigger that automation reliably.
+    - One to three tags and applicable release CI exists: do not offer manual release creation; the tag push should
+      trigger CI.
+    - No applicable release CI exists: offer to create one release per new tag with `$cli-gh`.
+    - More than three tags will be pushed together: offer to create one release per tag with `$cli-gh` even when release
+      CI exists, because GitHub does not create tag push events above that threshold. See
+      [GitHub's push-event limits](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push).
 
     Never create a GitHub release without the user's approval. If release history cannot be verified, report it as
     unknown and do not offer the write.

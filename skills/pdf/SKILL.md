@@ -15,8 +15,10 @@ semantic validation.
 
 ## Invariants
 
-1. Keep document contents local unless the user explicitly authorizes an upload or external disclosure. Package and
-   language-data downloads do not authorize document disclosure.
+1. Run extraction and transformations locally. Task-relevant document evidence in tool output and internal agent reports
+   may be processed by the configured model provider. Require explicit user authorization and an external-disclosure
+   review before uploading or sending document contents outside that agent workflow. Package and language-data downloads
+   do not authorize document disclosure.
 2. Preserve every original PDF byte-for-byte. Write a sibling output, copy, or explicitly named destination unless the
    user authorizes destructive replacement.
 3. Preserve monetary values, identifiers, dates, signs, and displayed precision as strings. Use `decimal.Decimal` for
