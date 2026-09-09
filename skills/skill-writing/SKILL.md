@@ -55,7 +55,7 @@ The symlink target is always the relative path `../../.agents/skills/<name>`.
 <name>/
 ├── SKILL.md       # Required: frontmatter + lean workflow (aim for <500 lines)
 ├── agents/
-│   └── openai.yaml # Required: Codex metadata; disables implicit invocation
+│   └── openai.yaml # Required: Codex invocation policy derived from SKILL.md
 ├── scripts/       # Optional: helper code (prefer TypeScript via bun run; Python via uv)
 ├── references/    # Optional: long-form docs loaded on demand
 └── assets/        # Optional: templates / fonts / images used in OUTPUT (never loaded into context)
@@ -109,6 +109,8 @@ leave the implementation in `scripts/`.
 Prefer `scripts/*.ts` run with `bun run scripts/<name>.ts`, unless there is a good reason TypeScript is the wrong fit
 for the helper. Python is also a good choice for data, text, and file processing; run Python helpers through
 `uv run scripts/<name>.py`, not raw `python` or `python3`.
+
+Keep Bash helpers compatible with macOS `/bin/bash` 3.2.
 
 ### Use `references/` when
 
@@ -201,7 +203,7 @@ belongs where:
 - Machine-consumed schema with a real validator? → Bundle both and document the validation route.
 - Reference-only schema documentation, long examples, variant guides, or domain knowledge? → `references/<topic>.md`
 - Templates or files the skill writes into the user's output? → `assets/`
-- None of the above? → ship just `SKILL.md`.
+- None of the above? → ship only the required `SKILL.md` and `agents/openai.yaml`.
 
 Sketch the directory tree first, then create only the subdirectories the layout actually needs.
 
@@ -216,11 +218,13 @@ mkdir -p "<scope>/.agents/skills/<name>/agents"
 
 Write `<scope>/.agents/skills/<name>/SKILL.md` with:
 
-- Frontmatter sorted alphabetically, with `description` last. The `description` is the only field seen at discovery time
-  — front-load trigger phrases there, not in the body.
+- Frontmatter sorted alphabetically, with `description` last. Front-load discovery-time trigger phrases in
+  `description`.
 - A `skill-dependencies` array when routing identified dependencies. Use bare names for skills in the same repository
   and `ORG/REPO#SKILL` for external skills. Sort by the target skill name (the bare name or substring after `#`), then
-  by the complete identifier. Omit the field when no dependencies exist.
+  by the complete identifier. Require unique strings, resolve every bare dependency in the same repository, and exclude
+  the owning skill as a bare dependency. External repository existence is not validated. Omit the field when no
+  dependencies exist.
 - A short `# Title`.
 - A one-line summary of what the skill does.
 - Add `disable-model-invocation: true` or `user-invocable: false` only when the skill differs from Claude's defaults.
@@ -241,6 +245,9 @@ Write `<scope>/.agents/skills/<name>/SKILL.md` with:
   it.
 - CLI signatures for any bundled scripts, including the runtime command (`bun run scripts/<name>.ts` or
   `uv run scripts/<name>.py`), so the agent can call them without reading them.
+
+Use imperative prose and resolve bundled `references/`, `scripts/`, `examples/`, and `assets/` paths relative to the
+owning skill directory.
 
 Aim for `SKILL.md` under 500 lines. If a section grows past ~50 lines and is not core workflow, move it to `references/`
 and link it.
@@ -283,22 +290,8 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 
 ## Notes
 
-- Frontmatter rule: sort fields alphabetically, but always place `description` last.
-- `skill-dependencies` entries must be strings, unique, and must not name the owning skill as a bare dependency. Every
-  bare dependency must resolve to a skill in the same repository; external repository existence is not validated.
 - The skills CLI parses `SKILL.md` frontmatter as YAML before publishing. A colon followed by a space inside a plain
   scalar, such as `leave: freeze` in `description`, makes that parser fail. Use an em dash or another safe separator, or
   quote the entire scalar.
-- "When to use" information belongs in `description` (discovery-time), not in the body (activation-time only).
-- Omit default-valued Claude invocation fields: absent `disable-model-invocation` means `false`, and absent
-  `user-invocable` means `true`.
-- Use imperative / infinitive form throughout `SKILL.md`.
-- All paths inside `SKILL.md` (e.g., `references/placeholder.md`, `scripts/example.sh`) are relative to the skill
-  directory.
-- Every new skill must include `agents/openai.yaml` with `policy.allow_implicit_invocation` derived from `SKILL.md`,
-  never the other way around.
-- Prefer TypeScript helper scripts run with `bun run`; use Python through `uv run`, never raw `python` or `python3`.
-- Bash scripts inside the skill must be compatible with Bash 3.2 (`/bin/bash`), since Codex uses the built-in Bash by
-  default.
 - Keep helper stdout, commands, paths, frontmatter, and generated skill content undecorated unless that skill's own
   output contract requires otherwise.

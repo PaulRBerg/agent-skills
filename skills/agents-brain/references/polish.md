@@ -83,7 +83,7 @@ CLAUDE.md symlink, and require explicit confirmation.
 Create or refresh a sibling symlink only when CLAUDE.md is missing or already a symlink:
 
 ```sh
-(cd "$dir" && ln -sf AGENTS.md CLAUDE.md)
+(cd "$dir" && ln -sfn AGENTS.md CLAUDE.md)
 ```
 
 Before writing, require `test -L "$dir/CLAUDE.md" || test ! -e "$dir/CLAUDE.md"`. A regular CLAUDE.md blocks only that

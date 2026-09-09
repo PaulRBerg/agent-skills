@@ -72,7 +72,7 @@ Parent files hold shared defaults; nested files contain only local deltas.
 For each created AGENTS.md, create a sibling compatibility symlink:
 
 ```sh
-(cd "$dir" && ln -sf AGENTS.md CLAUDE.md)
+(cd "$dir" && ln -sfn AGENTS.md CLAUDE.md)
 ```
 
 Write only when CLAUDE.md is missing or already a symlink. A regular CLAUDE.md blocks only that symlink target; leave it
