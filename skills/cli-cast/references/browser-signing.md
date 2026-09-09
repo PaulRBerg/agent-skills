@@ -1,26 +1,31 @@
 # Browser Wallet Signing
 
-Use this flow only after the transaction or message review in `SKILL.md` has been explicitly approved.
+Check capabilities and establish the public sender during preparation. Open a signing request only after the transaction
+or message review in `SKILL.md` has been explicitly approved.
 
 ## Availability
 
 Confirm the installed Cast supports browser signing:
 
 ```sh
-cast send --help 2>&1 | rg -q -- '--browser'
+env -i PATH="$PATH" cast send --help | rg --no-config -- '--browser'
 ```
 
-If unavailable, offer an encrypted keystore or hardware wallet before an environment-backed private key. Browser signing
-requires an interactive browser and local port `9545`; it does not work in ordinary headless CI or SSH sessions.
+Check the help command's exit status as well as the match. Use a clean environment for help output because Cast may
+print environment-backed credential defaults. Browser support is specific to each subcommand; `send --browser` does not
+imply `wallet address --browser` or `wallet sign --browser` exists.
+
+If unavailable in a browser-only workflow, stop without a signer fallback. Otherwise the signer preferences in
+`SKILL.md` apply. Browser signing requires an interactive browser and local port `9545`; it does not work in ordinary
+headless CI or SSH sessions.
 
 ## Resolve the Sender
 
-```sh
-OWNER=$(cast wallet address --browser)
-```
-
-Cache the address for the approved flow. Confirm the wallet network matches the reviewed chain and `--from` matches
-`$OWNER`.
+Use the public address supplied by the user or already known from the connected wallet as `OWNER` for preparation.
+Resolve ENS through `$evm-atlas`. Do not load key material to discover an address. Use `cast wallet address --browser`
+only if that exact subcommand's current help exposes `--browser`; otherwise ask for the public address. At signing,
+confirm the connected account matches the reviewed `OWNER`, `--from`, and chain. An account change requires a revised
+review.
 
 ## Approved Broadcast
 
@@ -38,15 +43,23 @@ cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
 
 `$RPC_URL` is the reviewed continuous-provider transport selected under `SKILL.md`; never use it for a standalone read.
 
-The fee flags are mandatory for Ethereum mainnet and must contain the approved quote from `ethereum-gas.md` when the
-wallet request opens. The user may deliberately edit the gas limit, max fee per gas, or max priority fee per gas in
-Rabby's confirmation UI, including by selecting a different tier. Treat their approval of the final wallet screen as
-authorization for those gas settings and the resulting maximum transaction cost. Do not reject, stop, request another
-approval, or resimulate solely because those values differ from the reviewed command.
+The example uses the default Ethereum fee policy. Use the user- or consumer-selected policy from `SKILL.md` when one is
+specified. For a fixed legacy policy, replace the fee pair with `--legacy --gas-price "$GAS_PRICE"` and preserve the
+reviewed gas limit. Do not pass EIP-1559 priority-fee flags with a legacy transaction.
+
+Unless the reviewed workflow fixes its fees, the user may deliberately edit the gas limit, gas price, max fee per gas,
+or max priority fee per gas in Rabby's confirmation UI, including by selecting a different tier. Treat their approval of
+the final wallet screen as authorization for those gas settings and the resulting maximum transaction cost. Do not
+reject, stop, request another approval, or resimulate solely because those values differ from the reviewed command.
 
 This exception applies only to gas settings changed and approved in the wallet UI. Confirm the chain, account, target,
 calldata, native value, and nonce still match the reviewed transaction; reject the request if any of those fields
 change.
+
+For a workflow whose transfer value depends on fixed fees, including an exact-zero sweep, preserve the reviewed
+transaction type, gas limit, and gas price. Reject wallet changes before signing and rebuild, simulate, and review the
+dependent transfer value. If the wallet cannot preserve a legacy request, stop without submitting an EIP-1559
+substitute.
 
 Do not combine `--browser` with another signer flag. Capture the transaction hash, then have `$evm-atlas` verify the
 receipt before reporting success.
@@ -81,15 +94,18 @@ repeated negative result.
 
 ## Message Signing
 
-Present the exact plain-message bytes or decoded EIP-712 domain and payload before approval. After approval:
+Before preparing a message or Permit2 flow, check whether `env -i PATH="$PATH" cast wallet sign --help` exposes
+`--browser`. If it does not, browser message signing is unavailable in this Cast installation; stop that flow without
+loading a key or substituting a transaction signature. Present the exact plain-message bytes or decoded EIP-712 domain
+and payload before approval. Only when the capability exists and the review is approved:
 
 ```sh
 cast wallet sign 'reviewed message' --browser
 cast wallet sign --data --from-file typed-data.json --browser
 ```
 
-Return the signature and signer address. Do not broadcast or submit the signature elsewhere unless the user separately
-authorized that external write.
+Verify the recovered signer matches the reviewed account, then return the signature and signer address. Do not broadcast
+or submit the signature elsewhere unless the user separately authorized that external write.
 
 ## Failure Handling
 

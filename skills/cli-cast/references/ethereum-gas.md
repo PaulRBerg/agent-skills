@@ -1,9 +1,12 @@
 # Ethereum Slow Gas
 
-Use this policy for Ethereum mainnet transactions only. Rabby's keyless gas-market endpoint supplies the same `slow`,
-`normal`, and `fast` tiers used by the wallet, including separate EIP-1559 max-fee and priority-fee values. It is a
-public runtime API, not a documented third-party SLA; stop on an outage or schema change instead of substituting another
-source.
+This is the default policy for Ethereum mainnet transactions. The user or consuming skill may explicitly select another
+policy under `SKILL.md`, including fixed legacy pricing for an exact-zero sweep. In that case, use and review the
+selected policy instead of fetching or enforcing this fee pair. Do not treat an API failure as an implicit override.
+
+Rabby's keyless gas-market endpoint supplies the same `slow`, `normal`, and `fast` tiers used by the wallet, including
+separate EIP-1559 max-fee and priority-fee values. It is a public runtime API, not a documented third-party SLA; stop on
+an outage or schema change instead of substituting another source.
 
 ## Fetch the Quote
 
@@ -36,7 +39,8 @@ If validation fails, fetch once more. Stop if the second result fails; do not fa
 
 ## Bind the Fees
 
-Pass both values to simulation where supported and to every transaction-building or `cast send` command:
+When this policy is selected, pass both values to simulation where supported and to every transaction-building or
+`cast send` command:
 
 ```sh
 cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \

@@ -60,11 +60,12 @@ Resolve and validate chain ID, sender, target, function signature, arguments, ca
 assumptions without signing. Obtain every on-chain fact through `evm-atlas`; do not request or load key material during
 preparation.
 
-For an Ethereum mainnet transaction, read [references/ethereum-gas.md](references/ethereum-gas.md), fetch a fresh Rabby
-`slow` quote, and bind its EIP-1559 fee pair to the transaction before simulation. Apply this policy to every signer;
-never let a keystore, hardware-wallet, or private-key flow silently select Normal or Fast. For browser signing, use the
-quote as the initial wallet request; the user may deliberately edit gas settings in the wallet confirmation UI under the
-Review rules below. Do not reuse Ethereum fee values on another chain.
+For Ethereum mainnet, the default gas policy is [references/ethereum-gas.md](references/ethereum-gas.md): fetch a fresh
+Rabby `slow` quote and bind its EIP-1559 fee pair before simulation. The user or a consuming skill may explicitly choose
+a different gas policy, including a fixed legacy gas price for an exact-zero sweep. Honor that choice; it does not
+require a separate policy-exception approval. Record its source, transaction type, fee values, and any constraints in
+the transaction review. Apply the selected policy to every signer and do not silently substitute a different tier or
+transaction type. Do not reuse Ethereum fee values on another chain.
 
 ### Simulate
 
@@ -80,8 +81,8 @@ Before any signature or broadcast, present one concrete review containing:
 - chain name and ID, RPC source, and latest block used;
 - sender, target, function, decoded arguments, calldata, and native value;
 - nonce, gas estimate/limit, fee assumptions, and maximum native-token cost;
-- for Ethereum mainnet, the Rabby oracle URL, `slow` tier, quote time, estimated inclusion time, max fee per gas, and
-  max priority fee per gas;
+- the selected gas policy and source; for Rabby Slow, the oracle URL, tier, quote time, estimated inclusion time, max
+  fee per gas, and max priority fee per gas; for a legacy policy, the fixed gas price and transaction type;
 - expected approvals, transfers, or other state changes;
 - simulation command and outcome;
 - selected signer and the exact signing/broadcast command with secrets redacted.
@@ -91,28 +92,36 @@ command in a fenced block, and state precisely what confirmation authorizes. Sto
 of this review in a subsequent message. If any reviewed field changes outside the browser-wallet exception below,
 simulate again and present a revised review.
 
-For browser signing only, the reviewed gas limit and fee caps are starting values. The user may deliberately change the
-gas limit, max fee per gas, or max priority fee per gas in the wallet confirmation UI. Their approval of that final
-wallet screen authorizes those edited gas settings and the resulting maximum transaction cost; do not stop, require a
-second approval, or resimulate solely because they differ from the prepared values. Continue only when the chain,
-sender, target, calldata, native value, nonce, and decoded intent still match the approved review. Wallet changes to any
-of those fields require rejection and a revised review.
+For browser signing only, the reviewed gas limit and fees are starting values unless the consuming workflow requires
+them to remain fixed. The user may deliberately change the gas limit, gas price, max fee per gas, or max priority fee
+per gas in the wallet confirmation UI. Their approval of that final wallet screen authorizes those edited gas settings
+and the resulting maximum transaction cost; do not stop, require a second approval, or resimulate solely because they
+differ from the prepared values. Continue only when the chain, sender, target, calldata, native value, nonce, and
+decoded intent still match the approved review. Wallet changes to any of those fields require rejection and a revised
+review.
+
+When fees determine the transfer value or another reviewed invariant, such as leaving exactly zero native balance, the
+browser exception does not apply. Preserve the reviewed transaction type, gas limit, and fee values. If the wallet
+changes them, reject before signing, recompute the dependent values, simulate, and obtain approval of the revised
+review.
 
 ### Sign and Broadcast
 
-Read [references/browser-signing.md](references/browser-signing.md) only after approval when a browser wallet is
-available. Prefer browser, encrypted keystore, or hardware wallet in that order. Use an environment-backed private key
-only when the user explicitly opts in or no safer method is available; never ask for a key in chat or print it.
+Read [references/browser-signing.md](references/browser-signing.md) for browser capability checks and sender handling;
+open a signing request only after approval. Prefer browser, encrypted keystore, or hardware wallet in that order unless
+the user or consuming skill restricts the signer. A browser-only workflow must stop if browser signing is unavailable;
+never substitute another signer. Use an environment-backed private key only when the user explicitly opts in or no safer
+method is available; never ask for a key in chat or print it.
 
 `cast send` signs and broadcasts in one command. Run it only after the review approval. Signing a message or typed data
 also requires a review of the exact payload, domain, chain binding, and intended use before approval.
 
-Every Ethereum mainnet transaction command must start with the approved Rabby Slow values explicitly as `--gas-price`
-and `--priority-gas-price`, regardless of signer. Before opening the signer, recheck that the approved max fee is not
-below the latest base fee. If the quote must change before signing, simulate again and present a revised review; never
-upgrade to Normal or Fast as a fallback. A browser-wallet user may override those starting gas settings in its
-confirmation UI as described under Review. These requirements do not apply to message or typed-data signatures because
-they consume no gas.
+Pass the selected fees explicitly: EIP-1559 uses `--gas-price` and `--priority-gas-price`; a fixed legacy policy uses
+`--legacy --gas-price` without `--priority-gas-price`. Under the default Ethereum policy, use the approved Rabby Slow
+pair. Before opening the signer on Ethereum, recheck that the approved max fee or legacy gas price covers the latest
+base fee. If fees must change before signing, simulate again and present a revised review; never silently change the
+selected policy. Wallet fee edits follow Review, including its fixed-fee exception. Message and typed-data signatures
+consume no gas.
 
 After broadcast, capture the transaction hash and have `evm-atlas` verify the receipt on the reviewed chain. When a
 receipt is still pending, it may use one bounded RouteMesh `newHeads` subscription to wait for the next block before
