@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::Path,
+};
 
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
@@ -8,10 +11,11 @@ use crate::{
 };
 
 use super::{
-    BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkClaimRow, WorkClaimUpdate, WorkRow, WorkUpdate,
+    BaselineRow, DirtObservationRow, EndedObservation, ResidualOwnerRow, Store, WorkClaimRow, WorkClaimUpdate, WorkRow,
+    WorkUpdate,
     store::{bump_generation, client_name, invalid_value, parse_client, parse_work_state, work_state_name},
     store_communications::add_message,
-    store_sessions::end_session_if_revision,
+    store_sessions::{end_session_if_revision, reconcile_ended},
 };
 
 /// State-owned facade for one atomic work arbitration.
@@ -58,6 +62,12 @@ impl WorkTransaction<'_> {
 
     pub(crate) fn end_session_if_revision(&self, identity: &Identity, expected_revision: i64) -> Result<bool> {
         end_session_if_revision(&self.transaction, identity, expected_revision)
+    }
+
+    /// Remove only sessions whose fingerprint and revision still match the death
+    /// observations, returning the identities this transaction actually removed.
+    pub(crate) fn reconcile_ended(&self, observations: &[EndedObservation]) -> Result<Vec<Identity>> {
+        reconcile_ended(&self.transaction, observations)
     }
 
     pub(crate) fn baselines_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Vec<BaselineRow>> {
@@ -151,6 +161,9 @@ impl Store {
     ) -> Result<WorkRow> {
         self.immediate(|transaction| {
             let existing = work_from(transaction, identity)?;
+            if let [claim] = claims {
+                crate::work::require_ordinary_item(existing.as_ref(), Path::new(&claim.repo_root), "draft")?;
+            }
             if existing.as_ref().is_some_and(|work| work.state != WorkState::Draft) {
                 return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
             }

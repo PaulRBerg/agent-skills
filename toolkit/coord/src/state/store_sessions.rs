@@ -178,39 +178,6 @@ impl Store {
         })
     }
 
-    /// Remove sessions proven dead by observations of the same stored row revision.
-    ///
-    /// An upsert racing with a liveness probe increments `revision`; the stale probe then
-    /// cannot remove the refreshed row. Unknown or merely old sessions are never removed.
-    pub(crate) fn reconcile_ended(&mut self, observations: &[EndedObservation]) -> Result<usize> {
-        self.immediate(|transaction| {
-            let mut removed = 0;
-            for observation in observations {
-                let stored = transaction
-                    .query_row(
-                        "SELECT pid, process_start_token, revision FROM sessions
-                         WHERE client = ?1 AND session_id = ?2",
-                        params![client_name(observation.identity.client), observation.identity.session_id],
-                        |row| {
-                            let pid = row.get::<_, Option<u32>>(0)?;
-                            let start_token = row.get::<_, Option<String>>(1)?;
-                            let fingerprint = pid.map(|pid| ProcessFingerprint { pid, start_token });
-                            Ok((fingerprint, row.get::<_, i64>(2)?))
-                        },
-                    )
-                    .optional()?;
-                if stored.as_ref() == Some(&(observation.expected_fingerprint.clone(), observation.expected_revision)) {
-                    remove_session(transaction, &observation.identity)?;
-                    removed += 1;
-                }
-            }
-            if removed > 0 {
-                bump_generation(transaction)?;
-            }
-            Ok(removed)
-        })
-    }
-
     pub(crate) fn session(&self, identity: &Identity) -> Result<Option<SessionRow>> {
         Ok(self
             .connection
@@ -242,6 +209,36 @@ impl Store {
             .map(|session| session.identity)
             .collect())
     }
+}
+
+pub(super) fn reconcile_ended(
+    transaction: &Transaction<'_>,
+    observations: &[EndedObservation],
+) -> Result<Vec<Identity>> {
+    let mut removed = Vec::new();
+    for observation in observations {
+        let stored = transaction
+            .query_row(
+                "SELECT pid, process_start_token, revision FROM sessions
+                 WHERE client = ?1 AND session_id = ?2",
+                params![client_name(observation.identity.client), observation.identity.session_id],
+                |row| {
+                    let pid = row.get::<_, Option<u32>>(0)?;
+                    let start_token = row.get::<_, Option<String>>(1)?;
+                    let fingerprint = pid.map(|pid| ProcessFingerprint { pid, start_token });
+                    Ok((fingerprint, row.get::<_, i64>(2)?))
+                },
+            )
+            .optional()?;
+        if stored.as_ref() == Some(&(observation.expected_fingerprint.clone(), observation.expected_revision)) {
+            remove_session(transaction, &observation.identity)?;
+            removed.push(observation.identity.clone());
+        }
+    }
+    if !removed.is_empty() {
+        bump_generation(transaction)?;
+    }
+    Ok(removed)
 }
 
 fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdate) -> Result<SessionRow> {

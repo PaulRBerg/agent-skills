@@ -846,3 +846,100 @@ fn process_inventory_is_cached_but_confirmed_death_still_cleans_bundle_work() {
     assert_eq!(refreshes.load(Ordering::SeqCst), 1);
     assert!(coordinator.store().unwrap().work(&owner).unwrap().is_none());
 }
+
+#[test]
+fn dead_session_release_rolls_back_when_a_waiter_notification_fails() {
+    let holder = identity("holder");
+    let first = identity("waiter-a");
+    let second = identity("waiter-b");
+    let (_temp, roots, active) = fixture(2, &[(&holder, 0, 120), (&first, 0, 121), (&second, 1, 122)]);
+    let requested = files(&roots, &["shared.rs", "shared.rs"]);
+    for owner in [&holder, &first, &second] {
+        active.start_bundle_for(owner.clone(), &owner.session_id, &requested, &[], &roots[0]).unwrap();
+    }
+    let mut store = active.store().unwrap();
+    store.update_delegate(&holder, "child", Some("explorer"), "active", 100.0).unwrap();
+    let session = store.session(&holder).unwrap().unwrap();
+    let work = store.work(&holder).unwrap().unwrap();
+    let delegates = store.delegates().unwrap();
+    let messages = store.all_messages().unwrap();
+    let generation = store.generation().unwrap();
+    let connection = rusqlite::Connection::open(store.path()).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TRIGGER reject_release_wake BEFORE INSERT ON messages
+             WHEN NEW.recipient_session_id = 'waiter-b' AND NEW.text LIKE 'Session ended; released work%'
+             BEGIN SELECT RAISE(ABORT, 'injected wake failure'); END;",
+        )
+        .unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(120, ProcessLiveness::Dead);
+    probe.set(121, ProcessLiveness::Alive);
+    probe.set(122, ProcessLiveness::Alive);
+    let coordinator = coordinator(active.store().unwrap(), probe, Arc::new(AtomicUsize::new(0)));
+
+    let error = coordinator.reconcile_processes(&mut store).unwrap_err();
+    assert!(error.to_string().contains("injected wake failure"));
+    assert_eq!(store.session(&holder).unwrap(), Some(session));
+    assert_eq!(store.work(&holder).unwrap(), Some(work));
+    assert_eq!(store.delegates().unwrap(), delegates);
+    assert_eq!(store.all_messages().unwrap(), messages);
+    assert_eq!(store.generation().unwrap(), generation);
+
+    connection.execute_batch("DROP TRIGGER reject_release_wake;").unwrap();
+    assert!(coordinator.reconcile_processes(&mut store).unwrap().is_empty());
+    assert!(store.session(&holder).unwrap().is_none());
+    assert!(store.work(&holder).unwrap().is_none());
+    assert!(store.delegates().unwrap().is_empty());
+    assert_eq!(store.inbox(&first, true).unwrap().len(), 1);
+    assert_eq!(store.inbox(&second, true).unwrap().len(), 1);
+    assert!(roots.iter().all(|root| store.residual_owners(root.to_str().unwrap()).unwrap().is_empty()));
+    let generation = store.generation().unwrap();
+    assert!(coordinator.reconcile_processes(&mut store).unwrap().is_empty());
+    assert_eq!(store.inbox(&first, true).unwrap().len(), 1);
+    assert_eq!(store.inbox(&second, true).unwrap().len(), 1);
+    assert_eq!(store.generation().unwrap(), generation);
+}
+
+#[test]
+fn concurrent_dead_session_probes_notify_each_waiter_once() {
+    struct ConcurrentProbe(std::sync::Barrier);
+    impl ProcessProbe for ConcurrentProbe {
+        fn fingerprint(&self, pid: u32) -> Result<ProcessFingerprint> {
+            Ok(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) })
+        }
+        fn liveness(&self, fingerprint: &ProcessFingerprint) -> ProcessLiveness {
+            if fingerprint.pid == 130 {
+                self.0.wait();
+                ProcessLiveness::Dead
+            } else {
+                ProcessLiveness::Alive
+            }
+        }
+    }
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let (_temp, roots, active) = fixture(2, &[(&holder, 0, 130), (&waiter, 1, 131)]);
+    let requested = files(&roots, &["shared.rs", "shared.rs"]);
+    active.start_bundle_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap();
+    active.start_bundle_for(waiter.clone(), "waiter", &requested, &[], &roots[1]).unwrap();
+    let mut first = active.store().unwrap();
+    let mut second = active.store().unwrap();
+    let coordinator = Coordinator::with_components(
+        active.store().unwrap(),
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::new(ConcurrentProbe(std::sync::Barrier::new(2))),
+        Arc::new(FakeClock::new(100.0)),
+    );
+    let generation = first.generation().unwrap();
+    std::thread::scope(|scope| {
+        let left = scope.spawn(|| coordinator.reconcile_processes(&mut first));
+        let right = scope.spawn(|| coordinator.reconcile_processes(&mut second));
+        assert!(left.join().unwrap().unwrap().is_empty());
+        assert!(right.join().unwrap().unwrap().is_empty());
+    });
+    assert!(first.session(&holder).unwrap().is_none());
+    assert!(first.work(&holder).unwrap().is_none());
+    assert_eq!(first.inbox(&waiter, true).unwrap().len(), 1);
+    assert_eq!(first.generation().unwrap(), generation + 2);
+}

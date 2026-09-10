@@ -483,23 +483,32 @@ impl Coordinator {
                 expected_revision: revisions[&observation.identity],
             })
             .collect::<Vec<_>>();
-        let released_work = dead
-            .iter()
-            .map(|observation| Ok((observation.identity.clone(), store.work(&observation.identity)?)))
-            .collect::<Result<Vec<_>>>()?;
-        store.reconcile_ended(&dead)?;
-        let remaining_work = store.works()?;
-        for (identity, released) in released_work {
-            if store.session(&identity)?.is_some() {
-                continue;
+        store.with_work_transaction(|transaction| {
+            let released_work = dead
+                .iter()
+                .map(|observation| Ok((observation.identity.clone(), transaction.work(&observation.identity)?)))
+                .collect::<Result<Vec<_>>>()?;
+            let removed = transaction.reconcile_ended(&dead)?;
+            let remaining_work = transaction.works()?;
+            for (identity, released) in released_work {
+                if !removed.contains(&identity) {
+                    continue;
+                }
+                let wakeups = released
+                    .as_ref()
+                    .filter(|work| work.state != WorkState::Draft)
+                    .map(|work| overlapping_waiters(&remaining_work, work, &identity))
+                    .unwrap_or_default();
+                notify_session_release_transaction(
+                    transaction,
+                    &identity,
+                    released.as_ref(),
+                    wakeups,
+                    self.clock.wall(),
+                )?;
             }
-            let wakeups = released
-                .as_ref()
-                .filter(|work| work.state != WorkState::Draft)
-                .map(|work| overlapping_waiters(&remaining_work, work, &identity))
-                .unwrap_or_default();
-            notify_session_release(store, &identity, released.as_ref(), wakeups, self.clock.wall())?;
-        }
+            Ok(())
+        })?;
         Ok(observations
             .iter()
             .filter(|observation| observation.liveness == ProcessLiveness::Unknown)
@@ -589,26 +598,6 @@ fn overlapping_waiters(work: &[WorkRow], released: &WorkRow, identity: &Identity
     });
     waiters.dedup_by(|left, right| left.0 == right.0);
     waiters
-}
-
-fn notify_session_release(
-    store: &mut Store,
-    identity: &Identity,
-    released: Option<&WorkRow>,
-    wakeups: Vec<(Identity, String)>,
-    current: f64,
-) -> Result<()> {
-    let Some(released) = released else {
-        return Ok(());
-    };
-    let text = sanitize(
-        &format!("Session ended; released work '{}'; your queued work may now be ready.", released.label),
-        super::MAX_MESSAGE_CHARS,
-    );
-    for (waiter, repo_root) in wakeups {
-        store.send_message(identity, &[waiter], &text, Some(&repo_root), current)?;
-    }
-    Ok(())
 }
 
 fn notify_session_release_transaction(

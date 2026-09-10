@@ -329,7 +329,7 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
         expected_fingerprint: first.fingerprint,
         expected_revision: first.revision,
     };
-    assert_eq!(store.reconcile_ended(&[stale]).unwrap(), 0);
+    assert!(store.with_work_transaction(|transaction| transaction.reconcile_ended(&[stale])).unwrap().is_empty());
     assert!(store.session(&owner).unwrap().is_some());
     assert!(store.work(&owner).unwrap().is_some());
 
@@ -338,7 +338,10 @@ fn stale_ended_observation_cannot_remove_a_refreshed_session() {
         expected_fingerprint: second.fingerprint,
         expected_revision: second.revision,
     };
-    assert_eq!(store.reconcile_ended(&[current]).unwrap(), 1);
+    assert_eq!(
+        store.with_work_transaction(|transaction| transaction.reconcile_ended(&[current])).unwrap(),
+        std::slice::from_ref(&owner)
+    );
     assert!(store.session(&owner).unwrap().is_none());
     assert!(store.work(&owner).unwrap().is_none());
     assert!(store.delegates().unwrap().is_empty());
@@ -502,7 +505,7 @@ fn reconcile_requires_the_exact_fingerprint_even_at_the_same_revision() {
         expected_fingerprint: Some(ProcessFingerprint { pid: 42, start_token: Some("reused-pid".to_owned()) }),
         expected_revision: row.revision,
     };
-    assert_eq!(store.reconcile_ended(&[mismatched]).unwrap(), 0);
+    assert!(store.with_work_transaction(|transaction| transaction.reconcile_ended(&[mismatched])).unwrap().is_empty());
     assert!(store.session(&owner).unwrap().is_some());
 }
 
@@ -936,6 +939,31 @@ fn draft_replacement_is_whole_work_only_and_rejects_authoritative_work() {
         "queued or active work exists; run ai-coord done before drafting"
     );
     assert_eq!(store.work(&owner).unwrap().unwrap(), before);
+}
+
+#[test]
+fn ordinary_draft_rechecks_mode_and_root_in_transaction() {
+    for replacement in [
+        vec![work_claim("/repo-a", "a.rs", "ignored"), work_claim("/repo-b", "b.rs", "ignored")],
+        vec![work_claim("/repo-b", "b.rs", "ignored")],
+    ] {
+        let temporary = tempdir().unwrap();
+        let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+        let owner = identity(Client::Codex, "owner");
+        store.upsert_session(&session_update(&owner, 0.0)).unwrap();
+        let root = std::path::Path::new("/repo-a");
+        crate::work::require_ordinary_item(store.work(&owner).unwrap().as_ref(), root, "draft").unwrap();
+
+        let mut competitor = Store::open(store.path()).unwrap();
+        let winner = competitor.save_draft(&owner, "winner", &replacement, 1.0).unwrap();
+        let generation = store.generation().unwrap();
+        let expected = crate::work::require_ordinary_item(Some(&winner), root, "draft").unwrap_err();
+        let error = store.save_draft(&owner, "stale", &[work_claim("/repo-a", "new.rs", "ignored")], 2.0).unwrap_err();
+        assert_eq!(error.kind, expected.kind);
+        assert_eq!(error.to_string(), expected.to_string());
+        assert_eq!(store.work(&owner).unwrap(), Some(winner));
+        assert_eq!(store.generation().unwrap(), generation);
+    }
 }
 
 #[test]
