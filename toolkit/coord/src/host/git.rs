@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeMap,
-    ffi::OsString,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::mpsc::{self, Receiver, RecvTimeoutError},
@@ -38,6 +37,17 @@ pub(super) struct CommandOutput {
 
 /// Run a child with bounded wall time while draining both output pipes.
 pub(super) fn run_output_timeout(command: &mut Command, timeout: Duration) -> std::io::Result<CommandOutput> {
+    run_output_with_input_timeout(command, None, timeout)
+}
+
+fn run_output_with_input_timeout(
+    command: &mut Command,
+    input: Option<&[u8]>,
+    timeout: Duration,
+) -> std::io::Result<CommandOutput> {
+    if input.is_some() {
+        command.stdin(Stdio::piped());
+    }
     let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
@@ -52,6 +62,10 @@ pub(super) fn run_output_timeout(command: &mut Command, timeout: Duration) -> st
             return Err(error);
         }
     };
+    if let Some(input) = input {
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        cleanup_on_error(stdin.write_all(input), &mut child)?;
+    }
     let started = Instant::now();
     let Some(status) = cleanup_on_error(child.wait_timeout(timeout), &mut child)? else {
         terminate_child(&mut child);
@@ -120,7 +134,7 @@ pub(crate) fn git_root(cwd: &Path) -> Option<PathBuf> {
     if !output.status.success() {
         return None;
     }
-    let value = std::str::from_utf8(&output.stdout).ok()?.trim();
+    let value = std::str::from_utf8(output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout)).ok()?;
     if value.is_empty() {
         return None;
     }
@@ -420,6 +434,9 @@ pub(crate) fn git_blob_hashes(root: &Path, paths: &[String], write: bool) -> Vec
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 hashes[index] = Some(UNHASHABLE_BLOB_HASH.to_owned());
             }
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                hashes[index] = Some(git_symlink_blob_hash(root, path, write));
+            }
             Ok(_) | Err(_) => eligible.push(index),
         }
     }
@@ -438,6 +455,31 @@ pub(crate) fn git_blob_hashes(root: &Path, paths: &[String], write: bool) -> Vec
         .cloned()
         .zip(hashes.into_iter().map(|hash| hash.unwrap_or_else(|| UNHASHABLE_BLOB_HASH.to_owned())))
         .collect()
+}
+
+fn git_symlink_blob_hash(root: &Path, path: &str, write: bool) -> String {
+    let Ok(target) = std::fs::read_link(root.join(path)) else {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    };
+    let mut command = Command::new("git");
+    command.args(["-C"]).arg(root).arg("hash-object");
+    if write {
+        command.arg("-w");
+    }
+    command.arg("--stdin");
+    let output = run_output_with_input_timeout(
+        &mut command,
+        Some(target.as_os_str().as_encoded_bytes()),
+        GIT_INSPECTION_TIMEOUT,
+    );
+    let Ok(output) = output else {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    };
+    if !output.status.success() {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if value.is_empty() { UNHASHABLE_BLOB_HASH.to_owned() } else { value }
 }
 
 fn git_blob_hash_batch(root: &Path, paths: &[&str], write: bool) -> Option<Vec<String>> {
@@ -513,29 +555,18 @@ fn push_git_path(paths: &mut Vec<String>, bytes: &[u8]) {
 }
 
 fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {
-    let mut cursor = path.to_owned();
-    let mut missing: Vec<OsString> = Vec::new();
-    loop {
-        match std::fs::canonicalize(&cursor) {
-            Ok(mut resolved) => {
-                for component in missing.iter().rev() {
-                    resolved.push(component);
-                }
-                return Ok(resolved);
+    let mut missing_error = None;
+    for ancestor in path.ancestors() {
+        match std::fs::canonicalize(ancestor) {
+            Ok(resolved) => {
+                let suffix = path.strip_prefix(ancestor).expect("ancestor comes from the same path");
+                return Ok(crate::lexically_normalized(resolved.join(suffix)));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                let Some(name) = cursor.file_name() else {
-                    return Err(error);
-                };
-                missing.push(name.to_os_string());
-                let Some(parent) = cursor.parent() else {
-                    return Err(error);
-                };
-                cursor = parent.to_owned();
-            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => missing_error = Some(error),
             Err(error) => return Err(error),
         }
     }
+    Err(missing_error.unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "path has no ancestor")))
 }
 
 #[cfg(test)]
@@ -627,7 +658,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn bundle_rejects_glob_control_and_invalid_utf8_inputs() {
-        use std::os::unix::ffi::OsStringExt;
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
         let temp = TempDir::new().unwrap();
         let invalid = temp.path().join(OsString::from_vec(vec![b'x', 0xff]));
@@ -648,6 +679,16 @@ mod tests {
         let temp = TempDir::new().unwrap();
         assert!(normalize_scopes(&[PathBuf::from("*.rs")], temp.path(), temp.path()).is_err());
         assert!(normalize_scopes(&[PathBuf::from("../outside")], temp.path(), temp.path()).is_err());
+    }
+
+    #[test]
+    fn normalizes_missing_components_before_enforcing_the_repository_boundary() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("repo");
+        fs::create_dir(&root).unwrap();
+
+        assert_eq!(normalize_scopes(&[PathBuf::from("missing/../inside")], &root, &root).unwrap(), vec!["inside"]);
+        assert!(normalize_scopes(&[PathBuf::from("missing/../../outside")], &root, &root).is_err());
     }
 
     #[cfg(unix)]
@@ -689,6 +730,16 @@ mod tests {
         assert_ne!(git_blob_hash(root, "nested/file.txt", false), UNHASHABLE_BLOB_HASH);
         assert_eq!(git_blob_hash(root, "missing", false), UNHASHABLE_BLOB_HASH);
         assert_eq!(relevant_dirty(&[scope("nested", true)], &["nested/file.txt".to_owned()]), vec!["nested/file.txt"]);
+    }
+
+    #[test]
+    fn git_root_preserves_trailing_whitespace_in_the_worktree_name() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("repo ");
+        fs::create_dir(&root).unwrap();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(&root).status().unwrap().success());
+
+        assert_eq!(git_root(&root), Some(root.canonicalize().unwrap()));
     }
 
     #[test]
@@ -759,7 +810,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn hashes_valid_and_broken_symlinks() {
+    fn hashes_symlink_contents_including_broken_targets() {
         use std::os::unix::fs::symlink;
 
         let temp = TempDir::new().unwrap();
@@ -768,12 +819,36 @@ mod tests {
         fs::write(root.join("target.txt"), "target\n").unwrap();
         symlink("target.txt", root.join("valid-link")).unwrap();
         symlink("missing-target.txt", root.join("broken-link")).unwrap();
+        assert!(
+            Command::new("git")
+                .args(["add", "valid-link", "broken-link"])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
         let paths = vec!["valid-link".to_owned(), "broken-link".to_owned()];
 
         let hashes = git_blob_hashes(root, &paths, false);
+        let expected = paths
+            .iter()
+            .map(|path| {
+                String::from_utf8(
+                    Command::new("git")
+                        .args(["rev-parse", &format!(":{path}")])
+                        .current_dir(root)
+                        .output()
+                        .unwrap()
+                        .stdout,
+                )
+                .unwrap()
+                .trim()
+                .to_owned()
+            })
+            .collect::<Vec<_>>();
 
-        assert_ne!(hashes[0].1, UNHASHABLE_BLOB_HASH);
-        assert_eq!(hashes[1].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes.iter().map(|(_, hash)| hash).collect::<Vec<_>>(), expected.iter().collect::<Vec<_>>());
+        assert_ne!(hashes[0].1, git_blob_hash(root, "target.txt", false));
     }
 
     #[test]

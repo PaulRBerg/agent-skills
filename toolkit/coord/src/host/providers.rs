@@ -20,6 +20,8 @@ pub(crate) const INVENTORY_CACHE_SECONDS: f64 = 2.0;
 pub(crate) const CLAUDE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
 pub(crate) const CLAUDE_PROVIDER_SOURCE: &str = "claude-agents-json";
 pub(crate) const CODEX_PROVIDER_SOURCE: &str = "hook-ledger";
+const CLAUDE_PARTIAL_RETRY_ATTEMPTS: usize = 3;
+const CLAUDE_PARTIAL_RETRY_DELAY: Duration = Duration::from_millis(25);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ProviderContext {
@@ -167,6 +169,17 @@ pub(crate) fn collect_claude_inventory(
             authoritative: false,
         };
     };
+    for attempt in 0..CLAUDE_PARTIAL_RETRY_ATTEMPTS {
+        let observation = collect_claude_inventory_once(executable, probe);
+        if observation.report.dropped == 0 || attempt + 1 == CLAUDE_PARTIAL_RETRY_ATTEMPTS {
+            return observation;
+        }
+        std::thread::sleep(CLAUDE_PARTIAL_RETRY_DELAY);
+    }
+    unreachable!("Claude inventory retry loop always returns")
+}
+
+fn collect_claude_inventory_once(executable: &Path, probe: &dyn ProcessProbe) -> ClaudeInventoryObservation {
     let output = match run_output_timeout(Command::new(executable).args(["agents", "--json"]), CLAUDE_INVENTORY_TIMEOUT)
     {
         Ok(output) => output,
@@ -503,6 +516,25 @@ mod tests {
         assert!(!malformed.authoritative);
         assert_eq!(malformed.report.dropped, 1);
         assert!(!inventory_result(vec![malformed.report]).complete);
+    }
+
+    #[test]
+    fn transiently_dropped_claude_rows_are_retried() {
+        let temp = TempDir::new().unwrap();
+        let executable = temp.path().join("claude");
+        fs::write(
+            &executable,
+            "#!/bin/sh\nmarker=\"$0.seen\"\nif test -e \"$marker\"; then\n  printf '%s' '[{\"id\":\"ready\",\"cwd\":\"/tmp\",\"state\":\"idle\",\"startedAt\":1}]'\nelse\n  : > \"$marker\"\n  printf '%s' '[{\"id\":\"partial\",\"state\":\"idle\"}]'\nfi\n",
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let observation = collect_claude_inventory(Some(&executable), &FakeProbe);
+
+        assert!(observation.authoritative);
+        assert_eq!(observation.report.dropped, 0);
+        assert_eq!(observation.sessions.len(), 1);
+        assert_eq!(observation.sessions[0].identity.session_id, "ready");
     }
 
     #[test]

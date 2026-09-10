@@ -373,12 +373,18 @@ fn handler_matches(group: &Value, handler: &Value, spec: &HookSpec) -> bool {
     }
     handler.get("type").and_then(Value::as_str) == Some("command") &&
         handler.get("command").and_then(Value::as_str) == Some(spec.command) &&
-        spec.timeout.is_none_or(|timeout| handler.get("timeout").and_then(Value::as_u64) == Some(timeout)) &&
-        spec.additional_context_limit
-            .is_none_or(|limit| handler.get("additionalContextLimit").and_then(Value::as_u64) == Some(limit)) &&
-        spec.if_filter.is_none_or(|filter| handler.get("if").and_then(Value::as_str) == Some(filter)) &&
-        spec.async_.is_none_or(|async_| handler.get("async").and_then(Value::as_bool) == Some(async_)) &&
-        spec.async_rewake.is_none_or(|rewake| handler.get("asyncRewake").and_then(Value::as_bool) == Some(rewake))
+        optional_field_matches(handler.get("timeout"), spec.timeout.map(Value::from)) &&
+        optional_field_matches(handler.get("additionalContextLimit"), spec.additional_context_limit.map(Value::from)) &&
+        optional_field_matches(handler.get("if"), spec.if_filter.map(Value::from)) &&
+        optional_field_matches(handler.get("async"), spec.async_.map(Value::from)) &&
+        optional_field_matches(handler.get("asyncRewake"), spec.async_rewake.map(Value::from))
+}
+
+fn optional_field_matches(actual: Option<&Value>, expected: Option<Value>) -> bool {
+    match expected {
+        Some(expected) => actual == Some(&expected),
+        None => actual.is_none(),
+    }
 }
 
 #[cfg(test)]
@@ -413,13 +419,14 @@ mod tests {
     fn removes_stale_owned_handlers_but_not_neighbouring_handlers() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("hooks.json");
-        fs::write(&path, r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"ai-coord hook codex","timeout":99},{"type":"command","command":"other"}]}],"Other":[{"hooks":[{"type":"command","command":"ai-coord waker codex"}]}]}}"#).unwrap();
+        fs::write(&path, r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"ai-coord hook codex","timeout":99},{"type":"command","command":"other"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"ai-coord hook codex","timeout":3,"async":true}]}],"Other":[{"hooks":[{"type":"command","command":"ai-coord waker codex"}]}]}}"#).unwrap();
 
         link_hooks(Client::Codex, &path, false, false).unwrap();
         let text = fs::read_to_string(path).unwrap();
 
         assert!(text.contains("\"command\":\"other\""));
         assert!(!text.contains("ai-coord waker codex"));
+        assert!(!text.contains("\"async\""));
         assert!(inspect_hooks(Client::Codex, &directory.path().join("hooks.json")).ok);
     }
 
