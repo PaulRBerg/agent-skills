@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -79,7 +79,7 @@ pub fn ensure_claude_hooks(path: &Path, force: bool, dry_run: bool) -> Result<Cl
     for spec in HOOK_SPECS {
         match hooks.get_mut(spec.event) {
             Some(existing @ Value::Array(_)) => {
-                if !command_present(existing, spec.command) {
+                if !spec_present(existing, *spec) {
                     existing.as_array_mut().expect("matched an array").push(build_group(*spec));
                     added.push(spec.event.to_owned());
                 }
@@ -125,7 +125,7 @@ pub fn inspect_claude_hooks(config_root: &Path, project_root: &Path) -> ClaudeHo
         .filter(|path| path.exists())
         .collect();
 
-    let mut commands_by_event: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut installed_events = BTreeSet::new();
     let mut errors = BTreeMap::new();
     let mut paths = Vec::new();
 
@@ -150,13 +150,10 @@ pub fn inspect_claude_hooks(config_root: &Path, project_root: &Path) -> ClaudeHo
         };
 
         let mut path_has_command = false;
-        for (event, value) in hooks {
-            let commands = commands_by_event.entry(event.clone()).or_default();
-            commands.extend(iter_hook_commands(value));
-        }
         for spec in HOOK_SPECS {
-            if hooks.get(spec.event).is_some_and(|value| has_ai_notify_event_command(value, spec.command)) {
+            if hooks.get(spec.event).is_some_and(|value| spec_present(value, *spec)) {
                 path_has_command = true;
+                installed_events.insert(spec.event);
             }
         }
         if path_has_command {
@@ -166,13 +163,7 @@ pub fn inspect_claude_hooks(config_root: &Path, project_root: &Path) -> ClaudeHo
 
     let missing_events = HOOK_SPECS
         .iter()
-        .filter(|spec| {
-            !commands_by_event.get(spec.event).is_some_and(|commands| {
-                commands
-                    .iter()
-                    .any(|command| command.contains("ai-notify") && command.contains(&event_subcommand(spec.command)))
-            })
-        })
+        .filter(|spec| !installed_events.contains(spec.event))
         .map(|spec| spec.event.to_owned())
         .collect::<Vec<_>>();
     let status = if missing_events.is_empty() {
@@ -239,13 +230,29 @@ fn command_present(value: &Value, expected: &str) -> bool {
     iter_hook_commands(value).iter().any(|command| command.trim() == expected)
 }
 
-fn has_ai_notify_event_command(value: &Value, command: &str) -> bool {
-    let subcommand = event_subcommand(command);
-    iter_hook_commands(value).iter().any(|candidate| candidate.contains("ai-notify") && candidate.contains(&subcommand))
-}
-
-fn event_subcommand(command: &str) -> String {
-    command.strip_prefix("ai-notify event ").unwrap_or(command).to_owned()
+fn spec_present(value: &Value, spec: HookSpec) -> bool {
+    value.as_array().is_some_and(|groups| {
+        groups.iter().any(|group| {
+            let Some(group) = group.as_object() else {
+                return false;
+            };
+            let matcher_matches = match spec.matcher {
+                Some(expected) => group.get("matcher").and_then(Value::as_str) == Some(expected),
+                None => !group.contains_key("matcher"),
+            };
+            matcher_matches &&
+                group.get("hooks").and_then(Value::as_array).is_some_and(|hooks| {
+                    hooks.iter().any(|hook| {
+                        hook.as_object().is_some_and(|hook| {
+                            hook.get("type").and_then(Value::as_str) == Some("command") &&
+                                hook.get("command")
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|command| command.trim() == spec.command)
+                        })
+                    })
+                })
+        })
+    })
 }
 
 fn summarize_hook(value: &Value) -> String {
@@ -357,5 +364,44 @@ mod tests {
         let report = inspect_claude_hooks(&config, &project);
         assert_eq!(report.status, IntegrationStatus::Ok);
         assert_eq!(report.ignored_paths.len(), 2);
+    }
+
+    #[test]
+    fn installer_and_inspector_require_the_declared_hook_shape() {
+        let directory = tempdir().unwrap();
+        let config = directory.path().join(".claude");
+        let path = config.join("settings.json");
+        fs::create_dir_all(&config).unwrap();
+        fs::write(
+            &path,
+            serde_json::to_string(&json!({
+                "hooks": {
+                    "PreToolUse": [{
+                        "matcher": "Bash",
+                        "hooks": [{"type": "command", "command": "ai-notify event ask-user-question"}]
+                    }],
+                    "Stop": [{
+                        "hooks": [{"type": "prompt", "command": "ai-notify event stop"}]
+                    }]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let before = inspect_claude_hooks(&config, directory.path());
+        assert!(before.missing_events.contains(&"PreToolUse".to_owned()));
+        assert!(before.missing_events.contains(&"Stop".to_owned()));
+
+        ensure_claude_hooks(&path, false, false).unwrap();
+        let after = inspect_claude_hooks(&config, directory.path());
+        assert!(!after.missing_events.contains(&"PreToolUse".to_owned()));
+        assert!(!after.missing_events.contains(&"Stop".to_owned()));
+        let settings: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(settings["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
+        assert_eq!(settings["hooks"]["Stop"].as_array().unwrap().len(), 2);
+
+        let repeated = ensure_claude_hooks(&config.join("settings.json"), false, false).unwrap();
+        assert!(!repeated.changed);
     }
 }

@@ -4,7 +4,10 @@
 //! sink. This keeps event parsing testable on every platform and lets the binary
 //! choose the SQLite and macOS implementations.
 
-use std::{env, path::Path};
+use std::{
+    env,
+    path::{Component, Path},
+};
 
 use serde_json::{Map, Value};
 
@@ -55,7 +58,7 @@ pub fn validate_payload(payload: &Value) -> Result<()> {
     let object = payload.as_object().ok_or_else(|| AppError::usage("JSON payload must be an object"))?;
     if let Some(cwd) = object.get("cwd") {
         let cwd = cwd.as_str().ok_or_else(|| AppError::usage("cwd must be a string"))?;
-        if cwd.contains("..") {
+        if Path::new(cwd).components().any(|component| component == Component::ParentDir) {
             return Err(AppError::usage("Path traversal detected in cwd"));
         }
     }
@@ -93,10 +96,13 @@ pub fn handle_stop(
     if nonempty_collection(object.get("background_tasks")) || nonempty_collection(object.get("session_crons")) {
         return Ok(());
     }
+    let prompt = state.active_prompt(session_id);
     state.mark_stopped(session_id);
-    let job = state.job_info(session_id);
-    if let (Some(duration), Some(prompt)) =
-        (job.duration_seconds.and_then(|value| u64::try_from(value).ok()), job.prompt) &&
+    let duration = prompt
+        .as_ref()
+        .and_then(|_| state.job_info(session_id).duration_seconds)
+        .and_then(|value| u64::try_from(value).ok());
+    if let (Some(duration), Some(prompt)) = (duration, prompt) &&
         should_send_completion_notification(&prompt, duration, config)
     {
         let notification = completion_notification(
@@ -427,6 +433,7 @@ mod tests {
     #[test]
     fn validation_rejects_invalid_generic_payload_fields() {
         assert!(validate_payload(&json!({"cwd":"/tmp/../etc"})).is_err());
+        assert!(validate_payload(&json!({"cwd":"/tmp/project..next"})).is_ok());
         assert!(validate_payload(&json!({"session_id":""})).is_err());
         assert!(parse_payload("[]").is_err());
     }
@@ -441,6 +448,7 @@ mod tests {
     #[test]
     fn stop_defers_pending_work_and_filters_normal_completions() {
         let state = State {
+            active: Some("work".into()),
             job: JobInfo { job_number: Some(1), duration_seconds: Some(11), prompt: Some("work".into()) },
             ..Default::default()
         };
@@ -455,6 +463,18 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sink.0.borrow()[0].subtitle, "Claude completed in 11s");
+    }
+    #[test]
+    fn stop_without_an_active_turn_does_not_repeat_a_previous_completion() {
+        let state = State {
+            job: JobInfo { job_number: Some(1), duration_seconds: Some(11), prompt: Some("previous work".into()) },
+            ..Default::default()
+        };
+        let mut sink = Sink::default();
+
+        handle_stop(&json!({"session_id":"s"}), &state, &config(), &mut sink).unwrap();
+
+        assert!(sink.0.borrow().is_empty());
     }
     #[test]
     fn failure_bypasses_duration_and_prefix_filters_but_requires_all() {

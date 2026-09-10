@@ -233,6 +233,20 @@ fn cleanup_dry_run_cancellation_and_deletion_use_configured_database() {
 }
 
 #[test]
+fn cleanup_dry_run_and_cancellation_do_not_create_a_missing_database() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/missing.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    environment.run(&["cleanup", "--dry-run"], "").success().stdout(predicate::str::contains("Sessions to delete: 0"));
+    assert!(!database.exists());
+
+    environment.run(&["cleanup", "--no-export"], "n\n").success();
+    assert!(!database.exists());
+}
+
+#[test]
 fn every_claude_event_path_runs_with_custom_database_and_log_paths() {
     let environment = TestEnv::new();
     let database = environment._root.path().join("custom/state.db");

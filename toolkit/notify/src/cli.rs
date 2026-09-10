@@ -7,7 +7,7 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::{
     config::{self, AppConfig, ConfigLoader, ConfigSource},
@@ -406,10 +406,9 @@ fn check_integrations(profile: Option<&str>) -> Result<()> {
 fn cleanup(days: Option<u32>, dry_run: bool, no_export: bool, config: &AppConfig) -> Result<()> {
     let retention_days = days.unwrap_or(config.cleanup.retention_days);
     let export_before = !no_export && config.cleanup.export_before_cleanup;
-    let store = SessionStore::new(config);
 
     if dry_run {
-        let count = expired_session_count(store.database_path(), retention_days)?;
+        let count = expired_session_count(&config.database.path, retention_days)?;
         println!("DRY RUN MODE - No data will be deleted");
         println!("Retention period: {retention_days} days");
         println!("Sessions to delete: {count}");
@@ -423,6 +422,7 @@ fn cleanup(days: Option<u32>, dry_run: bool, no_export: bool, config: &AppConfig
         println!("Cleanup cancelled");
         return Ok(());
     }
+    let store = SessionStore::new(config);
     println!("Running cleanup...");
     let stats = store.cleanup_old_data(retention_days, export_before);
     println!("Cleanup complete:");
@@ -466,7 +466,10 @@ fn confirm(prompt: &str) -> Result<bool> {
 }
 
 fn expired_session_count(path: &Path, retention_days: u32) -> Result<i64> {
-    let connection = Connection::open(path)
+    if !path.exists() {
+        return Ok(0);
+    }
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|error| AppError::operational(format!("cannot open session database {}: {error}", path.display())))?;
     let modifier = format!("-{retention_days} days");
     connection

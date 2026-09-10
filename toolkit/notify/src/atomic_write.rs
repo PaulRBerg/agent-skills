@@ -22,11 +22,12 @@ pub fn replace(path: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
 
     let mut temporary = NamedTempFile::new_in(parent)?;
     temporary.write_all(contents.as_ref())?;
-    temporary.as_file_mut().sync_all()?;
 
     #[cfg(unix)]
     fs::set_permissions(temporary.path(), permissions(mode))?;
 
+    // Flush both the contents and the final permission metadata before publishing the file.
+    temporary.as_file_mut().sync_all()?;
     temporary.persist(&target).map_err(|error| AppError::operational(error.error.to_string()))?;
     sync_parent(parent)?;
     Ok(())
