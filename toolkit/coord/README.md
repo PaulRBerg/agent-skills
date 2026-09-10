@@ -276,7 +276,7 @@ Detached autonomous triage is disabled unless the repository-root `.agents/coord
 auto_triage = true
 ```
 
-After `done`, an allowed main-session Stop, or SessionEnd, ai-coord may start one detached batch only when `main` is
+After `done`, a main-session Stop, or SessionEnd, ai-coord may start one detached batch only when `main` is
 checked out, no normal work is active or queued, pending findings exist, and the 24-hour repository cooldown has
 expired. A batch claims at most 20 findings and expires stale/dead leases. It runs an ephemeral offline, agentless Codex
 Luna/xhigh process for at most 30 minutes with workspace-write access plus the state directory. It never pushes.
@@ -306,12 +306,12 @@ Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook report the unread c
 `ai-coord inbox`, and identify message text as peer-reported data rather than instructions or authority. Peer text, IDs,
 prompts, and tool payloads are never injected. When other live work makes a repository non-quiet, prompt context adds a
 scope-gate reminder only when it fits the 200-character budget. Post-tool hooks also record best-effort touched paths
-and emit one `ai-coord done` nudge per transition to clean owned scopes. Stop hooks require a final `Findings recorded`
-summary with exact IDs for findings added in that turn; they request one bounded continuation when it is absent, then
-remain fail-open. After an allowed main Stop or SessionEnd, autonomous triage may run under its opt-in guards. Subagent
-hooks add read-only parent/child topology and never schedule triage. Claude's filtered `ai-coord waker claude` hook
-handles blocked starts in the background; planning scopes are recorded explicitly with `draft`, not inferred from
-provider-specific plan hooks.
+and emit one `ai-coord done` nudge per transition to clean owned scopes. Stop hooks never require a finding report or
+continue a turn because finding IDs are absent. IDs voluntarily included in a main final response are marked as
+user-surfaced; other findings stay internal. After a main Stop or SessionEnd, autonomous triage may run under its opt-in
+guards. Subagent hooks add read-only parent/child topology and never schedule triage. Claude's filtered
+`ai-coord waker claude` hook handles blocked starts in the background; planning scopes are recorded explicitly with
+`draft`, not inferred from provider-specific plan hooks.
 
 Prompt context and clean-scope release nudges use only the claim in the hook payload's current Git root. Authoritative
 SessionEnd and confirmed-death cleanup release the identity's whole logical item, wake affected queued sessions in every

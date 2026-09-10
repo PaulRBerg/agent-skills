@@ -151,7 +151,7 @@ fn record_finding(coordinator: &Coordinator, repo: &Path, identity: &Identity, s
 }
 
 #[test]
-fn lifecycle_schedules_only_after_an_allowed_main_stop_or_session_end() {
+fn lifecycle_schedules_after_main_stop_without_a_finding_report_or_session_end() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);
     let scheduler = RecordingScheduler::default();
@@ -160,20 +160,13 @@ fn lifecycle_schedules_only_after_an_allowed_main_stop_or_session_end() {
     let canonical_repo = fs::canonicalize(&repo).unwrap();
 
     begin_turn(&runtime, "codex", &repo, "main");
-    let finding_id = record_finding(&coordinator, &repo, &identity, "must report first");
-    let reporting = runtime.ingest(
-        "codex",
-        &json!({"session_id":"main", "cwd":repo, "hook_event_name":"Stop", "last_assistant_message":""}),
-    );
-    assert_eq!(serde_json::from_str::<Value>(&reporting).unwrap()["decision"], "block");
-    assert!(scheduler.0.lock().unwrap().is_empty(), "reporting continuation must precede triage scheduling");
-
+    record_finding(&coordinator, &repo, &identity, "tracked internally");
     assert_eq!(
         runtime.ingest(
             "codex",
             &json!({
-                "session_id":"main", "cwd":repo, "hook_event_name":"Stop", "stop_hook_active":true,
-                "last_assistant_message": format!("Findings recorded: {finding_id}")
+                "session_id":"main", "cwd":repo, "hook_event_name":"Stop", "stop_hook_active":false,
+                "last_assistant_message":"done"
             }),
         ),
         "{}"
@@ -448,25 +441,9 @@ fn malformed_supported_hook_fails_open_without_payload_leak() {
 
 #[test]
 fn finding_id_matching_requires_token_boundaries() {
-    assert!(contains_exact_id("Findings recorded: `deadbeef`", "deadbeef"));
+    assert!(contains_exact_id("Resolved: `deadbeef`", "deadbeef"));
     assert!(!contains_exact_id("not-deadbeef0", "deadbeef"));
     assert!(!contains_exact_id("0deadbeef", "deadbeef"));
-}
-
-#[test]
-fn finding_continuation_keeps_all_ids_within_the_reason_bound() {
-    let findings = (0..100)
-        .map(|index| crate::state::CurrentTurnFinding {
-            id: format!("{index:08x}"),
-            summary: "long summary ".repeat(100),
-        })
-        .collect::<Vec<_>>();
-    let output: Value = serde_json::from_str(&finding_continuation("Stop", &findings)).unwrap();
-    let reason = output["reason"].as_str().unwrap();
-    assert!(reason.chars().count() <= MAX_FINDING_REASON_CHARS);
-    for finding in findings {
-        assert!(contains_exact_id(reason, &finding.id));
-    }
 }
 
 #[test]
@@ -693,8 +670,10 @@ fn waived_sessions_keep_messages_touched_paths_findings_and_lifecycle_hooks_acti
         "codex",
         &json!({"session_id":"self", "cwd":repo, "hook_event_name":"Stop", "last_assistant_message":"done"}),
     );
-    assert_eq!(serde_json::from_str::<Value>(&stop).unwrap()["decision"], "block");
-    assert!(stop.contains(&finding_id));
+    assert_eq!(stop, "{}");
+    let findings = coordinator.store().unwrap().current_turn_findings(&identity).unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].id, finding_id);
     assert!(coordinator.store().unwrap().session(&identity).unwrap().unwrap().coordination_waived);
 
     runtime.ingest(
@@ -787,7 +766,7 @@ fn stop_without_current_turn_findings_is_a_normal_noop_for_both_clients() {
 }
 
 #[test]
-fn main_stop_blocks_once_with_exact_ids_and_summaries_when_missing() {
+fn main_stop_allows_omitted_finding_ids_without_marking_them_surfaced() {
     for (client, client_kind) in [("codex", Client::Codex), ("claude", Client::Claude)] {
         let temp = TempDir::new().unwrap();
         let (coordinator, repo) = runtime(&temp);
@@ -802,11 +781,10 @@ fn main_stop_blocks_once_with_exact_ids_and_summaries_when_missing() {
                 "stop_hook_active":false, "last_assistant_message":"done"
             }),
         );
-        let output: Value = serde_json::from_str(&output).unwrap();
-        assert_eq!(output["decision"], "block");
-        assert!(output["reason"].as_str().unwrap().contains("Findings recorded"));
-        assert!(output["reason"].as_str().unwrap().contains(&id));
-        assert!(output["reason"].as_str().unwrap().contains("review the boundary"));
+        assert_eq!(output, if client == "codex" { "{}" } else { "" });
+        let findings = coordinator.store().unwrap().current_turn_findings(&identity).unwrap();
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].id, id);
     }
 }
 
@@ -823,7 +801,7 @@ fn main_stop_marks_ids_user_surfaced_when_the_final_message_contains_them() {
             client,
             &json!({
                 "session_id":"self", "cwd":repo, "hook_event_name":"Stop",
-                "stop_hook_active":false, "last_assistant_message":format!("Findings recorded: {id}")
+                "stop_hook_active":false, "last_assistant_message":format!("Resolved {id}")
             }),
         );
         assert_eq!(output, if client == "codex" { "{}" } else { "" });
@@ -832,7 +810,7 @@ fn main_stop_marks_ids_user_surfaced_when_the_final_message_contains_them() {
 }
 
 #[test]
-fn active_stop_guard_fails_open_without_marking_missing_findings_surfaced() {
+fn continued_stop_keeps_unreported_findings_internal() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);
     let runtime = HookRuntime::new(&coordinator);
@@ -851,7 +829,7 @@ fn active_stop_guard_fails_open_without_marking_missing_findings_surfaced() {
 }
 
 #[test]
-fn duplicate_sightings_require_one_exact_id_and_surface_together() {
+fn voluntarily_reported_duplicate_sightings_surface_together() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);
     let runtime = HookRuntime::new(&coordinator);
@@ -859,20 +837,21 @@ fn duplicate_sightings_require_one_exact_id_and_surface_together() {
     begin_turn(&runtime, "codex", &repo, "self");
     let id = record_finding(&coordinator, &repo, &identity, "same report");
     assert_eq!(record_finding(&coordinator, &repo, &identity, "same report"), id);
-    let blocked = runtime.ingest(
+    let output = runtime.ingest(
         "codex",
         &json!({
             "session_id":"self", "cwd":repo, "hook_event_name":"Stop",
             "stop_hook_active":false, "last_assistant_message":"done"
         }),
     );
-    assert_eq!(blocked.matches(&id).count(), 1);
+    assert_eq!(output, "{}");
+    assert_eq!(coordinator.store().unwrap().current_turn_findings(&identity).unwrap().len(), 1);
     assert_eq!(
         runtime.ingest(
             "codex",
             &json!({
                 "session_id":"self", "cwd":repo, "hook_event_name":"Stop",
-                "stop_hook_active":false, "last_assistant_message":format!("Findings recorded: {id}")
+                "stop_hook_active":false, "last_assistant_message":format!("Resolved {id}")
             })
         ),
         "{}"
@@ -881,45 +860,26 @@ fn duplicate_sightings_require_one_exact_id_and_surface_together() {
 }
 
 #[test]
-fn subagent_stop_requires_ids_but_only_main_stop_marks_them_user_surfaced() {
-    let temp = TempDir::new().unwrap();
-    let (coordinator, repo) = runtime(&temp);
-    let runtime = HookRuntime::new(&coordinator);
-    let identity = Identity { client: Client::Claude, session_id: "self".into() };
-    begin_turn(&runtime, "claude", &repo, "self");
-    let id = record_finding(&coordinator, &repo, &identity, "subagent finding");
-    let blocked = runtime.ingest(
-        "claude",
-        &json!({
-            "session_id":"self", "cwd":repo, "hook_event_name":"SubagentStop", "agent_id":"child",
-            "stop_hook_active":false, "last_assistant_message":"done"
-        }),
-    );
-    let blocked: Value = serde_json::from_str(&blocked).unwrap();
-    assert_eq!(blocked["decision"], "block");
-    assert!(blocked["reason"].as_str().unwrap().contains("subagent final result"));
-    assert!(blocked["reason"].as_str().unwrap().contains(&id));
-
-    assert_eq!(
-        runtime.ingest(
-            "claude",
-            &json!({
-                "session_id":"self", "cwd":repo, "hook_event_name":"SubagentStop", "agent_id":"child",
-                "stop_hook_active":false, "last_assistant_message":format!("Findings recorded: {id}")
-            })
-        ),
-        ""
-    );
-    assert_eq!(coordinator.store().unwrap().current_turn_findings(&identity).unwrap().len(), 1);
-
-    let main = runtime.ingest(
-        "claude",
-        &json!({
-            "session_id":"self", "cwd":repo, "hook_event_name":"Stop",
-            "stop_hook_active":false, "last_assistant_message":"done"
-        }),
-    );
-    assert_eq!(serde_json::from_str::<Value>(&main).unwrap()["decision"], "block");
+fn subagent_stop_allows_omitted_ids_and_never_marks_findings_user_surfaced() {
+    for (client, client_kind) in [("codex", Client::Codex), ("claude", Client::Claude)] {
+        let temp = TempDir::new().unwrap();
+        let (coordinator, repo) = runtime(&temp);
+        let runtime = HookRuntime::new(&coordinator);
+        let identity = Identity { client: client_kind, session_id: "self".into() };
+        begin_turn(&runtime, client, &repo, "self");
+        let id = record_finding(&coordinator, &repo, &identity, "subagent finding");
+        for message in ["done".to_owned(), format!("Resolved {id}")] {
+            let output = runtime.ingest(
+                client,
+                &json!({
+                    "session_id":"self", "cwd":repo, "hook_event_name":"SubagentStop", "agent_id":"child",
+                    "stop_hook_active":false, "last_assistant_message":message
+                }),
+            );
+            assert_eq!(output, if client == "codex" { "{}" } else { "" });
+            assert_eq!(coordinator.store().unwrap().current_turn_findings(&identity).unwrap().len(), 1);
+        }
+    }
 }
 
 #[test]

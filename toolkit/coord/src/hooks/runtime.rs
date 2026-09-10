@@ -21,8 +21,6 @@ const MAX_PRESENCE_CHARS: usize = 200;
 const WAIVED_CONTEXT: &str = "ai-coord: #noc waives draft/start/wait/done for this prompt; skip them unless work may write, then re-enter the gate before editing. Existing work is unchanged.";
 const WAIVER_ENDED_CONTEXT: &str =
     "ai-coord: the previous #noc waiver ended; the normal coordination gate applies to this prompt.";
-const MAX_FINDING_REASON_CHARS: usize = 8_000;
-const MAX_FINDING_SUMMARY_CHARS: usize = 160;
 const WAKER_TIMEOUT_SECONDS: u64 = 3_480;
 const WAKER_POLL_SECONDS: f64 = 1.0;
 const PERMISSION_MODES: &[&str] = &["default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"];
@@ -210,30 +208,19 @@ impl<'a> HookRuntime<'a> {
         }
 
         if matches!(event, "Stop" | "SubagentStop") {
-            let findings = store.current_turn_findings(&identity)?;
-            let message = payload.get("last_assistant_message").and_then(Value::as_str).unwrap_or_default();
-            let all_present = findings.iter().all(|finding| contains_exact_id(message, &finding.id));
-            let stop_allowed = findings.is_empty() ||
-                all_present ||
-                payload.get("stop_hook_active").and_then(Value::as_bool).unwrap_or(false);
-            let output = if findings.is_empty() || all_present {
-                if event == "Stop" && !findings.is_empty() {
+            if event == "Stop" {
+                let findings = store.current_turn_findings(&identity)?;
+                let message = payload.get("last_assistant_message").and_then(Value::as_str).unwrap_or_default();
+                if !findings.is_empty() && findings.iter().all(|finding| contains_exact_id(message, &finding.id)) {
                     store.mark_current_turn_findings_surfaced(&identity, self.coordinator.now())?;
                 }
-                noop_stdout(client_name(client), event)
-            } else if payload.get("stop_hook_active").and_then(Value::as_bool).unwrap_or(false) {
-                noop_stdout(client_name(client), event)
-            } else {
-                finding_continuation(event, &findings)
-            };
+            }
             store.hook_success(client, event, self.coordinator.now())?;
             drop(store);
-            // Do not start triage while the first finding-reporting
-            // continuation is blocking the turn, or from subagent stops.
-            if event == "Stop" && stop_allowed {
+            if event == "Stop" {
                 self.scheduler.schedule(self.coordinator, &cwd, &identity);
             }
-            return Ok(output);
+            return Ok(noop_stdout(client_name(client), event));
         }
 
         if is_nudge_event(client, event) {
@@ -529,25 +516,6 @@ fn collect_touched(value: &Value, paths: &mut Vec<String>) {
 
 fn noop_stdout(client: &str, event: &str) -> String {
     if client == "codex" && matches!(event, "Stop" | "SubagentStop") { "{}".to_owned() } else { String::new() }
-}
-fn finding_continuation(event: &str, findings: &[crate::state::CurrentTurnFinding]) -> String {
-    let target = if event == "SubagentStop" { "subagent final result" } else { "final response" };
-    let prefix =
-        format!("Add a `Findings recorded` summary to the {target} containing each exact finding ID and summary: ");
-    let record_overhead = findings.iter().map(|finding| finding.id.chars().count() + 2).sum::<usize>() +
-        findings.len().saturating_sub(1) * 2;
-    let summary_limit = MAX_FINDING_REASON_CHARS
-        .saturating_sub(prefix.chars().count() + record_overhead)
-        .checked_div(findings.len().max(1))
-        .unwrap_or_default()
-        .min(MAX_FINDING_SUMMARY_CHARS);
-    let records = findings
-        .iter()
-        .map(|finding| format!("{}: {}", finding.id, sanitize(&finding.summary, summary_limit)))
-        .collect::<Vec<_>>()
-        .join("; ");
-    let reason = format!("{prefix}{records}");
-    json!({ "decision": "block", "reason": reason }).to_string()
 }
 fn contains_exact_id(message: &str, id: &str) -> bool {
     message.match_indices(id).any(|(start, value)| {
