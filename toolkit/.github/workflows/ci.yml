@@ -36,7 +36,6 @@ jobs:
               - 'LICENSE.md'
               - '.github/workflows/ci.yml'
               - '.gitignore'
-              - '.prettierignore'
               - 'commit/**'
               - 'coord/**'
               - 'handoff/**'
@@ -44,18 +43,18 @@ jobs:
               - 'skillet/**'
             coord-dashboard:
               - 'apps/coord-dashboard/**'
+              - 'coord/**'
               - 'justfile'
               - 'LICENSE.md'
               - '.github/workflows/ci.yml'
               - '.gitignore'
-              - '.prettierignore'
             handoffs:
               - 'apps/handoffs/**'
+              - 'handoff/**'
               - 'justfile'
               - 'LICENSE.md'
               - '.github/workflows/ci.yml'
               - '.gitignore'
-              - '.prettierignore'
 
   rust:
     needs: changes

@@ -1,6 +1,50 @@
-import { describe, expect, test } from "vitest";
-import { parseSnapshot } from "@/lib/api";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { parseSnapshot, subscribeToSnapshots } from "@/lib/api";
 import { sampleSnapshot } from "@/lib/sample-snapshot";
+
+type EventListener = (event: Event | MessageEvent<string>) => void;
+
+class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  static instances: FakeEventSource[] = [];
+
+  readonly listeners = new Map<string, EventListener[]>();
+  readyState = FakeEventSource.CONNECTING;
+  closed = false;
+
+  constructor(readonly url: string) {
+    FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    const listeners = this.listeners.get(type) ?? [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  emitSnapshot(snapshot: unknown): void {
+    this.readyState = FakeEventSource.OPEN;
+    const event = { data: JSON.stringify(snapshot) } as MessageEvent<string>;
+    for (const listener of this.listeners.get("snapshot") ?? []) listener(event);
+  }
+
+  close(): void {
+    this.closed = true;
+    this.readyState = FakeEventSource.CLOSED;
+  }
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  FakeEventSource.instances = [];
+});
+
+async function flushPromises(): Promise<void> {
+  for (let index = 0; index < 4; index += 1) await Promise.resolve();
+}
 
 describe("parseSnapshot", () => {
   test("accepts the committed snapshot fixture with matching parent totals", () => {
@@ -205,5 +249,104 @@ describe("parseSnapshot", () => {
     expect(() => parseSnapshot(malformed)).toThrow(
       "snapshot.findings[0].triaging",
     );
+  });
+
+  test("rejects enum values outside the Rust v7 contract", () => {
+    const invalidClient = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const providers = invalidClient.providers as Array<Record<string, unknown>>;
+    providers[0] = { ...providers[0], client: "cursor" };
+    expect(() => parseSnapshot(invalidClient)).toThrow(
+      "snapshot.providers[0].client must be claude or codex",
+    );
+
+    const invalidState = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const sessions = invalidState.sessions as Array<Record<string, unknown>>;
+    sessions[0] = { ...sessions[0], state: "paused" };
+    expect(() => parseSnapshot(invalidState)).toThrow(
+      "snapshot.sessions[0].state",
+    );
+
+    const invalidScope = {
+      ...sampleSnapshot,
+      scope: { kind: "organization" },
+    };
+    expect(() => parseSnapshot(invalidScope)).toThrow(
+      "snapshot.scope.kind must be cwd, machine, or repo",
+    );
+  });
+
+  test("rejects negative Rust unsigned counters", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const outsideScope = malformed.outside_scope as Record<string, unknown>;
+    outsideScope.sessions = -1;
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.outside_scope.sessions must be non-negative",
+    );
+  });
+});
+
+describe("subscribeToSnapshots", () => {
+  test("does not let an older polling response replace a newer SSE snapshot", async () => {
+    let resolveFetch!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    vi.stubGlobal("EventSource", FakeEventSource);
+    vi.stubGlobal("fetch", vi.fn(() => response));
+    const received: number[] = [];
+
+    const stop = subscribeToSnapshots({
+      onSnapshot: (snapshot) => received.push(snapshot.generation),
+      onConnectionChange: () => undefined,
+      onError: () => undefined,
+    });
+    FakeEventSource.instances[0]?.emitSnapshot({
+      ...sampleSnapshot,
+      generation: sampleSnapshot.generation + 1,
+    });
+    resolveFetch(new Response(JSON.stringify(sampleSnapshot)));
+    await flushPromises();
+
+    expect(received).toEqual([sampleSnapshot.generation + 1]);
+    stop();
+    expect(FakeEventSource.instances[0]?.closed).toBe(true);
+  });
+
+  test("polls continuously without overlapping slow requests", async () => {
+    vi.useFakeTimers();
+    let resolveFirst!: (response: Response) => void;
+    const firstResponse = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetchMock = vi
+      .fn<() => Promise<Response>>()
+      .mockReturnValueOnce(firstResponse)
+      .mockResolvedValue(new Response(JSON.stringify(sampleSnapshot)));
+    vi.stubGlobal("EventSource", FakeEventSource);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stop = subscribeToSnapshots({
+      onSnapshot: () => undefined,
+      onConnectionChange: () => undefined,
+      onError: () => undefined,
+    });
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFirst(new Response(JSON.stringify(sampleSnapshot)));
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    stop();
   });
 });

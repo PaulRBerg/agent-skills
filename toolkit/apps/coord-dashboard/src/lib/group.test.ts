@@ -84,4 +84,23 @@ describe("groupSnapshotByRepo", () => {
       lanes.find((lane) => lane.repoRoot === toolkitRoot)?.unmatchedWork,
     ).toEqual([]);
   });
+
+  test("keeps handoff-only repositories without inventing an activity time", () => {
+    const lanes = groupSnapshotByRepo({
+      ...sampleSnapshot,
+      sessions: [],
+      work: [],
+      findings: [],
+      delegates: [],
+      messages: [],
+      handoffs: [{ repo_root: "/repo/with-handoffs", count: 2 }],
+    });
+
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0]).toMatchObject({
+      repoRoot: "/repo/with-handoffs",
+      handoffCount: 2,
+      lastActivity: null,
+    });
+  });
 });

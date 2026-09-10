@@ -30,7 +30,7 @@ export function Header({
     ).length ?? 0;
   const partialProviders =
     snapshot?.providers.filter(
-      (provider) => provider.enabled && (!provider.ok || provider.dropped > 0),
+      (provider) => !provider.enabled || !provider.ok || provider.dropped > 0,
     ) ?? [];
   const showCoverageWarning =
     snapshot !== null && (!snapshot.complete || partialProviders.length > 0);
@@ -62,7 +62,7 @@ export function Header({
                     {lanes.length}
                   </AnimatedValue>
                 </dd>
-                <dt className="text-muted">active repos</dt>
+                <dt className="text-muted">repositories</dt>
               </div>
               <div className="flex items-baseline gap-1.5">
                 <dd className="font-mono text-sm font-semibold tabular-nums">
@@ -119,7 +119,9 @@ export function Header({
                 {partialProviders.length > 0
                   ? `: ${partialProviders
                       .map((provider) =>
-                        provider.dropped > 0
+                        !provider.enabled
+                          ? `${provider.client} disabled`
+                          : provider.dropped > 0
                           ? `${provider.client} dropped ${provider.dropped}`
                           : `${provider.client} unavailable`,
                       )

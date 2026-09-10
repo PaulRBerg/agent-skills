@@ -164,12 +164,13 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
         handoffCount:
           snapshot.handoffs.find((handoff) => handoff.repo_root === repoRoot)
             ?.count ?? 0,
-        lastActivity: Math.max(...activity),
+        lastActivity: activity.length > 0 ? Math.max(...activity) : null,
       };
     })
     .sort(
       (left, right) =>
-        right.lastActivity - left.lastActivity ||
+        (right.lastActivity ?? Number.NEGATIVE_INFINITY) -
+          (left.lastActivity ?? Number.NEGATIVE_INFINITY) ||
         left.repoRoot.localeCompare(right.repoRoot),
     );
 }

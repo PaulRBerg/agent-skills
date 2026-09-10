@@ -40,10 +40,9 @@ export function ApiErrorState({
         <div>
           <h2 className="text-sm font-semibold">Dashboard API unreachable</h2>
           <p className="mt-1 text-xs/5 text-ink-secondary">
-            Start the local server with{" "}
-            <code className="font-mono text-danger">ai-coord serve</code> or{" "}
-            <code className="font-mono text-danger">just coord-dashboard-dev</code>, then leave
-            this page open.
+            Start the coordination API with{" "}
+            <code className="font-mono text-danger">ai-coord serve</code>, then
+            leave this page open.
           </p>
           <p className="mt-2 font-mono text-[10px]/4 text-muted">{detail}</p>
         </div>

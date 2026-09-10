@@ -1,6 +1,8 @@
 import type {
+  Client,
   FindingKind,
   FindingState,
+  SessionState,
   Snapshot,
   WorkScopeKind,
   WorkState,
@@ -50,8 +52,36 @@ function integer(value: unknown, path: string): number {
   return parsed;
 }
 
+function unsignedInteger(value: unknown, path: string): number {
+  const parsed = integer(value, path);
+  if (parsed < 0) throw new Error(`${path} must be non-negative`);
+  return parsed;
+}
+
 function boolean(value: unknown, path: string): boolean {
   if (typeof value !== "boolean") throw new Error(`${path} must be a boolean`);
+  return value;
+}
+
+function client(value: unknown, path: string): Client {
+  if (value !== "claude" && value !== "codex") {
+    throw new Error(`${path} must be claude or codex`);
+  }
+  return value;
+}
+
+function sessionState(value: unknown, path: string): SessionState {
+  if (
+    value !== "idle" &&
+    value !== "in_flight" &&
+    value !== "unknown" &&
+    value !== "waiting" &&
+    value !== "working"
+  ) {
+    throw new Error(
+      `${path} must be idle, in_flight, unknown, waiting, or working`,
+    );
+  }
   return value;
 }
 
@@ -95,11 +125,11 @@ function findingKind(value: unknown, path: string): FindingKind | null {
 
 function validateSession(value: unknown, path: string): void {
   const row = record(value, path);
-  string(row.client, `${path}.client`);
+  client(row.client, `${path}.client`);
   string(row.session_id, `${path}.session_id`);
   string(row.cwd, `${path}.cwd`);
   nullableString(row.repo_root, `${path}.repo_root`);
-  string(row.state, `${path}.state`);
+  sessionState(row.state, `${path}.state`);
   if (row.callsign !== undefined)
     nullableString(row.callsign, `${path}.callsign`);
   nullableString(row.name, `${path}.name`);
@@ -108,8 +138,8 @@ function validateSession(value: unknown, path: string): void {
     nullableString(row.permission_mode, `${path}.permission_mode`);
   boolean(row.coordination_waived, `${path}.coordination_waived`);
   if (row.delegate_count !== undefined)
-    integer(row.delegate_count, `${path}.delegate_count`);
-  if (row.pid !== null) integer(row.pid, `${path}.pid`);
+    unsignedInteger(row.delegate_count, `${path}.delegate_count`);
+  if (row.pid !== null) unsignedInteger(row.pid, `${path}.pid`);
   string(row.source, `${path}.source`);
   number(row.started_at, `${path}.started_at`);
   number(row.last_seen, `${path}.last_seen`);
@@ -118,7 +148,7 @@ function validateSession(value: unknown, path: string): void {
 function validateWork(value: unknown, path: string): void {
   const row = record(value, path);
   integer(row.id, `${path}.id`);
-  string(row.client, `${path}.client`);
+  client(row.client, `${path}.client`);
   string(row.session_id, `${path}.session_id`);
   string(row.label, `${path}.label`);
   const state = workState(row.state, `${path}.state`);
@@ -127,7 +157,7 @@ function validateWork(value: unknown, path: string): void {
   if (state === "queued" && typeof row.blocked_reason !== "string") {
     throw new Error(`${path}.blocked_reason must describe queued work`);
   }
-  const scopeCount = integer(row.scope_count, `${path}.scope_count`);
+  const scopeCount = unsignedInteger(row.scope_count, `${path}.scope_count`);
   if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
   if (state === "draft") {
     number(row.draft_created_at, `${path}.draft_created_at`);
@@ -162,7 +192,7 @@ function validateWorkClaim(
   string(claim.repo_root, `${path}.repo_root`);
   if (claim.blocked_reason !== undefined)
     nullableString(claim.blocked_reason, `${path}.blocked_reason`);
-  const scopeCount = integer(claim.scope_count, `${path}.scope_count`);
+  const scopeCount = unsignedInteger(claim.scope_count, `${path}.scope_count`);
   if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
   if (state === "draft") {
     if (claim.scopes !== undefined)
@@ -184,11 +214,11 @@ function validateWorkClaim(
 
 function validateProvider(value: unknown, path: string): void {
   const row = record(value, path);
-  string(row.client, `${path}.client`);
+  client(row.client, `${path}.client`);
   boolean(row.ok, `${path}.ok`);
   string(row.source, `${path}.source`);
   boolean(row.enabled, `${path}.enabled`);
-  integer(row.dropped, `${path}.dropped`);
+  unsignedInteger(row.dropped, `${path}.dropped`);
   nullableString(row.error, `${path}.error`);
 }
 
@@ -217,7 +247,7 @@ function validateFinding(value: unknown, path: string): void {
 
 function validateDelegate(value: unknown, path: string): void {
   const row = record(value, path);
-  string(row.parent_client, `${path}.parent_client`);
+  client(row.parent_client, `${path}.parent_client`);
   string(row.parent_session_id, `${path}.parent_session_id`);
   string(row.agent_id, `${path}.agent_id`);
   nullableString(row.agent_type, `${path}.agent_type`);
@@ -228,11 +258,11 @@ function validateDelegate(value: unknown, path: string): void {
 function validateMessage(value: unknown, path: string): void {
   const row = record(value, path);
   string(row.id, `${path}.id`);
-  string(row.sender_client, `${path}.sender_client`);
+  client(row.sender_client, `${path}.sender_client`);
   string(row.sender_session_id, `${path}.sender_session_id`);
   if (row.sender_callsign !== undefined)
     nullableString(row.sender_callsign, `${path}.sender_callsign`);
-  string(row.recipient_client, `${path}.recipient_client`);
+  client(row.recipient_client, `${path}.recipient_client`);
   string(row.recipient_session_id, `${path}.recipient_session_id`);
   if (row.recipient_callsign !== undefined)
     nullableString(row.recipient_callsign, `${path}.recipient_callsign`);
@@ -251,13 +281,19 @@ export function parseSnapshot(value: unknown): Snapshot {
   boolean(snapshot.complete, "snapshot.complete");
 
   const scope = record(snapshot.scope, "snapshot.scope");
-  string(scope.kind, "snapshot.scope.kind");
-  if (scope.repo_root !== undefined)
+  if (scope.kind === "machine") {
+    if (scope.repo_root !== undefined) {
+      throw new Error("snapshot.scope.repo_root must be omitted for machine scope");
+    }
+  } else if (scope.kind === "cwd" || scope.kind === "repo") {
     string(scope.repo_root, "snapshot.scope.repo_root");
+  } else {
+    throw new Error("snapshot.scope.kind must be cwd, machine, or repo");
+  }
 
   if (snapshot.self !== null) {
     const self = record(snapshot.self, "snapshot.self");
-    string(self.client, "snapshot.self.client");
+    client(self.client, "snapshot.self.client");
     string(self.session_id, "snapshot.self.session_id");
   }
 
@@ -276,7 +312,13 @@ export function parseSnapshot(value: unknown): Snapshot {
   array(snapshot.handoffs, "snapshot.handoffs").forEach((value, index) => {
     const row = record(value, `snapshot.handoffs[${index}]`);
     string(row.repo_root, `snapshot.handoffs[${index}].repo_root`);
-    integer(row.count, `snapshot.handoffs[${index}].count`);
+    const count = unsignedInteger(
+      row.count,
+      `snapshot.handoffs[${index}].count`,
+    );
+    if (count < 1) {
+      throw new Error(`snapshot.handoffs[${index}].count must be positive`);
+    }
   });
   array(snapshot.delegates, "snapshot.delegates").forEach((row, index) =>
     validateDelegate(row, `snapshot.delegates[${index}]`),
@@ -286,13 +328,13 @@ export function parseSnapshot(value: unknown): Snapshot {
   );
 
   const outside = record(snapshot.outside_scope, "snapshot.outside_scope");
-  integer(outside.sessions, "snapshot.outside_scope.sessions");
-  integer(outside.directories, "snapshot.outside_scope.directories");
+  unsignedInteger(outside.sessions, "snapshot.outside_scope.sessions");
+  unsignedInteger(outside.directories, "snapshot.outside_scope.directories");
   const generatedAt = string(snapshot.generated_at, "snapshot.generated_at");
   if (Number.isNaN(Date.parse(generatedAt))) {
     throw new Error("snapshot.generated_at must be an ISO timestamp");
   }
-  integer(snapshot.generation, "snapshot.generation");
+  unsignedInteger(snapshot.generation, "snapshot.generation");
 
   return value as Snapshot;
 }
@@ -307,29 +349,44 @@ export async function fetchSnapshot(signal?: AbortSignal): Promise<Snapshot> {
 export function subscribeToSnapshots(callbacks: SnapshotCallbacks): () => void {
   let stopped = false;
   let pollingTimer: ReturnType<typeof setInterval> | undefined;
+  let pollInFlight = false;
+  let latestGeneration: number | undefined;
   const abortController = new AbortController();
   const source = new EventSource("/api/events");
+
+  const deliverSnapshot = (snapshot: Snapshot) => {
+    if (
+      latestGeneration !== undefined &&
+      snapshot.generation < latestGeneration
+    ) {
+      return;
+    }
+    latestGeneration = snapshot.generation;
+    callbacks.onSnapshot(snapshot);
+  };
 
   const stopPolling = () => {
     if (pollingTimer !== undefined) clearInterval(pollingTimer);
     pollingTimer = undefined;
   };
 
-  const pollOnce = async (): Promise<boolean> => {
+  const pollOnce = async (): Promise<void> => {
+    if (pollInFlight || stopped) return;
+    pollInFlight = true;
     try {
       const snapshot = await fetchSnapshot(abortController.signal);
-      if (stopped) return false;
-      callbacks.onSnapshot(snapshot);
+      if (stopped) return;
+      deliverSnapshot(snapshot);
       if (source.readyState !== EventSource.OPEN)
         callbacks.onConnectionChange("polling");
-      return true;
     } catch (error) {
-      if (stopped) return false;
+      if (stopped) return;
       callbacks.onConnectionChange("disconnected");
       callbacks.onError(
         error instanceof Error ? error : new Error("Snapshot request failed"),
       );
-      return false;
+    } finally {
+      pollInFlight = false;
     }
   };
 
@@ -351,7 +408,7 @@ export function subscribeToSnapshots(callbacks: SnapshotCallbacks): () => void {
         JSON.parse((event as MessageEvent<string>).data),
       );
       stopPolling();
-      callbacks.onSnapshot(snapshot);
+      deliverSnapshot(snapshot);
       callbacks.onConnectionChange("live");
     } catch (error) {
       callbacks.onError(
@@ -362,9 +419,7 @@ export function subscribeToSnapshots(callbacks: SnapshotCallbacks): () => void {
   });
   source.addEventListener("error", () => startPolling());
 
-  void pollOnce().then((success) => {
-    if (!success) startPolling();
-  });
+  startPolling();
 
   return () => {
     stopped = true;

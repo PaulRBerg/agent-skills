@@ -4,7 +4,9 @@
 
 - The nightly Rust workspace contains the `ai-commit`, `ai-coord`, `ai-handoff`, `ai-notify`, and `ai-skillet` crates. Keep shared Rust configuration at the root and crate behavior within its crate.
 - `apps/coord-dashboard` and `apps/handoffs` are independent Bun packages with separate locks and package-local validation. Do not combine their dependencies, scripts, or build outputs with the Rust workspace or each other.
-- Context is source-owned: root files describe workspace-wide behavior; each package's README.md and AGENTS.md own its product and local workflow. Update the owning package rather than duplicating package guidance at the root.
+- Context is source-owned: root files describe workspace-wide behavior; package-local README.md and AGENTS.md files,
+  when present, own product and workflow guidance. Update the owning package rather than duplicating its guidance at
+  the root.
 
 ## Validation
 

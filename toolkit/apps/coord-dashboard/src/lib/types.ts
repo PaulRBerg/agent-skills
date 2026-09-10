@@ -1,5 +1,15 @@
 export type WorkState = "active" | "draft" | "queued";
 export type WorkScopeKind = "exact" | "recursive";
+export type Client = "claude" | "codex";
+export type SessionState =
+  | "idle"
+  | "in_flight"
+  | "unknown"
+  | "waiting"
+  | "working";
+export type SnapshotScope =
+  | { kind: "machine"; repo_root?: never }
+  | { kind: "cwd" | "repo"; repo_root: string };
 
 export interface WorkScope {
   path: string;
@@ -7,7 +17,7 @@ export interface WorkScope {
 }
 
 export interface ProviderCoverage {
-  client: string;
+  client: Client;
   ok: boolean;
   source: string;
   enabled: boolean;
@@ -16,14 +26,14 @@ export interface ProviderCoverage {
 }
 
 export interface SessionIdentity {
-  client: string;
+  client: Client;
   session_id: string;
 }
 
 export interface Session extends SessionIdentity {
   cwd: string;
   repo_root: string | null;
-  state: string;
+  state: SessionState;
   callsign?: string | null;
   name: string | null;
   waiting_for: string | null;
@@ -78,7 +88,7 @@ export interface Finding {
 }
 
 export interface Delegate {
-  parent_client: string;
+  parent_client: Client;
   parent_session_id: string;
   agent_id: string;
   agent_type: string | null;
@@ -88,10 +98,10 @@ export interface Delegate {
 
 export interface Message {
   id: string;
-  sender_client: string;
+  sender_client: Client;
   sender_session_id: string;
   sender_callsign?: string | null;
-  recipient_client: string;
+  recipient_client: Client;
   recipient_session_id: string;
   recipient_callsign?: string | null;
   repo_root: string | null;
@@ -101,12 +111,9 @@ export interface Message {
 }
 
 export interface Snapshot {
-  schema_version: number;
+  schema_version: 7;
   complete: boolean;
-  scope: {
-    kind: string;
-    repo_root?: string;
-  };
+  scope: SnapshotScope;
   self: SessionIdentity | null;
   providers: ProviderCoverage[];
   sessions: Session[];
@@ -141,6 +148,6 @@ export interface RepoLaneModel {
   repoRoot: string;
   sessions: LaneSession[];
   unmatchedWork: WorkWithQueuePosition[];
-  lastActivity: number;
+  lastActivity: number | null;
   handoffCount: number;
 }

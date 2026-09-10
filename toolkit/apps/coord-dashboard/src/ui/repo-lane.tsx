@@ -67,7 +67,12 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
             <AnimatedValue value={workCount}>{workCount}</AnimatedValue> work
             {workCount === 1 ? " item" : " items"}
           </span>
-          <span>active {formatRelativeTime(lane.lastActivity, now)}</span>
+          <span>
+            activity{" "}
+            {lane.lastActivity === null
+              ? "unknown"
+              : formatRelativeTime(lane.lastActivity, now)}
+          </span>
         </div>
       </div>
 
