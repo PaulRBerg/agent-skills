@@ -62,6 +62,28 @@ fn existing_remote_branch_without_upstream_is_not_reported_as_new() {
 }
 
 #[test]
+fn configured_upstream_without_a_tracking_ref_uses_its_remote() {
+    let harness = Harness::new("push-configured-missing-tracking-ref");
+    let origin = harness.root.join("origin.git");
+    let upstream = harness.root.join("upstream.git");
+    init_bare(&origin, &harness.home);
+    init_bare(&upstream, &harness.home);
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.git(["branch", "-M", "main"]);
+    harness.git(["remote", "add", "origin", &format!("file://{}", origin.display())]);
+    harness.git(["remote", "add", "upstream", &format!("file://{}", upstream.display())]);
+    harness.git(["config", "branch.main.remote", "upstream"]);
+    harness.git(["config", "branch.main.merge", "refs/heads/main"]);
+
+    let pushed = harness.success(["push"]);
+
+    assert_eq!(stdout(&pushed), "PUSHED main\n");
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), git_at(&upstream, &harness.home, ["rev-parse", "refs/heads/main"]));
+    assert!(harness.git(["ls-remote", "origin", "refs/heads/main"]).is_empty());
+}
+
+#[test]
 fn behind_branch_is_a_safe_noncompletion() {
     let harness = Harness::new("push-behind");
     let remote = harness.root.join("remote.git");

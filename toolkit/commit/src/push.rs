@@ -67,12 +67,9 @@ pub fn execute(repository: &Repository) -> Result<PushOutcome> {
 }
 
 fn destination(repository: &Repository, branch: &str) -> Result<Destination> {
-    let upstream = repository.raw(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], None)?;
-    if upstream.status.success() {
-        let compare_ref = String::from_utf8(upstream.stdout)
-            .map_err(|_| AppError::operational("Git returned a non-UTF-8 upstream"))?
-            .trim()
-            .to_owned();
+    let branch_ref = format!("refs/heads/{branch}");
+    let compare_ref = repository.text(["for-each-ref", "--format=%(upstream)", &branch_ref], None)?;
+    if !compare_ref.is_empty() {
         let remote_key = format!("branch.{branch}.remote");
         let merge_key = format!("branch.{branch}.merge");
         let remote = repository.text(["config", "--get", &remote_key], None)?;
@@ -111,12 +108,19 @@ fn fetch(repository: &Repository, remote: &str) -> Result<()> {
 }
 
 fn refreshed_compare_ref(repository: &Repository, destination: &Destination) -> Result<Option<String>> {
-    if destination.set_upstream {
-        let reference = format!("refs/remotes/{}/{}", destination.remote, destination.remote_branch);
-        let output = repository.raw(["show-ref", "--verify", "--quiet", &reference], None)?;
-        return Ok(output.status.success().then_some(reference));
+    let reference = if destination.set_upstream {
+        format!("refs/remotes/{}/{}", destination.remote, destination.remote_branch)
+    } else if let Some(compare_ref) = &destination.compare_ref {
+        compare_ref.clone()
+    } else {
+        return Ok(None);
+    };
+    let output = repository.raw(["show-ref", "--verify", "--quiet", &reference], None)?;
+    match output.status.code() {
+        Some(0) => Ok(Some(reference)),
+        Some(1) => Ok(None),
+        _ => Err(git_error(output)),
     }
-    Ok(destination.compare_ref.clone())
 }
 
 fn behind_count(repository: &Repository, compare_ref: Option<&str>) -> Result<Option<u64>> {

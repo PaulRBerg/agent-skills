@@ -287,6 +287,55 @@ fn auto_baseline_is_applied_and_disclosed_in_both_output_modes() {
 }
 
 #[test]
+fn auto_baseline_paths_remain_repository_relative_from_subdirectories() {
+    let harness = Harness::new("auto-baseline-subdirectory");
+    harness.write("nested/intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("nested/intended.txt", BASELINE);
+    let baseline_oid = harness.git(["hash-object", "-w", "nested/intended.txt"]);
+    harness.write("nested/intended.txt", WORKTREE);
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        &format!("#!/bin/sh\n[ \"$1\" = baseline ] && printf 'nested/intended.txt\\t{baseline_oid}\\n'\n"),
+    );
+
+    let output = harness.command_at(&harness.repo.join("nested"), ["prepare", "--porcelain", "--", "intended.txt"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains(&format!("AUTO_BASELINE\tnested/intended.txt\t{baseline_oid}\n")),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn auto_baseline_query_ignores_inherited_repository_overrides() {
+    let harness = Harness::new("auto-baseline-isolated-environment");
+    harness.write("intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("intended.txt", BASELINE);
+    let baseline_oid = harness.git(["hash-object", "-w", "intended.txt"]);
+    harness.write("intended.txt", WORKTREE);
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        &format!(
+            "#!/bin/sh\n[ \"$1\" = baseline ] && [ -n \"${{GIT_OBJECT_DIRECTORY:-}}\" ] && printf 'intended.txt\\t{baseline_oid}\\n'\n"
+        ),
+    );
+    let foreign_objects = harness.root.join("foreign-objects");
+    fs::create_dir(&foreign_objects).unwrap();
+
+    let output = harness.command_with_env(
+        ["prepare", "--porcelain", "--", "intended.txt"],
+        [("GIT_OBJECT_DIRECTORY", foreign_objects.to_string_lossy().into_owned())],
+    );
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(!stdout(&output).contains("AUTO_BASELINE\t"), "{}", stdout(&output));
+}
+
+#[test]
 fn auto_baseline_timeout_is_advisory() {
     let harness = Harness::new("auto-baseline-timeout");
     harness.write("intended.txt", BASE);

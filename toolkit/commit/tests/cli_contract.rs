@@ -227,6 +227,16 @@ fn explicit_format_does_not_bypass_declared_validation_configuration() {
         assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
         assert!(stderr(&invalid).contains("validation.command"), "{}", stderr(&invalid));
     }
+
+    harness.write(
+        ".agents/commit.toml",
+        "[message]\nformat = \"verbose\"\n[\"valid\\u0061tion\"]\ncommand = [\"false\"]\n",
+    );
+    for flag in ["--natural", "--conventional"] {
+        let invalid = harness.command(["prepare", "--porcelain", flag, "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        assert!(stderr(&invalid).contains("invalid config"), "{}", stderr(&invalid));
+    }
 }
 
 #[test]

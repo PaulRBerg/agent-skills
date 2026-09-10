@@ -31,7 +31,9 @@ pub enum RefUpdate<'a> {
 impl Repository {
     pub fn discover() -> Result<Self> {
         let cwd = env::current_dir()?;
-        let root = command_text(Command::new("git").arg("-C").arg(&cwd).args(["rev-parse", "--show-toplevel"]))
+        let mut command = Command::new("git");
+        clear_repository_environment(&mut command);
+        let root = command_text(command.arg("-C").arg(&cwd).args(["rev-parse", "--show-toplevel"]))
             .map_err(|_| AppError::usage("current directory is not inside a Git working tree"))?;
         let root_text = root;
         let root = PathBuf::from(&root_text).canonicalize().map_err(|error| {
@@ -44,9 +46,10 @@ impl Repository {
         let root = root.canonicalize().map_err(|error| {
             AppError::operational(format!("cannot resolve repository root {}: {error}", root.display()))
         })?;
-        let top_level =
-            command_text(Command::new("git").arg("-C").arg(&root).args(["rev-parse", "--show-toplevel"]))
-                .map_err(|_| AppError::usage(format!("transaction repository is unavailable: {}", root.display())))?;
+        let mut command = Command::new("git");
+        clear_repository_environment(&mut command);
+        let top_level = command_text(command.arg("-C").arg(&root).args(["rev-parse", "--show-toplevel"]))
+            .map_err(|_| AppError::usage(format!("transaction repository is unavailable: {}", root.display())))?;
         let discovered_root = PathBuf::from(top_level).canonicalize()?;
         if discovered_root != root {
             return Err(AppError::usage(format!(
@@ -221,10 +224,11 @@ impl Repository {
         if !is_executable(&hook_path)? {
             return Ok(None);
         }
-        let output = Command::new(&hook_path)
+        let mut command = Command::new(&hook_path);
+        clear_repository_environment(&mut command);
+        let output = command
             .args(arguments)
             .current_dir(worktree)
-            .env_remove("GIT_INDEX_FILE")
             .env("GIT_INDEX_FILE", index)
             .env("GIT_DIR", self.git_dir()?)
             .env("GIT_WORK_TREE", worktree)
@@ -241,21 +245,10 @@ impl Repository {
             .split_first()
             .ok_or_else(|| AppError::operational("prepared validation command is empty in the transaction journal"))?;
         let mut command = Command::new(program);
+        clear_repository_environment(&mut command);
         command
             .args(arguments)
             .current_dir(worktree)
-            .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
-            .env_remove("GIT_COMMON_DIR")
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_GRAFT_FILE")
-            .env_remove("GIT_IMPLICIT_WORK_TREE")
-            .env_remove("GIT_INDEX_FILE")
-            .env_remove("GIT_NAMESPACE")
-            .env_remove("GIT_OBJECT_DIRECTORY")
-            .env_remove("GIT_PREFIX")
-            .env_remove("GIT_REPLACE_REF_BASE")
-            .env_remove("GIT_SHALLOW_FILE")
-            .env_remove("GIT_WORK_TREE")
             .env_remove("AI_COMMIT_HOOK_MODE")
             .env_remove("AI_COMMIT_ORIGINAL_WORKTREE")
             .env_remove("AI_COMMIT_VALIDATION_MODE")
@@ -284,12 +277,8 @@ impl Repository {
 
     pub fn command(&self, index: Option<&Path>) -> Command {
         let mut command = Command::new("git");
-        command
-            .arg("-C")
-            .arg(&self.root)
-            .env_remove("GIT_INDEX_FILE")
-            .env_remove("AI_COMMIT_HOOK_MODE")
-            .env_remove("AI_COMMIT_ORIGINAL_WORKTREE");
+        clear_repository_environment(&mut command);
+        command.arg("-C").arg(&self.root).env_remove("AI_COMMIT_HOOK_MODE").env_remove("AI_COMMIT_ORIGINAL_WORKTREE");
         if let Some(index) = index {
             command.env("GIT_INDEX_FILE", index);
         }
@@ -298,10 +287,10 @@ impl Repository {
 
     fn command_in_worktree(&self, index: Option<&Path>, worktree: &Path) -> Result<Command> {
         let mut command = Command::new("git");
+        clear_repository_environment(&mut command);
         command
             .arg("-C")
             .arg(worktree)
-            .env_remove("GIT_INDEX_FILE")
             .env("GIT_DIR", self.git_dir()?)
             .env("GIT_WORK_TREE", worktree)
             .env_remove("AI_COMMIT_HOOK_MODE")
@@ -394,6 +383,25 @@ impl Repository {
         input.push_str("prepare\ncommit\n");
         let output = self.with_input(["update-ref", "--stdin"], input.as_bytes(), None)?;
         if output.status.success() { Ok(()) } else { Err(git_error(output)) }
+    }
+}
+
+pub(crate) fn clear_repository_environment(command: &mut Command) {
+    for variable in [
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_DIR",
+        "GIT_GRAFT_FILE",
+        "GIT_IMPLICIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_NAMESPACE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_PREFIX",
+        "GIT_REPLACE_REF_BASE",
+        "GIT_SHALLOW_FILE",
+        "GIT_WORK_TREE",
+    ] {
+        command.env_remove(variable);
     }
 }
 

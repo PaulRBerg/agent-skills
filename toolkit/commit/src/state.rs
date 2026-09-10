@@ -193,26 +193,38 @@ impl Store {
                 break;
             }
             let entry = entry?;
-            if entry.path().extension().and_then(|value| value.to_str()) != Some("json") {
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
-            let Ok(source) = fs::read_to_string(entry.path()) else {
+            let Some(id) = path.file_stem().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if validate_id(id).is_err() {
+                continue;
+            }
+            // Read and evaluate the receipt only after locking so a concurrent
+            // commit or push retry cannot refresh it between inspection and cleanup.
+            let _lock = match self.lock(id) {
+                Ok(lock) => lock,
+                Err(error) if error.kind == ErrorKind::Retry => continue,
+                Err(error) => return Err(error),
+            };
+            let Ok(source) = fs::read_to_string(&path) else {
                 continue;
             };
             let Ok(transaction) = serde_json::from_str::<Transaction>(&source) else {
                 continue;
             };
+            if transaction.id != id {
+                continue;
+            }
             let Some(terminal_at) = transaction.terminal_at else {
                 continue;
             };
             if now.saturating_sub(terminal_at) < RECEIPT_RETENTION_SECONDS {
                 continue;
             }
-            let _lock = match self.lock(&transaction.id) {
-                Ok(lock) => lock,
-                Err(error) if error.kind == ErrorKind::Retry => continue,
-                Err(error) => return Err(error),
-            };
             let refs_deleted = match Repository::from_root(&transaction.repository_root) {
                 Ok(repository) => repository.delete_refs(&transaction.references()).is_ok(),
                 Err(_) => true,
@@ -220,7 +232,7 @@ impl Store {
             if !refs_deleted {
                 continue;
             }
-            let _ = fs::remove_file(entry.path());
+            let _ = fs::remove_file(path);
             cleaned += 1;
         }
         Ok(())

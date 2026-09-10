@@ -274,6 +274,32 @@ fn inherited_index_and_invalid_repository_states_are_invocation_errors() {
 }
 
 #[test]
+fn inherited_object_environment_cannot_redirect_prepared_objects() {
+    let harness = Harness::new("isolated-object-environment");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let foreign_objects = harness.root.join("foreign-objects");
+    fs::create_dir(&foreign_objects).unwrap();
+    let repository_objects = harness.repo.join(".git/objects");
+
+    let prepared = harness.command_with_env(
+        ["prepare", "--porcelain", "--", "intended.txt"],
+        [
+            ("GIT_OBJECT_DIRECTORY", foreign_objects.to_string_lossy().into_owned()),
+            ("GIT_ALTERNATE_OBJECT_DIRECTORIES", repository_objects.to_string_lossy().into_owned()),
+        ],
+    );
+
+    assert!(prepared.status.success(), "{}", stderr(&prepared));
+    assert!(fs::read_dir(&foreign_objects).unwrap().next().is_none());
+    let prepared_stdout = stdout(&prepared);
+    let transaction =
+        prepared_stdout.lines().find_map(|line| line.strip_prefix("PREPARED\t")).expect("PREPARED record");
+    assert_eq!(harness.git(["cat-file", "-t", &format!("refs/ai-commit/transactions/{transaction}")]), "tree");
+}
+
+#[test]
 fn no_verify_bypasses_retryable_verification_hooks() {
     let harness = Harness::new("no-verify");
     harness.write("intended.txt", "base\n");

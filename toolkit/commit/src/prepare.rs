@@ -15,7 +15,10 @@ use crate::{
     cli::{DiffMode, PrepareArgs},
     config,
     error::{AppError, Result},
-    git::{Repository, copy_file, decode_nul_paths, git_error, literal_pathspec, validate_safe_path_text},
+    git::{
+        Repository, clear_repository_environment, copy_file, decode_nul_paths, git_error, literal_pathspec,
+        validate_safe_path_text,
+    },
     rules,
     state::{MessageFormat, Store, Transaction, TransactionStatus, now_seconds},
 };
@@ -415,10 +418,9 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
             if Path::new(&raw_path).is_absolute() {
                 continue;
             }
-            let Ok(paths) = normalize_inputs(repository, &[raw_path]) else {
+            let Ok(path) = normalize_relative(Path::new(&raw_path), &raw_path) else {
                 continue;
             };
-            let path = paths.into_iter().next().expect("one normalized baseline path");
             if seen.contains(&path) || (!args.all && !intended_paths.contains(&path)) {
                 continue;
             }
@@ -563,7 +565,9 @@ fn bounded_ai_coord(repository_root: &Path, subcommand: &str, limit: u64, timeou
         .filter(|milliseconds| *milliseconds > 0)
         .map(Duration::from_millis)
         .unwrap_or(timeout);
-    let mut child = Command::new("ai-coord")
+    let mut command = Command::new("ai-coord");
+    clear_repository_environment(&mut command);
+    let mut child = command
         .arg(subcommand)
         .current_dir(repository_root)
         .stdin(Stdio::null())

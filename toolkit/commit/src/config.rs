@@ -65,6 +65,9 @@ pub fn load(repository_root: &Path, message_override: Option<MessageFormat>) -> 
 }
 
 fn declares_validation(source: &str) -> bool {
+    if let Ok(table) = toml::from_str::<toml::Table>(source) {
+        return table.contains_key("validation");
+    }
     source.lines().any(|line| {
         let content = line.split_once('#').map_or(line, |(content, _)| content);
         let compact = content.chars().filter(|character| !character.is_whitespace()).collect::<String>();
