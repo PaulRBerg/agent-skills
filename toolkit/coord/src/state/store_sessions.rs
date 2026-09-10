@@ -3,7 +3,7 @@ use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::{
-    domain::{Client, Identity, ProcessFingerprint},
+    domain::{Identity, ProcessFingerprint},
     error::{AppError, Result},
 };
 
@@ -15,6 +15,30 @@ use super::{
 impl Store {
     pub(crate) fn upsert_session(&mut self, update: &SessionUpdate) -> Result<SessionRow> {
         self.immediate(|transaction| upsert_session(transaction, update))
+    }
+
+    /// Child activity proves the parent is active, not that its lifecycle identity changed.
+    pub(crate) fn observe_delegate_parent(
+        &mut self,
+        identity: &Identity,
+        cwd: &str,
+        repo_root: Option<&str>,
+        current: f64,
+    ) -> Result<SessionRow> {
+        self.immediate(|transaction| {
+            transaction.execute(
+                "INSERT INTO sessions(client, session_id, cwd, repo_root, state, source, started_at, last_seen, revision)
+                 VALUES (?1, ?2, ?3, ?4, 'working', 'hook', ?5, ?5, 1)
+                 ON CONFLICT(client, session_id) DO UPDATE SET
+                    state = 'working', last_seen = excluded.last_seen, revision = sessions.revision + 1",
+                params![client_name(identity.client), identity.session_id, cwd, repo_root, current],
+            )?;
+            Ok(transaction.query_row(
+                &session_select("WHERE client = ?1 AND session_id = ?2"),
+                params![client_name(identity.client), identity.session_id],
+                session_from_row,
+            )?)
+        })
     }
 
     /// Register a new top-level identity and retire an older identity bound to
@@ -254,7 +278,8 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
                     process_start_token = CASE
                         WHEN excluded.pid IS NULL THEN sessions.process_start_token
                         ELSE excluded.process_start_token END,
-                    transcript_path = COALESCE(excluded.transcript_path, sessions.transcript_path),
+                    transcript_path = CASE WHEN sessions.client = 'codex' THEN sessions.transcript_path
+                                           ELSE COALESCE(excluded.transcript_path, sessions.transcript_path) END,
                     source = excluded.source,
                     last_seen = excluded.last_seen,
                     revision = sessions.revision + 1",
@@ -290,60 +315,6 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
         params![client_name(update.identity.client), update.identity.session_id],
         session_from_row,
     )?)
-}
-
-/// Replace one Codex root-session generation while preserving the root identity.
-/// The revision guard prevents an older hook from deleting a generation that won
-/// a concurrent replacement race.
-pub(super) fn replace_codex_session_generation(
-    transaction: &Transaction<'_>,
-    update: &SessionUpdate,
-    expected_revision: i64,
-) -> Result<Option<SessionRow>> {
-    if update.identity.client != Client::Codex {
-        return Err(AppError::usage("session generation replacement requires a Codex identity"));
-    }
-    let transcript_path = update
-        .transcript_path
-        .as_deref()
-        .ok_or_else(|| AppError::usage("session generation replacement requires a transcript path"))?;
-    let removed = transaction.execute(
-        "DELETE FROM sessions WHERE client = ?1 AND session_id = ?2 AND revision = ?3",
-        params![client_name(update.identity.client), update.identity.session_id, expected_revision],
-    )?;
-    if removed == 0 {
-        return Ok(None);
-    }
-
-    let (pid, start_token) = fingerprint_values(update.fingerprint.as_ref());
-    transaction.execute(
-        "INSERT INTO sessions(
-            client, session_id, cwd, repo_root, state, permission_mode,
-            coordination_waived, pid, process_start_token, transcript_path,
-            source, started_at, last_seen, revision
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 0), ?8, ?9, ?10, ?11, ?12, ?12, ?13)",
-        params![
-            client_name(update.identity.client),
-            update.identity.session_id,
-            update.cwd,
-            update.repo_root,
-            session_state_name(update.state),
-            update.permission_mode,
-            update.coordination_waived,
-            pid,
-            start_token,
-            transcript_path,
-            update.source,
-            update.current,
-            expected_revision + 1,
-        ],
-    )?;
-    bump_generation(transaction)?;
-    Ok(Some(transaction.query_row(
-        &session_select("WHERE client = ?1 AND session_id = ?2"),
-        params![client_name(update.identity.client), update.identity.session_id],
-        session_from_row,
-    )?))
 }
 
 pub(super) fn end_session_if_revision(

@@ -40,10 +40,12 @@ updates are all-or-none. Queued bundles hold no partial active claims, and one p
 retain repository-local fairness and avoid opposite-order deadlocks.
 Session liveness is based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced
 process is removed without an age grace period, while unknown liveness fails closed and never deletes the record.
-Codex identity uses `CODEX_SESSION_ID` with legacy `CODEX_THREAD_ID` fallback. Persistent fork generations share that
-root identity and are distinguished only by a private opaque transcript path: replace changed transcripts on their first
-non-end hook, release transient session state and work through cascades, and correlate revision-guarded SessionEnd hooks
-without exposing transcript paths in public status.
+Codex identity uses `CODEX_SESSION_ID` with legacy `CODEX_THREAD_ID` fallback. Child and persistent-fork transcript
+observations share that root owner; never replace its session or release work because a transcript differs. Classify
+child lifecycle before parent registration and update only delegate state and parent activity. Pin a private nonempty
+termination anchor only when `SessionStart` creates the row; preserve it, including an unknown anchor, on later upserts.
+Only a matching anchored `SessionEnd` may use revision-guarded cleanup. Ambiguous ends retain ownership until explicit
+`done` or proven process death. Keep transcript paths opaque and absent from public status and messages.
 
 Before work that can invalidate live chats, their ledger, hooks, or coordination CLI, require the user to close other
 agents and explicitly authorize the break, then implement it from one fresh session. Use an isolated

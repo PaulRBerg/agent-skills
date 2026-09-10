@@ -11,10 +11,7 @@ use crate::{
         any_overlap, git_blob_hashes, git_dirty_paths, git_root, normalize_work_claim_bundle, normalize_work_scopes,
         process_sweep, relevant_dirty,
     },
-    state::{
-        BaselineRow, EndedObservation, SessionRow, SessionUpdate, Store, TouchedPaths, WorkClaimUpdate, WorkRow,
-        WorkTransaction,
-    },
+    state::{BaselineRow, EndedObservation, Store, TouchedPaths, WorkClaimUpdate, WorkRow, WorkTransaction},
     work::WorkCoordinator,
 };
 
@@ -425,31 +422,6 @@ impl Coordinator {
             .unwrap_or_default();
         store.end_session(identity)?;
         notify_session_release(&mut store, identity, released.as_ref(), wakeups, self.clock.wall())
-    }
-
-    /// Replace one Codex transcript generation and notify overlapping waiters
-    /// atomically. A stale expected revision is a harmless no-op.
-    pub(crate) fn replace_codex_session_generation_for(
-        &self,
-        update: &SessionUpdate,
-        expected_revision: i64,
-    ) -> Result<Option<SessionRow>> {
-        let identity = &update.identity;
-        let mut store = self.store()?;
-        store.with_work_transaction(|transaction| {
-            let released = transaction.work(identity)?;
-            let all_work = transaction.works()?;
-            let wakeups = released
-                .as_ref()
-                .filter(|work| work.state != WorkState::Draft)
-                .map(|work| overlapping_waiters(&all_work, work, identity))
-                .unwrap_or_default();
-            let Some(session) = transaction.replace_codex_session_generation(update, expected_revision)? else {
-                return Ok(None);
-            };
-            notify_session_release_transaction(transaction, identity, released.as_ref(), wakeups, self.clock.wall())?;
-            Ok(Some(session))
-        })
     }
 
     /// End only the exact session generation observed by a correlated hook.

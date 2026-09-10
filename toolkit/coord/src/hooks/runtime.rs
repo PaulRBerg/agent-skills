@@ -96,7 +96,19 @@ impl<'a> HookRuntime<'a> {
             .unwrap_or(std::env::current_dir()?);
         let cwd = std::fs::canonicalize(&cwd).unwrap_or(cwd);
         let root = git_root(&cwd);
-        let transcript_path = payload.get("transcript_path").and_then(Value::as_str).map(str::to_owned);
+        let transcript_path =
+            payload.get("transcript_path").and_then(Value::as_str).filter(|value| !value.is_empty()).map(str::to_owned);
+        let delegate_id = if matches!(event, "SubagentStart" | "SubagentStop") {
+            Some(
+                payload
+                    .get("agent_id")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| AppError::usage("missing subagent id"))?,
+            )
+        } else {
+            None
+        };
         let mut store = self.coordinator.store()?;
 
         if event == "SessionEnd" {
@@ -127,69 +139,58 @@ impl<'a> HookRuntime<'a> {
         }
 
         let existing = store.session(&identity)?;
-        let transcript_changed = client == Client::Codex &&
-            existing
-                .as_ref()
-                .and_then(|row| row.transcript_path.as_ref())
-                .is_some_and(|stored| transcript_path.as_ref().is_some_and(|incoming| incoming != stored));
         let prompt_waiver = if event == "UserPromptSubmit" {
             payload.get("prompt").and_then(Value::as_str).map(prompt_waives_coordination)
         } else {
             None
         };
-        let waiver_ended = !transcript_changed &&
-            existing.as_ref().is_some_and(|row| row.coordination_waived) &&
-            prompt_waiver == Some(false);
-        let (update_permission_mode, permission_mode) = permission_mode(payload);
-        let fingerprint = host_process_reference(client, None)
-            .ok()
-            .flatten()
-            .or_else(|| existing.as_ref().and_then(|row| row.fingerprint.clone()));
-        let update = SessionUpdate {
-            identity: identity.clone(),
-            cwd: path_text(&cwd)?,
-            repo_root: root.as_ref().map(|path| path_text(path)).transpose()?,
-            state: if matches!(event, "SessionStart" | "Stop") { SessionState::Idle } else { SessionState::Working },
-            source: "hook".to_owned(),
-            name: (!transcript_changed).then(|| existing.as_ref().and_then(|row| row.name.clone())).flatten(),
-            waiting_for: None,
-            permission_mode,
-            update_permission_mode,
-            coordination_waived: prompt_waiver,
-            fingerprint,
-            transcript_path: transcript_path.clone(),
-            started_at: (!transcript_changed).then(|| existing.as_ref().map(|row| row.started_at)).flatten(),
-            current: self.coordinator.now(),
-        };
-        let (mut store, session, generation_replaced) = if transcript_changed {
-            let expected_revision = existing.as_ref().expect("changed transcript requires a stored session").revision;
-            drop(store);
-            let replaced = self.coordinator.replace_codex_session_generation_for(&update, expected_revision)?;
-            let mut next_store = self.coordinator.store()?;
-            if let Some(session) = replaced {
-                (next_store, session, true)
-            } else {
-                let current = next_store.session(&identity)?;
-                if current.as_ref().and_then(|row| row.transcript_path.as_ref()) != transcript_path.as_ref() {
-                    next_store.hook_success(client, event, self.coordinator.now())?;
-                    return Ok(noop_stdout(client_name(client), event));
-                }
-                let session = if event == "SessionStart" {
-                    next_store.upsert_session_superseding(&update)?
-                } else {
-                    next_store.upsert_session(&update)?
-                };
-                (next_store, session, false)
-            }
+        let waiver_ended = existing.as_ref().is_some_and(|row| row.coordination_waived) && prompt_waiver == Some(false);
+        let session = if delegate_id.is_some() {
+            store.observe_delegate_parent(
+                &identity,
+                &path_text(&cwd)?,
+                root.as_ref().map(|path| path_text(path)).transpose()?.as_deref(),
+                self.coordinator.now(),
+            )?
         } else {
-            let session = if event == "SessionStart" {
+            let (update_permission_mode, permission_mode) = permission_mode(payload);
+            let fingerprint = host_process_reference(client, None)
+                .ok()
+                .flatten()
+                .or_else(|| existing.as_ref().and_then(|row| row.fingerprint.clone()));
+            let update = SessionUpdate {
+                identity: identity.clone(),
+                cwd: path_text(&cwd)?,
+                repo_root: root.as_ref().map(|path| path_text(path)).transpose()?,
+                state: if matches!(event, "SessionStart" | "Stop") {
+                    SessionState::Idle
+                } else {
+                    SessionState::Working
+                },
+                source: "hook".to_owned(),
+                name: existing.as_ref().and_then(|row| row.name.clone()),
+                waiting_for: None,
+                permission_mode,
+                update_permission_mode,
+                coordination_waived: prompt_waiver,
+                fingerprint,
+                // Only the registering root start can establish an end anchor.
+                // Generic hooks can carry a child or fork transcript instead.
+                transcript_path: if client != Client::Codex || event == "SessionStart" {
+                    transcript_path
+                } else {
+                    None
+                },
+                started_at: existing.as_ref().map(|row| row.started_at),
+                current: self.coordinator.now(),
+            };
+            if event == "SessionStart" {
                 store.upsert_session_superseding(&update)?
             } else {
                 store.upsert_session(&update)?
-            };
-            (store, session, false)
+            }
         };
-        if (event == "SessionStart" || generation_replaced) && session.callsign.is_none() {
+        if event == "SessionStart" && session.callsign.is_none() {
             assign_auto_callsign(&mut store, &identity);
         }
 
@@ -197,12 +198,7 @@ impl<'a> HookRuntime<'a> {
             store.begin_turn(&identity, payload.get("turn_id").and_then(Value::as_str), self.coordinator.now())?;
         }
 
-        if matches!(event, "SubagentStart" | "SubagentStop") {
-            let agent_id = payload
-                .get("agent_id")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| AppError::usage("missing subagent id"))?;
+        if let Some(agent_id) = delegate_id {
             let agent_type = payload.get("agent_type").and_then(Value::as_str);
             store.update_delegate(
                 &identity,
@@ -366,11 +362,7 @@ fn permission_mode(payload: &Value) -> (bool, Option<String>) {
 }
 
 fn correlated_session_end(stored: Option<&str>, incoming: Option<&str>) -> bool {
-    match (stored, incoming) {
-        (Some(stored), Some(incoming)) => stored == incoming,
-        (None, None) => true,
-        _ => false,
-    }
+    matches!((stored, incoming), (Some(stored), Some(incoming)) if !stored.is_empty() && stored == incoming)
 }
 
 fn prompt_context(

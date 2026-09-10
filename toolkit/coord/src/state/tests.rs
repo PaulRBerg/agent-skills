@@ -361,7 +361,7 @@ fn missing_transcript_observation_preserves_the_known_opaque_identity() {
 }
 
 #[test]
-fn codex_generation_replacement_resets_transient_state_and_rejects_a_stale_end_revision() {
+fn codex_transcript_observations_preserve_work_and_reject_a_stale_end_revision() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
@@ -395,26 +395,27 @@ fn codex_generation_replacement_resets_transient_state_and_rejects_a_stale_end_r
         .unwrap()
         .finding;
 
-    let mut replacement = session_update(&owner, 2.0);
-    replacement.name = Some("must reset".to_owned());
-    replacement.waiting_for = Some("must reset".to_owned());
-    replacement.transcript_path = Some("opaque:fork".to_owned());
-    let replaced = store
-        .with_work_transaction(|transaction| transaction.replace_codex_session_generation(&replacement, first.revision))
-        .unwrap()
-        .unwrap();
+    let work = store.work(&owner).unwrap();
+    let baselines = store.baselines_in_repo(&owner, "/repo").unwrap();
+    let touched = store.touched(&owner, "/repo").unwrap();
+    let delegates = store.delegates().unwrap();
+    let findings = store.current_turn_findings(&owner).unwrap();
+    assert_eq!(findings.len(), 1);
+    let mut observation = session_update(&owner, 2.0);
+    observation.transcript_path = Some("opaque:fork".to_owned());
+    let refreshed = store.upsert_session(&observation).unwrap();
 
-    assert_eq!(replaced.revision, first.revision + 1);
-    assert_eq!(replaced.transcript_path.as_deref(), Some("opaque:fork"));
-    assert_eq!(replaced.started_at, 2.0);
-    assert_eq!(replaced.callsign, None);
-    assert_eq!(replaced.name, None);
-    assert_eq!(replaced.waiting_for, None);
-    assert!(!replaced.coordination_waived);
-    assert!(store.work(&owner).unwrap().is_none());
-    assert!(store.touched(&owner, "/repo").unwrap().paths.is_empty());
-    assert!(store.delegates().unwrap().is_empty());
-    assert!(store.current_turn_findings(&owner).unwrap().is_empty());
+    assert_eq!(refreshed.revision, first.revision + 1);
+    assert_eq!(refreshed.transcript_path.as_deref(), Some("opaque:first"));
+    assert_eq!(refreshed.started_at, 1.0);
+    assert_eq!(refreshed.callsign.as_deref(), Some("🦀 Old Callsign"));
+    assert_eq!(refreshed.name.as_deref(), Some("old name"));
+    assert!(refreshed.coordination_waived);
+    assert_eq!(store.work(&owner).unwrap(), work);
+    assert_eq!(store.baselines_in_repo(&owner, "/repo").unwrap(), baselines);
+    assert_eq!(store.touched(&owner, "/repo").unwrap(), touched);
+    assert_eq!(store.delegates().unwrap(), delegates);
+    assert_eq!(store.current_turn_findings(&owner).unwrap(), findings);
     assert_eq!(store.inbox(&peer, false).unwrap()[0].text, "durable message");
     assert!(store.finding("/repo", &finding.id, 2.0).unwrap().is_some());
 
@@ -423,7 +424,71 @@ fn codex_generation_replacement_resets_transient_state_and_rejects_a_stale_end_r
             .with_work_transaction(|transaction| transaction.end_session_if_revision(&owner, first.revision))
             .unwrap()
     );
-    assert_eq!(store.session(&owner).unwrap().unwrap().transcript_path.as_deref(), Some("opaque:fork"));
+    assert_eq!(store.session(&owner).unwrap().unwrap(), refreshed);
+    assert!(
+        store
+            .with_work_transaction(|transaction| transaction.end_session_if_revision(&owner, refreshed.revision))
+            .unwrap()
+    );
+    assert!(store.work(&owner).unwrap().is_none());
+    assert!(store.delegates().unwrap().is_empty());
+    assert!(store.current_turn_findings(&owner).unwrap().is_empty());
+}
+
+#[test]
+fn codex_registration_cannot_promote_an_unknown_or_concurrently_recorded_anchor() {
+    let temporary = tempdir().unwrap();
+    let database = temporary.path().join("state.db");
+    let mut store = Store::open(&database).unwrap();
+    let mut concurrent = Store::open(&database).unwrap();
+    for anchor in [None, Some("opaque:root")] {
+        let owner = identity(Client::Codex, anchor.unwrap_or("unknown"));
+        assert!(store.session(&owner).unwrap().is_none());
+        let mut root = session_update(&owner, 1.0);
+        root.transcript_path = anchor.map(str::to_owned);
+        let first = concurrent.upsert_session(&root).unwrap();
+        let mut branch = session_update(&owner, 2.0);
+        branch.transcript_path = Some("opaque:branch".to_owned());
+        let later = store.upsert_session_superseding(&branch).unwrap();
+        assert_eq!(later.transcript_path.as_deref(), anchor);
+        assert_eq!(later.revision, first.revision + 1);
+        assert!(
+            !concurrent
+                .with_work_transaction(|transaction| transaction.end_session_if_revision(&owner, first.revision))
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn delegate_activity_preserves_all_parent_metadata_and_invalidates_a_stale_end() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "root");
+    let mut update = session_update(&owner, 1.0);
+    update.state = SessionState::Waiting;
+    update.name = Some("parent".to_owned());
+    update.waiting_for = Some("approval".to_owned());
+    update.permission_mode = Some("plan".to_owned());
+    update.update_permission_mode = true;
+    update.coordination_waived = Some(true);
+    update.transcript_path = Some("opaque:root".to_owned());
+    store.upsert_session(&update).unwrap();
+    store.set_session_callsign(&owner, "🦀 Parent").unwrap();
+    let mut expected = store.session(&owner).unwrap().unwrap();
+    let revision = expected.revision;
+    expected.state = SessionState::Working;
+    expected.last_seen = 2.0;
+    expected.revision += 1;
+
+    let observed = store.observe_delegate_parent(&owner, "/child", Some("/child"), 2.0).unwrap();
+
+    assert_eq!(observed, expected);
+    assert!(!store.with_work_transaction(|transaction| transaction.end_session_if_revision(&owner, revision)).unwrap());
+    let unknown = identity(Client::Codex, "unknown");
+    let observed = store.observe_delegate_parent(&unknown, "/child", Some("/child"), 3.0).unwrap();
+    assert_eq!(observed.transcript_path, None);
+    assert_eq!(observed.fingerprint, None);
 }
 
 #[test]

@@ -28,8 +28,8 @@ Each `(client, session_id)` owns at most one logical work item, with one or more
 worktree and act on the whole logical item.
 
 For Codex, the session ID is the live session-tree root: CLI commands prefer `CODEX_SESSION_ID` and fall back to the
-legacy `CODEX_THREAD_ID`. Persistent forks retain that root identity, so each forked transcript is a new generation of
-the same coordination identity rather than a second concurrent owner.
+legacy `CODEX_THREAD_ID`. Subagents and persistent forks share that root's coordination identity and work; transcript
+changes do not create a new owner or release existing claims.
 
 ## Installation
 
@@ -315,14 +315,19 @@ Prompt context and clean-scope release nudges use only the claim in the hook pay
 SessionEnd and confirmed-death cleanup release the identity's whole logical item, wake affected queued sessions in every
 root, and do not create residual attribution for the ungraceful release.
 
-Codex has no dedicated fork hook. After Double-Esc edits and submits an earlier prompt, the first non-end hook from the
-fork—normally `SessionStart`—reports the same root session with a different opaque `transcript_path`. At that hook,
-`ai-coord` revision-guards an atomic generation replacement: the old generation's draft, queued or active work, touched
-paths, delegates, current-turn state, callsign, start time, and prompt waiver are released or reset, and overlapping
-waiters are notified once. The fork must acquire scopes again with `draft` or `start`; detection does not occur at the
-keypress itself. A delayed `SessionEnd` for an older transcript is ignored, while a matching current-transcript end is
-revision-guarded so it cannot delete a concurrently registered fork. Hooks that omit `transcript_path` never erase a
-known identity, and the legacy both-absent lifecycle remains supported.
+Codex transcript paths are private, opaque observations. Child activity, persistent forks, compaction, duplicate hooks,
+and delayed hooks with different or absent paths preserve the root's draft, queued or active work, baselines, touched
+paths, delegates, callsign, start time, waiver, and finding-reporting turn. Child lifecycle hooks update delegate state
+and parent activity without overwriting parent metadata. Ordinary prompt hooks still update the prompt waiver and
+finding-reporting turn.
+
+Only a `SessionStart` that creates the session row can establish a nonempty transcript anchor for root termination.
+Later starts and tool or child hooks cannot replace that anchor, including when it is unknown. A `SessionEnd` must match
+the owning root's anchor and pass a revision guard; branch, missing, and empty transcript ends retain ownership. A
+concurrent registration or activity update invalidates an already-observed end revision. Sessions first registered by a
+CLI command or a hook without a root anchor rely on explicit `done` or confirmed process-death cleanup. Transcript
+observations never notify release waiters; an authoritative root end releases the whole logical item and notifies each
+overlapping waiter once.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
 `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
@@ -353,7 +358,7 @@ only in the 30-day run artifacts described above. Composite session foreign keys
 cleanup on authoritative session end, dead-process reconciliation, and session supersession.
 
 Messages expire after 48 hours and are capped at 50 per inbox. On macOS and Linux, sessions are bound to a
-kernel-derived process fingerprint containing both PID and process start identity. Normal `SessionEnd` hooks release
+kernel-derived process fingerprint containing both PID and process start identity. Correlated `SessionEnd` hooks release
 immediately; after terminal closure, Ctrl+C, host crash, or another missed hook, the next fresh coordination probe
 removes a session as soon as that exact process is confirmed gone. PID reuse is treated as a different process. An
 unavailable or ambiguous liveness result fails closed: coverage becomes unknown and the session is retained. Sessions

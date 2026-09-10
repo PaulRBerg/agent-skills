@@ -964,6 +964,7 @@ fn status_removes_every_common_host_termination_without_an_age_grace() {
             "hook_event_name": "SessionEnd",
             "session_id": session_id,
             "cwd": fixture.root,
+            "transcript_path": format!("opaque:{session_id}"),
         })
         .to_string()
         .as_bytes(),
@@ -1086,6 +1087,7 @@ fn spawn_synthetic_host(fixture: &Fixture, session_id: &str) -> Child {
         "hook_event_name": "SessionStart",
         "session_id": session_id,
         "cwd": fixture.root,
+        "transcript_path": format!("opaque:{session_id}"),
     });
     child.stdin.take().unwrap().write_all(payload.to_string().as_bytes()).unwrap();
     child
