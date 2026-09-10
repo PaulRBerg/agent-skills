@@ -123,8 +123,7 @@ Read [references/failure-recovery.md](references/failure-recovery.md) before sup
 `--no-verify` or `--no-gpg-sign`. Bypass flags are explicit per-attempt recovery options, not first-attempt defaults.
 
 After `COMMITTED <transaction-id> <commit-oid>` (the OID is a 12-character abbreviation; pass it as-is), resolve every
-included finding with `ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'` and report the resolved
-finding IDs in the receipt summary.
+included finding with `ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'`.
 
 ## 5. Completion and Receipt
 
