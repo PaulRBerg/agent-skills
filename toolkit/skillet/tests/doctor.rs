@@ -90,6 +90,19 @@ fn readme_inventory_accepts_a_skill_only_table() {
 }
 
 #[test]
+fn readme_inventory_requires_a_markdown_table_with_skill_as_the_first_column() {
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "", "## Completion\n\nReport verification.");
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: true\n");
+    common::write(root.path().join("README.md"), "# Catalog\n\n## Skills\n\n| alpha |\n");
+
+    let (output, report) = run_json(root.path(), &[]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(codes(&report).contains("README_SKILLS_TABLE_INVALID"));
+}
+
+#[test]
 fn installed_root_does_not_require_catalog_readme_inventory() {
     let parent = TempDir::new().unwrap();
     for root_name in [".agents", ".claude", ".codex"] {
@@ -178,6 +191,23 @@ fn installed_exposures_validate_and_safely_update_declared_metadata() {
 }
 
 #[test]
+fn openai_policy_findings_locate_the_policy_field() {
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "disable-model-invocation: true\n", "## Completion\n\nReport verification.");
+    write_metadata(
+        root.path(),
+        "alpha",
+        "interface:\n  allow_implicit_invocation: false\npolicy:\n  note: retained\n  allow_implicit_invocation: true\n",
+    );
+    write_readme(root.path(), &["alpha"]);
+
+    let (output, report) = run_json(root.path(), &[]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(finding(&report, "OPENAI_POLICY_MISMATCH")["line"], 5);
+}
+
+#[test]
 fn fix_safe_leaves_missing_installed_metadata_absent() {
     let parent = TempDir::new().unwrap();
     let root = parent.path().join(".claude");
@@ -251,6 +281,24 @@ fn unknown_fields_invalid_enums_and_fork_cross_fields_are_located_and_determinis
         .code(1)
         .stdout(predicate::str::contains("FRONTMATTER_UNKNOWN_FIELD"))
         .stdout(predicate::str::contains("AGENT_CONTEXT_REQUIRED"));
+}
+
+#[test]
+fn metadata_install_targets_must_be_a_string() {
+    let root = TempDir::new().unwrap();
+    write_skill(
+        root.path(),
+        "alpha",
+        "metadata:\n  install-targets: [codex]\n",
+        "## Completion\n\nReport verification.",
+    );
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: true\n");
+    write_readme(root.path(), &["alpha"]);
+
+    let (output, report) = run_json(root.path(), &[]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(codes(&report).contains("METADATA_VALUE_INVALID_TYPE"));
 }
 
 #[test]

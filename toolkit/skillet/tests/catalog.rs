@@ -37,6 +37,36 @@ fn parses_only_leading_multiline_frontmatter_with_field_locations() {
 }
 
 #[test]
+fn accepts_utf8_bom_and_crlf_frontmatter() {
+    let temporary = TempDir::new().unwrap();
+    let skill = temporary.path().join("SKILL.md");
+    common::write(&skill, b"\xef\xbb\xbf---\r\nname: alpha\r\ndescription: Alpha.\r\n---\r\n# Alpha\r\n");
+
+    let parsed = parse_skill_file(&skill);
+
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    assert_eq!(parsed.frontmatter.unwrap().name.unwrap().value, "alpha");
+}
+
+#[test]
+fn duplicate_yaml_keys_are_rejected_without_choosing_a_value() {
+    let temporary = TempDir::new().unwrap();
+    let skill = temporary.path().join("SKILL.md");
+    common::write(
+        &skill,
+        "---\nname: alpha\nmetadata:\n  owner: first\n  owner: second\nname: beta\ndescription: Alpha.\n---\n",
+    );
+
+    let parsed = parse_skill_file(&skill);
+
+    assert!(parsed.frontmatter.is_none());
+    assert_eq!(
+        parsed.diagnostics.iter().map(|diagnostic| (diagnostic.code.as_str(), diagnostic.line)).collect::<Vec<_>>(),
+        [("FRONTMATTER_INVALID_YAML", Some(5))]
+    );
+}
+
+#[test]
 fn malformed_non_mapping_and_missing_frontmatter_are_diagnostics() {
     let temporary = TempDir::new().unwrap();
     common::write(temporary.path().join("skills/a/SKILL.md"), "---\nname: [unterminated\n---\n");
@@ -221,6 +251,24 @@ fn broad_scan_streams_unrecognized_roots_but_prunes_dependency_trees() {
 
     let direct = Catalog::load(&[RootRequest::explicit(&dependency)]).unwrap();
     assert!(direct.skill_names().iter().any(|name| name.as_str() == "dependency"));
+}
+
+#[cfg(unix)]
+#[test]
+fn permission_denied_descendants_do_not_abort_discovery() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temporary = TempDir::new().unwrap();
+    common::write(temporary.path().join("skills/visible/SKILL.md"), common::skill("visible", ""));
+    let inaccessible = temporary.path().join("blocked");
+    fs::create_dir(&inaccessible).unwrap();
+    fs::set_permissions(&inaccessible, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let result = Catalog::load(&[RootRequest::explicit(temporary.path())]);
+    fs::set_permissions(&inaccessible, fs::Permissions::from_mode(0o700)).unwrap();
+
+    let catalog = result.unwrap();
+    assert_eq!(catalog.skill_names().iter().map(|name| name.as_str()).collect::<Vec<_>>(), ["visible"]);
 }
 
 #[test]

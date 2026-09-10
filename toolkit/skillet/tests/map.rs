@@ -70,6 +70,18 @@ fn filter_selects_skill_and_inbound_edges_while_missing_filters_warn_and_succeed
 }
 
 #[test]
+fn filter_keeps_unresolved_references_from_the_selected_skill() {
+    let root = TempDir::new().unwrap();
+    common::write(root.path().join("skills/alpha/SKILL.md"), common::skill("alpha", "") + "\nInvoke $missing-skill.\n");
+
+    let report = json_map(&["map", "--root", root.path().to_str().unwrap(), "--skill", "alpha", "--format", "json"]);
+
+    assert_eq!(report["unresolved"].as_array().unwrap().len(), 1);
+    assert_eq!(report["unresolved"][0]["source"], "alpha");
+    assert_eq!(report["unresolved"][0]["target"], "missing-skill");
+}
+
+#[test]
 fn snippets_are_opt_in_and_skipped_policy_is_optional() {
     let root = fixture_catalog();
     let root = root.to_str().unwrap();
@@ -118,6 +130,30 @@ fn default_broad_root_excludes_agent_homes_and_catalog_sources_unless_enabled() 
     let names: Vec<_> =
         included["skills"].as_array().unwrap().iter().map(|skill| skill["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["source", "tool"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn permission_denied_descendants_do_not_abort_mapping() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = TempDir::new().unwrap();
+    common::write(root.path().join("skills/visible/SKILL.md"), common::skill("visible", ""));
+    let inaccessible = root.path().join("blocked");
+    fs::create_dir(&inaccessible).unwrap();
+    fs::set_permissions(&inaccessible, fs::Permissions::from_mode(0o000)).unwrap();
+    let inaccessible_file = root.path().join("blocked.txt");
+    common::write(&inaccessible_file, "$missing-skill\n");
+    fs::set_permissions(&inaccessible_file, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let output =
+        common::ai_skillet().args(["map", "--root"]).arg(root.path()).args(["--format", "json"]).output().unwrap();
+    fs::set_permissions(&inaccessible, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::set_permissions(&inaccessible_file, fs::Permissions::from_mode(0o600)).unwrap();
+
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["skills"].as_array().unwrap().len(), 1);
 }
 
 #[test]

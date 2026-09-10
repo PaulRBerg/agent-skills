@@ -1,6 +1,7 @@
 mod audit;
 mod fix;
 mod model;
+mod readme;
 mod render;
 mod resource;
 

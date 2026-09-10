@@ -15,7 +15,7 @@ use crate::{
     dependency::DependencyIdentifier,
     error::Error,
     exclusions::{agent_state_path, directory_name_is_excluded},
-    traversal::RootMode,
+    traversal::{RootMode, walk_error_is_recoverable},
 };
 
 use super::model::{EdgeType, EvidenceRecord, Provenance};
@@ -176,7 +176,11 @@ fn scan_root(
         .filter_entry(move |entry| reference_entry_allowed(entry, &scan_root, mode, include_catalog_sources));
 
     for entry in builder.build() {
-        let entry = entry.map_err(|error| Error::Traversal { path: root.to_path_buf(), message: error.to_string() })?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) if walk_error_is_recoverable(&error) => continue,
+            Err(error) => return Err(Error::Traversal { path: root.to_path_buf(), message: error.to_string() }),
+        };
         if !entry.file_type().is_some_and(|file_type| file_type.is_file()) {
             continue;
         }
@@ -193,7 +197,11 @@ fn scan_file(
     edges: &mut BTreeSet<EvidenceRecord>,
     unresolved: &mut BTreeSet<EvidenceRecord>,
 ) -> Result<(), Error> {
-    let file = File::open(path).map_err(|error| Error::io("read reference file", path, error))?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return Ok(()),
+        Err(error) => return Err(Error::io("read reference file", path, error)),
+    };
     let resolved_path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let source = source_for_file(&resolved_path, &catalog.skills);
     let mut reader = BufReader::with_capacity(READ_CHUNK_BYTES, file);
@@ -338,7 +346,9 @@ fn process_window(
             }
             CandidateKind::Unresolved => {
                 if !unresolved_evidence.insert((candidate.target.clone(), line)) ||
-                    (!options.selected.is_empty() && !options.selected.contains(&candidate.target))
+                    (!options.selected.is_empty() &&
+                        !options.selected.contains(&candidate.target) &&
+                        !source.is_some_and(|source| options.selected.contains(source)))
                 {
                     continue;
                 }

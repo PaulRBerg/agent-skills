@@ -115,7 +115,7 @@ cargo test -p ai-skillet --locked
 just rust-check
 ```
 
-From the monorepo root, `just install-cli` installs all four workspace binaries under `~/.local`.
+From the monorepo root, `just install-cli` installs all five workspace binaries under `~/.local`.
 
 ## License
 

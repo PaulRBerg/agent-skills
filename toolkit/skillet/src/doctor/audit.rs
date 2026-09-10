@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::Path,
-};
+use std::{collections::BTreeSet, fs};
 
 use regex::Regex;
 use serde_json::Value;
@@ -11,12 +7,12 @@ use crate::{
     catalog::{Catalog, Skill},
     diagnostic::Diagnostic,
     frontmatter::{Frontmatter, FrontmatterValue, SUPPORTED_FIELDS, markdown_prose},
-    traversal::ScanRoot,
 };
 
 use super::{
     AuditSelection, fix,
-    model::{Counts, Finding, Fix, Report, RootRecord, SCHEMA_VERSION, Severity},
+    model::{Counts, Finding, Fix, Report, SCHEMA_VERSION, Severity},
+    readme,
     resource::resource_target,
 };
 
@@ -66,10 +62,10 @@ pub fn build_report(catalog: &Catalog, selection: &AuditSelection, dependencies_
         check_prompt_hygiene(skill, frontmatter, &source, &mut findings);
     }
 
-    let roots = selection.roots.iter().map(|root| root_record(root, &skills)).collect::<Vec<_>>();
+    let roots = selection.roots.iter().map(|root| readme::root_record(root, &skills)).collect::<Vec<_>>();
     if !dependencies_only {
         for root in selection.roots.iter().filter(|root| selection.checks_readme(root)) {
-            check_readme(root, &skills, &mut findings);
+            readme::check(root, &skills, &mut findings);
         }
     }
 
@@ -298,7 +294,8 @@ fn check_typed_frontmatter(skill: &Skill, frontmatter: &Frontmatter, findings: &
         ));
     }
     if let Some(targets) = frontmatter.install_targets.as_ref() &&
-        targets.value.is_none()
+        targets.value.is_none() &&
+        install_targets_is_string(frontmatter)
     {
         findings.push(value_finding(
             skill,
@@ -401,7 +398,7 @@ fn check_metadata(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<F
         return;
     };
     for entry in entries {
-        if entry.key.value != "install-targets" && !matches!(&entry.value.value, FrontmatterValue::String(_)) {
+        if !matches!(&entry.value.value, FrontmatterValue::String(_)) {
             findings.push(value_finding(
                 skill,
                 entry.value.line,
@@ -410,6 +407,19 @@ fn check_metadata(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<F
             ));
         }
     }
+}
+
+fn install_targets_is_string(frontmatter: &Frontmatter) -> bool {
+    let Some(value) = frontmatter.value("metadata") else {
+        return false;
+    };
+    let FrontmatterValue::Mapping(entries) = &value.value else {
+        return false;
+    };
+    entries
+        .iter()
+        .find(|entry| entry.key.value == "install-targets")
+        .is_some_and(|entry| matches!(&entry.value.value, FrontmatterValue::String(_)))
 }
 
 fn check_bool_field(
@@ -574,7 +584,7 @@ fn check_openai(
             "OPENAI_POLICY_MISSING",
             Severity::Error,
             &path,
-            line_for(&source, "allow_implicit_invocation"),
+            policy_value_line(&source),
             false,
             "missing boolean policy.allow_implicit_invocation",
         ));
@@ -588,7 +598,7 @@ fn check_openai(
             "OPENAI_POLICY_MISMATCH",
             Severity::Error,
             &path,
-            line_for(&source, "allow_implicit_invocation"),
+            policy_value_line(&source),
             true,
             format!("allow_implicit_invocation is {actual}, expected {expected}"),
         ));
@@ -779,117 +789,6 @@ fn check_prompt_hygiene(skill: &Skill, frontmatter: &Frontmatter, source: &str, 
     }
 }
 
-fn check_readme(root: &ScanRoot, skills: &[&Skill], findings: &mut Vec<Finding>) {
-    if matches!(root.exposure_path.file_name().and_then(|name| name.to_str()), Some(".agents" | ".claude" | ".codex")) {
-        return;
-    }
-    let skills_directory = root.exposure_path.join("skills");
-    if !skills_directory.is_dir() {
-        return;
-    }
-    let active = active_skills(root, skills);
-    let path = root.exposure_path.join("README.md");
-    if !path.exists() {
-        findings.push(Finding::new(
-            "README_MISSING",
-            Severity::Error,
-            &path,
-            None,
-            false,
-            "catalog root is missing README.md",
-        ));
-        return;
-    }
-    let source = match fs::read_to_string(&path) {
-        Ok(source) => source,
-        Err(error) => {
-            findings.push(Finding::new(
-                "README_READ_ERROR",
-                Severity::Error,
-                &path,
-                None,
-                false,
-                format!("could not read README.md: {error}"),
-            ));
-            return;
-        }
-    };
-    let listed = readme_skills(&source);
-    for name in active.difference(&listed.keys().cloned().collect()) {
-        findings.push(Finding::new(
-            "README_SKILL_MISSING",
-            Severity::Error,
-            &path,
-            None,
-            false,
-            format!("active skill missing from README table: {name}"),
-        ));
-    }
-    for (name, line) in listed {
-        if !active.contains(&name) {
-            findings.push(Finding::new(
-                "README_LISTS_MISSING",
-                Severity::Error,
-                &path,
-                Some(line),
-                false,
-                format!("README lists missing skill: {name}"),
-            ));
-        }
-    }
-}
-
-fn readme_skills(source: &str) -> BTreeMap<String, u64> {
-    let mut result = BTreeMap::new();
-    let mut in_skills = false;
-    for (index, line) in source.lines().enumerate() {
-        if line.starts_with("## ") {
-            in_skills = line.trim() == "## Skills";
-            continue;
-        }
-        if !in_skills || !line.starts_with('|') {
-            continue;
-        }
-        let cells = line.trim().trim_matches('|').split('|').map(str::trim).collect::<Vec<_>>();
-        let Some(name) = cells.first() else {
-            continue;
-        };
-        if *name != "Skill" && crate::dependency::SkillName::parse(name).is_ok() {
-            result.entry((*name).to_owned()).or_insert(index as u64 + 1);
-        }
-    }
-    result
-}
-
-fn root_record(root: &ScanRoot, skills: &[&Skill]) -> RootRecord {
-    let readme = root.exposure_path.join("README.md");
-    RootRecord {
-        path: root.exposure_path.clone(),
-        active_skills: active_skills(root, skills).len(),
-        readme: readme.exists().then_some(readme),
-    }
-}
-
-fn active_skills(root: &ScanRoot, skills: &[&Skill]) -> BTreeSet<String> {
-    skills
-        .iter()
-        .filter(|skill| skill_belongs_to_root(root, skill.skill_path()))
-        .map(|skill| skill.directory_name.clone())
-        .collect()
-}
-
-fn skill_belongs_to_root(root: &ScanRoot, path: &Path) -> bool {
-    if path == root.exposure_path.join("SKILL.md") {
-        return true;
-    }
-    let Some(parent) = path.parent() else {
-        return false;
-    };
-    parent.parent() == Some(root.exposure_path.join("skills").as_path()) ||
-        (root.exposure_path.file_name().and_then(|name| name.to_str()) == Some("skills") &&
-            parent.parent() == Some(root.exposure_path.as_path()))
-}
-
 fn counts(findings: &[Finding], fixes: &[Fix]) -> Counts {
     Counts {
         findings: findings.len(),
@@ -904,7 +803,7 @@ fn counts(findings: &[Finding], fixes: &[Fix]) -> Counts {
 fn frontmatter_ranges(source: &str) -> Option<(std::ops::Range<usize>, usize)> {
     let mut lines = source.split_inclusive('\n');
     let first = lines.next()?;
-    if first.trim_end_matches(['\n', '\r']).trim_end() != "---" {
+    if first.trim_start_matches('\u{feff}').trim_end_matches(['\n', '\r']).trim_end() != "---" {
         return None;
     }
     let yaml_start = first.len();
@@ -927,8 +826,23 @@ fn clean_reference(reference: &str) -> &str {
         .trim_end_matches(['.', ',', ';', ':', ')', ']', '}', '\'', '"'])
 }
 
-fn line_for(source: &str, needle: &str) -> Option<u64> {
-    source.find(needle).map(|offset| line_at(source, offset))
+fn policy_value_line(source: &str) -> Option<u64> {
+    let mut in_policy = false;
+    for (index, line) in source.lines().enumerate() {
+        let content = line.trim_end_matches('\r');
+        let top_level =
+            !content.is_empty() && !content.starts_with([' ', '\t', '#']) && content != "---" && content != "...";
+        if top_level {
+            if in_policy {
+                return None;
+            }
+            in_policy = content.strip_prefix("policy:").is_some();
+        }
+        if in_policy && content.contains("allow_implicit_invocation") {
+            return Some(index as u64 + 1);
+        }
+    }
+    None
 }
 
 fn line_at(source: &str, offset: usize) -> u64 {

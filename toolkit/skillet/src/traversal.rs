@@ -179,8 +179,13 @@ fn discover_root(root: &ScanRoot, skills: &mut BTreeMap<PathBuf, SkillExposure>)
     }
 
     for entry in builder.build() {
-        let entry =
-            entry.map_err(|error| Error::Traversal { path: root.exposure_path.clone(), message: error.to_string() })?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) if walk_error_is_recoverable(&error) => continue,
+            Err(error) => {
+                return Err(Error::Traversal { path: root.exposure_path.clone(), message: error.to_string() });
+            }
+        };
         let path = entry.path();
         if path == root.exposure_path {
             continue;
@@ -198,6 +203,11 @@ fn discover_root(root: &ScanRoot, skills: &mut BTreeMap<PathBuf, SkillExposure>)
         }
     }
     Ok(())
+}
+
+pub(crate) fn walk_error_is_recoverable(error: &ignore::Error) -> bool {
+    error.depth().is_some_and(|depth| depth > 0) &&
+        error.io_error().is_some_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied)
 }
 
 fn add_candidate(root: &ScanRoot, path: &Path, skills: &mut BTreeMap<PathBuf, SkillExposure>) -> Result<(), Error> {

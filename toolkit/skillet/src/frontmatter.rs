@@ -15,6 +15,7 @@ use serde_saphyr::Spanned;
 use crate::diagnostic::Diagnostic;
 
 const MAX_FRONTMATTER_BYTES: usize = 8 * 1024 * 1024;
+const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 
 pub const SUPPORTED_FIELDS: &[&str] = &[
     "name",
@@ -178,7 +179,8 @@ fn parse_reader(path: &Path, mut reader: impl BufRead) -> FrontmatterParse {
         Err(error) => return read_error(path, 1, error),
     }
     line_number += 1;
-    if delimiter_contents(&line) != Some(b"---") {
+    let opening_line = line.strip_prefix(UTF8_BOM).unwrap_or(&line);
+    if delimiter_contents(opening_line) != Some(b"---") {
         return missing_delimiter(path, 1, "missing opening YAML frontmatter delimiter");
     }
 
