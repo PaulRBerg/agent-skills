@@ -236,9 +236,10 @@ fn spec_present(value: &Value, spec: HookSpec) -> bool {
             let Some(group) = group.as_object() else {
                 return false;
             };
+            let matcher = group.get("matcher").and_then(Value::as_str);
             let matcher_matches = match spec.matcher {
-                Some(expected) => group.get("matcher").and_then(Value::as_str) == Some(expected),
-                None => !group.contains_key("matcher"),
+                Some(expected) => matcher == Some(expected),
+                None => matches!(matcher, None | Some("") | Some("*")),
             };
             matcher_matches &&
                 group.get("hooks").and_then(Value::as_array).is_some_and(|hooks| {
@@ -403,5 +404,19 @@ mod tests {
 
         let repeated = ensure_claude_hooks(&config.join("settings.json"), false, false).unwrap();
         assert!(!repeated.changed);
+    }
+
+    #[test]
+    fn empty_and_wildcard_matchers_count_as_absent() {
+        let spec = *HOOK_SPECS.iter().find(|spec| spec.matcher.is_none()).unwrap();
+        let handler = json!({"type": "command", "command": spec.command});
+        for group in [
+            json!({"hooks": [handler]}),
+            json!({"matcher": "", "hooks": [handler]}),
+            json!({"matcher": "*", "hooks": [handler]}),
+        ] {
+            assert!(spec_present(&json!([group]), spec));
+        }
+        assert!(!spec_present(&json!([{"matcher": "Bash", "hooks": [handler]}]), spec));
     }
 }

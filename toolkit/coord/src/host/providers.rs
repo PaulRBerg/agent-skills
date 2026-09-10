@@ -169,14 +169,15 @@ pub(crate) fn collect_claude_inventory(
             authoritative: false,
         };
     };
-    for attempt in 0..CLAUDE_PARTIAL_RETRY_ATTEMPTS {
-        let observation = collect_claude_inventory_once(executable, probe);
-        if observation.report.dropped == 0 || attempt + 1 == CLAUDE_PARTIAL_RETRY_ATTEMPTS {
-            return observation;
+    let mut observation = collect_claude_inventory_once(executable, probe);
+    for _ in 1..CLAUDE_PARTIAL_RETRY_ATTEMPTS {
+        if observation.report.dropped == 0 {
+            break;
         }
         std::thread::sleep(CLAUDE_PARTIAL_RETRY_DELAY);
+        observation = collect_claude_inventory_once(executable, probe);
     }
-    unreachable!("Claude inventory retry loop always returns")
+    observation
 }
 
 fn collect_claude_inventory_once(executable: &Path, probe: &dyn ProcessProbe) -> ClaudeInventoryObservation {
