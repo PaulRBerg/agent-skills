@@ -94,18 +94,43 @@ repeated negative result.
 
 ## Message Signing
 
-Before preparing a message or Permit2 flow, check whether `env -i PATH="$PATH" cast wallet sign --help` exposes
-`--browser`. If it does not, browser message signing is unavailable in this Cast installation; stop that flow without
-loading a key or substituting a transaction signature. Present the exact plain-message bytes or decoded EIP-712 domain
-and payload before approval. Only when the capability exists and the review is approved:
+Cast supports browser signing of plain messages and EIP-712 typed data. Confirm the installed version's capabilities
+before preparation, using clean-environment help:
 
 ```sh
-cast wallet sign 'reviewed message' --browser
-cast wallet sign --data --from-file typed-data.json --browser
+env -i PATH="$PATH" cast wallet sign --help
+env -i PATH="$PATH" cast wallet verify --help
 ```
 
-Verify the recovered signer matches the reviewed account, then return the signature and signer address. Do not broadcast
-or submit the signature elsewhere unless the user separately authorized that external write.
+Require `sign` to expose `--browser` and `--from`; for typed data, also require `--data` and `--from-file` on both
+subcommands. If unavailable, stop a browser-only flow without loading a key or substituting a transaction signature.
+
+Use an EIP-712 JSON file containing `domain`, `types`, `primaryType`, and `message`. An API's `values` object is not a
+Cast `message`: use the consuming workflow's validated adapter and preserve the domain, type definitions, and all signed
+values exactly. Keep large integers as exact decimal strings or losslessly parsed integers. Do not infer a primary type
+from JSON key order or sign the raw API response.
+
+Present the exact plain-message bytes or full decoded EIP-712 domain, primary type, and payload. Review the owner,
+chain, verifying contract, authorizations, amounts, nonces, deadlines, and intended recipient of the signature where
+applicable. Bind the browser account to `OWNER`. Only after approval, sign and verify the same payload:
+
+```sh
+SIGNATURE="$(cast wallet sign --data --from-file "$TYPED_DATA_JSON" --from "$OWNER" --browser)" || exit 1
+cast wallet verify --address "$OWNER" --data --from-file "$TYPED_DATA_JSON" "$SIGNATURE" || exit 1
+```
+
+For plain messages, use `cast wallet sign "$MESSAGE" --from "$OWNER" --browser`, then
+`cast wallet verify --address "$OWNER" "$MESSAGE" "$SIGNATURE"`. Do not use `--no-hash` for EIP-712 documents or
+ordinary prefixed messages.
+
+Message signing is a human-interaction wait: preserve the process until the wallet responds. `--async` applies to
+broadcasts, not `wallet sign`. Treat sign or verify failure as blocking; never return or submit an unverified signature.
+This local recovery check requires a signature recoverable to `OWNER`; it does not verify EIP-1271 contract-wallet
+signatures. If that check cannot establish the reviewed signer, stop this flow.
+
+Return the verified signature and signer address. Submit it elsewhere only when approval explicitly covers that
+submission. For Permit2, the consuming workflow must bind the permit to its reviewed quote and state; a refreshed quote
+or changed payload requires a new review and signature. Never silently reuse or modify a signed payload.
 
 ## Failure Handling
 
