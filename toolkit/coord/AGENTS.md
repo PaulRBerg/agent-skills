@@ -15,7 +15,7 @@ security boundary or an OS file lock.
 Run shared tasks from the monorepo root `justfile`:
 
 - `cargo test -p ai-coord --locked` runs package tests; `just rust-check` runs the complete Rust workspace gate.
-- `just install-cli` installs all four workspace binaries and does not link hooks.
+- `just install-cli` installs all workspace binaries and does not link hooks.
 - `just coord-dashboard-check` and `just coord-dashboard-dev` delegate to the dashboard package.
 
 Use package selection when isolating a Rust failure: `cargo test -p ai-coord --locked` and
