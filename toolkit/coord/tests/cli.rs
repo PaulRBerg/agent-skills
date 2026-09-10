@@ -969,11 +969,12 @@ fn status_removes_every_common_host_termination_without_an_age_grace() {
         .to_string()
         .as_bytes(),
     );
-    ended.assert().success();
-    ended.assert().stdout(predicate::str::is_empty());
-    assert!(wait_for_session_absence(&fixture, session_id, Duration::from_secs(1)));
+    let removed = wait_for_session_absence(&fixture, session_id, Duration::from_secs(1));
     let _ = child.kill();
     let _ = child.wait();
+    ended.assert().success();
+    ended.assert().stdout(predicate::str::is_empty());
+    assert!(removed);
 }
 
 fn run_with_stdin(mut command: Command, arguments: &[&str], input: &[u8]) -> Output {
