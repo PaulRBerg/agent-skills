@@ -13,7 +13,7 @@ Local-only, read-only viewer for agent task handoffs.
 
 ## Workflow
 
-- Use Bun 1.3.14 and the exact dependency pins in `package.json`.
+- Use Bun 1.4.2 and the exact dependency pins in `package.json`.
 - Prefer the `just` recipes for development, targeted tests, type-checking, builds, and cold-start serving.
 - Keep server behavior behind testable parser, scanner, freshness, and request-handler seams.
 - Run targeted tests while iterating; use `just check` only for aggregate validation.
