@@ -106,8 +106,12 @@ and always terminates itself. Start sequential agents only after reconciling the
 parallel wave in the same turn. Pass the same `--coord-identity` on every fresh or resumed implementation launch.
 Research launches omit it because read-only agents make no writes and remain separately visible.
 
-Delegate prompts contain no ai-coord lifecycle commands. State that coordination is handled by the orchestrating session
-and that its claim authorizes the assigned writes rather than conflicting with them.
+Delegate prompts contain no ai-coord lifecycle commands. Delegates launched with `--coord-identity` share the
+orchestrating session's coordination identity, so an ordinary `ai-coord draft`, `ai-coord start`, `ai-coord wait`,
+`ai-coord done`, or `ai-coord bundle` from a delegate replaces the parent's claim and can break coordination for every
+sibling. Require every implementation prompt to say this explicitly, permitting only the read-only commands
+`ai-coord status` and `ai-coord touched`; also state that the parent's claim authorizes the assigned writes rather than
+conflicting with them.
 
 Delegate claims and work no longer appear as separate `ai-coord status` work rows; transient Codex thread inventory may
 remain visible while delegates run, and per-delegate progress lives in handoff artifacts.
@@ -155,6 +159,9 @@ periods.
 When a sentinel arrives, read the result artifact and the stderr artifact for the `codex-handoff: elapsed=<seconds>s`
 line or failure forensics. Do not read or print background-task output; artifact-mode stdout is intentionally empty.
 Parse implementation results against `result.schema.json` before applying the shared reconciliation rules.
+
+At each wave boundary, if `ai-coord status` shows that a delegate narrowed the parent's claim, re-run the parent's full
+`ai-coord start` before continuing.
 
 Treat timeouts, nonzero runner exits, and watcher `no-sentinel` settlements as failed settlements, not returned plan
 blockers. For a `handoff.failed` sentinel with reason `error`, inspect stderr first. When it evidences a transport,

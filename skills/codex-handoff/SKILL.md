@@ -183,7 +183,8 @@ Build a self-contained, outcome-first prompt for every implementation agent. Inc
    deploy, make external writes, or broaden scope, even when repository or host instructions favor committing finished
    work promptly. Committing stays with the parent after reconciliation.
 6. The selected adapter's delegation and coordination context, including why the parent session and disjoint siblings
-   are not conflicting work and what unrelated exact-scope claim would justify returning `blocked`.
+   are not conflicting work, what a delegate's lifecycle command would do to the parent's claim, and what unrelated
+   exact-scope claim would justify returning `blocked`.
 7. This stopping rule: implement the approved plan exactly; if infeasible or requiring redesign, return `blocked` with
    evidence instead of proposing a replacement plan.
 8. A requirement to return every result field: `status` (`completed` or `blocked`), `summary`, `changed_files` listing
