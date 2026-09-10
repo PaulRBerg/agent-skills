@@ -1,6 +1,6 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import type { HandoffRecord } from "../shared/handoff";
 import { parseHandoff } from "./parser";
@@ -53,7 +53,33 @@ function immediateDirectories(directory: string, logError: ScanOptions["logError
   }
 }
 
+function hasPhysicalHandoffDirectory(
+  target: ScanTarget,
+  logError: NonNullable<ScanOptions["logError"]>,
+): boolean {
+  const directories =
+    target.state === "live"
+      ? [
+          dirname(dirname(target.handoffDirectory)),
+          dirname(target.handoffDirectory),
+          target.handoffDirectory,
+        ]
+      : [target.handoffDirectory];
+
+  for (const directory of directories) {
+    try {
+      if (!lstatSync(directory).isDirectory()) return false;
+    } catch (error) {
+      if (!isMissing(error)) logError(`unable to inspect handoff directory ${directory}`, error);
+      return false;
+    }
+  }
+  return true;
+}
+
 export function scanTarget(target: ScanTarget, logError: NonNullable<ScanOptions["logError"]>): HandoffRecord[] {
+  if (!hasPhysicalHandoffDirectory(target, logError)) return [];
+
   let entries;
   try {
     entries = readdirSync(target.handoffDirectory, { withFileTypes: true });

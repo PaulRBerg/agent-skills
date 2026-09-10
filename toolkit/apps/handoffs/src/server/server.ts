@@ -4,15 +4,15 @@ import { createRequestHandler } from "./api";
 
 const DEFAULT_PORT = 7777;
 
-export function parsePort(rawPort: string | undefined): number {
+export function parsePort(rawPort: string | undefined, variableName = "AI_HANDOFFS_PORT"): number {
   if (rawPort === undefined) return DEFAULT_PORT;
   if (!/^\d+$/.test(rawPort)) {
-    throw new Error(`AI_HANDOFFS_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`);
+    throw new Error(`${variableName} must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`);
   }
 
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error(`AI_HANDOFFS_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`);
+    throw new Error(`${variableName} must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`);
   }
   return port;
 }

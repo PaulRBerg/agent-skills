@@ -1,10 +1,10 @@
 ---
 category: 'implementation'
 created: '2026-08-10T08:00:00Z'
-launch_repo: '/Users/example/projects/app'
+launch_repo: '~/projects/app'
 repos:
-  - '/Users/example/projects/app'
-origin: '/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'
+  - '~/projects/app'
+origin: '~/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'
 task: 'Validate task handoff compatibility'
 ---
 # Validate task handoff compatibility
@@ -28,14 +28,15 @@ constraints, and validation requirements.
 Current status: No task attempt has been recorded.
 
 If work stops before successful completion, replace the current status—not append an attempt history—with a concise
-record of completed work, remaining work, validation commands and outcomes, the blocker, and the next concrete action.
+record of completed work, remaining work, validation commands and outcomes, the blocker, and the next concrete
+action.
 
 ## Handoff cleanup
 
 Archive this handoff only after the requested work is complete and task-scoped validation passes:
 
 ```sh
-ai-handoff archive '/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'
+ai-handoff archive ~/'projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'
 ```
 
 A broader required check may remain non-green only when evidence attributes every failure to pre-existing or unrelated

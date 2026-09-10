@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HandoffRecord } from "../shared/handoff";
 import { createRequestHandler } from "./api";
@@ -59,6 +59,23 @@ describe("request handler", () => {
     expect(missing.status).toBe(404);
   });
 
+  it("returns a controlled error when discovery fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handler = createRequestHandler({
+      distDirectory: "/unused",
+      loadHandoffs: async () => {
+        throw new Error("scan failed");
+      },
+    });
+
+    const response = await handler(new Request("http://localhost/api/handoffs"));
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("Internal Server Error");
+    expect(logged).toHaveBeenCalledOnce();
+    logged.mockRestore();
+  });
+
   it("serves assets and GET/HEAD SPA fallbacks", async () => {
     const handler = await fixtureHandler();
     const asset = await handler(new Request("http://localhost/assets/app.js"));
@@ -83,5 +100,10 @@ describe("parsePort", () => {
       expect(() => parsePort(invalid)).toThrow("AI_HANDOFFS_PORT must be an integer from 1 to 65535");
     }
   });
-});
 
+  it("identifies the configured port variable in validation errors", () => {
+    expect(() => parsePort("invalid", "AI_HANDOFFS_API_PORT")).toThrow(
+      "AI_HANDOFFS_API_PORT must be an integer from 1 to 65535",
+    );
+  });
+});

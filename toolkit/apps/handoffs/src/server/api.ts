@@ -56,10 +56,15 @@ export function createRequestHandler(options: RequestHandlerOptions): (request: 
         });
       }
 
-      const payload: HandoffsResponse = { handoffs: await loadHandoffs() };
-      return Response.json(payload, {
-        headers: { "Cache-Control": "no-store" },
-      });
+      try {
+        const payload: HandoffsResponse = { handoffs: await loadHandoffs() };
+        return Response.json(payload, {
+          headers: { "Cache-Control": "no-store" },
+        });
+      } catch (error) {
+        console.error("[ai-handoffs] unable to load handoffs", error);
+        return new Response("Internal Server Error", { status: 500 });
+      }
     }
 
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {

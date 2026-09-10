@@ -162,6 +162,12 @@ fn validate_before_work_skill(candidate: Option<&Path>) -> Result<Option<PathBuf
         return Err(Error::usage(format!("before-work skill is not a directory: {}", directory.display())));
     }
     let entrypoint = directory.join("SKILL.md");
+    let entrypoint_metadata = fs::metadata(&entrypoint).map_err(|error| {
+        Error::operational(format!("before-work skill entrypoint is not readable {}: {error}", entrypoint.display()))
+    })?;
+    if !entrypoint_metadata.is_file() {
+        return Err(Error::usage(format!("before-work skill entrypoint is not a file: {}", entrypoint.display())));
+    }
     File::open(&entrypoint).map_err(|error| {
         Error::operational(format!("before-work skill entrypoint is not readable {}: {error}", entrypoint.display()))
     })?;

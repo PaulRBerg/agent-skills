@@ -65,9 +65,9 @@ describe("parseHandoff", () => {
       frontmatter: {
         category: "implementation",
         created: "2026-08-10T08:00:00Z",
-        launch_repo: "/Users/example/projects/app",
-        repos: ["/Users/example/projects/app"],
-        origin: "/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md",
+        launch_repo: "~/projects/app",
+        repos: ["~/projects/app"],
+        origin: "~/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md",
         task: "Validate task handoff compatibility",
       },
     });
@@ -76,7 +76,7 @@ describe("parseHandoff", () => {
     expect(parsed.markdown).toContain("## Execution status");
     expect(parsed.markdown).toContain("## Handoff cleanup");
     expect(parsed.markdown).toContain(
-      "ai-handoff archive '/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'",
+      "ai-handoff archive ~/'projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'",
     );
   });
 
@@ -128,6 +128,31 @@ describe("parseHandoff", () => {
       "launch_repo: projects/app",
     );
     expect(parseHandoff(source, "VIEWER.md").format).toBe("legacy");
+  });
+
+  it("rejects normalized but nonexistent calendar dates", () => {
+    const source = VALID_FRONTMATTER.replace(
+      "created: 2026-08-10T08:00:00Z",
+      "created: 2026-02-30T08:00:00Z",
+    );
+
+    expect(parseHandoff(source, "VIEWER.md").format).toBe("legacy");
+  });
+
+  it("accepts home-abbreviated producer paths without accepting other relative paths", () => {
+    const source = VALID_FRONTMATTER.replaceAll(
+      "/Users/example/projects/app",
+      "~/projects/app",
+    );
+
+    expect(parseHandoff(source, "VIEWER.md")).toMatchObject({
+      format: "frontmatter",
+      frontmatter: {
+        launch_repo: "~/projects/app",
+        repos: ["~/projects/app"],
+        origin: "~/projects/app/.ai/task-handoffs/VIEWER.md",
+      },
+    });
   });
 
   it("retains all markdown when a leading block is unterminated", () => {

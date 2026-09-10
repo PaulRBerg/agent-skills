@@ -41,6 +41,11 @@ describe("scanHandoffs", () => {
     );
     await writeHandoff(join(home, "outside", "ESCAPE.md"), "Escape", newer);
     await symlink(join(home, "outside"), join(home, "projects", "linked-repository"));
+    await mkdir(join(home, "projects", "gamma", ".ai"), { recursive: true });
+    await symlink(
+      join(home, "outside"),
+      join(home, "projects", "gamma", ".ai", "task-handoffs"),
+    );
     await symlink(
       join(home, "outside", "ESCAPE.md"),
       join(home, "projects", "alpha", ".ai", "task-handoffs", "LINKED.md"),

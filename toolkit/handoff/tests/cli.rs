@@ -142,6 +142,55 @@ fn create_rejects_existing_and_non_ignored_targets() {
     assert!(stderr(&output).contains("not ignored by Git"));
 }
 
+#[cfg(unix)]
+#[test]
+fn create_rejects_symlinked_handoff_directories_without_traversing_them() {
+    let harness = Harness::new("create-symlinked-parents");
+    let draft = harness.root.join("draft.md");
+    let outside = harness.root.join("outside");
+    fs::write(&draft, "# Symlink safety\n").unwrap();
+    fs::create_dir(&outside).unwrap();
+
+    let linked_ai = harness.repo("linked-ai", true);
+    std::os::unix::fs::symlink(&outside, linked_ai.join(".ai")).unwrap();
+    let output = harness.command([
+        "create",
+        "--repo",
+        linked_ai.to_str().unwrap(),
+        "--category",
+        "audit",
+        "--task",
+        "reject linked ai directory",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--no-clipboard",
+        "LINKED_AI.md",
+    ]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("git check-ignore failed"));
+    assert!(!outside.join("task-handoffs/LINKED_AI.md").exists());
+
+    let linked_handoffs = harness.repo("linked-handoffs", true);
+    fs::create_dir(linked_handoffs.join(".ai")).unwrap();
+    std::os::unix::fs::symlink(&outside, linked_handoffs.join(".ai/task-handoffs")).unwrap();
+    let output = harness.command([
+        "create",
+        "--repo",
+        linked_handoffs.to_str().unwrap(),
+        "--category",
+        "audit",
+        "--task",
+        "reject linked handoff directory",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--no-clipboard",
+        "LINKED_HANDOFFS.md",
+    ]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("git check-ignore failed"));
+    assert!(!outside.join("LINKED_HANDOFFS.md").exists());
+}
+
 #[test]
 fn cross_repository_create_uses_desktop_and_requires_repository_order() {
     let harness = Harness::new("cross-create");
@@ -517,6 +566,25 @@ fn create_rejects_an_invalid_before_work_skill() {
     assert!(!output.status.success());
     assert!(stderr(&output).contains("before-work skill entrypoint is not readable"));
     assert!(!repository.join(".ai/task-handoffs/INVALID_SKILL.md").exists());
+
+    fs::create_dir(skill.join("SKILL.md")).unwrap();
+    let output = harness.command([
+        "create",
+        "--repo",
+        repository.to_str().unwrap(),
+        "--category",
+        "implementation",
+        "--task",
+        "delegate the implementation",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--before-work-skill",
+        skill.to_str().unwrap(),
+        "INVALID_SKILL.md",
+    ]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("before-work skill entrypoint is not a file"));
+    assert!(!repository.join(".ai/task-handoffs/INVALID_SKILL.md").exists());
 }
 
 #[test]
@@ -566,6 +634,38 @@ fn create_rolls_back_on_clipboard_mismatch_and_no_clipboard_needs_no_tools() {
     ]);
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(repository.join(".ai/task-handoffs/NO_CLIPBOARD.md").exists());
+}
+
+#[test]
+fn create_rollback_preserves_preexisting_handoff_directories() {
+    let harness = Harness::new("clipboard-rollback-existing-directories");
+    let repository = harness.repo("repo", true);
+    let handoffs = repository.join(".ai/task-handoffs");
+    let marker = handoffs.join("KEEP.md");
+    let draft = harness.root.join("draft.md");
+    fs::create_dir_all(&handoffs).unwrap();
+    fs::write(&marker, "keep\n").unwrap();
+    fs::write(&draft, "# Clipboard\n").unwrap();
+    common::write_executable(&harness.root.join("shim/pbpaste"), "#!/bin/sh\nprintf wrong\n");
+
+    let output = harness.command([
+        "create",
+        "--repo",
+        repository.to_str().unwrap(),
+        "--category",
+        "audit",
+        "--task",
+        "preserve existing directories",
+        "--draft",
+        draft.to_str().unwrap(),
+        "ROLLBACK.md",
+    ]);
+
+    assert!(!output.status.success());
+    assert_eq!(fs::read_to_string(marker).unwrap(), "keep\n");
+    assert!(!handoffs.join("ROLLBACK.md").exists());
+    assert!(repository.join(".ai").is_dir());
+    assert!(handoffs.is_dir());
 }
 
 #[test]

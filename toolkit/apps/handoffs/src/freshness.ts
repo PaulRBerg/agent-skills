@@ -63,11 +63,11 @@ async function latestTreeMtime(path: string): Promise<number | null> {
 
 export async function inspectBuildFreshness(projectRoot: string): Promise<BuildFreshness> {
   const inputMtimes = await Promise.all(BUILD_INPUTS.map((path) => latestTreeMtime(resolve(projectRoot, path))));
-  const presentInputMtimes = inputMtimes.filter((value): value is number => value !== null);
+  const allInputsPresent = inputMtimes.every((value): value is number => value !== null);
 
   return {
     indexMtimeMs: await mtime(resolve(projectRoot, "dist", "index.html")),
     stampMtimeMs: await mtime(resolve(projectRoot, "dist", ".build-stamp")),
-    latestInputMtimeMs: presentInputMtimes.length > 0 ? Math.max(...presentInputMtimes) : null,
+    latestInputMtimeMs: allInputsPresent ? Math.max(...inputMtimes) : null,
   };
 }

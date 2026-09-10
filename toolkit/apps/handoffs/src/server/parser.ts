@@ -35,14 +35,16 @@ function isNonemptyString(value: unknown): value is string {
 }
 
 function isIsoDate(value: string): boolean {
-  return (
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) &&
-    !Number.isNaN(Date.parse(value))
-  );
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 19) === value.slice(0, 19);
 }
 
-function isAbsolutePath(value: unknown): value is string {
-  return isNonemptyString(value) && isAbsolute(value);
+function isHandoffPath(value: unknown): value is string {
+  return (
+    isNonemptyString(value) &&
+    (isAbsolute(value) || value === "~" || value.startsWith("~/"))
+  );
 }
 
 function validateFrontmatter(value: unknown): HandoffFrontmatter | null {
@@ -62,11 +64,11 @@ function validateFrontmatter(value: unknown): HandoffFrontmatter | null {
     !CATEGORY_SET.has(record.category) ||
     !isNonemptyString(record.created) ||
     !isIsoDate(record.created) ||
-    !isAbsolutePath(record.launch_repo) ||
+    !isHandoffPath(record.launch_repo) ||
     !Array.isArray(record.repos) ||
     record.repos.length === 0 ||
-    !record.repos.every(isAbsolutePath) ||
-    !isAbsolutePath(record.origin) ||
+    !record.repos.every(isHandoffPath) ||
+    !isHandoffPath(record.origin) ||
     !isNonemptyString(record.task)
   ) {
     return null;

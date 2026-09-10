@@ -1,12 +1,25 @@
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, unlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { inspectBuildFreshness, isBuildFresh } from "./freshness";
+import { BUILD_INPUTS, inspectBuildFreshness, isBuildFresh } from "./freshness";
 
 const temporaryDirectories: string[] = [];
+
+async function writeBuildInputs(projectRoot: string, modifiedAt: Date): Promise<void> {
+  const clientDirectory = join(projectRoot, "src", "client");
+  const sharedDirectory = join(projectRoot, "src", "shared");
+  await mkdir(clientDirectory, { recursive: true });
+  await mkdir(sharedDirectory);
+  await writeFile(join(clientDirectory, "main.tsx"), "export {};", "utf8");
+  for (const path of BUILD_INPUTS.filter((path) => !path.startsWith("src/"))) {
+    await writeFile(join(projectRoot, path), path, "utf8");
+  }
+  await utimes(join(clientDirectory, "main.tsx"), modifiedAt, modifiedAt);
+  await Promise.all(BUILD_INPUTS.map((path) => utimes(join(projectRoot, path), modifiedAt, modifiedAt)));
+}
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
@@ -35,13 +48,10 @@ describe("isBuildFresh", () => {
     const built = new Date("2026-08-10T08:00:00Z");
     const added = new Date("2026-08-11T08:00:00Z");
 
-    await mkdir(clientDirectory, { recursive: true });
+    await writeBuildInputs(projectRoot, old);
     await mkdir(distDirectory);
-    await writeFile(join(clientDirectory, "main.tsx"), "export {};", "utf8");
     await writeFile(join(distDirectory, "index.html"), "built", "utf8");
     await writeFile(join(distDirectory, ".build-stamp"), "built", "utf8");
-    await utimes(join(clientDirectory, "main.tsx"), old, old);
-    await utimes(clientDirectory, old, old);
     await utimes(join(distDirectory, "index.html"), built, built);
     await utimes(join(distDirectory, ".build-stamp"), built, built);
 
@@ -49,6 +59,26 @@ describe("isBuildFresh", () => {
 
     await mkdir(addedDirectory);
     await utimes(addedDirectory, added, added);
+
+    expect(isBuildFresh(await inspectBuildFreshness(projectRoot))).toBe(false);
+  });
+
+  it("treats a missing declared input as stale", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "ai-handoffs-freshness-"));
+    temporaryDirectories.push(projectRoot);
+    const old = new Date("2026-08-09T08:00:00Z");
+    const built = new Date("2026-08-10T08:00:00Z");
+    const distDirectory = join(projectRoot, "dist");
+
+    await writeBuildInputs(projectRoot, old);
+    await mkdir(distDirectory);
+    await writeFile(join(distDirectory, "index.html"), "built", "utf8");
+    await writeFile(join(distDirectory, ".build-stamp"), "built", "utf8");
+    await utimes(join(distDirectory, "index.html"), built, built);
+    await utimes(join(distDirectory, ".build-stamp"), built, built);
+    expect(isBuildFresh(await inspectBuildFreshness(projectRoot))).toBe(true);
+
+    await unlink(join(projectRoot, "index.html"));
 
     expect(isBuildFresh(await inspectBuildFreshness(projectRoot))).toBe(false);
   });

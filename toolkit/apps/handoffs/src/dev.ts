@@ -3,7 +3,7 @@ import { parsePort, reportStartupError } from "./server/server";
 try {
   const uiPort = parsePort(process.env.AI_HANDOFFS_PORT);
   const apiPort = process.env.AI_HANDOFFS_API_PORT ?? "7778";
-  parsePort(apiPort);
+  parsePort(apiPort, "AI_HANDOFFS_API_PORT");
 
   const environment = {
     ...process.env,
@@ -40,4 +40,3 @@ try {
   reportStartupError(error);
   process.exit(1);
 }
-
