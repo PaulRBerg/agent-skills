@@ -25,7 +25,7 @@ use crate::{
     error::Result,
     host::{WorkClaimRequest, git_blob_hashes, git_dirty_paths},
     state::{SessionUpdate, Store, WorkClaimUpdate, WorkUpdate},
-    work::WorkCoordinator,
+    work::{DIRT_HOLD_SECONDS, WorkCoordinator},
 };
 
 #[derive(Default)]
@@ -291,7 +291,7 @@ fn fresh_dirt_in_one_repository_queues_the_whole_bundle() {
 fn foreign_residual_in_one_repository_queues_the_whole_bundle() {
     let owner = identity("owner");
     let foreign = identity("foreign");
-    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 13)]);
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 13), (&foreign, 1, 14)]);
     fs::write(roots[1].join("residual.rs"), "dirty\n").unwrap();
     let dirty = git_dirty_paths(&roots[1]).unwrap();
     let hashes = git_blob_hashes(&roots[1], &dirty, false);
@@ -899,6 +899,49 @@ fn dead_session_release_rolls_back_when_a_waiter_notification_fails() {
     assert_eq!(store.inbox(&first, true).unwrap().len(), 1);
     assert_eq!(store.inbox(&second, true).unwrap().len(), 1);
     assert_eq!(store.generation().unwrap(), generation);
+}
+
+#[test]
+fn confirmed_death_releases_residual_ownership_recorded_by_done() {
+    let holder = identity("holder");
+    let successor = identity("successor");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    for (identity, pid) in [(&holder, 140), (&successor, 141)] {
+        add_session(&mut store, identity, &roots[0], pid, 1.0);
+        probe.set(pid, ProcessLiveness::Alive);
+    }
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::clone(&probe) as Arc<dyn ProcessProbe>,
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    );
+    let repo_root = roots[0].to_str().unwrap();
+    let requested = files(&roots, &["tracked.txt"]);
+    assert_eq!(
+        coordinator.start_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Ready
+    );
+    fs::write(roots[0].join("tracked.txt"), "dirty").unwrap();
+    assert_eq!(coordinator.done_for(&holder, &roots[0]).unwrap().holders, ["tracked.txt"]);
+    assert_eq!(coordinator.store().unwrap().residual_owners(repo_root).unwrap()[0].identity, holder);
+
+    *clock.value.lock().unwrap() = 100.0 + DIRT_HOLD_SECONDS;
+    let blocked = coordinator.start_for(successor.clone(), "successor", &requested, &[], &roots[0]).unwrap();
+    assert_eq!(blocked.kind, OutcomeKind::Blocked);
+    assert_eq!(blocked.holders, ["codex/holder"]);
+
+    probe.set(140, ProcessLiveness::Dead);
+    let ready = coordinator.start_for(successor.clone(), "successor", &requested, &[], &roots[0]).unwrap();
+    assert_eq!(ready.kind, OutcomeKind::Ready);
+    assert_eq!(ready.detail, "stale-dirt:tracked.txt");
+    let store = coordinator.store().unwrap();
+    assert!(store.session(&holder).unwrap().is_none());
+    assert!(store.residual_owners(repo_root).unwrap().is_empty());
+    assert_eq!(store.work(&successor).unwrap().unwrap().state, WorkState::Active);
 }
 
 #[test]

@@ -68,8 +68,9 @@ file-mutating post-tool payloads. Its stable output is one path per line, with a
 content. Status schema v7 exposes required session `coordination_waived` booleans and complete sorted work `claims`
 vectors; dashboard and terminal status home a logical bundle once, with nested claim blockers and queue positions.
 Hooks derive prompt/nudge/waker work from the payload's Git-root claim; authoritative end cleanup releases the whole
-logical item. Guidance stays
-here while README remains human-facing tool documentation.
+logical item. Residual ownership recorded by `done` is reclaimable only while the owner's session row exists;
+`reconcile_ended` releases attribution whose owner is gone so orphaned dirt degrades to the stale-dirt advisory instead
+of a permanent `residual` blocker. Guidance stays here while README remains human-facing tool documentation.
 
 ## Upstream documentation
 

@@ -185,7 +185,8 @@ When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks by
 print their blob OIDs and pass affected paths to the commit skill's baseline exclusion. `baseline` is a stable machine
 contract: zero or more `path<TAB>oid` records, with normalized repository-relative paths and empty output when no
 baselines exist. A session that finishes with uncommitted dirt retains residual ownership and can reclaim it
-immediately.
+immediately while its session row exists. Session end, confirmed process death, or supersession releases that
+attribution during the next process reconciliation, and the leftover edits become ordinary stale dirt.
 
 `ai-coord touched` prints normalized repository-relative paths written by this session's observed post-tool events, one
 per line. `!TRUNCATED` is the first record when the bounded 1,000-path set dropped older observations. Collection is
@@ -315,7 +316,8 @@ guards. Subagent hooks add read-only parent/child topology and never schedule tr
 
 Prompt context and clean-scope release nudges use only the claim in the hook payload's current Git root. Authoritative
 SessionEnd and confirmed-death cleanup release the identity's whole logical item, wake affected queued sessions in every
-root, and do not create residual attribution for the ungraceful release.
+root, and do not create residual attribution for the ungraceful release. Residual ownership recorded by an earlier
+`done` never outlives its session row: every reconciliation releases attribution whose owner is gone.
 
 Codex transcript paths are private, opaque observations. Child activity, persistent forks, compaction, duplicate hooks,
 and delayed hooks with different or absent paths preserve the root's draft, queued or active work, baselines, touched

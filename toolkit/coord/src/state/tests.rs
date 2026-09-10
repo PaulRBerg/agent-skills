@@ -510,6 +510,59 @@ fn reconcile_requires_the_exact_fingerprint_even_at_the_same_revision() {
 }
 
 #[test]
+fn reconcile_releases_residual_ownership_whose_session_row_is_gone() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let ended = identity(Client::Codex, "ended");
+    let live = identity(Client::Codex, "live");
+    let orphan = identity(Client::Codex, "orphan");
+    let row = store.upsert_session(&session_update(&ended, 1.0)).unwrap();
+    let mut live_update = session_update(&live, 1.0);
+    live_update.fingerprint = Some(ProcessFingerprint { pid: 43, start_token: Some("boot:43".to_owned()) });
+    store.upsert_session(&live_update).unwrap();
+    let dirt = ["ended.rs", "live.rs", "orphan.rs"].map(|path| (path.to_owned(), format!("{path}-blob")));
+    store.observe_dirt("/repo", &dirt, 1.0).unwrap();
+    store
+        .with_work_transaction(|transaction| {
+            transaction.record_residual_owners("/repo", &["ended.rs".to_owned()], &ended, 1.5)?;
+            transaction.record_residual_owners("/repo", &["live.rs".to_owned()], &live, 1.5)?;
+            transaction.record_residual_owners("/repo", &["orphan.rs".to_owned()], &orphan, 1.5)
+        })
+        .unwrap();
+    let owners = |store: &Store| {
+        store.residual_owners("/repo").unwrap().into_iter().map(|row| row.identity.session_id).collect::<Vec<_>>()
+    };
+    let generation = store.generation().unwrap();
+
+    let stale = EndedObservation {
+        identity: ended.clone(),
+        expected_fingerprint: row.fingerprint.clone(),
+        expected_revision: row.revision + 1,
+    };
+    assert!(store.with_work_transaction(|transaction| transaction.reconcile_ended(&[stale])).unwrap().is_empty());
+    assert!(store.session(&ended).unwrap().is_some());
+    assert_eq!(owners(&store), ["ended", "live"]);
+    assert_eq!(store.generation().unwrap(), generation + 1);
+
+    let current = EndedObservation {
+        identity: ended.clone(),
+        expected_fingerprint: row.fingerprint,
+        expected_revision: row.revision,
+    };
+    assert_eq!(
+        store.with_work_transaction(|transaction| transaction.reconcile_ended(&[current])).unwrap(),
+        std::slice::from_ref(&ended)
+    );
+    assert!(store.session(&ended).unwrap().is_none());
+    assert_eq!(owners(&store), ["live"]);
+    assert_eq!(store.observe_dirt("/repo", &dirt, 2.0).unwrap().len(), 3);
+
+    let quiet = store.generation().unwrap();
+    assert!(store.with_work_transaction(|transaction| transaction.reconcile_ended(&[])).unwrap().is_empty());
+    assert_eq!(store.generation().unwrap(), quiet);
+}
+
+#[test]
 fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_state() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();

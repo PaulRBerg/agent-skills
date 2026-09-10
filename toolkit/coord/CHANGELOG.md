@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Release residual ownership whose owning session row no longer exists during every process reconciliation, so dirt left
+  behind by an ended, dead, or superseded session no longer blocks later `start` calls with a `residual` holder that
+  `status` cannot show; the leftover edits follow the ordinary stale-dirt path instead.
 - `finding resolve` on an already-terminal finding with the same `--as` state now updates its evidence (`--commit`,
   `--canonical`) instead of failing; resolving with a different terminal state still fails and now points to `reopen`.
 - Break the internal ledger at schema v16 while retaining public status schema v7, with no migration or import. Store

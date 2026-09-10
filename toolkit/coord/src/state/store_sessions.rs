@@ -235,7 +235,19 @@ pub(super) fn reconcile_ended(
             removed.push(observation.identity.clone());
         }
     }
-    if !removed.is_empty() {
+    // Residual ownership is reclaimable only by a live session row. Every
+    // removal path deletes that row, so release attribution that no longer
+    // resolves instead of leaving a permanent blocker behind.
+    let orphaned = transaction.execute(
+        "DELETE FROM residual_owners
+         WHERE NOT EXISTS (
+            SELECT 1 FROM sessions
+            WHERE sessions.client = residual_owners.client
+              AND sessions.session_id = residual_owners.session_id
+         )",
+        [],
+    )?;
+    if !removed.is_empty() || orphaned > 0 {
         bump_generation(transaction)?;
     }
     Ok(removed)
