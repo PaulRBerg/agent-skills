@@ -209,8 +209,8 @@ pub(super) fn invalid_value(message: String) -> rusqlite::Error {
 }
 
 pub(super) fn new_id() -> String {
-    let bytes = rand::random::<[u8; 16]>();
-    let mut result = String::with_capacity(32);
+    let bytes = rand::random::<[u8; 8]>();
+    let mut result = String::with_capacity(16);
     for byte in bytes {
         use std::fmt::Write;
         let _ = write!(result, "{byte:02x}");

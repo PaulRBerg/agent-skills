@@ -5,8 +5,9 @@ use std::{
     io::{self, Write},
     path::{Component, Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
+    sync::mpsc,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
@@ -386,41 +387,95 @@ impl TriageRunner for CodexTriageRunner {
         let stdout = private_output(&request.run_dir.join(STDOUT_FILE))?;
         let stderr = private_output(&request.run_dir.join(STDERR_FILE))?;
         let args = codex_args(request.repo_root, request.state_dir, request.run_dir);
-        let child = Command::new("codex")
+        let mut command = Command::new("codex");
+        command
             .args(args)
             .current_dir(request.repo_root)
             .env("AI_COORD_TRIAGE_ROLE", "triager")
             .stdin(Stdio::piped())
             .stdout(stdout)
-            .stderr(stderr)
+            .stderr(stderr);
+        configure_triage_process_group(&mut command);
+        let child = command
             .spawn()
             .map_err(|error| AppError::operational(format!("could not launch Codex triager: {error}")))?;
         run_triage_child(child, request.prompt, heartbeat)
     }
 }
 
-fn run_triage_child(mut child: Child, prompt: &str, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
+#[cfg(unix)]
+fn configure_triage_process_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn configure_triage_process_group(_: &mut Command) {}
+
+fn run_triage_child(child: Child, prompt: &str, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
+    run_triage_child_with_limits(
+        child,
+        prompt,
+        heartbeat,
+        Duration::from_secs_f64(RUN_DEADLINE_SECONDS),
+        Duration::from_secs_f64(HEARTBEAT_SECONDS),
+    )
+}
+
+fn run_triage_child_with_limits(
+    mut child: Child,
+    prompt: &str,
+    heartbeat: &mut dyn FnMut() -> Result<()>,
+    deadline: Duration,
+    heartbeat_interval: Duration,
+) -> Result<ExitStatus> {
+    let started = Instant::now();
     let result = (|| {
         let mut stdin = child.stdin.take().ok_or_else(|| AppError::operational("Codex triager stdin unavailable"))?;
-        stdin.write_all(prompt.as_bytes())?;
-        drop(stdin);
-        let started = std::time::Instant::now();
+        let prompt = prompt.as_bytes().to_vec();
+        let (writer, writer_result) = mpsc::sync_channel(1);
+        thread::spawn(move || {
+            let result = stdin.write_all(&prompt);
+            drop(stdin);
+            let _ = writer.send(result);
+        });
+        let mut prompt_delivered = false;
         loop {
+            if !prompt_delivered {
+                match writer_result.try_recv() {
+                    Ok(Ok(())) => prompt_delivered = true,
+                    Err(mpsc::TryRecvError::Empty) => {}
+                    Ok(Err(error)) => return Err(error.into()),
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        return Err(AppError::operational("Codex triager prompt writer stopped unexpectedly"));
+                    }
+                }
+            }
             if let Some(status) = child.try_wait()? {
                 return Ok(status);
             }
-            if started.elapsed().as_secs_f64() >= RUN_DEADLINE_SECONDS {
+            let elapsed = started.elapsed();
+            if elapsed >= deadline {
                 return Err(AppError::operational("Codex triage run exceeded the 30-minute deadline"));
             }
             heartbeat()?;
-            thread::sleep(Duration::from_secs_f64(HEARTBEAT_SECONDS));
+            thread::sleep(heartbeat_interval.min(deadline.saturating_sub(started.elapsed())));
         }
     })();
     if result.is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
+        terminate_triage_child(&mut child);
     }
     result
+}
+
+fn terminate_triage_child(child: &mut Child) {
+    #[cfg(unix)]
+    if let Ok(group_id) = i32::try_from(child.id()) {
+        let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(-group_id), nix::sys::signal::Signal::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn register_triager_session(

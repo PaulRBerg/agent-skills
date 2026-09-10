@@ -101,7 +101,10 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
             "Drafts: non-authoritative temporary memory; submit with 'ai-coord start --draft'.",
             snapshot.work.iter().any(|work| work.state == WorkState::Draft),
         ),
-        ("Names/labels: hints; only 'ai-coord start' returning READY grants an edit scope.", true),
+        (
+            "Names/labels: hints; only a matching 'ai-coord start' or 'ai-coord bundle start' command returning READY grants an edit scope.",
+            true,
+        ),
         ("Partial coverage: sessions may be missing; absence does not mean no conflicts.", partial),
     ] {
         if present {
@@ -355,6 +358,13 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&snapshot_json(&value).unwrap()).unwrap()["handoffs"][0]["count"],
             2
         );
+    }
+
+    #[test]
+    fn rendering_names_both_start_forms_as_authoritative() {
+        let rendered = render_status_at(&snapshot(vec![], vec![]), 100.0);
+        assert!(rendered.contains("matching 'ai-coord start' or 'ai-coord bundle start'"));
+        assert!(rendered.contains("returning READY grants an edit scope"));
     }
 
     #[test]

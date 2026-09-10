@@ -617,16 +617,32 @@ fn directory_scope_errors_include_copy_paste_ready_recursive_commands() {
             ["draft", "regenerate all reports", "src"].as_slice(),
             "re-run: ai-coord draft --recursive 'src' 'regenerate all reports'",
         ),
-        (
-            ["start", "--recursive", "regenerate all reports", "src"].as_slice(),
-            "re-run: ai-coord start --recursive 'src' 'regenerate all reports'",
-        ),
     ] {
         let output = fixture.output(arguments);
         output.assert().failure().code(64);
         output.assert().stdout(predicate::str::is_empty());
         assert!(String::from_utf8_lossy(&output.stderr).contains(expected));
     }
+}
+
+#[test]
+fn nonexistent_recursive_scope_is_not_reinterpreted_when_label_names_a_directory() {
+    let fixture = Fixture::new();
+
+    let output = fixture.output(&["draft", "--recursive", "planned/subtree", "src"]);
+    output.assert().success();
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "DRAFT\t1\n");
+}
+
+#[test]
+fn existing_file_recursive_scope_triggers_the_misordered_argument_correction() {
+    let fixture = Fixture::new();
+    fs::write(fixture.root.join("plan.md"), "plan\n").unwrap();
+
+    let output = fixture.output(&["start", "--recursive", "plan.md", "src"]);
+    output.assert().failure().code(64);
+    output.assert().stdout(predicate::str::is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("re-run: ai-coord start --recursive 'src' 'plan.md'"));
 }
 
 #[test]

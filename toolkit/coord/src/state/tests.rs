@@ -1163,7 +1163,7 @@ fn touched_paths_are_bounded_sorted_and_report_eviction() {
 fn generated_ids_have_enough_entropy_for_durable_primary_keys() {
     let id = super::store::new_id();
 
-    assert_eq!(id.len(), 32);
+    assert_eq!(id.len(), 16);
     assert!(id.bytes().all(|byte| byte.is_ascii_hexdigit()));
 }
 

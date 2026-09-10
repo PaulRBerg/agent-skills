@@ -321,7 +321,7 @@ fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
         OutcomeKind::Blocked =>
             "ai-coord: No edit scope is owned; keep reading or planning only, then run `ai-coord wait` in the foreground.".to_owned(),
         OutcomeKind::Unknown if outcome.detail == "coverage" =>
-            "ai-coord: Ownership cannot be established; do not edit, and re-run `ai-coord start` after coverage recovers.".to_owned(),
+            "ai-coord: Ownership cannot be established; do not edit, and after coverage recovers re-run the matching `ai-coord start` or `ai-coord bundle start` command and require READY.".to_owned(),
         OutcomeKind::Unknown if outcome.detail.starts_with("dirty-settling:") =>
             match client {
                 Some(Client::Claude) =>
@@ -332,7 +332,7 @@ fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
         OutcomeKind::Active =>
             "ai-coord: The old edit scope remains active because the requested expansion failed; inspect the result before retrying.".to_owned(),
         OutcomeKind::Message =>
-            "ai-coord: A message woke this wait; inspect `ai-coord inbox`, then re-run `ai-coord start` to recheck ownership.".to_owned(),
+            "ai-coord: A message woke this wait; inspect `ai-coord inbox`, then re-run the matching `ai-coord start` or `ai-coord bundle start` command and require READY to recheck ownership.".to_owned(),
         OutcomeKind::Released | OutcomeKind::Timeout =>
             "ai-coord: This wake did not grant an edit scope; inspect with `ai-coord status` and `ai-coord inbox`, then re-run the matching `ai-coord start` or `ai-coord bundle start` command and require READY.".to_owned(),
         OutcomeKind::Done if !outcome.holders.is_empty() =>
@@ -415,8 +415,8 @@ fn corrected_recursive_order(
     let Some(misordered_label) = recursive
         .iter()
         .find(|path| {
-            !root.join(path).is_dir() ||
-                std::fs::symlink_metadata(root.join(path)).is_ok_and(|metadata| metadata.file_type().is_symlink())
+            std::fs::symlink_metadata(root.join(path))
+                .is_ok_and(|metadata| metadata.is_file() || metadata.file_type().is_symlink())
         })
         .cloned()
     else {
@@ -826,6 +826,15 @@ mod tests {
         assert!(guidance.contains("did not grant an edit scope"));
         assert!(guidance.contains("matching `ai-coord start` or `ai-coord bundle start`"));
         assert!(guidance.contains("require READY"));
+    }
+
+    #[test]
+    fn message_and_coverage_guidance_require_the_matching_start_form() {
+        for outcome in [Outcome::new(OutcomeKind::Message, 3, "1"), Outcome::new(OutcomeKind::Unknown, 2, "coverage")] {
+            let guidance = outcome_guidance(&outcome, Some(Client::Codex));
+            assert!(guidance.contains("matching `ai-coord start` or `ai-coord bundle start`"), "{guidance}");
+            assert!(guidance.contains("require READY"), "{guidance}");
+        }
     }
 
     #[test]

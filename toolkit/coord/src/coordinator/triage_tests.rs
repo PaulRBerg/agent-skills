@@ -427,18 +427,73 @@ fn sweep_safe_document_scopes_exclude_tracked_symlinks_to_code() {
 
 #[test]
 fn sweep_triage_child_is_reaped_when_prompt_delivery_fails() {
-    let child = Command::new("sh")
-        .args(["-c", "exec 0<&-; exec sleep 30"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
+    let mut command = Command::new("sh");
+    command.args(["-c", "exec 0<&-; exec sleep 30"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
+    configure_triage_process_group(&mut command);
+    let child = command.spawn().unwrap();
     let probe = NativeProcessProbe::new();
     let fingerprint = probe.fingerprint(child.id()).unwrap();
     let prompt = "x".repeat(1024 * 1024);
     assert!(run_triage_child(child, &prompt, &mut || Ok(())).is_err());
     assert_eq!(probe.liveness(&fingerprint), ProcessLiveness::Dead);
+}
+
+#[test]
+fn sweep_triage_child_preserves_success_after_prompt_delivery() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "cat >/dev/null"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
+    configure_triage_process_group(&mut command);
+    let child = command.spawn().unwrap();
+
+    let status = run_triage_child_with_limits(
+        child,
+        "prompt",
+        &mut || Ok(()),
+        Duration::from_secs(1),
+        Duration::from_millis(10),
+    )
+    .unwrap();
+
+    assert!(status.success());
+}
+
+#[test]
+fn sweep_triage_deadline_interrupts_blocked_prompt_and_reaps_the_process_group() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "sleep 30 & wait"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
+    configure_triage_process_group(&mut command);
+    let child = command.spawn().unwrap();
+    let group_id = i32::try_from(child.id()).unwrap();
+    let probe = NativeProcessProbe::new();
+    let fingerprint = probe.fingerprint(child.id()).unwrap();
+    let prompt = "x".repeat(1024 * 1024);
+    let started = Instant::now();
+
+    let error = run_triage_child_with_limits(
+        child,
+        &prompt,
+        &mut || Ok(()),
+        Duration::from_millis(100),
+        Duration::from_millis(10),
+    )
+    .unwrap_err();
+
+    assert_eq!(error.to_string(), "Codex triage run exceeded the 30-minute deadline");
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(probe.liveness(&fingerprint), ProcessLiveness::Dead);
+    let process_group = nix::unistd::Pid::from_raw(-group_id);
+    let group_is_gone =
+        (0..100).any(|_| match nix::sys::signal::kill(process_group, None::<nix::sys::signal::Signal>) {
+            Err(nix::errno::Errno::ESRCH) => true,
+            _ => {
+                thread::sleep(Duration::from_millis(10));
+                false
+            }
+        });
+    if !group_is_gone {
+        let _ = nix::sys::signal::kill(process_group, nix::sys::signal::Signal::SIGKILL);
+    }
+    assert!(group_is_gone, "triage process group survived deadline cleanup");
 }
 
 #[test]

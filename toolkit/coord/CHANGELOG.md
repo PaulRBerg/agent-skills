@@ -19,7 +19,7 @@
   claim blockers, and queue positions. Session end and confirmed death release the whole logical item and wake affected
   waiters without residual attribution.
 - Bound Git blob hashing to fixed-size batches and limit start-time hashing to dirt within the requested scopes.
-- Use 128-bit random ledger identifiers so durable findings and triage history do not accumulate 32-bit collision risk.
+- Use 64-bit random ledger identifiers so durable findings and triage history do not accumulate 32-bit collision risk.
 - Pin wait arbitration to the observed work-item ID and revision, retry transient concurrent lifecycle changes within
   the requested deadline, and return `RELEASED` when `done` wins without recreating work. Retry and release wakes never
   authorize edits; only a fresh matching foreground start returning `READY` does.
