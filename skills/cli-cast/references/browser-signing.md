@@ -49,17 +49,18 @@ reviewed gas limit. Do not pass EIP-1559 priority-fee flags with a legacy transa
 
 Unless the reviewed workflow fixes its fees, the user may deliberately edit the gas limit, gas price, max fee per gas,
 or max priority fee per gas in Rabby's confirmation UI, including by selecting a different tier. Treat their approval of
-the final wallet screen as authorization for those gas settings and the resulting maximum transaction cost. Do not
-reject, stop, request another approval, or resimulate solely because those values differ from the reviewed command.
+the final wallet screen as authorization for those gas settings. Apply `SKILL.md`'s chain-specific accounting to the
+resulting reserve, additional fees, and affordability; an execution fee cap may not cap the total cost. Do not reject,
+stop, request another approval, or resimulate solely because those values differ from the reviewed command.
 
 This exception applies only to gas settings changed and approved in the wallet UI. Confirm the chain, account, target,
 calldata, native value, and nonce still match the reviewed transaction; reject the request if any of those fields
 change.
 
-For a workflow whose transfer value depends on fixed fees, including an exact-zero sweep, preserve the reviewed
-transaction type, gas limit, and gas price. Reject wallet changes before signing and rebuild, simulate, and review the
-dependent transfer value. If the wallet cannot preserve a legacy request, stop without submitting an EIP-1559
-substitute.
+For a workflow whose transfer value depends on its fee reserve, including exact-zero and best-effort sweeps, preserve
+the reviewed transaction type, gas limit, and gas price or both EIP-1559 fee caps. Reject wallet changes before signing
+and rebuild, simulate, and review the dependent transfer value. If the wallet cannot preserve a legacy request, stop
+without submitting an EIP-1559 substitute.
 
 Do not combine `--browser` with another signer flag. Capture the transaction hash, then have `$evm-atlas` verify the
 receipt before reporting success.
