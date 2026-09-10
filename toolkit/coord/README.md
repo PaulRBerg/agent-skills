@@ -257,9 +257,11 @@ ai-coord finding reopen '<finding-id>'
 open record only when repository, normalized summary, and the complete normalized path set match exactly; it preserves
 kind from the original record. Same-path non-exact matches are printed as candidates. Terminal records never deduplicate
 a later recurrence. `handoff` moves a pending record to `handed-off`; `resolve` records `fixed`, `stale`, `rejected`, or
-`duplicate` (which requires a canonical ID); `reopen` returns a terminal record to pending. All JSON forms expose the
-same finding summary: `id`, `repo_root`, `summary`, nullable `kind`, `state`, `paths`, timestamps, nullable terminal
-evidence, `sighting_count`, and live `triaging`.
+`duplicate` (which requires a canonical ID); `reopen` returns a terminal record to pending. Resolving an already-terminal
+record with the same `--as` state updates its evidence (`--commit`, or `--canonical` for `duplicate`) in place instead of
+failing, which is useful after a rebase changes the commit OID; resolving with a different terminal state still fails and
+directs the caller to `reopen` first. All JSON forms expose the same finding summary: `id`, `repo_root`, `summary`,
+nullable `kind`, `state`, `paths`, timestamps, nullable terminal evidence, `sighting_count`, and live `triaging`.
 
 Recording a finding is a checkpoint, not completion or an assignment to another agent. A discovering session with
 maintenance authorization can fix pending or handed-off findings itself: acquire the repair scopes, revalidate against

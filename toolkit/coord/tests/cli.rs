@@ -506,6 +506,22 @@ fn finding_commands_deduplicate_sightings_and_enforce_lifecycle_evidence() {
     let resolved = fixture.output(&["finding", "resolve", &first_id, "--as", "fixed", "--commit", "abcdef0"]);
     assert_eq!(String::from_utf8_lossy(&resolved.stdout), format!("RESOLVED\t{first_id}\tfixed\n"));
 
+    // Re-resolving with the same terminal state (e.g. after a rebase changes the commit OID)
+    // updates the recorded evidence instead of failing.
+    let re_resolved = fixture.output(&["finding", "resolve", &first_id, "--as", "fixed", "--commit", "1234567"]);
+    re_resolved.assert().success();
+    assert_eq!(String::from_utf8_lossy(&re_resolved.stdout), format!("RESOLVED\t{first_id}\tfixed\n"));
+    let reshown: Value =
+        serde_json::from_slice(&fixture.output(&["finding", "show", &first_id, "--json"]).stdout).unwrap();
+    assert_eq!(reshown["commit_oid"], "1234567");
+
+    let different_terminal_state = fixture.output(&["finding", "resolve", &first_id, "--as", "rejected"]);
+    different_terminal_state.assert().failure();
+    assert!(
+        String::from_utf8_lossy(&different_terminal_state.stderr)
+            .contains(&format!("ai-coord finding reopen '{first_id}'"))
+    );
+
     let open: Value = serde_json::from_slice(&fixture.output(&["finding", "list", "--json"]).stdout).unwrap();
     assert!(open.as_array().unwrap().iter().all(|finding| finding["id"] != first_id));
     let all: Value = serde_json::from_slice(&fixture.output(&["finding", "list", "--all", "--json"]).stdout).unwrap();

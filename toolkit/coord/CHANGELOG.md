@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `finding resolve` on an already-terminal finding with the same `--as` state now updates its evidence (`--commit`,
+  `--canonical`) instead of failing; resolving with a different terminal state still fails and now points to `reopen`.
 - Break the internal ledger at schema v16 while retaining public status schema v7, with no migration or import. Store
   one logical work item per `(client, session_id)` with complete sorted repository-claim vectors and a private nullable
   opaque transcript identity for lifecycle correlation; reject v15 ledgers.

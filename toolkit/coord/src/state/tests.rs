@@ -775,6 +775,195 @@ fn finding_candidates_and_lifecycle_transitions_are_bounded_and_explicit() {
 }
 
 #[test]
+fn resolving_an_already_terminal_finding_with_the_same_state_updates_its_evidence() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Claude, "author");
+    let added = store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "rebase-prone finding".into(),
+            normalized_summary: "rebase-prone finding".into(),
+            kind: None,
+            paths: vec![],
+            head_oid: None,
+            observations: vec![],
+            author: author.clone(),
+            turn_id: None,
+            current: 1.0,
+        })
+        .unwrap()
+        .finding;
+    let first = store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: Some("abcdef0".into()),
+                canonical_id: None,
+                actor: author.clone(),
+                current: 2.0,
+            },
+        )
+        .unwrap();
+    assert_eq!(first.commit_oid, Some("abcdef0".into()));
+    assert_eq!(first.terminal_at, Some(2.0));
+
+    let updated = store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: Some("1234567".into()),
+                canonical_id: None,
+                actor: author.clone(),
+                current: 3.0,
+            },
+        )
+        .unwrap();
+    assert_eq!(updated.state, FindingState::Fixed);
+    assert_eq!(updated.commit_oid, Some("1234567".into()));
+    assert_eq!(updated.updated_at, 3.0);
+    // Rebase evidence updates never move terminal_at; it keeps recording the original resolution time.
+    assert_eq!(updated.terminal_at, Some(2.0));
+
+    let event_count: i64 = store
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM finding_events WHERE finding_id = ?1 AND event = 'resolved'",
+            [&added.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(event_count, 2);
+}
+
+#[test]
+fn resolving_a_terminal_finding_with_a_different_state_requires_reopen_first() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Claude, "author");
+    let added = store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "needs reopen".into(),
+            normalized_summary: "needs reopen".into(),
+            kind: None,
+            paths: vec![],
+            head_oid: None,
+            observations: vec![],
+            author: author.clone(),
+            turn_id: None,
+            current: 1.0,
+        })
+        .unwrap()
+        .finding;
+    store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: None,
+                canonical_id: None,
+                actor: author.clone(),
+                current: 2.0,
+            },
+        )
+        .unwrap();
+
+    let error = store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Rejected,
+                commit_oid: None,
+                canonical_id: None,
+                actor: author.clone(),
+                current: 3.0,
+            },
+        )
+        .unwrap_err();
+    let message = error.to_string();
+    assert!(message.contains("already terminal"), "unexpected message: {message}");
+    assert!(message.contains(&format!("ai-coord finding reopen '{}'", added.id)), "unexpected message: {message}");
+}
+
+#[test]
+fn resolving_a_terminal_duplicate_with_a_new_canonical_updates_it_and_still_rejects_self_reference() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Claude, "author");
+    let mut new_finding = |summary: &str, current: f64| {
+        store
+            .add_finding(&FindingAdd {
+                repo_root: "/repo".into(),
+                summary: summary.into(),
+                normalized_summary: summary.into(),
+                kind: None,
+                paths: vec![],
+                head_oid: None,
+                observations: vec![],
+                author: author.clone(),
+                turn_id: None,
+                current,
+            })
+            .unwrap()
+            .finding
+    };
+    let canonical_one = new_finding("canonical one", 1.0);
+    let canonical_two = new_finding("canonical two", 2.0);
+    let duplicate = new_finding("duplicate finding", 3.0);
+
+    store
+        .resolve_finding(
+            "/repo",
+            &duplicate.id,
+            &FindingResolution {
+                state: FindingState::Duplicate,
+                commit_oid: None,
+                canonical_id: Some(canonical_one.id.clone()),
+                actor: author.clone(),
+                current: 4.0,
+            },
+        )
+        .unwrap();
+
+    let updated = store
+        .resolve_finding(
+            "/repo",
+            &duplicate.id,
+            &FindingResolution {
+                state: FindingState::Duplicate,
+                commit_oid: None,
+                canonical_id: Some(canonical_two.id.clone()),
+                actor: author.clone(),
+                current: 5.0,
+            },
+        )
+        .unwrap();
+    assert_eq!(updated.canonical_id, Some(canonical_two.id.clone()));
+
+    let self_reference = store
+        .resolve_finding(
+            "/repo",
+            &duplicate.id,
+            &FindingResolution {
+                state: FindingState::Duplicate,
+                commit_oid: None,
+                canonical_id: Some(duplicate.id.clone()),
+                actor: author.clone(),
+                current: 6.0,
+            },
+        )
+        .unwrap_err();
+    assert!(self_reference.to_string().contains("cannot reference itself"));
+}
+
+#[test]
 fn inbox_is_capped_and_callsigns_are_snapshotted() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();

@@ -265,8 +265,11 @@ impl Store {
         }
         self.immediate(|transaction| {
             let finding = required_finding(transaction, repo_root, id, resolution.current)?;
-            if finding.state.is_terminal() {
-                return Err(AppError::operational(format!("finding {id} is already terminal")));
+            if finding.state.is_terminal() && finding.state != resolution.state {
+                return Err(AppError::operational(format!(
+                    "finding {id} is already terminal as {}; use `ai-coord finding reopen '{id}'` first",
+                    finding_state_name(finding.state)
+                )));
             }
             match (resolution.state, resolution.canonical_id.as_deref()) {
                 (FindingState::Duplicate, Some(canonical_id)) => {
@@ -286,7 +289,7 @@ impl Store {
             }
             transaction.execute(
                 "UPDATE findings
-                 SET state = ?1, updated_at = ?2, terminal_at = ?2,
+                 SET state = ?1, updated_at = ?2, terminal_at = COALESCE(terminal_at, ?2),
                      commit_oid = ?3, canonical_id = ?4
                  WHERE id = ?5",
                 params![
