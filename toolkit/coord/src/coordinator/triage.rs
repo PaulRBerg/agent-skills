@@ -4,7 +4,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Component, Path, PathBuf},
-    process::{Command, ExitStatus, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
     time::Duration,
 };
@@ -386,7 +386,7 @@ impl TriageRunner for CodexTriageRunner {
         let stdout = private_output(&request.run_dir.join(STDOUT_FILE))?;
         let stderr = private_output(&request.run_dir.join(STDERR_FILE))?;
         let args = codex_args(request.repo_root, request.state_dir, request.run_dir);
-        let mut child = Command::new("codex")
+        let child = Command::new("codex")
             .args(args)
             .current_dir(request.repo_root)
             .env("AI_COORD_TRIAGE_ROLE", "triager")
@@ -395,8 +395,14 @@ impl TriageRunner for CodexTriageRunner {
             .stderr(stderr)
             .spawn()
             .map_err(|error| AppError::operational(format!("could not launch Codex triager: {error}")))?;
+        run_triage_child(child, request.prompt, heartbeat)
+    }
+}
+
+fn run_triage_child(mut child: Child, prompt: &str, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
+    let result = (|| {
         let mut stdin = child.stdin.take().ok_or_else(|| AppError::operational("Codex triager stdin unavailable"))?;
-        stdin.write_all(request.prompt.as_bytes())?;
+        stdin.write_all(prompt.as_bytes())?;
         drop(stdin);
         let started = std::time::Instant::now();
         loop {
@@ -404,18 +410,17 @@ impl TriageRunner for CodexTriageRunner {
                 return Ok(status);
             }
             if started.elapsed().as_secs_f64() >= RUN_DEADLINE_SECONDS {
-                let _ = child.kill();
-                let _ = child.wait();
                 return Err(AppError::operational("Codex triage run exceeded the 30-minute deadline"));
             }
-            if let Err(error) = heartbeat() {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(error);
-            }
+            heartbeat()?;
             thread::sleep(Duration::from_secs_f64(HEARTBEAT_SECONDS));
         }
+    })();
+    if result.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
     }
+    result
 }
 
 fn register_triager_session(
@@ -449,7 +454,8 @@ fn register_triager_session(
 fn safe_document_paths(root: &Path, findings: &[FindingSummary]) -> Result<Vec<String>> {
     let mut paths = BTreeSet::new();
     for path in findings.iter().flat_map(|finding| &finding.paths) {
-        if !safe_document_path(path) || !root.join(path).is_file() {
+        if !safe_document_path(path) || !fs::symlink_metadata(root.join(path)).is_ok_and(|metadata| metadata.is_file())
+        {
             continue;
         }
         if git_text(root, &["ls-tree", "--name-only", "HEAD", "--", path])?.lines().any(|tracked| tracked == path) {
@@ -497,6 +503,9 @@ fn apply_result_file(
         }
         if reconciled.contains(&result.finding_id) {
             continue;
+        }
+        if result.status == ResultStatus::Deferred {
+            complete = false;
         }
         if result.status == ResultStatus::Duplicate &&
             result.canonical_id.as_ref().and_then(|id| statuses.get(id)).copied() == Some(ResultStatus::Duplicate)

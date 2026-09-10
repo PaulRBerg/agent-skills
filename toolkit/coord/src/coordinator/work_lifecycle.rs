@@ -12,7 +12,7 @@ use crate::{
         process_sweep, relevant_dirty,
     },
     state::{BaselineRow, EndedObservation, Store, TouchedPaths, WorkClaimUpdate, WorkRow, WorkTransaction},
-    work::WorkCoordinator,
+    work::{WorkCoordinator, require_ordinary_item},
 };
 
 use super::{Coordinator, FULL_REFRESH_SECONDS, MAX_LABEL_CHARS, path_text, resolved};
@@ -412,16 +412,10 @@ impl Coordinator {
 
     /// End an identity authoritatively and wake each overlapping queued item once.
     pub(crate) fn end_session_for(&self, identity: &Identity) -> Result<()> {
-        let mut store = self.store()?;
-        let released = store.work(identity)?;
-        let all_work = store.works()?;
-        let wakeups = released
-            .as_ref()
-            .filter(|work| work.state != WorkState::Draft)
-            .map(|work| overlapping_waiters(&all_work, work, identity))
-            .unwrap_or_default();
-        store.end_session(identity)?;
-        notify_session_release(&mut store, identity, released.as_ref(), wakeups, self.clock.wall())
+        let Some(session) = self.store()?.session(identity)? else {
+            return Ok(());
+        };
+        self.end_session_generation_for(identity, session.revision).map(|_| ())
     }
 
     /// End only the exact session generation observed by a correlated hook.
@@ -526,23 +520,15 @@ fn claim_update(repo_root: String, scopes: Vec<Scope>) -> WorkClaimUpdate {
     WorkClaimUpdate { repo_root, blocked_reason: None, scopes, baselines: Some(Vec::new()), residual_paths: Vec::new() }
 }
 
-fn require_ordinary_item(existing: Option<&WorkRow>, root: &Path, command: &str) -> Result<()> {
-    let Some(existing) = existing else {
-        return Ok(());
-    };
-    let repo_root = path_text(root)?;
-    if existing.claims.len() == 1 && existing.claim(&repo_root).is_some() {
-        return Ok(());
-    }
-    Err(AppError::operational(format!(
-        "existing work has {} repository claim(s) and cannot be changed by ai-coord {command}; use ai-coord bundle {command} or ai-coord done",
-        existing.claims.len()
-    )))
-}
-
 fn revalidate_draft(draft: &WorkRow) -> Result<()> {
     for claim in &draft.claims {
         let root = Path::new(&claim.repo_root);
+        if git_root(root).as_deref() != Some(root) {
+            return Err(AppError::usage(format!(
+                "stored draft repository no longer resolves to the same physical Git root: {}",
+                claim.repo_root
+            )));
+        }
         let files = claim
             .scopes
             .iter()

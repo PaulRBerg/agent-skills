@@ -8,8 +8,9 @@ use std::{
 use super::{
     RepoEvidence, WorkCoordinator, blockers, evidence_for, existing_claim_scopes, expansion_blockers,
     foreign_residuals, gather_evidence, merge_baselines, output_path, partition_dirty, path_text, request_paths,
-    request_work_overlap, same_claim_vector, same_work_vectors, sorted, unattributed_dirty, validate_claim_vector,
-    work_in_repo, work_paths, work_vector_covers_requests, work_vectors_overlap, write_baselines,
+    request_work_overlap, require_ordinary_item, same_claim_vector, same_work_vectors, sorted, unattributed_dirty,
+    validate_claim_vector, work_in_repo, work_paths, work_vector_covers_requests, work_vectors_overlap,
+    write_baselines,
 };
 use crate::{
     domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, WorkState, client_name, sanitize},
@@ -27,7 +28,7 @@ const MAX_BUNDLE_CONFLICT_PATHS: usize = 32;
 #[derive(Clone, Copy)]
 enum Submission {
     Direct,
-    Draft(i64),
+    Draft { id: i64, revision: i64 },
     Wait { id: i64, revision: i64 },
 }
 
@@ -88,7 +89,8 @@ impl WorkCoordinator<'_> {
             return Err(AppError::operational("no draft work for this session"));
         }
         let claims = requests_from_work(&draft);
-        self.submit(identity, &draft.label, claims, inventory, Submission::Draft(draft.revision), current)
+        let submission = Submission::Draft { id: draft.id, revision: draft.revision };
+        self.submit(identity, &draft.label, claims, inventory, submission, current)
     }
 
     pub(crate) fn wait_recheck(
@@ -114,21 +116,9 @@ impl WorkCoordinator<'_> {
     ) -> Result<Outcome> {
         validate_claim_vector(&claims)?;
         let existing = self.store.work(identity)?;
-        match submission {
-            Submission::Direct if existing.as_ref().is_some_and(|work| work.state == WorkState::Draft) => {
-                return Err(AppError::operational(
-                    "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
-                ));
-            }
-            Submission::Draft(revision)
-                if !existing
-                    .as_ref()
-                    .is_some_and(|work| work.state == WorkState::Draft && work.revision == revision) =>
-            {
-                return Err(AppError::retry("draft changed during promotion"));
-            }
-            Submission::Wait { id, revision } => verify_wait_submission(existing.as_ref(), id, revision)?,
-            _ => {}
+        verify_submission(existing.as_ref(), existing.as_ref(), submission)?;
+        if claims.len() == 1 && matches!(submission, Submission::Direct) {
+            require_ordinary_item(existing.as_ref(), &claims[0].repo_root, "start")?;
         }
         if let Some(active) = existing.as_ref().filter(|work| work.state == WorkState::Active) {
             return self.update_active(identity, label, claims, inventory, active, current);
@@ -348,8 +338,9 @@ fn requests_from_work(work: &WorkRow) -> Vec<WorkClaimRequest> {
 
 fn verify_submission(current: Option<&WorkRow>, expected: Option<&WorkRow>, submission: Submission) -> Result<()> {
     match submission {
-        Submission::Draft(revision) => {
-            if !current.is_some_and(|work| work.state == WorkState::Draft && work.revision == revision) {
+        Submission::Draft { id, revision } => {
+            if !current.is_some_and(|work| work.state == WorkState::Draft && work.id == id && work.revision == revision)
+            {
                 return Err(AppError::retry("draft changed during promotion"));
             }
         }
@@ -359,7 +350,7 @@ fn verify_submission(current: Option<&WorkRow>, expected: Option<&WorkRow>, subm
                     "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
                 ));
             }
-            if current.map(|work| work.revision) != expected.map(|work| work.revision) {
+            if current.map(|work| (work.id, work.revision)) != expected.map(|work| (work.id, work.revision)) {
                 return Err(AppError::retry("work item changed during arbitration"));
             }
         }
@@ -375,7 +366,10 @@ fn verify_wait_submission(current: Option<&WorkRow>, id: i64, revision: i64) -> 
 }
 fn verify_active(current: Option<&WorkRow>, expected: &WorkRow) -> Result<()> {
     if !current.is_some_and(|work| {
-        work.state == WorkState::Active && work.revision == expected.revision && same_work_vectors(work, expected)
+        work.state == WorkState::Active &&
+            work.id == expected.id &&
+            work.revision == expected.revision &&
+            same_work_vectors(work, expected)
     }) {
         return Err(AppError::retry("active work changed during scope update"));
     }
@@ -875,8 +869,7 @@ fn newly_unblocked_waiters(
     work: &[WorkRow],
     identity: &Identity,
 ) -> Vec<WorkRow> {
-    let mut waiters = work
-        .iter()
+    work.iter()
         .filter(|candidate| {
             candidate.state == WorkState::Queued &&
                 candidate.identity != *identity &&
@@ -884,9 +877,7 @@ fn newly_unblocked_waiters(
                 !request_work_overlap(claims, candidate)
         })
         .cloned()
-        .collect::<Vec<_>>();
-    waiters.dedup_by(|left, right| left.identity == right.identity);
-    waiters
+        .collect()
 }
 
 fn notify_waiters(

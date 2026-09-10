@@ -301,6 +301,9 @@ fn code_only_batch_launches_without_a_tracked_file_scope() {
     let store = coordinator.store().unwrap();
     assert!(store.work(&actor).unwrap().is_none());
     assert!(store.session(&actor).unwrap().is_none());
+    assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("partial"));
+    let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
+    assert_eq!(store.finding(&root, &finding_id, 100.0).unwrap().unwrap().state, FindingState::Pending);
 }
 
 #[test]
@@ -399,6 +402,43 @@ fn fixed_result_cannot_claim_an_unapproved_safe_document() {
     assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("partial"));
     let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
     assert_eq!(store.finding(&root, &finding_id, 101.0).unwrap().unwrap().state, FindingState::Pending);
+}
+
+#[test]
+fn sweep_safe_document_scopes_exclude_tracked_symlinks_to_code() {
+    let repo = repository(true);
+    fs::remove_file(repo.path().join("README.md")).unwrap();
+    std::os::unix::fs::symlink("src/lib.rs", repo.path().join("README.md")).unwrap();
+    assert!(Command::new("git").args(["add", "README.md"]).current_dir(repo.path()).status().unwrap().success());
+    assert!(
+        Command::new("git")
+            .args(["-c", "user.name=test", "-c", "user.email=test@invalid", "commit", "-qm", "link"])
+            .current_dir(repo.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let (coordinator, _) = fixture(repo.path(), 100.0);
+    let finding_id = add_finding(&coordinator, repo.path(), "prose", 1.0);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let finding = coordinator.store().unwrap().finding(root.to_str().unwrap(), &finding_id, 100.0).unwrap().unwrap();
+    assert!(safe_document_paths(&root, &[finding]).unwrap().is_empty());
+}
+
+#[test]
+fn sweep_triage_child_is_reaped_when_prompt_delivery_fails() {
+    let child = Command::new("sh")
+        .args(["-c", "exec 0<&-; exec sleep 30"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let probe = NativeProcessProbe::new();
+    let fingerprint = probe.fingerprint(child.id()).unwrap();
+    let prompt = "x".repeat(1024 * 1024);
+    assert!(run_triage_child(child, &prompt, &mut || Ok(())).is_err());
+    assert_eq!(probe.liveness(&fingerprint), ProcessLiveness::Dead);
 }
 
 #[test]

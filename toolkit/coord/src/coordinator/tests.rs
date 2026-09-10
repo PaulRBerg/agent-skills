@@ -363,6 +363,36 @@ fn draft_promotion_modes_reject_mismatches_without_mutating_the_draft() {
 }
 
 #[test]
+fn sweep_draft_promotion_rejects_a_replacement_with_the_same_revision() {
+    let owner = identity("owner");
+    let (_temp, roots, coordinator) = fixture(1, &[(&owner, 0, 22)]);
+    coordinator.draft_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    let old = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    coordinator.done_for(&owner, &roots[0]).unwrap();
+    coordinator.draft_for(owner.clone(), "replacement", &[PathBuf::from("new.rs")], &[], &roots[0]).unwrap();
+    let mut store = coordinator.store().unwrap();
+    let replacement = store.work(&owner).unwrap().unwrap();
+    assert_ne!(old.id, replacement.id);
+    assert_eq!(old.revision, replacement.revision);
+    let inventory = InventoryResult { complete: true, providers: Vec::new() };
+    assert!(WorkCoordinator { store: &mut store }.promote_draft(&owner, old, &inventory, 100.0).is_err());
+    assert_eq!(store.work(&owner).unwrap().unwrap(), replacement);
+}
+
+#[cfg(unix)]
+#[test]
+fn sweep_bundle_draft_revalidates_physical_repository_roots() {
+    let owner = identity("owner");
+    let (temp, roots, coordinator) = fixture(2, &[(&owner, 1, 23)]);
+    coordinator.draft_bundle_for(owner.clone(), "draft", &files(&roots, &["a.rs", "b.rs"]), &[], &roots[1]).unwrap();
+    let draft = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    fs::rename(&roots[0], temp.path().join("original-root")).unwrap();
+    std::os::unix::fs::symlink(&roots[1], &roots[0]).unwrap();
+    assert!(coordinator.promote_bundle_draft_for(&owner, &roots[1]).is_err());
+    assert_eq!(coordinator.store().unwrap().work(&owner).unwrap().unwrap(), draft);
+}
+
+#[test]
 fn wait_reevaluates_the_whole_bundle_and_preserves_fifo_age() {
     let holder = identity("holder");
     let early = identity("early");
@@ -479,6 +509,37 @@ fn wait_returns_released_when_replacement_drops_the_observed_repository_claim() 
     assert_eq!(replacement.submitted_at, Some(88.0));
     assert_eq!(replacement.claims[0].repo_root, roots[1].to_string_lossy());
     assert_eq!(replacement.claims[0].scopes[0].path, "other.rs");
+}
+
+#[test]
+fn sweep_ordinary_start_rechecks_repository_after_inventory_refresh() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(2);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 39, 1.0);
+    probe.set(39, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    queued.start_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReplaceOnce {
+                label: "replacement".to_owned(),
+                repo_root: roots[1].to_string_lossy().into_owned(),
+                path: "replacement.rs".to_owned(),
+                submitted_at: 88.0,
+            },
+            refreshes: 0,
+        }),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+    assert!(coordinator.start_for(owner.clone(), "stale", &[PathBuf::from("old.rs")], &[], &roots[0]).is_err());
+    let replacement = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_eq!(replacement.label, "replacement");
+    assert_eq!(replacement.claims[0].repo_root, roots[1].to_string_lossy());
 }
 
 #[test]
@@ -731,6 +792,27 @@ fn repo_filtered_snapshot_includes_the_complete_claim_vector() {
     assert_eq!(snapshot.work.len(), 1);
     assert_eq!(snapshot.work[0].claims.len(), 2);
     assert!(snapshot.sessions.iter().any(|session| session.identity == owner));
+}
+
+#[test]
+fn sweep_repo_message_targets_include_bundle_peers_once_and_exclude_the_sender() {
+    let sender = identity("sender");
+    let bundled = identity("bundled");
+    let local = identity("local");
+    let outside = identity("outside");
+    let (_temp, roots, coordinator) =
+        fixture(3, &[(&sender, 0, 91), (&bundled, 1, 92), (&local, 0, 93), (&outside, 2, 94)]);
+    for (owner, name, home) in [(&sender, "sender.rs", 0), (&bundled, "bundle.rs", 1), (&local, "local.rs", 0)] {
+        coordinator
+            .start_bundle_for(owner.clone(), name, &files(&roots[..2], &[name, name]), &[], &roots[home])
+            .unwrap();
+    }
+    let store = coordinator.store().unwrap();
+    let mut recipients =
+        super::resolve_targets("repo", &store.sessions().unwrap(), &store.works().unwrap(), Some(&roots[0]), &sender)
+            .unwrap();
+    recipients.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+    assert_eq!(recipients, [bundled, local]);
 }
 
 #[test]

@@ -24,6 +24,20 @@ pub(crate) struct WorkCoordinator<'a> {
     pub(crate) store: &'a mut Store,
 }
 
+pub(crate) fn require_ordinary_item(existing: Option<&WorkRow>, root: &Path, command: &str) -> Result<()> {
+    let Some(existing) = existing else {
+        return Ok(());
+    };
+    let repo_root = path_text(root)?;
+    if existing.claims.len() == 1 && existing.claim(&repo_root).is_some() {
+        return Ok(());
+    }
+    Err(AppError::operational(format!(
+        "existing work has {} repository claim(s) and cannot be changed by ai-coord {command}; use ai-coord bundle {command} or ai-coord done",
+        existing.claims.len()
+    )))
+}
+
 #[derive(Clone, Debug)]
 struct RepoEvidence {
     repo_root: String,

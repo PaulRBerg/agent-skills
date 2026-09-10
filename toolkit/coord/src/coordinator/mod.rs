@@ -530,7 +530,11 @@ fn resolve_targets(
         let root = path_text(root)?;
         return Ok(sessions
             .iter()
-            .filter(|row| row.repo_root.as_deref() == Some(&root) && row.identity != *sender)
+            .filter(|row| {
+                row.identity != *sender &&
+                    (row.repo_root.as_deref() == Some(&root) ||
+                        work.iter().any(|work| work.identity == row.identity && work.claim(&root).is_some()))
+            })
             .map(|row| row.identity.clone())
             .collect());
     }
