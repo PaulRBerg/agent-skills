@@ -134,6 +134,7 @@ pub fn inspect_codex_notify(config_root: &Path, profile: Option<&str>) -> CodexN
         if profile.is_some() { vec![base_path.clone(), profile_path.clone()] } else { vec![base_path.clone()] };
     let mut loaded_paths = Vec::new();
     let mut notify = None;
+    let mut notify_matches = None;
     let mut notify_path = None;
 
     if profile.is_some() && !profile_path.exists() {
@@ -167,15 +168,16 @@ pub fn inspect_codex_notify(config_root: &Path, profile: Option<&str>) -> CodexN
         };
         loaded_paths.push(path.clone());
         if let Some(item) = document.get("notify") {
+            notify_matches = Some(notify_uses_ai_notify(item));
             notify = Some(render_item(item));
             notify_path = Some(path);
         }
     }
 
-    let status = match notify.as_deref() {
+    let status = match notify_matches {
         None => IntegrationStatus::Missing,
-        Some(value) if notify_uses_ai_notify(value) => IntegrationStatus::Ok,
-        Some(_) => IntegrationStatus::Partial,
+        Some(true) => IntegrationStatus::Ok,
+        Some(false) => IntegrationStatus::Partial,
     };
     CodexNotifyReport {
         status,
@@ -239,11 +241,33 @@ fn render_item(item: &Item) -> String {
     item.to_string().trim().to_owned()
 }
 
-// The historical checker intentionally used a permissive substring check. Retain it for
-// configuration written by wrapper scripts that represent notify as a string or TOML array.
-fn notify_uses_ai_notify(value: &str) -> bool {
-    let normalized = value.to_ascii_lowercase();
-    normalized.contains("ai-notify") && normalized.contains("codex")
+/// Returns whether a parsed Codex `notify` value invokes ai-notify's Codex callback.
+///
+/// Accepted representations are an argv array whose program basename is `ai-notify` and which
+/// contains a later standalone `codex` argument; a string whose whitespace-split argv has that
+/// same shape; or Codex Desktop's four-element `SkyComputerUseClient` wrapper around the exact
+/// `["ai-notify", "codex"]` callback.
+fn notify_uses_ai_notify(item: &Item) -> bool {
+    let Some(value) = item.as_value() else {
+        return false;
+    };
+    match value {
+        Value::Array(array) => {
+            (array.iter().all(|value| value.as_str().is_some()) &&
+                argv_uses_ai_notify(array.iter().filter_map(Value::as_str))) ||
+                desktop_wrapper_previous_notify_equals(array, CODEX_NOTIFY_COMMAND)
+        }
+        Value::String(command) => argv_uses_ai_notify(command.value().split_whitespace()),
+        _ => false,
+    }
+}
+
+fn argv_uses_ai_notify<'a>(mut argv: impl Iterator<Item = &'a str>) -> bool {
+    let Some(program) = argv.next() else {
+        return false;
+    };
+    Path::new(program).file_name().and_then(|name| name.to_str()) == Some("ai-notify") &&
+        argv.any(|argument| argument == "codex")
 }
 
 #[cfg(test)]
@@ -306,6 +330,44 @@ mod tests {
         assert!(!update.changed);
         assert!(!update.conflict);
         assert_eq!(fs::read_to_string(path).unwrap(), config);
+    }
+
+    fn inspect_status(config: &str) -> IntegrationStatus {
+        let directory = tempdir().unwrap();
+        fs::write(directory.path().join("config.toml"), config).unwrap();
+        inspect_codex_notify(directory.path(), None).status
+    }
+
+    #[test]
+    fn check_accepts_array_command_with_ai_notify_basename_and_codex_argument() {
+        assert_eq!(
+            inspect_status("notify = [\"/opt/ai-tools/ai-notify\", \"codex\", \"--stdin\"]\n"),
+            IntegrationStatus::Ok
+        );
+    }
+
+    #[test]
+    fn check_accepts_whitespace_split_string_command() {
+        assert_eq!(inspect_status("notify = \"/usr/local/bin/ai-notify codex\"\n"), IntegrationStatus::Ok);
+    }
+
+    #[test]
+    fn check_accepts_codex_desktop_wrapper() {
+        let config = concat!(
+            "notify = [\n",
+            "  \"/Applications/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\",\n",
+            "  \"turn-ended\",\n",
+            "  \"--previous-notify\",\n",
+            "  \"[\\\"ai-notify\\\",\\\"codex\\\"]\",\n",
+            "]\n"
+        );
+
+        assert_eq!(inspect_status(config), IntegrationStatus::Ok);
+    }
+
+    #[test]
+    fn check_rejects_notify_substring_lookalikes() {
+        assert_eq!(inspect_status("notify = [\"my-ai-notify-proxy\", \"codex-relay\"]\n"), IntegrationStatus::Partial);
     }
 
     #[test]

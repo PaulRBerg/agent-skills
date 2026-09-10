@@ -241,6 +241,12 @@ value, then replace it explicitly if intended:
 ai-notify link codex --force
 ```
 
+`ai-notify check` accepts an argv array whose first program has the basename `ai-notify` and whose later arguments
+include the standalone argument `codex`. It also accepts the same argv shape in a whitespace-delimited string, and the
+Codex Desktop `SkyComputerUseClient` wrapper when its `--previous-notify` value is exactly `["ai-notify", "codex"]`.
+`ai-notify link codex` writes the canonical array shown above; without `--force`, other existing representations remain
+conflicts, except for that exact Codex Desktop wrapper.
+
 Codex profiles are separate files next to the base config, not `[profiles.<name>]` tables. To configure
 `~/.codex/review.config.toml`:
 
@@ -309,6 +315,10 @@ When `XDG_CONFIG_HOME` is unset, ai-notify uses these default locations:
 ├── ai-notify.log           # Application logs
 └── exports/                # JSON exports before cleanup
 ```
+
+Fresh and version-0 session databases are initialized at schema version 1. Commands that use session state reject a
+newer schema with operational exit code 1 and leave the database unchanged; move or remove the reported database file
+before retrying with this ai-notify version.
 
 ## Documentation
 

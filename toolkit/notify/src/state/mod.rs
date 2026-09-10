@@ -1,8 +1,9 @@
 //! SQLite-backed transient session state.
 //!
-//! State failures must not prevent a hook from notifying the user, so the public operational
-//! methods log SQLite and filesystem errors and return an empty result instead of propagating
-//! them. Configuration loading remains outside this module.
+//! An unsupported newer database schema propagates from initialization so callers never use it.
+//! Every other state failure must not prevent a hook from notifying the user, so initialization
+//! and the public operational methods log SQLite and filesystem errors and continue with an
+//! empty result instead.
 
 use std::{
     fs,
@@ -15,8 +16,8 @@ use rusqlite::{Connection, params};
 use serde::Serialize;
 
 use crate::{
-    config::{AppConfig, cleanup_marker_path, export_dir, runtime_config},
-    error::Result,
+    config::{AppConfig, cleanup_marker_path, export_dir},
+    error::{AppError, Result},
 };
 
 const SCHEMA_VERSION: i32 = 1;
@@ -95,35 +96,29 @@ pub struct SessionStore {
 /// Compatibility name matching the former Python implementation.
 pub type SessionTracker = SessionStore;
 
-impl Default for SessionStore {
-    fn default() -> Self {
-        Self::new(runtime_config().as_ref())
-    }
-}
-
 impl SessionStore {
     /// Creates a store for the YAML-configured database and ensures schema-v1 exists.
-    pub fn new(config: &AppConfig) -> Self {
+    pub fn new(config: &AppConfig) -> Result<Self> {
         let store = Self {
             database_path: config.database.path.clone(),
             auto_cleanup_enabled: config.cleanup.auto_cleanup_enabled,
             export_before_cleanup: config.cleanup.export_before_cleanup,
             retention_days: config.cleanup.retention_days,
         };
-        store.initialize();
-        store
+        store.initialize()?;
+        Ok(store)
     }
 
     /// Creates a store for an explicit database path, primarily for isolated callers and tests.
-    pub fn from_database_path(path: impl Into<PathBuf>) -> Self {
+    pub fn from_database_path(path: impl Into<PathBuf>) -> Result<Self> {
         let store = Self {
             database_path: path.into(),
             auto_cleanup_enabled: true,
             export_before_cleanup: true,
             retention_days: 30,
         };
-        store.initialize();
-        store
+        store.initialize()?;
+        Ok(store)
     }
 
     pub fn database_path(&self) -> &Path {
@@ -323,44 +318,69 @@ impl SessionStore {
         Some(stats)
     }
 
-    fn initialize(&self) {
-        let Some(connection) = self.connection("initialize session database") else {
-            return;
+    /// Only an unsupported newer schema is fatal; every other failure is logged so a hook can
+    /// still notify without session state.
+    fn initialize(&self) -> Result<()> {
+        let connection = match self.open_database() {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::error!(%error, "failed to open session database");
+                return Ok(());
+            }
         };
         let version = match connection.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0)) {
             Ok(version) => version,
             Err(error) => {
                 tracing::error!(%error, "failed to read session database schema version");
-                return;
+                return Ok(());
             }
         };
-        if version >= SCHEMA_VERSION {
-            return;
+        if version > SCHEMA_VERSION {
+            return Err(AppError::operational(format!(
+                "unsupported session database schema at {}: found version {version}, supported version {SCHEMA_VERSION}; move or remove the database file before retrying",
+                self.database_path.display()
+            )));
         }
-        if let Err(error) = connection.execute_batch(SCHEMA) {
+        let initialized = Self::configure_connection(&connection).and_then(|()| {
+            if version == SCHEMA_VERSION {
+                return Ok(());
+            }
+            connection.execute_batch(SCHEMA)?;
+            connection.pragma_update(None, "user_version", SCHEMA_VERSION)
+        });
+        if let Err(error) = initialized {
             tracing::error!(%error, "failed to initialize session database schema");
-            return;
         }
-        if let Err(error) = connection.pragma_update(None, "user_version", SCHEMA_VERSION) {
-            tracing::error!(%error, "failed to record session database schema version");
+        Ok(())
+    }
+
+    fn open_database(&self) -> Result<Connection> {
+        let parent = self.database_path.parent().filter(|path| !path.as_os_str().is_empty());
+        if let Some(parent) = parent {
+            fs::create_dir_all(parent).map_err(|error| {
+                AppError::operational(format!(
+                    "failed to create session database directory {}: {error}",
+                    parent.display()
+                ))
+            })?;
         }
+        Connection::open(&self.database_path).map_err(|error| {
+            AppError::operational(format!("cannot open session database {}: {error}", self.database_path.display()))
+        })
+    }
+
+    fn configure_connection(connection: &Connection) -> rusqlite::Result<()> {
+        connection.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;
+             PRAGMA temp_store=MEMORY;
+             PRAGMA busy_timeout=3000;",
+        )
     }
 
     fn connection(&self, operation: &str) -> Option<Connection> {
-        let parent = self.database_path.parent().filter(|path| !path.as_os_str().is_empty());
-        if let Some(parent) = parent &&
-            let Err(error) = fs::create_dir_all(parent)
-        {
-            tracing::error!(%error, path = %parent.display(), operation, "failed to create session database directory");
-            return None;
-        }
-        match Connection::open(&self.database_path).and_then(|connection| {
-            connection.execute_batch(
-                "PRAGMA journal_mode=WAL;
-                 PRAGMA synchronous=NORMAL;
-                 PRAGMA temp_store=MEMORY;
-                 PRAGMA busy_timeout=3000;",
-            )?;
+        match self.open_database().and_then(|connection| {
+            Self::configure_connection(&connection).map_err(AppError::from)?;
             Ok(connection)
         }) {
             Ok(connection) => Some(connection),
@@ -498,7 +518,7 @@ mod tests {
     #[test]
     fn tracks_active_turns_and_latest_completion() {
         let directory = tempdir().unwrap();
-        let store = SessionStore::from_database_path(directory.path().join("sessions.db"));
+        let store = SessionStore::from_database_path(directory.path().join("sessions.db")).unwrap();
 
         store.track_prompt("session-1", "first", "/tmp");
         assert_eq!(store.active_job_number("session-1"), Some(1));
@@ -516,7 +536,7 @@ mod tests {
     #[test]
     fn cleanup_uses_sqlite_text_timestamps() {
         let directory = tempdir().unwrap();
-        let store = SessionStore::from_database_path(directory.path().join("sessions.db"));
+        let store = SessionStore::from_database_path(directory.path().join("sessions.db")).unwrap();
         let connection = Connection::open(store.database_path()).unwrap();
         connection
             .execute("INSERT INTO sessions (session_id, prompt, cwd, created_at) VALUES ('old', 'old', '/', datetime('now', '-31 days'))", [])
@@ -534,7 +554,7 @@ mod tests {
     #[test]
     fn export_contains_all_schema_columns_newest_first() {
         let directory = tempdir().unwrap();
-        let store = SessionStore::from_database_path(directory.path().join("sessions.db"));
+        let store = SessionStore::from_database_path(directory.path().join("sessions.db")).unwrap();
         store.track_prompt("session-1", "first", "/one");
         store.track_prompt("session-2", "second", "/two");
         let output = directory.path().join("exports/sessions.json");
@@ -544,6 +564,41 @@ mod tests {
         let sessions = value.as_array().unwrap();
         assert_eq!(sessions[0]["prompt"], "second");
         assert_eq!(sessions[0].as_object().unwrap().len(), 9);
+    }
+
+    #[test]
+    fn rejects_newer_schema_without_modifying_database() {
+        let directory = tempdir().unwrap();
+        let database_path = directory.path().join("sessions.db");
+        let connection = Connection::open(&database_path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE sentinel (value TEXT NOT NULL);
+                 INSERT INTO sentinel (value) VALUES ('preserved');
+                 PRAGMA user_version = 2;",
+            )
+            .unwrap();
+        drop(connection);
+        let original = fs::read(&database_path).unwrap();
+
+        let error = SessionStore::from_database_path(&database_path).unwrap_err();
+
+        assert_eq!(error.kind, crate::error::ErrorKind::Operational);
+        assert_eq!(
+            error.message,
+            format!(
+                "unsupported session database schema at {}: found version 2, supported version 1; move or remove the database file before retrying",
+                database_path.display()
+            )
+        );
+        assert_eq!(fs::read(&database_path).unwrap(), original);
+        let connection =
+            Connection::open_with_flags(&database_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        assert_eq!(
+            connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
+            "preserved"
+        );
+        assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0)).unwrap(), 2);
     }
 
     #[test]

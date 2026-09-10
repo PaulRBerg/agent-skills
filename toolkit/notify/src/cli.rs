@@ -422,7 +422,7 @@ fn cleanup(days: Option<u32>, dry_run: bool, no_export: bool, config: &AppConfig
         println!("Cleanup cancelled");
         return Ok(());
     }
-    let store = SessionStore::new(config);
+    let store = SessionStore::new(config)?;
     println!("Running cleanup...");
     let stats = store.cleanup_old_data(retention_days, export_before);
     println!("Cleanup complete:");
@@ -439,7 +439,7 @@ fn cleanup(days: Option<u32>, dry_run: bool, no_export: bool, config: &AppConfig
 
 fn run_event(event: EventCommand, config: &AppConfig) -> Result<()> {
     let payload = events::parse_payload(&read_stdin()?)?;
-    let state = SessionStore::new(config);
+    let state = SessionStore::new(config)?;
     let mut notifier = MacNotifier::new(config.clone());
     match event {
         EventCommand::UserPromptSubmit => events::handle_user_prompt(&payload, &state),

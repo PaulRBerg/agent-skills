@@ -247,6 +247,35 @@ fn cleanup_dry_run_and_cancellation_do_not_create_a_missing_database() {
 }
 
 #[test]
+fn state_commands_reject_newer_database_schema_as_operational_error() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/newer.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+    fs::create_dir_all(database.parent().unwrap()).unwrap();
+    let connection = Connection::open(&database).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE sentinel (value TEXT NOT NULL);
+             INSERT INTO sentinel (value) VALUES ('preserved');
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+    drop(connection);
+    let original = fs::read(&database).unwrap();
+    let error = format!(
+        "unsupported session database schema at {}: found version 2, supported version 1; move or remove the database file before retrying",
+        database.display()
+    );
+    let prompt = r#"{"session_id":"newer-schema","prompt":"work","cwd":"/tmp/project"}"#;
+
+    environment.run(&["event", "user-prompt-submit"], prompt).code(1).stderr(predicate::str::contains(&error));
+    environment.run(&["cleanup", "--no-export"], "y\n").code(1).stderr(predicate::str::contains(&error));
+
+    assert_eq!(fs::read(&database).unwrap(), original);
+}
+
+#[test]
 fn every_claude_event_path_runs_with_custom_database_and_log_paths() {
     let environment = TestEnv::new();
     let database = environment._root.path().join("custom/state.db");
