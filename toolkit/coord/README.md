@@ -43,7 +43,7 @@ ai-coord link all
 ai-coord check
 ```
 
-From the monorepo root, `just install-cli` installs all four workspace binaries. It does not modify hooks; run
+From the monorepo root, `just install-cli` installs all workspace binaries. It does not modify hooks; run
 `ai-coord link all` separately when hook installation is intended.
 
 `link` merges owned hooks into `~/.codex/hooks.json` and `~/.claude/settings.json`. It preserves unrelated settings and

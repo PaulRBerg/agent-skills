@@ -1114,6 +1114,31 @@ fn partial_dirt_observation_retains_omitted_dirty_paths_and_residual_owners() {
     assert!(store.residual_owners("/repo").unwrap().is_empty());
 }
 
+#[test]
+fn touched_paths_are_bounded_sorted_and_report_eviction() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    store.upsert_session(&session_update(&owner, 0.0)).unwrap();
+    let paths = (0..1_005).map(|index| format!("src/{index:04}.rs")).collect::<Vec<_>>();
+
+    store.record_touched(&owner, "/repo", &paths, 1.0).unwrap();
+
+    let touched = store.touched(&owner, "/repo").unwrap();
+    assert!(touched.truncated);
+    assert_eq!(touched.paths.len(), 1_000);
+    assert_eq!(touched.paths.first().map(String::as_str), Some("src/0005.rs"));
+    assert_eq!(touched.paths.last().map(String::as_str), Some("src/1004.rs"));
+}
+
+#[test]
+fn generated_ids_have_enough_entropy_for_durable_primary_keys() {
+    let id = super::store::new_id();
+
+    assert_eq!(id.len(), 32);
+    assert!(id.bytes().all(|byte| byte.is_ascii_hexdigit()));
+}
+
 fn table_columns(connection: &Connection, table: &str) -> HashSet<String> {
     let mut statement = connection.prepare(&format!("PRAGMA table_info({table})")).unwrap();
     statement.query_map([], |row| row.get::<_, String>(1)).unwrap().collect::<rusqlite::Result<_>>().unwrap()

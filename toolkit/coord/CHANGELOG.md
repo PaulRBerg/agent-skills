@@ -5,10 +5,10 @@
 - Break the internal ledger at schema v16 while retaining public status schema v7, with no migration or import. Store
   one logical work item per `(client, session_id)` with complete sorted repository-claim vectors and a private nullable
   opaque transcript identity for lifecycle correlation; reject v15 ledgers.
-- Use Codex's shared root session identity, with `CODEX_SESSION_ID` ahead of the legacy `CODEX_THREAD_ID`. On the first
-  non-end hook whose transcript differs, atomically replace that root's prior generation, cascade its transient state
-  and work, wake overlapping waiters once, and require fresh coordination. Ignore delayed `SessionEnd` hooks from older
-  transcripts and revision-guard current-generation cleanup.
+- Use Codex's shared root session identity, with `CODEX_SESSION_ID` ahead of the legacy `CODEX_THREAD_ID`. Preserve the
+  root's coordination state across child, fork, compaction, and delayed transcript observations. Pin a private nonempty
+  transcript anchor only when `SessionStart` creates the row, and require a matching anchor plus a revision guard for
+  authoritative `SessionEnd` cleanup.
 - Add explicit atomic multi-repository `bundle draft` and `bundle start` commands using absolute paths grouped by
   canonical physical Git worktree. Require at least two roots; make draft promotion, direct submission, and active
   updates all-or-none; retain one parent FIFO age for repository-local fairness and opposite-order deadlock avoidance.
@@ -19,6 +19,7 @@
   claim blockers, and queue positions. Session end and confirmed death release the whole logical item and wake affected
   waiters without residual attribution.
 - Bound Git blob hashing to fixed-size batches and limit start-time hashing to dirt within the requested scopes.
+- Use 128-bit random ledger identifiers so durable findings and triage history do not accumulate 32-bit collision risk.
 - Pin wait arbitration to the observed work-item ID and revision, retry transient concurrent lifecycle changes within
   the requested deadline, and return `RELEASED` when `done` wins without recreating work. Retry and release wakes never
   authorize edits; only a fresh matching foreground start returning `READY` does.

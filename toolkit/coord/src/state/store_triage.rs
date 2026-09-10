@@ -192,11 +192,11 @@ impl Store {
             if !run_is_open(transaction, run_id)? {
                 return Ok(false);
             }
-            transaction.execute(
+            let renewed = transaction.execute(
                 "UPDATE finding_claims SET lease_expires_at = ?1 WHERE triage_run_id = ?2",
                 params![current + TRIAGE_LEASE_SECONDS, run_id],
             )?;
-            Ok(true)
+            Ok(renewed > 0)
         })
     }
 
@@ -328,6 +328,7 @@ mod tests {
         let start = store.begin_triage_run(&temp.path().to_string_lossy(), &identity("origin"), 2.0).unwrap().unwrap();
         assert_eq!(store.release_orphaned_claims(2.0 + TRIAGE_LEASE_SECONDS).unwrap(), 1);
         assert!(store.triage_claims(&start.run.id).unwrap().is_empty());
+        assert!(!store.renew_triage_claims(&start.run.id, 3.0 + TRIAGE_LEASE_SECONDS).unwrap());
     }
 
     #[test]

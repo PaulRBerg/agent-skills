@@ -267,6 +267,61 @@ fn coordination_commands_preserve_tsv_outputs_and_embedded_codes() {
 }
 
 #[test]
+fn baseline_and_touched_outputs_preserve_sorted_machine_contracts() {
+    let fixture = Fixture::new();
+    let mut host = spawn_synthetic_host(&fixture, "machine-output-host");
+    assert_strong_session(&fixture, "machine-output-host");
+    fixture.output_as("machine-output-host", &["start", "machine outputs", "src/app.rs"]).assert().success();
+
+    let connection = Connection::open(fixture.state.join("state.db")).unwrap();
+    let claim_id = connection
+        .query_row(
+            "SELECT work_claims.id
+             FROM work_claims
+             JOIN work_items ON work_items.id = work_claims.work_id
+             WHERE work_items.client = 'codex' AND work_items.session_id = 'machine-output-host'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap();
+    for (path, oid) in [("src/z.rs", "oid-z"), ("src/a.rs", "oid-a")] {
+        connection
+            .execute(
+                "INSERT INTO work_baselines(claim_id, path, oid) VALUES (?1, ?2, ?3)",
+                rusqlite::params![claim_id, path, oid],
+            )
+            .unwrap();
+    }
+    let repo_root = fs::canonicalize(&fixture.root).unwrap().to_string_lossy().into_owned();
+    connection
+        .execute(
+            "INSERT INTO touched_sets(client, session_id, repo_root, truncated)
+             VALUES ('codex', 'machine-output-host', ?1, 1)",
+            [&repo_root],
+        )
+        .unwrap();
+    for path in ["src/z.rs", "src/a.rs"] {
+        connection
+            .execute(
+                "INSERT INTO touched_paths(client, session_id, repo_root, path, touched_at)
+                 VALUES ('codex', 'machine-output-host', ?1, ?2, 1)",
+                rusqlite::params![repo_root, path],
+            )
+            .unwrap();
+    }
+
+    let baseline = fixture.output_as("machine-output-host", &["baseline"]);
+    baseline.assert().success();
+    assert_eq!(String::from_utf8_lossy(&baseline.stdout), "src/a.rs\toid-a\nsrc/z.rs\toid-z\n");
+    let touched = fixture.output_as("machine-output-host", &["touched"]);
+    touched.assert().success();
+    assert_eq!(String::from_utf8_lossy(&touched.stdout), "!TRUNCATED\nsrc/a.rs\nsrc/z.rs\n");
+
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
+#[test]
 fn bundle_cli_lifecycle_is_atomic_and_uses_v7_claims() {
     let fixture = Fixture::new();
     let second = fixture._temporary.path().join("z-repo");
