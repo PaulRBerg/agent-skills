@@ -8,6 +8,8 @@
       "primaryPublicRpc": "https://api.mainnet.abs.xyz",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://abscan.org",
+      "explorerAddressUrl": "https://abscan.org/address/{address}",
+      "explorerTxUrl": "https://abscan.org/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -18,6 +20,8 @@
       "primaryPublicRpc": "https://arb1.arbitrum.io/rpc",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://arbiscan.io",
+      "explorerAddressUrl": "https://arbiscan.io/address/{address}",
+      "explorerTxUrl": "https://arbiscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -28,6 +32,8 @@
       "primaryPublicRpc": "https://nova.arbitrum.io/rpc",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://arbitrum-nova.blockscout.com",
+      "explorerAddressUrl": "https://arbitrum-nova.blockscout.com/address/{address}",
+      "explorerTxUrl": "https://arbitrum-nova.blockscout.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -38,6 +44,8 @@
       "primaryPublicRpc": "https://api.avax.network/ext/bc/C/rpc",
       "nativeCurrencySymbol": "AVAX",
       "explorerUrl": "https://snowscan.xyz",
+      "explorerAddressUrl": "https://snowscan.xyz/address/{address}",
+      "explorerTxUrl": "https://snowscan.xyz/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -48,6 +56,8 @@
       "primaryPublicRpc": "https://mainnet.base.org",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://basescan.org",
+      "explorerAddressUrl": "https://basescan.org/address/{address}",
+      "explorerTxUrl": "https://basescan.org/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -58,6 +68,8 @@
       "primaryPublicRpc": "https://rpc.berachain.com",
       "nativeCurrencySymbol": "BERA",
       "explorerUrl": "https://berascan.com",
+      "explorerAddressUrl": "https://berascan.com/address/{address}",
+      "explorerTxUrl": "https://berascan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -68,6 +80,8 @@
       "primaryPublicRpc": "https://rpc.blast.io",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://blastscan.io",
+      "explorerAddressUrl": "https://blastscan.io/address/{address}",
+      "explorerTxUrl": "https://blastscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -78,6 +92,8 @@
       "primaryPublicRpc": "https://bsc-dataseed1.bnbchain.org",
       "nativeCurrencySymbol": "BNB",
       "explorerUrl": "https://bscscan.com",
+      "explorerAddressUrl": "https://bscscan.com/address/{address}",
+      "explorerTxUrl": "https://bscscan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -88,6 +104,8 @@
       "primaryPublicRpc": "https://forno.celo.org",
       "nativeCurrencySymbol": "CELO",
       "explorerUrl": "https://celoscan.io",
+      "explorerAddressUrl": "https://celoscan.io/address/{address}",
+      "explorerTxUrl": "https://celoscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -98,6 +116,8 @@
       "primaryPublicRpc": "https://rpc.chiliz.com",
       "nativeCurrencySymbol": "CHZ",
       "explorerUrl": "https://chiliscan.com",
+      "explorerAddressUrl": "https://chiliscan.com/address/{address}",
+      "explorerTxUrl": "https://chiliscan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -108,6 +128,8 @@
       "primaryPublicRpc": "https://rpc.coredao.org",
       "nativeCurrencySymbol": "CORE",
       "explorerUrl": "https://scan.coredao.org",
+      "explorerAddressUrl": "https://scan.coredao.org/address/{address}",
+      "explorerTxUrl": "https://scan.coredao.org/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -118,6 +140,8 @@
       "primaryPublicRpc": "https://ethereum-rpc.publicnode.com",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://etherscan.io",
+      "explorerAddressUrl": "https://etherscan.io/address/{address}",
+      "explorerTxUrl": "https://etherscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -128,6 +152,8 @@
       "primaryPublicRpc": "https://rpc.fantom.network",
       "nativeCurrencySymbol": "FTM",
       "explorerUrl": "https://explorer.fantom.network",
+      "explorerAddressUrl": "https://explorer.fantom.network/address/{address}",
+      "explorerTxUrl": "https://explorer.fantom.network/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -138,6 +164,8 @@
       "primaryPublicRpc": "https://api.node.glif.io/rpc/v1",
       "nativeCurrencySymbol": "FIL",
       "explorerUrl": "https://filecoin.blockscout.com",
+      "explorerAddressUrl": "https://filecoin.blockscout.com/address/{address}",
+      "explorerTxUrl": "https://filecoin.blockscout.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -148,6 +176,8 @@
       "primaryPublicRpc": "https://rpc.frax.com",
       "nativeCurrencySymbol": "FRAX",
       "explorerUrl": "https://fraxscan.com",
+      "explorerAddressUrl": "https://fraxscan.com/address/{address}",
+      "explorerTxUrl": "https://fraxscan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -158,6 +188,8 @@
       "primaryPublicRpc": "https://rpc.gnosischain.com",
       "nativeCurrencySymbol": "xDAI",
       "explorerUrl": "https://gnosisscan.io",
+      "explorerAddressUrl": "https://gnosisscan.io/address/{address}",
+      "explorerTxUrl": "https://gnosisscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -168,6 +200,8 @@
       "primaryPublicRpc": "https://rpc.hyperliquid.xyz/evm",
       "nativeCurrencySymbol": "HYPE",
       "explorerUrl": "https://hyperevmscan.io",
+      "explorerAddressUrl": "https://hyperevmscan.io/address/{address}",
+      "explorerTxUrl": "https://hyperevmscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -178,6 +212,8 @@
       "primaryPublicRpc": "https://babel-api.mainnet.iotex.io",
       "nativeCurrencySymbol": "IOTX",
       "explorerUrl": "https://iotexscan.io",
+      "explorerAddressUrl": "https://iotexscan.io/address/{address}",
+      "explorerTxUrl": "https://iotexscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -188,6 +224,8 @@
       "primaryPublicRpc": "https://replicator.phoenix.lightlink.io/rpc/v1",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://phoenix.lightlink.io",
+      "explorerAddressUrl": "https://phoenix.lightlink.io/address/{address}",
+      "explorerTxUrl": "https://phoenix.lightlink.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -198,6 +236,8 @@
       "primaryPublicRpc": "https://rpc.linea.build",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://lineascan.build",
+      "explorerAddressUrl": "https://lineascan.build/address/{address}",
+      "explorerTxUrl": "https://lineascan.build/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -208,6 +248,8 @@
       "primaryPublicRpc": "https://mainnet.mode.network",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://explorer.mode.network",
+      "explorerAddressUrl": "https://explorer.mode.network/address/{address}",
+      "explorerTxUrl": "https://explorer.mode.network/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -218,6 +260,8 @@
       "primaryPublicRpc": "https://rpc.monad.xyz",
       "nativeCurrencySymbol": "MON",
       "explorerUrl": "https://monadscan.com",
+      "explorerAddressUrl": "https://monadscan.com/address/{address}",
+      "explorerTxUrl": "https://monadscan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -228,6 +272,8 @@
       "primaryPublicRpc": "https://rpc.morphl2.io",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://explorer.morphl2.io",
+      "explorerAddressUrl": "https://explorer.morphl2.io/address/{address}",
+      "explorerTxUrl": "https://explorer.morphl2.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -238,6 +284,8 @@
       "primaryPublicRpc": "https://mainnet.optimism.io",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://optimistic.etherscan.io",
+      "explorerAddressUrl": "https://optimistic.etherscan.io/address/{address}",
+      "explorerTxUrl": "https://optimistic.etherscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -248,6 +296,8 @@
       "primaryPublicRpc": "https://polygon-bor-rpc.publicnode.com",
       "nativeCurrencySymbol": "POL",
       "explorerUrl": "https://polygonscan.com",
+      "explorerAddressUrl": "https://polygonscan.com/address/{address}",
+      "explorerTxUrl": "https://polygonscan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -258,6 +308,8 @@
       "primaryPublicRpc": "https://rpc.mainnet.chain.robinhood.com",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://robinhoodchain.blockscout.com",
+      "explorerAddressUrl": "https://robinhoodchain.blockscout.com/address/{address}",
+      "explorerTxUrl": "https://robinhoodchain.blockscout.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -268,6 +320,8 @@
       "primaryPublicRpc": "https://api.roninchain.com/rpc",
       "nativeCurrencySymbol": "RON",
       "explorerUrl": "https://app.roninchain.com",
+      "explorerAddressUrl": "https://app.roninchain.com/address/{address}",
+      "explorerTxUrl": "https://app.roninchain.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -278,6 +332,8 @@
       "primaryPublicRpc": "https://rpc.scroll.io",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://scrollscan.com",
+      "explorerAddressUrl": "https://scrollscan.com/address/{address}",
+      "explorerTxUrl": "https://scrollscan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -288,6 +344,8 @@
       "primaryPublicRpc": "https://evm-rpc.sei-apis.com",
       "nativeCurrencySymbol": "SEI",
       "explorerUrl": "https://seiscan.io",
+      "explorerAddressUrl": "https://seiscan.io/address/{address}",
+      "explorerTxUrl": "https://seiscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -298,6 +356,8 @@
       "primaryPublicRpc": "https://rpc.soniclabs.com",
       "nativeCurrencySymbol": "S",
       "explorerUrl": "https://sonicscan.org",
+      "explorerAddressUrl": "https://sonicscan.org/address/{address}",
+      "explorerTxUrl": "https://sonicscan.org/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -308,6 +368,8 @@
       "primaryPublicRpc": "https://rpc.sophon.xyz",
       "nativeCurrencySymbol": "SOPH",
       "explorerUrl": "https://explorer.sophon.xyz",
+      "explorerAddressUrl": "https://explorer.sophon.xyz/address/{address}",
+      "explorerTxUrl": "https://explorer.sophon.xyz/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -318,6 +380,8 @@
       "primaryPublicRpc": "https://mainnet.superseed.xyz",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://explorer.superseed.xyz",
+      "explorerAddressUrl": "https://explorer.superseed.xyz/address/{address}",
+      "explorerTxUrl": "https://explorer.superseed.xyz/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -328,6 +392,8 @@
       "primaryPublicRpc": "https://rpc.mainnet.taiko.xyz",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://taikoscan.io",
+      "explorerAddressUrl": "https://taikoscan.io/address/{address}",
+      "explorerTxUrl": "https://taikoscan.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -338,6 +404,8 @@
       "primaryPublicRpc": "https://mainnet.unichain.org",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://uniscan.xyz",
+      "explorerAddressUrl": "https://uniscan.xyz/address/{address}",
+      "explorerTxUrl": "https://uniscan.xyz/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -348,6 +416,8 @@
       "primaryPublicRpc": "https://worldchain-mainnet.g.alchemy.com/public",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://worldscan.org",
+      "explorerAddressUrl": "https://worldscan.org/address/{address}",
+      "explorerTxUrl": "https://worldscan.org/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -358,6 +428,8 @@
       "primaryPublicRpc": "https://rpc.xdcrpc.com",
       "nativeCurrencySymbol": "XDC",
       "explorerUrl": "https://xdcscan.com",
+      "explorerAddressUrl": "https://xdcscan.com/address/{address}",
+      "explorerTxUrl": "https://xdcscan.com/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -368,6 +440,8 @@
       "primaryPublicRpc": "https://mainnet.era.zksync.io",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://explorer.zksync.io",
+      "explorerAddressUrl": "https://explorer.zksync.io/address/{address}",
+      "explorerTxUrl": "https://explorer.zksync.io/tx/{tx_hash}",
       "routeMesh": true
     },
     {
@@ -378,6 +452,8 @@
       "primaryPublicRpc": "https://zora.drpc.org",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://explorer.zora.energy",
+      "explorerAddressUrl": "https://app.zerion.io/{address}/history?chain=zora",
+      "explorerTxUrl": "https://explorer.zora.energy/tx/{tx_hash}",
       "routeMesh": true
     }
   ]

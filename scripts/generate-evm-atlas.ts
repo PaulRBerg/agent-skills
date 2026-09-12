@@ -318,6 +318,8 @@ function targetMainnets(registryChains: RegistryChain[], data: AtlasOverlay) {
       primaryPublicRpc: row.primaryPublicRpc,
       nativeCurrencySymbol: chain.nativeCurrency.symbol,
       explorerUrl: explorerBaseUrl(chain),
+      explorerAddressUrl: chain.explorer.addressUrl,
+      explorerTxUrl: chain.explorer.txUrl,
       routeMesh: row.routeMesh,
     };
   });
@@ -353,10 +355,8 @@ function slugDiffersFromName(chain: RegistryChain): boolean {
 }
 
 function explorerBaseUrl(chain: RegistryChain): string {
-  const addressBase = stripSuffix(chain.explorer.addressUrl, "/address/{address}", `${chain.slug}.explorer.addressUrl`);
-  const txBase = stripSuffix(chain.explorer.txUrl, "/tx/{tx_hash}", `${chain.slug}.explorer.txUrl`);
-  if (addressBase !== txBase) fail(`${chain.slug} explorer address/tx base URLs differ.`);
-  return addressBase;
+  // Address history may live on a separate portfolio service with its own URL shape.
+  return stripSuffix(chain.explorer.txUrl, "/tx/{tx_hash}", `${chain.slug}.explorer.txUrl`);
 }
 
 function stripSuffix(value: string, suffix: string, name: string): string {

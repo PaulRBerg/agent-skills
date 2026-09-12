@@ -159,11 +159,13 @@ Otherwise issue bounded direct HTTP JSON-RPC requests against the target's `prim
 
 ## Explorer Links
 
-Use the target row's `explorerUrl` plus `references/explorers/explorer-paths.json`. Verify nonstandard explorers in
-their UI; Ronin does not reliably follow Etherscan paths and its chain ID collides with a non-target Chainscout entry.
-Use `$chromium-browser` for OKLink and Ronin browser evidence. Browser availability does not establish a supported
-programmatic API route; use documented credentials for API access and never extract or reproduce the site's private
-request-signing headers.
+For address and transaction links, substitute `{address}` in the target row's `explorerAddressUrl` or `{tx_hash}` in
+`explorerTxUrl`. Preserve the full template, including query parameters: address history may use a different service
+from the transaction explorer. For block and token links, use `explorerUrl` plus
+`references/explorers/explorer-paths.json`. Verify nonstandard explorers in their UI; Ronin does not reliably follow
+Etherscan paths and its chain ID collides with a non-target Chainscout entry. Use `$chromium-browser` for OKLink and
+Ronin browser evidence. Browser availability does not establish a supported programmatic API route; use documented
+credentials for API access and never extract or reproduce the site's private request-signing headers.
 
 ### OKLink historical fallback
 
