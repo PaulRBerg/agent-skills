@@ -22,10 +22,34 @@ If it fails with an auth error, stop with: `Run gh auth login first`.
 Collect repository context once and reuse it: authenticated login, repository identity and permission, default branch,
 and only the templates/categories required by the workflow.
 
+## Issue Metadata Permissions
+
+Filter metadata for every issue create/edit command using cached `repository.viewerPermission` before fetching labels,
+issue types, or other metadata IDs. Apply these defaults unless existing action-specific capability evidence says
+otherwise:
+
+| Metadata mutation                                  | Required repository permission            |
+| -------------------------------------------------- | ----------------------------------------- |
+| Labels, assignees, parent/sub-issues, dependencies | `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN` |
+| Issue type (`--type`, `--remove-type`), milestone  | `WRITE`, `MAINTAIN`, or `ADMIN`           |
+
+The type/milestone default follows GitHub's [issue API permissions](https://docs.github.com/en/rest/issues/issues). For
+relationships across repositories, check the required permission in each affected repository.
+
+With `READ`, missing, or unknown permission, omit privileged metadata flags. Issue authorship, a live template's
+`type: Bug`, and permission to edit the title/body do not grant metadata permission. Do not use a write as a permission
+probe or fetch metadata that will be omitted. Continue permitted content work and briefly report skipped metadata;
+explicitly requested metadata that cannot be applied remains incomplete.
+
+Project access is independent of repository permission. Apply template-only project entries only when project write
+access is already known; for an explicitly requested project, resolve its access only if needed. Report skipped entries
+without blocking issue creation. A permission denial invalidates the corresponding cached capability; do not retry the
+denied mutation without new authorization evidence.
+
 ## Fetch Repo Labels
 
-Fetch labels only when labels may be applied: owner-managed repositories, requested label edits, or a selected template
-that defines labels and the viewer has `ADMIN`, `MAINTAIN`, `WRITE`, or `TRIAGE` permission.
+Fetch labels only after the permission check allows them and the workflow needs template labels, requested label edits,
+or semantic labels in an owner-managed repository.
 
 Treat the live `name` and `description` list as authoritative. Match intent, use the smallest set, respect template
 labels, and never invent labels. Skip maintainer workflow labels such as `good first issue`, `needs triage`,
@@ -34,9 +58,9 @@ labels, and never invent labels. Skip maintainer workflow labels such as `good f
 ## Template Metadata and Issue Forms
 
 Issue-form YAML may define assignees, labels, type, and projects, but `gh issue create --body-file` does not execute the
-form. For deterministic posting, render the relevant fields into Markdown and pass supported metadata explicitly. Apply
-project metadata only after creation with `gh project item-add`; a failed project add leaves a created issue and must
-not trigger issue recreation. Do not combine `--template` with `--body` or `--body-file`.
+form. Render the relevant fields into Markdown and pass only metadata allowed by `Issue Metadata Permissions`. Apply
+permitted project metadata only after creation with `gh project item-add`; a failed project add leaves a created issue
+and must not trigger issue recreation. Do not combine `--template` with `--body` or `--body-file`.
 
 ## Platform String Normalization
 

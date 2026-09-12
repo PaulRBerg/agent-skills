@@ -41,8 +41,9 @@ uv run "<skill-dir>/scripts/issue-form.py" render \
 ```
 
 The renderer rejects missing required values, invalid dropdowns, unknown IDs, and unverified required checkboxes. Use
-its body and posting metadata exactly. The agent still owns answer wording, the external-disclosure review, title text
-after the live prefix, semantic labels, and the external post.
+its body exactly; filter its posting metadata through `context.md > Issue Metadata Permissions`. The agent still owns
+answer wording, the external-disclosure review, title text after the live prefix, semantic labels, and the external
+post.
 
 For a selected Markdown template, fetch it live and populate its existing structure. If no template applies, use the
 smallest useful `Problem`, `Solution`, and optional affected-files structure. Do not use `gh issue create --template`
@@ -53,9 +54,8 @@ sections, preserving their stated ordering and casing. Never introduce unasked g
 
 ## Labels, Type, and Title
 
-Use cached permission: `ADMIN`, `MAINTAIN`, `WRITE`, and `TRIAGE` may apply assignees and labels; `READ` may not. Apply
-live template-defined assignees and labels when permitted. Add semantic labels only when the owner is the viewer or
-`sablier-labs`, after matching against the live label set; never invent labels.
+Apply `context.md > Issue Metadata Permissions` before resolving metadata. Add semantic labels only when the owner is
+the viewer or `sablier-labs`, after matching against the live label set; never invent labels.
 
 For YAML, prepend the rendered `posting.titlePrefix` and pass permitted `posting.assignees`, labels, and
 `posting.issueType` when present. Preserve every applicable project entry; merge permitted live template labels with
@@ -63,18 +63,18 @@ agent-selected semantic labels and deduplicate. Write a concise title from the a
 metadata, accept `--type`, `--parent`, `--blocked-by`, and `--blocking` using current `gh issue create` flags; validate
 referenced issue numbers or URLs before posting.
 
-An explicitly requested project title may use `gh issue create --project`. Do not pass issue-form `projects` through
-that flag. After the issue URL is verified, apply each form project entry with `posting.md > Project-Template Metadata`
-and `gh project item-add`. A project-add failure is partial completion; never recreate the issue.
+An explicitly requested project title may use `gh issue create --project` when project access allows it. Do not pass
+issue-form `projects` through that flag. After the issue URL is verified, apply each permitted form project entry with
+`posting.md > Project-Template Metadata` and `gh project item-add`.
+
+Start with the content-only command, which is also the normal `READ` path:
 
 ```bash
-gh issue create --repo "<owner>/<repo>" --title "<title>" --body-file "<body-file>" \
-  --assignee "<template-assignee>" --label "<label>" \
-  --type "<type>" --parent "<parent-number-or-url>" \
-  --blocked-by "<issue-number-or-url>[,...]" --blocking "<issue-number-or-url>[,...]"
+gh issue create --repo "<owner>/<repo>" --title "<title>" --body-file "<body-file>"
 ```
 
-Omit metadata flags whose values are absent.
+Append metadata flags only when values are present and the permission check permits them. In particular, a rendered
+`posting.issueType: "Bug"` with `viewerPermission: "READ"` must not produce `--type Bug`.
 
 ## Images and Posting
 

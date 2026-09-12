@@ -30,6 +30,8 @@ Prefer the helper when the workflow needs repository, template, discussion, labe
 For YAML issue forms, invoke `<skill-dir>/scripts/issue-form.py`. `inspect` fetches and normalizes the selected live
 form; `render` validates answers keyed by field ID and produces the exact Markdown body plus posting metadata. The
 helper never selects a template, writes answers or titles, performs an external-disclosure review, or posts externally.
+All issue creation and update workflows apply `references/context.md > Issue Metadata Permissions` before resolving or
+passing metadata. Rendered template metadata describes requested values, not the viewer's authority to apply them.
 
 For pull request workflows, also verify:
 
@@ -70,11 +72,13 @@ thread's register calls for it.
 ## Completion
 
 Complete when the requested contribution exists in its final authored state and the returned GitHub URL has been
-verified. For updates/comments, report the changed artifact once; for failures, report the idempotency check and next
-action without claiming a write succeeded.
+verified. For updates/comments, report the changed artifact once. Determine the outcome from readback, not the command's
+exit status: creation can succeed before a metadata mutation fails.
 
 Use `### 🚀 <artifact> created`, `### ✅ <artifact> updated`, `### ✅ Comment posted`, or `### ✅ Comment updated`,
 followed by one Markdown link containing the repository, number, and title or action. Add a compact field list only when
-base, draft state, reviewers, labels, or changed fields matter. On failure, lead with `### ⛔ <artifact> not <action>`,
-then state the attempted target, concrete error, idempotency result, and next action. Keep `gh` output, JSON,
-diagnostics, template fields, URLs, and authored contribution text exact and undecorated.
+base, draft state, reviewers, labels, or changed fields matter. For verified partial success, report the created or
+updated artifact and identify omitted or failed metadata. Use `### ⛔ <artifact> not <action>` only for confirmed
+noncompletion; if readback is inconclusive, report the outcome as unverified. Include the concrete error, idempotency
+result, and next action. Keep `gh` output, JSON, diagnostics, template fields, URLs, and authored contribution text
+exact and undecorated.

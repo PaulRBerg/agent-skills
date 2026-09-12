@@ -18,12 +18,11 @@ working directory.
 5. Mark a required checkbox true only when its attestation is verified. Render through
    `<skill-dir>/scripts/issue-form.py render`; resolve every reported missing/invalid answer before posting.
 6. Run `posting.md > External-disclosure Review` on the agent-authored answers and rendered body. Compose a concise
-   title after the live prefix. Use live template labels/type only when cached permission allows them.
+   title after the live prefix. Filter live template metadata through `context.md > Issue Metadata Permissions`.
 7. Post with `gh issue create --repo anthropics/claude-code --title ... --body-file ...`, adding permitted labels and
-   issue type from rendered metadata. On label permission failure, run the posting idempotency check, then retry once
-   without labels. If rendered metadata includes `projects`, apply each entry after creation with
-   `posting.md > Project-Template Metadata`; a project-add failure is partial completion and never an issue-recreation
-   trigger.
+   issue type from rendered metadata. On failure, follow `posting.md > Error Handling and Idempotency`. If permitted
+   rendered metadata includes `projects`, apply each entry after creation with `posting.md > Project-Template Metadata`;
+   a project-add failure is partial completion and never an issue-recreation trigger.
 
 The helper owns form parsing and exact body structure. The agent owns template selection, environment interpretation,
 answer/title writing, the external-disclosure review, and posting. Follow `posting.md > Error Handling and Idempotency`
