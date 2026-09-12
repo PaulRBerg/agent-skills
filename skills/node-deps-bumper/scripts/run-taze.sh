@@ -6,7 +6,7 @@
 # Automatically detects monorepo projects (workspaces in package.json
 # or pnpm-workspace.yaml) and enables recursive mode.
 #
-# Bun projects with bunfig.toml minimumReleaseAge get matching Taze
+# Bun projects with local or global minimumReleaseAge get matching Taze
 # maturity-period flags. Taze does not auto-infer Bun's age gate.
 #
 # Exit codes:
@@ -116,16 +116,17 @@ fi
 
 # Mirror Bun's delayed-resolution policy for direct dependency candidates.
 # bunfig.toml stores seconds; Taze expects whole days.
-if [[ -f bunfig.toml ]] && [[ -f bun.lock || -f bun.lockb ]]; then
-  minimum_release_age="$(sed -nE 's/^[[:space:]]*minimumReleaseAge[[:space:]]*=[[:space:]]*([0-9]+).*$/\1/p' bunfig.toml | head -n 1)"
-  if [[ -n "$minimum_release_age" && "$minimum_release_age" != "0" ]]; then
-    maturity_days=$(((minimum_release_age + 86399) / 86400))
-    taze_args+=("--maturity-period" "$maturity_days")
+if [[ -f bun.lock || -f bun.lockb ]]; then
+  policy_args=()
+  if taze --help 2>/dev/null | grep -q -- '--maturity-period-exclude'; then
+    policy_args+=("--exclude-supported")
   fi
-
-  maturity_excludes="$(sed -nE 's/^[[:space:]]*minimumReleaseAgeExcludes[[:space:]]*=[[:space:]]*\[(.*)\].*$/\1/p' bunfig.toml | head -n 1 | tr -d '[:space:]"')"
-  if [[ -n "$maturity_excludes" ]] && taze --help 2>/dev/null | grep -q -- '--maturity-period-exclude'; then
-    taze_args+=("--maturity-period-exclude" "$maturity_excludes")
+  # Parse TOML rather than lines: lists may span lines and local keys override global keys.
+  maturity_args="$(uv run "$script_dir/bun-maturity.py" ${policy_args[@]+"${policy_args[@]}"})"
+  if [[ -n "$maturity_args" ]]; then
+    while IFS= read -r argument; do
+      taze_args+=("$argument")
+    done <<<"$maturity_args"
   fi
 fi
 

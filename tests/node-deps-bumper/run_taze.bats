@@ -4,6 +4,8 @@
 
 setup_file() {
   bats_require_minimum_version 1.5.0
+  TAZE_TEST_PYTHON="$(uv python find '>=3.11')"
+  export TAZE_TEST_PYTHON
 }
 
 setup() {
@@ -12,17 +14,21 @@ setup() {
   project="$BATS_TEST_TMPDIR/project"
   mock_bin="$BATS_TEST_TMPDIR/bin"
   taze_log="$BATS_TEST_TMPDIR/taze.log"
+  taze_help="$BATS_TEST_TMPDIR/taze-help.txt"
   uv_log="$BATS_TEST_TMPDIR/uv.log"
 
   mkdir -p "$project" "$mock_bin" "$BATS_TEST_TMPDIR/home"
   export HOME="$BATS_TEST_TMPDIR/home"
+  unset XDG_CONFIG_HOME
   export PATH="$mock_bin:/usr/bin:/bin"
   export TMPDIR="$BATS_TEST_TMPDIR"
   export TAZE_LOG="$taze_log"
+  export TAZE_HELP_FILE="$taze_help"
   export UV_LOG="$uv_log"
 
   install_taze_mock
   install_uv_mock
+  : >"$taze_help"
 }
 
 install_taze_mock() {
@@ -31,7 +37,7 @@ install_taze_mock() {
 set -eu
 
 if [ "${1:-}" = "--help" ]; then
-  printf '%s\n' "${TAZE_HELP_TEXT:-}"
+  cat "$TAZE_HELP_FILE"
   exit 0
 fi
 
@@ -47,6 +53,10 @@ install_uv_mock() {
 set -eu
 
 printf '%s\n' "$@" >"$UV_LOG"
+if [[ "${2:-}" == */bun-maturity.py ]]; then
+  shift
+  exec "$TAZE_TEST_PYTHON" "$@"
+fi
 printf '%s\n' '{"updates":[]}'
 EOF
   chmod 755 "$mock_bin/uv"
@@ -135,10 +145,11 @@ assert_taze_args() {
   write_package_json '{"name":"fixture"}'
   : >"$project/bun.lock"
   cat >"$project/bunfig.toml" <<'EOF'
+[install]
 minimumReleaseAge = 90000
 minimumReleaseAgeExcludes = ["react", "@types/node"]
 EOF
-  export TAZE_HELP_TEXT='  --maturity-period-exclude <packages>'
+  printf '%s\n' '  --maturity-period-exclude <packages>' >"$taze_help"
 
   run "$helper" "$project"
 
@@ -150,6 +161,7 @@ EOF
   write_package_json '{"name":"fixture"}'
   : >"$project/bun.lockb"
   cat >"$project/bunfig.toml" <<'EOF'
+[install]
 minimumReleaseAge = 1
 minimumReleaseAgeExcludes = ["react"]
 EOF
@@ -158,6 +170,96 @@ EOF
 
   [ "$status" -eq 0 ]
   assert_taze_args $'major\n--maturity-period\n1\n--include-locked'
+}
+
+@test "inherits global Bun policy and multiline exclusions for both scan and write" {
+  write_package_json '{"name":"fixture"}'
+  : >"$project/bun.lock"
+  cat >"$HOME/.bunfig.toml" <<'EOF'
+[install]
+minimumReleaseAge = 604_800
+minimumReleaseAgeExcludes = [
+  'react', # allow an independently managed package
+  "@types/node",
+]
+EOF
+  printf '%s\n' '  --maturity-period-exclude <packages>' >"$taze_help"
+
+  run "$helper" --include react "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args $'major\n--include\nreact\n--maturity-period\n7\n--maturity-period-exclude\nreact,@types/node\n--include-locked'
+
+  printf '%s\n' '[install]' 'linker = "hoisted"' >"$project/bunfig.toml"
+  run "$helper" --write --include react "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args $'major\n--include\nreact\n--maturity-period\n7\n--maturity-period-exclude\nreact,@types/node\n--write'
+}
+
+@test "uses XDG global config and overlays individual local policy keys" {
+  write_package_json '{"name":"fixture"}'
+  : >"$project/bun.lock"
+  export XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/config"
+  mkdir -p "$XDG_CONFIG_HOME"
+  printf '%s\n' '[install]' 'minimumReleaseAge = 86400' >"$HOME/.bunfig.toml"
+  cat >"$XDG_CONFIG_HOME/.bunfig.toml" <<'EOF'
+[install]
+minimumReleaseAge = 604800
+minimumReleaseAgeExcludes = ["react"]
+EOF
+  printf '%s\n' '  --maturity-period-exclude <packages>' >"$taze_help"
+  printf '%s\n' '[install]' 'minimumReleaseAgeExcludes = []' >"$project/bunfig.toml"
+
+  run "$helper" "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args $'major\n--maturity-period\n7\n--include-locked'
+
+  printf '%s\n' '[install]' 'minimumReleaseAge = 90000' >"$project/bunfig.toml"
+  run "$helper" "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args $'major\n--maturity-period\n2\n--maturity-period-exclude\nreact\n--include-locked'
+
+  printf '%s\n' '[install]' 'minimumReleaseAge = 0' >"$project/bunfig.toml"
+  run "$helper" "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args $'major\n--include-locked'
+}
+
+@test "does not apply user Bun policy to other package managers" {
+  write_package_json '{"name":"fixture"}'
+  printf '%s\n' '[install]' 'minimumReleaseAge = 604800' >"$HOME/.bunfig.toml"
+
+  run "$helper" "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args $'major\n--include-locked'
+  [ ! -e "$uv_log" ]
+}
+
+@test "Bun projects with no policy do not gain a maturity filter" {
+  write_package_json '{"name":"fixture"}'
+  : >"$project/bun.lock"
+
+  run "$helper" "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args $'major\n--include-locked'
+}
+
+@test "invalid Bun policy fails before Taze without exposing config contents" {
+  write_package_json '{"name":"fixture"}'
+  : >"$project/bun.lock"
+  printf '%s\n' '[install]' 'minimumReleaseAge = "fixture-secret"' >"$project/bunfig.toml"
+
+  run "$helper" --write --include react "$project"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'minimumReleaseAge must be a nonnegative integer'* ]]
+  [[ "$output" != *'fixture-secret'* ]]
+  [ ! -e "$taze_log" ]
+
+  printf '%s\n' '[install]' 'registry = "fixture-secret' >"$project/bunfig.toml"
+  run "$helper" "$project"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'cannot read Bun configuration'* ]]
+  [[ "$output" != *'fixture-secret'* ]]
+  [ ! -e "$taze_log" ]
 }
 
 @test "runs the plan parser against captured noninteractive taze output" {

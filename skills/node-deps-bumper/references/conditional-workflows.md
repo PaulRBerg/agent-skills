@@ -31,6 +31,12 @@ package manager policy.
 Taze v19.13.0+ auto-infers maturity periods from pnpm and Yarn workspace config, but not from Bun `bunfig.toml`. For Bun
 projects, pass `--maturity-period` explicitly.
 
+For Bun lockfile projects, `run-taze.sh` uses Python 3.11+ through `uv` to parse the global `.bunfig.toml` under
+`$XDG_CONFIG_HOME` (or `$HOME` when unset), then overlay project `[install]` keys. Multiline exclusion arrays are
+supported; an explicit local `0` or empty array overrides the inherited value. See
+[Bun configuration](https://bun.sh/docs/runtime/bunfig#global-vs-local). Verify the installer actually enforces
+inherited age settings; if it ignores them, preserve the policy in project configuration before installing.
+
 When the package manager config has an exclude list, pass matching Taze excludes if available:
 
 ```bash
@@ -44,11 +50,11 @@ transitive resolution.
 ## Update Bun Catalogs
 
 When the root `package.json` contains `catalog` / `catalogs` at the top level or under `workspaces`, use
-`scripts/update-bun-catalogs.py` with the saved Taze plan and agent-accepted include set. Preview before manifest
-writes; after the Taze write, rerun the same command with `--write` before regenerating the lockfile.
+`scripts/update-bun-catalogs.py` with the saved Taze plan and the selected packages present in catalogs. Skip this
+helper if that subset is empty. Preview before manifest writes; after the baseline passes, rerun the same command with
+`--write`, then perform the selected Taze write and regenerate the lockfile. Taze can update Bun catalogs natively, so
+running it first would invalidate the helper's saved plan.
 
 The helper owns default/named catalog discovery, multiple occurrences, prefix preservation, stale-plan validation, and
 atomic replacement. The agent owns which upgrades are accepted and whether a major migration is compatible. Do not
 manually reproduce the catalog transition or weaken a helper failure.
-
-Use `Edit` to apply the version changes directly to the root `package.json`.

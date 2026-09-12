@@ -42,7 +42,8 @@ compatibility constraint justifies it, or the package will run without a committ
    discoverable, and relevant migration/release notes. Apply only the majors the user selects.
 
 4. If nothing is selected, report the no-op and stop. If the root manifest uses Bun catalogs, preview the exact selected
-   catalog transitions from the accepted plan:
+   catalog transitions from the accepted plan. Pass only selected packages present in a catalog; skip the helper when
+   that subset is empty:
 
    ```sh
    uv run <skill-dir>/scripts/update-bun-catalogs.py \
@@ -63,15 +64,18 @@ compatibility constraint justifies it, or the package will run without a committ
    `### ⛔ Dependency bump blocked — baseline unusable` and report the exact prerequisite and diagnostics without asking
    for redundant authorization. Informational notices such as unavoidable deprecations do not block.
 
-6. Write all selected Taze updates in one command:
+6. For Bun catalogs, apply the previewed transitions first: rerun `update-bun-catalogs.py` with the same plan and
+   catalog include subset plus `--write`. It atomically updates every matching default/named catalog occurrence and
+   preserves each existing `^`, `~`, or empty prefix. Apply before Taze, whose native catalog writes would make this
+   plan stale.
+
+   Then write all selected Taze updates in one command:
 
    ```sh
    bash <skill-dir>/scripts/run-taze.sh --write --include package-a,package-b
    ```
 
-7. For Bun catalogs, rerun `update-bun-catalogs.py` with the same plan and include set plus `--write`. It atomically
-   updates every matching default/named catalog occurrence and preserves each existing `^`, `~`, or empty prefix. Then
-   run `ni` so the repository's package manager updates its lockfile.
+7. Run `ni` so the repository's package manager updates its lockfile.
 
 8. Inspect the manifest and lockfile diff. Rerun the exact baseline commands, plus the narrowest checks that exercise
    the updated dependencies and any required migrations. Treat every newly introduced error, type issue, check failure
