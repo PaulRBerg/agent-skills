@@ -234,7 +234,10 @@ pub fn validate_dependencies(
                     path,
                     *line,
                     *column,
-                    format!("bare skill dependency does not resolve in the scanned roots: {target}"),
+                    format!(
+                        "bare skill dependency does not resolve in the scanned roots: {target}; add the root that \
+                         owns it with --root, or qualify it as ORG/REPO#{target}"
+                    ),
                 ));
             }
         }
