@@ -84,9 +84,9 @@ New schema diagnostics use these stable codes:
 - Invalid values: `EFFORT_INVALID_VALUE` and `SHELL_INVALID_VALUE`, alongside the retained
   compatibility, context, coordination, and install-target codes.
 - Cross-field errors: `AGENT_CONTEXT_REQUIRED` and `BACKGROUND_CONTEXT_REQUIRED`.
-- Redundant defaults: `DISABLE_MODEL_INVOCATION_REDUNDANT_DEFAULT` warns on explicit `false`,
-  and `USER_INVOCABLE_REDUNDANT_DEFAULT` warns on explicit `true`. Omission preserves those
-  effective defaults.
+- Explicit defaults: `disable-model-invocation: false` and `user-invocable: true` restate the
+  effective defaults and are accepted without findings, so catalogs that require explicit
+  booleans stay clean.
 
 These diagnostics add findings without changing JSON schema version 1, deterministic finding
 order, exit codes, or the existing `--fix-safe` boundary.

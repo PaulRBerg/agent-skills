@@ -302,7 +302,7 @@ fn metadata_install_targets_must_be_a_string() {
 }
 
 #[test]
-fn explicit_claude_defaults_warn_without_changing_effective_policy() {
+fn explicit_claude_defaults_are_accepted_without_findings() {
     let root = TempDir::new().unwrap();
     common::write(
         root.path().join("skills/defaults/SKILL.md"),
@@ -312,15 +312,10 @@ fn explicit_claude_defaults_warn_without_changing_effective_policy() {
     write_readme(root.path(), &["defaults"]);
 
     let (output, report) = run_json(root.path(), &[]);
-    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.status.code(), Some(0));
     assert_eq!(report["counts"]["errors"], 0);
-    assert_eq!(report["counts"]["warnings"], 2);
-    assert_eq!(
-        codes(&report),
-        BTreeSet::from(["DISABLE_MODEL_INVOCATION_REDUNDANT_DEFAULT", "USER_INVOCABLE_REDUNDANT_DEFAULT",])
-    );
-    assert_eq!(finding(&report, "DISABLE_MODEL_INVOCATION_REDUNDANT_DEFAULT")["line"], 2);
-    assert_eq!(finding(&report, "USER_INVOCABLE_REDUNDANT_DEFAULT")["line"], 4);
+    assert_eq!(report["counts"]["warnings"], 0);
+    assert!(codes(&report).is_empty());
 }
 
 #[test]

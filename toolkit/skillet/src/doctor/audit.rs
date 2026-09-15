@@ -317,26 +317,6 @@ fn check_typed_frontmatter(skill: &Skill, frontmatter: &Frontmatter, findings: &
             "background requires context: fork",
         ));
     }
-    if let Some(value) = frontmatter.disable_model_invocation.as_ref() &&
-        !value.value
-    {
-        findings.push(warning_finding(
-            skill,
-            value.line,
-            "DISABLE_MODEL_INVOCATION_REDUNDANT_DEFAULT",
-            "disable-model-invocation: false is redundant; omit the field",
-        ));
-    }
-    if let Some(value) = frontmatter.user_invocable.as_ref() &&
-        value.value
-    {
-        findings.push(warning_finding(
-            skill,
-            value.line,
-            "USER_INVOCABLE_REDUNDANT_DEFAULT",
-            "user-invocable: true is redundant; omit the field",
-        ));
-    }
 }
 
 fn check_string_or_list_field(
@@ -454,10 +434,6 @@ fn typed_finding(
 
 fn value_finding(skill: &Skill, line: u64, code: &str, message: impl Into<String>) -> Finding {
     Finding::new(code, Severity::Error, skill.skill_path(), Some(line), false, message)
-}
-
-fn warning_finding(skill: &Skill, line: u64, code: &str, message: impl Into<String>) -> Finding {
-    Finding::new(code, Severity::Warning, skill.skill_path(), Some(line), false, message)
 }
 
 fn check_coordination(skill: &Skill, frontmatter: &Frontmatter, source: &str, findings: &mut Vec<Finding>) {
