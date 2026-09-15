@@ -160,9 +160,10 @@ arbitration transaction. A concurrent lifecycle change is retried within the ori
 overwriting work; if `done` releases work while its wait is in flight, that wait returns `RELEASED`. Neither retry nor
 release grants ownership: only a fresh matching foreground start that returns `READY` authorizes editing. For one-claim
 work, `done` keeps its idempotent current-root behavior. For a bundle, `done` requires a
-claimed worktree and releases all claims atomically. Both forms notify overlapping queued holders that their work may
-now be ready. Release inspection, baselines, touched paths, and hook cleanliness stay claim-local to the current
-repository; a bundle baseline from an unclaimed root is an error.
+claimed worktree and releases all claims atomically. Rejection leaves the bundle intact and supplies a command using one
+claimed root to release the entire bundle. Both forms notify overlapping queued holders that their work may now be ready.
+Release inspection, baselines, touched paths, and hook cleanliness stay claim-local to the current repository; a bundle
+baseline from an unclaimed root is an error.
 If one bundle repository cannot be inspected during release, its claim is released without residual attribution rather
 than leaving a partial bundle behind.
 

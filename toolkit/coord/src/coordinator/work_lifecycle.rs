@@ -329,7 +329,8 @@ impl Coordinator {
                 return Ok(Outcome::new(OutcomeKind::Done, 0, "already clear"));
             }
             return Err(AppError::operational(format!(
-                "repository bundle does not claim {repo_root}; run ai-coord done from a claimed repository"
+                "repository bundle does not claim {repo_root}; run ai-coord done from a claimed repository to release the whole bundle:\n  cd {} && ai-coord done",
+                crate::shell_quote(&work.claims[0].repo_root)
             )));
         }
         self.release_work(&mut store, identity, work)

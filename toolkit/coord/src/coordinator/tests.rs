@@ -723,7 +723,14 @@ fn bundle_done_requires_a_claimed_repository() {
     let before = coordinator.store().unwrap().work(&holder).unwrap().unwrap();
 
     let error = coordinator.done_for(&holder, &roots[2]).unwrap_err();
-    assert!(error.to_string().contains("run ai-coord done from a claimed repository"));
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "repository bundle does not claim {}; run ai-coord done from a claimed repository to release the whole bundle:\n  cd {} && ai-coord done",
+            roots[2].display(),
+            crate::shell_quote(roots[0].to_str().unwrap())
+        )
+    );
     assert_eq!(coordinator.store().unwrap().work(&holder).unwrap().unwrap(), before);
     assert_eq!(coordinator.done_for(&holder, &roots[1]).unwrap().kind, OutcomeKind::Done);
 }

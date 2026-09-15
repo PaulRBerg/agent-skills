@@ -374,6 +374,67 @@ fn bundle_cli_lifecycle_is_atomic_and_uses_v7_claims() {
 }
 
 #[test]
+fn bundle_done_help_explains_claimed_worktree_and_atomic_release() {
+    let fixture = Fixture::new();
+    let help = fixture.output(&["done", "--help"]);
+    help.assert().success();
+    let stdout = String::from_utf8_lossy(&help.stdout);
+    assert!(stdout.contains("Release this session's draft, active, or queued work."), "{stdout}");
+    assert!(stdout.contains("Run from a worktree claimed by this session."), "{stdout}");
+    assert!(stdout.contains("For a multi-repository bundle, this releases every claim atomically."), "{stdout}");
+}
+
+#[test]
+fn bundle_done_recovery_command_releases_every_claim_from_a_quoted_root() {
+    let fixture = Fixture::new();
+    let first = fixture._temporary.path().join("a claimed repo's");
+    let unclaimed = fixture._temporary.path().join("unclaimed-repo");
+    for root in [&first, &unclaimed] {
+        fs::create_dir_all(root.join("src")).unwrap();
+        assert!(Command::new("git").args(["init", "--quiet"]).current_dir(root).status().unwrap().success());
+    }
+    let mut host = spawn_synthetic_host(&fixture, "recovery-host");
+    assert_strong_session(&fixture, "recovery-host");
+    let first_path = first.join("src/a.rs").to_string_lossy().into_owned();
+    let second_path = fixture.root.join("src/b.rs").to_string_lossy().into_owned();
+    let first_root = fs::canonicalize(&first).unwrap().to_string_lossy().into_owned();
+    let unclaimed_root = fs::canonicalize(&unclaimed).unwrap();
+    fixture.output_as("recovery-host", &["bundle", "start", "two roots", &second_path, &first_path]).assert().success();
+    let before = fixture.json_status().1["work"].clone();
+    assert_eq!(before.as_array().unwrap().len(), 1);
+    assert_eq!(before[0]["claims"].as_array().unwrap().len(), 2);
+    assert_eq!(before[0]["claims"][0]["repo_root"], first_root);
+
+    let rejected = fixture.output_as_in("recovery-host", &unclaimed, &["done"]);
+    rejected.assert().failure().code(1).stdout(predicate::str::is_empty());
+    assert_eq!(fixture.json_status().1["work"], before);
+    let stderr = String::from_utf8_lossy(&rejected.stderr);
+    assert_eq!(
+        stderr,
+        format!(
+            "error: repository bundle does not claim {}; run ai-coord done from a claimed repository to release the whole bundle:\n  cd '{}' && ai-coord done\n",
+            unclaimed_root.display(),
+            first_root.replace('\'', "'\"'\"'")
+        )
+    );
+    let recovery_command = stderr.lines().find_map(|line| line.strip_prefix("  ")).expect("recovery command");
+    let recovered = fixture
+        .bash_command()
+        .current_dir(&unclaimed)
+        .env("AI_COORD_SESSION_ID", "recovery-host")
+        .env("AI_COORD_TEST_BIN", BINARY)
+        .args(["-c", &format!("ai-coord() {{ \"$AI_COORD_TEST_BIN\" \"$@\"; }}\n{recovery_command}")])
+        .output()
+        .expect("execute suggested recovery command");
+    recovered.assert().success();
+    assert_eq!(String::from_utf8_lossy(&recovered.stdout), "DONE\treleased\n");
+    assert!(fixture.json_status().1["work"].as_array().unwrap().is_empty());
+
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
+#[test]
 fn bundle_draft_promotion_and_ordinary_mismatch_are_explicit() {
     let fixture = Fixture::new();
     let second = fixture._temporary.path().join("z-repo");

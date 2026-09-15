@@ -28,6 +28,9 @@ pub(crate) enum Command {
     /// non-readiness wake events.
     Wait(WaitArgs),
     /// Release this session's draft, active, or queued work.
+    ///
+    /// Run from a worktree claimed by this session. For a multi-repository bundle,
+    /// this releases every claim atomically.
     Done(DoneArgs),
     /// Print Git blob baselines for this session's active work.
     Baseline,
