@@ -103,7 +103,7 @@ pub enum ConfigCommand {
 pub enum LinkCommand {
     /// Install ai-notify hooks in Claude Code settings.
     Claude {
-        /// Claude Code settings.json path (defaults to ~/.claude/settings.json).
+        /// Claude Code settings.json path (defaults to ~/.claude/settings.json; generated files are refused).
         #[arg(long)]
         path: Option<PathBuf>,
         /// Replace a conflicting non-list hook entry.

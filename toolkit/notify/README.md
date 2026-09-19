@@ -191,6 +191,10 @@ This merges the hooks into `~/.claude/settings.json` without touching your other
 project or local settings file, `--dry-run` to preview, and `--force` to replace a conflicting entry. For more
 information about Claude Code hooks, see the [official documentation](https://code.claude.com/docs/en/hooks).
 
+If a `settings.json` has a sibling `settings/hooks.jsonc`, ai-notify treats it as generated and refuses to overwrite it,
+including when that file is selected with `--path`. Update `settings/hooks.jsonc` through its owning configuration and
+run that configuration's normal settings generator to regenerate `settings.json`.
+
 The resulting `hooks` section uses Claude Code's nested schema (each event maps to a list of matcher groups):
 
 ```json

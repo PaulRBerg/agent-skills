@@ -65,6 +65,15 @@ impl ClaudeHooksReport {
 
 /// Add missing ai-notify Claude Code hooks while preserving all unrelated JSON data.
 pub fn ensure_claude_hooks(path: &Path, force: bool, dry_run: bool) -> Result<ClaudeHooksUpdate> {
+    if let Some(source) = generated_settings_source(path) {
+        return Err(AppError::integration(format!(
+            "refusing to overwrite generated Claude Code settings {}; update canonical hook source {} and run its normal settings generator to regenerate {}",
+            path.display(),
+            source.display(),
+            path.display(),
+        )));
+    }
+
     let mut data = load_settings(path)?;
     let root = data.as_object_mut().expect("load_settings validates object roots");
     let hooks = root.entry("hooks").or_insert_with(|| Value::Object(Map::new()));
@@ -111,6 +120,25 @@ pub fn ensure_claude_hooks(path: &Path, force: bool, dry_run: bool) -> Result<Cl
     }
 
     Ok(ClaudeHooksUpdate { path: path.to_path_buf(), changed, added, updated, skipped })
+}
+
+fn generated_settings_source(path: &Path) -> Option<PathBuf> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let target = fs::canonicalize(path).ok()?;
+            settings_hooks_source(path).or_else(|| settings_hooks_source(&target))
+        }
+        _ => settings_hooks_source(path),
+    }
+}
+
+fn settings_hooks_source(path: &Path) -> Option<PathBuf> {
+    if path.file_name().is_none_or(|name| name != "settings.json") {
+        return None;
+    }
+
+    let source = path.parent()?.join("settings/hooks.jsonc");
+    source.exists().then_some(source)
 }
 
 /// Inspect only Claude Code's documented global and project settings locations.

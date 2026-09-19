@@ -158,6 +158,101 @@ fn link_claude_supports_dry_run_updates_and_schema_failures() {
 }
 
 #[test]
+fn link_claude_refuses_generated_settings_for_default_and_explicit_paths() {
+    let environment = TestEnv::new();
+    let settings = environment.home.join(".claude/settings.json");
+    let source = environment.home.join(".claude/settings/hooks.jsonc");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&settings, "{\"model\":\"opus\"}\n").unwrap();
+    fs::write(&source, "// canonical hooks\n{}\n").unwrap();
+    let settings_before = fs::read(&settings).unwrap();
+    let source_before = fs::read(&source).unwrap();
+    let message = format!(
+        "update canonical hook source {} and run its normal settings generator to regenerate {}",
+        source.display(),
+        settings.display()
+    );
+
+    environment.run(&["link", "claude"], "").code(1).stderr(predicate::str::contains(&message));
+    environment
+        .run(&["link", "claude", "--path", settings.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains(&message));
+    environment
+        .run(&["link", "claude", "--path", settings.to_str().unwrap(), "--dry-run"], "")
+        .code(1)
+        .stderr(predicate::str::contains(&message));
+
+    assert_eq!(fs::read(&settings).unwrap(), settings_before);
+    assert_eq!(fs::read(&source).unwrap(), source_before);
+}
+
+#[cfg(unix)]
+#[test]
+fn link_claude_refuses_generated_settings_through_final_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    let environment = TestEnv::new();
+
+    let lexical_settings = environment._root.path().join("lexical/settings.json");
+    let lexical_source = environment._root.path().join("lexical/settings/hooks.jsonc");
+    let lexical_target = environment._root.path().join("backing.json");
+    fs::create_dir_all(lexical_source.parent().unwrap()).unwrap();
+    fs::write(&lexical_target, "{\"model\":\"opus\"}\n").unwrap();
+    fs::write(&lexical_source, "// canonical hooks\n{}\n").unwrap();
+    symlink(&lexical_target, &lexical_settings).unwrap();
+    let lexical_target_before = fs::read(&lexical_target).unwrap();
+    let lexical_source_before = fs::read(&lexical_source).unwrap();
+
+    environment
+        .run(&["link", "claude", "--path", lexical_settings.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains(lexical_source.to_str().unwrap()));
+    assert!(lexical_settings.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&lexical_target).unwrap(), lexical_target_before);
+    assert_eq!(fs::read(&lexical_source).unwrap(), lexical_source_before);
+
+    let generated_settings = environment._root.path().join("generated/settings.json");
+    let generated_source = environment._root.path().join("generated/settings/hooks.jsonc");
+    let alias = environment._root.path().join("alias.json");
+    fs::create_dir_all(generated_source.parent().unwrap()).unwrap();
+    fs::write(&generated_settings, "{\"model\":\"sonnet\"}\n").unwrap();
+    fs::write(&generated_source, "// canonical hooks\n{}\n").unwrap();
+    symlink(&generated_settings, &alias).unwrap();
+    let generated_settings_before = fs::read(&generated_settings).unwrap();
+    let generated_source_before = fs::read(&generated_source).unwrap();
+
+    environment
+        .run(&["link", "claude", "--path", alias.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains(generated_source.to_str().unwrap()));
+    assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&generated_settings).unwrap(), generated_settings_before);
+    assert_eq!(fs::read(&generated_source).unwrap(), generated_source_before);
+}
+
+#[cfg(unix)]
+#[test]
+fn link_claude_preserves_broken_final_symlink_errors() {
+    use std::os::unix::fs::symlink;
+
+    let environment = TestEnv::new();
+    let settings = environment._root.path().join("broken/settings.json");
+    let source = environment._root.path().join("broken/settings/hooks.jsonc");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "// canonical hooks\n{}\n").unwrap();
+    symlink(environment._root.path().join("missing.json"), &settings).unwrap();
+    let source_before = fs::read(&source).unwrap();
+
+    environment
+        .run(&["link", "claude", "--path", settings.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains("cannot resolve symlink"));
+    assert!(settings.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&source).unwrap(), source_before);
+}
+
+#[test]
 fn link_codex_preserves_conflicts_and_supports_force_and_profiles() {
     let environment = TestEnv::new();
     let config = environment.home.join(".codex/config.toml");
