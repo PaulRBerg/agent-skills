@@ -54,7 +54,6 @@ pub(crate) struct WorkRow {
     pub(crate) state: WorkState,
     pub(crate) blocked_reason: Option<String>,
     pub(crate) claims: Vec<WorkClaimRow>,
-    pub(crate) draft_created_at: Option<f64>,
     pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
     pub(crate) revision: i64,
@@ -81,7 +80,6 @@ pub(crate) struct WorkUpdate {
     pub(crate) state: WorkState,
     pub(crate) blocked_reason: Option<String>,
     pub(crate) claims: Vec<WorkClaimUpdate>,
-    pub(crate) draft_created_at: Option<f64>,
     pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
     /// Compare-and-swap guard for an existing work item.
@@ -96,6 +94,41 @@ pub(crate) struct WorkClaimUpdate {
     /// `None` preserves retained claim baselines; `Some` replaces all of them.
     pub(crate) baselines: Option<Vec<BaselineRow>>,
     pub(crate) residual_paths: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DraftOwner {
+    Session(Identity),
+    Name(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DraftClaimUpdate {
+    pub(crate) repo_root: String,
+    pub(crate) scopes: Vec<Scope>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DraftClaimRow {
+    pub(crate) repo_root: String,
+    pub(crate) scopes: Vec<Scope>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DraftRow {
+    pub(crate) id: i64,
+    pub(crate) name: Option<String>,
+    pub(crate) owner: Option<Identity>,
+    pub(crate) label: String,
+    pub(crate) created_at: f64,
+    pub(crate) updated_at: f64,
+    pub(crate) claims: Vec<DraftClaimRow>,
+}
+
+impl DraftRow {
+    pub(crate) fn claim(&self, repo_root: &str) -> Option<&DraftClaimRow> {
+        self.claims.iter().find(|claim| claim.repo_root == repo_root)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

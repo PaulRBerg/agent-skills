@@ -353,7 +353,7 @@ fn fingerprint_values(fingerprint: Option<&ProcessFingerprint>) -> (Option<u32>,
     fingerprint.map_or((None, None), |value| (Some(value.pid), value.start_token.as_deref()))
 }
 
-fn session_select(suffix: &str) -> String {
+pub(super) fn session_select(suffix: &str) -> String {
     format!(
         "SELECT client, session_id, cwd, repo_root, state, callsign, name,
                 waiting_for, permission_mode, coordination_waived, pid, process_start_token, transcript_path,
@@ -362,7 +362,7 @@ fn session_select(suffix: &str) -> String {
     )
 }
 
-fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
+pub(super) fn session_from_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
     let pid = row.get::<_, Option<u32>>(10)?;
     let start_token = row.get::<_, Option<String>>(11)?;
     Ok(SessionRow {

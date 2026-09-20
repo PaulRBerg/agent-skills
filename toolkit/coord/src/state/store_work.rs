@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    path::Path,
-};
+use std::collections::{BTreeMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
@@ -11,11 +8,11 @@ use crate::{
 };
 
 use super::{
-    BaselineRow, DirtObservationRow, EndedObservation, ResidualOwnerRow, Store, WorkClaimRow, WorkClaimUpdate, WorkRow,
-    WorkUpdate,
+    BaselineRow, DirtObservationRow, EndedObservation, ResidualOwnerRow, SessionRow, Store, WorkClaimRow,
+    WorkClaimUpdate, WorkRow, WorkUpdate,
     store::{bump_generation, client_name, invalid_value, parse_client, parse_work_state, work_state_name},
     store_communications::add_message,
-    store_sessions::{end_session_if_revision, reconcile_ended},
+    store_sessions::{end_session_if_revision, reconcile_ended, session_from_row, session_select},
 };
 
 /// State-owned facade for one atomic work arbitration.
@@ -23,7 +20,7 @@ use super::{
 /// Callers collect slow provider and Git evidence before entering this facade,
 /// then re-read every mutable work decision through it before writing.
 pub(crate) struct WorkTransaction<'store> {
-    transaction: Transaction<'store>,
+    pub(super) transaction: Transaction<'store>,
 }
 
 impl Store {
@@ -50,6 +47,32 @@ impl WorkTransaction<'_> {
             )
             .optional()?
             .flatten())
+    }
+
+    /// Paths this session has observed touched in `repo_root` at or after `since`,
+    /// for the soft-claim hard/soft partition (see `crate::work::soft`).
+    pub(crate) fn touched_in_repo(&self, identity: &Identity, repo_root: &str, since: f64) -> Result<Vec<String>> {
+        let mut statement = self.transaction.prepare(
+            "SELECT path FROM touched_paths
+             WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3 AND touched_at >= ?4
+             ORDER BY path",
+        )?;
+        Ok(statement
+            .query_map(params![client_name(identity.client), identity.session_id, repo_root, since], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// The holder's complete session row, for the soft-claim idle test (state and
+    /// last_seen; see `crate::work::soft`).
+    pub(crate) fn session(&self, identity: &Identity) -> Result<Option<SessionRow>> {
+        Ok(self
+            .transaction
+            .query_row(
+                &session_select("WHERE client = ?1 AND session_id = ?2"),
+                params![client_name(identity.client), identity.session_id],
+                session_from_row,
+            )
+            .optional()?)
     }
 
     pub(crate) fn work(&self, identity: &Identity) -> Result<Option<WorkRow>> {
@@ -148,53 +171,21 @@ impl WorkTransaction<'_> {
         }
         Ok(removed)
     }
+
+    pub(crate) fn draft_for_session(&self, identity: &Identity) -> Result<Option<super::DraftRow>> {
+        super::store_drafts::draft_for_session_from(&self.transaction, identity)
+    }
+
+    pub(crate) fn draft_by_id(&self, id: i64) -> Result<Option<super::DraftRow>> {
+        super::store_drafts::draft_by_id_from(&self.transaction, id)
+    }
+
+    pub(crate) fn delete_draft(&self, id: i64) -> Result<bool> {
+        super::store_drafts::delete_draft(&self.transaction, id)
+    }
 }
 
 impl Store {
-    /// Create or atomically replace this session's non-authoritative draft.
-    pub(crate) fn save_draft(
-        &mut self,
-        identity: &Identity,
-        label: &str,
-        claims: &[WorkClaimUpdate],
-        current: f64,
-    ) -> Result<WorkRow> {
-        self.immediate(|transaction| {
-            let existing = work_from(transaction, identity)?;
-            if let [claim] = claims {
-                crate::work::require_ordinary_item(existing.as_ref(), Path::new(&claim.repo_root), "draft")?;
-            }
-            if existing.as_ref().is_some_and(|work| work.state != WorkState::Draft) {
-                return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
-            }
-            let claims = claims
-                .iter()
-                .cloned()
-                .map(|claim| WorkClaimUpdate {
-                    blocked_reason: None,
-                    baselines: Some(Vec::new()),
-                    residual_paths: Vec::new(),
-                    ..claim
-                })
-                .collect();
-            save_work(
-                transaction,
-                &WorkUpdate {
-                    identity: identity.clone(),
-                    label: label.to_owned(),
-                    state: WorkState::Draft,
-                    blocked_reason: None,
-                    claims,
-                    draft_created_at: Some(current),
-                    submitted_at: None,
-                    updated_at: current,
-                    expected_revision: existing.map(|work| work.revision),
-                },
-            )?;
-            work_from(transaction, identity)?.ok_or_else(|| AppError::retry("draft disappeared during replacement"))
-        })
-    }
-
     pub(crate) fn work(&self, identity: &Identity) -> Result<Option<WorkRow>> {
         work_from(&self.connection, identity)
     }
@@ -242,31 +233,18 @@ impl Store {
 
 fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> {
     let claims = normalized_claims(&update.claims)?;
-    if update.state == WorkState::Draft {
-        let existing_state = transaction
-            .query_row(
-                "SELECT state FROM work_items WHERE client = ?1 AND session_id = ?2",
-                params![client_name(update.identity.client), update.identity.session_id],
-                |row| parse_work_state(row.get(0)?),
-            )
-            .optional()?;
-        if existing_state.is_some_and(|state| state != WorkState::Draft) {
-            return Err(AppError::operational("queued or active work exists; run ai-coord done before drafting"));
-        }
-    }
     match update.expected_revision {
         Some(revision) => {
             let changed = transaction.execute(
                 "UPDATE work_items SET
                     label = ?1, state = ?2, blocked_reason = ?3,
-                    draft_created_at = ?4, submitted_at = ?5, updated_at = ?6,
+                    submitted_at = ?4, updated_at = ?5,
                     revision = revision + 1
-                 WHERE client = ?7 AND session_id = ?8 AND revision = ?9",
+                 WHERE client = ?6 AND session_id = ?7 AND revision = ?8",
                 params![
                     update.label,
                     work_state_name(update.state),
                     update.blocked_reason,
-                    update.draft_created_at,
                     update.submitted_at,
                     update.updated_at,
                     client_name(update.identity.client),
@@ -292,15 +270,14 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
             transaction.execute(
                 "INSERT INTO work_items(
                     client, session_id, label, state, blocked_reason,
-                    draft_created_at, submitted_at, updated_at, revision
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1)",
+                    submitted_at, updated_at, revision
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)",
                 params![
                     client_name(update.identity.client),
                     update.identity.session_id,
                     update.label,
                     work_state_name(update.state),
                     update.blocked_reason,
-                    update.draft_created_at,
                     update.submitted_at,
                     update.updated_at,
                 ],
@@ -421,11 +398,11 @@ fn works_from(connection: &Connection, repo_root: Option<&str>) -> Result<Vec<Wo
             work_select(
                 "JOIN work_claims ON work_claims.work_id = work_items.id
                  WHERE work_claims.repo_root = ?1
-                 ORDER BY COALESCE(submitted_at, draft_created_at), work_items.id",
+                 ORDER BY submitted_at, work_items.id",
             ),
             vec![repo_root],
         ),
-        None => (work_select("ORDER BY COALESCE(submitted_at, draft_created_at), work_items.id"), Vec::new()),
+        None => (work_select("ORDER BY submitted_at, work_items.id"), Vec::new()),
     };
     let mut statement = connection.prepare(&query)?;
     let bases = statement
@@ -524,7 +501,6 @@ struct WorkBase {
     label: String,
     state: WorkState,
     blocked_reason: Option<String>,
-    draft_created_at: Option<f64>,
     submitted_at: Option<f64>,
     updated_at: f64,
     revision: i64,
@@ -533,7 +509,7 @@ struct WorkBase {
 fn work_select(suffix: &str) -> String {
     format!(
         "SELECT work_items.id, client, session_id, label, state, work_items.blocked_reason,
-                draft_created_at, submitted_at, updated_at, revision FROM work_items {suffix}"
+                submitted_at, updated_at, revision FROM work_items {suffix}"
     )
 }
 
@@ -544,10 +520,9 @@ fn work_base_from_row(row: &Row<'_>) -> rusqlite::Result<WorkBase> {
         label: row.get(3)?,
         state: parse_work_state(row.get(4)?)?,
         blocked_reason: row.get(5)?,
-        draft_created_at: row.get(6)?,
-        submitted_at: row.get(7)?,
-        updated_at: row.get(8)?,
-        revision: row.get(9)?,
+        submitted_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        revision: row.get(8)?,
     })
 }
 
@@ -583,7 +558,6 @@ fn finish_work(connection: &Connection, base: WorkBase) -> Result<WorkRow> {
         state: base.state,
         blocked_reason: base.blocked_reason,
         claims,
-        draft_created_at: base.draft_created_at,
         submitted_at: base.submitted_at,
         updated_at: base.updated_at,
         revision: base.revision,
@@ -627,14 +601,14 @@ fn residual_owner_from_row(row: &Row<'_>) -> rusqlite::Result<ResidualOwnerRow> 
     })
 }
 
-const fn scope_kind_name(kind: ScopeKind) -> &'static str {
+pub(super) const fn scope_kind_name(kind: ScopeKind) -> &'static str {
     match kind {
         ScopeKind::Exact => "exact",
         ScopeKind::Recursive => "recursive",
     }
 }
 
-fn parse_scope_kind(value: String) -> rusqlite::Result<ScopeKind> {
+pub(super) fn parse_scope_kind(value: String) -> rusqlite::Result<ScopeKind> {
     match value.as_str() {
         "exact" => Ok(ScopeKind::Exact),
         "recursive" => Ok(ScopeKind::Recursive),

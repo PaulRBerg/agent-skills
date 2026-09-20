@@ -4,6 +4,7 @@ import { tv } from "tailwind-variants";
 import { shortenPath } from "@/lib/format";
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
 import type {
+  RepoLaneDraft,
   WorkClaimWithQueuePosition,
   WorkWithQueuePosition,
 } from "@/lib/types";
@@ -43,21 +44,15 @@ function ClaimDetail({
       >
         {shortenPath(claim.repo_root)}
       </span>
-      {state === "draft" ? (
-        <span className={chip({ state })}>
-          draft · {claim.scope_count} scope{claim.scope_count === 1 ? "" : "s"}
+      {claim.scopes?.map((scope) => (
+        <span
+          className={chip({ state })}
+          key={`${scope.kind}:${scope.path}`}
+          title={`${scope.path} (${scope.kind})`}
+        >
+          <span className="min-w-0 truncate">{scope.path}</span>
         </span>
-      ) : (
-        claim.scopes?.map((scope) => (
-          <span
-            className={chip({ state })}
-            key={`${scope.kind}:${scope.path}`}
-            title={`${scope.path} (${scope.kind})`}
-          >
-            <span className="min-w-0 truncate">{scope.path}</span>
-          </span>
-        ))
-      )}
+      ))}
       {state === "queued" && claim.queuePosition !== undefined ? (
         <span className="inline-flex items-center gap-1 font-mono text-xs text-queued-ink">
           <Clock3 aria-hidden="true" className="size-3" />#
@@ -116,5 +111,21 @@ export function WorkChips({ work }: WorkChipsProps) {
         ))}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+interface DraftChipProps {
+  laneDraft: RepoLaneDraft;
+}
+
+export function DraftChip({ laneDraft }: DraftChipProps) {
+  const { who, scopeCount } = laneDraft;
+  return (
+    <span
+      className={chip({ state: "draft" })}
+      title={laneDraft.draft.label}
+    >
+      draft {who} · {scopeCount} scope{scopeCount === 1 ? "" : "s"}
+    </span>
   );
 }

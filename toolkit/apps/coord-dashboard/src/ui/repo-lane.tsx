@@ -8,7 +8,7 @@ import {
 import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
 import type { RepoLaneModel } from "@/lib/types";
 import { AnimatedValue } from "@/ui/animated-value";
-import { WorkChips } from "@/ui/work-chips";
+import { DraftChip, WorkChips } from "@/ui/work-chips";
 import { SessionRow } from "@/ui/session-row";
 
 interface RepoLaneProps {
@@ -133,8 +133,28 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
         </AnimatePresence>
       </div>
 
+      {lane.drafts.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-line-muted px-3 py-2">
+          <AnimatePresence initial={false} mode="popLayout">
+            {lane.drafts.map((laneDraft) => (
+              <motion.div
+                animate={{ opacity: 1, y: 0 }}
+                data-motion-item
+                exit={{ opacity: 0, y: -3 }}
+                initial={{ opacity: 0, y: 3 }}
+                key={laneDraft.draft.id}
+                layout="position"
+                transition={{ duration: MOTION_DURATION.field, ease: MOTION_EASE }}
+              >
+                <DraftChip laneDraft={laneDraft} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      ) : null}
+
       <AnimatePresence initial={false}>
-        {workCount === 0 ? (
+        {workCount === 0 && lane.drafts.length === 0 ? (
           <motion.p
             animate={{ opacity: 1 }}
             className="border-t border-line-muted px-3 py-2 text-xs text-muted"

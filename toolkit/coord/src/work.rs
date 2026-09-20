@@ -1,6 +1,8 @@
 //! Atomic work arbitration over provider, process, and Git evidence.
 
 mod bundle;
+mod messages;
+mod soft;
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},

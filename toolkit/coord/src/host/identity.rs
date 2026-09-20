@@ -51,6 +51,50 @@ fn nonempty_utf8(value: OsString) -> Option<String> {
     value.into_string().ok().filter(|value| !value.is_empty())
 }
 
+/// Raw signal that the caller's environment looks like a delegate process
+/// rather than the session that should hold lifecycle claims. Rule (a)
+/// (`Override`) is always a rejection; rule (b) (`Thread`) is only confirmed
+/// as a delegate by the coordinator once the ledger shows an active delegate
+/// row for the resolved root session.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum DelegateSignal {
+    /// The `AI_COORD_CLIENT`/`AI_COORD_SESSION_ID` override is in effect, and
+    /// the process's own host identity resolves to a different session.
+    Override { host: Identity },
+    /// No override is in effect; `CODEX_SESSION_ID` and `CODEX_THREAD_ID` are
+    /// both present and disagree, as they do for a native Codex subagent.
+    Thread { thread_id: String },
+}
+
+/// Detect whether the current process environment looks like a delegate.
+/// See [`DelegateSignal`] for what each variant means.
+pub(crate) fn delegate_signal() -> Option<DelegateSignal> {
+    delegate_signal_with(|name| env::var_os(name))
+}
+
+fn delegate_signal_with(mut get: impl FnMut(&str) -> Option<OsString>) -> Option<DelegateSignal> {
+    let override_client = get("AI_COORD_CLIENT").and_then(|value| value.into_string().ok());
+    let override_session = get("AI_COORD_SESSION_ID").and_then(nonempty_utf8);
+    let override_identity = match (override_client.as_deref(), override_session) {
+        (Some("codex"), Some(session_id)) => Some(Identity { client: Client::Codex, session_id }),
+        (Some("claude"), Some(session_id)) => Some(Identity { client: Client::Claude, session_id }),
+        _ => None,
+    };
+
+    if let Some(override_identity) = override_identity {
+        return host_environment(&mut get)
+            .filter(|host| *host != override_identity)
+            .map(|host| DelegateSignal::Override { host });
+    }
+
+    let codex_session = get("CODEX_SESSION_ID").and_then(nonempty_utf8);
+    let codex_thread = get("CODEX_THREAD_ID").and_then(nonempty_utf8);
+    match (codex_session, codex_thread) {
+        (Some(session), Some(thread)) if session != thread => Some(DelegateSignal::Thread { thread_id: thread }),
+        _ => None,
+    }
+}
+
 /// Return the starting process and at most fifteen ancestors.
 pub(crate) fn process_ancestors(start_pid: Option<u32>) -> Vec<ProcessFingerprint> {
     let pid = start_pid.unwrap_or_else(parent_process_id);
@@ -124,5 +168,49 @@ mod tests {
     #[test]
     fn identity_key_uses_stable_provider_prefix() {
         assert_eq!(identity_key(&Identity { client: Client::Codex, session_id: "abc".to_owned() }), "codex/abc");
+    }
+
+    fn signal(values: &[(&str, &str)]) -> Option<DelegateSignal> {
+        let values: HashMap<&str, &str> = values.iter().copied().collect();
+        delegate_signal_with(|name| values.get(name).map(OsString::from))
+    }
+
+    #[test]
+    fn override_matching_host_identity_reports_no_delegate_signal() {
+        assert_eq!(
+            signal(&[("AI_COORD_CLIENT", "codex"), ("AI_COORD_SESSION_ID", "parent"), ("CODEX_SESSION_ID", "parent")]),
+            None
+        );
+    }
+
+    #[test]
+    fn override_with_differing_host_identity_reports_rule_a() {
+        assert_eq!(
+            signal(&[("AI_COORD_CLIENT", "codex"), ("AI_COORD_SESSION_ID", "parent"), ("CODEX_SESSION_ID", "child")]),
+            Some(DelegateSignal::Override { host: Identity { client: Client::Codex, session_id: "child".to_owned() } })
+        );
+    }
+
+    #[test]
+    fn override_with_no_host_environment_reports_no_delegate_signal() {
+        assert_eq!(signal(&[("AI_COORD_CLIENT", "codex"), ("AI_COORD_SESSION_ID", "parent")]), None);
+    }
+
+    #[test]
+    fn equal_codex_session_and_thread_report_no_delegate_signal() {
+        assert_eq!(signal(&[("CODEX_SESSION_ID", "root"), ("CODEX_THREAD_ID", "root")]), None);
+    }
+
+    #[test]
+    fn differing_codex_session_and_thread_report_rule_b() {
+        assert_eq!(
+            signal(&[("CODEX_SESSION_ID", "root"), ("CODEX_THREAD_ID", "child")]),
+            Some(DelegateSignal::Thread { thread_id: "child".to_owned() })
+        );
+    }
+
+    #[test]
+    fn claude_host_only_reports_no_delegate_signal() {
+        assert_eq!(signal(&[("CLAUDE_CODE_SESSION_ID", "claude")]), None);
     }
 }

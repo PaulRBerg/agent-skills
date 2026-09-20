@@ -12,8 +12,9 @@ use crate::domain::{
 };
 
 use super::{
-    BaselineRow, EndedObservation, FindingAdd, FindingCounts, FindingPathObservation, FindingResolution,
-    MAX_INBOX_MESSAGES, ProviderCacheRow, SCHEMA_VERSION, SessionUpdate, Store, WorkClaimUpdate, WorkUpdate,
+    BaselineRow, DraftClaimUpdate, DraftOwner, EndedObservation, FindingAdd, FindingCounts, FindingPathObservation,
+    FindingResolution, MAX_INBOX_MESSAGES, ProviderCacheRow, SCHEMA_VERSION, SessionUpdate, Store, WorkClaimUpdate,
+    WorkUpdate,
 };
 
 fn identity(client: Client, session_id: &str) -> Identity {
@@ -52,7 +53,6 @@ fn work_update(identity: &Identity) -> WorkUpdate {
             baselines: Some(vec![BaselineRow { path: "src/state/mod.rs".to_owned(), oid: "old-oid".to_owned() }]),
             residual_paths: Vec::new(),
         }],
-        draft_created_at: None,
         submitted_at: Some(1.0),
         updated_at: 1.0,
         expected_revision: None,
@@ -74,7 +74,7 @@ fn save_work(store: &mut Store, update: &WorkUpdate) -> crate::error::Result<i64
 }
 
 #[test]
-fn new_store_has_exact_v16_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v17_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -88,6 +88,9 @@ fn new_store_has_exact_v16_schema_and_runtime_pragmas() {
     let claim_columns = table_columns(&store.connection, "work_claims");
     let scope_columns = table_columns(&store.connection, "work_scopes");
     let baseline_columns = table_columns(&store.connection, "work_baselines");
+    let draft_columns = table_columns(&store.connection, "drafts");
+    let draft_claim_columns = table_columns(&store.connection, "draft_claims");
+    let draft_scope_columns = table_columns(&store.connection, "draft_scopes");
     let tables = table_names(&store.connection);
 
     assert_eq!(version, SCHEMA_VERSION);
@@ -110,7 +113,6 @@ fn new_store_has_exact_v16_schema_and_runtime_pragmas() {
             "label".to_owned(),
             "state".to_owned(),
             "blocked_reason".to_owned(),
-            "draft_created_at".to_owned(),
             "submitted_at".to_owned(),
             "updated_at".to_owned(),
             "revision".to_owned(),
@@ -122,6 +124,35 @@ fn new_store_has_exact_v16_schema_and_runtime_pragmas() {
     );
     assert_eq!(scope_columns, HashSet::from(["claim_id".to_owned(), "path".to_owned(), "kind".to_owned()]));
     assert_eq!(baseline_columns, HashSet::from(["claim_id".to_owned(), "path".to_owned(), "oid".to_owned()]));
+    assert_eq!(
+        draft_columns,
+        HashSet::from([
+            "id".to_owned(),
+            "name".to_owned(),
+            "owner_client".to_owned(),
+            "owner_session_id".to_owned(),
+            "label".to_owned(),
+            "created_at".to_owned(),
+            "updated_at".to_owned(),
+        ])
+    );
+    assert_eq!(draft_claim_columns, HashSet::from(["id".to_owned(), "draft_id".to_owned(), "repo_root".to_owned()]));
+    assert_eq!(draft_scope_columns, HashSet::from(["claim_id".to_owned(), "path".to_owned(), "kind".to_owned()]));
+    assert_eq!(
+        foreign_key_targets(&store.connection, "drafts"),
+        HashSet::from([
+            ("owner_client".to_owned(), "sessions".to_owned(), "client".to_owned(), "CASCADE".to_owned()),
+            ("owner_session_id".to_owned(), "sessions".to_owned(), "session_id".to_owned(), "CASCADE".to_owned()),
+        ])
+    );
+    assert_eq!(
+        foreign_key_targets(&store.connection, "draft_claims"),
+        HashSet::from([("draft_id".to_owned(), "drafts".to_owned(), "id".to_owned(), "CASCADE".to_owned())])
+    );
+    assert_eq!(
+        foreign_key_targets(&store.connection, "draft_scopes"),
+        HashSet::from([("claim_id".to_owned(), "draft_claims".to_owned(), "id".to_owned(), "CASCADE".to_owned())])
+    );
     assert_eq!(
         foreign_key_targets(&store.connection, "work_items"),
         HashSet::from([
@@ -145,6 +176,9 @@ fn new_store_has_exact_v16_schema_and_runtime_pragmas() {
     assert!(tables.contains("work_claims"));
     assert!(tables.contains("work_scopes"));
     assert!(tables.contains("work_baselines"));
+    assert!(tables.contains("drafts"));
+    assert!(tables.contains("draft_claims"));
+    assert!(tables.contains("draft_scopes"));
     assert!(tables.contains("current_turns"));
     assert!(tables.contains("findings"));
     assert!(tables.contains("finding_paths"));
@@ -200,21 +234,21 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let connection = Connection::open(&path).unwrap();
     connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)", []).unwrap();
     connection.execute("INSERT INTO sentinel VALUES ('preserved')", []).unwrap();
-    connection.pragma_update(None, "user_version", 15).unwrap();
+    connection.pragma_update(None, "user_version", 16).unwrap();
     drop(connection);
 
     let error = Store::open(&path).err().unwrap();
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 15 is incompatible with required schema 16 at {}; \
+            "state schema 16 is incompatible with required schema 17 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
     );
 
     let connection = Connection::open(path).unwrap();
-    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 15);
+    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 16);
     assert_eq!(
         connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
         "preserved"
@@ -1149,63 +1183,114 @@ fn work_save_is_atomic_and_cas_rollback_preserves_all_claims() {
     assert_eq!(store.generation().unwrap(), generation + 1);
 }
 
+fn draft_claim(repo_root: &str, path: &str) -> DraftClaimUpdate {
+    DraftClaimUpdate {
+        repo_root: repo_root.to_owned(),
+        scopes: vec![Scope { path: path.to_owned(), kind: ScopeKind::Exact }],
+    }
+}
+
 #[test]
-fn draft_replacement_is_whole_work_only_and_rejects_authoritative_work() {
+fn session_owned_draft_replacement_is_unconstrained_by_prior_roots() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-    let first_claims = [work_claim("/repo-b", "b.rs", "ignored"), work_claim("/repo-a", "a.rs", "ignored")];
-    let first = store.save_draft(&owner, "first", &first_claims, 1.0).unwrap();
-    assert_eq!(first.state, WorkState::Draft);
+    let first_claims = [draft_claim("/repo-b", "b.rs"), draft_claim("/repo-a", "a.rs")];
+    let first = store.save_draft(DraftOwner::Session(owner.clone()), "first", &first_claims, 1.0).unwrap();
+    assert!(first.name.is_none());
+    assert_eq!(first.owner.as_ref(), Some(&owner));
     assert_eq!(first.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<Vec<_>>(), ["/repo-a", "/repo-b"]);
-    assert!(store.baselines_in_repo(&owner, "/repo-a").unwrap().is_empty());
 
-    let retained_id = first.claim("/repo-b").unwrap().id;
-    let second_claims = [work_claim("/repo-c", "c.rs", "ignored"), work_claim("/repo-b", "b2.rs", "ignored")];
-    let second = store.save_draft(&owner, "second", &second_claims, 2.0).unwrap();
+    let second_claims = [draft_claim("/repo-c", "c.rs")];
+    let second = store.save_draft(DraftOwner::Session(owner.clone()), "second", &second_claims, 2.0).unwrap();
     assert_eq!(second.id, first.id);
-    assert_eq!(second.revision, first.revision + 1);
-    assert_eq!(second.claim("/repo-b").unwrap().id, retained_id);
-    assert!(second.claim("/repo-a").is_none());
-
-    let mut queued = work_update(&owner);
-    queued.state = WorkState::Queued;
-    queued.blocked_reason = Some("blocked".to_owned());
-    queued.submitted_at = Some(3.0);
-    queued.expected_revision = Some(second.revision);
-    save_work(&mut store, &queued).unwrap();
-    let before = store.work(&owner).unwrap().unwrap();
-    assert_eq!(
-        store.save_draft(&owner, "rejected", &first_claims, 4.0).unwrap_err().to_string(),
-        "queued or active work exists; run ai-coord done before drafting"
-    );
-    assert_eq!(store.work(&owner).unwrap().unwrap(), before);
+    assert_eq!(second.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<Vec<_>>(), ["/repo-c"]);
+    assert_eq!(store.draft_for_session(&owner).unwrap().unwrap(), second);
 }
 
 #[test]
-fn ordinary_draft_rechecks_mode_and_root_in_transaction() {
-    for replacement in [
-        vec![work_claim("/repo-a", "a.rs", "ignored"), work_claim("/repo-b", "b.rs", "ignored")],
-        vec![work_claim("/repo-b", "b.rs", "ignored")],
-    ] {
-        let temporary = tempdir().unwrap();
-        let mut store = Store::open(temporary.path().join("state.db")).unwrap();
-        let owner = identity(Client::Codex, "owner");
-        store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-        let root = std::path::Path::new("/repo-a");
-        crate::work::require_ordinary_item(store.work(&owner).unwrap().as_ref(), root, "draft").unwrap();
+fn named_draft_replacement_requires_the_same_repository_roots() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let claims = [draft_claim("/repo-a", "a.rs")];
+    let first = store.save_draft(DraftOwner::Name("plan1".to_owned()), "first", &claims, 1.0).unwrap();
+    assert_eq!(first.name.as_deref(), Some("plan1"));
+    assert!(first.owner.is_none());
 
-        let mut competitor = Store::open(store.path()).unwrap();
-        let winner = competitor.save_draft(&owner, "winner", &replacement, 1.0).unwrap();
-        let generation = store.generation().unwrap();
-        let expected = crate::work::require_ordinary_item(Some(&winner), root, "draft").unwrap_err();
-        let error = store.save_draft(&owner, "stale", &[work_claim("/repo-a", "new.rs", "ignored")], 2.0).unwrap_err();
-        assert_eq!(error.kind, expected.kind);
-        assert_eq!(error.to_string(), expected.to_string());
-        assert_eq!(store.work(&owner).unwrap(), Some(winner));
-        assert_eq!(store.generation().unwrap(), generation);
-    }
+    let same_root = [draft_claim("/repo-a", "a2.rs")];
+    let replaced = store.save_draft(DraftOwner::Name("plan1".to_owned()), "second", &same_root, 2.0).unwrap();
+    assert_eq!(replaced.id, first.id);
+
+    let other_root = [draft_claim("/repo-b", "b.rs")];
+    let error = store.save_draft(DraftOwner::Name("plan1".to_owned()), "third", &other_root, 3.0).unwrap_err();
+    assert_eq!(error.to_string(), "draft plan1 belongs to /repo-a; choose another name");
+    assert_eq!(store.draft_named("plan1").unwrap().unwrap(), replaced);
+}
+
+#[test]
+fn drafts_table_check_constraints_require_exactly_one_owner_kind() {
+    let temporary = tempdir().unwrap();
+    let store = Store::open(temporary.path().join("state.db")).unwrap();
+    assert!(
+        store
+            .connection
+            .execute(
+                "INSERT INTO drafts(name, owner_client, owner_session_id, label, created_at, updated_at)
+                 VALUES (NULL, NULL, NULL, 'orphan', 1.0, 1.0)",
+                [],
+            )
+            .is_err(),
+        "neither a name nor an owner must be rejected"
+    );
+    assert!(
+        store
+            .connection
+            .execute(
+                "INSERT INTO drafts(name, owner_client, owner_session_id, label, created_at, updated_at)
+                 VALUES ('both', 'codex', 'owner', 'ambiguous', 1.0, 1.0)",
+                [],
+            )
+            .is_err(),
+        "both a name and an owner must be rejected"
+    );
+}
+
+#[test]
+fn named_draft_survives_owner_session_removal_but_unnamed_draft_cascades() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    let session = store.upsert_session(&session_update(&owner, 1.0)).unwrap();
+    store.save_draft(DraftOwner::Session(owner.clone()), "unnamed", &[draft_claim("/repo", "a.rs")], 1.0).unwrap();
+    store.save_draft(DraftOwner::Name("survivor".to_owned()), "named", &[draft_claim("/repo-b", "b.rs")], 1.0).unwrap();
+
+    let observation = EndedObservation {
+        identity: owner.clone(),
+        expected_fingerprint: session.fingerprint,
+        expected_revision: session.revision,
+    };
+    assert_eq!(
+        store.with_work_transaction(|transaction| transaction.reconcile_ended(&[observation])).unwrap(),
+        std::slice::from_ref(&owner)
+    );
+    assert!(store.session(&owner).unwrap().is_none());
+    assert!(store.draft_for_session(&owner).unwrap().is_none());
+    assert!(store.draft_named("survivor").unwrap().is_some());
+}
+
+#[test]
+fn pruning_removes_stale_named_drafts_but_keeps_fresh_ones() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    store.save_draft(DraftOwner::Name("stale".to_owned()), "old", &[draft_claim("/repo", "a.rs")], 0.0).unwrap();
+    store.save_draft(DraftOwner::Name("fresh".to_owned()), "new", &[draft_claim("/repo-b", "b.rs")], 100.0).unwrap();
+
+    let seven_days = 7.0 * 24.0 * 60.0 * 60.0;
+    store.prune(seven_days + 50.0).unwrap();
+
+    assert!(store.draft_named("stale").unwrap().is_none());
+    assert!(store.draft_named("fresh").unwrap().is_some());
 }
 
 #[test]
@@ -1234,7 +1319,7 @@ fn fifo_clock_advances_only_when_submitted_and_breaks_timestamp_ties() {
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
-    store.save_draft(&owner, "draft", &[work_claim("/repo", "src/lib.rs", "ignored")], 42.0).unwrap();
+    store.save_draft(DraftOwner::Session(owner.clone()), "draft", &[draft_claim("/repo", "src/lib.rs")], 42.0).unwrap();
     let untouched: i64 = store
         .connection
         .query_row("SELECT value FROM metadata WHERE key = 'submission_clock_micros'", [], |row| row.get(0))
@@ -1399,6 +1484,34 @@ fn touched_paths_are_bounded_sorted_and_report_eviction() {
     assert_eq!(touched.paths.len(), 1_000);
     assert_eq!(touched.paths.first().map(String::as_str), Some("src/0005.rs"));
     assert_eq!(touched.paths.last().map(String::as_str), Some("src/1004.rs"));
+}
+
+#[test]
+fn work_transaction_touched_in_repo_and_session_expose_soft_claim_evidence() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let owner = identity(Client::Codex, "owner");
+    let mut update = session_update(&owner, 5.0);
+    update.state = SessionState::Idle;
+    store.upsert_session(&update).unwrap();
+    store.record_touched(&owner, "/repo", &["src/a.rs".to_owned(), "src/b.rs".to_owned()], 6.0).unwrap();
+
+    store
+        .with_work_transaction(|transaction| {
+            let paths = transaction.touched_in_repo(&owner, "/repo", 0.0).unwrap();
+            assert_eq!(paths, ["src/a.rs", "src/b.rs"]);
+            assert!(transaction.touched_in_repo(&owner, "/other", 0.0).unwrap().is_empty());
+            assert!(transaction.touched_in_repo(&owner, "/repo", 6.5).unwrap().is_empty());
+
+            let session = transaction.session(&owner).unwrap().unwrap();
+            assert_eq!(session.state, SessionState::Idle);
+            assert_eq!(session.last_seen, 5.0);
+
+            let stranger = identity(Client::Codex, "stranger");
+            assert!(transaction.session(&stranger).unwrap().is_none());
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]

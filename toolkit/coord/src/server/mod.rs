@@ -295,7 +295,7 @@ mod tests {
                 self.generation.fetch_add(1, Ordering::SeqCst);
             }
             Ok(SnapshotV2 {
-                schema_version: 7,
+                schema_version: 8,
                 complete: true,
                 scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None },
                 self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
@@ -309,6 +309,7 @@ mod tests {
                 }],
                 sessions: vec![],
                 work: vec![],
+                drafts: vec![],
                 findings: vec![],
                 handoffs: vec![],
                 delegates: vec![],
@@ -442,7 +443,7 @@ mod tests {
         let mut response = String::new();
         stream.read_to_string(&mut response).await.unwrap();
         assert!(response.starts_with("HTTP/1.1 200"));
-        assert!(response.contains("\"schema_version\":7"));
+        assert!(response.contains("\"schema_version\":8"));
 
         let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
         stream.write_all(b"GET /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").await.unwrap();

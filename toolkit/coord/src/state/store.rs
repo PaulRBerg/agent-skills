@@ -17,6 +17,7 @@ pub(super) use crate::domain::{client_name, sanitize};
 use super::schema;
 
 pub(crate) const MESSAGE_TTL: f64 = 48.0 * 60.0 * 60.0;
+pub(crate) const DRAFT_TTL: f64 = 7.0 * 24.0 * 60.0 * 60.0;
 pub(crate) const MAX_INBOX_MESSAGES: usize = 50;
 pub(super) const MAX_ERROR_CODE_CHARS: usize = 80;
 
@@ -60,6 +61,8 @@ impl Store {
     pub(crate) fn prune(&mut self, current: f64) -> Result<()> {
         self.immediate(|transaction| {
             transaction.execute("DELETE FROM messages WHERE created_at < ?1", [current - MESSAGE_TTL])?;
+            transaction
+                .execute("DELETE FROM drafts WHERE name IS NOT NULL AND updated_at < ?1", [current - DRAFT_TTL])?;
             Ok(())
         })
     }
@@ -186,7 +189,6 @@ pub(super) fn parse_session_state(value: String) -> rusqlite::Result<SessionStat
 pub(super) const fn work_state_name(state: WorkState) -> &'static str {
     match state {
         WorkState::Active => "active",
-        WorkState::Draft => "draft",
         WorkState::Queued => "queued",
     }
 }
@@ -194,7 +196,6 @@ pub(super) const fn work_state_name(state: WorkState) -> &'static str {
 pub(super) fn parse_work_state(value: String) -> rusqlite::Result<WorkState> {
     match value.as_str() {
         "active" => Ok(WorkState::Active),
-        "draft" => Ok(WorkState::Draft),
         "queued" => Ok(WorkState::Queued),
         _ => Err(invalid_value(format!("invalid work state {value:?}"))),
     }

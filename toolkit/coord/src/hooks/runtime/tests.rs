@@ -298,21 +298,26 @@ fn codex_transcript_interleavings_preserve_drafts_and_queued_work() {
         );
         register(&coordinator, owner, &repo, 304 + index as u32);
     }
-    coordinator.draft_for(draft.clone(), "draft", &scope, &[], &repo).unwrap();
+    coordinator.draft_for(draft.clone(), None, "draft", &scope, &[], &repo).unwrap();
     assert_eq!(
         coordinator.start_for(queued.clone(), "queued", &scope, &[], &repo).unwrap().kind,
         crate::domain::OutcomeKind::Blocked
     );
 
+    let before_draft = coordinator.store().unwrap().draft_for_session(&draft).unwrap().unwrap();
+    let before_queued = coordinator.store().unwrap().work(&queued).unwrap().unwrap();
     for owner in [&draft, &queued] {
-        let before = coordinator.store().unwrap().work(owner).unwrap().unwrap();
         for event in ["SubagentStart", "PostToolUse", "SubagentStop", "SessionStart", "PostToolUse"] {
             for transcript in [Some("opaque:branch"), None, Some("opaque:root")] {
                 let payload = json!({"session_id":owner.session_id, "cwd":repo, "hook_event_name":event,
                     "transcript_path":transcript, "agent_id":"child", "tool_name":"Read"});
                 runtime.ingest("codex", &payload);
                 let store = coordinator.store().unwrap();
-                assert_eq!(store.work(owner).unwrap().as_ref(), Some(&before), "{payload}");
+                if owner == &draft {
+                    assert_eq!(store.draft_for_session(owner).unwrap().as_ref(), Some(&before_draft), "{payload}");
+                } else {
+                    assert_eq!(store.work(owner).unwrap().as_ref(), Some(&before_queued), "{payload}");
+                }
                 assert!(store.inbox(owner, true).unwrap().is_empty());
             }
         }
@@ -1176,4 +1181,137 @@ fn session_end_cleans_identity_wide_bundle_work_and_deduplicates_wakeup() {
     for root in [&first, &second] {
         assert!(store.residual_owners(fs::canonicalize(root).unwrap().to_str().unwrap()).unwrap().is_empty());
     }
+}
+
+#[test]
+fn out_of_scope_write_names_the_peer_holder_by_callsign() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let holder = Identity { client: Client::Claude, session_id: "holder".into() };
+    register(&coordinator, &holder, &repo, 301);
+    assert_eq!(
+        coordinator.start_for(holder.clone(), "work", &[repo.join("src/a.rs")], &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    coordinator.store().unwrap().set_session_callsign(&holder, "🦊 Swift Otter").unwrap();
+
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let output = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_name":"Write", "tool_input":{"file_path": repo.join("src/a.rs")}
+        }),
+    );
+    assert!(output.contains("wrote src/a.rs owned by 🦊 Swift Otter"), "{output}");
+}
+
+#[test]
+fn out_of_scope_write_with_no_claim_points_at_ai_coord_start() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let output = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_name":"Write", "tool_input":{"file_path": repo.join("src/b.rs")}
+        }),
+    );
+    assert!(output.contains("wrote src/b.rs outside your claim; run ai-coord start"), "{output}");
+}
+
+#[test]
+fn writes_inside_the_callers_own_claim_are_silent() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let identity = Identity { client: Client::Claude, session_id: "self".into() };
+    register(&coordinator, &identity, &repo, 302);
+    assert_eq!(
+        coordinator.start_for(identity.clone(), "work", &[repo.join("src/a.rs")], &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    // Keep the claimed scope dirty so the unrelated clean-scope release nudge cannot fire
+    // and mask the assertion that no `wrote` fragment is emitted for an own-scope write.
+    fs::create_dir_all(repo.join("src")).unwrap();
+    fs::write(repo.join("src/a.rs"), "pending\n").unwrap();
+
+    let runtime = HookRuntime::new(&coordinator);
+    let output = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_name":"Write", "tool_input":{"file_path": repo.join("src/a.rs")}
+        }),
+    );
+    assert_eq!(output, "");
+}
+
+#[test]
+fn waived_sessions_never_report_out_of_scope_writes() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let identity = Identity { client: Client::Claude, session_id: "self".into() };
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    coordinator.store().unwrap().set_coordination_waived(&identity, true).unwrap();
+
+    let output = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_name":"Write", "tool_input":{"file_path": repo.join("src/b.rs")}
+        }),
+    );
+    assert!(!output.contains("wrote "), "{output}");
+}
+
+#[test]
+fn multiple_offending_paths_count_the_remainder_before_the_unread_fragment() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let identity = Identity { client: Client::Claude, session_id: "self".into() };
+    let peer = Identity { client: Client::Codex, session_id: "peer".into() };
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    coordinator
+        .store()
+        .unwrap()
+        .send_message(&peer, std::slice::from_ref(&identity), "peer data", Some(&root), 100.0)
+        .unwrap();
+
+    let output = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_uses":[
+                {"tool_name":"Write", "tool_input":{"file_path": repo.join("src/b1.rs")}},
+                {"tool_name":"Write", "tool_input":{"file_path": repo.join("src/b2.rs")}}
+            ]
+        }),
+    );
+    assert!(output.contains("(+1 more)"), "{output}");
+    let wrote_index = output.find("wrote ").expect("wrote fragment present");
+    let unread_index = output.find("unread peer messages").expect("unread fragment present");
+    assert!(wrote_index < unread_index, "{output}");
+}
+
+#[test]
+fn codex_apply_patch_out_of_scope_write_is_reported() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("codex", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let output = runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolUse",
+            "tool_name":"apply_patch",
+            "tool_input":{"command":"*** Begin Patch\n*** Update File: src/c.rs\n*** End Patch"}
+        }),
+    );
+    assert!(output.contains("wrote src/c.rs outside your claim; run ai-coord start"), "{output}");
 }

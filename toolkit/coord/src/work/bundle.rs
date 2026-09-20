@@ -7,28 +7,30 @@ use std::{
 
 use super::{
     RepoEvidence, WorkCoordinator, blockers, evidence_for, existing_claim_scopes, expansion_blockers,
-    foreign_residuals, gather_evidence, merge_baselines, output_path, partition_dirty, path_text, request_paths,
-    request_work_overlap, require_ordinary_item, same_claim_vector, same_work_vectors, sorted, unattributed_dirty,
-    validate_claim_vector, work_in_repo, work_paths, work_vector_covers_requests, work_vectors_overlap,
-    write_baselines,
+    foreign_residuals, gather_evidence, merge_baselines,
+    messages::{MAX_MESSAGE_CHARS, conflict_detail, identity_display, notify_contenders},
+    output_path, partition_dirty, path_text, request_paths, request_work_overlap, require_ordinary_item,
+    same_claim_vector, same_work_vectors, soft, unattributed_dirty, validate_claim_vector, work_in_repo, work_paths,
+    work_vector_covers_requests, work_vectors_overlap, write_baselines,
 };
+#[cfg(test)]
+use crate::state::WorkClaimRow;
 use crate::{
-    domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, WorkState, client_name, sanitize},
+    domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, WorkState, sanitize},
     error::{AppError, Result},
-    host::{WorkClaimRequest, overlapping_paths, relevant_dirty},
+    host::{WorkClaimRequest, relevant_dirty},
     state::{
-        BaselineRow, DirtObservationRow, ResidualOwnerRow, WorkClaimRow, WorkClaimUpdate, WorkRow, WorkTransaction,
+        BaselineRow, DirtObservationRow, DraftRow, ResidualOwnerRow, WorkClaimUpdate, WorkRow, WorkTransaction,
         WorkUpdate,
     },
 };
 
-const MAX_MESSAGE_CHARS: usize = 240;
-const MAX_BUNDLE_CONFLICT_PATHS: usize = 32;
+pub(crate) const MAX_BUNDLE_CONFLICT_PATHS: usize = 32;
 
 #[derive(Clone, Copy)]
 enum Submission {
     Direct,
-    Draft { id: i64, revision: i64 },
+    Draft { id: i64, updated_at: f64, extra_delete: Option<i64> },
     Wait { id: i64, revision: i64 },
 }
 
@@ -38,12 +40,12 @@ enum ArbitrationStep {
 }
 
 #[derive(Clone, Debug, Default)]
-struct ClaimEvaluation {
-    reason: Option<String>,
+pub(crate) struct ClaimEvaluation {
+    pub(crate) reason: Option<String>,
     fresh: Vec<String>,
     advisory: Vec<String>,
-    contenders: Vec<WorkRow>,
-    residuals: Vec<ResidualOwnerRow>,
+    pub(crate) contenders: Vec<WorkRow>,
+    pub(crate) residuals: Vec<ResidualOwnerRow>,
 }
 
 impl WorkCoordinator<'_> {
@@ -81,15 +83,13 @@ impl WorkCoordinator<'_> {
     pub(crate) fn promote_draft(
         &mut self,
         identity: &Identity,
-        draft: WorkRow,
+        draft: DraftRow,
+        extra_delete: Option<i64>,
         inventory: &InventoryResult,
         current: f64,
     ) -> Result<Outcome> {
-        if draft.state != WorkState::Draft {
-            return Err(AppError::operational("no draft work for this session"));
-        }
-        let claims = requests_from_work(&draft);
-        let submission = Submission::Draft { id: draft.id, revision: draft.revision };
+        let claims = requests_from_draft(&draft);
+        let submission = Submission::Draft { id: draft.id, updated_at: draft.updated_at, extra_delete };
         self.submit(identity, &draft.label, claims, inventory, submission, current)
     }
 
@@ -116,7 +116,8 @@ impl WorkCoordinator<'_> {
     ) -> Result<Outcome> {
         validate_claim_vector(&claims)?;
         let existing = self.store.work(identity)?;
-        verify_submission(existing.as_ref(), existing.as_ref(), submission)?;
+        let session_draft_exists = self.store.draft_for_session(identity)?.is_some();
+        verify_submission(existing.as_ref(), existing.as_ref(), submission, session_draft_exists)?;
         if claims.len() == 1 && matches!(submission, Submission::Direct) {
             require_ordinary_item(existing.as_ref(), &claims[0].repo_root, "start")?;
         }
@@ -137,7 +138,14 @@ impl WorkCoordinator<'_> {
         loop {
             let step = self.store.with_work_transaction(|transaction| {
                 let current_work = transaction.work(identity)?;
-                verify_submission(current_work.as_ref(), existing.as_ref(), submission)?;
+                let session_draft_exists = transaction.draft_for_session(identity)?.is_some();
+                verify_submission(current_work.as_ref(), existing.as_ref(), submission, session_draft_exists)?;
+                if let Submission::Draft { id, updated_at, .. } = submission {
+                    let current_draft = transaction.draft_by_id(id)?;
+                    if !current_draft.is_some_and(|draft| draft.updated_at == updated_at) {
+                        return Err(AppError::retry("draft changed during promotion"));
+                    }
+                }
                 let submitted_at = match submitted_at {
                     Some(submitted_at) => submitted_at,
                     None => {
@@ -149,7 +157,7 @@ impl WorkCoordinator<'_> {
                 let work = transaction.works()?;
                 let observations = refresh_observations(transaction, &evidence, current)?;
                 let residuals = read_residuals(transaction, &claims)?;
-                let evaluations = evaluate_claims(
+                let mut evaluations = evaluate_claims(
                     &claims,
                     inventory.complete,
                     &evidence,
@@ -161,6 +169,16 @@ impl WorkCoordinator<'_> {
                     current,
                     None,
                 );
+                soften_evaluations(
+                    transaction,
+                    identity,
+                    &claims,
+                    &mut evaluations,
+                    &evidence,
+                    &work,
+                    submitted_at,
+                    current,
+                )?;
                 let blocked_reason = evaluations.iter().find_map(|evaluation| evaluation.reason.clone());
                 let state = if blocked_reason.is_some() { WorkState::Queued } else { WorkState::Active };
                 if state == WorkState::Active {
@@ -191,13 +209,18 @@ impl WorkCoordinator<'_> {
                     state,
                     blocked_reason,
                     claims: updates,
-                    draft_created_at: current_work.as_ref().and_then(|work| work.draft_created_at),
                     submitted_at: Some(submitted_at),
                     updated_at: current,
                     expected_revision: current_work.as_ref().map(|work| work.revision),
                 })?;
+                if let Submission::Draft { id, extra_delete, .. } = submission {
+                    transaction.delete_draft(id)?;
+                    if let Some(extra) = extra_delete.filter(|extra| *extra != id) {
+                        transaction.delete_draft(extra)?;
+                    }
+                }
                 if should_notify {
-                    notify_contenders(transaction, identity, label, &claims, &evaluations, current)?;
+                    notify_contenders(transaction, identity, label, &claims, &evaluations, &evidence, current)?;
                 }
                 Ok(ArbitrationStep::Complete(decision))
             })?;
@@ -241,7 +264,6 @@ impl WorkCoordinator<'_> {
                                 residual_paths: Vec::new(),
                             })
                             .collect(),
-                        draft_created_at: existing.draft_created_at,
                         submitted_at: existing.submitted_at,
                         updated_at: current,
                         expected_revision: Some(existing.revision),
@@ -311,7 +333,6 @@ impl WorkCoordinator<'_> {
                     state: WorkState::Active,
                     blocked_reason: None,
                     claims: updates,
-                    draft_created_at: existing.draft_created_at,
                     submitted_at: existing.submitted_at,
                     updated_at: current,
                     expected_revision: Some(existing.revision),
@@ -336,16 +357,24 @@ fn requests_from_work(work: &WorkRow) -> Vec<WorkClaimRequest> {
         .collect()
 }
 
-fn verify_submission(current: Option<&WorkRow>, expected: Option<&WorkRow>, submission: Submission) -> Result<()> {
+fn requests_from_draft(draft: &DraftRow) -> Vec<WorkClaimRequest> {
+    draft
+        .claims
+        .iter()
+        .map(|claim| WorkClaimRequest { repo_root: PathBuf::from(&claim.repo_root), scopes: claim.scopes.clone() })
+        .collect()
+}
+
+fn verify_submission(
+    current: Option<&WorkRow>,
+    expected: Option<&WorkRow>,
+    submission: Submission,
+    session_draft_exists: bool,
+) -> Result<()> {
     match submission {
-        Submission::Draft { id, revision } => {
-            if !current.is_some_and(|work| work.state == WorkState::Draft && work.id == id && work.revision == revision)
-            {
-                return Err(AppError::retry("draft changed during promotion"));
-            }
-        }
+        Submission::Draft { .. } => {}
         Submission::Direct => {
-            if current.is_some_and(|work| work.state == WorkState::Draft) {
+            if session_draft_exists {
                 return Err(AppError::operational(
                     "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
                 ));
@@ -487,6 +516,85 @@ fn evaluate_claims(
         .collect()
 }
 
+/// Nullifies each "overlap" evaluation whose contenders are all idle and whose
+/// scopes overlapping the request are all soft (untouched), narrowing those
+/// contenders' claims in place and notifying them of what they yielded. A claim
+/// that an earlier-queued waiter also overlaps is re-blocked as "waiter" instead,
+/// so a yield never lets a newcomer jump the FIFO queue; that waiter's own recheck
+/// triggers the yield. Only the non-expansion path softens; `update_active`
+/// expansion never does.
+#[allow(clippy::too_many_arguments)]
+fn soften_evaluations(
+    transaction: &WorkTransaction<'_>,
+    identity: &Identity,
+    claims: &[WorkClaimRequest],
+    evaluations: &mut [ClaimEvaluation],
+    evidence: &[RepoEvidence],
+    work: &[WorkRow],
+    submitted_at: f64,
+    current: f64,
+) -> Result<()> {
+    let qualified = claims.len() > 1;
+    // One entry per distinct contender identity, so a contender blocking the
+    // request in more than one repository (a bundle) is narrowed with exactly one
+    // `save_work` covering every repository, instead of one write per repository
+    // racing against its own stale revision.
+    let mut aggregate: Vec<(WorkRow, Vec<soft::RepoYield>)> = Vec::new();
+    for (claim, evaluation) in claims.iter().zip(evaluations.iter_mut()) {
+        if evaluation.reason.as_deref() != Some("overlap") || evaluation.contenders.is_empty() {
+            continue;
+        }
+        let repo_root = claim.repo_root.to_str().expect("validated root");
+        let dirty = &evidence_for(evidence, repo_root).dirty;
+        let mut plans = Vec::with_capacity(evaluation.contenders.len());
+        for contender in &evaluation.contenders {
+            let contender_claim = contender.claim(repo_root).expect("repository contender");
+            let overlap = soft::overlapping_scopes(&claim.scopes, &contender_claim.scopes);
+            let paths = soft::evidence_paths(transaction, contender, repo_root, dirty)?;
+            let soft_overlap = soft::soft_subset(&overlap, &paths);
+            let session = transaction.session(&contender.identity)?;
+            let qualifies = soft::is_idle_holder(session.as_ref(), current) && soft_overlap.len() == overlap.len();
+            plans.push((contender.clone(), soft_overlap, qualifies));
+        }
+        if plans.iter().all(|(_, _, qualifies)| *qualifies) {
+            let repo_work = work_in_repo(work, repo_root);
+            let earlier =
+                blockers(&repo_work, identity, repo_root, &claim.scopes, WorkState::Queued, Some(submitted_at));
+            if !earlier.is_empty() {
+                evaluation.reason = Some("waiter".to_owned());
+                evaluation.contenders = earlier;
+                continue;
+            }
+            evaluation.reason = None;
+            for (contender, soft_overlap, _) in plans {
+                match aggregate.iter_mut().find(|(existing, _)| existing.identity == contender.identity) {
+                    Some((_, entries)) => entries.push((repo_root.to_owned(), soft_overlap)),
+                    None => aggregate.push((contender, vec![(repo_root.to_owned(), soft_overlap)])),
+                }
+            }
+        }
+    }
+    if aggregate.is_empty() {
+        return Ok(());
+    }
+    let requester_display = identity_display(identity, transaction)?;
+    for (contender, yields) in aggregate {
+        let session = transaction.session(&contender.identity)?;
+        let minutes = soft::idle_minutes(session.as_ref(), current);
+        soft::yield_untouched_scopes(
+            transaction,
+            identity,
+            &requester_display,
+            &contender,
+            &yields,
+            qualified,
+            minutes,
+            current,
+        )?;
+    }
+    Ok(())
+}
+
 fn advisory_evaluations(
     claims: &[WorkClaimRequest],
     evidence: &[RepoEvidence],
@@ -616,63 +724,6 @@ fn blocked_outcome(
     }
 }
 
-fn conflict_detail(
-    claims: &[WorkClaimRequest],
-    evaluations: &[ClaimEvaluation],
-    transaction: &WorkTransaction<'_>,
-    qualified: bool,
-) -> Result<(Vec<String>, Vec<String>, Vec<String>)> {
-    let mut identities = Vec::<Identity>::new();
-    let mut paths = Vec::new();
-    let mut broad = HashSet::new();
-    for (claim, evaluation) in claims.iter().zip(evaluations) {
-        for residual in &evaluation.residuals {
-            if !identities.contains(&residual.identity) {
-                identities.push(residual.identity.clone());
-            }
-            paths.push(output_path(claim, &residual.path, qualified));
-        }
-        let repo_root = claim.repo_root.to_str().expect("validated root");
-        for contender in &evaluation.contenders {
-            if !identities.contains(&contender.identity) {
-                identities.push(contender.identity.clone());
-            }
-            let contender_claim = contender.claim(repo_root).expect("repository contender");
-            paths.extend(
-                overlapping_paths(&claim.scopes, &contender_claim.scopes)
-                    .iter()
-                    .map(|path| output_path(claim, path, qualified)),
-            );
-            for requested in &claim.scopes {
-                if requested.is_recursive() &&
-                    contender_claim.scopes.iter().any(|owned| {
-                        requested.path == "." || owned.path.starts_with(&format!("{}/", requested.path))
-                    })
-                {
-                    broad.insert(output_path(claim, &requested.path, qualified));
-                }
-            }
-        }
-    }
-    paths.sort();
-    paths.dedup();
-    let holders =
-        identities.iter().map(|identity| identity_display(identity, transaction)).collect::<Result<Vec<_>>>()?;
-    let mut broad = sorted(broad);
-    if qualified {
-        broad.truncate(MAX_BUNDLE_CONFLICT_PATHS);
-    }
-    Ok((holders, paths, broad))
-}
-
-fn identity_display(identity: &Identity, transaction: &WorkTransaction<'_>) -> Result<String> {
-    if let Some(callsign) = transaction.callsign(identity)? {
-        return Ok(callsign);
-    }
-    let prefix = identity.session_id.chars().take(8).collect::<String>();
-    Ok(format!("{}/{prefix}", client_name(identity.client)))
-}
-
 fn claim_updates(
     transaction: &WorkTransaction<'_>,
     identity: &Identity,
@@ -751,91 +802,6 @@ fn prepare_baselines(
         merge_baselines(prepared.entry(repo_root.clone()).or_default(), write_baselines(Path::new(&repo_root), &paths));
         attempted.entry(repo_root).or_default().extend(paths);
     }
-}
-
-fn notify_contenders(
-    transaction: &WorkTransaction<'_>,
-    identity: &Identity,
-    label: &str,
-    claims: &[WorkClaimRequest],
-    evaluations: &[ClaimEvaluation],
-    current: f64,
-) -> Result<()> {
-    let qualified = claims.len() > 1;
-    let mut notified = Vec::<Identity>::new();
-    for (claim, evaluation) in claims.iter().zip(evaluations) {
-        if evaluation.reason.as_deref() != Some("overlap") {
-            continue;
-        }
-        let repo_root = claim.repo_root.to_str().expect("validated root");
-        for contender in &evaluation.contenders {
-            if notified.contains(&contender.identity) {
-                continue;
-            }
-            let message = if qualified {
-                bundle_blocked_message(label, claims, evaluations, contender)
-            } else {
-                blocked_message(label, &claim.scopes, contender.claim(repo_root).expect("repository contender"))
-            };
-            transaction.send_message(
-                identity,
-                &contender.identity,
-                &message,
-                (!qualified).then_some(repo_root),
-                current,
-            )?;
-            notified.push(contender.identity.clone());
-        }
-    }
-    Ok(())
-}
-
-fn blocked_message(label: &str, requested: &[Scope], blocker: &WorkClaimRow) -> String {
-    let overlaps = overlapping_paths(requested, &blocker.scopes);
-    let broad = blocker
-        .scopes
-        .iter()
-        .filter(|owned| {
-            requested.iter().any(|requested| {
-                owned.is_recursive() && (owned.path == "." || requested.path.starts_with(&format!("{}/", owned.path)))
-            })
-        })
-        .map(|scope| scope.path.clone())
-        .collect::<Vec<_>>();
-    let message = if broad.is_empty() {
-        format!("Queued behind your work: {label}; overlaps: {}.", overlaps.join(", "))
-    } else {
-        format!(
-            "Narrow broad work {} with ai-coord start if unrelated; queued work '{label}' overlaps: {}.",
-            broad.join(", "),
-            overlaps.join(", ")
-        )
-    };
-    sanitize(&message, MAX_MESSAGE_CHARS)
-}
-
-fn bundle_blocked_message(
-    label: &str,
-    claims: &[WorkClaimRequest],
-    evaluations: &[ClaimEvaluation],
-    blocker: &WorkRow,
-) -> String {
-    let mut overlaps = Vec::new();
-    for (claim, evaluation) in claims.iter().zip(evaluations) {
-        if !evaluation.contenders.iter().any(|candidate| candidate.identity == blocker.identity) {
-            continue;
-        }
-        let repo_root = claim.repo_root.to_str().expect("validated root");
-        if let Some(owned) = blocker.claim(repo_root) {
-            overlaps.extend(
-                overlapping_paths(&claim.scopes, &owned.scopes).iter().map(|path| output_path(claim, path, true)),
-            );
-        }
-    }
-    overlaps.sort();
-    overlaps.dedup();
-    overlaps.truncate(MAX_BUNDLE_CONFLICT_PATHS);
-    sanitize(&format!("Queued behind your work: {label}; overlaps: {}.", overlaps.join(", ")), MAX_MESSAGE_CHARS)
 }
 
 fn released_paths(
@@ -923,7 +889,6 @@ mod tests {
                     scopes: claim.scopes,
                 })
                 .collect(),
-            draft_created_at: None,
             submitted_at: Some(submitted_at),
             updated_at: submitted_at,
             revision: 1,

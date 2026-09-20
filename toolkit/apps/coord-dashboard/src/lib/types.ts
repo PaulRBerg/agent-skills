@@ -1,4 +1,4 @@
-export type WorkState = "active" | "draft" | "queued";
+export type WorkState = "active" | "queued";
 export type WorkScopeKind = "exact" | "recursive";
 export type Client = "claude" | "codex";
 export type SessionState =
@@ -52,7 +52,6 @@ export interface Work extends SessionIdentity {
   state: WorkState;
   blocked_reason?: string | null;
   scope_count: number;
-  draft_created_at?: number;
   submitted_at?: number;
   updated_at: number;
   claims: WorkClaim[];
@@ -63,6 +62,21 @@ export interface WorkClaim {
   blocked_reason?: string | null;
   scope_count: number;
   scopes?: WorkScope[];
+}
+
+export interface SnapshotDraftClaim {
+  repo_root: string;
+  scope_count: number;
+}
+
+export interface SnapshotDraft {
+  id: string;
+  name: string | null;
+  owner: SessionIdentity | null;
+  label: string;
+  created_at: number;
+  updated_at: number;
+  claims: SnapshotDraftClaim[];
 }
 
 export type FindingState =
@@ -111,13 +125,14 @@ export interface Message {
 }
 
 export interface Snapshot {
-  schema_version: 7;
+  schema_version: 8;
   complete: boolean;
   scope: SnapshotScope;
   self: SessionIdentity | null;
   providers: ProviderCoverage[];
   sessions: Session[];
   work: Work[];
+  drafts: SnapshotDraft[];
   findings: Finding[];
   handoffs: { repo_root: string; count: number }[];
   delegates: Delegate[];
@@ -144,10 +159,17 @@ export interface LaneSession {
   delegates: Delegate[];
 }
 
+export interface RepoLaneDraft {
+  draft: SnapshotDraft;
+  who: string;
+  scopeCount: number;
+}
+
 export interface RepoLaneModel {
   repoRoot: string;
   sessions: LaneSession[];
   unmatchedWork: WorkWithQueuePosition[];
+  drafts: RepoLaneDraft[];
   lastActivity: number | null;
   handoffCount: number;
 }

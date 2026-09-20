@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     domain::{
-        SessionState, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState, client_name,
-        terminal_field,
+        SessionState, SnapshotDraftV2, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
+        client_name, terminal_field,
     },
     error::Result,
 };
@@ -53,6 +53,9 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
         let count = group.rows.len();
         lines.push(session_line(group.rows[0], None, now, (count > 1).then(|| format!("count={count}")), false));
     }
+    for draft in &snapshot.drafts {
+        lines.push(draft_line(draft, &snapshot.sessions, now));
+    }
 
     let coverage = snapshot
         .providers
@@ -98,8 +101,9 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
         ),
         ("Waiting: host/human wait; work=queued means coordination queue.", states.contains(&SessionState::Waiting)),
         (
-            "Drafts: non-authoritative temporary memory; submit with 'ai-coord start --draft'.",
-            snapshot.work.iter().any(|work| work.state == WorkState::Draft),
+            "Drafts: non-authoritative temporary memory; submit with 'ai-coord start --draft' \
+             or 'ai-coord start --draft NAME'.",
+            !snapshot.drafts.is_empty(),
         ),
         (
             "Names/labels: hints; only a matching 'ai-coord start' or 'ai-coord bundle start' command returning READY grants an edit scope.",
@@ -157,7 +161,6 @@ fn session_line(
             detail.push(format!("repo={}", work.claims[0].repo_root));
         }
         match work.state {
-            WorkState::Draft => detail.push(format!("draft · {} scopes", work.scope_count)),
             WorkState::Queued => detail.push("work=queued".to_owned()),
             WorkState::Active => detail.push("work=active".to_owned()),
         }
@@ -207,6 +210,37 @@ fn session_line(
     .join("\t")
 }
 
+fn draft_line(draft: &SnapshotDraftV2, sessions: &[SnapshotSessionV2], now: f64) -> String {
+    let scopes = draft.claims.iter().map(|claim| claim.scope_count).sum::<usize>();
+    let roots = draft.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<Vec<_>>().join(",");
+    [
+        "draft".to_owned(),
+        draft_owner_label(draft, sessions),
+        draft.label.clone(),
+        format!("{scopes} scopes"),
+        age_label(draft.updated_at, now),
+        format!("repos={roots}"),
+    ]
+    .map(|value| terminal_field(&value))
+    .join("\t")
+}
+
+fn draft_owner_label(draft: &SnapshotDraftV2, sessions: &[SnapshotSessionV2]) -> String {
+    if let Some(name) = &draft.name {
+        return name.clone();
+    }
+    let Some(owner) = &draft.owner else {
+        return String::new();
+    };
+    if let Some(callsign) =
+        sessions.iter().find(|session| session.identity == *owner).and_then(|session| session.callsign.clone())
+    {
+        return callsign;
+    }
+    let prefix_len = owner.session_id.chars().count().min(8);
+    format!("{}/{}", client_name(owner.client), owner.session_id.chars().take(prefix_len).collect::<String>())
+}
+
 fn coverage_label(provider: &crate::domain::ProviderReport) -> &'static str {
     if !provider.enabled {
         "disabled"
@@ -249,12 +283,12 @@ mod tests {
     use super::*;
     use crate::domain::{
         Client, FindingState, FindingSummary, Identity, OutsideScopeV2, ProviderReport, Scope, ScopeKind,
-        SnapshotScopeV2, SnapshotWorkClaimV2, SnapshotWorkV2,
+        SnapshotDraftClaimV2, SnapshotScopeV2, SnapshotWorkClaimV2, SnapshotWorkV2,
     };
 
     fn snapshot(sessions: Vec<SnapshotSessionV2>, work: Vec<SnapshotWorkV2>) -> SnapshotV2 {
         SnapshotV2 {
-            schema_version: 7,
+            schema_version: 8,
             complete: true,
             scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Repo, repo_root: Some("/repo".into()) },
             self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
@@ -268,6 +302,7 @@ mod tests {
             }],
             sessions,
             work,
+            drafts: vec![],
             findings: vec![],
             handoffs: vec![],
             delegates: vec![],
@@ -306,12 +341,22 @@ mod tests {
                 repo_root: "/repo".into(),
                 blocked_reason: None,
                 scope_count: 1,
-                scopes: (state != WorkState::Draft)
-                    .then_some(vec![Scope { path: "src/lib.rs".into(), kind: ScopeKind::Exact }]),
+                scopes: Some(vec![Scope { path: "src/lib.rs".into(), kind: ScopeKind::Exact }]),
             }],
-            draft_created_at: (state == WorkState::Draft).then_some(900.0),
-            submitted_at: (state != WorkState::Draft).then_some(950.0),
+            submitted_at: Some(950.0),
             updated_at: 1_000.0,
+        }
+    }
+
+    fn draft(name: Option<&str>, owner_id: Option<&str>) -> SnapshotDraftV2 {
+        SnapshotDraftV2 {
+            id: "1".into(),
+            name: name.map(str::to_owned),
+            owner: owner_id.map(|id| Identity { client: Client::Codex, session_id: id.into() }),
+            label: "exact files".into(),
+            created_at: 900.0,
+            updated_at: 900.0,
+            claims: vec![SnapshotDraftClaimV2 { repo_root: "/repo".into(), scope_count: 1 }],
         }
     }
 
@@ -335,17 +380,16 @@ mod tests {
     }
 
     #[test]
-    fn json_keeps_the_v7_schema_and_omits_draft_paths() {
-        let payload: serde_json::Value = serde_json::from_str(
-            &snapshot_json(&snapshot(vec![session("self")], vec![work("self", WorkState::Draft)])).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(payload["schema_version"], 7);
+    fn json_keeps_the_v8_schema_and_omits_draft_paths() {
+        let mut value = snapshot(vec![session("self")], vec![]);
+        value.drafts.push(draft(None, Some("self")));
+        let payload: serde_json::Value = serde_json::from_str(&snapshot_json(&value).unwrap()).unwrap();
+        assert_eq!(payload["schema_version"], 8);
         assert_eq!(payload["self"]["session_id"], "self");
         assert_eq!(payload["sessions"][0]["coordination_waived"], false);
-        assert_eq!(payload["work"][0]["scope_count"], 1);
-        assert!(payload["work"][0]["claims"][0].get("scopes").is_none());
-        assert!(payload["work"][0].get("blocked_reason").is_none());
+        assert_eq!(payload["drafts"][0]["claims"][0]["scope_count"], 1);
+        assert!(payload["drafts"][0]["claims"][0].get("scopes").is_none());
+        assert!(payload["work"].as_array().unwrap().is_empty());
         assert!(payload.get("messages").is_none());
     }
 
@@ -368,17 +412,25 @@ mod tests {
     }
 
     #[test]
-    fn rendering_groups_anonymous_but_keeps_work_rows_and_hides_draft_paths() {
+    fn rendering_groups_anonymous_and_hides_draft_paths() {
         let mut named = session("named");
         named.callsign = Some("🦊 Fox\u{1b}[2J".into());
-        let rendered = render_status_at(
-            &snapshot(vec![session("one"), session("two"), named], vec![work("named", WorkState::Draft)]),
-            2_000.0,
-        );
-        assert!(rendered.contains("\t🦊 Fox [2J\texact files\tnamed\t/repo\tdraft · 1 scopes"));
+        let mut value = snapshot(vec![session("one"), session("two"), named], vec![]);
+        value.drafts.push(draft(None, Some("named")));
+        let rendered = render_status_at(&value, 2_000.0);
+        assert!(rendered.contains("draft\t🦊 Fox [2J\texact files\t1 scopes"));
         assert!(!rendered.contains('\u{1b}'));
         assert!(rendered.contains("\tcount=2\t/repo\t"));
         assert!(!rendered.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn rendering_shows_named_drafts_by_name() {
+        let mut value = snapshot(vec![], vec![]);
+        value.drafts.push(draft(Some("plan1"), None));
+        let rendered = render_status_at(&value, 2_000.0);
+        assert!(rendered.contains("draft\tplan1\texact files\t1 scopes"));
+        assert!(rendered.contains("repos=/repo"));
     }
 
     #[test]

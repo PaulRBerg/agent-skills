@@ -129,9 +129,9 @@ describe("parseSnapshot", () => {
   });
 
   test("rejects the previous status schema", () => {
-    const legacy = { ...sampleSnapshot, schema_version: 5 };
+    const legacy = { ...sampleSnapshot, schema_version: 7 };
     expect(() => parseSnapshot(legacy)).toThrow(
-      "snapshot.schema_version must be 7",
+      "snapshot.schema_version must be 8",
     );
   });
 
@@ -165,26 +165,77 @@ describe("parseSnapshot", () => {
     expect(parseSnapshot(withoutCallsigns)).toBe(withoutCallsigns);
   });
 
-  test("requires draft claim counts without exposing literal scopes", () => {
+  test("rejects a work claim without literal scopes", () => {
     const malformed = structuredClone(sampleSnapshot) as Record<
       string,
       unknown
     >;
     const work = malformed.work as Array<Record<string, unknown>>;
     const claims = work[0]?.claims as Array<Record<string, unknown>>;
-    work[0] = {
-      ...work[0],
+    const { scopes: _scopes, ...claimWithoutScopes } = claims[0] ?? {};
+    work[0] = { ...work[0], claims: [claimWithoutScopes] };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.work[0].claims[0].scopes must be an array",
+    );
+  });
+
+  test("rejects a draft claim that exposes literal scopes", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const drafts = malformed.drafts as Array<Record<string, unknown>>;
+    const claims = drafts[0]?.claims as Array<Record<string, unknown>>;
+    drafts[0] = {
+      ...drafts[0],
       claims: [
-        {
-          ...claims[0],
-          scopes: [{ path: "private/file", kind: "exact" }],
-        },
+        { ...claims[0], scopes: [{ path: "private/file", kind: "exact" }] },
       ],
     };
 
     expect(() => parseSnapshot(malformed)).toThrow(
-      "snapshot.work[0].claims[0].scopes must be omitted for draft work",
+      "snapshot.drafts[0].claims[0].scopes must be omitted for a draft claim",
     );
+  });
+
+  test("rejects a draft with both name and owner", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const drafts = malformed.drafts as Array<Record<string, unknown>>;
+    drafts[1] = {
+      ...drafts[1],
+      name: "duplicate-owner-and-name",
+      owner: { client: "codex", session_id: "some-session" },
+    };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.drafts[1] must have exactly one of name or owner",
+    );
+  });
+
+  test("rejects a draft with neither name nor owner", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const drafts = malformed.drafts as Array<Record<string, unknown>>;
+    drafts[0] = { ...drafts[0], name: null, owner: null };
+
+    expect(() => parseSnapshot(malformed)).toThrow(
+      "snapshot.drafts[0] must have exactly one of name or owner",
+    );
+  });
+
+  test("accepts a named draft and a session-owned draft", () => {
+    expect(parseSnapshot(sampleSnapshot)).toBe(sampleSnapshot);
+    const drafts = sampleSnapshot.drafts;
+    expect(drafts[0]?.name).not.toBeNull();
+    expect(drafts[0]?.owner).toBeNull();
+    expect(drafts[1]?.name).toBeNull();
+    expect(drafts[1]?.owner).not.toBeNull();
   });
 
   test("rejects malformed nested work claims", () => {

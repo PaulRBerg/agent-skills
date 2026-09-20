@@ -72,6 +72,10 @@ pub(crate) struct NameArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct DraftArgs {
+    /// Store this draft under a portable name instead of this session.
+    #[arg(long, value_name = "NAME")]
+    pub(crate) name: Option<String>,
+
     /// Explicitly remember a directory prefix; repeat for multiple directories.
     #[arg(long = "recursive", value_name = "DIR")]
     pub(crate) recursive_paths: Vec<PathBuf>,
@@ -84,9 +88,16 @@ pub(crate) struct DraftArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct StartArgs {
-    /// Submit the stored draft for normal arbitration.
-    #[arg(long, conflicts_with_all = ["recursive_paths", "label", "paths"])]
-    pub(crate) draft: bool,
+    /// Submit the stored draft for normal arbitration. Bare `--draft` submits this
+    /// session's unnamed draft; `--draft NAME` submits the named draft.
+    #[arg(
+        long,
+        value_name = "NAME",
+        num_args = 0..=1,
+        default_missing_value = "",
+        conflicts_with_all = ["recursive_paths", "label", "paths"]
+    )]
+    pub(crate) draft: Option<String>,
 
     /// Explicitly reserve a directory prefix; repeat for multiple directories.
     #[arg(long = "recursive", value_name = "DIR", conflicts_with = "draft")]
@@ -115,6 +126,10 @@ pub(crate) enum BundleCommand {
 
 #[derive(Debug, Args)]
 pub(crate) struct BundleDraftArgs {
+    /// Store this draft under a portable name instead of this session.
+    #[arg(long, value_name = "NAME")]
+    pub(crate) name: Option<String>,
+
     /// Explicitly remember an absolute directory prefix; repeat for multiple directories.
     #[arg(long = "recursive", value_name = "ABSOLUTE_DIR")]
     pub(crate) recursive_paths: Vec<PathBuf>,
@@ -127,9 +142,16 @@ pub(crate) struct BundleDraftArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct BundleStartArgs {
-    /// Submit the stored repository bundle draft for arbitration.
-    #[arg(long, conflicts_with_all = ["recursive_paths", "label", "paths"])]
-    pub(crate) draft: bool,
+    /// Submit the stored repository bundle draft for arbitration. Bare `--draft`
+    /// submits this session's unnamed draft; `--draft NAME` submits the named draft.
+    #[arg(
+        long,
+        value_name = "NAME",
+        num_args = 0..=1,
+        default_missing_value = "",
+        conflicts_with_all = ["recursive_paths", "label", "paths"]
+    )]
+    pub(crate) draft: Option<String>,
 
     /// Explicitly reserve an absolute directory prefix; repeat for multiple directories.
     #[arg(long = "recursive", value_name = "ABSOLUTE_DIR", conflicts_with = "draft")]

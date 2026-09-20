@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Yield idle holders' untouched (soft) claims instead of blocking a new `start` or `wait`: a holder session idle at
+  least five minutes whose overlapping scope carries no touched-since-submission or Git-dirty evidence is narrowed, or
+  released entirely when nothing remains, and receives a `Yielded untouched scopes …` message; an earlier-queued
+  overlapping waiter keeps FIFO precedence, and active-work expansion never yields.
+- Add a trailing ` untouched: …` segment to a still-blocked holder message, listing that holder's own overlapping
+  scopes that carry no evidence even though the request stayed queued.
+- Lead Claude's `PostToolBatch` and Codex's `PostToolUse` `additionalContext` with an out-of-scope write warning for
+  Write, Edit, NotebookEdit, and `apply_patch` writes: `wrote <path> owned by <holder>` for a peer's active claim, or
+  `wrote <path> outside your claim; run ai-coord start` otherwise, silent for the caller's own claim and for
+  `#noc`-waived sessions.
+- Add portable named drafts: `draft --name NAME` and `bundle draft --name NAME` store a draft with no owning session
+  that survives session end and never blocks or counts as any session's active work; submit one from any session with
+  `start --draft NAME` or `bundle start --draft NAME`; unpromoted named drafts expire after seven days.
+- Break the internal ledger at schema v17 (reject v16 and every other nonzero version without migration) to add
+  dedicated `drafts`, `draft_claims`, and `draft_scopes` tables and remove the draft state from `work_items`; break
+  public status at schema v8 to publish a top-level `drafts` array that work items never nest.
+- Reject `draft`, `start`, `bundle draft`, `bundle start`, `wait`, and `done` with exit 64 when the caller's
+  environment looks like a delegate of the owning session rather than that session itself; `status`, `touched`,
+  `inbox`, `msg`, `finding`, `baseline`, `trailer`, and `name` remain available to delegates.
 - Release residual ownership whose owning session row no longer exists during every process reconciliation, so dirt left
   behind by an ended, dead, or superseded session no longer blocks later `start` calls with a `residual` holder that
   `status` cannot show; the leftover edits follow the ordinary stale-dirt path instead.

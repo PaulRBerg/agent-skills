@@ -11,7 +11,10 @@ use crate::{
         any_overlap, git_blob_hashes, git_dirty_paths, git_root, normalize_work_claim_bundle, normalize_work_scopes,
         process_sweep, relevant_dirty,
     },
-    state::{BaselineRow, EndedObservation, Store, TouchedPaths, WorkClaimUpdate, WorkRow, WorkTransaction},
+    state::{
+        BaselineRow, DraftClaimRow, DraftClaimUpdate, DraftOwner, DraftRow, EndedObservation, Store, TouchedPaths,
+        WorkRow, WorkTransaction,
+    },
     work::{WorkCoordinator, require_ordinary_item},
 };
 
@@ -31,7 +34,7 @@ struct ReleasePlan {
 
 impl Coordinator {
     pub(crate) fn start(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf], cwd: &Path) -> Result<Outcome> {
-        let identity = self.required_identity()?;
+        let identity = self.lifecycle_identity()?;
         self.start_for(identity, label, files, recursive, cwd)
     }
 
@@ -66,7 +69,7 @@ impl Coordinator {
     }
 
     pub(crate) fn start_bundle(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf]) -> Result<Outcome> {
-        let identity = self.required_identity()?;
+        let identity = self.lifecycle_identity()?;
         self.start_bundle_for(identity, label, files, recursive, &std::env::current_dir()?)
     }
 
@@ -89,14 +92,22 @@ impl Coordinator {
         WorkCoordinator { store: &mut store }.start_claims(&identity, &label, claims, &inventory, self.clock.wall())
     }
 
-    pub(crate) fn draft(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf], cwd: &Path) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        self.draft_for(identity, label, files, recursive, cwd)
+    pub(crate) fn draft(
+        &self,
+        name: Option<&str>,
+        label: &str,
+        files: &[PathBuf],
+        recursive: &[PathBuf],
+        cwd: &Path,
+    ) -> Result<Outcome> {
+        let identity = self.lifecycle_identity()?;
+        self.draft_for(identity, name, label, files, recursive, cwd)
     }
 
     pub(crate) fn draft_for(
         &self,
         identity: Identity,
+        name: Option<&str>,
         label: &str,
         files: &[PathBuf],
         recursive: &[PathBuf],
@@ -110,21 +121,40 @@ impl Coordinator {
             return Err(AppError::usage("at least one scope is required"));
         }
         let mut store = self.store()?;
-        require_ordinary_item(store.work(&identity)?.as_ref(), &root, "draft")?;
+        let owner = match name {
+            Some(name) => DraftOwner::Name(normalized_draft_name(name)?),
+            None => {
+                let existing = store.work(&identity)?;
+                require_ordinary_item(existing.as_ref(), &root, "draft")?;
+                if existing.is_some() {
+                    return Err(AppError::operational(
+                        "queued or active work exists; run ai-coord done before drafting",
+                    ));
+                }
+                DraftOwner::Session(identity.clone())
+            }
+        };
         self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         store.set_coordination_waived(&identity, false)?;
-        store.save_draft(&identity, &label, &[claim_update(path_text(&root)?, scopes.clone())], self.clock.wall())?;
+        store.save_draft(owner, &label, &[draft_claim_update(path_text(&root)?, scopes.clone())], self.clock.wall())?;
         Ok(Outcome::new(OutcomeKind::Draft, 0, scopes.len().to_string()))
     }
 
-    pub(crate) fn draft_bundle(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf]) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        self.draft_bundle_for(identity, label, files, recursive, &std::env::current_dir()?)
+    pub(crate) fn draft_bundle(
+        &self,
+        name: Option<&str>,
+        label: &str,
+        files: &[PathBuf],
+        recursive: &[PathBuf],
+    ) -> Result<Outcome> {
+        let identity = self.lifecycle_identity()?;
+        self.draft_bundle_for(identity, name, label, files, recursive, &std::env::current_dir()?)
     }
 
     pub(crate) fn draft_bundle_for(
         &self,
         identity: Identity,
+        name: Option<&str>,
         label: &str,
         files: &[PathBuf],
         recursive: &[PathBuf],
@@ -135,30 +165,38 @@ impl Coordinator {
         let claims = normalize_work_claim_bundle(files, recursive)?;
         let updates = claims
             .iter()
-            .map(|claim| Ok(claim_update(path_text(&claim.repo_root)?, claim.scopes.clone())))
+            .map(|claim| Ok(draft_claim_update(path_text(&claim.repo_root)?, claim.scopes.clone())))
             .collect::<Result<Vec<_>>>()?;
         let scope_count = updates.iter().map(|claim| claim.scopes.len()).sum::<usize>();
         let mut store = self.store()?;
+        let owner = match name {
+            Some(name) => DraftOwner::Name(normalized_draft_name(name)?),
+            None => {
+                if store.work(&identity)?.is_some() {
+                    return Err(AppError::operational(
+                        "queued or active work exists; run ai-coord done before drafting",
+                    ));
+                }
+                DraftOwner::Session(identity.clone())
+            }
+        };
         let session_root = git_root(&cwd);
         self.ensure_session(&mut store, &identity, &cwd, session_root.as_deref())?;
         store.set_coordination_waived(&identity, false)?;
-        store.save_draft(&identity, &label, &updates, self.clock.wall())?;
+        store.save_draft(owner, &label, &updates, self.clock.wall())?;
         Ok(Outcome::new(OutcomeKind::Draft, 0, scope_count.to_string()))
     }
 
-    pub(crate) fn promote_draft(&self, cwd: &Path) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        self.promote_draft_for(&identity, cwd)
+    pub(crate) fn promote_draft(&self, name: Option<&str>, cwd: &Path) -> Result<Outcome> {
+        let identity = self.lifecycle_identity()?;
+        self.promote_draft_for(&identity, name, cwd)
     }
 
-    pub(crate) fn promote_draft_for(&self, identity: &Identity, cwd: &Path) -> Result<Outcome> {
+    pub(crate) fn promote_draft_for(&self, identity: &Identity, name: Option<&str>, cwd: &Path) -> Result<Outcome> {
         let cwd = resolved(cwd);
         let root = git_root(&cwd).ok_or_else(|| AppError::operational("start --draft requires a Git worktree"))?;
         let mut store = self.store()?;
-        let draft = store
-            .work(identity)?
-            .filter(|work| work.state == WorkState::Draft)
-            .ok_or_else(|| AppError::operational("no draft work for this session"))?;
+        let (draft, extra_delete) = resolve_promoted_draft(&mut store, identity, name)?;
         if draft.claims.len() != 1 {
             return Err(AppError::operational(
                 "draft is a repository bundle; submit it with ai-coord bundle start --draft",
@@ -171,38 +209,52 @@ impl Coordinator {
                 draft.claims[0].repo_root
             )));
         }
-        revalidate_draft(&draft)?;
+        revalidate_draft(&draft.claims)?;
         self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
         store.set_coordination_waived(identity, false)?;
         let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.promote_draft(identity, draft, &inventory, self.clock.wall())
+        WorkCoordinator { store: &mut store }.promote_draft(
+            identity,
+            draft,
+            extra_delete,
+            &inventory,
+            self.clock.wall(),
+        )
     }
 
-    pub(crate) fn promote_bundle_draft(&self, cwd: &Path) -> Result<Outcome> {
-        let identity = self.required_identity()?;
-        self.promote_bundle_draft_for(&identity, cwd)
+    pub(crate) fn promote_bundle_draft(&self, name: Option<&str>, cwd: &Path) -> Result<Outcome> {
+        let identity = self.lifecycle_identity()?;
+        self.promote_bundle_draft_for(&identity, name, cwd)
     }
 
-    pub(crate) fn promote_bundle_draft_for(&self, identity: &Identity, cwd: &Path) -> Result<Outcome> {
+    pub(crate) fn promote_bundle_draft_for(
+        &self,
+        identity: &Identity,
+        name: Option<&str>,
+        cwd: &Path,
+    ) -> Result<Outcome> {
         let cwd = resolved(cwd);
         let mut store = self.store()?;
-        let draft = store
-            .work(identity)?
-            .filter(|work| work.state == WorkState::Draft)
-            .ok_or_else(|| AppError::operational("no draft work for this session"))?;
+        let (draft, extra_delete) = resolve_promoted_draft(&mut store, identity, name)?;
         if draft.claims.len() < 2 {
             return Err(AppError::operational("draft has one repository claim; submit it with ai-coord start --draft"));
         }
-        revalidate_draft(&draft)?;
+        revalidate_draft(&draft.claims)?;
         let session_root = git_root(&cwd);
         self.ensure_session(&mut store, identity, &cwd, session_root.as_deref())?;
         store.set_coordination_waived(identity, false)?;
         let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.promote_draft(identity, draft, &inventory, self.clock.wall())
+        WorkCoordinator { store: &mut store }.promote_draft(
+            identity,
+            draft,
+            extra_delete,
+            &inventory,
+            self.clock.wall(),
+        )
     }
 
     pub(crate) fn wait(&self, timeout_seconds: u64, poll_seconds: f64) -> Result<Outcome> {
-        let identity = self.required_identity()?;
+        let identity = self.lifecycle_identity()?;
         let cwd = std::env::current_dir()?;
         let root = git_root(&resolved(&cwd)).ok_or_else(|| AppError::operational("wait requires a Git worktree"))?;
         self.wait_for_repo(&identity, &root, timeout_seconds, poll_seconds, false)
@@ -247,12 +299,6 @@ impl Coordinator {
             let qualified = work.claims.len() > 1;
             if work.state == WorkState::Active {
                 return Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(work_paths(&work, qualified)));
-            }
-            if work.state == WorkState::Draft {
-                let command = if qualified { "ai-coord bundle start --draft" } else { "ai-coord start --draft" };
-                return Err(AppError::operational(format!(
-                    "draft work must be submitted with {command} before waiting"
-                )));
             }
             let claimed_roots = work.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<HashSet<_>>();
             let pending = store
@@ -308,7 +354,7 @@ impl Coordinator {
     }
 
     pub(crate) fn done(&self) -> Result<Outcome> {
-        let identity = self.required_identity()?;
+        let identity = self.lifecycle_identity()?;
         let cwd = std::env::current_dir()?;
         let outcome = self.done_for(&identity, &cwd)?;
         if let Ok(cwd) = std::env::current_dir() {
@@ -321,12 +367,20 @@ impl Coordinator {
         let root = git_root(&resolved(cwd)).ok_or_else(|| AppError::operational("done requires a Git worktree"))?;
         let repo_root = path_text(&root)?;
         let mut store = self.store()?;
+        let draft_removed = match store.draft_for_session(identity)?.filter(|draft| draft.claim(&repo_root).is_some()) {
+            Some(draft) => store.delete_draft(draft.id)?,
+            None => false,
+        };
         let Some(work) = store.work(identity)? else {
-            return Ok(Outcome::new(OutcomeKind::Done, 0, "already clear"));
+            return Ok(Outcome::new(OutcomeKind::Done, 0, if draft_removed { "released" } else { "already clear" }));
         };
         if work.claim(&repo_root).is_none() {
             if work.claims.len() == 1 {
-                return Ok(Outcome::new(OutcomeKind::Done, 0, "already clear"));
+                return Ok(Outcome::new(
+                    OutcomeKind::Done,
+                    0,
+                    if draft_removed { "released" } else { "already clear" },
+                ));
             }
             return Err(AppError::operational(format!(
                 "repository bundle does not claim {repo_root}; run ai-coord done from a claimed repository to release the whole bundle:\n  cd {} && ai-coord done",
@@ -425,11 +479,8 @@ impl Coordinator {
         store.with_work_transaction(|transaction| {
             let released = transaction.work(identity)?;
             let all_work = transaction.works()?;
-            let wakeups = released
-                .as_ref()
-                .filter(|work| work.state != WorkState::Draft)
-                .map(|work| overlapping_waiters(&all_work, work, identity))
-                .unwrap_or_default();
+            let wakeups =
+                released.as_ref().map(|work| overlapping_waiters(&all_work, work, identity)).unwrap_or_default();
             if !transaction.end_session_if_revision(identity, expected_revision)? {
                 return Ok(false);
             }
@@ -497,7 +548,6 @@ impl Coordinator {
                 }
                 let wakeups = released
                     .as_ref()
-                    .filter(|work| work.state != WorkState::Draft)
                     .map(|work| overlapping_waiters(&remaining_work, work, &identity))
                     .unwrap_or_default();
                 notify_session_release_transaction(
@@ -526,12 +576,45 @@ fn normalized_label(label: &str) -> Result<String> {
     Ok(label)
 }
 
-fn claim_update(repo_root: String, scopes: Vec<Scope>) -> WorkClaimUpdate {
-    WorkClaimUpdate { repo_root, blocked_reason: None, scopes, baselines: Some(Vec::new()), residual_paths: Vec::new() }
+fn draft_claim_update(repo_root: String, scopes: Vec<Scope>) -> DraftClaimUpdate {
+    DraftClaimUpdate { repo_root, scopes }
 }
 
-fn revalidate_draft(draft: &WorkRow) -> Result<()> {
-    for claim in &draft.claims {
+const MAX_DRAFT_NAME_CHARS: usize = 40;
+
+fn normalized_draft_name(name: &str) -> Result<String> {
+    let count = name.chars().count();
+    let valid = (1..=MAX_DRAFT_NAME_CHARS).contains(&count) &&
+        name.chars().all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'));
+    if !valid {
+        return Err(AppError::usage("draft name must be 1-40 characters of letters, digits, '.', '_' or '-'"));
+    }
+    Ok(name.to_owned())
+}
+
+fn resolve_promoted_draft(
+    store: &mut Store,
+    identity: &Identity,
+    name: Option<&str>,
+) -> Result<(DraftRow, Option<i64>)> {
+    match name {
+        Some(name) => {
+            let draft =
+                store.draft_named(name)?.ok_or_else(|| AppError::operational(format!("no draft named {name}")))?;
+            let extra_delete = store.draft_for_session(identity)?.map(|draft| draft.id);
+            Ok((draft, extra_delete))
+        }
+        None => {
+            let draft = store
+                .draft_for_session(identity)?
+                .ok_or_else(|| AppError::operational("no unnamed draft for this session"))?;
+            Ok((draft, None))
+        }
+    }
+}
+
+fn revalidate_draft(claims: &[DraftClaimRow]) -> Result<()> {
+    for claim in claims {
         let root = Path::new(&claim.repo_root);
         if git_root(root).as_deref() != Some(root) {
             return Err(AppError::usage(format!(

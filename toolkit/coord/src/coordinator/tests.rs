@@ -96,7 +96,7 @@ impl ProviderInventory for MutatingInventory {
                     writer.with_work_transaction(|transaction| transaction.delete_work(&self.identity).map(|_| ()))?;
                 }
                 InventoryMutation::ReplaceOnce { label, repo_root, path, submitted_at } => {
-                    let current = writer.work(&self.identity)?.expect("queued work to replace");
+                    writer.work(&self.identity)?.expect("queued work to replace");
                     writer.with_work_transaction(|transaction| {
                         assert!(transaction.delete_work(&self.identity)?);
                         transaction.save_work(&WorkUpdate {
@@ -111,7 +111,6 @@ impl ProviderInventory for MutatingInventory {
                                 baselines: None,
                                 residual_paths: Vec::new(),
                             }],
-                            draft_created_at: current.draft_created_at,
                             submitted_at: Some(*submitted_at),
                             updated_at: 200.0,
                             expected_revision: None,
@@ -138,7 +137,6 @@ impl ProviderInventory for MutatingInventory {
                                     residual_paths: Vec::new(),
                                 })
                                 .collect(),
-                            draft_created_at: current.draft_created_at,
                             submitted_at: current.submitted_at,
                             updated_at: 200.0 + self.refreshes as f64,
                             expected_revision: Some(current.revision),
@@ -190,6 +188,29 @@ fn add_session(store: &mut Store, identity: &Identity, root: &Path, pid: u32, cu
             transcript_path: None,
             started_at: Some(current),
             current,
+        })
+        .unwrap();
+}
+
+/// Overrides a fixture session to idle, backdating `last_seen` so `current - last_seen`
+/// reaches the desired idle age relative to the fixture's fixed wall clock (100.0).
+fn idle_since(store: &mut Store, identity: &Identity, root: &Path, pid: u32, last_seen: f64) {
+    store
+        .upsert_session(&SessionUpdate {
+            identity: identity.clone(),
+            cwd: root.to_string_lossy().into_owned(),
+            repo_root: Some(root.to_string_lossy().into_owned()),
+            state: SessionState::Idle,
+            source: "test".to_owned(),
+            name: None,
+            waiting_for: None,
+            permission_mode: None,
+            update_permission_mode: false,
+            coordination_waived: None,
+            fingerprint: Some(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) }),
+            transcript_path: None,
+            started_at: Some(last_seen),
+            current: last_seen,
         })
         .unwrap();
 }
@@ -348,35 +369,52 @@ fn draft_promotion_modes_reject_mismatches_without_mutating_the_draft() {
     let (_temp, roots, coordinator) = fixture(2, &[(&bundled, 0, 20), (&ordinary, 0, 21)]);
     let requested = files(&roots, &["a.rs", "b.rs"]);
 
-    coordinator.draft_bundle_for(bundled.clone(), "bundle draft", &requested, &[], &roots[0]).unwrap();
-    let before = coordinator.store().unwrap().work(&bundled).unwrap().unwrap();
-    let error = coordinator.promote_draft_for(&bundled, &roots[0]).unwrap_err();
+    coordinator.draft_bundle_for(bundled.clone(), None, "bundle draft", &requested, &[], &roots[0]).unwrap();
+    let before = coordinator.store().unwrap().draft_for_session(&bundled).unwrap().unwrap();
+    let error = coordinator.promote_draft_for(&bundled, None, &roots[0]).unwrap_err();
     assert!(error.to_string().contains("bundle start --draft"));
-    assert_eq!(coordinator.store().unwrap().work(&bundled).unwrap().unwrap(), before);
-    assert_eq!(coordinator.promote_bundle_draft_for(&bundled, &roots[0]).unwrap().kind, OutcomeKind::Ready);
+    assert_eq!(coordinator.store().unwrap().draft_for_session(&bundled).unwrap().unwrap(), before);
+    assert_eq!(coordinator.promote_bundle_draft_for(&bundled, None, &roots[0]).unwrap().kind, OutcomeKind::Ready);
 
-    coordinator.draft_for(ordinary.clone(), "one draft", &[PathBuf::from("one.rs")], &[], &roots[0]).unwrap();
-    let before = coordinator.store().unwrap().work(&ordinary).unwrap().unwrap();
-    let error = coordinator.promote_bundle_draft_for(&ordinary, &roots[0]).unwrap_err();
+    coordinator.draft_for(ordinary.clone(), None, "one draft", &[PathBuf::from("one.rs")], &[], &roots[0]).unwrap();
+    let before = coordinator.store().unwrap().draft_for_session(&ordinary).unwrap().unwrap();
+    let error = coordinator.promote_bundle_draft_for(&ordinary, None, &roots[0]).unwrap_err();
     assert!(error.to_string().contains("ai-coord start --draft"));
-    assert_eq!(coordinator.store().unwrap().work(&ordinary).unwrap().unwrap(), before);
+    assert_eq!(coordinator.store().unwrap().draft_for_session(&ordinary).unwrap().unwrap(), before);
 }
 
 #[test]
-fn sweep_draft_promotion_rejects_a_replacement_with_the_same_revision() {
+fn sweep_draft_promotion_rejects_a_stale_draft_after_replacement() {
     let owner = identity("owner");
     let (_temp, roots, coordinator) = fixture(1, &[(&owner, 0, 22)]);
-    coordinator.draft_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
-    let old = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    coordinator.draft_for(owner.clone(), None, "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    let old = coordinator.store().unwrap().draft_for_session(&owner).unwrap().unwrap();
     coordinator.done_for(&owner, &roots[0]).unwrap();
-    coordinator.draft_for(owner.clone(), "replacement", &[PathBuf::from("new.rs")], &[], &roots[0]).unwrap();
+    coordinator.draft_for(owner.clone(), None, "replacement", &[PathBuf::from("new.rs")], &[], &roots[0]).unwrap();
     let mut store = coordinator.store().unwrap();
-    let replacement = store.work(&owner).unwrap().unwrap();
+    let replacement = store.draft_for_session(&owner).unwrap().unwrap();
     assert_ne!(old.id, replacement.id);
-    assert_eq!(old.revision, replacement.revision);
     let inventory = InventoryResult { complete: true, providers: Vec::new() };
-    assert!(WorkCoordinator { store: &mut store }.promote_draft(&owner, old, &inventory, 100.0).is_err());
-    assert_eq!(store.work(&owner).unwrap().unwrap(), replacement);
+    assert!(WorkCoordinator { store: &mut store }.promote_draft(&owner, old, None, &inventory, 100.0).is_err());
+    assert_eq!(store.draft_for_session(&owner).unwrap().unwrap(), replacement);
+}
+
+#[test]
+fn promoting_a_named_draft_also_clears_the_promoters_own_unnamed_draft() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, coordinator) = fixture(1, &[(&owner, 0, 60), (&promoter, 0, 61)]);
+    coordinator.draft_for(owner.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    coordinator.draft_for(promoter.clone(), None, "mine", &[PathBuf::from("b.rs")], &[], &roots[0]).unwrap();
+    assert!(coordinator.store().unwrap().draft_for_session(&promoter).unwrap().is_some());
+    assert!(coordinator.store().unwrap().draft_named("plan1").unwrap().is_some());
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    assert!(coordinator.store().unwrap().draft_named("plan1").unwrap().is_none());
+    assert!(coordinator.store().unwrap().draft_for_session(&promoter).unwrap().is_none());
+    let work = coordinator.store().unwrap().work(&promoter).unwrap().unwrap();
+    assert_eq!(work.claims[0].scopes, vec![Scope { path: "a.rs".to_owned(), kind: ScopeKind::Exact }]);
 }
 
 #[cfg(unix)]
@@ -384,12 +422,14 @@ fn sweep_draft_promotion_rejects_a_replacement_with_the_same_revision() {
 fn sweep_bundle_draft_revalidates_physical_repository_roots() {
     let owner = identity("owner");
     let (temp, roots, coordinator) = fixture(2, &[(&owner, 1, 23)]);
-    coordinator.draft_bundle_for(owner.clone(), "draft", &files(&roots, &["a.rs", "b.rs"]), &[], &roots[1]).unwrap();
-    let draft = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    coordinator
+        .draft_bundle_for(owner.clone(), None, "draft", &files(&roots, &["a.rs", "b.rs"]), &[], &roots[1])
+        .unwrap();
+    let draft = coordinator.store().unwrap().draft_for_session(&owner).unwrap().unwrap();
     fs::rename(&roots[0], temp.path().join("original-root")).unwrap();
     std::os::unix::fs::symlink(&roots[1], &roots[0]).unwrap();
-    assert!(coordinator.promote_bundle_draft_for(&owner, &roots[1]).is_err());
-    assert_eq!(coordinator.store().unwrap().work(&owner).unwrap().unwrap(), draft);
+    assert!(coordinator.promote_bundle_draft_for(&owner, None, &roots[1]).is_err());
+    assert_eq!(coordinator.store().unwrap().draft_for_session(&owner).unwrap().unwrap(), draft);
 }
 
 #[test]
@@ -795,7 +835,7 @@ fn repo_filtered_snapshot_includes_the_complete_claim_vector() {
     coordinator.start_bundle_for(owner.clone(), "bundle", &requested, &[], &roots[1]).unwrap();
 
     let snapshot = coordinator.snapshot(false, &roots[0], false).unwrap();
-    assert_eq!(snapshot.schema_version, 7);
+    assert_eq!(snapshot.schema_version, 8);
     assert_eq!(snapshot.work.len(), 1);
     assert_eq!(snapshot.work[0].claims.len(), 2);
     assert!(snapshot.sessions.iter().any(|session| session.identity == owner));
@@ -826,8 +866,8 @@ fn sweep_repo_message_targets_include_bundle_peers_once_and_exclude_the_sender()
 fn ordinary_one_claim_lifecycle_remains_current_root_scoped() {
     let owner = identity("owner");
     let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 100)]);
-    coordinator.draft_for(owner.clone(), "draft", &[PathBuf::from("one.rs")], &[], &roots[0]).unwrap();
-    assert_eq!(coordinator.promote_draft_for(&owner, &roots[0]).unwrap().kind, OutcomeKind::Ready);
+    coordinator.draft_for(owner.clone(), None, "draft", &[PathBuf::from("one.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(coordinator.promote_draft_for(&owner, None, &roots[0]).unwrap().kind, OutcomeKind::Ready);
     let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
     assert_eq!(work.claims.len(), 1);
     assert_eq!(coordinator.done_for(&owner, &roots[1]).unwrap().detail, "already clear");
@@ -992,4 +1032,194 @@ fn concurrent_dead_session_probes_notify_each_waiter_once() {
     assert!(first.work(&holder).unwrap().is_none());
     assert_eq!(first.inbox(&waiter, true).unwrap().len(), 1);
     assert_eq!(first.generation().unwrap(), generation + 2);
+}
+
+#[test]
+fn idle_holder_yields_the_untouched_overlapping_scope_and_keeps_the_rest() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 200), (&requester, 0, 201)]);
+    coordinator
+        .start_for(holder.clone(), "holder", &[], &[PathBuf::from("src"), PathBuf::from("docs")], &roots[0])
+        .unwrap();
+    let before = coordinator.store().unwrap().work(&holder).unwrap().unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 200, -1000.0);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+
+    let store = coordinator.store().unwrap();
+    let after = store.work(&holder).unwrap().unwrap();
+    let scopes =
+        after.claim(roots[0].to_str().unwrap()).unwrap().scopes.iter().map(|s| s.path.as_str()).collect::<Vec<_>>();
+    assert_eq!(scopes, ["docs"]);
+    assert_eq!(after.submitted_at, before.submitted_at);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("Yielded untouched scopes src"));
+    assert!(inbox[0].text.contains("re-run ai-coord start to re-acquire"));
+}
+
+#[test]
+fn yield_never_lets_a_newcomer_jump_an_earlier_queued_waiter() {
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let newcomer = identity("newcomer");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 200), (&waiter, 0, 201), (&newcomer, 0, 202)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    let queued =
+        coordinator.start_for(waiter.clone(), "waiter", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(queued.kind, OutcomeKind::Blocked);
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 200, -1000.0);
+
+    let outcome =
+        coordinator.start_for(newcomer.clone(), "newcomer", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.work(&newcomer).unwrap().unwrap().blocked_reason.as_deref(), Some("waiter"));
+    let held = store.work(&holder).unwrap().unwrap();
+    assert_eq!(held.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1, "holder was not narrowed");
+    assert!(store.inbox(&holder, true).unwrap().iter().all(|message| !message.text.contains("Yielded")));
+    drop(store);
+
+    let promoted =
+        coordinator.start_for(waiter.clone(), "waiter", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(promoted.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(store.work(&holder).unwrap().is_none(), "holder released after yielding its only scope");
+    assert!(
+        store
+            .inbox(&holder, true)
+            .unwrap()
+            .iter()
+            .any(|message| message.text.contains("Yielded untouched scopes src to"))
+    );
+}
+
+#[test]
+fn non_idle_holder_stays_blocked_with_an_untouched_suffix() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 202), (&requester, 0, 203)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("untouched: src."));
+}
+
+#[test]
+fn touched_path_makes_an_idle_holders_scope_hard_and_the_message_omits_untouched() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 204), (&requester, 0, 205)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    let mut store = coordinator.store().unwrap();
+    idle_since(&mut store, &holder, &roots[0], 204, -1000.0);
+    store.record_touched(&holder, roots[0].to_str().unwrap(), &["src/lib.rs".to_owned()], 100.0).unwrap();
+    drop(store);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(!inbox[0].text.contains("untouched:"));
+}
+
+#[test]
+fn dirty_file_beneath_the_scope_makes_an_idle_holder_hard() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 206), (&requester, 0, 207)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 206, -1000.0);
+    fs::create_dir_all(roots[0].join("src")).unwrap();
+    fs::write(roots[0].join("src/new.rs"), "dirty\n").unwrap();
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+}
+
+#[test]
+fn narrowing_to_zero_scopes_releases_the_holders_claim_and_the_requester_is_ready() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 208), (&requester, 0, 209)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 208, -1000.0);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+
+    let store = coordinator.store().unwrap();
+    assert!(store.work(&holder).unwrap().is_none());
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("Yielded untouched scopes src"));
+}
+
+#[test]
+fn exact_scope_holder_with_the_exact_path_touched_stays_hard() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 210), (&requester, 0, 211)]);
+    coordinator.start_for(holder.clone(), "holder", &[PathBuf::from("config.toml")], &[], &roots[0]).unwrap();
+    let mut store = coordinator.store().unwrap();
+    idle_since(&mut store, &holder, &roots[0], 210, -1000.0);
+    store.record_touched(&holder, roots[0].to_str().unwrap(), &["config.toml".to_owned()], 100.0).unwrap();
+    drop(store);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("config.toml")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(!inbox[0].text.contains("untouched:"));
+}
+
+#[test]
+fn idle_contender_blocking_a_two_root_bundle_is_narrowed_once_with_one_message() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(2, &[(&holder, 0, 212), (&requester, 1, 213)]);
+    coordinator.start_bundle_for(holder.clone(), "holder", &[], &files(&roots, &["src", "src"]), &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 212, -1000.0);
+
+    let outcome = coordinator
+        .start_bundle_for(requester.clone(), "requester", &files(&roots, &["src/lib.rs", "src/lib.rs"]), &[], &roots[0])
+        .unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+
+    let store = coordinator.store().unwrap();
+    // Both roots' "src" scopes were the holder's only claims, so full narrowing
+    // released the whole work item.
+    assert!(store.work(&holder).unwrap().is_none());
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("Yielded untouched scopes"));
+    assert!(inbox[0].text.contains(roots[0].join("src").to_str().unwrap()));
+    assert!(inbox[0].text.contains(roots[1].join("src").to_str().unwrap()));
 }

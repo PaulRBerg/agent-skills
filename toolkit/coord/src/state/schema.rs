@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 16;
+pub(crate) const SCHEMA_VERSION: i64 = 17;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -34,23 +34,45 @@ const STATEMENTS: &[&str] = &[
         client TEXT NOT NULL,
         session_id TEXT NOT NULL,
         label TEXT NOT NULL,
-        state TEXT NOT NULL CHECK (state IN ('draft', 'queued', 'active')),
+        state TEXT NOT NULL CHECK (state IN ('queued', 'active')),
         blocked_reason TEXT,
-        draft_created_at REAL,
-        submitted_at REAL,
+        submitted_at REAL NOT NULL,
         updated_at REAL NOT NULL,
         revision INTEGER NOT NULL CHECK (revision > 0),
         UNIQUE (client, session_id),
         FOREIGN KEY (client, session_id)
             REFERENCES sessions(client, session_id) ON DELETE CASCADE,
         CHECK (
-            (state = 'draft' AND draft_created_at IS NOT NULL
-                AND submitted_at IS NULL AND blocked_reason IS NULL)
-            OR (state = 'queued' AND submitted_at IS NOT NULL
-                AND blocked_reason IS NOT NULL)
-            OR (state = 'active' AND submitted_at IS NOT NULL
-                AND blocked_reason IS NULL)
+            (state = 'queued' AND blocked_reason IS NOT NULL)
+            OR (state = 'active' AND blocked_reason IS NULL)
         )
+    )",
+    "CREATE TABLE drafts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NULL,
+        owner_client TEXT NULL,
+        owner_session_id TEXT NULL,
+        label TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        CHECK (name IS NOT NULL OR (owner_client IS NOT NULL AND owner_session_id IS NOT NULL)),
+        CHECK (name IS NULL OR (owner_client IS NULL AND owner_session_id IS NULL)),
+        UNIQUE(name),
+        UNIQUE(owner_client, owner_session_id),
+        FOREIGN KEY (owner_client, owner_session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE TABLE draft_claims (
+        id INTEGER PRIMARY KEY,
+        draft_id REFERENCES drafts(id) ON DELETE CASCADE,
+        repo_root TEXT NOT NULL,
+        UNIQUE(draft_id, repo_root)
+    )",
+    "CREATE TABLE draft_scopes (
+        claim_id REFERENCES draft_claims(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        kind TEXT CHECK (kind IN ('exact','recursive')),
+        PRIMARY KEY(claim_id, path)
     )",
     "CREATE TABLE work_claims (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

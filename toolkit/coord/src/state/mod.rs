@@ -2,6 +2,7 @@ mod model;
 mod schema;
 mod store;
 mod store_communications;
+mod store_drafts;
 mod store_findings;
 mod store_sessions;
 mod store_touched;

@@ -1,8 +1,11 @@
+import { shortSessionId } from "@/lib/format";
 import type {
   Delegate,
+  RepoLaneDraft,
   RepoLaneModel,
   Session,
   Snapshot,
+  SnapshotDraft,
   Work,
   WorkWithQueuePosition,
 } from "@/lib/types";
@@ -13,6 +16,37 @@ function sessionKey(client: string, sessionId: string): string {
 
 function sessionRepo(session: Session): string {
   return session.repo_root ?? session.cwd;
+}
+
+function sortedFirstRoot(repoRoots: string[]): string {
+  return [...repoRoots].sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  )[0]!;
+}
+
+function draftHome(
+  draft: SnapshotDraft,
+  sessionsByKey: Map<string, Session>,
+): string {
+  const ownerSession = draft.owner
+    ? sessionsByKey.get(sessionKey(draft.owner.client, draft.owner.session_id))
+    : undefined;
+  const ownerRoot = ownerSession ? sessionRepo(ownerSession) : undefined;
+  return ownerRoot &&
+    draft.claims.some((claim) => claim.repo_root === ownerRoot)
+    ? ownerRoot
+    : sortedFirstRoot(draft.claims.map((claim) => claim.repo_root));
+}
+
+function draftWho(
+  draft: SnapshotDraft,
+  sessionsByKey: Map<string, Session>,
+): string {
+  if (draft.name !== null) return draft.name;
+  const owner = draft.owner!;
+  const session = sessionsByKey.get(sessionKey(owner.client, owner.session_id));
+  if (session?.callsign) return session.callsign;
+  return `${owner.client}/${shortSessionId(owner.session_id)}`;
 }
 
 function withQueuePositions(work: Work[]): WorkWithQueuePosition[] {
@@ -86,11 +120,12 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
       const home =
         sessionRoot && item.claims.some((claim) => claim.repo_root === sessionRoot)
           ? sessionRoot
-          : [...item.claims]
-              .map((claim) => claim.repo_root)
-              .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))[0]!;
+          : sortedFirstRoot(item.claims.map((claim) => claim.repo_root));
       return [item.id, home];
     }),
+  );
+  const draftHomeById = new Map(
+    snapshot.drafts.map((draft) => [draft.id, draftHome(draft, sessionsByKey)]),
   );
   const workBySession = new Map(
     work.flatMap((item) => {
@@ -105,6 +140,9 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
 
   snapshot.sessions.forEach((session) => roots.add(sessionRepo(session)));
   work.forEach((item) => item.claims.forEach((claim) => roots.add(claim.repo_root)));
+  snapshot.drafts.forEach((draft) =>
+    draft.claims.forEach((claim) => roots.add(claim.repo_root)),
+  );
   snapshot.findings.forEach((finding) => roots.add(finding.repo_root));
   snapshot.handoffs.forEach((handoff) => roots.add(handoff.repo_root));
   snapshot.messages.forEach((message) => {
@@ -136,6 +174,16 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
           workHome.get(item.id) === repoRoot &&
           !workBySession.has(sessionKey(item.client, item.session_id)),
       );
+      const drafts: RepoLaneDraft[] = snapshot.drafts
+        .filter((draft) => draftHomeById.get(draft.id) === repoRoot)
+        .map((draft) => ({
+          draft,
+          who: draftWho(draft, sessionsByKey),
+          scopeCount: draft.claims.reduce(
+            (total, claim) => total + claim.scope_count,
+            0,
+          ),
+        }));
       const activity = [
         ...snapshot.sessions
           .filter((session) => sessionRepo(session) === repoRoot)
@@ -143,12 +191,13 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
         ...work
           .filter((item) => item.claims.some((claim) => claim.repo_root === repoRoot))
           .map((item) =>
-            Math.max(
-              item.draft_created_at ?? Number.NEGATIVE_INFINITY,
-              item.submitted_at ?? Number.NEGATIVE_INFINITY,
-              item.updated_at,
-            ),
+            Math.max(item.submitted_at ?? Number.NEGATIVE_INFINITY, item.updated_at),
           ),
+        ...snapshot.drafts
+          .filter((draft) =>
+            draft.claims.some((claim) => claim.repo_root === repoRoot),
+          )
+          .map((draft) => draft.updated_at),
         ...snapshot.findings
           .filter((finding) => finding.repo_root === repoRoot)
           .map((finding) => finding.updated_at),
@@ -161,6 +210,7 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
         repoRoot,
         sessions,
         unmatchedWork,
+        drafts,
         handoffCount:
           snapshot.handoffs.find((handoff) => handoff.repo_root === repoRoot)
             ?.count ?? 0,

@@ -22,16 +22,16 @@ use unicode_normalization::UnicodeNormalization;
 use crate::{
     domain::{
         Identity, InventoryResult, OutsideScopeV2, ProcessProbe, ProviderReport, SessionState, SnapshotDelegateV2,
-        SnapshotHandoffV4, SnapshotScopeKindV2, SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkClaimV2,
-        SnapshotWorkV2, WorkState, sanitize,
+        SnapshotDraftClaimV2, SnapshotDraftV2, SnapshotHandoffV4, SnapshotScopeKindV2, SnapshotScopeV2,
+        SnapshotSessionV2, SnapshotV2, SnapshotWorkClaimV2, SnapshotWorkV2, WorkState, sanitize,
     },
     error::{AppError, Result},
     host::{
-        INVENTORY_CACHE_SECONDS, NativeProcessProbe, from_environment, git_blob_hashes, git_dirty_paths, git_root,
-        host_process_reference, identity_key, process_ancestors,
+        DelegateSignal, INVENTORY_CACHE_SECONDS, NativeProcessProbe, delegate_signal, from_environment,
+        git_blob_hashes, git_dirty_paths, git_root, host_process_reference, identity_key, process_ancestors,
     },
     server::{SnapshotMessageV1, SnapshotSource},
-    state::{MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow},
+    state::{DraftRow, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow},
 };
 
 #[cfg(test)]
@@ -135,6 +135,36 @@ impl Coordinator {
         Ok(self.identity(true)?.expect("required identity"))
     }
 
+    /// Resolves the caller's identity for the eight lifecycle-claim commands
+    /// (`start`, `start_bundle`, `draft`, `draft_bundle`, `promote_draft`,
+    /// `promote_bundle_draft`, `wait`, `done`) and rejects callers whose
+    /// environment looks like a delegate of that identity rather than the
+    /// session that should hold its claims (see `DelegateSignal`). Every
+    /// other `required_identity()` caller — messaging, findings, baseline,
+    /// touched — stays unguarded: delegates legitimately use those.
+    fn lifecycle_identity(&self) -> Result<Identity> {
+        let identity = self.required_identity()?;
+        self.reject_delegate(&identity)?;
+        Ok(identity)
+    }
+
+    fn reject_delegate(&self, identity: &Identity) -> Result<()> {
+        let confirmed = match delegate_signal() {
+            Some(DelegateSignal::Override { .. }) => true,
+            Some(DelegateSignal::Thread { .. }) => {
+                self.store()?.delegates()?.iter().any(|row| &row.parent == identity && row.state == "active")
+            }
+            None => false,
+        };
+        if confirmed {
+            return Err(AppError::usage(format!(
+                "lifecycle commands are not allowed from a delegate of {}; the parent's claim covers this work",
+                identity_key(identity)
+            )));
+        }
+        Ok(())
+    }
+
     pub(crate) fn snapshot(&self, machine_wide: bool, cwd: &Path, allow_cached: bool) -> Result<SnapshotV2> {
         let mut store = self.store()?;
         let inventory = self.refresh_inventory(&mut store, allow_cached)?;
@@ -143,6 +173,7 @@ impl Coordinator {
         let root = git_root(&cwd);
         let sessions = store.sessions()?;
         let work = store.works()?;
+        let drafts = store.drafts()?;
         let roots = sessions
             .iter()
             .filter_map(|row| row.repo_root.clone())
@@ -169,6 +200,7 @@ impl Coordinator {
             root.as_deref(),
             sessions,
             work,
+            drafts,
             self.clock.wall(),
         )
     }
@@ -341,6 +373,7 @@ fn build_snapshot(
     root: Option<&Path>,
     sessions: Vec<SessionRow>,
     work: Vec<WorkRow>,
+    drafts: Vec<DraftRow>,
     current: f64,
 ) -> Result<SnapshotV2> {
     let handoff_roots = if machine {
@@ -398,7 +431,6 @@ fn build_snapshot(
         .into_iter()
         .filter(|work| machine || root_text.as_ref().is_some_and(|root| work.claim(root).is_some()))
         .map(|work| {
-            let draft = work.state == WorkState::Draft;
             let scope_count = work.claims.iter().map(|claim| claim.scopes.len()).sum::<usize>();
             let mut claims = work
                 .claims
@@ -407,7 +439,7 @@ fn build_snapshot(
                     repo_root: claim.repo_root,
                     blocked_reason: claim.blocked_reason,
                     scope_count: claim.scopes.len(),
-                    scopes: (!draft).then_some(claim.scopes),
+                    scopes: Some(claim.scopes),
                 })
                 .collect::<Vec<_>>();
             claims.sort_by(|left, right| left.repo_root.cmp(&right.repo_root));
@@ -419,10 +451,26 @@ fn build_snapshot(
                 blocked_reason: work.blocked_reason,
                 scope_count,
                 claims,
-                draft_created_at: work.draft_created_at,
                 submitted_at: work.submitted_at,
                 updated_at: work.updated_at,
             }
+        })
+        .collect();
+    let scoped_drafts = drafts
+        .into_iter()
+        .filter(|draft| machine || root_text.as_ref().is_some_and(|root| draft.claim(root).is_some()))
+        .map(|draft| SnapshotDraftV2 {
+            id: draft.id.to_string(),
+            name: draft.name,
+            owner: draft.owner,
+            label: draft.label,
+            created_at: draft.created_at,
+            updated_at: draft.updated_at,
+            claims: draft
+                .claims
+                .into_iter()
+                .map(|claim| SnapshotDraftClaimV2 { repo_root: claim.repo_root, scope_count: claim.scopes.len() })
+                .collect(),
         })
         .collect();
     let findings = if machine {
@@ -446,7 +494,7 @@ fn build_snapshot(
     let outside_directories = outside.iter().map(|row| row.cwd.clone()).collect::<HashSet<_>>().len();
     let handoffs = snapshot_handoffs(handoff_roots);
     Ok(SnapshotV2 {
-        schema_version: 7,
+        schema_version: 8,
         complete: inventory.complete,
         scope: if machine {
             SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None }
@@ -460,6 +508,7 @@ fn build_snapshot(
         providers: inventory.providers,
         sessions: scoped,
         work: scoped_work,
+        drafts: scoped_drafts,
         findings,
         handoffs,
         delegates,

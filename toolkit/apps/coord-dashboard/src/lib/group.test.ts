@@ -41,13 +41,23 @@ describe("groupSnapshotByRepo", () => {
     ]);
 
     expect(cards.map((work) => work.id).sort((left, right) => left - right)).toEqual([
-      640, 644, 645, 646, 647,
+      644, 645, 646, 647,
     ]);
-    expect(
-      lanes[1]?.sessions.some(
-        ({ work }) => work?.label === "monorepo-dashboard-orchestrator",
-      ),
-    ).toBe(false);
+  });
+
+  test("homes drafts once, preferring the owning session's repository", () => {
+    const lanes = groupSnapshotByRepo(sampleSnapshot);
+    const toolkitLane = lanes.find((lane) => lane.repoRoot === toolkitRoot);
+    const skillsLane = lanes.find((lane) => lane.repoRoot === skillsRoot);
+
+    expect(toolkitLane?.drafts.map((laneDraft) => laneDraft.draft.id)).toEqual(
+      ["draft-4a91"],
+    );
+    expect(toolkitLane?.drafts[0]?.who).toBe("🐢 Queue Kid");
+    expect(skillsLane?.drafts.map((laneDraft) => laneDraft.draft.id)).toEqual(
+      ["draft-b7f2"],
+    );
+    expect(skillsLane?.drafts[0]?.who).toBe("monorepo-dashboard-orchestrator");
   });
 
   test("keeps delegates only beside their live parent session", () => {
@@ -68,7 +78,7 @@ describe("groupSnapshotByRepo", () => {
       ...sampleSnapshot,
       sessions: sampleSnapshot.sessions.filter(
         (session) =>
-          session.session_id !== "7ca88f40-3aed-4f2d-be71-a80e544dd332",
+          session.session_id !== "019fcbf1-1a53-7e20-a682-520d66c5b87f",
       ),
     };
     const lanes = groupSnapshotByRepo(orphanedSnapshot);
@@ -77,9 +87,7 @@ describe("groupSnapshotByRepo", () => {
       lanes.find((lane) => lane.repoRoot === skillsRoot)?.unmatchedWork.map(
         (work) => work.label,
       ),
-    ).toContain(
-      "monorepo-dashboard-orchestrator",
-    );
+    ).toContain("docs-followup");
     expect(
       lanes.find((lane) => lane.repoRoot === toolkitRoot)?.unmatchedWork,
     ).toEqual([]);
@@ -90,6 +98,7 @@ describe("groupSnapshotByRepo", () => {
       ...sampleSnapshot,
       sessions: [],
       work: [],
+      drafts: [],
       findings: [],
       delegates: [],
       messages: [],

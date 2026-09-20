@@ -345,8 +345,8 @@ mod tests {
         store
             .connection
             .execute(
-                "INSERT INTO work_items(client, session_id, label, state, draft_created_at, updated_at, revision)
-             VALUES ('codex', 'normal', 'normal work', 'draft', 1, 1, 1)",
+                "INSERT INTO work_items(client, session_id, label, state, submitted_at, updated_at, revision)
+             VALUES ('codex', 'normal', 'normal work', 'active', 1, 1, 1)",
                 [],
             )
             .unwrap();

@@ -3,7 +3,7 @@ import type { Snapshot } from "@/lib/types";
 export const SAMPLE_NOW = 1_785_833_730;
 
 export const sampleSnapshot = {
-  schema_version: 7,
+  schema_version: 8,
   complete: false,
   scope: { kind: "machine" },
   self: {
@@ -108,20 +108,6 @@ export const sampleSnapshot = {
   ],
   work: [
     {
-      id: 640,
-      client: "claude",
-      session_id: "7ca88f40-3aed-4f2d-be71-a80e544dd332",
-      label: "monorepo-dashboard-orchestrator",
-      state: "draft",
-      scope_count: 3,
-      draft_created_at: 1_785_833_260,
-      updated_at: 1_785_833_700,
-      claims: [
-        { repo_root: "/Users/prb/projects/agent-toolkit", scope_count: 2 },
-        { repo_root: "/Users/prb/projects/agent-skills", scope_count: 1 },
-      ],
-    },
-    {
       id: 646,
       client: "codex",
       session_id: "019fcbf9-d75c-7ba3-a481-18068ea954eb",
@@ -197,6 +183,34 @@ export const sampleSnapshot = {
           scope_count: 1,
           scopes: [{ path: "skills/evm-atlas", kind: "recursive" }],
         },
+      ],
+    },
+  ],
+  drafts: [
+    {
+      id: "draft-b7f2",
+      name: "monorepo-dashboard-orchestrator",
+      owner: null,
+      label: "Coordinate dashboard schema rollout across repos",
+      created_at: 1_785_833_260,
+      updated_at: 1_785_833_700,
+      claims: [
+        { repo_root: "/Users/prb/projects/agent-toolkit", scope_count: 2 },
+        { repo_root: "/Users/prb/projects/agent-skills", scope_count: 1 },
+      ],
+    },
+    {
+      id: "draft-4a91",
+      name: null,
+      owner: {
+        client: "codex",
+        session_id: "019fcbf9-2db4-7be1-90ed-7ba4a7527a84",
+      },
+      label: "Follow-up serve-api coverage scopes",
+      created_at: 1_785_833_500,
+      updated_at: 1_785_833_690,
+      claims: [
+        { repo_root: "/Users/prb/projects/agent-toolkit", scope_count: 1 },
       ],
     },
   ],

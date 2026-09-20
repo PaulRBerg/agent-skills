@@ -174,7 +174,7 @@ fn identity_commands_and_state_are_fully_isolated() {
         matches!(code, 0 | 2),
         "status is complete under a detectable Codex ancestor and partial when the test host is unknown"
     );
-    assert_eq!(status["schema_version"], 7);
+    assert_eq!(status["schema_version"], 8);
     assert_eq!(status["scope"]["kind"], "machine");
     assert_eq!(status["sessions"][0]["callsign"], "🦀 Ferris Test");
     assert_eq!(status["sessions"][0]["coordination_waived"], false);
@@ -322,7 +322,7 @@ fn baseline_and_touched_outputs_preserve_sorted_machine_contracts() {
 }
 
 #[test]
-fn bundle_cli_lifecycle_is_atomic_and_uses_v7_claims() {
+fn bundle_cli_lifecycle_is_atomic_and_uses_v8_claims() {
     let fixture = Fixture::new();
     let second = fixture._temporary.path().join("z-repo");
     fs::create_dir_all(second.join("src")).unwrap();
@@ -347,7 +347,7 @@ fn bundle_cli_lifecycle_is_atomic_and_uses_v7_claims() {
     let repo_status = fixture.output_as_in("multi-host", &fixture.root, &["status", "--json"]);
     assert!(matches!(repo_status.status.code(), Some(0 | 2)));
     let repo_status: Value = serde_json::from_slice(&repo_status.stdout).unwrap();
-    assert_eq!(repo_status["schema_version"], 7);
+    assert_eq!(repo_status["schema_version"], 8);
     assert!(repo_status["sessions"].as_array().unwrap().iter().any(|row| row["session_id"] == "multi-host"));
     let repo_work = repo_status["work"].as_array().unwrap();
     assert_eq!(repo_work.len(), 1);
@@ -634,10 +634,14 @@ fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
     assert_eq!(String::from_utf8_lossy(&created.stdout), "DRAFT\t2\n");
 
     let (_, snapshot) = fixture.json_status();
-    let draft = snapshot["work"].as_array().unwrap().iter().find(|work| work["session_id"] == "draft-host").unwrap();
-    assert_eq!(draft["state"], "draft");
-    assert_eq!(draft["scope_count"], 2);
-    assert!(draft.get("scopes").is_none());
+    assert!(snapshot["work"].as_array().unwrap().is_empty());
+    let draft = snapshot["drafts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|draft| draft["owner"]["session_id"] == "draft-host")
+        .unwrap();
+    assert!(draft["name"].is_null());
     assert_eq!(draft["claims"][0]["scope_count"], 2);
     assert!(draft["claims"][0].get("scopes").is_none());
     assert!(!serde_json::to_string(draft).unwrap().contains("private.rs"));
@@ -668,6 +672,40 @@ fn draft_create_replace_promote_and_done_preserve_scope_privacy() {
 }
 
 #[test]
+fn named_draft_is_portable_across_sessions_and_shows_in_status_without_literal_paths() {
+    let fixture = Fixture::new();
+    let mut planner = spawn_synthetic_host(&fixture, "planner");
+    let mut implementer = spawn_synthetic_host(&fixture, "implementer");
+    assert_strong_session(&fixture, "planner");
+    assert_strong_session(&fixture, "implementer");
+
+    let created = fixture.output_as("planner", &["draft", "--name", "plan1", "shared plan", "src/secret.rs"]);
+    created.assert().success();
+    assert_eq!(String::from_utf8_lossy(&created.stdout), "DRAFT\t1\n");
+
+    let (_, snapshot) = fixture.json_status();
+    let raw = serde_json::to_string(&snapshot["drafts"]).unwrap();
+    assert!(!raw.contains("secret.rs"));
+    let draft = snapshot["drafts"].as_array().unwrap().iter().find(|draft| draft["name"] == "plan1").unwrap();
+    assert!(draft["owner"].is_null());
+    assert_eq!(draft["claims"][0]["scope_count"], 1);
+
+    let promoted = fixture.output_as("implementer", &["start", "--draft", "plan1"]);
+    promoted.assert().success();
+    assert_eq!(String::from_utf8_lossy(&promoted.stdout), "READY\tsrc/secret.rs\n");
+
+    let (_, snapshot) = fixture.json_status();
+    assert!(snapshot["drafts"].as_array().unwrap().iter().all(|draft| draft["name"] != "plan1"));
+    let work = work_item(&fixture, "implementer").unwrap();
+    assert_eq!(work["state"], "active");
+
+    let _ = planner.kill();
+    let _ = planner.wait();
+    let _ = implementer.kill();
+    let _ = implementer.wait();
+}
+
+#[test]
 fn draft_and_direct_start_require_scopes_and_draft_promotion_is_exclusive() {
     let fixture = Fixture::new();
     for arguments in [["draft", "empty"].as_slice(), ["start", "empty"].as_slice()] {
@@ -676,9 +714,13 @@ fn draft_and_direct_start_require_scopes_and_draft_promotion_is_exclusive() {
         assert_eq!(String::from_utf8_lossy(&output.stderr), "error: at least one scope is required\n");
     }
 
-    let conflict = fixture.output(&["start", "--draft", "label"]);
+    let conflict = fixture.output(&["start", "--draft", "name", "--recursive", "src"]);
     conflict.assert().failure().code(2);
     assert!(String::from_utf8_lossy(&conflict.stderr).contains("--draft"));
+
+    let missing = fixture.output(&["start", "--draft", "missing"]);
+    missing.assert().failure().code(1);
+    assert_eq!(String::from_utf8_lossy(&missing.stderr), "error: no draft named missing\n");
 }
 
 #[test]
@@ -743,7 +785,7 @@ fn promotion_revalidates_paths_and_repository_without_consuming_the_draft() {
     let invalid = fixture.output_as("revalidate-host", &["start", "--draft"]);
     invalid.assert().failure().code(64);
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("recursive scope is not a directory: planned"));
-    assert_eq!(work_state(&fixture, "revalidate-host"), Some("draft".to_owned()));
+    assert!(draft_item(&fixture, "revalidate-host").is_some());
 
     fs::remove_file(fixture.root.join("planned")).unwrap();
     let other = fixture._temporary.path().join("other-repo");
@@ -752,7 +794,7 @@ fn promotion_revalidates_paths_and_repository_without_consuming_the_draft() {
     let mismatch = fixture.output_as_in("revalidate-host", &other, &["start", "--draft"]);
     mismatch.assert().failure().code(1);
     assert!(String::from_utf8_lossy(&mismatch.stderr).contains("draft belongs to"));
-    assert_eq!(work_state(&fixture, "revalidate-host"), Some("draft".to_owned()));
+    assert!(draft_item(&fixture, "revalidate-host").is_some());
 
     let _ = host.kill();
     let _ = host.wait();
@@ -940,7 +982,6 @@ fn fifo_age_begins_at_draft_promotion_not_draft_creation() {
         direct_work["submitted_at"].as_f64().unwrap() < drafted_work["submitted_at"].as_f64().unwrap(),
         "draft creation must not establish FIFO age"
     );
-    assert!(drafted_work["draft_created_at"].as_f64().unwrap() < drafted_work["submitted_at"].as_f64().unwrap());
 
     fixture.output_as("fifo-holder", &["done"]);
     assert_eq!(
@@ -994,7 +1035,7 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     check.assert().failure().code(2);
     let reports: Vec<Value> = serde_json::from_slice(&check.stdout).expect("check JSON");
     let state = reports.iter().find(|report| report["component"] == "state").expect("state report");
-    assert_eq!(state["schema_version"], 16);
+    assert_eq!(state["schema_version"], 17);
     assert_eq!(state["path"], fixture.state.join("state.db").to_string_lossy().as_ref());
     let codex_hooks = reports.iter().find(|report| report["component"] == "hooks:codex").expect("hook report");
     assert!(codex_hooks["error"].is_null());
@@ -1294,4 +1335,15 @@ fn work_item(fixture: &Fixture, session_id: &str) -> Option<Value> {
 
 fn work_state(fixture: &Fixture, session_id: &str) -> Option<String> {
     work_item(fixture, session_id)?.get("state")?.as_str().map(str::to_owned)
+}
+
+fn draft_item(fixture: &Fixture, session_id: &str) -> Option<Value> {
+    fixture
+        .json_status()
+        .1
+        .get("drafts")?
+        .as_array()?
+        .iter()
+        .find(|draft| draft["owner"]["session_id"] == session_id)
+        .cloned()
 }

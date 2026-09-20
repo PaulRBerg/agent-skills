@@ -88,6 +88,7 @@ async fn execute(cli: Cli) -> Result<u8> {
         Command::Draft(arguments) => {
             validate_scopes(&arguments.paths, &arguments.recursive_paths, "draft", &arguments.label)?;
             let outcome = Coordinator::open_default()?.draft(
+                arguments.name.as_deref(),
                 &arguments.label,
                 &arguments.paths,
                 &arguments.recursive_paths,
@@ -98,8 +99,9 @@ async fn execute(cli: Cli) -> Result<u8> {
         }
         Command::Start(arguments) => {
             let coordinator = Coordinator::open_default()?;
-            let outcome = if arguments.draft {
-                coordinator.promote_draft(&std::env::current_dir()?)?
+            let outcome = if let Some(draft) = &arguments.draft {
+                let name = (!draft.is_empty()).then_some(draft.as_str());
+                coordinator.promote_draft(name, &std::env::current_dir()?)?
             } else {
                 validate_scopes(
                     &arguments.paths,
@@ -127,11 +129,19 @@ async fn execute(cli: Cli) -> Result<u8> {
         Command::Bundle(arguments) => {
             let coordinator = Coordinator::open_default()?;
             let (outcome, started) = match arguments.command {
-                BundleCommand::Draft(arguments) => {
-                    (coordinator.draft_bundle(&arguments.label, &arguments.paths, &arguments.recursive_paths)?, false)
-                }
-                BundleCommand::Start(arguments) if arguments.draft => {
-                    (coordinator.promote_bundle_draft(&std::env::current_dir()?)?, true)
+                BundleCommand::Draft(arguments) => (
+                    coordinator.draft_bundle(
+                        arguments.name.as_deref(),
+                        &arguments.label,
+                        &arguments.paths,
+                        &arguments.recursive_paths,
+                    )?,
+                    false,
+                ),
+                BundleCommand::Start(arguments) if arguments.draft.is_some() => {
+                    let draft = arguments.draft.as_deref().expect("checked above");
+                    let name = (!draft.is_empty()).then_some(draft);
+                    (coordinator.promote_bundle_draft(name, &std::env::current_dir()?)?, true)
                 }
                 BundleCommand::Start(arguments) => (
                     coordinator.start_bundle(

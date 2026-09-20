@@ -86,8 +86,8 @@ function sessionState(value: unknown, path: string): SessionState {
 }
 
 function workState(value: unknown, path: string): WorkState {
-  if (value !== "active" && value !== "draft" && value !== "queued") {
-    throw new Error(`${path} must be active, draft, or queued`);
+  if (value !== "active" && value !== "queued") {
+    throw new Error(`${path} must be active or queued`);
   }
   return value;
 }
@@ -159,22 +159,14 @@ function validateWork(value: unknown, path: string): void {
   }
   const scopeCount = unsignedInteger(row.scope_count, `${path}.scope_count`);
   if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
-  if (state === "draft") {
-    number(row.draft_created_at, `${path}.draft_created_at`);
-    if (row.submitted_at !== undefined)
-      throw new Error(`${path}.submitted_at must be omitted for draft work`);
-  } else {
-    if (row.draft_created_at !== undefined)
-      number(row.draft_created_at, `${path}.draft_created_at`);
-    number(row.submitted_at, `${path}.submitted_at`);
-  }
+  number(row.submitted_at, `${path}.submitted_at`);
   if (row.scopes !== undefined)
     throw new Error(`${path}.scopes belongs to a work claim`);
   const claims = array(row.claims, `${path}.claims`);
   if (claims.length < 1) throw new Error(`${path}.claims must not be empty`);
   const claimScopeCount = claims.reduce<number>(
     (total, value, index) =>
-      total + validateWorkClaim(value, `${path}.claims[${index}]`, state),
+      total + validateWorkClaim(value, `${path}.claims[${index}]`),
     0,
   );
   if (scopeCount !== claimScopeCount) {
@@ -183,22 +175,13 @@ function validateWork(value: unknown, path: string): void {
   number(row.updated_at, `${path}.updated_at`);
 }
 
-function validateWorkClaim(
-  value: unknown,
-  path: string,
-  state: WorkState,
-): number {
+function validateWorkClaim(value: unknown, path: string): number {
   const claim = record(value, path);
   string(claim.repo_root, `${path}.repo_root`);
   if (claim.blocked_reason !== undefined)
     nullableString(claim.blocked_reason, `${path}.blocked_reason`);
   const scopeCount = unsignedInteger(claim.scope_count, `${path}.scope_count`);
   if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
-  if (state === "draft") {
-    if (claim.scopes !== undefined)
-      throw new Error(`${path}.scopes must be omitted for draft work`);
-    return scopeCount;
-  }
   const scopes = array(claim.scopes, `${path}.scopes`);
   if (scopes.length < 1) throw new Error(`${path}.scopes must not be empty`);
   scopes.forEach((item, index) => {
@@ -210,6 +193,39 @@ function validateWorkClaim(
     throw new Error(`${path}.scope_count must match scopes length`);
   }
   return scopeCount;
+}
+
+function validateDraftClaim(value: unknown, path: string): void {
+  const claim = record(value, path);
+  string(claim.repo_root, `${path}.repo_root`);
+  const scopeCount = unsignedInteger(claim.scope_count, `${path}.scope_count`);
+  if (scopeCount < 1) throw new Error(`${path}.scope_count must be positive`);
+  if (claim.scopes !== undefined)
+    throw new Error(`${path}.scopes must be omitted for a draft claim`);
+}
+
+function validateDraft(value: unknown, path: string): void {
+  const row = record(value, path);
+  string(row.id, `${path}.id`);
+  const name = nullableString(row.name, `${path}.name`);
+  let hasOwner = false;
+  if (row.owner !== null) {
+    const owner = record(row.owner, `${path}.owner`);
+    client(owner.client, `${path}.owner.client`);
+    string(owner.session_id, `${path}.owner.session_id`);
+    hasOwner = true;
+  }
+  if ((name !== null) === hasOwner) {
+    throw new Error(`${path} must have exactly one of name or owner`);
+  }
+  string(row.label, `${path}.label`);
+  number(row.created_at, `${path}.created_at`);
+  number(row.updated_at, `${path}.updated_at`);
+  const claims = array(row.claims, `${path}.claims`);
+  if (claims.length < 1) throw new Error(`${path}.claims must not be empty`);
+  claims.forEach((claim, index) =>
+    validateDraftClaim(claim, `${path}.claims[${index}]`),
+  );
 }
 
 function validateProvider(value: unknown, path: string): void {
@@ -275,8 +291,8 @@ function validateMessage(value: unknown, path: string): void {
 
 export function parseSnapshot(value: unknown): Snapshot {
   const snapshot = record(value, "snapshot");
-  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 7) {
-    throw new Error("snapshot.schema_version must be 7");
+  if (integer(snapshot.schema_version, "snapshot.schema_version") !== 8) {
+    throw new Error("snapshot.schema_version must be 8");
   }
   boolean(snapshot.complete, "snapshot.complete");
 
@@ -305,6 +321,9 @@ export function parseSnapshot(value: unknown): Snapshot {
   );
   array(snapshot.work, "snapshot.work").forEach((row, index) =>
     validateWork(row, `snapshot.work[${index}]`),
+  );
+  array(snapshot.drafts, "snapshot.drafts").forEach((row, index) =>
+    validateDraft(row, `snapshot.drafts[${index}]`),
   );
   array(snapshot.findings, "snapshot.findings").forEach((row, index) =>
     validateFinding(row, `snapshot.findings[${index}]`),

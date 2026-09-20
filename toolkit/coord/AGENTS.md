@@ -31,13 +31,14 @@ ladders, old-format importers, deprecated CLI aliases, dual reads or writes, ret
 hook recognition by default. Rejecting an incompatible persisted version with an actionable error is required safety
 behavior, not backward compatibility.
 
-Schema v16 is the Rust implementation's clean break. It never migrates or imports an older ledger; reject v15 and every
-other nonzero version with actionable replacement guidance. Work is one logical item per `(client, session_id)` with a
-sorted vector of repository claims. Ordinary `draft` and `start` stay current-root compatible and must not implicitly
-append or move a claim. Cross-repository work uses only the explicit atomic `bundle draft` and `bundle start` commands
-with absolute paths and at least two canonical physical Git roots; direct submission, draft promotion, and active
-updates are all-or-none. Queued bundles hold no partial active claims, and one parent FIFO age governs all claims to
-retain repository-local fairness and avoid opposite-order deadlocks.
+Schema v17 is the Rust implementation's clean break. It never migrates or imports an older ledger; reject v16 and every
+other nonzero version with actionable replacement guidance. `drafts`, `draft_claims`, and `draft_scopes` hold both
+session-owned and portable named drafts; `work_items` no longer carries a draft state. Work is one logical item per
+`(client, session_id)` with a sorted vector of repository claims. Ordinary `draft` and `start` stay current-root
+compatible and must not implicitly append or move a claim. Cross-repository work uses only the explicit atomic `bundle
+draft` and `bundle start` commands with absolute paths and at least two canonical physical Git roots; direct submission,
+draft promotion, and active updates are all-or-none. Queued bundles hold no partial active claims, and one parent FIFO
+age governs all claims to retain repository-local fairness and avoid opposite-order deadlocks.
 Session liveness is based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced
 process is removed without an age grace period, while unknown liveness fails closed and never deletes the record.
 Codex identity uses `CODEX_SESSION_ID` with legacy `CODEX_THREAD_ID` fallback. Child and persistent-fork transcript
@@ -65,12 +66,35 @@ repository-relative `path<TAB>oid` record per line, or empty output when no base
 `ai-coord touched` is a best-effort cross-check of normalized repository-relative paths observed in this session's
 file-mutating post-tool payloads. Its stable output is one path per line, with a leading `!TRUNCATED` record when its
 1,000-path cap dropped older records; an empty complete set exits successfully with no output. It stores no payload
-content. Status schema v7 exposes required session `coordination_waived` booleans and complete sorted work `claims`
-vectors; dashboard and terminal status home a logical bundle once, with nested claim blockers and queue positions.
-Hooks derive prompt/nudge/waker work from the payload's Git-root claim; authoritative end cleanup releases the whole
-logical item. Residual ownership recorded by `done` is reclaimable only while the owner's session row exists;
-`reconcile_ended` releases attribution whose owner is gone so orphaned dirt degrades to the stale-dirt advisory instead
-of a permanent `residual` blocker. Guidance stays here while README remains human-facing tool documentation.
+content. Status schema v8 exposes required session `coordination_waived` booleans and complete sorted work `claims`
+vectors, plus a top-level `drafts` array that work never nests; dashboard and terminal status home a logical bundle
+once, with nested claim blockers and queue positions. Hooks derive prompt/nudge/waker work from the payload's Git-root
+claim; authoritative end cleanup releases the whole logical item. Residual ownership recorded by `done` is reclaimable
+only while the owner's session row exists; `reconcile_ended` releases attribution whose owner is gone so orphaned dirt
+degrades to the stale-dirt advisory instead of a permanent `residual` blocker. Guidance stays here while README remains
+human-facing tool documentation.
+
+An idle (≥`IDLE_YIELD_SECONDS`) holder whose overlapping scopes carry no touched-since-submission or Git-dirty evidence
+(soft, judged per whole scope) is narrowed or released to grant a blocked `start`/`wait` unless an earlier-queued waiter
+overlaps the same paths, and never for an active-work expansion; treat the
+`Yielded untouched scopes …` message as authoritative and re-run `start` if writes continue past a narrowed scope. A
+still-queued holder message's trailing ` untouched: …` segment names only that holder's own soft overlap and does not by
+itself unblock the caller.
+
+Post-tool hooks lead `additionalContext` with an out-of-scope write warning (`wrote <path> owned by <holder>` or
+`wrote <path> outside your claim; run ai-coord start`) for Write/Edit/NotebookEdit/`apply_patch` writes; treat it as a
+signal to stop and re-run `ai-coord start`, not as coordination state itself — it covers only visible file-mutating
+tools, not Bash.
+
+Named drafts (`draft --name NAME` / `bundle draft --name NAME`, submitted with `start --draft NAME` or
+`bundle start --draft NAME`) have no owning session, are never counted as active work by any session, and outlive the
+session that created them; they expire after `DRAFT_TTL` (seven days) if never promoted. Bare `--draft` still means this
+session's own unnamed draft.
+
+`draft`, `start`, `bundle draft`, `bundle start`, `wait`, and `done` exit 64 when the caller looks like a delegate of
+the owning session rather than that session itself; a subagent must never invoke these six commands and should expect
+the delegate-lifecycle error if it does. `status`, `touched`, `inbox`, `msg`, `finding`, `baseline`, `trailer`, and
+`name` remain delegate-safe.
 
 ## Upstream documentation
 

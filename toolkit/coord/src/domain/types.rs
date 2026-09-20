@@ -40,7 +40,6 @@ pub(crate) enum SessionState {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorkState {
     Active,
-    Draft,
     Queued,
 }
 
@@ -238,10 +237,25 @@ pub(crate) struct SnapshotWorkV2 {
     pub(crate) scope_count: usize,
     pub(crate) claims: Vec<SnapshotWorkClaimV2>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) draft_created_at: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) submitted_at: Option<f64>,
     pub(crate) updated_at: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct SnapshotDraftClaimV2 {
+    pub(crate) repo_root: String,
+    pub(crate) scope_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct SnapshotDraftV2 {
+    pub(crate) id: String,
+    pub(crate) name: Option<String>,
+    pub(crate) owner: Option<Identity>,
+    pub(crate) label: String,
+    pub(crate) created_at: f64,
+    pub(crate) updated_at: f64,
+    pub(crate) claims: Vec<SnapshotDraftClaimV2>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -276,6 +290,7 @@ pub(crate) struct SnapshotV2 {
     pub(crate) providers: Vec<ProviderReport>,
     pub(crate) sessions: Vec<SnapshotSessionV2>,
     pub(crate) work: Vec<SnapshotWorkV2>,
+    pub(crate) drafts: Vec<SnapshotDraftV2>,
     pub(crate) findings: Vec<FindingSummary>,
     pub(crate) handoffs: Vec<SnapshotHandoffV4>,
     pub(crate) delegates: Vec<SnapshotDelegateV2>,
