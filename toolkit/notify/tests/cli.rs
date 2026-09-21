@@ -130,6 +130,10 @@ fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_usage() {
     environment.run(&["codex", payload], "").success();
     environment.run(&["codex", "--stdin"], payload).success();
 
+    let no_reply = r#"{"type":"agent-turn-complete","input-messages":["hello"],"last-assistant-message":null}"#;
+    environment.run(&["codex", no_reply], "").success();
+    environment.run(&["codex", "--stdin"], no_reply).success();
+
     environment.run(&["codex", "{"], "").code(2).stderr(predicate::str::contains("Failed to parse JSON"));
     environment
         .run(&["codex", "{}"], "")

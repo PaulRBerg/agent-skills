@@ -353,7 +353,7 @@ fn validate_codex_input_messages(messages: Option<&Value>) -> Result<()> {
 
 fn validate_codex_message_text(message: Option<&Value>, field: &str) -> Result<()> {
     match message {
-        None => Ok(()),
+        None | Some(Value::Null) => Ok(()),
         Some(message) if is_codex_message_text(message) => Ok(()),
         Some(_) => Err(AppError::usage(format!("Codex {field} must be a string, array, or object"))),
     }
