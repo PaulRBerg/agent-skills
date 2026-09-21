@@ -131,6 +131,18 @@ fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_usage() {
     environment.run(&["codex", "--stdin"], payload).success();
 
     environment.run(&["codex", "{"], "").code(2).stderr(predicate::str::contains("Failed to parse JSON"));
+    environment
+        .run(&["codex", "{}"], "")
+        .code(2)
+        .stderr(predicate::str::contains("Codex payload must include type \"agent-turn-complete\""));
+    environment
+        .run(&["codex", r#"{"type":"agent-turn-complete","input-messages":42}"#], "")
+        .code(2)
+        .stderr(predicate::str::contains("Codex input-messages must be a string or an array of strings or objects"));
+    environment
+        .run(&["codex", r#"{"type":"agent-turn-complete","last-assistant-message":42}"#], "")
+        .code(2)
+        .stderr(predicate::str::contains("Codex last-assistant-message must be a string, array, or object"));
 }
 
 #[test]

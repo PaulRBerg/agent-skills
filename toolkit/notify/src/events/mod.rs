@@ -213,13 +213,19 @@ pub fn handle_ask_user_question(
 pub fn handle_codex_notify(payload: &Value, config: &AppConfig, notifier: &mut impl NotificationSink) -> Result<()> {
     validate_payload(payload)?;
     let object = object(payload)?;
-    if let Some(event) = first_value(object, &["type", "event"]).and_then(Value::as_str) &&
-        !event.is_empty() &&
-        event != CODEX_EVENT_TYPE
-    {
+    let event = first_value(object, &["type", "event"])
+        .and_then(Value::as_str)
+        .filter(|event| !event.is_empty())
+        .ok_or_else(|| AppError::usage("Codex payload must include type \"agent-turn-complete\""))?;
+    if event != CODEX_EVENT_TYPE {
         return Ok(());
     }
-    let prompt = extract_last_user_message(first_value(object, &["input-messages", "input_messages", "inputMessages"]));
+    let input_messages = first_value(object, &["input-messages", "input_messages", "inputMessages"]);
+    validate_codex_input_messages(input_messages)?;
+    let last_assistant_message =
+        first_value(object, &["last-assistant-message", "last_assistant_message", "lastAssistantMessage"]);
+    validate_codex_message_text(last_assistant_message, "last-assistant-message")?;
+    let prompt = extract_last_user_message(input_messages);
     if should_send_codex_notification(&prompt, config) {
         let cwd = string(object, "cwd");
         let project = if cwd.is_empty() {
@@ -229,10 +235,7 @@ pub fn handle_codex_notify(payload: &Value, config: &AppConfig, notifier: &mut i
         } else {
             project_name(cwd)
         };
-        let result = extract_message_text(first_value(
-            object,
-            &["last-assistant-message", "last_assistant_message", "lastAssistantMessage"],
-        ));
+        let result = extract_message_text(last_assistant_message);
         let notification = completion_notification(Client::Codex, &project, &prompt, &result, None);
         let _ = notifier.deliver(&notification);
     }
@@ -337,6 +340,33 @@ pub fn extract_message_text(message: Option<&Value>) -> String {
             .find_map(|key| object.get(key))
             .map_or_else(String::new, |value| extract_message_text(Some(value))),
         _ => String::new(),
+    }
+}
+
+fn validate_codex_input_messages(messages: Option<&Value>) -> Result<()> {
+    match messages {
+        None => Ok(()),
+        Some(messages) if !matches!(messages, Value::Object(_)) && is_codex_message_text(messages) => Ok(()),
+        Some(_) => Err(AppError::usage("Codex input-messages must be a string or an array of strings or objects")),
+    }
+}
+
+fn validate_codex_message_text(message: Option<&Value>, field: &str) -> Result<()> {
+    match message {
+        None => Ok(()),
+        Some(message) if is_codex_message_text(message) => Ok(()),
+        Some(_) => Err(AppError::usage(format!("Codex {field} must be a string, array, or object"))),
+    }
+}
+
+fn is_codex_message_text(message: &Value) -> bool {
+    match message {
+        Value::String(_) => true,
+        Value::Array(items) => items.iter().all(is_codex_message_text),
+        Value::Object(object) => {
+            ["content", "text", "message"].into_iter().find_map(|key| object.get(key)).is_none_or(is_codex_message_text)
+        }
+        _ => false,
     }
 }
 
