@@ -12,6 +12,8 @@ use crate::{
 
 use super::*;
 
+const CONFIG_PATH: &str = ".agents/coord.toml";
+
 #[derive(Default)]
 struct FakeLauncher {
     specs: Mutex<Vec<DetachedProcessSpec>>,
@@ -362,6 +364,44 @@ fn commit_trailer_is_reconciled_before_retrying_runner() {
     assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("reconciled"));
     let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
     assert_eq!(store.finding(&root, &finding_id, 101.0).unwrap().unwrap().state, FindingState::Fixed);
+}
+
+#[test]
+fn commit_trailer_is_not_reconciled_after_branch_changes() {
+    let repo = repository(true);
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    let finding_id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+    let launcher = FakeLauncher::default();
+    let TriageSchedule::Launched { run_id, .. } =
+        coordinator.schedule_findings_triage_for(repo.path(), &origin, &launcher).unwrap()
+    else {
+        panic!()
+    };
+    let run_dir = repo.path().join("state/triage-runs").join(&run_id);
+    let mut metadata = read_metadata(&run_dir).unwrap();
+    metadata.authorized_paths = vec!["README.md".to_owned()];
+    write_metadata(&run_dir, &metadata).unwrap();
+    fs::write(repo.path().join("README.md"), "current prose\n").unwrap();
+    assert!(Command::new("git").args(["add", "README.md"]).current_dir(repo.path()).status().unwrap().success());
+    assert!(
+        Command::new("git")
+            .args(["-c", "user.name=test", "-c", "user.email=test@invalid", "commit", "-qm"])
+            .arg(format!("docs: refresh prose\n\nFinding-ID: {finding_id}"))
+            .current_dir(repo.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        Command::new("git").args(["checkout", "-qb", "topic"]).current_dir(repo.path()).status().unwrap().success()
+    );
+
+    coordinator.run_findings_triage_with(&run_id, repo.path(), &FailingRunner).unwrap();
+
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("branch-changed"));
+    let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
+    assert_eq!(store.finding(&root, &finding_id, 101.0).unwrap().unwrap().state, FindingState::Pending);
 }
 
 #[test]

@@ -31,8 +31,6 @@ use super::{
     triage_schema::result_schema,
 };
 
-#[cfg(test)]
-const CONFIG_PATH: &str = ".agents/coord.toml";
 const RUN_DIRECTORY: &str = "triage-runs";
 const RUN_DEADLINE_SECONDS: f64 = 30.0 * 60.0;
 const HEARTBEAT_SECONDS: f64 = 2.0;
@@ -701,6 +699,9 @@ fn reconcile_artifacts(
     metadata: &RunMetadata,
     root: &Path,
 ) -> Result<HashSet<String>> {
+    if !main_branch(root) {
+        return Ok(HashSet::new());
+    }
     let actor = triager_identity(&run.id);
     let current = coordinator.clock.wall();
     let mut reconciled = HashSet::new();
