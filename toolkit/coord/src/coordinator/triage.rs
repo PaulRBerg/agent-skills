@@ -29,6 +29,7 @@ use super::{
     triage_paths::{deterministic_handoff, safe_document_path},
     triage_prompt::triage_prompt,
     triage_schema::result_schema,
+    triage_worktree::{TriageWorktree, admit_commits, commit_for_finding, copy_handoff, git_text, validate_commit},
 };
 
 const RUN_DIRECTORY: &str = "triage-runs";
@@ -48,6 +49,10 @@ struct RunMetadata {
     repo_root: String,
     state_dir: String,
     start_head: String,
+    #[serde(default)]
+    worktree_path: Option<PathBuf>,
+    #[serde(default)]
+    worktree_branch: Option<String>,
     finding_ids: Vec<String>,
     #[serde(default)]
     authorized_paths: Vec<String>,
@@ -88,7 +93,7 @@ enum ResultStatus {
 }
 
 struct TriageRequest<'a> {
-    repo_root: &'a Path,
+    worktree: &'a Path,
     state_dir: &'a Path,
     run_dir: &'a Path,
     prompt: &'a str,
@@ -184,6 +189,8 @@ impl Coordinator {
             repo_root: path_text(&root)?,
             state_dir: path_text(&state_dir)?,
             start_head,
+            worktree_path: None,
+            worktree_branch: None,
             finding_ids: start.claims.iter().map(|claim| claim.finding_id.clone()).collect(),
             authorized_paths: Vec::new(),
             started_at: now,
@@ -251,6 +258,7 @@ impl Coordinator {
             if run_is_live(&run, metadata.as_ref(), self.probe.as_ref(), current) {
                 continue;
             }
+            let _worktree = TriageWorktree::new(root, &run_dir, &run.id, current);
             record_reconcile_detail(&run_dir, current, "worker-lost", &"triage worker is no longer live");
             if let Some(metadata) = metadata.as_ref() &&
                 let Err(error) = reconcile_artifacts(self, &run, metadata, root)
@@ -288,6 +296,7 @@ impl Coordinator {
         }
         let state_dir = fs::canonicalize(self.store_path.parent().expect("store path has parent"))?;
         let run_dir = state_dir.join(RUN_DIRECTORY).join(run_id);
+        let worktree = TriageWorktree::new(&root, &run_dir, run_id, self.clock.wall());
         let mut metadata = read_worker_metadata(&run_dir)?;
         if metadata.run_id != run_id ||
             metadata.repo_root != run.repo_root ||
@@ -337,11 +346,20 @@ impl Coordinator {
         }
         metadata.authorized_paths = authorized_paths;
         write_metadata(&run_dir, &metadata)?;
-        let prompt = triage_prompt(&metadata.start_head, &findings, &metadata.authorized_paths)?;
+        let prompt = triage_prompt(run_id, &metadata.start_head, &findings, &metadata.authorized_paths)?;
         write_private(&run_dir.join(SCHEMA_FILE), serde_json::to_vec_pretty(&result_schema())?.as_slice())?;
         write_private(&run_dir.join("prompt.txt"), prompt.as_bytes())?;
 
-        let request = TriageRequest { repo_root: &root, state_dir: &state_dir, run_dir: &run_dir, prompt: &prompt };
+        metadata.worktree_path = Some(worktree.path.clone());
+        metadata.worktree_branch = Some(worktree.branch.clone());
+        write_metadata(&run_dir, &metadata)?;
+        if let Err(error) = worktree.create(&metadata.start_head) {
+            record_reconcile_detail(&run_dir, self.clock.wall(), "runner-failed", &error);
+            finish_worker(&mut store, &run_dir, &mut metadata, "runner-failed", self.clock.wall())?;
+            return Err(error);
+        }
+        let request =
+            TriageRequest { worktree: &worktree.path, state_dir: &state_dir, run_dir: &run_dir, prompt: &prompt };
         let mut heartbeat = || {
             let current = self.clock.wall();
             metadata.heartbeat_at = current;
@@ -357,7 +375,10 @@ impl Coordinator {
             Ok(reconciled) => reconciled,
             Err(error) => {
                 record_reconcile_detail(&run_dir, current, "reconcile-failed", &error);
-                HashSet::new()
+                Reconciliation {
+                    resolved: HashSet::new(),
+                    admission_failed: metadata.finding_ids.iter().cloned().collect(),
+                }
             }
         };
         let (outcome, failure_detail) = match execution {
@@ -384,11 +405,11 @@ impl TriageRunner for CodexTriageRunner {
     fn run(&self, request: &TriageRequest<'_>, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
         let stdout = private_output(&request.run_dir.join(STDOUT_FILE))?;
         let stderr = private_output(&request.run_dir.join(STDERR_FILE))?;
-        let args = codex_args(request.repo_root, request.state_dir, request.run_dir);
+        let args = codex_args(request.worktree, request.state_dir, request.run_dir);
         let mut command = Command::new("codex");
         command
             .args(args)
-            .current_dir(request.repo_root)
+            .current_dir(request.worktree)
             .env("AI_COORD_TRIAGE_ROLE", "triager")
             .stdin(Stdio::piped())
             .stdout(stdout)
@@ -537,7 +558,7 @@ fn apply_result_file(
     metadata: &RunMetadata,
     root: &Path,
     run_dir: &Path,
-    reconciled: &HashSet<String>,
+    reconciled: &Reconciliation,
 ) -> Result<bool> {
     if !main_branch(root) {
         return Err(AppError::operational("triage results can be applied only while main is checked out"));
@@ -554,7 +575,11 @@ fn apply_result_file(
             complete = false;
             continue;
         }
-        if reconciled.contains(&result.finding_id) {
+        if reconciled.admission_failed.contains(&result.finding_id) {
+            complete = false;
+            continue;
+        }
+        if reconciled.resolved.contains(&result.finding_id) {
             continue;
         }
         if result.status == ResultStatus::Deferred {
@@ -591,6 +616,7 @@ fn apply_finding_result(
         ResultStatus::Deferred => Ok(()),
         ResultStatus::HandedOff => {
             let path = result.handoff_path.as_deref().expect("shape requires handoff path");
+            copy_handoff(metadata.worktree_path.as_deref(), root, &result.finding_id)?;
             validate_handoff(root, &result.finding_id, path)?;
             coordinator.store()?.handoff_finding(&run.repo_root, &result.finding_id, path, &actor, current)?;
             Ok(())
@@ -693,25 +719,44 @@ fn validate_result_shape(result: &FindingResult) -> Result<()> {
     Ok(())
 }
 
+#[derive(Default)]
+struct Reconciliation {
+    resolved: HashSet<String>,
+    admission_failed: HashSet<String>,
+}
+
 fn reconcile_artifacts(
     coordinator: &Coordinator,
     run: &TriageRun,
     metadata: &RunMetadata,
     root: &Path,
-) -> Result<HashSet<String>> {
+) -> Result<Reconciliation> {
+    let mut reconciled = Reconciliation::default();
+    if let Some(worktree) = metadata.worktree_path.as_deref() {
+        reconciled.admission_failed = admit_commits(
+            root,
+            worktree,
+            &metadata.start_head,
+            &metadata.finding_ids,
+            &metadata.authorized_paths,
+            coordinator.clock.wall(),
+        )?;
+    }
     if !main_branch(root) {
-        return Ok(HashSet::new());
+        return Ok(reconciled);
     }
     let actor = triager_identity(&run.id);
     let current = coordinator.clock.wall();
-    let mut reconciled = HashSet::new();
     let authorized = metadata.authorized_paths.iter().map(String::as_str).collect::<HashSet<_>>();
     for finding_id in &metadata.finding_ids {
+        if reconciled.admission_failed.contains(finding_id) {
+            continue;
+        }
         let Some(finding) = coordinator.store()?.finding(&run.repo_root, finding_id, current)? else {
             continue;
         };
         if finding.state != FindingState::Pending {
-            reconciled.insert(finding_id.clone());
+            reconciled.resolved.insert(finding_id.clone());
             continue;
         }
         if let Ok(Some(oid)) = commit_for_finding(root, &metadata.start_head, finding_id) &&
@@ -733,69 +778,18 @@ fn reconcile_artifacts(
                 )
                 .is_ok()
         {
-            reconciled.insert(finding_id.clone());
+            reconciled.resolved.insert(finding_id.clone());
             continue;
         }
         let handoff = deterministic_handoff(finding_id);
-        if validate_handoff(root, finding_id, &handoff).is_ok() &&
+        if copy_handoff(metadata.worktree_path.as_deref(), root, finding_id).is_ok() &&
+            validate_handoff(root, finding_id, &handoff).is_ok() &&
             coordinator.store()?.handoff_finding(&run.repo_root, finding_id, &handoff, &actor, current).is_ok()
         {
-            reconciled.insert(finding_id.clone());
+            reconciled.resolved.insert(finding_id.clone());
         }
     }
     Ok(reconciled)
-}
-
-fn commit_for_finding(root: &Path, start: &str, finding_id: &str) -> Result<Option<String>> {
-    let pattern = format!("Finding-ID: {finding_id}");
-    let output = Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(["log", "--format=%H", "--fixed-strings", "--grep"])
-        .arg(&pattern)
-        .arg(format!("{start}..HEAD"))
-        .output()?;
-    if !output.status.success() {
-        return Ok(None);
-    }
-    let oids = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    Ok((oids.len() == 1).then(|| oids[0].clone()))
-}
-
-fn validate_commit(root: &Path, start: &str, finding_id: &str, oid: &str) -> Result<HashSet<String>> {
-    if oid.len() < 7 || oid.len() > 64 || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(AppError::operational("invalid triage commit OID"));
-    }
-    if !git_success(root, &["merge-base", "--is-ancestor", start, oid])? ||
-        !git_success(root, &["merge-base", "--is-ancestor", oid, "HEAD"])?
-    {
-        return Err(AppError::operational("triage commit is not between the run start and current HEAD"));
-    }
-    let message = git_text(root, &["show", "-s", "--format=%B", oid])?;
-    let trailer = format!("Finding-ID: {finding_id}");
-    if !message.lines().any(|line| line == trailer) {
-        return Err(AppError::operational("triage commit is missing the exact Finding-ID trailer"));
-    }
-    if message.lines().filter(|line| line.starts_with("Finding-ID:")).count() != 1 {
-        return Err(AppError::operational("triage commit must contain exactly one Finding-ID trailer"));
-    }
-    let matching = commit_for_finding(root, start, finding_id)?;
-    if matching.as_deref() != Some(oid) {
-        return Err(AppError::operational("finding must map to exactly one triage commit"));
-    }
-    let changed = git_text(root, &["diff-tree", "--no-commit-id", "--name-only", "-r", oid])?
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(str::to_owned)
-        .collect::<HashSet<_>>();
-    if changed.is_empty() {
-        return Err(AppError::operational("triage commit changes no paths"));
-    }
-    Ok(changed)
 }
 
 fn validate_handoff(root: &Path, finding_id: &str, path: &str) -> Result<()> {
@@ -828,28 +822,6 @@ fn validate_relative_path(path: &str) -> Result<()> {
         return Err(AppError::operational("triage artifact path must be a normalized repository-relative path"));
     }
     Ok(())
-}
-
-fn git_success(root: &Path, args: &[&str]) -> Result<bool> {
-    Ok(Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?
-        .success())
-}
-
-fn git_text(root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git").args(["-C"]).arg(root).args(args).output()?;
-    if !output.status.success() {
-        return Err(AppError::operational(format!(
-            "Git artifact validation failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 fn finish_worker(
@@ -891,7 +863,7 @@ fn finish_failed_schedule_run(
     }
 }
 
-fn record_reconcile_detail(run_dir: &Path, current: f64, outcome: &str, error: &dyn std::fmt::Display) {
+pub(super) fn record_reconcile_detail(run_dir: &Path, current: f64, outcome: &str, error: &dyn std::fmt::Display) {
     let _ = append_reconcile_detail(run_dir, current, outcome, error);
 }
 

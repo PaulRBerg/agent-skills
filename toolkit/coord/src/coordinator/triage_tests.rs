@@ -51,6 +51,7 @@ struct FakeRunner {
 impl TriageRunner for FakeRunner {
     fn run(&self, request: &TriageRequest<'_>, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
         heartbeat()?;
+        assert_isolated_worktree(request);
         let metadata = read_metadata(request.run_dir)?;
         let store = Store::open(request.state_dir.join("state.db"))?;
         let work = store.work(&triager_identity(&metadata.run_id))?;
@@ -74,8 +75,9 @@ impl TriageRunner for FakeRunner {
 
 struct FailingRunner;
 impl TriageRunner for FailingRunner {
-    fn run(&self, _: &TriageRequest<'_>, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
+    fn run(&self, request: &TriageRequest<'_>, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
         heartbeat()?;
+        assert_isolated_worktree(request);
         Err(AppError::operational("simulated deadline"))
     }
 }
@@ -221,11 +223,11 @@ fn launch_failure_writes_the_specific_reconcile_detail() {
 
 #[test]
 fn codex_command_is_ephemeral_sandboxed_offline_and_agentless() {
-    let repo = Path::new("/repo");
+    let worktree = Path::new("/state/triage-runs/a/worktree");
     let state = Path::new("/state");
     let run = Path::new("/state/triage-runs/a");
-    let request = TriageRequest { repo_root: repo, state_dir: state, run_dir: run, prompt: "prompt" };
-    let args = codex_args(request.repo_root, request.state_dir, request.run_dir)
+    let request = TriageRequest { worktree, state_dir: state, run_dir: run, prompt: "prompt" };
+    let args = codex_args(request.worktree, request.state_dir, request.run_dir)
         .into_iter()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
@@ -244,6 +246,8 @@ fn codex_command_is_ephemeral_sandboxed_offline_and_agentless() {
     ] {
         assert!(args.iter().any(|arg| arg == expected), "missing {expected}: {args:?}");
     }
+    assert!(args.windows(2).any(|args| args == ["-C", "/state/triage-runs/a/worktree"]));
+    assert!(args.windows(2).any(|args| args == ["--add-dir", "/state"]));
     assert!(!args.iter().any(|arg| arg == "--sandbox"), "--approve-for-me selects workspace-write: {args:?}");
 }
 
@@ -303,6 +307,7 @@ fn code_only_batch_launches_without_a_tracked_file_scope() {
     let store = coordinator.store().unwrap();
     assert!(store.work(&actor).unwrap().is_none());
     assert!(store.session(&actor).unwrap().is_none());
+    assert_worktree_removed(repo.path(), &run_id);
     assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("partial"));
     let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
     assert_eq!(store.finding(&root, &finding_id, 100.0).unwrap().unwrap().state, FindingState::Pending);
@@ -327,6 +332,7 @@ fn runner_failure_finishes_run_and_releases_claims() {
     assert!(prompt.contains("$task-handoff"));
     assert!(prompt.contains("FINDING_<UPPERCASE_ID>.md` with its no-clipboard workflow"));
     let store = coordinator.store().unwrap();
+    assert_worktree_removed(repo.path(), &run_id);
     assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("runner-failed"));
     assert!(store.triage_claims(&run_id).unwrap().is_empty());
     assert!(store.work(&actor).unwrap().is_none());
@@ -549,4 +555,323 @@ fn recursion_marker_suppresses_public_scheduler() {
             TriageSchedule::Skipped("triager-lifecycle")
         );
     });
+}
+
+fn assert_isolated_worktree(request: &TriageRequest<'_>) {
+    let metadata = read_metadata(request.run_dir).unwrap();
+    assert_eq!(request.worktree, request.run_dir.join("worktree"));
+    assert_eq!(metadata.worktree_path.as_deref(), Some(request.worktree));
+    let branch = format!("triage/{}", metadata.run_id);
+    assert_eq!(metadata.worktree_branch.as_deref(), Some(branch.as_str()));
+    assert_eq!(git_text(request.worktree, &["symbolic-ref", "--short", "HEAD"]).unwrap().trim(), branch);
+    assert_ne!(crate::host::git_root(request.worktree).unwrap(), Path::new(&metadata.repo_root));
+    assert!(request.prompt.contains(&format!("isolated worktree on branch {branch}")));
+}
+
+fn assert_worktree_removed(repo: &Path, run_id: &str) {
+    assert!(!repo.join("state/triage-runs").join(run_id).join("worktree").exists());
+    assert!(git_text(repo, &["branch", "--list", &format!("triage/{run_id}")]).unwrap().is_empty());
+    assert_eq!(git_text(repo, &["worktree", "list", "--porcelain"]).unwrap().matches("worktree ").count(), 1);
+}
+
+struct CallbackRunner<F>(F);
+
+impl<F: Fn(&TriageRequest<'_>) -> Result<ExitStatus>> TriageRunner for CallbackRunner<F> {
+    fn run(&self, request: &TriageRequest<'_>, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
+        heartbeat()?;
+        assert_isolated_worktree(request);
+        (self.0)(request)
+    }
+}
+
+fn schedule_run(coordinator: &Coordinator, origin: &Identity, repo: &Path) -> String {
+    let TriageSchedule::Launched { run_id, .. } =
+        coordinator.schedule_findings_triage_for(repo, origin, &FakeLauncher::default()).unwrap()
+    else {
+        panic!("expected triage launch")
+    };
+    run_id
+}
+
+fn commit_file(repo: &Path, path: &str, contents: &str, message: &str) -> String {
+    fs::write(repo.join(path), contents).unwrap();
+    git_text(repo, &["add", "--", path]).unwrap();
+    git_text(repo, &["-c", "user.name=test", "-c", "user.email=test@invalid", "commit", "-qm", message]).unwrap();
+    git_head_oid(repo).unwrap()
+}
+
+fn fixed_output(finding_id: &str, oid: &str) -> Value {
+    json!({ "results": [{
+        "finding_id": finding_id, "status": "fixed", "evidence": "corrected stale prose",
+        "changed_paths": ["README.md"], "validation": ["reviewed documentation diff"],
+        "commit_oid": oid, "canonical_id": null, "handoff_path": null
+    }] })
+}
+
+fn finding_state(coordinator: &Coordinator, repo: &Path, id: &str) -> FindingSummary {
+    coordinator
+        .store()
+        .unwrap()
+        .finding(crate::host::git_root(repo).unwrap().to_str().unwrap(), id, 101.0)
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn worktree_document_commit_is_admitted_and_resolved() {
+    let repo = repository(true);
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    let id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+    let start = git_head_oid(repo.path()).unwrap();
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let committed = Mutex::new(None);
+    let runner = CallbackRunner(|request: &TriageRequest<'_>| {
+        assert_eq!(git_head_oid(request.worktree).as_deref(), Some(start.as_str()));
+        let oid =
+            commit_file(request.worktree, "README.md", "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+        assert_eq!(git_head_oid(repo.path()).as_deref(), Some(start.as_str()));
+        assert_eq!(fs::read_to_string(repo.path().join("README.md"))?, "old prose\n");
+        write_private(&request.run_dir.join(RESULT_FILE), &serde_json::to_vec(&fixed_output(&id, &oid))?)?;
+        *committed.lock().unwrap() = Some(oid);
+        Ok(ExitStatus::from_raw(0))
+    });
+    coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
+    let oid = committed.lock().unwrap().clone().unwrap();
+    assert_eq!(git_head_oid(repo.path()).as_deref(), Some(oid.as_str()));
+    assert_eq!(fs::read_to_string(repo.path().join("README.md")).unwrap(), "correct prose\n");
+    let finding = finding_state(&coordinator, repo.path(), &id);
+    assert_eq!(finding.state, FindingState::Fixed);
+    assert_eq!(finding.commit_oid.as_deref(), Some(oid.as_str()));
+    assert_eq!(
+        coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap().outcome.as_deref(),
+        Some("completed")
+    );
+    assert_worktree_removed(repo.path(), &run_id);
+}
+
+#[test]
+fn worktree_commits_are_admitted_in_ancestry_order() {
+    let repo = repository(true);
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    let first = add_finding(&coordinator, repo.path(), "first typo", 1.0);
+    let second = add_finding_at(&coordinator, repo.path(), "second typo", "NOTES.md", FindingKind::Docs, 2.0);
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let runner = CallbackRunner(|request: &TriageRequest<'_>| {
+        // Reverse claim order to exercise ancestry ordering at admission.
+        let second_oid =
+            commit_file(request.worktree, "NOTES.md", "fixed notes\n", &format!("docs: notes\n\nFinding-ID: {second}"));
+        let first_oid = commit_file(
+            request.worktree,
+            "README.md",
+            "fixed readme\n",
+            &format!("docs: readme\n\nFinding-ID: {first}"),
+        );
+        let mut output = fixed_output(&first, &first_oid);
+        let mut second_result = fixed_output(&second, &second_oid)["results"][0].clone();
+        second_result["changed_paths"] = json!(["NOTES.md"]);
+        output["results"].as_array_mut().unwrap().push(second_result);
+        write_private(&request.run_dir.join(RESULT_FILE), &serde_json::to_vec(&output)?)?;
+        Ok(ExitStatus::from_raw(0))
+    });
+    coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
+    for id in [&first, &second] {
+        let finding = finding_state(&coordinator, repo.path(), id);
+        assert_eq!(finding.state, FindingState::Fixed);
+        assert!(finding.commit_oid.is_some());
+    }
+    assert_eq!(git_head_oid(repo.path()), finding_state(&coordinator, repo.path(), &first).commit_oid);
+    assert_worktree_removed(repo.path(), &run_id);
+}
+
+#[test]
+fn admission_failure_preserves_main_and_pending_finding_without_handoff() {
+    for obstruction in ["main-moved", "dirty-path", "unsafe-ancestor", "unauthorized-commit"] {
+        let repo = repository(true);
+        let (coordinator, origin) = fixture(repo.path(), 100.0);
+        let id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+        let run_id = schedule_run(&coordinator, &origin, repo.path());
+        let expected_head = Mutex::new(git_head_oid(repo.path()).unwrap());
+        let runner = CallbackRunner(|request: &TriageRequest<'_>| {
+            match obstruction {
+                "main-moved" => {
+                    *expected_head.lock().unwrap() =
+                        commit_file(repo.path(), "NOTES.md", "main advanced\n", "other work");
+                }
+                "dirty-path" => fs::write(repo.path().join("README.md"), "uncommitted work\n")?,
+                "unsafe-ancestor" => {
+                    commit_file(request.worktree, "src/lib.rs", "unsafe code\n", "unapproved code");
+                }
+                _ => {}
+            }
+            let changed = if obstruction == "unauthorized-commit" { "NOTES.md" } else { "README.md" };
+            let oid =
+                commit_file(request.worktree, changed, "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+            let handoff = deterministic_handoff(&id);
+            fs::create_dir_all(request.worktree.join(".ai/task-handoffs"))?;
+            fs::write(request.worktree.join(&handoff), format!("Source finding: {id}\n"))?;
+            // A failed admission must not fall back to even a valid deterministic handoff.
+            let mut result = fixed_output(&id, &oid);
+            if obstruction == "main-moved" {
+                result["results"][0] = json!({
+                    "finding_id": id, "status": "handed_off", "evidence": "needs retry",
+                    "changed_paths": [handoff], "validation": ["marker checked"], "commit_oid": null,
+                    "canonical_id": null, "handoff_path": handoff
+                });
+            }
+            write_private(&request.run_dir.join(RESULT_FILE), &serde_json::to_vec(&result)?)?;
+            Ok(ExitStatus::from_raw(0))
+        });
+        coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
+        assert_eq!(finding_state(&coordinator, repo.path(), &id).state, FindingState::Pending, "{obstruction}");
+        assert_eq!(git_head_oid(repo.path()).unwrap(), *expected_head.lock().unwrap(), "{obstruction}");
+        let expected_prose = if obstruction == "dirty-path" { "uncommitted work\n" } else { "old prose\n" };
+        assert_eq!(fs::read_to_string(repo.path().join("README.md")).unwrap(), expected_prose);
+        assert_eq!(fs::read_to_string(repo.path().join("src/lib.rs")).unwrap(), "pub fn value() -> u8 { 1 }\n");
+        assert!(!repo.path().join(deterministic_handoff(&id)).exists());
+        let log =
+            fs::read_to_string(repo.path().join("state/triage-runs").join(&run_id).join(RECONCILE_LOG_FILE)).unwrap();
+        assert!(log.contains("admission-failed"), "{obstruction}: {log}");
+        assert_worktree_removed(repo.path(), &run_id);
+    }
+}
+
+#[test]
+fn worktree_handoff_is_published_before_validation_even_after_runner_failure() {
+    for runner_failed in [false, true] {
+        let repo = repository(true);
+        let (coordinator, origin) = fixture(repo.path(), 100.0);
+        let id = add_finding_at(&coordinator, repo.path(), "code behavior", "src/lib.rs", FindingKind::Bug, 1.0);
+        let run_id = schedule_run(&coordinator, &origin, repo.path());
+        let handoff = deterministic_handoff(&id);
+        let contents = format!("# Handoff\n\nSource finding: {id}\n");
+        let runner = CallbackRunner(|request: &TriageRequest<'_>| {
+            fs::create_dir_all(request.worktree.join(".ai/task-handoffs"))?;
+            fs::write(request.worktree.join(&handoff), &contents)?;
+            assert!(!repo.path().join(&handoff).exists());
+            if runner_failed {
+                return Err(AppError::operational("simulated lost worker"));
+            }
+            let result = json!({ "results": [{
+                "finding_id": id, "status": "handed_off", "evidence": "verified broad scope",
+                "changed_paths": [handoff], "validation": ["marker checked"], "commit_oid": null,
+                "canonical_id": null, "handoff_path": handoff
+            }] });
+            write_private(&request.run_dir.join(RESULT_FILE), &serde_json::to_vec(&result)?)?;
+            Ok(ExitStatus::from_raw(0))
+        });
+        coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
+        assert_eq!(finding_state(&coordinator, repo.path(), &id).state, FindingState::HandedOff);
+        assert_eq!(fs::read_to_string(repo.path().join(&handoff)).unwrap(), contents);
+        validate_handoff(&crate::host::git_root(repo.path()).unwrap(), &id, &handoff).unwrap();
+        assert_worktree_removed(repo.path(), &run_id);
+    }
+}
+
+#[test]
+fn invalid_result_and_nonzero_exit_remove_worktrees() {
+    for outcome in ["invalid-result", "runner-failed"] {
+        let repo = repository(true);
+        let (coordinator, origin) = fixture(repo.path(), 100.0);
+        add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+        let run_id = schedule_run(&coordinator, &origin, repo.path());
+        let runner = CallbackRunner(|request: &TriageRequest<'_>| {
+            fs::write(request.run_dir.join(RESULT_FILE), "invalid json")?;
+            Ok(ExitStatus::from_raw(if outcome == "runner-failed" { 256 } else { 0 }))
+        });
+        coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
+        assert_eq!(
+            coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap().outcome.as_deref(),
+            Some(outcome)
+        );
+        assert_worktree_removed(repo.path(), &run_id);
+    }
+}
+
+#[test]
+fn branch_change_cleans_a_previous_worktree_without_admission() {
+    let repo = repository(true);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let (coordinator, origin) = fixture(&root, 100.0);
+    let id = add_finding(&coordinator, &root, "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, &root);
+    let run_dir = root.join("state/triage-runs").join(&run_id);
+    let mut metadata = read_metadata(&run_dir).unwrap();
+    let worktree = TriageWorktree::new(&root, &run_dir, &run_id, 100.0);
+    worktree.create(&metadata.start_head).unwrap();
+    metadata.worktree_path = Some(worktree.path.clone());
+    metadata.worktree_branch = Some(worktree.branch.clone());
+    metadata.authorized_paths = vec!["README.md".to_owned()];
+    write_metadata(&run_dir, &metadata).unwrap();
+    commit_file(&worktree.path, "README.md", "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+    git_text(&root, &["checkout", "-qb", "topic"]).unwrap();
+    coordinator.run_findings_triage_with(&run_id, &root, &FailingRunner).unwrap();
+    assert_eq!(git_head_oid(&root).as_deref(), Some(metadata.start_head.as_str()));
+    assert_eq!(finding_state(&coordinator, &root, &id).state, FindingState::Pending);
+    assert_eq!(
+        coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap().outcome.as_deref(),
+        Some("branch-changed")
+    );
+    assert_worktree_removed(&root, &run_id);
+}
+
+#[test]
+fn inactive_reconciliation_preserves_live_worktrees_and_removes_lost_or_expired_ones() {
+    for expired in [false, true] {
+        let repo = repository(true);
+        let root = crate::host::git_root(repo.path()).unwrap();
+        let (coordinator, origin) = fixture(repo.path(), 100.0);
+        let id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+        let run_id = schedule_run(&coordinator, &origin, repo.path());
+        let run_root = root.join("state/triage-runs");
+        let run_dir = run_root.join(&run_id);
+        let mut metadata = read_metadata(&run_dir).unwrap();
+        let worktree = TriageWorktree::new(&root, &run_dir, &run_id, 100.0);
+        worktree.create(&metadata.start_head).unwrap();
+        metadata.worktree_path = Some(worktree.path.clone());
+        metadata.worktree_branch = Some(worktree.branch.clone());
+        metadata.authorized_paths = vec!["README.md".to_owned()];
+        write_metadata(&run_dir, &metadata).unwrap();
+        coordinator.reconcile_inactive_runs(&root, &run_root, 100.0).unwrap();
+        assert!(worktree.path.exists(), "live worker must retain its worktree");
+        let oid =
+            commit_file(&worktree.path, "README.md", "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+        let current = if expired { 100.0 + RUN_DEADLINE_SECONDS } else { 100.0 + HEARTBEAT_GRACE_SECONDS + 1.0 };
+        if expired {
+            metadata.heartbeat_at = current;
+            write_metadata(&run_dir, &metadata).unwrap();
+        }
+        coordinator.reconcile_inactive_runs(&root, &run_root, current).unwrap();
+        assert_eq!(git_head_oid(&root).as_deref(), Some(oid.as_str()));
+        assert_eq!(finding_state(&coordinator, &root, &id).state, FindingState::Fixed);
+        assert_eq!(
+            coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap().outcome.as_deref(),
+            Some("worker-lost")
+        );
+        assert_worktree_removed(&root, &run_id);
+    }
+}
+
+#[test]
+fn handoff_copy_never_overwrites_or_traverses_symlinked_parents() {
+    let source = tempfile::tempdir().unwrap();
+    let destination = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let id = "abc123";
+    let relative = deterministic_handoff(id);
+    fs::create_dir_all(source.path().join(".ai/task-handoffs")).unwrap();
+    fs::write(source.path().join(&relative), format!("Source finding: {id}\n")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), destination.path().join(".ai")).unwrap();
+    assert!(copy_handoff(Some(source.path()), destination.path(), id).is_err());
+    assert!(!outside.path().join("task-handoffs").exists());
+    fs::remove_file(destination.path().join(".ai")).unwrap();
+    fs::create_dir(destination.path().join(".ai")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), destination.path().join(".ai/task-handoffs")).unwrap();
+    assert!(copy_handoff(Some(source.path()), destination.path(), id).is_err());
+    assert!(!outside.path().join("FINDING_ABC123.md").exists());
+    fs::remove_file(destination.path().join(".ai/task-handoffs")).unwrap();
+    fs::create_dir(destination.path().join(".ai/task-handoffs")).unwrap();
+    fs::write(destination.path().join(&relative), "existing user handoff\n").unwrap();
+    copy_handoff(Some(source.path()), destination.path(), id).unwrap();
+    assert_eq!(fs::read_to_string(destination.path().join(&relative)).unwrap(), "existing user handoff\n");
+    assert!(validate_handoff(destination.path(), id, &relative).is_err());
 }

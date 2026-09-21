@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::Path};
 
-pub(super) fn codex_args(repo_root: &Path, state_dir: &Path, run_dir: &Path) -> Vec<OsString> {
+pub(super) fn codex_args(worktree: &Path, state_dir: &Path, run_dir: &Path) -> Vec<OsString> {
     [
         OsString::from("exec"),
         OsString::from("--ephemeral"),
@@ -10,7 +10,7 @@ pub(super) fn codex_args(repo_root: &Path, state_dir: &Path, run_dir: &Path) -> 
         OsString::from("-c"),
         OsString::from("model_reasoning_effort=\"xhigh\""),
         OsString::from("-C"),
-        repo_root.as_os_str().to_owned(),
+        worktree.as_os_str().to_owned(),
         OsString::from("--add-dir"),
         state_dir.as_os_str().to_owned(),
         OsString::from("--approve-for-me"),

@@ -467,11 +467,16 @@ auto_triage = true
 After `done`, a main-session Stop, or SessionEnd, ai-coord may start one detached batch only when `main` is
 checked out, no normal work is active or queued, pending findings exist, and the 24-hour repository cooldown has
 expired. A batch claims at most 20 findings and expires stale/dead leases. It runs an ephemeral offline, agentless Codex
-Luna/xhigh process for at most 30 minutes with workspace-write access plus the state directory. It never pushes.
+Luna/xhigh process for at most 30 minutes in an isolated worktree under the run directory on branch `triage/<run-id>`.
+The state directory remains available to the worker. It never pushes; the worktree isolates its edits, and only the
+admission step below changes the original checkout.
 
-The safe tier may make only unambiguous documentation fixes and records a local `Finding-ID` commit. Everything else is
-validated into the deterministic `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md` handoff tier while preserving the exact
-ledger ID in its `Source finding:` marker. Structured output, artifacts, commit trailers, and paths are reconciled
+The safe tier may make only unambiguous documentation fixes and records a local `Finding-ID` commit in the worktree.
+Only validated documentation commits are fast-forwarded into `main` while it is checked out and clean for those paths;
+failed admission leaves the finding pending. The worktree and its branch are removed after the run, including failures.
+Everything else is written in the worktree and copied without overwriting an existing file, then validated into the
+deterministic `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md` handoff tier while preserving the exact ledger ID in its
+`Source finding:` marker. Structured output, artifacts, commit trailers, and paths are reconciled
 before state changes. Triagers do not schedule another triager. Run metadata and stdout/stderr live under
 `$XDG_STATE_HOME/ai-coord/triage-runs/` (or `AI_COORD_STATE_DIR`) and are retained for 30 days.
 

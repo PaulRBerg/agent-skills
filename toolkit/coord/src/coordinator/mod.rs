@@ -7,6 +7,7 @@ mod triage_config;
 mod triage_paths;
 mod triage_prompt;
 mod triage_schema;
+mod triage_worktree;
 mod work_lifecycle;
 
 use std::{

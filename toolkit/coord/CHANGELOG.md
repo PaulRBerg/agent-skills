@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Isolate detached finding triagers in per-run worktrees; admit only validated documentation commits by fast-forward
+  into checked-out `main`, copy deterministic handoffs without overwriting, and remove worktrees and branches on exit.
+
 - Add durable in-flight work recommendations: owners may send, respond to, and withdraw explicit `defer` or `omit`
   proposals; both endpoints retain inspectable context and decision history, including after work/session deletion.
   `recommend list` and `recommend show` expose recommendation JSON schema v1 while status remains schema v8. Pending
