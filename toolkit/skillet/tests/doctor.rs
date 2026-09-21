@@ -782,6 +782,36 @@ fn fix_safe_creates_and_updates_metadata_without_other_byte_changes() {
     assert_eq!(fs::read(root.path().join("unrelated.bin")).unwrap(), unrelated_before);
 }
 
+#[cfg(unix)]
+#[test]
+fn fix_safe_refuses_to_replace_symlinked_metadata() {
+    use std::os::unix::fs::symlink;
+
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "disable-model-invocation: true\n", "## Completion\n\nReport verification.");
+    write_readme(root.path(), &["alpha"]);
+    let target = root.path().join("outside-openai.yaml");
+    let target_bytes = b"policy:\n  allow_implicit_invocation: true\n";
+    common::write(&target, target_bytes);
+    let path = root.path().join("skills/alpha/agents/openai.yaml");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    symlink(&target, &path).unwrap();
+
+    let (output, report) = run_json(root.path(), &["--fix-safe"]);
+
+    assert_eq!(output.status.code(), Some(3));
+    assert!(codes(&report).contains("OPENAI_METADATA_FIX_FAILED"));
+    assert_eq!(report["counts"]["fixes"], 0);
+    assert!(fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&target).unwrap(), target_bytes);
+    assert!(
+        finding(&report, "OPENAI_METADATA_FIX_FAILED")["message"]
+            .as_str()
+            .unwrap()
+            .contains("target is a symlink; refusing to replace it")
+    );
+}
+
 #[test]
 fn failed_fix_is_exit_three_and_leaves_target_and_directories_unchanged() {
     let root = TempDir::new().unwrap();

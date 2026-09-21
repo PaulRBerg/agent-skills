@@ -98,18 +98,12 @@ fn atomic_write(path: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()>
 }
 
 fn stage_and_persist(path: &Path, parent: &Path, contents: &[u8], mode: WriteMode) -> io::Result<()> {
-    match mode {
-        WriteMode::Create if path.exists() => {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "target appeared during fix"));
-        }
-        WriteMode::Replace if !path.is_file() => {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "target disappeared during fix"));
-        }
-        _ => {}
+    if matches!(mode, WriteMode::Create) && path.exists() {
+        return Err(io::Error::new(io::ErrorKind::AlreadyExists, "target appeared during fix"));
     }
 
     let permissions = match mode {
-        WriteMode::Replace => Some(fs::metadata(path)?.permissions()),
+        WriteMode::Replace => Some(replacement_metadata(path)?.permissions()),
         WriteMode::Create => None,
     };
     let mut builder = tempfile::Builder::new();
@@ -127,8 +121,8 @@ fn stage_and_persist(path: &Path, parent: &Path, contents: &[u8], mode: WriteMod
             WriteMode::Create if path.exists() => {
                 return Err(io::Error::new(io::ErrorKind::AlreadyExists, "target appeared during fix"));
             }
-            WriteMode::Replace if !path.is_file() => {
-                return Err(io::Error::new(io::ErrorKind::NotFound, "target disappeared during fix"));
+            WriteMode::Replace => {
+                replacement_metadata(path)?;
             }
             _ => {}
         }
@@ -137,6 +131,23 @@ fn stage_and_persist(path: &Path, parent: &Path, contents: &[u8], mode: WriteMod
             WriteMode::Replace => temporary.persist(path).map(|_| ()).map_err(|error| error.error),
         }
     })()
+}
+
+fn replacement_metadata(path: &Path) -> io::Result<fs::Metadata> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "target disappeared during fix"));
+        }
+        Err(error) => return Err(error),
+    };
+    if metadata.file_type().is_symlink() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "target is a symlink; refusing to replace it"));
+    }
+    if !metadata.is_file() {
+        return Err(io::Error::new(io::ErrorKind::NotFound, "target disappeared during fix"));
+    }
+    Ok(metadata)
 }
 
 #[cfg(test)]
