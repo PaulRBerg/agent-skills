@@ -2,7 +2,6 @@
 authors.workspace = true
 description = "Coordinate parallel Codex and Claude Code agents in shared working trees"
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
 name = "ai-coord"
 readme = "AGENTS.md"

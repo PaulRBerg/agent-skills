@@ -2,7 +2,6 @@
 authors.workspace = true
 description = "Create and archive agent task handoffs"
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
 name = "ai-handoff"
 readme = "AGENTS.md"

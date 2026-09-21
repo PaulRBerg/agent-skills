@@ -2,7 +2,6 @@
 authors.workspace = true
 description = "Prepare immutable Git snapshots and commit them safely in shared working trees"
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
 name = "ai-commit"
 readme = "AGENTS.md"

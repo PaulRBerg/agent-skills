@@ -4,7 +4,6 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description = "Inspect and maintain agent-skill catalogs"
-homepage.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "AGENTS.md"

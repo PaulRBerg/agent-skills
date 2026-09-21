@@ -2,7 +2,6 @@
 authors.workspace = true
 description = "Desktop notification system for Claude Code and Codex CLI"
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
 name = "ai-notify"
 readme = "AGENTS.md"
