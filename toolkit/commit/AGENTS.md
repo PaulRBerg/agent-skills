@@ -34,8 +34,8 @@ model.
   commit recovery; preflight must not validate or replace them.
 - Normal verification hooks retain their existing physical-worktree behavior, and `post-commit` always runs from the
   physical worktree without the snapshot-check environment.
-- Never remove an index lock that this process did not create. Hold the owned lock through ref CAS and index
-  reconciliation.
+- Never remove an index lock that this transaction did not create; recovery may reclaim only a lock whose contents equal
+  the transaction's persisted token. Hold the owned lock through ref CAS and index reconciliation.
 - A post-ref-update failure must remain replayable without creating a second commit.
 - Tests isolate repositories, remotes, `HOME`, configuration, and state in temporary directories.
 
@@ -189,8 +189,5 @@ Pushes always fetch and compare first; they never pull, merge, or rebase.
 ### Development
 
 The crate targets macOS and Linux with the rolling Rust nightly toolchain.
-
-From the monorepo root, run `cargo test -p ai-commit --locked` for package tests or `just rust-check` for the complete
-Rust workspace gate.
 
 Licensed under MIT.
