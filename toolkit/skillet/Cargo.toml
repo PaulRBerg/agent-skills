@@ -7,7 +7,7 @@ description = "Inspect and maintain agent-skill catalogs"
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true
-readme = "README.md"
+readme = "AGENTS.md"
 keywords = ["agents", "skills", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 

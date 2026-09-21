@@ -49,6 +49,14 @@ fn write_readme(root: &std::path::Path, names: &[&str]) {
     );
 }
 
+fn clean_catalog() -> TempDir {
+    let root = TempDir::new().unwrap();
+    write_skill(root.path(), "alpha", "", "## Completion\n\nReport the verified result.");
+    write_metadata(root.path(), "alpha", "policy:\n  allow_implicit_invocation: true\n");
+    write_readme(root.path(), &["alpha"]);
+    root
+}
+
 fn codes(report: &Value) -> BTreeSet<&str> {
     report["findings"].as_array().unwrap().iter().map(|finding| finding["code"].as_str().unwrap()).collect()
 }
@@ -58,9 +66,9 @@ fn finding<'a>(report: &'a Value, code: &str) -> &'a Value {
 }
 
 #[test]
-fn clean_fixture_has_schema_v1_valid_json_and_text() {
-    let root = common::fixture("doctor/catalog");
-    let (output, report) = run_json(&root, &[]);
+fn clean_catalog_has_schema_v1_valid_json_and_text() {
+    let root = clean_catalog();
+    let (output, report) = run_json(root.path(), &[]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(report["schema_version"], 1);
     assert_eq!(report["counts"]["findings"], 0);
@@ -70,7 +78,7 @@ fn clean_fixture_has_schema_v1_valid_json_and_text() {
 
     common::ai_skillet()
         .args(["doctor", "--root"])
-        .arg(&root)
+        .arg(root.path())
         .assert()
         .success()
         .stdout(predicate::str::contains("ai-skillet doctor: 0 error(s)"))
@@ -817,8 +825,8 @@ fn safe_fix_failures_are_isolated_from_successful_atomic_fixes() {
 
 #[test]
 fn output_is_deterministic_default_root_works_and_operational_errors_exit_two() {
-    let root = common::fixture("doctor/catalog");
-    let run = || common::ai_skillet().args(["doctor", "--format", "json"]).current_dir(&root).output().unwrap();
+    let root = clean_catalog();
+    let run = || common::ai_skillet().args(["doctor", "--format", "json"]).current_dir(root.path()).output().unwrap();
     let first = run();
     let second = run();
     assert!(first.status.success());

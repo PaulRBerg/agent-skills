@@ -5,6 +5,7 @@ edition.workspace = true
 homepage.workspace = true
 license.workspace = true
 name = "ai-coord"
+readme = "AGENTS.md"
 repository.workspace = true
 version.workspace = true
 
