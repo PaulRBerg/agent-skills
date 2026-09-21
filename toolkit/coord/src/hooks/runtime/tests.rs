@@ -12,7 +12,7 @@ use super::*;
 use crate::{
     coordinator::{Clock, InventoryObservation, ProviderInventory},
     domain::{InventoryResult, ProcessFingerprint, ProcessLiveness, ProcessProbe, ProviderReport},
-    state::{FindingAdd, SessionUpdate, Store},
+    state::{FindingAdd, RecommendationAction, SessionUpdate, Store},
 };
 
 struct AliveProbe;
@@ -114,6 +114,56 @@ fn register(coordinator: &Coordinator, identity: &Identity, repo: &Path, pid: u3
             current: 100.0,
         })
         .unwrap();
+}
+
+fn send_recommendation(coordinator: &Coordinator, sender: &Identity, recipient: &Identity, repo: &Path) -> String {
+    coordinator
+        .send_recommendation_for(
+            sender,
+            &recipient.session_id,
+            RecommendationAction::Defer,
+            &[PathBuf::from("src/shared.rs")],
+            &[],
+            "The recipient's current polish would become redundant.",
+            "The sender will replace the shared implementation.",
+            repo,
+        )
+        .unwrap()
+        .recommendation
+        .id
+}
+
+fn active_recipient_fixture(
+    coordinator: &Coordinator,
+    repo: &Path,
+    recipient_client: Client,
+) -> (Identity, Identity, String) {
+    let recipient = Identity { client: recipient_client, session_id: "recipient".into() };
+    let sender = Identity {
+        client: if recipient_client == Client::Codex { Client::Claude } else { Client::Codex },
+        session_id: "sender".into(),
+    };
+    register(coordinator, &recipient, repo, 401);
+    register(coordinator, &sender, repo, 402);
+    HookRuntime::new(coordinator).ingest(
+        client_name(recipient_client),
+        &json!({
+            "session_id": recipient.session_id,
+            "cwd": repo,
+            "hook_event_name": "SessionStart"
+        }),
+    );
+    let scope = [PathBuf::from("src/shared.rs")];
+    assert_eq!(
+        coordinator.start_for(recipient.clone(), "recipient", &scope, &[], repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    assert_eq!(
+        coordinator.start_for(sender.clone(), "sender", &scope, &[], repo).unwrap().kind,
+        crate::domain::OutcomeKind::Blocked
+    );
+    let id = send_recommendation(coordinator, &sender, &recipient, repo);
+    (sender, recipient, id)
 }
 
 fn begin_turn(runtime: &HookRuntime<'_>, client: &str, repo: &Path, session_id: &str) {
@@ -1314,4 +1364,238 @@ fn codex_apply_patch_out_of_scope_write_is_reported() {
         }),
     );
     assert!(output.contains("wrote src/c.rs outside your claim; run ai-coord start"), "{output}");
+}
+
+#[test]
+fn recommendation_checkpoint_defers_message_and_clean_notices_for_both_hosts() {
+    for (client, client_name, event) in
+        [(Client::Codex, "codex", "PostToolUse"), (Client::Claude, "claude", "PostToolBatch")]
+    {
+        let temp = TempDir::new().unwrap();
+        let (coordinator, repo) = runtime(&temp);
+        let (_sender, recipient, recommendation_id) = active_recipient_fixture(&coordinator, &repo, client);
+        let runtime = HookRuntime::new(&coordinator);
+        let payload = json!({
+            "session_id": recipient.session_id,
+            "cwd": repo,
+            "hook_event_name": event,
+            "tool_name": "Read",
+            "tool_input": {}
+        });
+
+        let first = runtime.ingest(client_name, &payload);
+        let first_context = serde_json::from_str::<Value>(&first).unwrap()["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(first_context.contains("Work recommendations need review"), "{first_context}");
+        assert!(!first_context.contains("unread peer messages"), "{first_context}");
+        assert!(!first_context.contains("Owned scopes are clean"), "{first_context}");
+        assert!(!first_context.contains(&recommendation_id), "{first_context}");
+        assert!(!first_context.contains("recipient's current polish"), "{first_context}");
+        assert!(first_context.chars().count() <= MAX_PRESENCE_CHARS);
+        let root = fs::canonicalize(&repo).unwrap();
+        assert!(coordinator.pending_recommendations(&recipient, Some(&root), true).unwrap().is_empty());
+        assert!(!coordinator.store().unwrap().unnotified_messages(&recipient).unwrap().is_empty());
+
+        let second = runtime.ingest(client_name, &payload);
+        assert!(second.contains("unread peer messages"), "{second}");
+        assert!(second.contains("Owned scopes are clean"), "{second}");
+        assert!(!second.contains("Work recommendations need review"), "{second}");
+        assert_eq!(runtime.ingest(client_name, &payload), "");
+    }
+}
+
+#[test]
+fn scope_warning_defers_recommendation_without_consuming_it() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let (_sender, recipient, _recommendation_id) = active_recipient_fixture(&coordinator, &repo, Client::Claude);
+    let runtime = HookRuntime::new(&coordinator);
+    let root = fs::canonicalize(&repo).unwrap();
+    let outside = format!("src/{}.rs", "x".repeat(90));
+
+    let warning = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id": recipient.session_id,
+            "cwd": repo,
+            "hook_event_name": "PostToolBatch",
+            "tool_name": "Write",
+            "tool_input": {"file_path": repo.join(&outside)}
+        }),
+    );
+    assert!(warning.contains(&format!("wrote {outside} outside your claim; run ai-coord start")), "{warning}");
+    assert!(!warning.contains("Work recommendations need review"), "{warning}");
+    assert!(!warning.contains("unread peer messages"), "{warning}");
+    assert_eq!(coordinator.pending_recommendations(&recipient, Some(&root), true).unwrap().len(), 1);
+    assert!(!coordinator.store().unwrap().unnotified_messages(&recipient).unwrap().is_empty());
+
+    let review = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id": recipient.session_id,
+            "cwd": repo,
+            "hook_event_name": "PostToolBatch",
+            "tool_name": "Read",
+            "tool_input": {}
+        }),
+    );
+    assert!(review.contains("Work recommendations need review"), "{review}");
+
+    let deferred = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id": recipient.session_id,
+            "cwd": repo,
+            "hook_event_name": "PostToolBatch",
+            "tool_name": "Read",
+            "tool_input": {}
+        }),
+    );
+    assert!(deferred.contains("unread peer messages"), "{deferred}");
+    assert!(deferred.contains("Owned scopes are clean"), "{deferred}");
+}
+
+#[test]
+fn prompt_reports_pending_recommendations_with_and_without_noc() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let (_sender, recipient, _recommendation_id) = active_recipient_fixture(&coordinator, &repo, Client::Codex);
+    let runtime = HookRuntime::new(&coordinator);
+
+    let ordinary = runtime.ingest(
+        "codex",
+        &json!({
+            "session_id": recipient.session_id,
+            "cwd": repo,
+            "hook_event_name": "UserPromptSubmit",
+            "turn_id": "ordinary",
+            "prompt": "continue"
+        }),
+    );
+    assert!(ordinary.contains("Recommendations pending: 1"), "{ordinary}");
+
+    let waived = runtime.ingest(
+        "codex",
+        &json!({
+            "session_id": recipient.session_id,
+            "cwd": repo,
+            "hook_event_name": "UserPromptSubmit",
+            "turn_id": "waived",
+            "prompt": "#noc"
+        }),
+    );
+    assert!(waived.starts_with(WAIVED_CONTEXT), "{waived}");
+    assert!(waived.contains("Pending 1: `ai-coord recommend list`."), "{waived}");
+    assert!(waived.chars().count() <= MAX_PRESENCE_CHARS);
+}
+
+#[test]
+fn active_wait_wakes_for_typed_recommendation_after_ack_all_and_pointer_eviction() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let (sender, recipient, recommendation_id) = active_recipient_fixture(&coordinator, &repo, Client::Codex);
+    let root = fs::canonicalize(&repo).unwrap();
+    let before = coordinator.store().unwrap().work(&recipient).unwrap().unwrap();
+    coordinator.store().unwrap().acknowledge(&recipient, None, 100.0).unwrap();
+    let acknowledged = coordinator.wait_for_repo(&recipient, &root, 1, 0.1, false).unwrap();
+    assert_eq!(acknowledged.kind, crate::domain::OutcomeKind::Message);
+    assert_eq!(acknowledged.code, 3);
+    assert_eq!(acknowledged.detail, "1");
+    assert_eq!(coordinator.store().unwrap().work(&recipient).unwrap().unwrap(), before);
+
+    for index in 0..55 {
+        coordinator
+            .store()
+            .unwrap()
+            .send_message(
+                &sender,
+                std::slice::from_ref(&recipient),
+                &format!("ordinary-{index}"),
+                root.to_str(),
+                101.0 + f64::from(index),
+            )
+            .unwrap();
+    }
+    let inbox = coordinator.store().unwrap().inbox(&recipient, false).unwrap();
+    assert_eq!(inbox.len(), 50);
+    assert!(inbox.iter().all(|message| !message.text.contains(&recommendation_id)));
+    let evicted = coordinator.wait_for_repo(&recipient, &root, 1, 0.1, false).unwrap();
+    assert_eq!(evicted.kind, crate::domain::OutcomeKind::Message);
+    assert_eq!(evicted.detail, "1");
+    assert_eq!(coordinator.store().unwrap().work(&recipient).unwrap().unwrap(), before);
+}
+
+#[test]
+fn queued_waker_reports_recommendation_without_granting_ownership() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let sender = Identity { client: Client::Codex, session_id: "sender".into() };
+    let recipient = Identity { client: Client::Claude, session_id: "recipient".into() };
+    register(&coordinator, &sender, &repo, 411);
+    register(&coordinator, &recipient, &repo, 412);
+    let scope = [PathBuf::from("src/shared.rs")];
+    assert_eq!(
+        coordinator.start_for(sender.clone(), "sender", &scope, &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    assert_eq!(
+        coordinator.start_for(recipient.clone(), "recipient", &scope, &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Blocked
+    );
+    send_recommendation(&coordinator, &sender, &recipient, &repo);
+    coordinator.store().unwrap().acknowledge(&recipient, None, 100.0).unwrap();
+    let before = coordinator.store().unwrap().work(&recipient).unwrap().unwrap();
+
+    let outcome = HookRuntime::new(&coordinator)
+        .waker(
+            "claude",
+            &json!({
+                "session_id": recipient.session_id,
+                "cwd": repo,
+                "hook_event_name": "PostToolUseFailure"
+            }),
+        )
+        .unwrap();
+    assert_eq!(outcome.kind, crate::domain::OutcomeKind::Message);
+    assert_eq!(outcome.code, 3);
+    assert_eq!(outcome.detail, "1");
+    assert_eq!(coordinator.store().unwrap().work(&recipient).unwrap().unwrap(), before);
+}
+
+#[test]
+fn specific_message_notification_marking_preserves_later_arrivals() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let sender = Identity { client: Client::Codex, session_id: "sender".into() };
+    let recipient = Identity { client: Client::Claude, session_id: "recipient".into() };
+    let root = fs::canonicalize(repo).unwrap().to_string_lossy().into_owned();
+    let first_id = coordinator
+        .store()
+        .unwrap()
+        .send_message(&sender, std::slice::from_ref(&recipient), "first", Some(&root), 100.0)
+        .unwrap()
+        .pop()
+        .unwrap();
+    let selected = coordinator
+        .store()
+        .unwrap()
+        .unnotified_messages(&recipient)
+        .unwrap()
+        .into_iter()
+        .map(|message| message.id)
+        .collect::<Vec<_>>();
+    let second_id = coordinator
+        .store()
+        .unwrap()
+        .send_message(&sender, std::slice::from_ref(&recipient), "second", Some(&root), 101.0)
+        .unwrap()
+        .pop()
+        .unwrap();
+
+    coordinator.store().unwrap().mark_messages_notified(&recipient, &selected, 102.0).unwrap();
+    let remaining = coordinator.store().unwrap().unnotified_messages(&recipient).unwrap();
+    assert_eq!(selected, [first_id]);
+    assert_eq!(remaining.iter().map(|message| &message.id).collect::<Vec<_>>(), [&second_id]);
 }

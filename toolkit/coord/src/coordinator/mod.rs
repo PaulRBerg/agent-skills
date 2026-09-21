@@ -1,5 +1,6 @@
 mod findings;
 mod inventory;
+mod recommendations;
 mod triage;
 mod triage_command;
 mod triage_config;

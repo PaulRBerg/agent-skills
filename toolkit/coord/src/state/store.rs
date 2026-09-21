@@ -59,7 +59,9 @@ impl Store {
     }
 
     pub(crate) fn prune(&mut self, current: f64) -> Result<()> {
-        self.immediate(|transaction| {
+        self.with_work_transaction(|work| {
+            work.refresh_recommendations(current)?;
+            let transaction = &work.transaction;
             transaction.execute("DELETE FROM messages WHERE created_at < ?1", [current - MESSAGE_TTL])?;
             transaction
                 .execute("DELETE FROM drafts WHERE name IS NOT NULL AND updated_at < ?1", [current - DRAFT_TTL])?;

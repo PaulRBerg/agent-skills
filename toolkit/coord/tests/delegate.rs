@@ -247,3 +247,104 @@ fn rule_a_delegate_environment_still_allows_touched_and_inbox_but_rejects_start(
     assert_eq!(start.status.code(), Some(64), "stderr={}", String::from_utf8_lossy(&start.stderr));
     assert!(String::from_utf8_lossy(&start.stderr).contains("delegate of codex/parent"));
 }
+
+#[test]
+fn delegates_may_inspect_parent_recommendations_but_cannot_mutate_them() {
+    let fixture = Fixture::new();
+    let mut parent_host = spawn_synthetic_host(&fixture, "parent");
+    let mut sender_host = spawn_synthetic_host(&fixture, "sender");
+    assert_strong_session(&fixture, "parent");
+    assert_strong_session(&fixture, "sender");
+
+    let parent_start = fixture
+        .command()
+        .env("AI_COORD_CLIENT", "codex")
+        .env("AI_COORD_SESSION_ID", "parent")
+        .env("CODEX_SESSION_ID", "parent")
+        .args(["start", "parent work", "README.md"])
+        .output()
+        .expect("start parent work");
+    assert_eq!(parent_start.status.code(), Some(0), "stderr={}", String::from_utf8_lossy(&parent_start.stderr));
+
+    let sender_start = fixture
+        .command()
+        .env("AI_COORD_CLIENT", "codex")
+        .env("AI_COORD_SESSION_ID", "sender")
+        .env("CODEX_SESSION_ID", "sender")
+        .args(["start", "replacement work", "README.md"])
+        .output()
+        .expect("queue sender work");
+    assert_eq!(sender_start.status.code(), Some(3), "stderr={}", String::from_utf8_lossy(&sender_start.stderr));
+
+    let sent = fixture
+        .command()
+        .env("AI_COORD_CLIENT", "codex")
+        .env("AI_COORD_SESSION_ID", "sender")
+        .env("CODEX_SESSION_ID", "sender")
+        .args([
+            "recommend",
+            "send",
+            "parent",
+            "--action",
+            "defer",
+            "--path",
+            "README.md",
+            "--reason",
+            "The submitted replacement changes this file.",
+            "--replacement",
+            "Replace the file and revalidate its documented contract.",
+        ])
+        .output()
+        .expect("send recommendation");
+    assert_eq!(sent.status.code(), Some(0), "stderr={}", String::from_utf8_lossy(&sent.stderr));
+    let id = String::from_utf8_lossy(&sent.stdout)
+        .trim()
+        .strip_prefix("RECOMMENDED\t")
+        .expect("recommendation TSV")
+        .to_owned();
+
+    let delegate_env = [("AI_COORD_CLIENT", "codex"), ("AI_COORD_SESSION_ID", "parent"), ("CODEX_SESSION_ID", "child")];
+    let listed =
+        fixture.command().envs(delegate_env).args(["recommend", "list", "--json"]).output().expect("delegate list");
+    assert_eq!(listed.status.code(), Some(0), "stderr={}", String::from_utf8_lossy(&listed.stderr));
+    let listed: Value = serde_json::from_slice(&listed.stdout).expect("list JSON");
+    assert_eq!(listed["recommendations"][0]["id"], id);
+
+    let shown = fixture
+        .command()
+        .envs(delegate_env)
+        .args(["recommend", "show", &id, "--json"])
+        .output()
+        .expect("delegate show");
+    assert_eq!(shown.status.code(), Some(0), "stderr={}", String::from_utf8_lossy(&shown.stderr));
+    let shown: Value = serde_json::from_slice(&shown.stdout).expect("show JSON");
+    assert_eq!(shown["recommendation"]["id"], id);
+
+    for arguments in [
+        vec![
+            "recommend",
+            "send",
+            "sender",
+            "--action",
+            "omit",
+            "--path",
+            "README.md",
+            "--reason",
+            "delegate send",
+            "--replacement",
+            "delegate replacement",
+        ],
+        vec!["recommend", "respond", &id, "--decision", "accepted", "--reason", "delegate decision"],
+        vec!["recommend", "withdraw", &id, "--reason", "delegate withdrawal"],
+    ] {
+        let rejected =
+            fixture.command().envs(delegate_env).args(arguments).output().expect("delegate mutation rejection");
+        assert_eq!(rejected.status.code(), Some(64), "stderr={}", String::from_utf8_lossy(&rejected.stderr));
+        assert!(String::from_utf8_lossy(&rejected.stderr).contains("delegate of codex/parent"));
+    }
+
+    let _ = parent_host.kill();
+    let _ = parent_host.wait();
+    let _ = sender_host.kill();
+    let _ = sender_host.wait();
+}

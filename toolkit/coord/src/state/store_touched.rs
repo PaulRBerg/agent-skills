@@ -84,8 +84,13 @@ impl Store {
         Ok(TouchedPaths { paths, truncated })
     }
 
-    /// Returns true only once per transition from dirty to clean.
-    pub(crate) fn update_scopes_clean(&mut self, identity: &Identity, repo_root: &str, clean: bool) -> Result<bool> {
+    /// Re-arm on dirt and report a clean transition without consuming its nudge.
+    pub(crate) fn clean_scope_nudge_pending(
+        &mut self,
+        identity: &Identity,
+        repo_root: &str,
+        clean: bool,
+    ) -> Result<bool> {
         self.immediate(|transaction| {
             transaction.execute(
                 "INSERT INTO touched_sets(client, session_id, repo_root, scopes_clean)
@@ -98,14 +103,26 @@ impl Store {
                 params![client_name(identity.client), identity.session_id, repo_root],
                 |row| row.get(0),
             )?;
-            if previous != clean {
+            if previous && !clean {
                 transaction.execute(
-                    "UPDATE touched_sets SET scopes_clean = ?4
+                    "UPDATE touched_sets SET scopes_clean = 0
                      WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3",
-                    params![client_name(identity.client), identity.session_id, repo_root, clean],
+                    params![client_name(identity.client), identity.session_id, repo_root],
                 )?;
             }
             Ok(clean && !previous)
+        })
+    }
+
+    /// Consume a clean-scope nudge only after its complete fragment was selected.
+    pub(crate) fn mark_clean_scope_nudged(&mut self, identity: &Identity, repo_root: &str) -> Result<bool> {
+        self.immediate(|transaction| {
+            Ok(transaction.execute(
+                "UPDATE touched_sets SET scopes_clean = 1
+                 WHERE client = ?1 AND session_id = ?2 AND repo_root = ?3
+                   AND scopes_clean = 0",
+                params![client_name(identity.client), identity.session_id, repo_root],
+            )? > 0)
         })
     }
 }

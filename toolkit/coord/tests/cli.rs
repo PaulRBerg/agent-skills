@@ -1035,7 +1035,7 @@ fn link_and_check_use_only_the_configured_temporary_roots() {
     check.assert().failure().code(2);
     let reports: Vec<Value> = serde_json::from_slice(&check.stdout).expect("check JSON");
     let state = reports.iter().find(|report| report["component"] == "state").expect("state report");
-    assert_eq!(state["schema_version"], 17);
+    assert_eq!(state["schema_version"], 18);
     assert_eq!(state["path"], fixture.state.join("state.db").to_string_lossy().as_ref());
     let codex_hooks = reports.iter().find(|report| report["component"] == "hooks:codex").expect("hook report");
     assert!(codex_hooks["error"].is_null());

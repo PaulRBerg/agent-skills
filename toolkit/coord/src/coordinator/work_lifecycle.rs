@@ -58,14 +58,16 @@ impl Coordinator {
         self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         store.set_coordination_waived(&identity, false)?;
         let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.start_direct(
+        let outcome = WorkCoordinator { store: &mut store }.start_direct(
             &identity,
             &root,
             &label,
             scopes,
             &inventory,
             self.clock.wall(),
-        )
+        )?;
+        store.refresh_recommendations(self.clock.wall())?;
+        Ok(outcome)
     }
 
     pub(crate) fn start_bundle(&self, label: &str, files: &[PathBuf], recursive: &[PathBuf]) -> Result<Outcome> {
@@ -89,7 +91,15 @@ impl Coordinator {
         self.ensure_session(&mut store, &identity, &cwd, session_root.as_deref())?;
         store.set_coordination_waived(&identity, false)?;
         let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.start_claims(&identity, &label, claims, &inventory, self.clock.wall())
+        let outcome = WorkCoordinator { store: &mut store }.start_claims(
+            &identity,
+            &label,
+            claims,
+            &inventory,
+            self.clock.wall(),
+        )?;
+        store.refresh_recommendations(self.clock.wall())?;
+        Ok(outcome)
     }
 
     pub(crate) fn draft(
@@ -213,13 +223,15 @@ impl Coordinator {
         self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
         store.set_coordination_waived(identity, false)?;
         let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.promote_draft(
+        let outcome = WorkCoordinator { store: &mut store }.promote_draft(
             identity,
             draft,
             extra_delete,
             &inventory,
             self.clock.wall(),
-        )
+        )?;
+        store.refresh_recommendations(self.clock.wall())?;
+        Ok(outcome)
     }
 
     pub(crate) fn promote_bundle_draft(&self, name: Option<&str>, cwd: &Path) -> Result<Outcome> {
@@ -244,13 +256,15 @@ impl Coordinator {
         self.ensure_session(&mut store, identity, &cwd, session_root.as_deref())?;
         store.set_coordination_waived(identity, false)?;
         let inventory = self.refresh_inventory(&mut store, false)?;
-        WorkCoordinator { store: &mut store }.promote_draft(
+        let outcome = WorkCoordinator { store: &mut store }.promote_draft(
             identity,
             draft,
             extra_delete,
             &inventory,
             self.clock.wall(),
-        )
+        )?;
+        store.refresh_recommendations(self.clock.wall())?;
+        Ok(outcome)
     }
 
     pub(crate) fn wait(&self, timeout_seconds: u64, poll_seconds: f64) -> Result<Outcome> {
@@ -297,6 +311,11 @@ impl Coordinator {
             }
             observed_valid_work = true;
             let qualified = work.claims.len() > 1;
+            store.refresh_recommendations(self.clock.wall())?;
+            let pending_recommendations = store.pending_recommendations(identity, None, false)?;
+            if !pending_recommendations.is_empty() {
+                return Ok(Outcome::new(OutcomeKind::Message, 3, pending_recommendations.len().to_string()));
+            }
             if work.state == WorkState::Active {
                 return Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(work_paths(&work, qualified)));
             }
@@ -339,6 +358,7 @@ impl Coordinator {
                     }
                     Err(error) => return Err(error),
                 };
+                store.refresh_recommendations(self.clock.wall())?;
                 last_full_check = Some(self.clock.monotonic());
                 last_generation = Some(store.generation()?);
                 if outcome.code == 0 || (outcome.code == 2 && !outcome.detail.starts_with("dirty-settling:")) {
@@ -449,6 +469,7 @@ impl Coordinator {
                     transaction.send_message(identity, &waiter, &text, Some(&repo_root), self.clock.wall())?;
                 }
             }
+            transaction.refresh_recommendations(self.clock.wall())?;
             Ok(removed)
         })?;
         let mut outcome = Outcome::new(OutcomeKind::Done, 0, if removed { "released" } else { "already clear" });
@@ -485,6 +506,7 @@ impl Coordinator {
                 return Ok(false);
             }
             notify_session_release_transaction(transaction, identity, released.as_ref(), wakeups, self.clock.wall())?;
+            transaction.refresh_recommendations(self.clock.wall())?;
             Ok(true)
         })
     }
@@ -558,6 +580,7 @@ impl Coordinator {
                     self.clock.wall(),
                 )?;
             }
+            transaction.refresh_recommendations(self.clock.wall())?;
             Ok(())
         })?;
         Ok(observations

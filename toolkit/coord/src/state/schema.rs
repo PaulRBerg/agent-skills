@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 17;
+pub(crate) const SCHEMA_VERSION: i64 = 18;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -150,6 +150,41 @@ const STATEMENTS: &[&str] = &[
     )",
     "CREATE INDEX messages_recipient_idx
         ON messages(recipient_client, recipient_session_id, created_at)",
+    "CREATE TABLE recommendations (
+        id TEXT PRIMARY KEY,
+        repo_root TEXT NOT NULL,
+        sender_client TEXT NOT NULL,
+        sender_session_id TEXT NOT NULL,
+        recipient_client TEXT NOT NULL,
+        recipient_session_id TEXT NOT NULL,
+        sender_snapshot TEXT NOT NULL,
+        recipient_snapshot TEXT NOT NULL,
+        sender_fingerprint TEXT NOT NULL,
+        recipient_fingerprint TEXT NOT NULL,
+        scopes TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('defer', 'omit')),
+        reason TEXT NOT NULL,
+        replacement TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'accepted', 'rejected', 'withdrawn', 'stale')),
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        decision TEXT CHECK (decision IN ('accepted', 'rejected')),
+        decision_reason TEXT,
+        decision_at REAL,
+        invalidation_reason TEXT,
+        surfaced_at REAL,
+        CHECK (sender_client != recipient_client OR sender_session_id != recipient_session_id),
+        CHECK ((decision IS NULL AND decision_reason IS NULL AND decision_at IS NULL)
+            OR (decision IS NOT NULL AND decision_reason IS NOT NULL AND decision_at IS NOT NULL)),
+        CHECK (state != 'pending' OR decision IS NULL),
+        CHECK (state != 'accepted' OR decision IS 'accepted'),
+        CHECK (state != 'rejected' OR decision IS 'rejected'),
+        CHECK ((state IN ('withdrawn', 'stale')) = (invalidation_reason IS NOT NULL))
+    )",
+    "CREATE INDEX recommendations_sender_idx
+        ON recommendations(sender_client, sender_session_id, state, created_at)",
+    "CREATE INDEX recommendations_recipient_idx
+        ON recommendations(recipient_client, recipient_session_id, state, created_at)",
     "CREATE TABLE current_turns (
         client TEXT NOT NULL,
         session_id TEXT NOT NULL,

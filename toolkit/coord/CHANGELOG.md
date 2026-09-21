@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add durable in-flight work recommendations: owners may send, respond to, and withdraw explicit `defer` or `omit`
+  proposals; both endpoints retain inspectable context and decision history, including after work/session deletion.
+  `recommend list` and `recommend show` expose recommendation JSON schema v1 while status remains schema v8. Pending
+  review checkpoints, inbox hints, waits, and Claude wakers route recipients to review without changing work ownership.
+  Break the internal ledger at schema v18 and reject v17 and every other nonzero version without migration or import.
 - Yield idle holders' untouched (soft) claims instead of blocking a new `start` or `wait`: a holder session idle at
   least five minutes whose overlapping scope carries no touched-since-submission or Git-dirty evidence is narrowed, or
   released entirely when nothing remains, and receives a `Yielded untouched scopes …` message; an earlier-queued

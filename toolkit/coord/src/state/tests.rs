@@ -74,7 +74,7 @@ fn save_work(store: &mut Store, update: &WorkUpdate) -> crate::error::Result<i64
 }
 
 #[test]
-fn new_store_has_exact_v17_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v18_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -181,6 +181,9 @@ fn new_store_has_exact_v17_schema_and_runtime_pragmas() {
     assert!(tables.contains("draft_scopes"));
     assert!(tables.contains("current_turns"));
     assert!(tables.contains("findings"));
+    assert!(tables.contains("recommendations"));
+    assert!(foreign_key_targets(&store.connection, "recommendations").is_empty());
+    assert_eq!(table_columns(&store.connection, "recommendations").len(), 22);
     assert!(tables.contains("finding_paths"));
     assert!(tables.contains("finding_observations"));
     assert!(tables.contains("finding_sightings"));
@@ -234,21 +237,21 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let connection = Connection::open(&path).unwrap();
     connection.execute("CREATE TABLE sentinel(value TEXT NOT NULL)", []).unwrap();
     connection.execute("INSERT INTO sentinel VALUES ('preserved')", []).unwrap();
-    connection.pragma_update(None, "user_version", 16).unwrap();
+    connection.pragma_update(None, "user_version", 17).unwrap();
     drop(connection);
 
     let error = Store::open(&path).err().unwrap();
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 16 is incompatible with required schema 17 at {}; \
+            "state schema 17 is incompatible with required schema 18 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
     );
 
     let connection = Connection::open(path).unwrap();
-    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 16);
+    assert_eq!(connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0)).unwrap(), 17);
     assert_eq!(
         connection.query_row("SELECT value FROM sentinel", [], |row| row.get::<_, String>(0)).unwrap(),
         "preserved"

@@ -192,9 +192,10 @@ else kept the request queued. A yielded holder that keeps writing to a narrowed-
 warning below and must re-run `ai-coord start`.
 
 In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its work is promoted,
-a message arrives, the work is released, coverage becomes unknown, or the waker times out. A readiness wake still
-requires the matching ordinary or bundle start form to return `READY`; message wakes identify `inbox` as the inspection
-surface and the matching start form as the ownership recheck. Unknown coverage, timeout, and release state explicitly
+a message or pending recommendation arrives, the work is released, coverage becomes unknown, or the waker times out. A
+readiness wake still requires the matching ordinary or bundle start form to return `READY`; message wakes identify
+`inbox` and `recommend list` in each claimed repository as inspection surfaces, then require the matching start form as
+the ownership recheck. Unknown coverage, timeout, and release state explicitly
 that no edit scope is owned. Repeated start calls may launch multiple independent wakers for the same session; each exits
 on the first terminal outcome. Codex sessions use `ai-coord wait` in the foreground.
 The waker resolves the Git root from its hook payload and observes only that root's queued row.
@@ -260,6 +261,45 @@ Message targets resolve an exact `client/session` or session ID first, then an e
 least four characters, or a unique callsign/label/provider-name substring. `repo` expands to the currently live peers in
 the Git worktree. Messages are recipient-scoped and snapshot both endpoint callsigns when sent, so later renames do not
 rewrite history.
+
+## Work recommendations
+
+Recommendations are durable, explicit peer proposals for in-flight work that may become redundant. They are advisory:
+they do not grant permission, change work claims, force an interruption, remove a requirement, or establish that a
+replacement succeeded. Only the owning agent may send, respond to, or withdraw a recommendation. Delegates may inspect
+their shared parent's records with `recommend list` and `recommend show`.
+
+```sh
+ai-coord recommend send TARGET --action defer --path src/legacy_adapter.rs \
+  --reason 'The planned removal would make this polish redundant.' \
+  --replacement 'My submitted work removes this adapter; retain parser work and verify the replacement.'
+ai-coord recommend list
+ai-coord recommend list --sent --all --json
+ai-coord recommend show ID --json
+ai-coord recommend respond ID --decision accepted --reason 'Deferring this polish; retaining parser tests and revalidation.'
+ai-coord recommend withdraw ID --reason 'The replacement no longer removes this adapter.'
+```
+
+`send` requires exactly one live peer; both sender and recipient must have submitted queued or active work in the
+current canonical repository. It takes `--action defer|omit`, one or more repeatable `--path` and/or `--recursive` scopes
+covered by the recipient's claim, and a required `--reason` and `--replacement`. Each recommendation allows up to 50
+scopes; reason, replacement, and response text must contain 1–2,000 Unicode characters after whitespace normalization.
+`list` defaults to incoming pending records in the current repository;
+`--sent` selects outgoing records and `--all` includes accepted and terminal history. `show`, `respond`, and `withdraw`
+authorize by endpoint identity and work from any directory. Repeating an identical live send and an identical valid
+decision is idempotent. Successful mutations print one TSV record; stale or conflicting decisions print `STALE` or
+`CONFLICT` and exit 3. JSON uses recommendation schema v1 envelopes and includes complete endpoint, work-claim, scope,
+decision, and invalidation snapshots; it does not change status or dashboard JSON.
+
+When a pending review is available, hooks and `inbox` direct the recipient to inspect `recommend list`, even after the
+ordinary pointer message has been acknowledged. Reach a safe boundary before the next affected edit or expensive batch;
+an executing tool is never forcibly interrupted. Compare the complete peer evidence and captured contexts with the user
+request, accepted plan, protected contracts, and required validation. Record an allowed accept or reject decision before
+changing scopes. After acceptance, safely reconcile only your own partial edits, retain essential validation and a
+specific revalidation step, then narrow through the ordinary or bundle `start` command and require `READY` (or use
+ordinary `done`). Acceptance does not bypass residual dirt or permit the sender to edit. Verify the promised replacement
+before reporting completion. A source change, expiry, or withdrawal invalidates the expectation and requires reassessment;
+recipient completion alone preserves the recorded acceptance history.
 
 ## Findings and autonomous triage
 
@@ -374,18 +414,20 @@ therefore session-scoped: the parent's work covers all delegated work. Subagents
 (`draft`, `start`, `bundle`, `wait`, or `done`) themselves because their inherited identity would make those commands
 act as the parent.
 
-This rule is enforced, not just documented: `draft`, `start`, `bundle draft`, `bundle start`, `wait`, and `done` exit 64
-when the environment looks like a delegate rather than the session that should hold its claims — either an
+This rule is enforced: `draft`, `start`, `bundle draft`, `bundle start`, `wait`, `done`, `recommend send`,
+`recommend respond`, and `recommend withdraw` exit 64 when the environment looks like a delegate rather than the session
+that should hold its claims — either an
 `AI_COORD_CLIENT`/`AI_COORD_SESSION_ID` override that resolves to a different host identity, or a Codex subagent whose
 `CODEX_SESSION_ID` and `CODEX_THREAD_ID` disagree while the ledger records an active delegate for that root. `status`,
-`touched`, `inbox`, `msg`, `finding`, `baseline`, `trailer`, and `name` remain available to delegates.
+`touched`, `inbox`, `msg`, `recommend list`, `recommend show`, `finding`, `baseline`, `trailer`, and `name` remain
+available to delegates.
 
 ## Storage and retention
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate development and validation. The directory is mode `0700` and the database is mode
 `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v17. Any other nonzero schema, including v16, is rejected without migration, import, deletion, or
+internal schema v18. Any other nonzero schema, including v17, is rejected without migration, import, deletion, or
 replacement, while the public `status --json` schema is v8. This is an isolated-state break with no migration or
 compatibility path. Close agents and explicitly choose any backup, removal, installation, and relinking rollout before
 retrying with incompatible state.
@@ -399,7 +441,10 @@ session foreign keys cascade draft and submitted work cleanup on authoritative s
 and session supersession, but only for a session-owned (unnamed) draft: a named draft has no owning session and that
 cascade never touches it. Named drafts instead expire and are deleted after seven days without an update.
 
-Messages expire after 48 hours and are capped at 50 per inbox. On macOS and Linux, sessions are bound to a
+Messages expire after 48 hours and are capped at 50 per inbox. Pending and accepted recommendations expire 48 hours
+after creation. Rejected, withdrawn, and stale history is retained for 48 hours after that transition; each endpoint is
+capped at 50 live incoming and 50 live outgoing recommendations.
+Their endpoint and context snapshots survive session or work deletion. On macOS and Linux, sessions are bound to a
 kernel-derived process fingerprint containing both PID and process start identity. Correlated `SessionEnd` hooks release
 immediately; after terminal closure, Ctrl+C, host crash, or another missed hook, the next fresh coordination probe
 removes a session as soon as that exact process is confirmed gone. PID reuse is treated as a different process. An

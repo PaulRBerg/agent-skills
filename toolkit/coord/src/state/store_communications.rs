@@ -44,15 +44,36 @@ impl Store {
         Ok(statement.query_map([], message_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    /// Mark unread messages as surfaced without waking generation-based waiters.
-    pub(crate) fn mark_unnotified(&mut self, identity: &Identity, current: f64) -> Result<usize> {
+    pub(crate) fn unnotified_messages(&self, identity: &Identity) -> Result<Vec<MessageRow>> {
+        let mut statement = self.connection.prepare(&format!(
+            "{} WHERE recipient_client = ?1 AND recipient_session_id = ?2
+               AND acknowledged_at IS NULL AND notified_at IS NULL
+             ORDER BY created_at, id",
+            message_select()
+        ))?;
+        Ok(statement
+            .query_map(params![client_name(identity.client), identity.session_id], message_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Mark only messages represented by a rendered hook notice.
+    pub(crate) fn mark_messages_notified(
+        &mut self,
+        identity: &Identity,
+        ids: &[String],
+        current: f64,
+    ) -> Result<usize> {
         self.immediate(|transaction| {
-            Ok(transaction.execute(
-                "UPDATE messages SET notified_at = ?1
-                 WHERE recipient_client = ?2 AND recipient_session_id = ?3
-                   AND acknowledged_at IS NULL AND notified_at IS NULL",
-                params![current, client_name(identity.client), identity.session_id],
-            )?)
+            let mut changed = 0;
+            for id in ids {
+                changed += transaction.execute(
+                    "UPDATE messages SET notified_at = ?1
+                     WHERE id = ?2 AND recipient_client = ?3 AND recipient_session_id = ?4
+                       AND acknowledged_at IS NULL AND notified_at IS NULL",
+                    params![current, id, client_name(identity.client), identity.session_id],
+                )?;
+            }
+            Ok(changed)
         })
     }
 
@@ -230,9 +251,29 @@ pub(super) fn add_message(
     repo_root: Option<&str>,
     current: f64,
 ) -> Result<String> {
-    let id = new_id();
     let sender_callsign = callsign(transaction, sender)?;
     let recipient_callsign = callsign(transaction, recipient)?;
+    add_message_with_callsigns(
+        transaction,
+        (sender, sender_callsign.as_deref()),
+        (recipient, recipient_callsign.as_deref()),
+        text,
+        repo_root,
+        current,
+    )
+}
+
+pub(super) fn add_message_with_callsigns(
+    transaction: &Transaction<'_>,
+    sender: (&Identity, Option<&str>),
+    recipient: (&Identity, Option<&str>),
+    text: &str,
+    repo_root: Option<&str>,
+    current: f64,
+) -> Result<String> {
+    let id = new_id();
+    let (sender, sender_callsign) = sender;
+    let (recipient, recipient_callsign) = recipient;
     transaction.execute(
         "INSERT INTO messages(
             id, sender_client, sender_session_id, sender_callsign, recipient_client,

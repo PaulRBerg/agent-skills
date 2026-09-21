@@ -19,6 +19,7 @@ pub(crate) enum Command {
     ///
     /// Use --draft to submit the stored draft, or pass LABEL and scopes for a
     /// direct submission. Use --recursive DIR for directory-prefix ownership.
+    /// Use `recommend send` when a planned replacement may make a holder's work obsolete.
     Start(StartArgs),
     /// Coordinate one atomic work item spanning multiple Git repositories.
     Bundle(BundleArgs),
@@ -46,6 +47,8 @@ pub(crate) enum Command {
     Msg(MessageArgs),
     /// List or acknowledge recipient-only messages.
     Inbox(InboxArgs),
+    /// Send, inspect, and decide cooperative in-flight work recommendations.
+    Recommend(RecommendArgs),
     /// Record and manage durable repository findings.
     Finding(FindingArgs),
     /// Print the current agent-session Git trailer.
@@ -217,6 +220,135 @@ pub(crate) struct InboxArgs {
     /// Acknowledge all pending messages.
     #[arg(long = "ack-all")]
     pub(crate) ack_all: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RecommendArgs {
+    #[command(subcommand)]
+    pub(crate) command: RecommendCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum RecommendCommand {
+    /// Propose that one peer defer or omit a covered part of its submitted work.
+    Send(RecommendSendArgs),
+    /// List incoming pending recommendations in this worktree, or sent/history records.
+    List(RecommendListArgs),
+    /// Show one endpoint-authorized recommendation from any directory.
+    Show(RecommendShowArgs),
+    /// Accept or reject an incoming recommendation with a recorded reason.
+    Respond(RecommendRespondArgs),
+    /// Withdraw a sent recommendation with a recorded reason.
+    Withdraw(RecommendWithdrawArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RecommendSendArgs {
+    pub(crate) target: String,
+
+    #[arg(long, value_enum)]
+    pub(crate) action: RecommendationActionArg,
+
+    /// Propose one exact repository-relative path; repeat for multiple paths.
+    #[arg(long = "path", value_name = "PATH")]
+    pub(crate) paths: Vec<PathBuf>,
+
+    /// Propose one recursive repository-relative directory; repeat as needed.
+    #[arg(long = "recursive", value_name = "DIR")]
+    pub(crate) recursive_paths: Vec<PathBuf>,
+
+    #[arg(long)]
+    pub(crate) reason: String,
+
+    #[arg(long)]
+    pub(crate) replacement: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RecommendListArgs {
+    /// List recommendations sent by this endpoint instead of incoming recommendations.
+    #[arg(long)]
+    pub(crate) sent: bool,
+
+    /// Include accepted and terminal recommendation history.
+    #[arg(long)]
+    pub(crate) all: bool,
+
+    /// Emit the recommendation JSON v1 envelope.
+    #[arg(long = "json")]
+    pub(crate) as_json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RecommendShowArgs {
+    pub(crate) id: String,
+
+    /// Emit the recommendation JSON v1 envelope.
+    #[arg(long = "json")]
+    pub(crate) as_json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RecommendRespondArgs {
+    pub(crate) id: String,
+
+    #[arg(long, value_enum)]
+    pub(crate) decision: RecommendationDecisionArg,
+
+    #[arg(long)]
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RecommendWithdrawArgs {
+    pub(crate) id: String,
+
+    #[arg(long)]
+    pub(crate) reason: String,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum RecommendationActionArg {
+    Defer,
+    Omit,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum RecommendationDecisionArg {
+    Accepted,
+    Rejected,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_recommend_send_with_exact_and_recursive_scopes() {
+        let cli = Cli::try_parse_from([
+            "ai-coord",
+            "recommend",
+            "send",
+            "peer",
+            "--action",
+            "defer",
+            "--path",
+            "src/legacy.rs",
+            "--recursive",
+            "src/generated",
+            "--reason",
+            "replacement makes this obsolete",
+            "--replacement",
+            "remove the adapter and revalidate callers",
+        ])
+        .expect("recommend send parses");
+        let Command::Recommend(RecommendArgs { command: RecommendCommand::Send(arguments) }) = cli.command else {
+            panic!("expected recommend send");
+        };
+        assert!(matches!(arguments.action, RecommendationActionArg::Defer));
+        assert_eq!(arguments.paths, vec![PathBuf::from("src/legacy.rs")]);
+        assert_eq!(arguments.recursive_paths, vec![PathBuf::from("src/generated")]);
+    }
 }
 
 #[derive(Debug, Args)]

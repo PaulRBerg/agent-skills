@@ -251,3 +251,145 @@ pub(crate) struct ProviderCacheRow {
     pub(crate) enabled: bool,
     pub(crate) dropped: usize,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RecommendationAction {
+    Defer,
+    Omit,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RecommendationState {
+    Pending,
+    Accepted,
+    Rejected,
+    Withdrawn,
+    Stale,
+}
+
+impl RecommendationState {
+    pub(crate) const fn is_live(self) -> bool {
+        matches!(self, Self::Pending | Self::Accepted)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RecommendationDecision {
+    Accepted,
+    Rejected,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub(crate) struct RecommendationClaim {
+    pub(crate) repo_root: String,
+    pub(crate) scopes: Vec<Scope>,
+}
+
+/// Semantic work context, excluding revision, queue state, timestamps and dirt.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub(crate) struct RecommendationWork {
+    pub(crate) id: i64,
+    pub(crate) label: String,
+    pub(crate) claims: Vec<RecommendationClaim>,
+}
+
+impl From<&WorkRow> for RecommendationWork {
+    fn from(work: &WorkRow) -> Self {
+        let mut claims = work
+            .claims
+            .iter()
+            .map(|claim| {
+                let mut scopes = claim.scopes.clone();
+                scopes.sort_by(|a, b| a.path.cmp(&b.path).then_with(|| a.is_recursive().cmp(&b.is_recursive())));
+                RecommendationClaim { repo_root: claim.repo_root.clone(), scopes }
+            })
+            .collect::<Vec<_>>();
+        claims.sort_by(|a, b| a.repo_root.cmp(&b.repo_root));
+        Self { id: work.id, label: work.label.split_whitespace().collect::<Vec<_>>().join(" "), claims }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub(crate) struct RecommendationEndpoint {
+    pub(crate) identity: Identity,
+    pub(crate) callsign: Option<String>,
+    pub(crate) work: RecommendationWork,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+pub(crate) struct RecommendationRow {
+    pub(crate) id: String,
+    pub(crate) repo_root: String,
+    pub(crate) sender: RecommendationEndpoint,
+    pub(crate) recipient: RecommendationEndpoint,
+    pub(crate) scopes: Vec<Scope>,
+    pub(crate) action: RecommendationAction,
+    pub(crate) reason: String,
+    pub(crate) replacement: String,
+    pub(crate) state: RecommendationState,
+    pub(crate) created_at: f64,
+    pub(crate) updated_at: f64,
+    pub(crate) decision: Option<RecommendationDecision>,
+    pub(crate) decision_reason: Option<String>,
+    pub(crate) decision_at: Option<f64>,
+    pub(crate) invalidation_reason: Option<String>,
+    #[serde(skip)]
+    pub(crate) surfaced_at: Option<f64>,
+    #[serde(skip)]
+    pub(super) sender_fingerprint: Option<ProcessFingerprint>,
+    #[serde(skip)]
+    pub(super) recipient_fingerprint: Option<ProcessFingerprint>,
+}
+
+/// A slow process probe is performed before acquiring the transaction. The store
+/// revalidates its fingerprint and semantic work context under the write lock.
+#[derive(Clone, Debug)]
+pub(crate) struct RecommendationObservation {
+    pub(crate) identity: Identity,
+    pub(crate) fingerprint: Option<ProcessFingerprint>,
+    pub(crate) work: RecommendationWork,
+    pub(crate) liveness: crate::domain::ProcessLiveness,
+}
+
+impl RecommendationObservation {
+    pub(crate) fn new(session: &SessionRow, work: &WorkRow, liveness: crate::domain::ProcessLiveness) -> Self {
+        Self {
+            identity: session.identity.clone(),
+            fingerprint: session.fingerprint.clone(),
+            work: work.into(),
+            liveness,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RecommendationSend {
+    pub(crate) sender: RecommendationObservation,
+    pub(crate) recipient: RecommendationObservation,
+    pub(crate) repo_root: String,
+    pub(crate) scopes: Vec<Scope>,
+    pub(crate) action: RecommendationAction,
+    pub(crate) reason: String,
+    pub(crate) replacement: String,
+    pub(crate) current: f64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RecommendationOutcome {
+    Recommended,
+    Existing,
+    Accepted,
+    Rejected,
+    Withdrawn,
+    Stale,
+    Conflict,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RecommendationMutation {
+    pub(crate) outcome: RecommendationOutcome,
+    pub(crate) recommendation: RecommendationRow,
+}
