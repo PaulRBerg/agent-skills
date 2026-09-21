@@ -439,6 +439,45 @@ fn expired_named_drafts_are_pruned_before_reuse_or_promotion() {
 }
 
 #[test]
+fn expired_named_bundle_drafts_are_pruned_before_reuse_or_promotion() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, fixture) = fixture(3, &[(&owner, 0, 66), (&promoter, 2, 67)]);
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        fixture.store().unwrap(),
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::new(FakeProbe::default()),
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    );
+
+    coordinator
+        .draft_bundle_for(
+            owner.clone(),
+            Some("plan1"),
+            "named bundle",
+            &files(&roots[0..2], &["a.rs", "b.rs"]),
+            &[],
+            &roots[0],
+        )
+        .unwrap();
+    clock.sleep(Duration::from_secs(8 * 24 * 60 * 60));
+
+    let error = coordinator.promote_bundle_draft_for(&promoter, Some("plan1"), &roots[2]).unwrap_err();
+    assert!(error.to_string().contains("no draft named plan1"));
+    coordinator
+        .draft_bundle_for(
+            owner,
+            Some("plan1"),
+            "replacement bundle",
+            &files(&roots[1..3], &["c.rs", "d.rs"]),
+            &[],
+            &roots[1],
+        )
+        .unwrap();
+}
+
+#[test]
 fn named_draft_wrong_repository_guidance_does_not_suggest_done() {
     let owner = identity("owner");
     let promoter = identity("promoter");

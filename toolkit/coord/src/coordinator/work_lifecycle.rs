@@ -254,6 +254,7 @@ impl Coordinator {
     ) -> Result<Outcome> {
         let cwd = resolved(cwd);
         let mut store = self.store()?;
+        store.prune(self.clock.wall())?;
         let (draft, extra_delete) = resolve_promoted_draft(&mut store, identity, name)?;
         if draft.claims.len() < 2 {
             return Err(AppError::operational("draft has one repository claim; submit it with ai-coord start --draft"));
