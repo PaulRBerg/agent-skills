@@ -53,12 +53,12 @@ ai-handoff archive <handoff-path>
 `create` canonicalizes and deduplicates Git worktrees. A single-repository handoff is published below that
 repository's ignored `.ai/task-handoffs/` directory. A cross-repository handoff is published below
 `$HOME/Desktop/.ai/task-handoffs/` and requires an explicit launch repository plus a `## Repository order` section.
-Publication is no-overwrite and atomic, and clipboard commands are copied through `pbcopy` and verified through
-`pbpaste` unless `--no-clipboard` is passed. `--draft` is required except with `--check`, which validates placement
-without reading a draft or writing files. `--before-work-skill` requires an absolute directory with a readable
-`SKILL.md` and appends an instruction to load it before any task work to the generated Codex prompt. Generated handoff
-files abbreviate every occurrence of the active home directory as `~`; reported paths and launch commands remain
-absolute.
+Publication descends through no-follow directory handles, is no-overwrite and atomic, and clipboard commands are copied
+through `pbcopy` and verified through `pbpaste` unless `--no-clipboard` is passed. `--draft` is required except with
+`--check`, which validates placement without reading a draft or writing files. `--before-work-skill` requires an
+absolute directory with a readable `SKILL.md` and appends an instruction to load it before any task work to the
+generated Codex prompt. Generated handoff files abbreviate every occurrence of the active home directory as `~`;
+reported paths and launch commands remain absolute.
 
 `archive` moves a handoff to `$HOME/.local/share/task-handoffs/archive/<origin>/`, adding a UTC timestamp when the
 name is occupied.

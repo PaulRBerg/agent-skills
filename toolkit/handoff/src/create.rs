@@ -1,12 +1,20 @@
 use std::{
+    collections::hash_map::RandomState,
+    ffi::{OsStr, OsString},
     fs::{self, File},
+    hash::BuildHasher,
     io::{Read, Write},
+    os::fd::OwnedFd,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use chrono::Utc;
-use tempfile::Builder;
+use rustix::{
+    fs::{self as unix_fs, AtFlags, FileType, Mode, OFlags},
+    io::Errno,
+};
 
 use crate::{
     cli::CreateArgs,
@@ -22,8 +30,16 @@ pub(crate) fn run(arguments: CreateArgs) -> Result<()> {
     let launch_repository = launch_repository(&repositories, arguments.launch_repo.as_deref())?;
     let before_work_skill = validate_before_work_skill(arguments.before_work_skill.as_deref())?;
     let placement = placement(&repositories, &arguments.filename)?;
-    validate_physical_parents(&placement.base)?;
-    ensure_absent(&placement.target)?;
+    let existing_handoff_directory = validate_physical_parents(&placement.base)?;
+    if repositories.len() == 1 && !git::is_ignored(&placement.base, &placement.relative)? {
+        return Err(Error::operational(format!(
+            "handoff target is not ignored by Git: {}",
+            placement.relative.display()
+        )));
+    }
+    if let Some(directory) = existing_handoff_directory {
+        ensure_absent(&directory, OsStr::new(&arguments.filename), &placement.target)?;
+    }
 
     if arguments.check {
         println!("target\t{}", placement.target.display());
@@ -77,9 +93,6 @@ fn placement(repositories: &[PathBuf], filename: &str) -> Result<Placement> {
     let relative = PathBuf::from(".ai").join("task-handoffs").join(filename);
     if repositories.len() == 1 {
         let repository = &repositories[0];
-        if !git::is_ignored(repository, &relative)? {
-            return Err(Error::operational(format!("handoff target is not ignored by Git: {}", relative.display())));
-        }
         return Ok(Placement { base: repository.clone(), target: repository.join(&relative), relative });
     }
 
@@ -303,43 +316,105 @@ fn build_command(
     format!("codex -C {} {}", shell_quote(launch_repository), shell_quote(&prompt))
 }
 
-fn validate_physical_parents(base: &Path) -> Result<()> {
-    for path in [base.join(".ai"), base.join(".ai/task-handoffs")] {
-        match fs::symlink_metadata(&path) {
-            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
-            Ok(_) => {
-                return Err(Error::operational(format!(
-                    "handoff parent must be a physical directory: {}",
-                    path.display()
-                )));
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(Error::operational(format!("cannot inspect handoff parent {}: {error}", path.display())));
-            }
+fn validate_physical_parents(base: &Path) -> Result<Option<OwnedFd>> {
+    let base_directory = open_base_directory(base)?;
+    let ai_path = base.join(".ai");
+    let Some(ai_directory) = open_existing_directory(&base_directory, OsStr::new(".ai"), &ai_path)? else {
+        return Ok(None);
+    };
+    let handoff_path = ai_path.join("task-handoffs");
+    open_existing_directory(&ai_directory, OsStr::new("task-handoffs"), &handoff_path)
+}
+
+fn open_base_directory(path: &Path) -> Result<OwnedFd> {
+    let directory =
+        unix_fs::open(path, OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC, Mode::empty())
+            .map_err(|error| {
+                Error::operational(format!("cannot inspect handoff parent {}: {error}", path.display()))
+            })?;
+    verify_directory(&directory, path, "handoff parent")?;
+    Ok(directory)
+}
+
+fn open_existing_directory(parent: &OwnedFd, name: &OsStr, path: &Path) -> Result<Option<OwnedFd>> {
+    match unix_fs::openat(
+        parent,
+        name,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(directory) => {
+            verify_directory(&directory, path, "handoff parent")?;
+            Ok(Some(directory))
         }
+        Err(Errno::NOENT) => Ok(None),
+        Err(error) if error == Errno::LOOP || error == Errno::NOTDIR => Err(physical_directory_error(path)),
+        Err(error) => Err(Error::operational(format!("cannot inspect handoff parent {}: {error}", path.display()))),
+    }
+}
+
+fn open_handoff_directory(parent: &OwnedFd, name: &OsStr, path: &Path) -> Result<OwnedFd> {
+    let directory = unix_fs::openat(
+        parent,
+        name,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|error| {
+        if error == Errno::LOOP || error == Errno::NOTDIR {
+            physical_directory_error(path)
+        } else {
+            Error::operational(format!("cannot inspect handoff directory {}: {error}", path.display()))
+        }
+    })?;
+    verify_directory(&directory, path, "handoff directory")?;
+    Ok(directory)
+}
+
+fn verify_directory(directory: &OwnedFd, path: &Path, description: &str) -> Result<()> {
+    let status = unix_fs::fstat(directory)
+        .map_err(|error| Error::operational(format!("cannot inspect {description} {}: {error}", path.display())))?;
+    if FileType::from_raw_mode(status.st_mode) != FileType::Directory {
+        return Err(physical_directory_error(path));
     }
     Ok(())
 }
 
-fn ensure_absent(path: &Path) -> Result<()> {
-    match fs::symlink_metadata(path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+fn physical_directory_error(path: &Path) -> Error {
+    Error::operational(format!("handoff parent must be a physical directory: {}", path.display()))
+}
+
+fn ensure_absent(directory: &OwnedFd, name: &OsStr, path: &Path) -> Result<()> {
+    match unix_fs::statat(directory, name, AtFlags::SYMLINK_NOFOLLOW) {
+        Err(Errno::NOENT) => Ok(()),
         Err(error) => Err(Error::operational(format!("cannot inspect handoff target {}: {error}", path.display()))),
         Ok(_) => Err(Error::operational(format!("handoff target already exists: {}", path.display()))),
     }
 }
 
 struct Publication {
-    target: PathBuf,
+    base_directory: OwnedFd,
+    ai_directory: Option<OwnedFd>,
+    handoff_directory: Option<OwnedFd>,
+    target_name: OsString,
+    temporary_name: Option<OsString>,
     target_created: bool,
-    created_directories: Vec<PathBuf>,
+    ai_created: bool,
+    handoff_directory_created: bool,
     finished: bool,
 }
 
 impl Publication {
     fn finish(&mut self) {
         self.finished = true;
+    }
+
+    fn ai_directory(&self) -> &OwnedFd {
+        self.ai_directory.as_ref().expect(".ai directory is open")
+    }
+
+    fn handoff_directory(&self) -> &OwnedFd {
+        self.handoff_directory.as_ref().expect("handoff directory is open")
     }
 }
 
@@ -348,72 +423,115 @@ impl Drop for Publication {
         if self.finished {
             return;
         }
-        if self.target_created {
-            let _ = fs::remove_file(&self.target);
+        if let Some(directory) = &self.handoff_directory {
+            if let Some(name) = &self.temporary_name {
+                let _ = unix_fs::unlinkat(directory, name, AtFlags::empty());
+            }
+            if self.target_created {
+                let _ = unix_fs::unlinkat(directory, &self.target_name, AtFlags::empty());
+            }
         }
-        for directory in self.created_directories.iter().rev() {
-            let _ = fs::remove_dir(directory);
+        if self.handoff_directory_created &&
+            let Some(directory) = &self.ai_directory
+        {
+            let _ = unix_fs::unlinkat(directory, "task-handoffs", AtFlags::REMOVEDIR);
+        }
+        if self.ai_created {
+            let _ = unix_fs::unlinkat(&self.base_directory, ".ai", AtFlags::REMOVEDIR);
         }
     }
 }
 
 fn publish(base: &Path, target: &Path, contents: &[u8]) -> Result<Publication> {
+    let target_name = target.file_name().expect("target has a filename").to_owned();
     let mut publication = Publication {
-        target: target.to_path_buf(),
+        base_directory: open_base_directory(base)?,
+        ai_directory: None,
+        handoff_directory: None,
+        target_name,
+        temporary_name: None,
         target_created: false,
-        created_directories: Vec::new(),
+        ai_created: false,
+        handoff_directory_created: false,
         finished: false,
     };
-    for directory in [base.join(".ai"), base.join(".ai/task-handoffs")] {
-        match fs::create_dir(&directory) {
-            Ok(()) => publication.created_directories.push(directory),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let metadata = fs::symlink_metadata(&directory).map_err(|inspect_error| {
-                    Error::operational(format!(
-                        "cannot inspect handoff directory {}: {inspect_error}",
-                        directory.display()
-                    ))
-                })?;
-                if !metadata.is_dir() || metadata.file_type().is_symlink() {
-                    return Err(Error::operational(format!(
-                        "handoff parent must be a physical directory: {}",
-                        directory.display()
-                    )));
-                }
-            }
-            Err(error) => {
-                return Err(Error::operational(format!(
-                    "cannot create handoff directory {}: {error}",
-                    directory.display()
-                )));
-            }
-        }
-    }
 
-    let target_directory = target.parent().expect("target has a parent");
-    let mut temporary = Builder::new()
-        .prefix(".ai-handoff.")
-        .tempfile_in(target_directory)
-        .map_err(|error| Error::operational(format!("cannot stage handoff: {error}")))?;
+    let ai_path = base.join(".ai");
+    publication.ai_created = create_directory(&publication.base_directory, ".ai", &ai_path)?;
+    publication.ai_directory = Some(open_handoff_directory(&publication.base_directory, OsStr::new(".ai"), &ai_path)?);
+
+    let handoff_path = ai_path.join("task-handoffs");
+    publication.handoff_directory_created =
+        create_directory(publication.ai_directory(), "task-handoffs", &handoff_path)?;
+    publication.handoff_directory =
+        Some(open_handoff_directory(publication.ai_directory(), OsStr::new("task-handoffs"), &handoff_path)?);
+
+    let (temporary_name, mut temporary) = create_staged_file(publication.handoff_directory())?;
+    publication.temporary_name = Some(temporary_name);
     temporary
         .write_all(contents)
         .and_then(|()| temporary.flush())
-        .and_then(|()| temporary.as_file().sync_all())
+        .and_then(|()| temporary.sync_all())
         .map_err(|error| Error::operational(format!("cannot write staged handoff: {error}")))?;
-    ensure_absent(target)?;
-    fs::hard_link(temporary.path(), target)
-        .map_err(|error| Error::operational(format!("cannot publish handoff without overwriting: {error}")))?;
+    ensure_absent(publication.handoff_directory(), &publication.target_name, target)?;
+    unix_fs::linkat(
+        publication.handoff_directory(),
+        publication.temporary_name.as_ref().expect("staged handoff has a name"),
+        publication.handoff_directory(),
+        &publication.target_name,
+        AtFlags::empty(),
+    )
+    .map_err(|error| Error::operational(format!("cannot publish handoff without overwriting: {error}")))?;
     publication.target_created = true;
 
+    let published_file = unix_fs::openat(
+        publication.handoff_directory(),
+        &publication.target_name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|error| Error::operational(format!("cannot verify published handoff: {error}")))?;
     let mut published = Vec::new();
-    File::open(target)
-        .and_then(|mut file| file.read_to_end(&mut published))
+    File::from(published_file)
+        .read_to_end(&mut published)
         .map_err(|error| Error::operational(format!("cannot verify published handoff: {error}")))?;
     if published != contents {
         return Err(Error::operational("published handoff bytes changed during validation"));
     }
-    temporary.close().map_err(|error| Error::operational(format!("cannot remove staged handoff: {error}")))?;
+    let temporary_name = publication.temporary_name.as_ref().expect("staged handoff has a name").clone();
+    unix_fs::unlinkat(publication.handoff_directory(), temporary_name, AtFlags::empty())
+        .map_err(|error| Error::operational(format!("cannot remove staged handoff: {error}")))?;
+    publication.temporary_name = None;
     Ok(publication)
+}
+
+fn create_directory(parent: &OwnedFd, name: &str, path: &Path) -> Result<bool> {
+    match unix_fs::mkdirat(parent, name, Mode::RWXU | Mode::RGRP | Mode::XGRP | Mode::ROTH | Mode::XOTH) {
+        Ok(()) => Ok(true),
+        Err(Errno::EXIST) => Ok(false),
+        Err(error) => Err(Error::operational(format!("cannot create handoff directory {}: {error}", path.display()))),
+    }
+}
+
+fn create_staged_file(directory: &OwnedFd) -> Result<(OsString, File)> {
+    static TEMPORARY_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    for _ in 0..128 {
+        let unique = TEMPORARY_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let suffix = RandomState::new().hash_one((std::process::id(), unique));
+        let name = OsString::from(format!(".ai-handoff.{suffix:016x}"));
+        match unix_fs::openat(
+            directory,
+            &name,
+            OFlags::CREATE | OFlags::EXCL | OFlags::WRONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::RUSR | Mode::WUSR | Mode::RGRP | Mode::ROTH,
+        ) {
+            Ok(file) => return Ok((name, File::from(file))),
+            Err(Errno::EXIST) => {}
+            Err(error) => return Err(Error::operational(format!("cannot stage handoff: {error}"))),
+        }
+    }
+    Err(Error::operational("cannot stage handoff: too many temporary filename collisions"))
 }
 
 fn copy_and_verify(command: &str) -> Result<()> {

@@ -67,6 +67,7 @@ dependencies = [
  "chrono",
  "clap",
  "predicates",
+ "rustix",
  "tempfile",
  "thiserror",
 ]

@@ -12,6 +12,7 @@ version.workspace = true
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap.workspace = true
+rustix = { version = "1", features = ["fs"] }
 tempfile.workspace = true
 thiserror.workspace = true
 

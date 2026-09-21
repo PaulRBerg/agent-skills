@@ -58,6 +58,54 @@ fn creates_single_repository_handoff_and_verifies_clipboard() {
     assert!(command.contains("under .ai/task-handoffs/CREATE_HANDOFF.md"));
 }
 
+#[cfg(unix)]
+#[test]
+fn create_publishes_inside_the_preopened_handoff_directory() {
+    use std::os::unix::fs::MetadataExt;
+
+    let harness = Harness::new("anchored-create");
+    let repository = harness.repo("repo", true);
+    let handoffs = repository.join(".ai/task-handoffs");
+    let draft = harness.root.join("draft.md");
+    fs::create_dir_all(&handoffs).unwrap();
+    fs::write(&draft, "# Anchored publication\n").unwrap();
+    let directory = fs::File::open(&handoffs).unwrap();
+
+    let output = harness.command([
+        "create",
+        "--repo",
+        repository.to_str().unwrap(),
+        "--category",
+        "implementation",
+        "--task",
+        "anchor publication to a directory handle",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--no-clipboard",
+        "ANCHORED.md",
+    ]);
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let published = rustix::fs::openat(
+        &directory,
+        "ANCHORED.md",
+        rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::NOFOLLOW,
+        rustix::fs::Mode::empty(),
+    )
+    .unwrap();
+    let status = rustix::fs::fstat(&published).unwrap();
+    let metadata = fs::metadata(handoffs.join("ANCHORED.md")).unwrap();
+    assert_eq!(u64::try_from(status.st_dev).unwrap(), metadata.dev());
+    assert_eq!(status.st_ino, metadata.ino());
+    assert!(
+        fs::read_dir(handoffs).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".ai-handoff."))
+    );
+}
+
 #[test]
 fn create_abbreviates_home_paths_throughout_the_handoff_file() {
     let harness = Harness::new("home-paths");
@@ -167,7 +215,7 @@ fn create_rejects_symlinked_handoff_directories_without_traversing_them() {
         "LINKED_AI.md",
     ]);
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("git check-ignore failed"));
+    assert!(stderr(&output).contains("handoff parent must be a physical directory"));
     assert!(!outside.join("task-handoffs/LINKED_AI.md").exists());
 
     let linked_handoffs = harness.repo("linked-handoffs", true);
@@ -187,7 +235,7 @@ fn create_rejects_symlinked_handoff_directories_without_traversing_them() {
         "LINKED_HANDOFFS.md",
     ]);
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("git check-ignore failed"));
+    assert!(stderr(&output).contains("handoff parent must be a physical directory"));
     assert!(!outside.join("LINKED_HANDOFFS.md").exists());
 }
 
