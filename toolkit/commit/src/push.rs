@@ -47,7 +47,7 @@ pub fn execute(repository: &Repository) -> Result<PushOutcome> {
     if first.status.success() {
         return Ok(success_outcome(destination));
     }
-    if !is_non_fast_forward(&first.stderr) {
+    if !is_retryable_rejection(&first.stdout, &destination.remote_branch) {
         return Err(git_error(first));
     }
 
@@ -143,15 +143,23 @@ fn behind_count(repository: &Repository, compare_ref: Option<&str>) -> Result<Op
 fn attempt(repository: &Repository, destination: &Destination) -> Result<std::process::Output> {
     let refspec = format!("HEAD:refs/heads/{}", destination.remote_branch);
     if destination.set_upstream {
-        repository.raw(["push", "--set-upstream", &destination.remote, &refspec], None)
+        repository.raw(["push", "--porcelain", "--set-upstream", &destination.remote, &refspec], None)
     } else {
-        repository.raw(["push", &destination.remote, &refspec], None)
+        repository.raw(["push", "--porcelain", &destination.remote, &refspec], None)
     }
 }
 
-fn is_non_fast_forward(stderr: &[u8]) -> bool {
-    let stderr = String::from_utf8_lossy(stderr);
-    stderr.contains("non-fast-forward") || stderr.contains("(fetch first)")
+fn is_retryable_rejection(stdout: &[u8], remote_branch: &str) -> bool {
+    let refspec = format!("HEAD:refs/heads/{remote_branch}");
+    String::from_utf8_lossy(stdout).lines().any(|line| {
+        let mut fields = line.splitn(3, '\t');
+        matches!(
+            (fields.next(), fields.next(), fields.next()),
+            (Some("!"), Some(pushed_refspec), Some(summary))
+                if pushed_refspec == refspec
+                    && (summary.contains("non-fast-forward") || summary.contains("fetch first"))
+        )
+    })
 }
 
 fn success_outcome(destination: Destination) -> PushOutcome {

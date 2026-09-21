@@ -125,7 +125,7 @@ fn recognized_non_fast_forward_is_fetched_and_retried_once() {
     let real_git = git_binary();
     write_executable(
         &harness.shim.join("git"),
-        "#!/bin/sh\ncase \" $* \" in *' push '*)\n  printf 'push\\n' >> \"$PUSH_ATTEMPTS\"\n  if [ ! -e \"$PUSH_MARKER\" ]; then\n    : > \"$PUSH_MARKER\"\n    printf ' ! [rejected] main -> main (non-fast-forward)\\n' >&2\n    printf 'error: failed to push some refs\\n' >&2\n    exit 1\n  fi\n;; esac\nexec \"$REAL_GIT\" \"$@\"\n",
+        "#!/bin/sh\ncase \" $* \" in *' push '*)\n  printf 'push\\n' >> \"$PUSH_ATTEMPTS\"\n  if [ ! -e \"$PUSH_MARKER\" ]; then\n    : > \"$PUSH_MARKER\"\n    printf 'To file:///remote.git\\n!\\tHEAD:refs/heads/main\\t[rejected] (non-fast-forward)\\nDone\\n'\n    printf 'error: failed to push some refs\\n' >&2\n    exit 1\n  fi\n;; esac\nexec \"$REAL_GIT\" \"$@\"\n",
     );
     let pushed = harness.command_with_env(
         ["push"],
@@ -138,6 +138,38 @@ fn recognized_non_fast_forward_is_fetched_and_retried_once() {
     assert!(pushed.status.success(), "{}", stderr(&pushed));
     assert_eq!(stdout(&pushed), "PUSHED main\n");
     assert_eq!(fs::read_to_string(attempts).unwrap(), "push\npush\n");
+}
+
+#[test]
+fn unrelated_push_rejection_is_not_retried() {
+    let harness = Harness::new("push-unrelated-rejection");
+    let remote = harness.root.join("remote.git");
+    init_bare(&remote, &harness.home);
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.git(["branch", "-M", "main"]);
+    harness.git(["remote", "add", "origin", &format!("file://{}", remote.display())]);
+    harness.git(["push", "--quiet", "-u", "origin", "HEAD"]);
+    harness.write("intended.txt", "rejected\n");
+    harness.commit_all("rejected");
+
+    let attempts = harness.root.join("push-attempts");
+    let real_git = git_binary();
+    write_executable(
+        &harness.shim.join("git"),
+        "#!/bin/sh\ncase \" $* \" in *' push '*)\n  printf 'push\\n' >> \"$PUSH_ATTEMPTS\"\n  printf 'To file:///remote.git\\n!\\tHEAD:refs/heads/main\\t[remote rejected] (pre-receive hook declined)\\nDone\\n'\n  printf 'error: failed to push some refs\\n' >&2\n  exit 1\n;; esac\nexec \"$REAL_GIT\" \"$@\"\n",
+    );
+    let rejected = harness.command_with_env(
+        ["push"],
+        [
+            ("REAL_GIT", real_git.to_string_lossy().into_owned()),
+            ("PUSH_ATTEMPTS", attempts.to_string_lossy().into_owned()),
+        ],
+    );
+
+    assert_eq!(exit_code(&rejected), 1);
+    assert!(stderr(&rejected).contains("error: failed to push some refs"));
+    assert_eq!(fs::read_to_string(attempts).unwrap(), "push\n");
 }
 
 #[test]
