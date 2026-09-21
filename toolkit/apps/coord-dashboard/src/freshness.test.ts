@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, unlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { inspectBuildFreshness, isBuildFresh } from "./freshness";
+import { BUILD_INPUTS, inspectBuildFreshness, isBuildFresh } from "./freshness";
 
 const temporaryDirectories: string[] = [];
 
@@ -38,6 +38,10 @@ describe("isBuildFresh", () => {
     await mkdir(sourceDirectory, { recursive: true });
     await mkdir(distDirectory);
     await writeFile(join(sourceDirectory, "main.tsx"), "export {};", "utf8");
+    for (const input of BUILD_INPUTS.filter((path) => path !== "src")) {
+      await writeFile(join(projectRoot, input), input, "utf8");
+      await utimes(join(projectRoot, input), old, old);
+    }
     await writeFile(join(distDirectory, "index.html"), "built", "utf8");
     await writeFile(join(distDirectory, ".build-stamp"), "built", "utf8");
     await utimes(join(sourceDirectory, "main.tsx"), old, old);
@@ -51,5 +55,32 @@ describe("isBuildFresh", () => {
     await utimes(addedDirectory, added, added);
 
     expect(isBuildFresh(await inspectBuildFreshness(projectRoot))).toBe(false);
+  });
+
+  it("treats a missing declared input as stale", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "ai-coord-dashboard-freshness-"));
+    temporaryDirectories.push(projectRoot);
+    const old = new Date("2026-08-09T08:00:00Z");
+    const built = new Date("2026-08-10T08:00:00Z");
+    const distDirectory = join(projectRoot, "dist");
+
+    await mkdir(join(projectRoot, "src"), { recursive: true });
+    for (const input of BUILD_INPUTS.filter((path) => path !== "src")) {
+      await writeFile(join(projectRoot, input), input, "utf8");
+      await utimes(join(projectRoot, input), old, old);
+    }
+    await utimes(join(projectRoot, "src"), old, old);
+    await mkdir(distDirectory);
+    await writeFile(join(distDirectory, "index.html"), "built", "utf8");
+    await writeFile(join(distDirectory, ".build-stamp"), "built", "utf8");
+    await utimes(join(distDirectory, "index.html"), built, built);
+    await utimes(join(distDirectory, ".build-stamp"), built, built);
+    expect(isBuildFresh(await inspectBuildFreshness(projectRoot))).toBe(true);
+
+    await unlink(join(projectRoot, "index.html"));
+
+    const freshness = await inspectBuildFreshness(projectRoot);
+    expect(freshness.latestInputMtimeMs).toBeNull();
+    expect(isBuildFresh(freshness)).toBe(false);
   });
 });
