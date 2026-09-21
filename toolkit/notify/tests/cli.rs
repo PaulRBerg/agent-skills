@@ -150,6 +150,36 @@ fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_usage() {
 }
 
 #[test]
+fn native_codex_hooks_read_stdin_and_complete_the_tracked_turn_silently() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+    environment
+        .run(
+            &["event", "codex"],
+            r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","turn_id":"t","prompt":"fix tests"}"#,
+        )
+        .success()
+        .stdout("");
+    environment
+        .run(
+            &["event", "codex"],
+            r#"{"hook_event_name":"Stop","session_id":"s","turn_id":"t","last_assistant_message":null}"#,
+        )
+        .success()
+        .stdout("");
+    let connection = Connection::open(database).unwrap();
+    let (prompt, stopped): (String, bool) = connection
+        .query_row("SELECT prompt, stopped_at IS NOT NULL FROM sessions WHERE session_id = 'codex:s:t'", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(prompt, "fix tests");
+    assert!(stopped);
+}
+
+#[test]
 fn link_claude_supports_dry_run_updates_and_schema_failures() {
     let environment = TestEnv::new();
     let settings = environment.home.join(".claude/settings.json");

@@ -1,12 +1,13 @@
 # ai-notify
 
-`ai-notify` is a macOS Rust CLI that sends `terminal-notifier` alerts for Claude Code hooks and Codex CLI's `notify`
-callback. Keep notification delivery macOS-specific while keeping pure logic and tests platform-independent; CI runs on
-Ubuntu with nightly Rust.
+`ai-notify` is a macOS Rust CLI that sends `terminal-notifier` alerts for Claude Code hooks, native Codex hooks, and
+Codex's legacy `notify` callback. Keep notification delivery macOS-specific while keeping pure logic and tests
+platform-independent; CI runs on Ubuntu with nightly Rust.
 
 ## Upstream Documentation
 
 - OpenAI Codex CLI `notify` callback: <https://learn.chatgpt.com/docs/config-file/config-advanced#notifications>
+- OpenAI Codex native hooks: <https://learn.chatgpt.com/docs/hooks>
 - Claude Code hook configuration and event schemas: <https://code.claude.com/docs/en/hooks>
 
 ## Development Workflow
@@ -18,8 +19,9 @@ Ubuntu with nightly Rust.
 
 ## Architecture and Invariants
 
-- Claude Code commands under `ai-notify event` read hook JSON from stdin. The `ai-notify codex` callback accepts Codex's
-  JSON as its final argument or via `--stdin`; it does not create a tracked SQLite session.
+- Commands under `ai-notify event` read hook JSON from stdin. `event codex` handles native `UserPromptSubmit` and `Stop`,
+  tracking prompts under a `codex:<session_id>:<turn_id>` key in the existing SQLite schema. The legacy `ai-notify codex`
+  callback accepts JSON as its final argument or via `--stdin` without creating a tracked SQLite session.
 - `integrations::HOOK_SPECS` is the source of truth for installed Claude hooks. The integration inspector derives its
   required event set from that list so `link claude` and `check` stay aligned.
 - Preserve unrelated settings and hooks when changing integration writers. `link codex` must continue to refuse a
@@ -27,8 +29,8 @@ Ubuntu with nightly Rust.
 - Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. Runtime configuration is cached for
   the life of the process.
 - Claude `Stop` defers completion while `background_tasks` or `session_crons` are present. `StopFailure` alerts only in
-  `all` mode and bypasses duration and prompt filters. Codex payloads lack duration; Codex filtering suppresses internal
-  title-generation prompts and applies notification mode and prompt-prefix exclusions.
+  `all` mode and bypasses duration and prompt filters. Both Codex integrations omit duration filtering, suppress internal
+  title-generation prompts, and apply notification mode and prompt-prefix exclusions.
 - SQLite uses WAL mode with `synchronous=NORMAL`; session data is intentionally transient rather than strictly durable.
 
 ## Testing
@@ -269,6 +271,33 @@ failed and, in `all` mode, alerts immediately without applying the duration thre
 interrupt fires neither `Stop` nor `StopFailure`, so it cannot produce a completion notification.
 
 ### Codex CLI Integration
+
+#### Native hooks
+
+For Codex versions supporting native hooks, merge these handlers into `~/.codex/hooks.json`, preserving existing hooks:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "ai-notify event codex", "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "ai-notify event codex", "timeout": 5 }] }]
+  }
+}
+```
+
+Review and trust the two exact definitions through Codex's `/hooks` interface. Remove ai-notify from the legacy `notify`
+callback to prevent duplicate notifications. If Codex Desktop owns a `SkyComputerUseClient` wrapper, preserve the wrapper
+and remove only its ai-notify `--previous-notify` forwarding arguments.
+
+`UserPromptSubmit` retains task context for `Stop`; a repeated stop for a tracked turn is ignored. If no prompt was
+recorded, such as when hooks are installed during a turn, the completion still reports the available result. Native
+hooks preserve the Codex notification mode and prompt-prefix filters and do not apply `threshold_seconds`.
+
+Codex 0.155.1 disables native hooks in internal title-generation threads, so those threads never invoke these handlers.
+See the [native hook contract](https://learn.chatgpt.com/docs/hooks). Use `/hooks` to inspect this integration;
+`ai-notify check` and `ai-notify link codex` inspect and configure the legacy callback described below.
+
+#### Legacy notify callback
 
 Codex CLI can invoke ai-notify through the `notify` setting in your root config file (`~/.codex/config.toml`).
 

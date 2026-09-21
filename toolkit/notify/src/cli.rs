@@ -70,7 +70,7 @@ pub enum Command {
         #[arg(long)]
         no_export: bool,
     },
-    /// Handle a Claude Code hook event.
+    /// Handle an agent hook event.
     Event {
         #[command(subcommand)]
         event: EventCommand,
@@ -129,6 +129,8 @@ pub enum LinkCommand {
 
 #[derive(Clone, Copy, Debug, Subcommand)]
 pub enum EventCommand {
+    /// Handle native Codex UserPromptSubmit and Stop hooks from stdin.
+    Codex,
     UserPromptSubmit,
     Stop,
     StopFailure,
@@ -442,6 +444,7 @@ fn run_event(event: EventCommand, config: &AppConfig) -> Result<()> {
     let state = SessionStore::new(config)?;
     let mut notifier = MacNotifier::new(config.clone());
     match event {
+        EventCommand::Codex => events::handle_codex_hook(&payload, &state, config, &mut notifier),
         EventCommand::UserPromptSubmit => events::handle_user_prompt(&payload, &state),
         EventCommand::Stop => events::handle_stop(&payload, &state, config, &mut notifier),
         EventCommand::StopFailure => events::handle_stop_failure(&payload, &state, config, &mut notifier),

@@ -10,6 +10,7 @@
 - Documentation updates for Codex CLI support
 - Claude Code `StopFailure` hook and `ai-notify event stop-failure` handler
 - Codex profile-aware integration checks (`ai-notify check --profile NAME`)
+- Native Codex `UserPromptSubmit` and `Stop` handling with `ai-notify event codex`, retaining task context per turn
 
 ### Changed
 

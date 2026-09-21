@@ -35,7 +35,7 @@ pub struct JobInfo {
     pub prompt: Option<String>,
 }
 
-/// Minimal state required by Claude hook handlers.
+/// Minimal state required by native hook handlers.
 pub trait SessionState {
     fn track_prompt(&self, session_id: &str, prompt: &str, cwd: &str);
     fn mark_stopped(&self, session_id: &str);
@@ -209,7 +209,54 @@ pub fn handle_ask_user_question(
     Ok(())
 }
 
-/// Handles Codex's completion callback. Codex does not read or mutate session state.
+/// Tracks native Codex prompts and notifies on Stop without a duration threshold.
+pub fn handle_codex_hook(
+    payload: &Value,
+    state: &impl SessionState,
+    config: &AppConfig,
+    notifier: &mut impl NotificationSink,
+) -> Result<()> {
+    validate_payload(payload)?;
+    let object = object(payload)?;
+    let session_id = required_session_id(object)?;
+    let turn_id = string(object, "turn_id");
+    if turn_id.is_empty() {
+        return Err(AppError::usage("Codex hook payload must include turn_id"));
+    }
+    // Steering can submit multiple prompts per turn; isolate state from other turns and clients.
+    let key = format!("codex:{session_id}:{turn_id}");
+    match string(object, "hook_event_name") {
+        "UserPromptSubmit" => state.track_prompt(&key, string(object, "prompt"), string(object, "cwd")),
+        "Stop" => {
+            let reply = object.get("last_assistant_message");
+            validate_codex_message_text(reply, "last_assistant_message")?;
+            // A completed turn must not fall back to an earlier prompt submitted during steering.
+            if state.job_info(&key).prompt.is_some() {
+                return Ok(());
+            }
+            let prompt = state.active_prompt(&key);
+            if prompt.is_some() {
+                state.mark_stopped(&key);
+            }
+            let prompt = prompt.as_deref().unwrap_or_default();
+            if should_send_codex_notification(prompt, config) {
+                let notification = completion_notification(
+                    Client::Codex,
+                    &project_name(string(object, "cwd")),
+                    prompt,
+                    &extract_message_text(reply),
+                    None,
+                );
+                let _ = notifier.deliver(&notification);
+            }
+            state.cleanup_if_due();
+        }
+        _ => return Err(AppError::usage("Codex hook must be UserPromptSubmit or Stop")),
+    }
+    Ok(())
+}
+
+/// Handles Codex's legacy completion callback without reading or mutating session state.
 pub fn handle_codex_notify(payload: &Value, config: &AppConfig, notifier: &mut impl NotificationSink) -> Result<()> {
     validate_payload(payload)?;
     let object = object(payload)?;
@@ -553,6 +600,67 @@ mod tests {
         let mut sink = Sink::default();
         handle_codex_notify(&json!({"event":"agent-turn-complete", "cwd":"/tmp/p", "inputMessages":[{"role":"user", "content":[{"text":"first"}]},{"role":"user", "content":"last"}], "lastAssistantMessage":{"content":"done"}}), &config(), &mut sink).unwrap();
         assert_eq!(sink.0.borrow()[0].message, "Task: last\nResult: done");
+    }
+
+    #[test]
+    fn native_codex_hooks_keep_latest_prompt_and_notify_once_per_turn() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut config = config();
+        config.database.path = directory.path().join("sessions.db");
+        config.cleanup.auto_cleanup_enabled = false;
+        config.notification.threshold_seconds = u64::MAX;
+        let state = crate::state::SessionStore::new(&config).unwrap();
+        let mut sink = Sink::default();
+        for prompt in ["first request", "latest request"] {
+            handle_codex_hook(
+                &json!({"hook_event_name":"UserPromptSubmit", "session_id":"s", "turn_id":"t", "prompt":prompt}),
+                &state,
+                &config,
+                &mut sink,
+            )
+            .unwrap();
+        }
+        assert!(sink.0.borrow().is_empty());
+        let stop = json!({"hook_event_name":"Stop", "session_id":"s", "turn_id":"t", "cwd":"/tmp/project", "last_assistant_message":"done"});
+        handle_codex_hook(&stop, &state, &config, &mut sink).unwrap();
+        handle_codex_hook(&stop, &state, &config, &mut sink).unwrap();
+        let notifications = sink.0.borrow();
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].message, "Task: latest request\nResult: done");
+        assert_eq!(notifications[0].subtitle, "Codex completed");
+    }
+
+    #[test]
+    fn native_codex_stop_preserves_modes_and_prompt_exclusions() {
+        let stop = json!({"hook_event_name":"Stop", "session_id":"s", "turn_id":"t", "last_assistant_message":"done"});
+        for (mode, prompt) in [
+            (crate::model::NotificationMode::All, "/skip this"),
+            (crate::model::NotificationMode::PermissionOnly, "work"),
+            (crate::model::NotificationMode::Disabled, "work"),
+        ] {
+            let mut config = config();
+            config.notification.mode = mode;
+            config.notification.exclude_patterns = vec!["/skip".into()];
+            let state = State { active: Some(prompt.into()), ..Default::default() };
+            let mut sink = Sink::default();
+            handle_codex_hook(&stop, &state, &config, &mut sink).unwrap();
+            assert!(sink.0.borrow().is_empty());
+            assert_eq!(*state.stopped.borrow(), ["codex:s:t"]);
+        }
+    }
+
+    #[test]
+    fn native_codex_stop_without_prompt_state_still_reports_the_result() {
+        let state = State::default();
+        let mut sink = Sink::default();
+        let mut stop =
+            json!({"hook_event_name":"Stop", "session_id":"s", "turn_id":"t", "last_assistant_message":null});
+        handle_codex_hook(&stop, &state, &config(), &mut sink).unwrap();
+        assert_eq!(sink.0.borrow()[0].message, "Result: Turn completed.");
+        stop["last_assistant_message"] = json!(42);
+        assert!(handle_codex_hook(&stop, &state, &config(), &mut sink).is_err());
+        stop["turn_id"] = json!("");
+        assert!(handle_codex_hook(&stop, &state, &config(), &mut sink).is_err());
     }
 
     // Codex 0.155.1: tui/src/app/thread_title.rs::thread_title_instructions.
