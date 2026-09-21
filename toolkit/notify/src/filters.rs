@@ -23,10 +23,26 @@ pub fn should_send_failure_notification(config: &AppConfig) -> bool {
     config.notification.mode == NotificationMode::All
 }
 
-/// Codex payloads have no duration, so only mode and prompt-prefix filtering applies.
+/// Codex has no duration; filter internal title requests before applying user preferences.
 pub fn should_send_codex_notification(prompt: &str, config: &AppConfig) -> bool {
     config.notification.mode == NotificationMode::All &&
+        !is_codex_title_request(prompt) &&
         !config.notification.exclude_patterns.iter().any(|pattern| !prompt.is_empty() && prompt.starts_with(pattern))
+}
+
+fn is_codex_title_request(prompt: &str) -> bool {
+    // Codex 0.155.1's temporary title threads inherit legacy notify without a source marker.
+    // Match both prompt envelopes from tui/src/app/thread_title.rs, not generic title requests.
+    let Some((_, context)) = prompt
+        .strip_prefix("Generate a concise, single-line task title of at most ")
+        .and_then(|instructions| instructions.split_once("Do not answer the request."))
+    else {
+        return false;
+    };
+    context.starts_with("\n\nUser prompt:\n") ||
+        context.starts_with(
+            "\nPrioritize the current task and latest substantive user request.\n\nRecent conversation messages:\n",
+        )
 }
 
 #[cfg(test)]

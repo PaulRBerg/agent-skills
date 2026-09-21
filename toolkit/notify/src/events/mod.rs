@@ -554,6 +554,60 @@ mod tests {
         handle_codex_notify(&json!({"event":"agent-turn-complete", "cwd":"/tmp/p", "inputMessages":[{"role":"user", "content":[{"text":"first"}]},{"role":"user", "content":"last"}], "lastAssistantMessage":{"content":"done"}}), &config(), &mut sink).unwrap();
         assert_eq!(sink.0.borrow()[0].message, "Task: last\nResult: done");
     }
+
+    // Codex 0.155.1: tui/src/app/thread_title.rs::thread_title_instructions.
+    const CODEX_TITLE_INSTRUCTIONS: &str = "Generate a concise, single-line task title of at most \
+        36 characters and under five words where possible. Start with an imperative verb. \
+        Capitalize only the first word unless the user's language, proper nouns, acronyms, or code terms \
+        require otherwise. Preserve ticket references exactly. Write in the user's language. \
+        Do not use quotes, markdown, or trailing punctuation. Do not answer the request.";
+
+    #[test]
+    fn codex_internal_title_and_rename_turns_do_not_notify() {
+        for context in [
+            "\n\nUser prompt:\nFix the failing tests",
+            "\nPrioritize the current task and latest substantive user request.\n\n\
+             Recent conversation messages:\n<conversation>\n\
+             <message role=\"user\">Fix the failing tests</message>\n</conversation>",
+        ] {
+            let mut sink = Sink::default();
+            handle_codex_notify(
+                &json!({
+                    "type": "agent-turn-complete",
+                    "client": "codex-tui",
+                    "input-messages": [format!("{CODEX_TITLE_INSTRUCTIONS}{context}")],
+                    "last-assistant-message": "{\"title\":\"Fix failing tests\"}",
+                }),
+                &config(),
+                &mut sink,
+            )
+            .unwrap();
+            assert!(sink.0.borrow().is_empty(), "internal title context: {context}");
+        }
+    }
+
+    #[test]
+    fn codex_real_title_requests_and_quoted_internal_prompts_still_notify() {
+        for prompt in [
+            "Generate a title for my article".to_owned(),
+            CODEX_TITLE_INSTRUCTIONS.to_owned(),
+            format!("Explain this internal prompt: {CODEX_TITLE_INSTRUCTIONS}\n\nUser prompt:\nFix tests"),
+        ] {
+            let mut sink = Sink::default();
+            handle_codex_notify(
+                &json!({
+                    "type": "agent-turn-complete",
+                    "input-messages": [prompt],
+                    "last-assistant-message": "{\"title\":\"Fix failing tests\"}",
+                }),
+                &config(),
+                &mut sink,
+            )
+            .unwrap();
+            assert_eq!(sink.0.borrow().len(), 1, "user prompt: {prompt}");
+        }
+    }
+
     #[test]
     fn duration_and_text_extractors_keep_historical_behavior() {
         assert_eq!(format_duration(3661), "1h1m");

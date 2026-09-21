@@ -23,6 +23,7 @@
   global locations
 - Resolve Codex profiles to sibling `<name>.config.toml` files with base-plus-profile overlay semantics
 - Preserve Codex TOML formatting and refuse a different existing `notify` command unless `--force` is supplied
+- Suppress Codex internal automatic-title and rename-suggestion notifications while preserving user title requests
 
 ## [1.0.0] - 2025-01-22
 

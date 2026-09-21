@@ -27,8 +27,8 @@ Ubuntu with nightly Rust.
 - Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. Runtime configuration is cached for
   the life of the process.
 - Claude `Stop` defers completion while `background_tasks` or `session_crons` are present. `StopFailure` alerts only in
-  `all` mode and bypasses duration and prompt filters. Codex payloads lack duration, so Codex filtering applies only
-  notification mode and prompt-prefix exclusions.
+  `all` mode and bypasses duration and prompt filters. Codex payloads lack duration; Codex filtering suppresses internal
+  title-generation prompts and applies notification mode and prompt-prefix exclusions.
 - SQLite uses WAL mode with `synchronous=NORMAL`; session data is intentionally transient rather than strictly durable.
 
 ## Testing
@@ -314,7 +314,12 @@ ai-notify codex '<json payload>'
 ```
 
 The Codex notify payload does not include job duration, so `notification.threshold_seconds` is not applied for Codex
-notifications. Exclude patterns and notification mode still apply.
+notifications. Exclude patterns and notification mode still apply. Internal automatic-title and rename-suggestion
+requests are suppressed by their specific prompt envelopes; ordinary user requests to write titles still notify.
+
+Codex 0.155.1 runs these requests in hidden ephemeral threads that disable `features.hooks` but inherit the legacy
+`notify` command. Its callback carries no ephemeral/thread-source marker, so ai-notify recognizes the two prompts in
+[Codex's title generator](https://github.com/openai/codex/blob/rust-v0.155.1/codex-rs/tui/src/app/thread_title.rs).
 
 ### Integration Check
 
