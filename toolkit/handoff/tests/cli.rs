@@ -95,8 +95,7 @@ fn create_publishes_inside_the_preopened_handoff_directory() {
     .unwrap();
     let status = rustix::fs::fstat(&published).unwrap();
     let metadata = fs::metadata(handoffs.join("ANCHORED.md")).unwrap();
-    #[cfg_attr(target_os = "linux", allow(clippy::useless_conversion))] // st_dev is i32 on macOS, u64 on Linux
-    assert_eq!(u64::try_from(status.st_dev).unwrap(), metadata.dev());
+    assert_eq!(u128::try_from(status.st_dev).unwrap(), u128::from(metadata.dev()));
     assert_eq!(status.st_ino, metadata.ino());
     assert!(
         fs::read_dir(handoffs).unwrap().all(|entry| !entry
