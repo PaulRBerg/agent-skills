@@ -417,6 +417,39 @@ fn promoting_a_named_draft_also_clears_the_promoters_own_unnamed_draft() {
     assert_eq!(work.claims[0].scopes, vec![Scope { path: "a.rs".to_owned(), kind: ScopeKind::Exact }]);
 }
 
+#[test]
+fn expired_named_drafts_are_pruned_before_reuse_or_promotion() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, fixture) = fixture(2, &[(&owner, 0, 62), (&promoter, 1, 63)]);
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        fixture.store().unwrap(),
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::new(FakeProbe::default()),
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    );
+
+    coordinator.draft_for(owner.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    clock.sleep(Duration::from_secs(8 * 24 * 60 * 60));
+
+    let error = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("no draft named plan1"));
+    coordinator.draft_for(owner, Some("plan1"), "replacement", &[PathBuf::from("b.rs")], &[], &roots[1]).unwrap();
+}
+
+#[test]
+fn named_draft_wrong_repository_guidance_does_not_suggest_done() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 64), (&promoter, 1, 65)]);
+    coordinator.draft_for(owner, Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+
+    let error = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[1]).unwrap_err();
+    assert!(error.to_string().contains("run ai-coord start --draft plan1 there"));
+    assert!(!error.to_string().contains("ai-coord done"));
+}
+
 #[cfg(unix)]
 #[test]
 fn sweep_bundle_draft_revalidates_physical_repository_roots() {

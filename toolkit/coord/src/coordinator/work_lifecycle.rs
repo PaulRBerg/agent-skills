@@ -131,6 +131,7 @@ impl Coordinator {
             return Err(AppError::usage("at least one scope is required"));
         }
         let mut store = self.store()?;
+        store.prune(self.clock.wall())?;
         let owner = match name {
             Some(name) => DraftOwner::Name(normalized_draft_name(name)?),
             None => {
@@ -179,6 +180,7 @@ impl Coordinator {
             .collect::<Result<Vec<_>>>()?;
         let scope_count = updates.iter().map(|claim| claim.scopes.len()).sum::<usize>();
         let mut store = self.store()?;
+        store.prune(self.clock.wall())?;
         let owner = match name {
             Some(name) => DraftOwner::Name(normalized_draft_name(name)?),
             None => {
@@ -206,6 +208,7 @@ impl Coordinator {
         let cwd = resolved(cwd);
         let root = git_root(&cwd).ok_or_else(|| AppError::operational("start --draft requires a Git worktree"))?;
         let mut store = self.store()?;
+        store.prune(self.clock.wall())?;
         let (draft, extra_delete) = resolve_promoted_draft(&mut store, identity, name)?;
         if draft.claims.len() != 1 {
             return Err(AppError::operational(
@@ -214,9 +217,13 @@ impl Coordinator {
         }
         let repo_root = path_text(&root)?;
         if draft.claim(&repo_root).is_none() {
+            let remediation = match name {
+                Some(name) => format!("run ai-coord start --draft {name} there"),
+                None => "run ai-coord start --draft there or clear it with ai-coord done".to_owned(),
+            };
             return Err(AppError::operational(format!(
-                "draft belongs to {}; run ai-coord start --draft there or clear it with ai-coord done",
-                draft.claims[0].repo_root
+                "draft belongs to {}; {remediation}",
+                draft.claims[0].repo_root,
             )));
         }
         revalidate_draft(&draft.claims)?;

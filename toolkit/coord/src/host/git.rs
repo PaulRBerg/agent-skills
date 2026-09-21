@@ -396,7 +396,11 @@ pub(crate) fn git_dirty_paths(root: &Path) -> Result<Vec<String>> {
         return Err(AppError::operational(format!("could not inspect Git dirt: {detail}")));
     }
 
-    let parts: Vec<&[u8]> = output.stdout.split(|byte| *byte == 0).collect();
+    parse_git_dirty_paths(&output.stdout)
+}
+
+fn parse_git_dirty_paths(output: &[u8]) -> Result<Vec<String>> {
+    let parts: Vec<&[u8]> = output.split(|byte| *byte == 0).collect();
     let mut dirty = Vec::new();
     let mut index = 0;
     while index < parts.len() {
@@ -406,11 +410,11 @@ pub(crate) fn git_dirty_paths(root: &Path) -> Result<Vec<String>> {
             continue;
         }
         let status = &entry[..2];
-        push_git_path(&mut dirty, &entry[3..]);
+        push_git_path(&mut dirty, &entry[3..])?;
         if (status.contains(&b'R') || status.contains(&b'C')) &&
             let Some(other) = parts.get(index)
         {
-            push_git_path(&mut dirty, other);
+            push_git_path(&mut dirty, other)?;
             index += 1;
         }
     }
@@ -544,14 +548,17 @@ pub(crate) fn relevant_dirty(scopes: &[Scope], dirty_paths: &[String]) -> Vec<St
         .collect()
 }
 
-fn push_git_path(paths: &mut Vec<String>, bytes: &[u8]) {
+fn push_git_path(paths: &mut Vec<String>, bytes: &[u8]) -> Result<()> {
     if bytes.is_empty() {
-        return;
+        return Ok(());
     }
-    let path = String::from_utf8_lossy(bytes).into_owned();
+    let path = std::str::from_utf8(bytes)
+        .map_err(|_| AppError::operational("could not inspect Git dirt: non-UTF-8 path in porcelain output"))?
+        .to_owned();
     if !paths.contains(&path) {
         paths.push(path);
     }
+    Ok(())
 }
 
 fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {
@@ -907,6 +914,12 @@ mod tests {
         let dirty = git_dirty_paths(root).unwrap();
         assert!(dirty.contains(&"before.txt".to_owned()));
         assert!(dirty.contains(&"after.txt".to_owned()));
+    }
+
+    #[test]
+    fn git_dirt_rejects_non_utf8_porcelain_paths() {
+        let error = parse_git_dirty_paths(b"?? foo\xff.txt\0").unwrap_err();
+        assert_eq!(error.to_string(), "could not inspect Git dirt: non-UTF-8 path in porcelain output");
     }
 
     #[test]
