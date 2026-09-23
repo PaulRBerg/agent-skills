@@ -22,15 +22,15 @@ boundary, relevant repository constraints, and stopping rule from the shared pro
 When the user has not explicitly included research agents in a model preference, select research configuration from
 these tiers:
 
-| Investigation                          | Model           | Effort             | Baseline timeout |
-| -------------------------------------- | --------------- | ------------------ | ---------------- |
-| Bounded, routine survey                | `gpt-5.6-luna`  | `medium`           | 10 minutes       |
-| Involved survey across unfamiliar code | `gpt-5.6-terra` | `medium` or `high` | 15 minutes       |
+| Investigation                          | Model        | Effort   | Baseline timeout |
+| -------------------------------------- | ------------ | -------- | ---------------- |
+| Bounded, routine survey                | `gpt-6-luna` | `high`   | 10 minutes       |
+| Involved survey across unfamiliar code | `gpt-6-sol`  | `medium` | 15 minutes       |
 
-Under this default selection, use Luna for bounded surveys and Terra for involved ones; Sol and Astra are
-implementation-only — research gathers evidence, the parent synthesizes. Never select `low`, `ultra`, or `max`. Research
-should normally use shorter budgets than implementation; keep the baseline between 10 and 15 minutes unless repository
-evidence says otherwise.
+Under this default selection, use Luna for bounded surveys and Sol for involved ones; Astra is implementation-only —
+research gathers evidence, the parent synthesizes. Never select `low`, `ultra`, or `max`. Research should normally use
+shorter budgets than implementation; keep the baseline between 10 and 15 minutes unless repository evidence says
+otherwise.
 
 When the research wave settles, parse each result against `research-result.schema.json`, read its stderr artifact for
 failure forensics, and return the findings to the shared Research Phase for the plan or research-only response. Do not
@@ -41,19 +41,19 @@ reconcile the working tree.
 Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                                                     | Effort                  | Timeout             | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | --------------------------------------------------------- | ----------------------- | ------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-luna\|gpt-5.6-terra\|gpt-5.6-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                                  | Effort                  | Timeout             | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | -------------------------------------- | ----------------------- | ------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
 When the user has not specified a model preference, select implementation configuration from these tiers:
 
-| Work                                                                              | Model           | Effort             | Baseline timeout |
-| --------------------------------------------------------------------------------- | --------------- | ------------------ | ---------------- |
-| Bounded, routine implementation                                                   | `gpt-5.6-luna`  | `medium`           | 10 minutes       |
-| Everyday or involved implementation                                               | `gpt-5.6-terra` | `medium` or `high` | 20 minutes       |
-| Semantic or cross-cutting implementation                                          | `gpt-5.6-sol`   | `xhigh`            | 40 minutes       |
-| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra`   | `xhigh`            | 40 minutes       |
+| Work                                                                              | Model         | Effort             | Baseline timeout |
+| --------------------------------------------------------------------------------- | ------------- | ------------------ | ---------------- |
+| Bounded, routine implementation                                                   | `gpt-6-luna`  | `high`             | 10 minutes       |
+| Everyday or involved implementation                                               | `gpt-6-sol`   | `medium` or `high` | 20 minutes       |
+| Semantic or cross-cutting implementation                                          | `gpt-6-sol`   | `xhigh`            | 40 minutes       |
+| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra` | `xhigh`            | 40 minutes       |
 
 An explicit user model preference replaces this task-complexity model selection, but effort and timeout still follow the
 applicable work tier. Never select `low`, `ultra`, or `max`. Adjust a timeout when repository evidence shows that
@@ -203,11 +203,11 @@ Kickoff, once per wave:
 ```markdown
 ### 🚀 Wave 1/2 [░░░░░░░░░░] 0% (0/3 settled) — 3 agents launched
 
-| Agent | Scope               | Model · effort        | Budget | State       |
-| ----- | ------------------- | --------------------- | ------ | ----------- |
-| A1    | `internal/pricing`  | `gpt-5.6-sol` · high  | ≤30m   | 🚀 launched |
-| A2    | `internal/backfill` | `gpt-5.6-sol` · high  | ≤30m   | 🚀 launched |
-| A3    | `internal/evidence` | `gpt-5.6-sol` · xhigh | ≤40m   | 🚀 launched |
+| Agent | Scope               | Model · effort      | Budget | State       |
+| ----- | ------------------- | ------------------- | ------ | ----------- |
+| A1    | `internal/pricing`  | `gpt-6-sol` · high  | ≤30m   | 🚀 launched |
+| A2    | `internal/backfill` | `gpt-6-sol` · high  | ≤30m   | 🚀 launched |
+| A3    | `internal/evidence` | `gpt-6-sol` · xhigh | ≤40m   | 🚀 launched |
 ```
 
 Research waves use 🔎 in their heading and investigation scopes in their rows.
@@ -217,11 +217,11 @@ Wave status, on each digest or completion:
 ```markdown
 ### ⏳ Wave 1/2 [███░░░░░░░] 33% (1/3 settled) — 15m elapsed
 
-| Agent · model/effort   | Status     | Activity                   |
-| ---------------------- | ---------- | -------------------------- |
-| A1 · gpt-5.6-sol/high  | ⏳ 15m/20m | ran `cargo test`           |
-| A2 · gpt-5.6-sol/high  | ✅ 8m      | done — 3 files, tests pass |
-| A3 · gpt-5.6-sol/xhigh | ⏳ 15m/20m | no recent activity         |
+| Agent · model/effort | Status     | Activity                   |
+| -------------------- | ---------- | -------------------------- |
+| A1 · gpt-6-sol/high  | ⏳ 15m/20m | ran `cargo test`           |
+| A2 · gpt-6-sol/high  | ✅ 8m      | done — 3 files, tests pass |
+| A3 · gpt-6-sol/xhigh | ⏳ 15m/20m | no recent activity         |
 ```
 
 At full settlement, use the final watcher settlement record. A wave with failures still reaches 100%; its heading and

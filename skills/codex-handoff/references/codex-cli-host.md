@@ -10,17 +10,16 @@ Never invoke `codex exec` or fall back to any nested CLI process.
 
 When the user has not specified a model preference, use these tiers for research and implementation:
 
-| Work                                                                              | Model           | Effort   |
-| --------------------------------------------------------------------------------- | --------------- | -------- |
-| Bounded research or routine implementation                                        | `gpt-5.6-terra` | `medium` |
-| Involved research or implementation                                               | `gpt-5.6-terra` | `high`   |
-| Semantic or cross-cutting implementation                                          | `gpt-5.6-sol`   | `xhigh`  |
-| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra`   | `xhigh`  |
+| Work                                                                              | Model         | Effort             |
+| --------------------------------------------------------------------------------- | ------------- | ------------------ |
+| Bounded research or routine implementation                                        | `gpt-6-luna`  | `high`             |
+| Involved research or implementation                                               | `gpt-6-sol`   | `medium` or `high` |
+| Semantic or cross-cutting implementation                                          | `gpt-6-sol`   | `xhigh`            |
+| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra` | `xhigh`            |
 
-Under this default selection, Astra at `xhigh` is the ceiling; Sol and Astra are implementation-only. Research agents
-use Terra — research gathers evidence, the parent synthesizes. Never select `low`, `ultra`, or `max`, and do not choose
-Luna unless the user's explicit preference requires it. Keep the highest-tier agent's scope minimal and move deferrable
-validation to the validation owner.
+Under this default selection, Astra at `xhigh` is the ceiling and Astra is implementation-only. Research agents use Luna
+or Sol — research gathers evidence, the parent synthesizes. Never select `low`, `ultra`, or `max`. Keep the highest-tier
+agent's scope minimal and move deferrable validation to the validation owner.
 
 Spawn every research or implementation worker with a self-contained prompt and `fork_turns: "none"`. This avoids copying
 the parent conversation and permits explicit `model` and `reasoning_effort` selection. Use a stable lowercase task name
@@ -50,9 +49,9 @@ edit as a contract violation.
 Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                                                     | Effort                  | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | --------------------------------------------------------- | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-5.6-luna\|gpt-5.6-terra\|gpt-5.6-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                                  | Effort                  | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | -------------------------------------- | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
 Use the native configuration table above for every manifest row unless the user's explicit preference overrides its

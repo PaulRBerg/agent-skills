@@ -22,10 +22,10 @@ One JSON object per line, each with a top-level `type`
 | `item.started` / `item.updated` / `item.completed` | Work items; `item.type` identifies the activity               |
 | `error`                                            | Unrecoverable stream error; the wrapper still owns settlement |
 
-Item types in Codex CLI 0.148.0: `agent_message` (assistant text), `reasoning`, `command_execution` (has `command` and
+Item types in Codex CLI 0.156.1: `agent_message` (assistant text), `reasoning`, `command_execution` (has `command` and
 `status`), `file_change`, `mcp_tool_call`, `collab_tool_call`, `web_search`, `todo_list` (plan updates), and `error`
 (non-fatal item error)
-([0.148 event definitions](https://github.com/openai/codex/blob/rust-v0.148.0/codex-rs/exec/src/exec_events.rs)).
+([0.156.1 event definitions](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/exec/src/exec_events.rs)).
 Example:
 
 ```json
@@ -36,7 +36,7 @@ Example:
 
 The app-server protocol documents separate `model/safetyBuffering/updated` and `model/rerouted` notifications
 ([turn events](https://learn.chatgpt.com/docs/app-server#turn-events)), but they are not part of the documented
-`codex exec --json` event set. Verified against Codex CLI 0.148.0; later versions may differ, so treat the forwarded
+`codex exec --json` event set. Verified against Codex CLI 0.156.1; later versions may differ, so treat the forwarded
 event set as version-dependent, not guaranteed. Do not invent equivalent JSONL events or infer a safety check from
 silence. A quiet period may be ordinary work or transient buffering, and an independent server-side policy reroute may
 leave the responding model unknowable.
