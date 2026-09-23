@@ -410,8 +410,8 @@ fn prepared_validation_can_resolve_ignored_local_directories() {
 }
 
 #[test]
-fn snapshot_hooks_without_validation_do_not_resolve_ignored_root_node_modules() {
-    let harness = Harness::new("snapshot-hook-no-node-modules");
+fn snapshot_hooks_resolve_ignored_local_directories() {
+    let harness = Harness::new("snapshot-hook-node-modules");
     harness.write(".gitignore", "node_modules/\n");
     harness.write("intended.txt", "base\n");
     harness.commit_all("base");
@@ -421,7 +421,7 @@ fn snapshot_hooks_without_validation_do_not_resolve_ignored_root_node_modules() 
     harness.write("intended.txt", "physical worktree changed after prepare\n");
     write_executable(
         &harness.repo.join(".git/hooks/pre-commit"),
-        "#!/bin/sh\nset -eu\ntest \"${AI_COMMIT_HOOK_MODE:-}\" = snapshot-check\ntest ! -e node_modules/@example/tool/marker.txt\n",
+        "#!/bin/sh\nset -eu\ntest \"${AI_COMMIT_HOOK_MODE:-}\" = snapshot-check\ntest \"$(cat node_modules/@example/tool/marker.txt)\" = dependency\n",
     );
 
     harness.success(["commit", &transaction, "-m", "test: preserve snapshot hook dependencies"]);

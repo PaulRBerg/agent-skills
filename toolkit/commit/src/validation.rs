@@ -61,7 +61,6 @@ pub fn run(args: TransactionArgs, store: &Store) -> Result<()> {
             &candidate_index,
             &candidate.tree,
             &temporary.path().join("validation-index"),
-            true,
         )?;
         run_configured(&repository, command, &snapshot, &candidate.tree, &transaction.id)
     } else {
@@ -258,7 +257,6 @@ impl ValidationSnapshot {
         index: &Path,
         candidate_tree: &str,
         validation_index: &Path,
-        include_local_artifacts: bool,
     ) -> Result<Self> {
         let git_dir = repository.git_dir()?;
         let mut builder = Builder::new();
@@ -287,9 +285,7 @@ impl ValidationSnapshot {
         }
         fs::write(worktree.path().join(".git"), format!("gitdir: {}\n", git_dir.display()))
             .map_err(|error| AppError::retry(format!("cannot configure temporary hook worktree: {error}")))?;
-        if include_local_artifacts {
-            project_ignored_directories(repository, index, worktree.path())?;
-        }
+        project_ignored_directories(repository, index, worktree.path())?;
         copy_file(index, validation_index)?;
         Ok(Self { worktree, validation_index: validation_index.to_path_buf() })
     }

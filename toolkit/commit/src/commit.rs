@@ -104,7 +104,6 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
             &commit_index,
             &before_hook_tree,
             &temporary.path().join("snapshot-validation-index"),
-            validation_configured,
         )?)
     } else {
         None

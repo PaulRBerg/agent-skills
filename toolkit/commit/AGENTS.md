@@ -22,7 +22,8 @@ model.
 - Prepared objects remain pinned until a terminal receipt expires or a prepared transaction is discarded.
 - A commit is built from the prepared tree, with only clean current-HEAD movement and hook-staged changes admitted.
 - When an intended prepared path differs from the physical worktree, verification hooks run against a temporary
-  materialization of the complete prepared index. Those hooks may edit the message but must not modify tracked content.
+  materialization of the complete prepared index, with ignored local directories projected in so installed tooling
+  resolves as in the physical worktree. Those hooks may edit the message but must not modify tracked content.
 - An optional repository validation argv is frozen into the prepared transaction and always runs directly against a
   complete materialization of that prepared candidate before verification hooks, including with `--no-verify`. It
   receives an isolated Git environment; ignored local directories remain available for read-only dependency and
@@ -120,7 +121,9 @@ retain their normal behavior: tracked changes they stage can enter the commit, a
 temporary materialization of the complete prepared index beneath the repository's physical Git directory. They receive
 the existing alternate `GIT_INDEX_FILE`, `GIT_WORK_TREE` pointing to that materialization,
 `AI_COMMIT_HOOK_MODE=snapshot-check`, and `AI_COMMIT_ORIGINAL_WORKTREE` pointing to the canonical physical repository
-root.
+root. Ignored local directories whose parents exist in the prepared tree (for example `node_modules` or a virtual
+environment) are projected into the materialization as symlinks, so hooks resolve installed tooling, justfile imports
+and interpreters exactly as they do from the physical worktree and need no snapshot-specific branches.
 
 Snapshot-check hooks may edit the commit message, but any tracked-content or prepared-index change stops the commit
 with `snapshot-check hook modified prepared content`, lists the affected paths, and leaves the transaction prepared for
@@ -150,9 +153,9 @@ If HEAD advanced cleanly, the candidate includes the immutable prepared delta ap
 validator receives `GIT_DIR` for the physical repository,
 `GIT_WORK_TREE` and `GIT_INDEX_FILE` for the materialization, `AI_COMMIT_VALIDATION_MODE=prepared-tree`, and
 `AI_COMMIT_ORIGINAL_WORKTREE` for the canonical physical root; inherited conflicting Git and ai-commit hook variables
-are cleared or replaced. Ignored local directories whose parents exist in the candidate tree are projected into the
-materialization so validators can resolve installed tooling and local evidence; validators must treat those artifacts
-as read-only. A nonzero exit, or a validator that changes tracked worktree or staged/index content, admits no changes
+are cleared or replaced. Ignored local directories are projected into the materialization as for snapshot-check
+hooks, so validators can resolve installed tooling and local evidence; validators must treat those artifacts as
+read-only. A nonzero exit, or a validator that changes tracked worktree or staged/index content, admits no changes
 and leaves the transaction prepared for retry. When both happen, both facts are reported. A same-ID retry is suitable
 after repairing only a transient dependency or environment failure. A content or configuration repair requires
 reviewing the failure, preserving excluded baseline bytes, discarding the confirmed uncommitted preparation, and
