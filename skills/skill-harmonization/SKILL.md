@@ -66,8 +66,9 @@ Require valid JSON and retain its repository root, present and missing user root
 locations, kinds, clients, symlink identity, hashes, references, and duplicate records. Do not substitute a duplicated
 inventory command or broaden the roots.
 
-When metadata or doc-link evidence is needed, optionally run `ai-skillet doctor --format json` against the repository
-and present user skill roots. Consume its findings as additional evidence; warnings are not conclusions by themselves.
+When metadata or doc-link evidence is needed, optionally run `ai-skillet doctor --format json` with one repeated
+`--root` for the repository and each present user skill root. Consume its findings as additional evidence; warnings are
+not conclusions by themselves.
 
 ## Evidence Boundary
 

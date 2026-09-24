@@ -113,8 +113,9 @@ uv run "$skill_dir/scripts/transcript-inspect.py" <transcript-path>... \
 ```
 
 For each file it emits a header (source, session id, cwd, timestamp range, per-channel totals, sampled flag) and bounded
-entries with absolute record line numbers: every non-context user message, keyword/correction/verification- matching
-assistant messages, and tool failures. Redaction is always on; entry text is capped at 240 characters.
+entries with absolute record line numbers: every non-context user message, keyword-, correction-, or
+verification-matching assistant messages, and tool failures. Redaction is always on; entry text is capped at 240
+characters.
 
 Digests are redacted and bounded — inspect them before reading raw bodies, and read raw bodies only when the digest is
 insufficient. Each entry's line number lets you pull the exact underlying record when needed:

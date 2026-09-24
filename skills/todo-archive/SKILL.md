@@ -56,9 +56,10 @@ do not invoke this skill again through a skill tool.
 
 `scripts/archive_todo.py` reads only `<root>/.ai/TODO.md`, writes archived tasks to `<root>/.ai/todos/YYYY-MM/DD.md`,
 and rewrites `<root>/.ai/TODO.md` with the remaining tasks. It preserves task-free sections and prose verbatim (a
-minimal `# TODO` stub only if everything was archived). With `--hint`, it restricts archiving to the matched heading's
-subtree and exits non-zero listing available headings when nothing matches. A same-day re-run appends its batch to that
-day's file, removing the new leading H1 only when it exactly matches the existing archive's leading H1.
+minimal stub with the source's first heading, or `# TODO`, only if everything was archived). With `--hint`, it restricts
+archiving to the matched heading's subtree and exits non-zero listing available headings when nothing matches. A
+same-day re-run appends its batch to that day's file, removing the new leading H1 only when it exactly matches the
+existing archive's leading H1.
 
 ## Completion
 

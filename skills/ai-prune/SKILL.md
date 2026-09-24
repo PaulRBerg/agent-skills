@@ -43,9 +43,12 @@ This skill runs only on macOS. Stop and report when `uname -s` is not `Darwin` o
 2. Inventory both trees with modification times, excluding the protected paths:
 
    ```sh
-   fd -H -l -t f -E todos -E archive -E TODO.md -E PROMPT.md . "$repo_root/.ai"
-   fd -H -l -t f . "$repo_root/.cache"
+   fd -H -I -l -t f -E todos -E archive -E TODO.md -E PROMPT.md . "$repo_root/.ai"
+   fd -H -I -l -t f . "$repo_root/.cache"
    ```
+
+   Keep `-I`: these trees are usually Git-ignored, and without it nested ignore patterns (for example a global `PLAN.md`
+   rule) silently drop entries from the inventory.
 
    Do not run per-file commands over the inventory; read the listing and open only the files whose relevance is unclear.
 

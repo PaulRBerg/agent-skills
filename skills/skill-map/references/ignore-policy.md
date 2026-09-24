@@ -72,6 +72,6 @@ The helper does not globally ignore every directory named `plans`, `sessions`, o
 only under known agent state roots such as `.claude/` and `.codex/`, so project-authored files with those names can
 still be scanned.
 
-Known skill catalog source checkouts are different: broad home-directory scans ignore them because installed copies
-under `~/.agents`, `~/.claude`, `.agents`, or `.claude` are the actionable skill locations. Explicit `--root` paths
-inside a catalog source tree still scan that catalog for repo-local audits.
+Known skill catalog source checkouts are different: broad home-directory scans ignore them because installed copies,
+such as project `.agents` or `.claude` skills and agent homes passed as explicit roots, are the actionable skill
+locations. Explicit `--root` paths inside a catalog source tree still scan that catalog for repo-local audits.
