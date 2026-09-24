@@ -60,6 +60,15 @@ class GitSquashTests(unittest.TestCase):
             self.assertEqual(result["subject"], "feat: final")
             self.assertEqual(git(repo, "rev-list", "--count", "main..HEAD").stdout.strip(), "1")
 
+    def test_origin_without_head_falls_back_to_main(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = make_repo(root / "repo")
+            git(repo, "remote", "add", "origin", str(root / "missing.git"))
+            plan = json.loads(self.helper("plan", "--cwd", str(repo), "--subject", "feat: final").stdout)
+            self.assertEqual(plan["baseBranch"], "main")
+            self.assertTrue(plan["remote"]["originConfigured"])
+
     def test_dirty_detached_default_zero_ahead_and_bad_base_fail(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo = make_repo(Path(directory) / "repo", commits=1)

@@ -19,7 +19,7 @@ Squash the current feature branch into one commit representing its net change re
 - `--base <branch>`: override default-branch detection.
 
 Without `--subject`, the agent writes a conventional-commit subject from the surviving net diff. Without `--base`, the
-helper resolves `origin/HEAD`, then origin's advertised head, then local/remote `main`, `master`, or `trunk`.
+helper resolves `origin/HEAD`, then local/remote `main`, `master`, or `trunk`.
 
 ## Plan Interface
 

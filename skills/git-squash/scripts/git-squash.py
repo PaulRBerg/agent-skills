@@ -40,12 +40,6 @@ def resolve_base(cwd: Path, requested: str | None) -> tuple[str, str]:
         symbolic = git(cwd, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD", check=False)
         if symbolic.returncode == 0 and symbolic.stdout.strip().startswith("origin/"):
             branch = symbolic.stdout.strip().removeprefix("origin/")
-    if not branch and git(cwd, "remote", "get-url", "origin", check=False).returncode == 0:
-        remote = git(cwd, "remote", "show", "-n", "origin", check=False)
-        for line in remote.stdout.splitlines():
-            if "HEAD branch:" in line and not line.rstrip().endswith("(unknown)"):
-                branch = line.split("HEAD branch:", 1)[1].strip()
-                break
     if not branch:
         branch = next((candidate for candidate in ("main", "master", "trunk") if ref_exists(cwd, f"refs/heads/{candidate}") or ref_exists(cwd, f"refs/remotes/origin/{candidate}")), None)
     if not branch:
