@@ -224,16 +224,14 @@ impl Repository {
         // buffers and deadlock the child and parent against each other.
         let writer = std::thread::spawn(move || stdin.write_all(&input));
         let output = child.wait_with_output().map_err(AppError::from)?;
-        if output.status.success() {
-            return decode_nul_paths(&output.stdout);
+        let written = writer.join().map_err(|_| AppError::operational("git check-ignore input writer panicked"))?;
+        // Git's own failure is actionable; a broken pipe after it exited is only a consequence.
+        if !output.status.success() && output.status.code() != Some(1) {
+            return Err(git_error(output));
         }
-        if output.status.code() == Some(1) {
-            return Ok(Vec::new());
-        }
-        if let Ok(Err(error)) = writer.join() {
-            return Err(AppError::from(error));
-        }
-        Err(git_error(output))
+        // Results from truncated input would silently omit ignored paths.
+        written.map_err(AppError::from)?;
+        if output.status.success() { decode_nul_paths(&output.stdout) } else { Ok(Vec::new()) }
     }
 
     pub fn run_snapshot_hook(

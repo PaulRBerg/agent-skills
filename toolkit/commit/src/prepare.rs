@@ -652,8 +652,7 @@ fn truncate_full_diff(diff: &str, limit: usize) -> (String, Vec<(String, usize)>
 fn diff_git_header_path(line: &str) -> Option<String> {
     let rest = line.strip_prefix("diff --git ")?;
     if rest.starts_with('"') {
-        let (path, _remainder) = take_quoted_git_path(rest)?;
-        return path.strip_prefix("a/").map(str::to_owned);
+        return decode_quoted_git_path(rest)?.strip_prefix("a/").map(str::to_owned);
     }
     let after_a = rest.strip_prefix("a/")?;
     Some(after_a.split(" b/").next().unwrap_or_default().to_owned())
@@ -664,93 +663,55 @@ fn diff_git_header_path(line: &str) -> Option<String> {
 fn header_plus_path(line: &str) -> Option<String> {
     let rest = line.strip_prefix("+++ ")?;
     if rest.starts_with('"') {
-        let (path, _remainder) = take_quoted_git_path(rest)?;
-        return path.strip_prefix("b/").map(str::to_owned);
+        return decode_quoted_git_path(rest)?.strip_prefix("b/").map(str::to_owned);
     }
     rest.strip_prefix("b/").map(str::to_owned)
 }
 
-/// Splits off one Git-quoted path token (the leading `"` is expected to have been checked by the
-/// caller and is consumed here) and returns its unescaped value along with the remainder of the
-/// input after the closing quote.
-fn take_quoted_git_path(input: &str) -> Option<(String, &str)> {
-    let rest = input.strip_prefix('"')?;
-    let bytes = rest.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'"' => {
-                let raw = &rest[..index];
-                let remainder = &rest[index + 1..];
-                return unquote_git_path(raw).map(|path| (path, remainder));
-            }
-            b'\\' => {
-                index += 1;
-                if index >= bytes.len() {
-                    return None;
-                }
-                if bytes[index].is_ascii_digit() {
-                    let mut consumed = 0;
-                    while consumed < 3 && bytes.get(index).is_some_and(u8::is_ascii_digit) {
-                        index += 1;
-                        consumed += 1;
-                    }
-                } else {
-                    index += 1;
-                }
-            }
-            _ => index += 1,
-        }
-    }
-    None
-}
-
-/// Decodes Git's C-style quoting (`quote_c_style`): `\"`, `\\`, the named control escapes, and
-/// `\NNN` octal byte escapes.
-fn unquote_git_path(quoted: &str) -> Option<String> {
-    let bytes = quoted.as_bytes();
+/// Decodes one leading Git C-style quoted path token (`quote_c_style`: `\"`, `\\`, the named
+/// control escapes, and `\NNN` octal byte escapes).
+fn decode_quoted_git_path(input: &str) -> Option<String> {
+    let bytes = input.strip_prefix('"')?.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] != b'\\' {
-            out.push(bytes[index]);
-            index += 1;
-            continue;
-        }
+    loop {
+        let byte = *bytes.get(index)?;
         index += 1;
-        let escape = *bytes.get(index)?;
-        if (b'0'..=b'7').contains(&escape) {
-            let mut value = 0u32;
-            let mut consumed = 0;
-            while consumed < 3 {
-                match bytes.get(index) {
-                    Some(&digit) if (b'0'..=b'7').contains(&digit) => {
-                        value = value * 8 + u32::from(digit - b'0');
-                        index += 1;
-                        consumed += 1;
+        match byte {
+            b'"' => return String::from_utf8(out).ok(),
+            b'\\' => {
+                let escape = *bytes.get(index)?;
+                if (b'0'..=b'7').contains(&escape) {
+                    let mut value = 0u32;
+                    for _ in 0..3 {
+                        match bytes.get(index) {
+                            Some(&digit) if (b'0'..=b'7').contains(&digit) => {
+                                value = value * 8 + u32::from(digit - b'0');
+                                index += 1;
+                            }
+                            _ => break,
+                        }
                     }
-                    _ => break,
+                    out.push(value as u8);
+                    continue;
                 }
+                out.push(match escape {
+                    b'"' => b'"',
+                    b'\\' => b'\\',
+                    b'a' => 0x07,
+                    b'b' => 0x08,
+                    b'f' => 0x0c,
+                    b'n' => b'\n',
+                    b'r' => b'\r',
+                    b't' => b'\t',
+                    b'v' => 0x0b,
+                    _ => return None,
+                });
+                index += 1;
             }
-            out.push(value as u8);
-            continue;
+            _ => out.push(byte),
         }
-        let decoded = match escape {
-            b'"' => b'"',
-            b'\\' => b'\\',
-            b'a' => 0x07,
-            b'b' => 0x08,
-            b'f' => 0x0c,
-            b'n' => b'\n',
-            b'r' => b'\r',
-            b't' => b'\t',
-            b'v' => 0x0b,
-            _ => return None,
-        };
-        out.push(decoded);
-        index += 1;
     }
-    String::from_utf8(out).ok()
 }
 
 fn print_prepared(
