@@ -126,7 +126,7 @@ Files:
 - `skills/skill-doctor/SKILL.md`
 - `skills/skill-harmonization/SKILL.md`
 
-Keep the same ai-skillet minimum version, `0.1.0+`. Each consumer must invoke its appropriate ai-skillet subcommand
+Keep the same ai-skillet minimum version, `1.0.0+`. Each consumer must invoke its appropriate ai-skillet subcommand
 directly (`map` for skill-map and skill-harmonization; `doctor` for skill-doctor), with no retired Python, uv, ripgrep,
 helper-resolution, wrapper, or fallback path.
 

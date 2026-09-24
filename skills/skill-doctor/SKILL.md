@@ -1,6 +1,6 @@
 ---
 argument-hint: "[--root PATH ...] [--skill NAME ...] [--format text|json] [--fix-safe] [--dependencies-only]"
-compatibility: Requires ai-skillet 0.1.0+.
+compatibility: Requires ai-skillet 1.0.0+.
 name: skill-doctor
 description:
   "Use to audit Agent Skills catalogs or installed skill roots for metadata and doc-link issues; optionally apply
@@ -23,7 +23,7 @@ skill roots, then apply only narrow metadata repairs when requested.
 
 ## Workflow
 
-1. Require `ai-skillet` 0.1.0 or newer on `PATH`, then run:
+1. Require `ai-skillet` 1.0.0 or newer on `PATH`, then run:
 
    ```sh
    ai-skillet doctor

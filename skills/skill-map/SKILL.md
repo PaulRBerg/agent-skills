@@ -2,7 +2,7 @@
 argument-hint:
   "[--skill NAME] [--root PATH | --portfolio-root PATH] [--format text|json|dot] [--include-catalog-sources]
   [--include-self] [--include-snippets] [--show-skipped]"
-compatibility: Requires ai-skillet 0.1.0+.
+compatibility: Requires ai-skillet 1.0.0+.
 coordination: exempt
 name: skill-map
 description:
@@ -34,7 +34,7 @@ cache, dependency, and backup noise.
 
 ## Workflow
 
-1. Require `ai-skillet` 0.1.0 or newer on `PATH`, then run:
+1. Require `ai-skillet` 1.0.0 or newer on `PATH`, then run:
 
    ```sh
    ai-skillet map
