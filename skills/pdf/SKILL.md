@@ -42,7 +42,8 @@ The helper emits schema-versioned JSON with integrity, encryption, page geometry
 text coverage without document text. Stop on `password_required`; password handling is outside this skill.
 
 When layout, cropping, OCR quality, signatures, or form placement matters, render the first and last page, every
-structural boundary, and any page behind a discrepancy.
+structural boundary, and any page behind a discrepancy. For dense charts, tables, or technical drawings, render at
+higher resolution and crop or zoom the relevant region before reading values.
 
 ## Route by Evidence
 

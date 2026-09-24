@@ -60,6 +60,11 @@ Make every visual device earn its place. Cards, pills, gradients, numbering, div
 illustrations, and animation must communicate hierarchy, function, sequence, or subject—not merely decorate. Concentrate
 expressive force in the signature and make the surrounding system support it.
 
+Name concrete patterns to avoid; generic "avoid an AI look" advice only swaps one default for another. Without a brief
+that calls for them, avoid these known model defaults: cream or off-white backgrounds, italic accent words in headlines,
+numbered `01/02/03` section labels, monospace labels, and pill-shaped buttons. After the first render, name any other
+default the result fell back on and revise it.
+
 ### 4. Build the actual experience
 
 - Follow local components, tokens, styling architecture, and dependency versions before introducing new primitives.
