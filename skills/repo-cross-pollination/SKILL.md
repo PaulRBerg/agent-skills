@@ -79,8 +79,9 @@ It prints one JSON document (`schemaVersion: 1`) to stdout, exits 2 on invalid i
   dependency count per ecosystem), `files.guidance`, `files.workflow`, `files.manifest` (tracked paths), `tasks[]`
   (`runner` is `just` or `package.json`, with `file` and `name`), and `notes` for anything it could not parse.
 - `dependencyGaps[]`: dependencies present in some but not all repositories sharing that ecosystem, with `presentIn`
-  (repo, manifest, section, spec, use count) and `missingIn`. It parses `package.json`, `pyproject.toml` (PEP 621, PEP
-  735, uv, Poetry), `Cargo.toml`, and `go.mod` (direct `require` and `tool` entries), skipping workspace-local packages.
+  (repo, manifest, section, spec, use count) and `missingIn`. It parses `package.json`, `pyproject.toml` (uv:
+  `[project]`, `[dependency-groups]`, `[tool.uv]`), `Cargo.toml`, and `go.mod` (direct `require` and `tool` entries),
+  skipping workspace-local packages.
 - `taskGaps[]`: task names present in some but not all repositories.
 - `summary`: shared and gap counts per ecosystem and for tasks.
 

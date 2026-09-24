@@ -83,10 +83,10 @@ DONOR = {
 RECIPIENT = {
     "package-lock.json": "{}\n",
     "package.json": json.dumps({"devDependencies": {"knip": "^5.1.0"}}),
+    "uv.lock": "version = 1\n",
     "pyproject.toml": """
-        [tool.poetry.dependencies]
-        python = "^3.12"
-        requests = "^2.31"
+        [project]
+        dependencies = ["requests>=2.31"]
     """,
     "Cargo.toml": """
         [dependencies]
@@ -120,7 +120,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(donor["files"]["guidance"], [".claude/skills/review/SKILL.md", "AGENTS.md"])
         self.assertEqual(donor["files"]["workflow"], [".github/workflows/ci.yml", "justfile"])
         self.assertEqual(donor["packageManagers"], ["bun", "cargo", "go"])
-        self.assertEqual(recipient["packageManagers"], ["cargo", "go", "npm"])
+        self.assertEqual(recipient["packageManagers"], ["cargo", "go", "npm", "uv"])
         self.assertIn({"file": "package.json", "name": "lint", "runner": "package.json"}, donor["tasks"])
         if shutil.which("just"):
             self.assertIn({"file": "justfile", "name": "check", "runner": "just"}, donor["tasks"])
@@ -135,12 +135,12 @@ class InventoryTests(unittest.TestCase):
                 ("go", "github.com/stretchr/testify"),
                 ("go", "golang.org/x/tools/cmd/stringer"),
                 ("npm", "oxlint"),
-                ("pypi", "pytest"),
+                ("uv", "pytest"),
             ],
         )
-        self.assertEqual(gaps[("pypi", "pytest")]["missingIn"], ["recipient"])
+        self.assertEqual(gaps[("uv", "pytest")]["missingIn"], ["recipient"])
         self.assertEqual(
-            gaps[("pypi", "pytest")]["presentIn"],
+            gaps[("uv", "pytest")]["presentIn"],
             [
                 {
                     "manifest": "pyproject.toml",
@@ -154,7 +154,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(gaps[("cargo", "libc")]["presentIn"][0]["section"], "target.cfg(unix).dependencies")
         self.assertEqual(gaps[("go", "golang.org/x/tools/cmd/stringer")]["presentIn"][0]["section"], "tool")
         self.assertEqual(
-            data["summary"]["dependencies"]["pypi"], {"gaps": 1, "repos": ["donor", "recipient"], "shared": 1}
+            data["summary"]["dependencies"]["uv"], {"gaps": 1, "repos": ["donor", "recipient"], "shared": 1}
         )
         self.assertEqual(data["summary"]["dependencies"]["cargo"]["shared"], 1)
         self.assertEqual(data["summary"]["dependencies"]["npm"]["shared"], 1)

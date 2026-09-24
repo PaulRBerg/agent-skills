@@ -7,7 +7,7 @@ import path from "node:path";
 import process from "node:process";
 
 type Category = "guidance" | "manifest" | "workflow";
-type Ecosystem = "cargo" | "go" | "npm" | "pypi";
+type Ecosystem = "cargo" | "go" | "npm" | "uv";
 
 type Dependency = { ecosystem: Ecosystem; manifest: string; name: string; section: string; spec: string };
 type Task = { file: string; name: string; runner: "just" | "package.json" };
@@ -35,7 +35,7 @@ const ecosystemManifests: Record<string, Ecosystem> = {
   "Cargo.toml": "cargo",
   "go.mod": "go",
   "package.json": "npm",
-  "pyproject.toml": "pypi",
+  "pyproject.toml": "uv",
 };
 
 const lockfilePackageManagers: Record<string, string> = {
@@ -268,8 +268,8 @@ function parseManifest(
   switch (ecosystem) {
     case "npm":
       return npmDependencies(file, text, repo, packageManagers);
-    case "pypi":
-      return pypiDependencies(file, text);
+    case "uv":
+      return uvDependencies(file, text);
     case "cargo":
       return cargoDependencies(file, text);
     case "go":
@@ -291,16 +291,15 @@ function npmDependencies(file: string, text: string, repo: Repo, packageManagers
   return found;
 }
 
-function pypiDependencies(file: string, text: string): Dependency[] {
+function uvDependencies(file: string, text: string): Dependency[] {
   const doc = Bun.TOML.parse(text) as Record<string, unknown>;
   const project = asRecord(doc.project);
   const tool = asRecord(doc.tool);
   const uv = asRecord(tool.uv);
-  const poetry = asRecord(tool.poetry);
   const localSources = new Set(
     Object.entries(asRecord(uv.sources))
       .filter(([, source]) => "workspace" in asRecord(source) || "path" in asRecord(source))
-      .map(([name]) => normalizePypi(name)),
+      .map(([name]) => normalizePythonName(name)),
   );
   const found: Dependency[] = [];
   const addRequirements = (requirements: unknown, section: string) => {
@@ -309,15 +308,8 @@ function pypiDependencies(file: string, text: string): Dependency[] {
       const match = /^\s*([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(.*)$/.exec(requirement);
       if (!match) continue;
       const [, name = "", spec = ""] = match;
-      if (localSources.has(normalizePypi(name))) continue;
-      found.push({ ecosystem: "pypi", manifest: file, name, section, spec: spec.trim() });
-    }
-  };
-  const addPoetry = (table: unknown, section: string) => {
-    for (const [name, spec] of Object.entries(asRecord(table))) {
-      if (name === "python" || "path" in asRecord(spec)) continue;
-      const version = typeof spec === "string" ? spec : String(asRecord(spec).version ?? "");
-      found.push({ ecosystem: "pypi", manifest: file, name, section, spec: version });
+      if (localSources.has(normalizePythonName(name))) continue;
+      found.push({ ecosystem: "uv", manifest: file, name, section, spec: spec.trim() });
     }
   };
 
@@ -329,11 +321,6 @@ function pypiDependencies(file: string, text: string): Dependency[] {
     addRequirements(requirements, `dependency-groups.${group}`);
   }
   addRequirements(uv["dev-dependencies"], "tool.uv.dev-dependencies");
-  addPoetry(poetry.dependencies, "tool.poetry.dependencies");
-  addPoetry(poetry["dev-dependencies"], "tool.poetry.dev-dependencies");
-  for (const [group, table] of Object.entries(asRecord(poetry.group))) {
-    addPoetry(asRecord(table).dependencies, `tool.poetry.group.${group}.dependencies`);
-  }
   return found;
 }
 
@@ -420,7 +407,7 @@ function report(repos: Repo[]) {
       byDependency.set(key, entry);
     }
   }
-  for (const ecosystem of ["cargo", "go", "npm", "pypi"] as const) {
+  for (const ecosystem of ["cargo", "go", "npm", "uv"] as const) {
     const eligible = repos.filter((repo) => ecosystem in repo.ecosystems).map((repo) => repo.id);
     if (eligible.length >= 2) summary[ecosystem] = { gaps: 0, repos: eligible, shared: 0 };
   }
@@ -470,12 +457,12 @@ function compareEntries(a: { ecosystem: string; name: string }, b: { ecosystem: 
 }
 
 function normalizeName(ecosystem: Ecosystem, name: string): string {
-  if (ecosystem === "pypi") return normalizePypi(name);
+  if (ecosystem === "uv") return normalizePythonName(name);
   if (ecosystem === "cargo") return name.toLowerCase().replaceAll("_", "-");
   return name;
 }
 
-function normalizePypi(name: string): string {
+function normalizePythonName(name: string): string {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 
