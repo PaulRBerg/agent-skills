@@ -115,9 +115,12 @@ path. Use `--no-auto-baseline` to disable ambient discovery while retaining expl
 skips discovery because it captures the index exactly.
 
 Before verification hooks run, `commit` compares the transaction's intended paths in the prepared index with the
-physical shared worktree. Unrelated dirty paths do not affect hook execution. When every intended path matches, hooks
-retain their normal behavior: tracked changes they stage can enter the commit, and newly added paths are reported as
-`HOOK_ADDED`. When an intended path differs, `pre-commit`, `prepare-commit-msg`, and `commit-msg` instead run from a
+physical shared worktree. Unrelated dirty paths do not affect hook execution. When every intended path matches and no
+`[validation]` command is configured, hooks retain their normal behavior: tracked changes they stage can enter the
+commit, and newly added paths are reported as `HOOK_ADDED`. A configured `[validation]` command always selects
+snapshot-check hook mode, even when every intended path matches the physical worktree, because that mode's temporary
+materialization is also validation's candidate worktree. When an intended path differs, `pre-commit`,
+`prepare-commit-msg`, and `commit-msg` instead run from a
 temporary materialization of the complete prepared index beneath the repository's physical Git directory. They receive
 the existing alternate `GIT_INDEX_FILE`, `GIT_WORK_TREE` pointing to that materialization,
 `AI_COMMIT_HOOK_MODE=snapshot-check`, and `AI_COMMIT_ORIGINAL_WORKTREE` pointing to the canonical physical repository

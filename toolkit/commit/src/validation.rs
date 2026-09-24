@@ -10,6 +10,7 @@ use crate::{
     cli::TransactionArgs,
     error::{AppError, Result},
     git::{Repository, copy_file, decode_nul_paths, git_error, literal_pathspec},
+    prepare::PATH_BATCH_SIZE,
     state::{Store, Transaction, TransactionStatus},
 };
 
@@ -149,9 +150,9 @@ pub(crate) fn intended_paths_differ_from_worktree(
     }
     copy_file(index, comparison_index)?;
     let capture_paths = intended_paths.iter().filter(|path| entries.contains_key(*path)).collect::<Vec<_>>();
-    if !capture_paths.is_empty() {
+    for batch in capture_paths.chunks(PATH_BATCH_SIZE) {
         let mut capture_arguments = vec!["add".to_owned(), "-A".to_owned(), "--".to_owned()];
-        capture_arguments.extend(capture_paths.into_iter().map(|path| literal_pathspec(path)));
+        capture_arguments.extend(batch.iter().map(|path| literal_pathspec(path)));
         let captured = repository.raw_in_worktree(capture_arguments, Some(comparison_index), &repository.root)?;
         if !captured.status.success() {
             return Err(git_error(captured));

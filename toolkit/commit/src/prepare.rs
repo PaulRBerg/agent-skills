@@ -30,7 +30,7 @@ struct Baseline {
     automatic: bool,
 }
 
-const PATH_BATCH_SIZE: usize = 32;
+pub(crate) const PATH_BATCH_SIZE: usize = 32;
 const AI_COORD_BASELINE_TIMEOUT: Duration = Duration::from_secs(5);
 const AI_COORD_TRAILER_TIMEOUT: Duration = Duration::from_millis(750);
 
@@ -100,7 +100,7 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         None,
     )?;
     let full_diff = if args.diff == DiffMode::Full {
-        Some(repository.text(
+        Some(repository.text_lossy(
             [
                 "-c",
                 "core.quotePath=false",
@@ -609,20 +609,25 @@ fn truncate_full_diff(diff: &str, limit: usize) -> (String, Vec<(String, usize)>
     let mut path = String::new();
     let mut kept = 0usize;
     let mut omitted = 0usize;
+    // `+++ b/<path>` headers are only trustworthy before a file's first hunk: an added line whose
+    // content itself begins with `++ b/` renders as a `+++ b/...` line inside a hunk and must not
+    // be mistaken for the next file-header path update.
+    let mut in_header = false;
     for line in diff.lines() {
         if line.starts_with("diff --git ") {
             if omitted > 0 {
                 truncations.push((path.clone(), omitted));
             }
-            path = line
-                .strip_prefix("diff --git a/")
-                .and_then(|rest| rest.split(" b/").next())
-                .unwrap_or_default()
-                .to_owned();
+            path = diff_git_header_path(line).unwrap_or_default();
             kept = 0;
             omitted = 0;
-        } else if let Some(new_path) = line.strip_prefix("+++ b/") {
-            path = new_path.to_owned();
+            in_header = true;
+        } else if in_header {
+            if line.starts_with("@@") {
+                in_header = false;
+            } else if let Some(new_path) = header_plus_path(line) {
+                path = new_path;
+            }
         }
         if kept < limit {
             output.push_str(line);
@@ -639,6 +644,113 @@ fn truncate_full_diff(diff: &str, limit: usize) -> (String, Vec<(String, usize)>
         output.pop();
     }
     (output, truncations)
+}
+
+/// Extracts the `a/`-side path from a `diff --git a/<path> b/<path>` header line, unquoting it if
+/// Git quoted it (paths containing `"`, `\`, or control characters are quoted even with
+/// `core.quotePath=false`, which only exempts non-ASCII bytes).
+fn diff_git_header_path(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("diff --git ")?;
+    if rest.starts_with('"') {
+        let (path, _remainder) = take_quoted_git_path(rest)?;
+        return path.strip_prefix("a/").map(str::to_owned);
+    }
+    let after_a = rest.strip_prefix("a/")?;
+    Some(after_a.split(" b/").next().unwrap_or_default().to_owned())
+}
+
+/// Extracts the `b/`-side path from a `+++ b/<path>` (or quoted) header line, or `None` for
+/// `+++ /dev/null`.
+fn header_plus_path(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("+++ ")?;
+    if rest.starts_with('"') {
+        let (path, _remainder) = take_quoted_git_path(rest)?;
+        return path.strip_prefix("b/").map(str::to_owned);
+    }
+    rest.strip_prefix("b/").map(str::to_owned)
+}
+
+/// Splits off one Git-quoted path token (the leading `"` is expected to have been checked by the
+/// caller and is consumed here) and returns its unescaped value along with the remainder of the
+/// input after the closing quote.
+fn take_quoted_git_path(input: &str) -> Option<(String, &str)> {
+    let rest = input.strip_prefix('"')?;
+    let bytes = rest.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => {
+                let raw = &rest[..index];
+                let remainder = &rest[index + 1..];
+                return unquote_git_path(raw).map(|path| (path, remainder));
+            }
+            b'\\' => {
+                index += 1;
+                if index >= bytes.len() {
+                    return None;
+                }
+                if bytes[index].is_ascii_digit() {
+                    let mut consumed = 0;
+                    while consumed < 3 && bytes.get(index).is_some_and(u8::is_ascii_digit) {
+                        index += 1;
+                        consumed += 1;
+                    }
+                } else {
+                    index += 1;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    None
+}
+
+/// Decodes Git's C-style quoting (`quote_c_style`): `\"`, `\\`, the named control escapes, and
+/// `\NNN` octal byte escapes.
+fn unquote_git_path(quoted: &str) -> Option<String> {
+    let bytes = quoted.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'\\' {
+            out.push(bytes[index]);
+            index += 1;
+            continue;
+        }
+        index += 1;
+        let escape = *bytes.get(index)?;
+        if (b'0'..=b'7').contains(&escape) {
+            let mut value = 0u32;
+            let mut consumed = 0;
+            while consumed < 3 {
+                match bytes.get(index) {
+                    Some(&digit) if (b'0'..=b'7').contains(&digit) => {
+                        value = value * 8 + u32::from(digit - b'0');
+                        index += 1;
+                        consumed += 1;
+                    }
+                    _ => break,
+                }
+            }
+            out.push(value as u8);
+            continue;
+        }
+        let decoded = match escape {
+            b'"' => b'"',
+            b'\\' => b'\\',
+            b'a' => 0x07,
+            b'b' => 0x08,
+            b'f' => 0x0c,
+            b'n' => b'\n',
+            b'r' => b'\r',
+            b't' => b'\t',
+            b'v' => 0x0b,
+            _ => return None,
+        };
+        out.push(decoded);
+        index += 1;
+    }
+    String::from_utf8(out).ok()
 }
 
 fn print_prepared(

@@ -328,6 +328,55 @@ fn full_diff_caps_each_file_and_discloses_truncation() {
 }
 
 #[test]
+fn full_diff_path_tracking_ignores_hunk_content_resembling_a_header() {
+    let harness = Harness::new("diff-hunk-decoy");
+    harness.write("trap.txt", "base\n");
+    harness.commit_all("base");
+    // The first added line's content is `++ b/decoy.txt`; the diff prefixes it with one more `+`,
+    // rendering `+++ b/decoy.txt`, which must not be mistaken for a new file-header path because
+    // it appears inside the hunk body, after `@@`.
+    let mut content = String::from("++ b/decoy.txt\n");
+    content.extend((0..500).map(|index| format!("line {index}\n")));
+    harness.write("trap.txt", &content);
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", "trap.txt"]);
+    let output = stdout(&output);
+    let truncated =
+        output.lines().find(|line| line.starts_with("DIFF_TRUNCATED\t")).expect("trap file diff is truncated");
+    assert!(truncated.starts_with("DIFF_TRUNCATED\ttrap.txt\t"), "path corrupted by hunk content: {truncated}");
+}
+
+#[test]
+fn full_diff_path_tracking_unquotes_git_quoted_headers() {
+    let harness = Harness::new("diff-quoted-path");
+    let filename = "weird\"quote.txt";
+    harness.write(filename, "base\n");
+    harness.commit_all("base");
+    let big: String = (0..500).map(|index| format!("line {index}\n")).collect();
+    harness.write(filename, &big);
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", filename]);
+    let output = stdout(&output);
+    let truncated =
+        output.lines().find(|line| line.starts_with("DIFF_TRUNCATED\t")).expect("quoted file diff is truncated");
+    assert!(
+        truncated.starts_with(&format!("DIFF_TRUNCATED\t{filename}\t")),
+        "quoted header path was not unquoted correctly: {truncated}"
+    );
+}
+
+#[test]
+fn full_diff_display_tolerates_non_utf8_content() {
+    let harness = Harness::new("diff-non-utf8");
+    harness.write("latin1.txt", "base\n");
+    harness.commit_all("base");
+    // "café\n" encoded as Latin-1: the 0xE9 byte is not valid UTF-8 on its own.
+    fs::write(harness.repo.join("latin1.txt"), [b'c', b'a', b'f', 0xE9, b'\n']).unwrap();
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", "latin1.txt"]);
+    let output = stdout(&output);
+    assert!(output.contains("PREPARED\t"));
+    assert!(output.lines().any(|line| line.starts_with("DIFF\t")));
+}
+
+#[test]
 fn staged_and_all_modes_capture_their_documented_scope() {
     let staged = Harness::new("staged");
     staged.write("one.txt", "base\n");

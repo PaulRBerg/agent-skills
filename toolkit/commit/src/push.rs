@@ -78,6 +78,12 @@ fn destination(repository: &Repository, branch: &str) -> Result<Destination> {
             .strip_prefix("refs/heads/")
             .ok_or_else(|| AppError::usage(format!("unsupported upstream merge ref: {merge}")))?
             .to_owned();
+        if remote_branch != branch {
+            return Err(AppError::usage(format!(
+                "upstream {remote}/{remote_branch} does not match current branch {branch}; ai-commit push refuses to \
+                 move a differently named ref; push explicitly with `git push {remote} HEAD:refs/heads/{remote_branch}`"
+            )));
+        }
         return Ok(Destination {
             branch: branch.to_owned(),
             remote,

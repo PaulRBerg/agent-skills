@@ -84,6 +84,57 @@ fn configured_upstream_without_a_tracking_ref_uses_its_remote() {
 }
 
 #[test]
+fn standalone_push_refuses_a_differently_named_upstream() {
+    let harness = Harness::new("push-mismatched-upstream");
+    let remote = harness.root.join("remote.git");
+    init_bare(&remote, &harness.home);
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.git(["branch", "-M", "main"]);
+    harness.git(["remote", "add", "origin", &format!("file://{}", remote.display())]);
+    harness.git(["push", "--quiet", "-u", "origin", "HEAD"]);
+    harness.git(["switch", "--quiet", "-c", "fix", "--track", "origin/main"]);
+    harness.write("intended.txt", "fix work\n");
+    harness.commit_all("fix work");
+    let remote_before = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+    let local_before = harness.git(["rev-parse", "HEAD"]);
+
+    let refused = harness.command(["push"]);
+    assert_eq!(exit_code(&refused), 2);
+    let message = stderr(&refused);
+    assert!(message.contains("origin/main"), "{message}");
+    assert!(message.contains("fix"), "{message}");
+    assert!(message.contains("git push"), "{message}");
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), remote_before);
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), local_before);
+}
+
+#[test]
+fn commit_push_refuses_a_differently_named_upstream_without_moving_the_remote() {
+    let harness = Harness::new("commit-push-mismatched-upstream");
+    let remote = harness.root.join("remote.git");
+    init_bare(&remote, &harness.home);
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.git(["branch", "-M", "main"]);
+    harness.git(["remote", "add", "origin", &format!("file://{}", remote.display())]);
+    harness.git(["push", "--quiet", "-u", "origin", "HEAD"]);
+    harness.git(["switch", "--quiet", "-c", "fix", "--track", "origin/main"]);
+    harness.write("intended.txt", "fix work\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let remote_before = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+
+    let refused = harness.command(["commit", &transaction, "-m", "test: mismatched upstream push", "--push"]);
+    assert_eq!(exit_code(&refused), 2);
+    let message = stderr(&refused);
+    assert!(message.contains("origin/main"), "{message}");
+    assert!(message.contains("fix"), "{message}");
+    assert!(stdout(&refused).contains("COMMITTED"), "{}", stdout(&refused));
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), remote_before);
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "fix work");
+}
+
+#[test]
 fn behind_branch_is_a_safe_noncompletion() {
     let harness = Harness::new("push-behind");
     let remote = harness.root.join("remote.git");

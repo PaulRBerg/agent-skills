@@ -128,6 +128,22 @@ impl Repository {
         output_text(output)
     }
 
+    /// Like `text`, but decodes non-UTF-8 output lossily instead of failing. Intended for
+    /// display-only output (such as the `--diff full` preview) where invalid UTF-8 in tracked
+    /// content must not abort the surrounding command.
+    pub fn text_lossy<I, S>(&self, args: I, index: Option<&Path>) -> Result<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let output = self.raw(args, index)?;
+        if !output.status.success() {
+            return Err(git_error(output));
+        }
+        let text = String::from_utf8_lossy(&output.stdout).into_owned();
+        Ok(text.trim_end_matches(['\r', '\n']).to_owned())
+    }
+
     pub fn bytes<I, S>(&self, args: I, index: Option<&Path>) -> Result<Vec<u8>>
     where
         I: IntoIterator<Item = S>,
@@ -202,13 +218,20 @@ impl Repository {
         let mut child = command
             .spawn()
             .map_err(|error| AppError::operational(format!("cannot execute git check-ignore: {error}")))?;
-        child.stdin.take().expect("piped stdin").write_all(&input)?;
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        // Write stdin on a separate thread while this thread drains stdout/stderr: with large
+        // inputs and outputs, writing all of stdin before reading any output can fill both pipe
+        // buffers and deadlock the child and parent against each other.
+        let writer = std::thread::spawn(move || stdin.write_all(&input));
         let output = child.wait_with_output().map_err(AppError::from)?;
         if output.status.success() {
             return decode_nul_paths(&output.stdout);
         }
         if output.status.code() == Some(1) {
             return Ok(Vec::new());
+        }
+        if let Ok(Err(error)) = writer.join() {
+            return Err(AppError::from(error));
         }
         Err(git_error(output))
     }

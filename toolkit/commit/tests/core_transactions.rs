@@ -163,6 +163,55 @@ fn hook_added_paths_are_committed_reported_and_reconciled() {
 }
 
 #[test]
+fn worktree_comparison_batches_many_intended_paths() {
+    // The worktree-comparison capture batches its `git add -A -- <paths>` invocation instead of
+    // passing every intended path in a single command; exercise a path count spanning more than
+    // one batch (batch size 32) so the chunking cannot silently drop or duplicate paths.
+    let path_count = 40;
+    let paths: Vec<String> = (0..path_count).map(|index| format!("file-{index:02}.txt")).collect();
+    let path_refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+
+    let matching = Harness::new("worktree-comparison-batch-matching");
+    for path in &paths {
+        matching.write(path, "base\n");
+    }
+    matching.commit_all("base");
+    for path in &paths {
+        matching.write(path, "prepared\n");
+    }
+    let (transaction, _) = matching.prepare(&path_refs);
+    let hook_log = matching.root.join("hook-mode.log");
+    write_executable(
+        &matching.repo.join(".git/hooks/pre-commit"),
+        &format!("#!/bin/sh\nset -eu\nprintf '%s\\n' \"${{AI_COMMIT_HOOK_MODE-unset}}\" > '{}'\n", hook_log.display()),
+    );
+    matching.success(["commit", &transaction, "-m", "test: batched worktree comparison matches"]);
+    assert_eq!(fs::read_to_string(&hook_log).unwrap(), "unset\n");
+
+    let drifted = Harness::new("worktree-comparison-batch-drifted");
+    for path in &paths {
+        drifted.write(path, "base\n");
+    }
+    drifted.commit_all("base");
+    for path in &paths {
+        drifted.write(path, "prepared\n");
+    }
+    let (transaction, _) = drifted.prepare(&path_refs);
+    // Change a path in the last batch (index 35, batch 2 of paths 32..40) after preparation.
+    drifted.write(&paths[35], "changed after prepare\n");
+    let hook_log = drifted.root.join("hook-mode.log");
+    write_executable(
+        &drifted.repo.join(".git/hooks/pre-commit"),
+        &format!("#!/bin/sh\nset -eu\nprintf '%s\\n' \"${{AI_COMMIT_HOOK_MODE-unset}}\" > '{}'\n", hook_log.display()),
+    );
+    drifted.success(["commit", &transaction, "-m", "test: batched worktree comparison detects drift"]);
+    assert_eq!(fs::read_to_string(&hook_log).unwrap(), "snapshot-check\n");
+    assert_eq!(drifted.git(["show", &format!("HEAD:{}", paths[0])]), "prepared");
+    assert_eq!(drifted.git(["show", &format!("HEAD:{}", paths[35])]), "prepared");
+    assert_eq!(drifted.read(&paths[35]), "changed after prepare\n");
+}
+
+#[test]
 fn unrelated_dirty_paths_do_not_select_snapshot_hook_mode() {
     let harness = Harness::new("unrelated-dirty-hook");
     harness.write("intended.txt", "base\n");
@@ -407,6 +456,30 @@ fn prepared_validation_can_resolve_ignored_local_directories() {
     assert_eq!(harness.read("node_modules/@example/tool/marker.txt"), "dependency\n");
     assert_eq!(harness.read(".artifacts/reviews/evidence.md"), "evidence\n");
     assert_eq!(harness.read("workspace/bin/tool"), "tool\n");
+}
+
+#[test]
+fn prepared_validation_resolves_a_large_number_of_ignored_directories() {
+    // Regression test: resolving ignored local directories pipes candidate paths into
+    // `git check-ignore --stdin` and reads matches back. Writing the full stdin payload before
+    // reading any stdout can deadlock once both pipe buffers fill (typically 16-64 KiB on
+    // macOS/Linux), so use enough ignored directories that both payloads comfortably exceed that.
+    let harness = Harness::new("check-ignore-large-io");
+    harness.write(".gitignore", "ignored-directory-*/\n");
+    harness.write("intended.txt", "base\n");
+    harness.write(".agents/commit.toml", "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"true\"]\n");
+    harness.commit_all("base");
+
+    let directory_count = 4000;
+    for index in 0..directory_count {
+        harness.write(&format!("ignored-directory-{index:05}/marker.txt"), "x\n");
+    }
+    harness.write("intended.txt", "changed\n");
+
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let output = harness.command(["commit", &transaction, "-m", "test: large check-ignore payload"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "changed");
 }
 
 #[test]
