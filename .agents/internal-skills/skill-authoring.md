@@ -129,8 +129,8 @@ string metadata field `metadata.install-targets`:
 | `codex`             | Codex only            |
 | `claude-code codex` | Claude Code and Codex |
 
-Use only these exact values and canonical order. `~/.agents/justfile` is the policy consumer; agent clients and the
-generic `skills` CLI do not interpret this field themselves.
+Use only these exact values and canonical order. `scripts/publish-skills.ts` and `~/.agents/justfile` consume it; agent
+clients and the generic `skills` CLI do not interpret this field themselves.
 
 - Add `compatibility` for the human-facing product and environment requirement.
 - Write the skill only for its supported clients; do not add fallback branches for unsupported agents.

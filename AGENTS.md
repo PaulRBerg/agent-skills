@@ -57,6 +57,7 @@ Treat visual structure as information architecture, not decoration.
 - `skills/<name>/examples/` contains sample files.
 - `skills/<name>/assets/` contains bundled media or other static assets.
 - `.agents/internal-skills/<name>.md` contains repo-private internal skills referenced with `@`.
+- `tests/<name>/` contains tests for that skill's helpers; `scripts/` contains catalog tooling.
 - `README.md` lists every skill and stays minimal.
 - Claude Code reads `AGENTS.md` directly; do not add a `CLAUDE.md`.
 
@@ -66,7 +67,7 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
 
 - After editing Markdown, run `just prettier-write` then `just prettier-check`, in that order; if `prettier-check`
   fails, fix only the files you changed.
-- `package.json` exists only for local formatting and hook wiring; there is no build step.
+- `package.json` exists only for local formatting, type-checking, and hook wiring; there is no build step.
 - Treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the verification surface
   unless a task introduces a narrower check.
 

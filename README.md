@@ -23,28 +23,26 @@ bunx skills add PaulRBerg/agent-skills
 | ai-prune             | Archive stale .ai files and trash stale .cache entries on macOS           |
 | autoresearch         | Autonomous experiment loop                                                |
 | brainstorm           | Co-create novel ideas and converge on a testable concept                  |
-| claude-handoff       | Delegate approved Claude plans to Sonnet or Opus subagents                |
 | chromium-browser     | Shared Chromium browsing, DevTools automation, and Wayback research       |
+| claude-handoff       | Research or implement approved plans with Claude subagents                |
 | cli-cast             | Foundry cast CLI guidance                                                 |
 | cli-coingecko        | CoinGecko CLI for prices and market data                                  |
 | cli-gh               | GitHub CLI operations                                                     |
 | cli-just             | Just command runner guidance                                              |
-| codebase-design      | Shared vocabulary and principles for designing deep modules               |
-| codex-handoff        | Delegate approved plans to Codex agents from Claude Code or Codex CLI     |
 | code-polish          | Simplify and/or risk-profiled review with autofix                         |
+| codebase-design      | Shared vocabulary and principles for designing deep modules               |
+| codex-handoff        | Research or implement approved plans with Codex agents                    |
 | commit               | Semantic commit messages with deterministic ai-commit mechanics           |
 | copy-transcript-path | Copy the active Claude Code or Codex CLI transcript path                  |
-| skill-writing        | Bootstrap a new agent skill                                               |
 | effect-ts            | Effect 3 patterns and source-aligned guidance                             |
 | evm-atlas            | EVM lookup + DEX transaction/order interpretation                         |
-| frontend-design      | Distinctive, subject-specific frontend design                             |
 | fresh-eyes-sweep     | Meticulous whole-repository audit and verified fixes                      |
+| frontend-design      | Distinctive, subject-specific frontend design                             |
 | git-squash           | Squash PR branch with semantic commit message                             |
 | grill-me             | Relentlessly stress-test plans and designs                                |
 | html-debrief         | Interactive HTML task debriefs                                            |
 | html-playground      | Interactive single-file HTML playgrounds                                  |
 | interview-me         | Clarify plans and ideas through a focused, lightweight interview          |
-| wrap-up              | Wind down a session fast: collect subagent wrap-ups and hand off the rest |
 | large-file-refactor  | Large source-file report and Serena split plans                           |
 | naming-refactor      | Exhaustive behavior-preserving repository naming refactor                 |
 | node-deps-bumper     | Node.js dependency updates via taze                                       |
@@ -55,6 +53,7 @@ bunx skills add PaulRBerg/agent-skills
 | skill-doctor         | Audit Agent Skills catalogs and installed skill roots                     |
 | skill-harmonization  | Harmonize repository and user-installed skill portfolios                  |
 | skill-map            | Find skill dependencies and references across machine                     |
+| skill-writing        | Bootstrap a project-local agent skill                                     |
 | spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS                               |
 | stale-comments-audit | Audit and fix stale comments in JavaScript, TypeScript, and Go            |
 | tailwind-css         | Tailwind CSS v4 styling guidance                                          |
@@ -62,6 +61,7 @@ bunx skills add PaulRBerg/agent-skills
 | todo-archive         | Archive checked TODO.md tasks into .ai/todos                              |
 | tool-finder          | Find and compare current developer tools                                  |
 | vitest               | Vitest test writing and debugging                                         |
+| wrap-up              | Wind down a session fast: collect subagent wrap-ups and hand off the rest |
 | yeet                 | GitHub contribution workflows                                             |
 
 ## Forked Skills

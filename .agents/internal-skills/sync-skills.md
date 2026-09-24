@@ -114,7 +114,7 @@ their content here, the sync run reads both skills directly:
 Out of scope unless the request explicitly names it: host selection, launch, and continuation mechanics; research
 mechanics; Claude-adapter-only content; Codex-adapter-only content; each skill's model defaults and its failed-agent
 re-run rules — model defaults are intentionally different (codex-handoff adapters choose GPT tiers; claude-handoff uses
-`sonnet`) — never normalize them; status reporting style; frontmatter and `references/`/`scripts/` contents.
+`sonnet` or `opus`) — never normalize them; status reporting style; frontmatter and `references/`/`scripts/` contents.
 
 Verification is prose comparison of the in-scope blocks; there is no extractable helper data.
 
