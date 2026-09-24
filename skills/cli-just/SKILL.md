@@ -29,8 +29,6 @@ Create readable task automation that matches the repository's installed Just ver
   )
   ```
 
-- Read `references/recipes.md` when writing recipes for executable prerequisites and quiet/script echo rules.
-- Read `references/inline-scripts.md` when selecting a shell or writing script bodies, including macOS Bash constraints.
 - Use the user's section-banner style when creating a new standalone justfile; existing repository organization
   overrides it.
 
@@ -42,13 +40,13 @@ Create readable task automation that matches the repository's installed Just ver
 2. Use the installed manual (`just --help`, `just --man`, or <https://just.systems/man/en/>) for version-sensitive
    syntax. Read only the task-specific reference:
 
-   | Task                                       | Reference                      |
-   | ------------------------------------------ | ------------------------------ |
-   | Recipes, parameters, dependencies, cache   | `references/recipes.md`        |
-   | Settings, dotenv, lists, modules           | `references/settings.md`       |
-   | Expressions, functions, constants          | `references/syntax.md`         |
-   | Shell or script recipes                    | `references/inline-scripts.md` |
-   | Check/write, status, aliases, organization | `references/patterns.md`       |
+   | Task                                                                    | Reference                      |
+   | ----------------------------------------------------------------------- | ------------------------------ |
+   | Recipes, parameters, dependencies, cache, executable checks, echo rules | `references/recipes.md`        |
+   | Settings, dotenv, lists, modules                                        | `references/settings.md`       |
+   | Expressions, functions, constants                                       | `references/syntax.md`         |
+   | Shell or script recipes, macOS Bash constraints                         | `references/inline-scripts.md` |
+   | Check/write, status, aliases, organization                              | `references/patterns.md`       |
 
 3. Make the smallest recipe or setting change. Do not enable unstable features unless the requested design needs them
    and the installed version supports them.

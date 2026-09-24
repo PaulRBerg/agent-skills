@@ -14,8 +14,6 @@ the ecosystem:
 | Databases/infrastructure | product and cloud-provider docs, migration and operations guidance; workload, backup, scaling, operational cost                                                                          |
 | Agent skills             | [skills.sh](https://skills.sh), vendor docs, GitHub topics, GitHub code search for `path:SKILL.md`, and web search; valid metadata, portability, token use, license, bundled-script risk |
 
-Search more than one index for agent skills: registries do not cover every GitHub or independently published skill.
-
 If evidence is otherwise close, prefer: stronger TypeScript support then smaller bundle then recency; Python or Go
 standard library, then typed/current Python support or fewer dependencies with idiomatic cancellation; safer,
 better-documented Rust; simpler-install, structured-output CLIs; and agent skills with progressive disclosure and fewer

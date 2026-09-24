@@ -78,16 +78,15 @@ Profiles live at `references/profiles/<name>.md`. Missing selected profiles are 
 Run the narrowest formatter/lint, targeted tests, typecheck, and invariant checks that prove the final touched behavior.
 Broaden only for shared contracts. Name skipped checks and why.
 
-Report `Scope`, `Simplifications` when run, `Verification`, and `Issues and caveats` when present. Summarize scope with
-the file count and smallest useful repository-relative roots, globs, ranges, or user-supplied targets. Do not enumerate
-every file merely to prove scope; name individual paths only for a small explicit scope or to clarify exceptions and
-findings. Findings include severity, location, impact, evidence, fix, and confidence. A residual risk states the
-assumption, consequence if wrong, and how to check it. Under `Issues and caveats`, group verified fixes with evidence as
-`Resolved`, and remaining problems, limitations, or unverified assumptions as `Open`, with their impact and next step.
-Omit empty groups and report each item once; put neutral context and agreed decisions under changes or scope. Reserve
-`blocker` for something preventing required work and `risk` for a specific potential adverse outcome. A workaround
-leaves an item open when the underlying issue still affects the result. Completion requires fixed scope, traceable
-edits/findings, and validation evidence.
+Summarize scope with the file count and smallest useful repository-relative roots, globs, ranges, or user-supplied
+targets. Do not enumerate every file merely to prove scope; name individual paths only for a small explicit scope or to
+clarify exceptions and findings. Findings include severity, location, impact, evidence, fix, and confidence. A residual
+risk states the assumption, consequence if wrong, and how to check it. Under `Issues and caveats`, group verified fixes
+with evidence as `Resolved`, and remaining problems, limitations, or unverified assumptions as `Open`, with their impact
+and next step. Omit empty groups and report each item once; put neutral context and agreed decisions under changes or
+scope. Reserve `blocker` for something preventing required work and `risk` for a specific potential adverse outcome. A
+workaround leaves an item open when the underlying issue still affects the result. Completion requires fixed scope,
+traceable edits/findings, and validation evidence.
 
 Render a successful report as `### ✨ Code polish — ✅ complete`, a small summary-count table, a compact `Scope`
 summary, `### ✨ Simplifications`, `### 🧪 Verification`, and `### Issues and caveats`, omitting inapplicable sections.
