@@ -586,7 +586,8 @@ State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/stat
 internal schema v19. Any other nonzero schema, including v18, is rejected without migration, import, deletion, or
 replacement, while the public `status --json` schema is v8. This is an isolated-state break with no migration or
 compatibility path. Close agents and explicitly choose any backup, removal, installation, and relinking rollout before
-retrying with incompatible state.
+retrying with incompatible state; `just reset-coord-ledger` deletes the resolved ledger and its WAL files after a
+`[y/N]` confirmation.
 
 The SQLite ledger stores bounded session metadata, callsigns, the coordination-waiver boolean, private opaque transcript
 paths, work labels, literal scopes, messages, finding lifecycle events, sightings, portable named drafts alongside

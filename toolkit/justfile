@@ -43,6 +43,33 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Run all workspace and application checks.
 @check: rust-check coord-dashboard-check handoffs-check
 
+# Delete the ai-coord ledger (state.db plus its -wal/-shm files) after a [y/N] confirmation.
+reset-coord-ledger:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -n "${AI_COORD_STATE_DIR:-}" ]]; then
+        dir="$AI_COORD_STATE_DIR"
+    else
+        dir="${XDG_STATE_HOME:-$HOME/.local/state}/ai-coord"
+    fi
+    db="$dir/state.db"
+    files=()
+    for file in "$db" "$db-wal" "$db-shm"; do
+        [[ -e "$file" ]] && files+=("$file")
+    done
+    if (( ${#files[@]} == 0 )); then
+        echo "No ai-coord ledger at $db"
+        exit 0
+    fi
+    printf '%s\n' "${files[@]}"
+    read -r -p "Delete these ai-coord ledger files? Close all agents first. [y/N] " reply || reply=""
+    if [[ "$reply" != [yY] && "$reply" != [yY][eE][sS] ]]; then
+        echo "Aborted; nothing deleted."
+        exit 1
+    fi
+    rm -f -- "${files[@]}"
+    echo "Deleted the ai-coord ledger."
+
 cli_packages := "commit coord handoff notify skillet"
 
 # Install all local CLI packages under ~/.local.
