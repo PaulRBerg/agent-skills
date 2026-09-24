@@ -2,6 +2,25 @@
 
 ## 1.0.0 - Unreleased
 
+- Run snapshot-check hooks and configured validation from a materialization under ai-commit's state directory instead of
+  the repository's Git directory, so upward config and `node_modules` lookups no longer reach the physical worktree;
+  materializations left by interrupted runs are removed automatically, and leftover `.git/ai-commit-hook-*`
+  directories from earlier versions can be deleted manually.
+- Project ignored directories one level deep and recreate their symlinks, so workspace links such as
+  `node_modules/@scope/pkg -> ../../packages/pkg` resolve to the prepared candidate; also project ignored symlinks to
+  directories and initialized submodules whose checked-out HEAD matches the candidate's gitlink.
+- Stop rejecting hooks and validators that rewrite identical bytes (`touch`, `sed -i`) as modifying prepared content.
+- Skip building the materialization when no verification hook file or validator will run.
+- Release Git's shared index lock while configured `[validation]` commands run; `commit` re-acquires it, re-verifies the
+  branch head, and revalidates onto a moved head up to three times before a retryable exit.
+- Skip and disclose (`AUTO_BASELINE_SKIPPED`) automatic `ai-coord` baselines whose path is in neither HEAD nor the
+  worktree; other automatic baseline failures now name their ai-coord origin and suggest `--no-auto-baseline` or an
+  explicit `--exclude-baseline` override.
+- Stage `prepare` path lists through one `git update-index --stdin` and one `git add --pathspec-from-file` process
+  instead of 32-path batches.
+- Remove an expired transaction's lock file with its receipt, and stop counting lock files toward the receipt-cleanup
+  scan limit, so cleanup keeps working after many transactions.
+- Run `post-commit` with `GIT_INDEX_FILE` set to the real shared index instead of the temporary commit index.
 - Add immutable prepare/commit transactions for shared Git working trees.
 - Add safe upstream-aware push, transaction inspection, and discard workflows.
 - Support transactional first commits on named unborn branches.

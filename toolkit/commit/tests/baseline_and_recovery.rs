@@ -76,7 +76,7 @@ fn baseline_exclusion_runs_strict_hook_against_snapshot() {
     assert_eq!(fields[3], "snapshot-check");
     assert_eq!(fields[4], harness.repo.canonicalize().unwrap().to_string_lossy());
     let snapshot = std::path::Path::new(&fields[1]);
-    assert!(snapshot.starts_with(harness.repo.join(".git").canonicalize().unwrap()));
+    assert!(snapshot.starts_with(harness.state.join("tmp").canonicalize().unwrap()));
     assert!(!snapshot.exists(), "snapshot worktree was not cleaned: {}", snapshot.display());
 
     let committed_file = harness.git(["show", "HEAD:intended.txt"]);
@@ -233,6 +233,8 @@ fn snapshot_materialization_failure_cleans_temporary_state_and_is_retryable() {
     let prepared =
         harness.success(["prepare", "--porcelain", "--exclude-baseline", &specification, "--", "intended.txt"]);
     let transaction = prepared_id(&stdout(&prepared));
+    // Snapshot mode materializes only when a verification hook will run in it.
+    write_executable(&harness.repo.join(".git/hooks/pre-commit"), "#!/bin/sh\nexit 0\n");
     let head_before = harness.git(["rev-parse", "HEAD"]);
     let index_before = harness.git(["hash-object", ".git/index"]);
 
@@ -246,10 +248,10 @@ fn snapshot_materialization_failure_cleans_temporary_state_and_is_retryable() {
     assert_eq!(harness.git(["rev-parse", "HEAD"]), head_before);
     assert_eq!(harness.git(["hash-object", ".git/index"]), index_before);
     assert_eq!(harness.read("intended.txt"), WORKTREE);
-    let snapshots: Vec<_> = fs::read_dir(harness.repo.join(".git"))
+    let snapshots: Vec<_> = fs::read_dir(harness.state.join("tmp"))
         .unwrap()
         .map(|entry| entry.unwrap().file_name())
-        .filter(|name| name.to_string_lossy().starts_with("ai-commit-hook-"))
+        .filter(|name| name.to_string_lossy().starts_with("ai-commit-snapshot-"))
         .collect();
     assert!(snapshots.is_empty(), "snapshot temporary state remained: {snapshots:?}");
 
@@ -409,6 +411,90 @@ fn staged_and_opt_out_skip_auto_query_and_missing_binary_is_tolerated() {
 
     let missing = harness.command_with_env(["prepare", "--all", "--porcelain"], [("PATH", "/usr/bin:/bin")]);
     assert!(missing.status.success(), "{}", stderr(&missing));
+}
+
+#[test]
+fn auto_baseline_for_absent_path_is_skipped_and_disclosed() {
+    let harness = Harness::new("auto-baseline-absent");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let oid = harness.git_input(["hash-object", "-w", "--stdin"], b"stale\n");
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        &format!("#!/bin/sh\n[ \"$1\" = baseline ] && printf 'gone.txt\\t{oid}\\n'\n"),
+    );
+
+    let output = harness.success(["prepare", "--all", "--porcelain"]);
+    assert!(stdout(&output).contains(&format!("AUTO_BASELINE_SKIPPED\tgone.txt\t{oid}\n")), "{}", stdout(&output));
+    assert!(!stdout(&output).contains("AUTO_BASELINE\t"));
+    assert!(stdout(&output).contains("PATH\tintended.txt\n"));
+    let output = harness.success(["prepare", "--all"]);
+    assert!(
+        stdout(&output)
+            .contains(&format!("## skipped auto baselines (path not in HEAD or the worktree)\ngone.txt={oid}\n")),
+        "{}",
+        stdout(&output)
+    );
+
+    let explicit = format!("gone.txt={oid}");
+    let output = harness.command(["prepare", "--all", "--no-auto-baseline", "--exclude-baseline", &explicit]);
+    assert_eq!(exit_code(&output), 2);
+    assert!(stderr(&output).contains("baseline path is not a file in HEAD or the worktree: gone.txt"));
+}
+
+#[test]
+fn failing_auto_baseline_names_ai_coord_and_the_overrides() {
+    let harness = Harness::new("auto-baseline-conflict");
+    harness.write("intended.txt", BASE);
+    harness.commit_all("base");
+    harness.write("intended.txt", WORKTREE);
+    let oid = harness.git_input(["hash-object", "-w", "--stdin"], b"unrelated\ncontent\n");
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        &format!("#!/bin/sh\n[ \"$1\" = baseline ] && printf 'intended.txt\\t{oid}\\n'\n"),
+    );
+
+    let output = harness.command(["prepare", "--", "intended.txt"]);
+    assert_eq!(exit_code(&output), 2, "{}", stderr(&output));
+    let message = stderr(&output);
+    assert!(
+        message.contains(&format!("automatic ai-coord stale-dirt baseline intended.txt={oid} failed")),
+        "{message}"
+    );
+    assert!(message.contains("do not apply cleanly"), "{message}");
+    assert!(
+        message.contains(
+            "rerun prepare with --no-auto-baseline, or override it with --exclude-baseline intended.txt=<oid>"
+        ),
+        "{message}"
+    );
+    harness.success(["prepare", "--no-auto-baseline", "--", "intended.txt"]);
+}
+
+#[test]
+fn expired_receipt_cleanup_removes_its_transaction_lock_file() {
+    let harness = Harness::new("receipt-lock-cleanup");
+    harness.write("one.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("one.txt", "changed\n");
+    let (transaction, _) = harness.prepare(&["one.txt"]);
+    harness.success(["commit", &transaction, "-m", "test: expiring receipt"]);
+    let journal = harness.transaction_json(&transaction);
+    let lock = journal.with_extension("lock");
+    assert!(lock.exists());
+    let foreign_lock = journal.with_file_name("0000000000000001.lock");
+    fs::write(&foreign_lock, "").unwrap();
+    let mut receipt: serde_json::Value = serde_json::from_str(&fs::read_to_string(&journal).unwrap()).unwrap();
+    receipt["terminal_at"] = 0.into();
+    fs::write(&journal, serde_json::to_vec_pretty(&receipt).unwrap()).unwrap();
+
+    let expired = harness.command(["show", &transaction]);
+
+    assert_eq!(exit_code(&expired), 2);
+    assert!(!journal.exists());
+    assert!(!lock.exists());
+    assert!(foreign_lock.exists());
 }
 
 #[test]

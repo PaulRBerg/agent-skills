@@ -28,6 +28,7 @@ struct Baseline {
     path: String,
     oid: String,
     automatic: bool,
+    skipped: bool,
 }
 
 pub(crate) const PATH_BATCH_SIZE: usize = 32;
@@ -47,7 +48,7 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         None => repository.empty_tree()?,
     };
     let intended_paths = normalize_inputs(&repository, &args.paths)?;
-    let baselines = parse_baselines(&repository, &args, &intended_paths)?;
+    let mut baselines = parse_baselines(&repository, &args, &intended_paths)?;
     let repository_config = config::load(&repository.root, message_format_override(&args))?;
 
     let temporary = Builder::new().prefix("prepare-").tempdir_in(store.temporary())?;
@@ -72,7 +73,7 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
         stage_worktree(&repository, &prepared_index, &base_head, args.all, &intended_paths)?;
     }
     let worktree_tree = repository.text(["write-tree"], Some(&prepared_index))?;
-    apply_baselines(&repository, temporary.path(), &prepared_index, &base_head, &worktree_tree, &baselines)?;
+    apply_baselines(&repository, temporary.path(), &prepared_index, &base_head, &worktree_tree, &mut baselines)?;
     let prepared_tree = repository.text(["write-tree"], Some(&prepared_index))?;
     let paths = changed_paths(&repository, &base_head, &prepared_tree)?;
     if paths.is_empty() {
@@ -311,22 +312,36 @@ fn stage_worktree(repository: &Repository, index: &Path, base_head: &str, all: b
         return Err(AppError::usage("intended paths do not match tracked or worktree files"));
     }
 
-    let head_paths = head_paths.into_iter().collect::<Vec<_>>();
-    for paths in head_paths.chunks(PATH_BATCH_SIZE) {
-        let mut arguments = vec!["update-index".to_owned(), "--force-remove".to_owned(), "--".to_owned()];
-        arguments.extend(paths.iter().cloned());
-        repository.checked(arguments, Some(index))?;
+    // Path lists travel over stdin so each operation is one Git process regardless of path count.
+    if !head_paths.is_empty() {
+        let input = nul_separated(head_paths.iter().cloned());
+        let output = repository.with_input(["update-index", "--force-remove", "-z", "--stdin"], &input, Some(index))?;
+        if !output.status.success() {
+            return Err(git_error(output));
+        }
     }
-    for paths in worktree_paths.chunks(PATH_BATCH_SIZE) {
-        let mut arguments = vec!["add".to_owned(), "--force".to_owned(), "--".to_owned()];
-        arguments.extend(paths.iter().map(|path| literal_pathspec(path)));
-        let output = repository.raw(arguments, Some(index))?;
+    if !worktree_paths.is_empty() {
+        let input = nul_separated(worktree_paths.iter().map(|path| literal_pathspec(path)));
+        let output = repository.with_input(
+            ["add", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"],
+            &input,
+            Some(index),
+        )?;
         if !output.status.success() {
             let message = git_error(output).message;
             return Err(AppError::usage(format!("cannot snapshot intended paths: {message}")));
         }
     }
     Ok(())
+}
+
+fn nul_separated(values: impl Iterator<Item = String>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for value in values {
+        bytes.extend_from_slice(value.as_bytes());
+        bytes.push(0);
+    }
+    bytes
 }
 
 fn pathspec_batches(pathspecs: &[String]) -> Vec<&[String]> {
@@ -411,7 +426,7 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
             return Err(AppError::usage(format!("baseline OID is not a blob for path {path}: {oid}")));
         }
         let oid = repository.text(["rev-parse", "--verify", &format!("{oid}^{{blob}}")], None)?;
-        baselines.push(Baseline { path, oid, automatic: false });
+        baselines.push(Baseline { path, oid, automatic: false, skipped: false });
     }
     if !args.staged && !args.no_auto_baseline {
         for (raw_path, raw_oid) in bounded_baselines(&repository.root) {
@@ -438,7 +453,7 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
                 continue;
             };
             seen.insert(path.clone());
-            baselines.push(Baseline { path, oid, automatic: true });
+            baselines.push(Baseline { path, oid, automatic: true, skipped: false });
         }
     }
     Ok(baselines)
@@ -468,60 +483,92 @@ fn apply_baselines(
     prepared_index: &Path,
     base_head: &str,
     worktree_tree: &str,
-    baselines: &[Baseline],
+    baselines: &mut [Baseline],
 ) -> Result<()> {
-    for (number, baseline) in baselines.iter().enumerate() {
+    for (number, baseline) in baselines.iter_mut().enumerate() {
         let baseline_index = temporary.join(format!("baseline-index-{number}"));
-        repository.checked(["read-tree", worktree_tree], Some(&baseline_index))?;
-        let baseline_entry = repository
-            .tree_entry(base_head, &baseline.path)?
-            .or(repository.tree_entry(worktree_tree, &baseline.path)?)
-            .ok_or_else(|| {
-                AppError::usage(format!("baseline path is not a file in HEAD or the worktree: {}", baseline.path))
-            })?;
-        if baseline_entry.kind != "blob" {
-            return Err(AppError::usage(format!("baseline path is not a file: {}", baseline.path)));
-        }
-        let mode = baseline_entry.mode;
-        repository.checked(
-            ["update-index", "--add", "--cacheinfo", &mode, &baseline.oid, &baseline.path],
-            Some(&baseline_index),
-        )?;
-        let baseline_tree = repository.text(["write-tree"], Some(&baseline_index))?;
-
-        repository.checked(["update-index", "--force-remove", "--", &baseline.path], Some(prepared_index))?;
-        if let Some(entry) = repository.tree_entry(base_head, &baseline.path)? {
-            repository.checked(
-                ["update-index", "--add", "--cacheinfo", &entry.mode, &entry.oid, &baseline.path],
-                Some(prepared_index),
-            )?;
-        }
-        let pathspec = literal_pathspec(&baseline.path);
-        let patch = repository.bytes(
-            ["diff", "--binary", "--no-ext-diff", "--no-textconv", &baseline_tree, worktree_tree, "--", &pathspec],
-            None,
-        )?;
-        if patch.is_empty() {
-            continue;
-        }
-        let check = repository.with_input(
-            ["apply", "--cached", "--check", "--whitespace=nowarn", "-"],
-            &patch,
-            Some(prepared_index),
-        )?;
-        if !check.status.success() {
-            return Err(AppError::usage(format!(
-                "baseline changes do not apply cleanly to prepared HEAD for path: {}",
-                baseline.path
-            )));
-        }
-        let applied =
-            repository.with_input(["apply", "--cached", "--whitespace=nowarn", "-"], &patch, Some(prepared_index))?;
-        if !applied.status.success() {
-            return Err(git_error(applied));
+        match apply_baseline(repository, &baseline_index, prepared_index, base_head, worktree_tree, baseline) {
+            Ok(true) => {}
+            // An automatic record for a path absent from HEAD and the worktree has nothing to exclude.
+            Ok(false) if baseline.automatic => baseline.skipped = true,
+            Ok(false) => {
+                return Err(AppError::usage(format!(
+                    "baseline path is not a file in HEAD or the worktree: {}",
+                    baseline.path
+                )));
+            }
+            Err(mut error) if baseline.automatic => {
+                error.message = format!(
+                    "automatic ai-coord stale-dirt baseline {}={} failed: {}\nrerun prepare with --no-auto-baseline, \
+                     or override it with --exclude-baseline {}=<oid>",
+                    baseline.path, baseline.oid, error.message, baseline.path
+                );
+                return Err(error);
+            }
+            Err(error) => return Err(error),
         }
     }
     Ok(())
+}
+
+/// Applies only the baseline-to-worktree delta for one path; returns `false` when the path is in
+/// neither HEAD nor the worktree.
+fn apply_baseline(
+    repository: &Repository,
+    baseline_index: &Path,
+    prepared_index: &Path,
+    base_head: &str,
+    worktree_tree: &str,
+    baseline: &Baseline,
+) -> Result<bool> {
+    let Some(baseline_entry) =
+        repository.tree_entry(base_head, &baseline.path)?.or(repository.tree_entry(worktree_tree, &baseline.path)?)
+    else {
+        return Ok(false);
+    };
+    repository.checked(["read-tree", worktree_tree], Some(baseline_index))?;
+    if baseline_entry.kind != "blob" {
+        return Err(AppError::usage(format!("baseline path is not a file: {}", baseline.path)));
+    }
+    let mode = baseline_entry.mode;
+    repository.checked(
+        ["update-index", "--add", "--cacheinfo", &mode, &baseline.oid, &baseline.path],
+        Some(baseline_index),
+    )?;
+    let baseline_tree = repository.text(["write-tree"], Some(baseline_index))?;
+
+    repository.checked(["update-index", "--force-remove", "--", &baseline.path], Some(prepared_index))?;
+    if let Some(entry) = repository.tree_entry(base_head, &baseline.path)? {
+        repository.checked(
+            ["update-index", "--add", "--cacheinfo", &entry.mode, &entry.oid, &baseline.path],
+            Some(prepared_index),
+        )?;
+    }
+    let pathspec = literal_pathspec(&baseline.path);
+    let patch = repository.bytes(
+        ["diff", "--binary", "--no-ext-diff", "--no-textconv", &baseline_tree, worktree_tree, "--", &pathspec],
+        None,
+    )?;
+    if patch.is_empty() {
+        return Ok(true);
+    }
+    let check = repository.with_input(
+        ["apply", "--cached", "--check", "--whitespace=nowarn", "-"],
+        &patch,
+        Some(prepared_index),
+    )?;
+    if !check.status.success() {
+        return Err(AppError::usage(format!(
+            "baseline changes do not apply cleanly to prepared HEAD for path: {}",
+            baseline.path
+        )));
+    }
+    let applied =
+        repository.with_input(["apply", "--cached", "--whitespace=nowarn", "-"], &patch, Some(prepared_index))?;
+    if !applied.status.success() {
+        return Err(git_error(applied));
+    }
+    Ok(true)
 }
 
 fn changed_paths(repository: &Repository, base_head: &str, prepared_tree: &str) -> Result<Vec<String>> {
@@ -731,7 +778,8 @@ fn print_prepared(
             println!("TRAILER\t{}", escape_tsv(trailer));
         }
         for baseline in baselines.iter().filter(|baseline| baseline.automatic) {
-            println!("AUTO_BASELINE\t{}\t{}", escape_tsv(&baseline.path), baseline.oid);
+            let record = if baseline.skipped { "AUTO_BASELINE_SKIPPED" } else { "AUTO_BASELINE" };
+            println!("{record}\t{}\t{}", escape_tsv(&baseline.path), baseline.oid);
         }
         println!("BRANCH\t{}", escape_tsv(&transaction.branch));
         for line in transaction.name_status.lines() {
@@ -758,10 +806,17 @@ fn print_prepared(
     if let Some(trailer) = &transaction.trailer {
         println!("\n## trailer\n{trailer}");
     }
-    let automatic = baselines.iter().filter(|baseline| baseline.automatic).collect::<Vec<_>>();
-    if !automatic.is_empty() {
+    let (skipped, applied): (Vec<_>, Vec<_>) =
+        baselines.iter().filter(|baseline| baseline.automatic).partition(|baseline| baseline.skipped);
+    if !applied.is_empty() {
         println!("\n## auto-applied baselines");
-        for baseline in automatic {
+        for baseline in applied {
+            println!("{}={}", baseline.path, baseline.oid);
+        }
+    }
+    if !skipped.is_empty() {
+        println!("\n## skipped auto baselines (path not in HEAD or the worktree)");
+        for baseline in skipped {
             println!("{}={}", baseline.path, baseline.oid);
         }
     }

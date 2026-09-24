@@ -1,11 +1,8 @@
-use std::{
-    collections::BTreeSet,
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use tempfile::Builder;
 
+pub(crate) use crate::snapshot::ValidationSnapshot;
 use crate::{
     cli::TransactionArgs,
     error::{AppError, Result},
@@ -18,11 +15,6 @@ pub(crate) struct Candidate {
     pub parent: Option<String>,
     pub base: String,
     pub tree: String,
-}
-
-pub(crate) struct ValidationSnapshot {
-    worktree: tempfile::TempDir,
-    validation_index: PathBuf,
 }
 
 pub fn run(args: TransactionArgs, store: &Store) -> Result<()> {
@@ -200,6 +192,12 @@ pub(crate) fn snapshot_drift_paths(
     candidate_tree: &str,
 ) -> Result<Vec<String>> {
     let current_tree = repository.text(["write-tree"], Some(index))?;
+    // Refresh stat data first so rewriting identical bytes (`touch`, `sed -i`) is not drift.
+    repository.checked_in_worktree(
+        ["update-index", "-q", "--refresh"],
+        Some(snapshot.validation_index()),
+        snapshot.root(),
+    )?;
     let mut paths = diff_paths(repository, candidate_tree, &current_tree)?.into_iter().collect::<BTreeSet<_>>();
     paths.extend(worktree_diff_paths(repository, snapshot.validation_index(), snapshot.root(), &[])?);
     Ok(paths.into_iter().collect())
@@ -250,54 +248,6 @@ pub(crate) fn diff_paths(repository: &Repository, old: &str, new: &str) -> Resul
     let bytes = repository
         .bytes(["diff", "--no-ext-diff", "--no-textconv", "--name-only", "--no-renames", "-z", old, new, "--"], None)?;
     decode_nul_paths(&bytes)
-}
-
-impl ValidationSnapshot {
-    pub(crate) fn materialize(
-        repository: &Repository,
-        index: &Path,
-        candidate_tree: &str,
-        validation_index: &Path,
-    ) -> Result<Self> {
-        let git_dir = repository.git_dir()?;
-        let mut builder = Builder::new();
-        builder.prefix("ai-commit-hook-");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            builder.permissions(fs::Permissions::from_mode(0o700));
-        }
-        let worktree = builder.tempdir_in(&git_dir).map_err(|error| {
-            AppError::retry(format!("cannot create temporary hook worktree under {}: {error}", git_dir.display()))
-        })?;
-        if env::var_os("AI_COMMIT_TEST_FAIL_SNAPSHOT_MATERIALIZATION").is_some() {
-            return Err(AppError::retry("injected snapshot materialization failure"));
-        }
-        repository
-            .checked_in_worktree(["checkout-index", "--all", "--force"], Some(index), worktree.path())
-            .map_err(|error| AppError::retry(format!("cannot materialize temporary hook worktree: {error}")))?;
-        repository
-            .checked_in_worktree(["update-index", "--refresh"], Some(index), worktree.path())
-            .map_err(|error| AppError::retry(format!("cannot validate temporary hook worktree: {error}")))?;
-        let materialized_tree = repository.text(["write-tree"], Some(index))?;
-        if materialized_tree != candidate_tree {
-            return Err(AppError::operational("temporary hook worktree materialization changed the prepared tree"));
-        }
-        fs::write(worktree.path().join(".git"), format!("gitdir: {}\n", git_dir.display()))
-            .map_err(|error| AppError::retry(format!("cannot configure temporary hook worktree: {error}")))?;
-        project_ignored_directories(repository, index, worktree.path())?;
-        copy_file(index, validation_index)?;
-        Ok(Self { worktree, validation_index: validation_index.to_path_buf() })
-    }
-
-    pub(crate) fn root(&self) -> &Path {
-        self.worktree.path()
-    }
-
-    pub(crate) fn validation_index(&self) -> &Path {
-        &self.validation_index
-    }
 }
 
 fn transaction_is_current(repository: &Repository, transaction: &Transaction, parent: Option<&str>) -> Result<bool> {
@@ -369,107 +319,6 @@ fn worktree_diff_paths(
     arguments.extend(paths.iter().map(|path| literal_pathspec(path)));
     let bytes = repository.bytes_in_worktree(arguments, Some(index), worktree)?;
     decode_nul_paths(&bytes)
-}
-
-fn project_ignored_directories(repository: &Repository, index: &Path, worktree: &Path) -> Result<()> {
-    let untracked = repository.bytes(["ls-files", "--others", "--directory", "-z"], Some(index))?;
-    let mut directory_records = Vec::new();
-    for record in untracked.split(|byte| *byte == 0).filter(|record| record.ends_with(b"/")) {
-        directory_records.extend_from_slice(record);
-        directory_records.push(0);
-    }
-    let mut directories = decode_nul_paths(&directory_records)?;
-    for directory in &mut directories {
-        directory.pop();
-    }
-    directories.sort_by(|left, right| {
-        Path::new(left).components().count().cmp(&Path::new(right).components().count()).then_with(|| left.cmp(right))
-    });
-    let mut roots = Vec::<PathBuf>::new();
-    for directory in directories {
-        let relative = PathBuf::from(&directory);
-        if roots.iter().any(|ancestor| relative.starts_with(ancestor)) {
-            continue;
-        }
-        roots.push(relative);
-    }
-
-    let mut prepared = Vec::<(String, PathBuf, PathBuf)>::new();
-    for relative in roots {
-        let source = repository.root.join(&relative);
-        let metadata = match fs::metadata(&source) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => {
-                return Err(AppError::retry(format!(
-                    "cannot inspect ignored local directory {}: {error}",
-                    source.display()
-                )));
-            }
-        };
-        if !metadata.is_dir() {
-            continue;
-        }
-
-        let destination = worktree.join(&relative);
-        match fs::symlink_metadata(&destination) {
-            Ok(_) => continue,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(AppError::retry(format!(
-                    "cannot inspect prepared local-artifact path {}: {error}",
-                    destination.display()
-                )));
-            }
-        }
-        let Some(parent) = destination.parent() else {
-            continue;
-        };
-        if !parent.is_dir() {
-            continue;
-        }
-
-        fs::create_dir(&destination).map_err(|error| {
-            AppError::retry(format!(
-                "cannot create prepared local-artifact directory {}: {error}",
-                destination.display()
-            ))
-        })?;
-        prepared.push((relative.to_string_lossy().into_owned(), source, destination));
-    }
-
-    let candidates = prepared.iter().map(|(relative, _, _)| relative.clone()).collect::<Vec<_>>();
-    let ignored = repository.ignored_paths_in_worktree(&candidates, index, worktree).map_err(|error| {
-        AppError::retry(format!("cannot inspect ignored local directories for prepared validation: {error}"))
-    })?;
-    let ignored = ignored.into_iter().collect::<BTreeSet<_>>();
-    for (relative, source, destination) in prepared {
-        if !ignored.contains(&relative) {
-            fs::remove_dir(&destination).map_err(|error| {
-                AppError::retry(format!(
-                    "cannot remove unused prepared local-artifact directory {}: {error}",
-                    destination.display()
-                ))
-            })?;
-            continue;
-        }
-        for entry in fs::read_dir(&source).map_err(|error| {
-            AppError::retry(format!("cannot read ignored local directory {}: {error}", source.display()))
-        })? {
-            let entry = entry.map_err(|error| {
-                AppError::retry(format!("cannot read ignored local entry under {}: {error}", source.display()))
-            })?;
-            let linked_path = destination.join(entry.file_name());
-            #[cfg(unix)]
-            std::os::unix::fs::symlink(entry.path(), &linked_path).map_err(|error| {
-                AppError::retry(format!(
-                    "cannot expose ignored local artifact at {} for prepared validation: {error}",
-                    linked_path.display()
-                ))
-            })?;
-        }
-    }
-    Ok(())
 }
 
 fn append_validation_recovery(mut error: AppError, transaction_id: &str) -> AppError {

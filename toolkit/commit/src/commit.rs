@@ -85,36 +85,46 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     }
 
     let commit_index = temporary.path().join("commit-index");
-    let Candidate { parent: current_parent, base: current_base, tree: before_hook_tree } =
-        build_candidate(&repository, &transaction, &commit_index)?;
     let message_file = temporary.path().join("commit-message");
     write_message(&message_file, &args.messages)?;
 
-    let validation_configured = transaction.validation_command.is_some();
-    let needs_hook_snapshot = validation_configured ||
-        intended_paths_differ_from_worktree(
-            &repository,
-            &commit_index,
-            &transaction.paths,
-            &temporary.path().join("worktree-comparison-index"),
-        )?;
-    let hook_snapshot = if needs_hook_snapshot {
-        Some(ValidationSnapshot::materialize(
-            &repository,
-            &commit_index,
-            &before_hook_tree,
-            &temporary.path().join("snapshot-validation-index"),
-        )?)
-    } else {
-        None
+    let (candidate, hook_snapshot, run_hooks) = match transaction.validation_command.as_deref() {
+        Some(command) => {
+            // Validation commands can run for minutes; release the shared index meanwhile so other
+            // Git operations in the worktree are not blocked, then re-verify the branch under the lock.
+            drop(index_lock);
+            let (candidate, snapshot, lock) =
+                validate_unlocked(&repository, &transaction, command, &commit_index, temporary.path(), &lock_marker)?;
+            index_lock = lock;
+            (candidate, Some(snapshot), true)
+        }
+        None => {
+            let candidate = build_candidate(&repository, &transaction, &commit_index)?;
+            let snapshot_mode = intended_paths_differ_from_worktree(
+                &repository,
+                &commit_index,
+                &transaction.paths,
+                &temporary.path().join("worktree-comparison-index"),
+            )?;
+            // Snapshot-check mode runs only executable hook files, so without one there is nothing
+            // to run and no reason to materialize the complete prepared tree.
+            let snapshot = if snapshot_mode && verification_hooks_exist(&repository, args.no_verify)? {
+                Some(ValidationSnapshot::materialize(
+                    &repository,
+                    &commit_index,
+                    &candidate.tree,
+                    &temporary.path().join("snapshot-validation-index"),
+                )?)
+            } else {
+                None
+            };
+            let run_hooks = !snapshot_mode || snapshot.is_some();
+            (candidate, snapshot, run_hooks)
+        }
     };
+    let Candidate { parent: current_parent, base: current_base, tree: before_hook_tree } = candidate;
 
-    if let Some(command) = transaction.validation_command.as_deref() {
-        let snapshot = hook_snapshot.as_ref().expect("configured validation requires a complete snapshot");
-        run_configured(&repository, command, snapshot, &before_hook_tree, &transaction.id)?;
-    }
-
-    if !args.no_verify {
+    if run_hooks && !args.no_verify {
         run_verification_hook(
             &repository,
             &commit_index,
@@ -126,16 +136,18 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         )?;
     }
     let message_path = message_file.to_string_lossy().into_owned();
-    run_verification_hook(
-        &repository,
-        &commit_index,
-        hook_snapshot.as_ref(),
-        &before_hook_tree,
-        &transaction.id,
-        "prepare-commit-msg",
-        &[&message_path, "message"],
-    )?;
-    if !args.no_verify {
+    if run_hooks {
+        run_verification_hook(
+            &repository,
+            &commit_index,
+            hook_snapshot.as_ref(),
+            &before_hook_tree,
+            &transaction.id,
+            "prepare-commit-msg",
+            &[&message_path, "message"],
+        )?;
+    }
+    if run_hooks && !args.no_verify {
         run_verification_hook(
             &repository,
             &commit_index,
@@ -231,10 +243,57 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         ))
     })?;
 
-    let _ = run_hook(&repository, &commit_index, "post-commit", &[]);
+    // Like `git commit`, post-commit sees the real shared index, not the temporary commit index.
+    let shared_index = index_lock.index_path.clone();
+    let _ = run_hook(&repository, &shared_index, "post-commit", &[]);
     drop(index_lock);
     print_commit_receipt(&transaction);
     maybe_push(&repository, &mut transaction, store, args.push)
+}
+
+const VALIDATION_ATTEMPTS: usize = 3;
+
+/// Runs configured validation without holding the shared index lock, then re-acquires it and
+/// confirms the validated candidate's parent is still the branch head. When the branch moved,
+/// the immutable prepared delta is re-applied to the new head and validated again.
+fn validate_unlocked(
+    repository: &Repository,
+    transaction: &Transaction,
+    command: &[String],
+    commit_index: &Path,
+    temporary: &Path,
+    lock_marker: &str,
+) -> Result<(Candidate, ValidationSnapshot, IndexLock)> {
+    for _ in 0..VALIDATION_ATTEMPTS {
+        let candidate = build_candidate(repository, transaction, commit_index)?;
+        let snapshot = ValidationSnapshot::materialize(
+            repository,
+            commit_index,
+            &candidate.tree,
+            &temporary.join("snapshot-validation-index"),
+        )?;
+        run_configured(repository, command, &snapshot, &candidate.tree, &transaction.id)?;
+        let index_lock = IndexLock::acquire(repository, lock_marker)?;
+        ensure_branch(repository, &transaction.branch)?;
+        repository.ensure_idle()?;
+        if repository.head_oid()? == candidate.parent {
+            return Ok((candidate, snapshot, index_lock));
+        }
+    }
+    Err(AppError::retry(format!(
+        "branch {} moved during each of {VALIDATION_ATTEMPTS} validation attempts; no commit was created and \
+         transaction {} remains prepared and retryable",
+        transaction.branch, transaction.id
+    )))
+}
+
+fn verification_hooks_exist(repository: &Repository, no_verify: bool) -> Result<bool> {
+    for hook in ["pre-commit", "prepare-commit-msg", "commit-msg"] {
+        if (hook == "prepare-commit-msg" || !no_verify) && repository.hook_exists(hook)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn recover_after_ref_update(

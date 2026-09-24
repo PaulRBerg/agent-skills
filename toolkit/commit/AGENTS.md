@@ -9,7 +9,8 @@ model.
 - `src/prepare.rs` resolves intended paths, constructs immutable trees in alternate indexes, and records transactions.
 - `src/validation.rs` reapplies immutable prepared deltas, materializes candidates, and runs frozen validation with
   drift detection for both `validate` and `commit`.
-- `src/commit.rs` locks the shared index, runs hooks/signing, CAS-updates refs, and reconciles the shared index.
+- `src/commit.rs` runs configured validation without the shared index lock, then locks the shared index, re-verifies
+  the branch head, runs hooks/signing, CAS-updates refs, and reconciles the shared index.
 - `src/push.rs` implements fetch-first, no-integration pushes.
 - `src/state.rs` owns atomic journal records, receipts, retention, and transaction refs.
 - `src/git.rs` is the only subprocess boundary for Git operations.
@@ -18,12 +19,16 @@ model.
 
 - `prepare` must never mutate the worktree, shared index, branch ref, or user configuration.
 - Automatic stale-dirt baselines are advisory: malformed output or an unavailable/failing `ai-coord` must not fail
-  preparation, explicit exclusions win by path, and staged capture never consults ambient coordination state.
+  preparation, explicit exclusions win by path, and staged capture never consults ambient coordination state. An
+  automatic baseline whose path is in neither HEAD nor the worktree is skipped and disclosed; any other automatic
+  baseline failure names its ai-coord origin and the `--no-auto-baseline`/`--exclude-baseline` overrides.
 - Prepared objects remain pinned until a terminal receipt expires or a prepared transaction is discarded.
 - A commit is built from the prepared tree, with only clean current-HEAD movement and hook-staged changes admitted.
 - When an intended prepared path differs from the physical worktree, verification hooks run against a temporary
-  materialization of the complete prepared index, with ignored local directories projected in so installed tooling
-  resolves as in the physical worktree. Those hooks may edit the message but must not modify tracked content.
+  materialization of the complete prepared index, created outside the repository under ai-commit's state directory,
+  with ignored local directories and matching initialized submodules projected in so installed tooling resolves without
+  reaching the physical worktree. Those hooks may edit the message but must not modify tracked content; stat-only
+  rewrites of identical bytes are not drift.
 - An optional repository validation argv is frozen into the prepared transaction and always runs directly against a
   complete materialization of that prepared candidate before verification hooks, including with `--no-verify`. It
   receives an isolated Git environment; ignored local directories remain available for read-only dependency and
@@ -36,7 +41,11 @@ model.
 - Normal verification hooks retain their existing physical-worktree behavior, and `post-commit` always runs from the
   physical worktree without the snapshot-check environment.
 - Never remove an index lock that this transaction did not create; recovery may reclaim only a lock whose contents equal
-  the transaction's persisted token. Hold the owned lock through ref CAS and index reconciliation.
+  the transaction's persisted token. Hold the owned lock through verification hooks, ref CAS, and index
+  reconciliation. Configured `[validation]` commands run without it; after re-acquiring the lock, `commit` requires the
+  same branch, an idle repository, and a HEAD equal to the validated candidate's parent, rebuilding and revalidating
+  onto a moved head at most three times before a retryable exit.
+- Receipt cleanup deletes an expired transaction's lock file only after its journal, while holding that lock.
 - A post-ref-update failure must remain replayable without creating a second commit.
 - Tests isolate repositories, remotes, `HOME`, configuration, and state in temporary directories.
 
@@ -112,7 +121,10 @@ Prepared journals do not age out; terminal receipts and their refs are retained 
 In default and `--all` modes, `prepare` also asks `ai-coord baseline` for stale-dirt baselines and excludes the
 pre-existing portions of those files automatically. Explicit `--exclude-baseline` values take precedence for the same
 path. Use `--no-auto-baseline` to disable ambient discovery while retaining explicit exclusions; `--staged` always
-skips discovery because it captures the index exactly.
+skips discovery because it captures the index exactly. An automatic baseline whose path exists in neither HEAD nor
+the worktree has nothing to exclude; it is skipped and disclosed as `AUTO_BASELINE_SKIPPED<tab>path<tab>oid` (ordinary
+output: `skipped auto baselines`). Any other automatic baseline failure stops preparation with a message naming the
+ai-coord record and suggesting `--no-auto-baseline` or an explicit `--exclude-baseline` override.
 
 Before verification hooks run, `commit` compares the transaction's intended paths in the prepared index with the
 physical shared worktree. Unrelated dirty paths do not affect hook execution. When every intended path matches and no
@@ -121,17 +133,28 @@ commit, and newly added paths are reported as `HOOK_ADDED`. A configured `[valid
 snapshot-check hook mode, even when every intended path matches the physical worktree, because that mode's temporary
 materialization is also validation's candidate worktree. When an intended path differs, `pre-commit`,
 `prepare-commit-msg`, and `commit-msg` instead run from a temporary materialization of the complete prepared index
-beneath the repository's physical Git directory. They receive the existing alternate `GIT_INDEX_FILE`, `GIT_WORK_TREE`
-pointing to that materialization, `AI_COMMIT_HOOK_MODE=snapshot-check`, and `AI_COMMIT_ORIGINAL_WORKTREE` pointing to
-the canonical physical repository root. Ignored local directories whose parents exist in the prepared tree (for example
-`node_modules` or a virtual environment) are projected into the materialization as symlinks, so hooks resolve installed
-tooling, justfile imports and interpreters exactly as they do from the physical worktree and need no snapshot-specific
-branches.
+under ai-commit's state directory (`<state>/tmp/ai-commit-snapshot-*/worktree`), outside the repository, so upward
+configuration and `node_modules` lookups never climb into the physical worktree. They receive the existing alternate
+`GIT_INDEX_FILE`, `GIT_WORK_TREE` pointing to that materialization, `AI_COMMIT_HOOK_MODE=snapshot-check`, and
+`AI_COMMIT_ORIGINAL_WORKTREE` pointing to the canonical physical repository root. Ignored local directories whose parents
+exist in the prepared tree (for example `node_modules` or a virtual environment), including ignored symlinks to
+directories, are projected one level deep: each is a real directory whose entries link to their physical paths,
+`@scope` directories are expanded one more level, and symlinks are recreated so targets inside the repository (such as
+workspace links like `node_modules/@scope/pkg -> ../../packages/pkg`) resolve inside the materialization while targets
+outside it resolve to the same physical location. An initialized submodule whose checked-out HEAD equals the
+candidate's gitlink commit has its entries (not its `.git`) projected the same way; other submodules stay empty. Hooks
+therefore need no snapshot-specific branches. Absolute paths recorded inside dependency files, such as editable-install
+`.pth` entries, and packages resolved through their physical real paths still refer to the physical worktree. The
+materialization is skipped when no executable verification hook file would run (none is installed, or only
+`pre-commit`/`commit-msg` exist and `--no-verify` is given) and no `[validation]` command is configured.
 
 Snapshot-check hooks may edit the commit message, but any tracked-content or prepared-index change stops the commit
 with `snapshot-check hook modified prepared content`, lists the affected paths, and leaves the transaction prepared for
-explicit recovery. Ordinary hook failures remain retryable. Temporary hook state is removed on success or failure, and
-`post-commit` always runs through the physical worktree without snapshot-check markers. This isolates conventional
+explicit recovery. Drift is judged by content and mode after a stat refresh, so rewriting identical bytes (`touch`,
+`sed -i`) is not drift. Ordinary hook failures remain retryable. Temporary hook state is removed on success or failure;
+materializations abandoned by interrupted processes are removed by a later snapshot once their owner lock is free and
+they are at least five minutes old. `post-commit` always runs through the physical worktree without snapshot-check
+markers and, as with `git commit`, with `GIT_INDEX_FILE` naming the real shared index. This isolates conventional
 relative Git and worktree operations; it does not constrain hooks that deliberately perform external side effects.
 
 State defaults to `$XDG_STATE_HOME/ai-commit` or `~/.local/state/ai-commit`; `AI_COMMIT_STATE_DIR` overrides it.
@@ -151,14 +174,17 @@ usage error. Explicit `--natural` or `--conventional` always wins for that prepa
 `validation.command` is optional. When configured, it must be one non-empty argv vector (no shell form, empty argv
 elements, or NUL bytes). `prepare` freezes that argv in its journal without running it. Both `validate` and `commit`
 execute the frozen command directly from a temporary complete materialization of the exact commit candidate, even
-when the physical worktree has changed. `commit` runs it before Git verification hooks, including with `--no-verify`.
+when the physical worktree has changed. `commit` runs it before Git verification hooks, including with `--no-verify`,
+without holding Git's shared index lock, so other Git operations in the worktree are not blocked; afterwards it
+re-acquires the lock and, if the branch moved meanwhile, re-applies the prepared delta onto the new HEAD and validates
+again, exiting `3` after three attempts that each saw movement.
 If HEAD advanced cleanly, the candidate includes the immutable prepared delta applied to that observed HEAD. The
 validator receives `GIT_DIR` for the physical repository,
 `GIT_WORK_TREE` and `GIT_INDEX_FILE` for the materialization, `AI_COMMIT_VALIDATION_MODE=prepared-tree`, and
 `AI_COMMIT_ORIGINAL_WORKTREE` for the canonical physical root; inherited conflicting Git and ai-commit hook variables
-are cleared or replaced. Ignored local directories are projected into the materialization as for snapshot-check
-hooks, so validators can resolve installed tooling and local evidence; validators must treat those artifacts as
-read-only. A nonzero exit, or a validator that changes tracked worktree or staged/index content, admits no changes
+are cleared or replaced. Ignored local directories and matching initialized submodules are projected into the
+materialization as for snapshot-check hooks, so validators can resolve installed tooling and local evidence; projected
+entries are links to physical files, so validators must treat them as read-only. A nonzero exit, or a validator that changes tracked worktree or staged/index content, admits no changes
 and leaves the transaction prepared for retry. When both happen, both facts are reported. A same-ID retry is suitable
 after repairing only a transient dependency or environment failure. A content or configuration repair requires
 reviewing the failure, preserving excluded baseline bytes, discarding the confirmed uncommitted preparation, and
@@ -180,7 +206,8 @@ discard it.
 `prepare --porcelain` emits stable TSV records. Tabs, newlines, carriage returns, and backslashes inside fields are
 backslash-escaped. Outcome records use `PREPARED`, `VALIDATED`, `VALIDATION_SKIPPED`, `COMMITTED`, `PUSHED`,
 `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and `DISCARDED`. Each automatically applied exclusion is disclosed as
-`AUTO_BASELINE<tab>path<tab>oid`; the ordinary output lists the same pairs under `auto-applied baselines`.
+`AUTO_BASELINE<tab>path<tab>oid`; the ordinary output lists the same pairs under `auto-applied baselines`. Each skipped
+automatic baseline is disclosed as `AUTO_BASELINE_SKIPPED<tab>path<tab>oid`.
 
 Receipts and retryable diagnostics print a fixed 12-character commit OID abbreviation; `show` and the transaction
 journal retain full OIDs. The `--diff full` display diff omits binary patch payloads and caps each file's section at

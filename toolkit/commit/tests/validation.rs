@@ -1,8 +1,13 @@
 mod common;
 
-use std::fs;
+use std::{
+    fs,
+    os::unix::fs::symlink,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime},
+};
 
-use common::{Harness, exit_code, stderr, stdout, write_executable};
+use common::{Harness, exit_code, git_at, stderr, stdout, write_executable};
 
 #[test]
 fn validation_failure_preserves_the_immutable_transaction_and_explains_recovery() {
@@ -97,7 +102,7 @@ fn validation_success_is_exact_preflight_and_commit_revalidates() {
     harness.write("intended.txt", "prepared\n");
     let validator = configure_validator(
         &harness,
-        "#!/bin/sh\nset -eu\nprintf 'ran\\n' >> \"$VALIDATION_LOG\"\ntest \"$(cat intended.txt)\" = prepared\ncase \"$EXPECTED_SHARED_INDEX_LOCK\" in\n  absent) test ! -e \"$AI_COMMIT_ORIGINAL_WORKTREE/.git/index.lock\" ;;\n  owned) test -e \"$AI_COMMIT_ORIGINAL_WORKTREE/.git/index.lock\" ;;\n  *) exit 92 ;;\nesac\n",
+        "#!/bin/sh\nset -eu\nprintf 'ran\\n' >> \"$VALIDATION_LOG\"\ntest \"$(cat intended.txt)\" = prepared\ntest ! -e \"$AI_COMMIT_ORIGINAL_WORKTREE/.git/index.lock\"\n",
     );
     let hook_marker = harness.root.join("hook-ran");
     write_executable(&harness.repo.join(".git/hooks/pre-commit"), "#!/bin/sh\n: > \"$HOOK_MARKER\"\n");
@@ -123,7 +128,6 @@ fn validation_success_is_exact_preflight_and_commit_revalidates() {
         [
             ("VALIDATION_LOG", validation_log_text.as_str()),
             ("HOOK_MARKER", hook_marker_text.as_str()),
-            ("EXPECTED_SHARED_INDEX_LOCK", "absent"),
             ("PUSH_MARKER", push_marker.to_str().unwrap()),
             ("REAL_GIT", real_git.to_str().unwrap()),
         ],
@@ -141,7 +145,6 @@ fn validation_success_is_exact_preflight_and_commit_revalidates() {
         [
             ("VALIDATION_LOG", validation_log_text.as_str()),
             ("HOOK_MARKER", hook_marker_text.as_str()),
-            ("EXPECTED_SHARED_INDEX_LOCK", "owned"),
             ("PUSH_MARKER", push_marker.to_str().unwrap()),
             ("REAL_GIT", real_git.to_str().unwrap()),
         ],
@@ -527,6 +530,125 @@ fn snapshot_hook_failure_reports_drift_and_precommit_recovery_together() {
     assert_eq!(harness.git(["rev-parse", "HEAD"]), head_before);
     assert_eq!(fs::read(harness.repo.join(".git/index")).unwrap(), index_before);
     assert_eq!(harness.read("intended.txt"), "later live content\n");
+}
+
+#[test]
+fn validation_projects_workspace_links_into_a_snapshot_outside_the_repository() {
+    let harness = Harness::new("validate-workspace-links");
+    harness.write(".gitignore", "node_modules/\n");
+    harness.write("packages/b/index.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("node_modules/dep/marker.txt", "dependency\n");
+    fs::create_dir_all(harness.repo.join("node_modules/@scope")).unwrap();
+    symlink("../../packages/b", harness.repo.join("node_modules/@scope/b")).unwrap();
+    symlink("dep", harness.repo.join("node_modules/alias")).unwrap();
+    harness.write("packages/b/index.txt", "prepared\n");
+    configure_validator(
+        &harness,
+        "#!/bin/sh\nset -eu\nsnapshot=$(pwd -P)\nprintf '%s\\n' \"$snapshot\" > \"$SNAPSHOT_LOG\"\ncase \"$snapshot/\" in \"$AI_COMMIT_ORIGINAL_WORKTREE\"/*) exit 81;; esac\ntest \"$(cat node_modules/@scope/b/index.txt)\" = prepared\ntest \"$(cd node_modules/@scope/b && pwd -P)\" = \"$snapshot/packages/b\"\ntest \"$(cat node_modules/dep/marker.txt)\" = dependency\ntest \"$(cat node_modules/alias/marker.txt)\" = dependency\n",
+    );
+    let (transaction, _) = harness.prepare(&["packages/b/index.txt"]);
+    harness.write("packages/b/index.txt", "live content after prepare\n");
+    let snapshots = harness.state.join("tmp");
+    let abandoned = snapshots.join("ai-commit-snapshot-abandoned");
+    fs::create_dir_all(abandoned.join("worktree")).unwrap();
+    fs::write(abandoned.join("lock"), "").unwrap();
+    let old = SystemTime::now() - Duration::from_secs(3600);
+    fs::File::open(&abandoned).unwrap().set_modified(old).unwrap();
+    let log = harness.root.join("snapshot-path");
+    let log_text = log.to_string_lossy().into_owned();
+
+    let validated = harness.success_with_env(["validate", &transaction], [("SNAPSHOT_LOG", &log_text)]);
+    assert_validated(&harness, &transaction, &validated);
+    let snapshot = PathBuf::from(fs::read_to_string(&log).unwrap().trim());
+    assert!(!snapshot.starts_with(harness.repo.canonicalize().unwrap()), "{}", snapshot.display());
+    assert!(!snapshot.exists(), "snapshot was retained: {}", snapshot.display());
+    assert!(!abandoned.exists(), "abandoned snapshot was not swept");
+    harness.success_with_env(["commit", &transaction, "-m", "test: workspace links"], [("SNAPSHOT_LOG", &log_text)]);
+    assert_eq!(harness.git(["show", "HEAD:packages/b/index.txt"]), "prepared");
+    assert_eq!(fs::read_link(harness.repo.join("node_modules/@scope/b")).unwrap(), Path::new("../../packages/b"));
+    assert_eq!(harness.read("packages/b/index.txt"), "live content after prepare\n");
+    let leftovers: Vec<_> = fs::read_dir(&snapshots)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name.to_string_lossy().starts_with("ai-commit-snapshot-"))
+        .collect();
+    assert!(leftovers.is_empty(), "snapshot temporary state remained: {leftovers:?}");
+}
+
+#[test]
+fn validation_projects_symlinked_ignored_directories() {
+    let harness = Harness::new("validate-symlinked-ignored");
+    harness.write(".gitignore", "deps\nlinked-store\n.store/\n");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    fs::create_dir_all(harness.root.join("shared-deps")).unwrap();
+    fs::write(harness.root.join("shared-deps/tool.txt"), "shared tool\n").unwrap();
+    symlink("../shared-deps", harness.repo.join("deps")).unwrap();
+    harness.write(".store/nm/tool.txt", "store tool\n");
+    symlink(".store/nm", harness.repo.join("linked-store")).unwrap();
+    harness.write("intended.txt", "prepared\n");
+    configure_validator(
+        &harness,
+        "#!/bin/sh\nset -eu\ntest \"$(cat intended.txt)\" = prepared\ntest -L deps\ntest \"$(cat deps/tool.txt)\" = 'shared tool'\ntest \"$(readlink linked-store)\" = .store/nm\ntest \"$(cat linked-store/tool.txt)\" = 'store tool'\n",
+    );
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    assert_validated(&harness, &transaction, &harness.success(["validate", &transaction]));
+    assert_eq!(fs::read_to_string(harness.root.join("shared-deps/tool.txt")).unwrap(), "shared tool\n");
+}
+
+#[test]
+fn validation_projects_initialized_submodules_at_the_candidate_commit_only() {
+    let harness = Harness::new("validate-submodule");
+    let origin = harness.root.join("submodule-origin");
+    fs::create_dir_all(&origin).unwrap();
+    let identity = ["-c", "user.name=AI Commit Test", "-c", "user.email=ai-commit@example.com"];
+    git_at(&origin, &harness.home, ["init", "--quiet"]);
+    fs::write(origin.join("module.txt"), "module v1\n").unwrap();
+    git_at(&origin, &harness.home, ["add", "module.txt"]);
+    git_at(&origin, &harness.home, identity.into_iter().chain(["commit", "--quiet", "-m", "v1"]));
+    harness.git([
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "--quiet",
+        origin.to_str().unwrap(),
+        "mods/sub",
+    ]);
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    configure_validator(
+        &harness,
+        "#!/bin/sh\nset -eu\ntest \"$(cat mods/sub/module.txt)\" = 'module v1'\ntest ! -e mods/sub/.git\n",
+    );
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    assert_validated(&harness, &transaction, &harness.success(["validate", &transaction]));
+    harness.success(["discard", &transaction]);
+
+    let submodule = harness.repo.join("mods/sub");
+    fs::write(submodule.join("module.txt"), "module v2\n").unwrap();
+    git_at(&submodule, &harness.home, identity.into_iter().chain(["commit", "--quiet", "-am", "v2"]));
+    configure_validator(&harness, "#!/bin/sh\nset -eu\ntest -d mods/sub\ntest -z \"$(ls -A mods/sub)\"\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    assert_validated(&harness, &transaction, &harness.success(["validate", &transaction]));
+}
+
+#[test]
+fn stat_only_rewrites_by_validators_and_snapshot_hooks_are_not_drift() {
+    let harness = Harness::new("validate-stat-only-rewrite");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let rewrite = "#!/bin/sh\nset -eu\ncp intended.txt rewritten\nmv rewritten intended.txt\ntouch -t 200001010000 intended.txt\n";
+    configure_validator(&harness, rewrite);
+    write_executable(&harness.repo.join(".git/hooks/pre-commit"), rewrite);
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+
+    assert_validated(&harness, &transaction, &harness.success(["validate", &transaction]));
+    harness.success(["commit", &transaction, "-m", "test: stat-only rewrites"]);
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
 }
 
 fn configure_validator(harness: &Harness, source: &str) -> std::path::PathBuf {

@@ -292,8 +292,25 @@ impl Repository {
         command.args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child =
             command.spawn().map_err(|error| AppError::operational(format!("cannot execute git: {error}")))?;
-        child.stdin.take().expect("piped stdin").write_all(input)?;
-        child.wait_with_output().map_err(AppError::from)
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        // Write stdin on a scoped thread while draining stdout/stderr so large inputs, such as
+        // NUL-separated path lists, cannot deadlock against a child that writes before reading all input.
+        let (output, written) = std::thread::scope(|scope| {
+            let writer = scope.spawn(move || stdin.write_all(input));
+            let output = child.wait_with_output();
+            (output, writer.join())
+        });
+        let output = output.map_err(AppError::from)?;
+        let written = written.map_err(|_| AppError::operational("git input writer panicked"))?;
+        // Git's own failure is actionable; a broken pipe after it exited is only a consequence.
+        if output.status.success() {
+            written.map_err(AppError::from)?;
+        }
+        Ok(output)
+    }
+
+    pub fn hook_exists(&self, hook: &str) -> Result<bool> {
+        is_executable(&self.git_path("hooks")?.join(hook))
     }
 
     pub fn command(&self, index: Option<&Path>) -> Command {

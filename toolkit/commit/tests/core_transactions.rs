@@ -257,7 +257,7 @@ fn post_commit_uses_physical_worktree_without_snapshot_marker() {
     write_executable(
         &harness.repo.join(".git/hooks/post-commit"),
         &format!(
-            "#!/bin/sh\nset -eu\nprintf '%s\\n%s\\n%s\\n%s\\n' \"$PWD\" \"${{GIT_WORK_TREE-unset}}\" \"${{AI_COMMIT_HOOK_MODE-unset}}\" \"${{AI_COMMIT_ORIGINAL_WORKTREE-unset}}\" > '{}'\ncat intended.txt >> '{}'\n",
+            "#!/bin/sh\nset -eu\nprintf '%s\\n%s\\n%s\\n%s\\n%s\\n' \"$PWD\" \"${{GIT_WORK_TREE-unset}}\" \"${{AI_COMMIT_HOOK_MODE-unset}}\" \"${{AI_COMMIT_ORIGINAL_WORKTREE-unset}}\" \"${{GIT_INDEX_FILE-unset}}\" > '{}'\ncat intended.txt >> '{}'\n",
             post_commit_log.display(),
             post_commit_log.display()
         ),
@@ -265,9 +265,14 @@ fn post_commit_uses_physical_worktree_without_snapshot_marker() {
 
     harness.success(["commit", &transaction, "-m", "test: physical post commit"]);
 
+    let root = harness.repo.canonicalize().unwrap();
     assert_eq!(
         fs::read_to_string(post_commit_log).unwrap(),
-        format!("{}\nunset\nunset\nunset\nlater physical worktree\n", harness.repo.canonicalize().unwrap().display())
+        format!(
+            "{}\nunset\nunset\nunset\n{}\nlater physical worktree\n",
+            root.display(),
+            root.join(".git/index").display()
+        )
     );
     assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
     assert_eq!(harness.read("intended.txt"), "later physical worktree\n");
@@ -626,4 +631,137 @@ fn directory_expansion_handles_file_directory_replacements() {
     harness.success(["commit", &to_directory, "-m", "test: replace file"]);
     assert_eq!(harness.git(["show", "HEAD:node/next.txt"]), "next");
     assert!(harness.git(["ls-tree", "HEAD", "node"]).starts_with("040000 tree "));
+}
+
+#[test]
+fn snapshot_is_not_materialized_when_no_verification_hook_or_validator_runs() {
+    let harness = Harness::new("no-hook-snapshot");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    let fail_materialization = [("AI_COMMIT_TEST_FAIL_SNAPSHOT_MATERIALIZATION", "1")];
+
+    harness.write("intended.txt", "first\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    harness.write("intended.txt", "first drift\n");
+    harness.success_with_env(["commit", &transaction, "-m", "test: no hooks"], fail_materialization);
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "first");
+
+    write_executable(&harness.repo.join(".git/hooks/pre-commit"), "#!/bin/sh\nexit 0\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    harness.write("intended.txt", "second drift\n");
+    harness
+        .success_with_env(["commit", &transaction, "-m", "test: bypassed hook", "--no-verify"], fail_materialization);
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "first drift");
+
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    harness.write("intended.txt", "third drift\n");
+    let output =
+        harness.command_with_env(["commit", &transaction, "-m", "test: hook needs snapshot"], fail_materialization);
+    assert_eq!(exit_code(&output), 3, "{}", stderr(&output));
+    assert!(stderr(&output).contains("injected snapshot materialization failure"));
+}
+
+#[test]
+fn prepare_all_feeds_large_literal_path_lists_to_one_git_process() {
+    let harness = Harness::new("pathspec-from-file");
+    let paths: Vec<String> = (0..300).map(|index| format!("file-{index:03}.txt")).collect();
+    for path in &paths {
+        harness.write(path, "base\n");
+    }
+    harness.write(".gitignore", "ab.txt\n");
+    harness.commit_all("base");
+    for path in &paths[1..] {
+        harness.write(path, "changed\n");
+    }
+    fs::remove_file(harness.repo.join(&paths[0])).unwrap();
+    harness.write("a[b].txt", "literal\n");
+    harness.write("ab.txt", "ignored\n");
+    harness.write("with space.txt", "spaced\n");
+    let log = harness.root.join("git.log");
+    write_executable(
+        &harness.shim.join("git"),
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$GIT_LOG\"\nexec \"$REAL_GIT\" \"$@\"\n",
+    );
+    let real_git = git_binary();
+
+    let output = harness.success_with_env(
+        ["prepare", "--all", "--porcelain"],
+        [("GIT_LOG", log.as_os_str()), ("REAL_GIT", real_git.as_os_str())],
+    );
+
+    let stdout = stdout(&output);
+    assert_eq!(stdout.lines().filter(|line| line.starts_with("PATH\t")).count(), 302);
+    assert!(stdout.contains("CHANGE\tD\\tfile-000.txt\n"), "{stdout}");
+    assert!(stdout.contains("PATH\tfile-299.txt\n"));
+    assert!(stdout.contains("PATH\ta[b].txt\n"));
+    assert!(stdout.contains("PATH\twith space.txt\n"));
+    assert!(!stdout.contains("PATH\tab.txt\n"), "{stdout}");
+    let log = fs::read_to_string(log).unwrap();
+    assert_eq!(log.lines().filter(|line| line.contains(" add --force --pathspec-from-file=- ")).count(), 1, "{log}");
+    assert_eq!(log.lines().filter(|line| line.contains(" update-index --force-remove -z --stdin")).count(), 1);
+}
+
+#[test]
+fn configured_validation_releases_the_index_lock_and_revalidates_after_branch_movement() {
+    let harness = Harness::new("validation-unlocked");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    configure_validator(
+        &harness,
+        "#!/bin/sh\nset -eu\nprintf 'ran\\n' >> \"$VALIDATION_LOG\"\ntest ! -e \"$AI_COMMIT_ORIGINAL_WORKTREE/.git/index.lock\"\ntest \"$(cat intended.txt)\" = prepared\nif [ -e \"$ADVANCE_MARKER\" ]; then\n  test \"$(cat other.txt)\" = other\n  exit 0\nfi\n: > \"$ADVANCE_MARKER\"\nprintf 'other\\n' > \"$AI_COMMIT_ORIGINAL_WORKTREE/other.txt\"\nenv -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C \"$AI_COMMIT_ORIGINAL_WORKTREE\" add other.txt\nenv -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C \"$AI_COMMIT_ORIGINAL_WORKTREE\" commit -q -m concurrent\n",
+    );
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let log = harness.root.join("validation.log");
+    let marker = harness.root.join("advanced");
+
+    harness.success_with_env(
+        ["commit", &transaction, "-m", "test: unlocked validation"],
+        [("VALIDATION_LOG", log.as_os_str()), ("ADVANCE_MARKER", marker.as_os_str())],
+    );
+
+    assert_eq!(fs::read_to_string(log).unwrap(), "ran\nran\n");
+    assert_eq!(harness.git(["log", "--format=%s", "-2"]), "test: unlocked validation\nconcurrent");
+    assert_eq!(harness.git(["show", "HEAD:intended.txt"]), "prepared");
+    assert_eq!(harness.git(["show", "HEAD:other.txt"]), "other");
+    assert!(!harness.repo.join(".git/index.lock").exists());
+}
+
+#[test]
+fn configured_validation_stops_retryably_when_the_branch_keeps_moving() {
+    let harness = Harness::new("validation-racing");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    configure_validator(
+        &harness,
+        "#!/bin/sh\nset -eu\nprintf 'ran\\n' >> \"$VALIDATION_LOG\"\nprintf 'x\\n' >> \"$AI_COMMIT_ORIGINAL_WORKTREE/other.txt\"\nenv -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C \"$AI_COMMIT_ORIGINAL_WORKTREE\" add other.txt\nenv -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C \"$AI_COMMIT_ORIGINAL_WORKTREE\" commit -q -m concurrent\n",
+    );
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let log = harness.root.join("validation.log");
+
+    let output =
+        harness.command_with_env(["commit", &transaction, "-m", "test: racing"], [("VALIDATION_LOG", log.as_os_str())]);
+
+    assert_eq!(exit_code(&output), 3, "{}", stderr(&output));
+    assert!(stderr(&output).contains("moved during each of 3 validation attempts"), "{}", stderr(&output));
+    assert_eq!(fs::read_to_string(log).unwrap(), "ran\nran\nran\n");
+    assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "4");
+    assert!(stdout(&harness.success(["show", &transaction])).starts_with(&format!("PREPARED {transaction}\n")));
+    assert!(!harness.repo.join(".git/index.lock").exists());
+}
+
+fn configure_validator(harness: &Harness, source: &str) {
+    let validator = harness.root.join("validator");
+    write_executable(&validator, source);
+    harness.write(
+        ".agents/commit.toml",
+        &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
+    );
+}
+
+fn git_binary() -> std::path::PathBuf {
+    let output = std::process::Command::new("sh").args(["-c", "command -v git"]).output().unwrap();
+    assert!(output.status.success());
+    std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }

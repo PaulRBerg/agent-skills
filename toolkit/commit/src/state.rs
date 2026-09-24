@@ -17,6 +17,7 @@ use crate::{
 
 pub const RECEIPT_RETENTION_SECONDS: u64 = 7 * 24 * 60 * 60;
 const RECEIPT_CLEANUP_BATCH_SIZE: usize = 64;
+const RECEIPT_CLEANUP_SCAN_LIMIT: usize = 10_000;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -159,7 +160,7 @@ impl Store {
 
     pub fn lock(&self, id: &str) -> Result<TransactionLock> {
         validate_id(id)?;
-        let path = self.transactions.join(format!("{id}.lock"));
+        let path = self.lock_path(id);
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -188,15 +189,18 @@ impl Store {
             Err(error) => return Err(AppError::operational(format!("cannot scan transaction receipts: {error}"))),
         };
         let mut cleaned = 0;
-        for entry in entries.take(10_000) {
-            if cleaned >= RECEIPT_CLEANUP_BATCH_SIZE {
+        let mut scanned = 0;
+        for entry in entries {
+            if cleaned >= RECEIPT_CLEANUP_BATCH_SIZE || scanned >= RECEIPT_CLEANUP_SCAN_LIMIT {
                 break;
             }
             let entry = entry?;
             let path = entry.path();
+            // Only journals count toward the scan limit; lock files must not starve cleanup.
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
+            scanned += 1;
             let Some(id) = path.file_stem().and_then(|value| value.to_str()) else {
                 continue;
             };
@@ -232,10 +236,21 @@ impl Store {
             if !refs_deleted {
                 continue;
             }
-            let _ = fs::remove_file(path);
+            if fs::remove_file(&path).is_err() {
+                continue;
+            }
+            // Unlink the lock file while still holding it, after the journal is gone. A process
+            // that opened the old inode either fails to lock it now or locks it after release;
+            // like one that creates a fresh lock file, it then loads no journal and stops. Two
+            // holders could only share work if a new preparation redrew this random 64-bit ID.
+            let _ = fs::remove_file(self.lock_path(id));
             cleaned += 1;
         }
         Ok(())
+    }
+
+    fn lock_path(&self, id: &str) -> PathBuf {
+        self.transactions.join(format!("{id}.lock"))
     }
 }
 

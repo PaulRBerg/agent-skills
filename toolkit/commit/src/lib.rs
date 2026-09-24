@@ -6,6 +6,7 @@ mod git;
 mod prepare;
 mod push;
 mod rules;
+mod snapshot;
 mod state;
 mod transactions;
 mod validation;
