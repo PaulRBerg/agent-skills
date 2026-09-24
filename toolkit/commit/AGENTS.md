@@ -120,13 +120,13 @@ physical shared worktree. Unrelated dirty paths do not affect hook execution. Wh
 commit, and newly added paths are reported as `HOOK_ADDED`. A configured `[validation]` command always selects
 snapshot-check hook mode, even when every intended path matches the physical worktree, because that mode's temporary
 materialization is also validation's candidate worktree. When an intended path differs, `pre-commit`,
-`prepare-commit-msg`, and `commit-msg` instead run from a
-temporary materialization of the complete prepared index beneath the repository's physical Git directory. They receive
-the existing alternate `GIT_INDEX_FILE`, `GIT_WORK_TREE` pointing to that materialization,
-`AI_COMMIT_HOOK_MODE=snapshot-check`, and `AI_COMMIT_ORIGINAL_WORKTREE` pointing to the canonical physical repository
-root. Ignored local directories whose parents exist in the prepared tree (for example `node_modules` or a virtual
-environment) are projected into the materialization as symlinks, so hooks resolve installed tooling, justfile imports
-and interpreters exactly as they do from the physical worktree and need no snapshot-specific branches.
+`prepare-commit-msg`, and `commit-msg` instead run from a temporary materialization of the complete prepared index
+beneath the repository's physical Git directory. They receive the existing alternate `GIT_INDEX_FILE`, `GIT_WORK_TREE`
+pointing to that materialization, `AI_COMMIT_HOOK_MODE=snapshot-check`, and `AI_COMMIT_ORIGINAL_WORKTREE` pointing to
+the canonical physical repository root. Ignored local directories whose parents exist in the prepared tree (for example
+`node_modules` or a virtual environment) are projected into the materialization as symlinks, so hooks resolve installed
+tooling, justfile imports and interpreters exactly as they do from the physical worktree and need no snapshot-specific
+branches.
 
 Snapshot-check hooks may edit the commit message, but any tracked-content or prepared-index change stops the commit
 with `snapshot-check hook modified prepared content`, lists the affected paths, and leaves the transaction prepared for

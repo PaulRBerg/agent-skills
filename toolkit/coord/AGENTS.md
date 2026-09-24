@@ -283,23 +283,22 @@ ai-coord wait        # waits up to 300 seconds
 ai-coord wait -t 60  # explicit timeout, capped at one hour
 ```
 
-Editing requires the matching `ai-coord start` or `ai-coord bundle start` form to return `READY`. Every terminal `start`,
-`wait`, and `done` outcome also prints one concise next-step sentence to stderr while preserving the stdout TSV contract.
-`wait` checks the SQLite generation counter each second and performs full inventory, Git, and arbitration refreshes when
-coordination state changes, every second while the work is blocked by dirty-settling, or otherwise every 20 seconds as a
-fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness
-wakes with exit 3; `UNKNOWN` exits 2. After any such wake, inspect the reported state and re-arm with the matching start
-form as needed. Each wait recheck pins the observed work-item ID and revision before Git evidence and again in the
-arbitration transaction. A concurrent lifecycle change is retried within the original timeout instead of recreating or
-overwriting work; if `done` releases work while its wait is in flight, that wait returns `RELEASED`. Neither retry nor
-release grants ownership: only a fresh matching foreground start that returns `READY` authorizes editing. For one-claim
-work, `done` keeps its idempotent current-root behavior. For a bundle, `done` requires a
-claimed worktree and releases all claims atomically. Rejection leaves the bundle intact and supplies a command using one
-claimed root to release the entire bundle. Both forms notify overlapping queued holders that their work may now be ready.
-Release inspection, baselines, touched paths, and hook cleanliness stay claim-local to the current repository; a bundle
-baseline from an unclaimed root is an error.
-If one bundle repository cannot be inspected during release, its claim is released without residual attribution rather
-than leaving a partial bundle behind.
+Editing requires the matching `ai-coord start` or `ai-coord bundle start` form to return `READY`. Every terminal
+`start`, `wait`, and `done` outcome also prints one concise next-step sentence to stderr while preserving the stdout TSV
+contract. `wait` checks the SQLite generation counter each second and performs full inventory, Git, and arbitration
+refreshes when coordination state changes, every second while the work is blocked by dirty-settling, or otherwise every
+20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3; `UNKNOWN` exits 2.
+After any such wake, inspect the reported state and re-arm with the matching start form as needed. Each wait recheck
+pins the observed work-item ID and revision before Git evidence and again in the arbitration transaction. A concurrent
+lifecycle change is retried within the original timeout instead of recreating or overwriting work; if `done` releases
+work while its wait is in flight, that wait returns `RELEASED`. Neither retry nor release grants ownership: only a fresh
+matching foreground start that returns `READY` authorizes editing. For one-claim work, `done` keeps its idempotent
+current-root behavior. For a bundle, `done` requires a claimed worktree and releases all claims atomically. Rejection
+leaves the bundle intact and supplies a command using one claimed root to release the entire bundle. Both forms notify
+overlapping queued holders that their work may now be ready. Release inspection, baselines, touched paths, and hook
+cleanliness stay claim-local to the current repository; a bundle baseline from an unclaimed root is an error. If one
+bundle repository cannot be inspected during release, its claim is released without residual attribution rather than
+leaving a partial bundle behind.
 
 FIFO applies among intersecting queued scopes; disjoint queued work can proceed independently. Newly blocked work
 reports only the paths that actually overlap. Holder messages do the same and explicitly suggest narrowing when a
