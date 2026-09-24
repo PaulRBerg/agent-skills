@@ -17,6 +17,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MINER = REPO_ROOT / "skills/agents-introspection/scripts/transcript-miner.py"
+FIXTURE_TIMESTAMP = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class MinerFixture:
@@ -52,7 +53,7 @@ class MinerFixture:
         if session_meta:
             records.append(
                 {
-                    "timestamp": "2026-08-08T12:00:00Z",
+                    "timestamp": FIXTURE_TIMESTAMP,
                     "type": "session_meta",
                     "payload": {"id": session_id, "cwd": str(cwd)},
                 }
@@ -126,7 +127,7 @@ class MinerFixture:
             }
         )
         env.pop("CODEX_THREAD_ID", None)
-        env.pop("CLAUDE_SESSION_ID", None)
+        env.pop("CLAUDE_CODE_SESSION_ID", None)
         env.update(env_updates or {})
         result = subprocess.run(command, text=True, capture_output=True, check=False, env=env)
         if result.returncode != 0:
@@ -229,7 +230,7 @@ class TranscriptMinerTests(unittest.TestCase):
         self.fixture.codex_session("codex-live", project, user="needle")
         self.fixture.claude_session(project, "claude-live", project, user="needle")
         self.fixture.history([{"project": str(project), "sessionId": "claude-live", "display": "needle"}])
-        env = {"CODEX_THREAD_ID": "codex-live", "CLAUDE_SESSION_ID": "claude-live"}
+        env = {"CODEX_THREAD_ID": "codex-live", "CLAUDE_CODE_SESSION_ID": "claude-live"}
 
         default_report = self.fixture.run([project], ["needle"], env_updates=env)
         included_report = self.fixture.run([project], ["needle"], include_current=True, env_updates=env)
@@ -484,7 +485,7 @@ def claude_message(role: str, session_id: str, cwd: Path, text: str) -> dict[str
         "type": role,
         "sessionId": session_id,
         "cwd": str(cwd),
-        "timestamp": "2026-08-08T12:00:00Z",
+        "timestamp": FIXTURE_TIMESTAMP,
         "message": {"role": role, "content": [{"type": "text", "text": text}]},
     }
 

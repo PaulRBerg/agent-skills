@@ -115,7 +115,7 @@ def main() -> int:
     parser.add_argument(
         "--include-current",
         action="store_true",
-        help="Include the live CODEX_THREAD_ID or CLAUDE_SESSION_ID transcript (diagnostics only)",
+        help="Include the live CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID transcript (diagnostics only)",
     )
     parser.add_argument("--since", default=None, help="Only mine sessions modified since YYYY-MM-DD or Nd (days back)")
     parser.add_argument(
@@ -526,7 +526,7 @@ def mine_claude_sessions(
             path_directory_projects[path.resolve(strict=False)].update(possible_projects)
 
     sessions: list[SessionSummary] = []
-    current_id = os.environ.get("CLAUDE_SESSION_ID", "").strip()
+    current_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip()
     for path, directory_candidates in sorted(path_directory_projects.items(), key=lambda item: str(item[0])):
         metadata = list(read_jsonl_head(path))
         session_id = claude_session_id(metadata, path)

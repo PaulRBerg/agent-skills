@@ -77,8 +77,8 @@ Source ownership is structural and precedes relevance scoring:
 - A cwd equal to or below multiple requested roots belongs to the longest, most-specific root. A transcript is emitted
   at most once, and project strings in messages, context, tool inputs, or tool outputs never establish ownership.
 
-The live `CODEX_THREAD_ID` or `CLAUDE_SESSION_ID` transcript is excluded by default. Use `--include-current` only when
-diagnosing the miner or intentionally inspecting the active session.
+The live `CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID` transcript is excluded by default. Use `--include-current` only
+when diagnosing the miner or intentionally inspecting the active session.
 
 Candidate signals use delineated channels. `user` is actual task text, preferring Claude history `display`; `assistant`
 is plain assistant message text; injected AGENTS, skill, environment, permission, collaboration, abort, and command
