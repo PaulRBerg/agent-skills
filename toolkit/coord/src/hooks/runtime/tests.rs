@@ -10,8 +10,9 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::{
-    coordinator::{Clock, InventoryObservation, ProviderInventory},
+    coordinator::{Clock, InventoryObservation, ProviderInventory, last_codex_hook_error},
     domain::{InventoryResult, ProcessFingerprint, ProcessLiveness, ProcessProbe, ProviderReport},
+    host::{CodexHookLedgerEvidence, codex_provider_report},
     state::{FindingAdd, RecommendationAction, SessionUpdate, Store},
 };
 
@@ -477,6 +478,7 @@ fn malformed_child_lifecycle_cannot_mutate_the_parent() {
             assert_eq!(coordinator.store().unwrap().session(&identity).unwrap(), before);
         }
     }
+    assert!(coordinator.store().unwrap().hook_health().unwrap().is_empty());
 }
 
 #[test]
@@ -491,7 +493,65 @@ fn malformed_supported_hook_fails_open_without_payload_leak() {
     );
     assert_eq!(output, "{}");
     assert!(!output.contains("SECRET"));
-    assert_eq!(coordinator.store().unwrap().hook_health().unwrap()[0].last_error_code.as_deref(), Some("hook_error"));
+    assert!(coordinator.store().unwrap().hook_health().unwrap().is_empty());
+}
+
+fn codex_coverage_ok(coordinator: &Coordinator) -> bool {
+    let store = coordinator.store().unwrap();
+    let evidence = CodexHookLedgerEvidence {
+        hooks_ok: true,
+        trust_ok: true,
+        last_hook_error_code: last_codex_hook_error(&store).unwrap(),
+        ..Default::default()
+    };
+    codex_provider_report(Some(Path::new("codex")), &evidence).ok
+}
+
+#[test]
+fn malformed_subagent_start_leaves_coverage_complete_while_operational_failures_degrade_it() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    let start = |agent_id: Option<&str>| {
+        runtime.ingest(
+            "codex",
+            &json!({"session_id":"root", "cwd":repo, "hook_event_name":"SubagentStart", "agent_id":agent_id}),
+        )
+    };
+
+    start(None);
+    assert!(coordinator.store().unwrap().sessions().unwrap().is_empty());
+    assert!(codex_coverage_ok(&coordinator));
+
+    let connection = rusqlite::Connection::open(coordinator.store().unwrap().path()).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TRIGGER reject_delegate BEFORE INSERT ON delegates
+             BEGIN SELECT RAISE(ABORT, 'injected delegate failure'); END;",
+        )
+        .unwrap();
+    start(Some("child"));
+    assert!(!codex_coverage_ok(&coordinator));
+
+    connection.execute_batch("DROP TRIGGER reject_delegate;").unwrap();
+    start(Some("child"));
+    assert!(codex_coverage_ok(&coordinator));
+    assert_eq!(coordinator.store().unwrap().delegates().unwrap().len(), 1);
+}
+
+#[test]
+fn late_subagent_stop_does_not_resurrect_an_ended_parent() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let output = HookRuntime::new(&coordinator).ingest(
+        "codex",
+        &json!({"session_id":"gone", "cwd":repo, "hook_event_name":"SubagentStop", "agent_id":"child"}),
+    );
+    assert_eq!(output, "{}");
+    let store = coordinator.store().unwrap();
+    assert!(store.sessions().unwrap().is_empty());
+    assert!(store.delegates().unwrap().is_empty());
+    assert!(codex_coverage_ok(&coordinator));
 }
 
 #[test]

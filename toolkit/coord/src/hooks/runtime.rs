@@ -69,7 +69,16 @@ impl<'a> HookRuntime<'a> {
         if !supported {
             return noop_stdout(client, event);
         }
-        match self.ingest_supported(client_kind, event, payload) {
+        // An invalid payload carries nothing ingestible and a retry cannot repair
+        // it, so it must not record hook health that would degrade coverage.
+        let (identity, delegate_id) = match hook_target(client_kind, event, payload) {
+            Ok(target) => target,
+            Err(error) => {
+                eprintln!("ai-coord: ignored invalid {client} {event} hook payload: {error}");
+                return noop_stdout(client, event);
+            }
+        };
+        match self.ingest_supported(event, identity, delegate_id, payload) {
             Ok(stdout) => stdout,
             Err(_) => {
                 if let Ok(mut store) = self.coordinator.store() {
@@ -80,34 +89,16 @@ impl<'a> HookRuntime<'a> {
         }
     }
 
-    fn ingest_supported(&self, client: Client, event: &str, payload: &Value) -> Result<String> {
-        let session_id = payload
-            .get("session_id")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| AppError::usage("missing session id"))?;
-        let identity = Identity { client, session_id: session_id.to_owned() };
-        let cwd = payload
-            .get("cwd")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or(std::env::current_dir()?);
-        let cwd = std::fs::canonicalize(&cwd).unwrap_or(cwd);
-        let root = git_root(&cwd);
+    fn ingest_supported(
+        &self,
+        event: &str,
+        identity: Identity,
+        delegate_id: Option<&str>,
+        payload: &Value,
+    ) -> Result<String> {
+        let client = identity.client;
         let transcript_path =
             payload.get("transcript_path").and_then(Value::as_str).filter(|value| !value.is_empty()).map(str::to_owned);
-        let delegate_id = if matches!(event, "SubagentStart" | "SubagentStop") {
-            Some(
-                payload
-                    .get("agent_id")
-                    .and_then(Value::as_str)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| AppError::usage("missing subagent id"))?,
-            )
-        } else {
-            None
-        };
         let mut store = self.coordinator.store()?;
 
         if event == "SessionEnd" {
@@ -131,13 +122,21 @@ impl<'a> HookRuntime<'a> {
             // A session end may have made a repository quiescent. The
             // scheduler owns all config, branch, cooldown, and lease guards;
             // lifecycle hooks must remain fail-open if it cannot run.
-            if ended {
+            if ended && let Ok(cwd) = hook_cwd(payload) {
                 self.scheduler.schedule(self.coordinator, &cwd, &identity);
             }
             return Ok(noop_stdout(client_name(client), event));
         }
 
         let existing = store.session(&identity)?;
+        if event == "SubagentStop" && existing.is_none() {
+            // A late child end must not resurrect a parent that already ended;
+            // its delegate rows were removed with the parent.
+            store.hook_success(client, event, self.coordinator.now())?;
+            return Ok(noop_stdout(client_name(client), event));
+        }
+        let cwd = hook_cwd(payload)?;
+        let root = git_root(&cwd);
         let prompt_waiver = if event == "UserPromptSubmit" {
             payload.get("prompt").and_then(Value::as_str).map(prompt_waives_coordination)
         } else {
@@ -145,10 +144,16 @@ impl<'a> HookRuntime<'a> {
         };
         let waiver_ended = existing.as_ref().is_some_and(|row| row.coordination_waived) && prompt_waiver == Some(false);
         let session = if delegate_id.is_some() {
+            let fingerprint = if existing.as_ref().is_some_and(|row| row.fingerprint.is_some()) {
+                None
+            } else {
+                host_process_reference(client, None).ok().flatten()
+            };
             store.observe_delegate_parent(
                 &identity,
                 &path_text(&cwd)?,
                 root.as_ref().map(|path| path_text(path)).transpose()?.as_deref(),
+                fingerprint.as_ref(),
                 self.coordinator.now(),
             )?
         } else {
@@ -318,13 +323,7 @@ impl<'a> HookRuntime<'a> {
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| AppError::usage("missing session id"))?;
             let identity = Identity { client: Client::Claude, session_id: session_id.to_owned() };
-            let cwd = payload
-                .get("cwd")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .map(PathBuf::from)
-                .unwrap_or(std::env::current_dir()?);
-            let cwd = std::fs::canonicalize(&cwd).unwrap_or(cwd);
+            let cwd = hook_cwd(payload)?;
             let root = git_root(&cwd).ok_or_else(|| AppError::operational("waker requires a Git worktree"))?;
             let repo_root = path_text(&root)?;
             let mut store = self.coordinator.store()?;
@@ -351,6 +350,37 @@ impl<'a> HookRuntime<'a> {
             }
         }
     }
+}
+
+/// Validate the identity fields every supported event requires.
+fn hook_target<'a>(client: Client, event: &str, payload: &'a Value) -> Result<(Identity, Option<&'a str>)> {
+    let session_id = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| AppError::usage("missing session id"))?;
+    let delegate_id = if matches!(event, "SubagentStart" | "SubagentStop") {
+        Some(
+            payload
+                .get("agent_id")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| AppError::usage("missing subagent id"))?,
+        )
+    } else {
+        None
+    };
+    Ok((Identity { client, session_id: session_id.to_owned() }, delegate_id))
+}
+
+/// Resolve the payload working directory, consulting the process directory
+/// only when the payload omits one.
+fn hook_cwd(payload: &Value) -> Result<PathBuf> {
+    let cwd = match payload.get("cwd").and_then(Value::as_str).filter(|value| !value.is_empty()) {
+        Some(value) => PathBuf::from(value),
+        None => std::env::current_dir()?,
+    };
+    Ok(std::fs::canonicalize(&cwd).unwrap_or(cwd))
 }
 
 fn supported_events(client: Client) -> impl Iterator<Item = &'static str> {

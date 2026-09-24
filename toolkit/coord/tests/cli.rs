@@ -170,10 +170,7 @@ fn identity_commands_and_state_are_fully_isolated() {
     assert!(String::from_utf8_lossy(&finding.stdout).starts_with("ADDED\t"));
 
     let (code, status) = fixture.json_status();
-    assert!(
-        matches!(code, 0 | 2),
-        "status is complete under a detectable Codex ancestor and partial when the test host is unknown"
-    );
+    assert_eq!(code, 0, "a session without a detectable host process must not make coverage partial");
     assert_eq!(status["schema_version"], 8);
     assert_eq!(status["scope"]["kind"], "machine");
     assert_eq!(status["sessions"][0]["callsign"], "🦀 Ferris Test");
@@ -203,12 +200,32 @@ fn hook_input_is_fail_open_and_never_echoes_payload() {
     stop.assert().success();
     assert_eq!(String::from_utf8_lossy(&stop.stdout), "{}\n");
     assert!(!String::from_utf8_lossy(&stop.stdout).contains("do not leak"));
-    stop.assert().stderr(predicate::str::is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&stop.stderr),
+        "ai-coord: ignored invalid codex Stop hook payload: missing session id\n"
+    );
 
     let waker = run_with_stdin(fixture.command(), &["waker", "claude"], b"not json");
     waker.assert().success();
     waker.assert().stdout(predicate::str::is_empty());
     waker.assert().stderr(predicate::str::is_empty());
+}
+
+#[test]
+fn sessions_without_a_host_process_keep_blocking_and_release_through_done() {
+    let fixture = Fixture::new();
+    let held = fixture.output_as("unanchored-holder", &["start", "held work", "src/held.rs"]);
+    assert_eq!(String::from_utf8_lossy(&held.stdout), "READY\tsrc/held.rs\n");
+    let blocked = fixture.output_as("unanchored-peer", &["start", "peer work", "src/held.rs"]);
+    blocked.assert().failure().code(3);
+    assert!(String::from_utf8_lossy(&blocked.stdout).starts_with("BLOCKED\t"));
+    let (code, _) = fixture.json_status();
+    assert_eq!(code, 0);
+
+    let done = fixture.output_as("unanchored-holder", &["done"]);
+    assert_eq!(String::from_utf8_lossy(&done.stdout), "DONE\treleased\n");
+    let ready = fixture.output_as("unanchored-peer", &["start", "peer work", "src/held.rs"]);
+    assert_eq!(String::from_utf8_lossy(&ready.stdout), "READY\tsrc/held.rs\n");
 }
 
 #[test]

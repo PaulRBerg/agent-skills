@@ -43,8 +43,12 @@ impl ProcessProbe for FakeProbe {
     fn fingerprint(&self, pid: u32) -> Result<ProcessFingerprint> {
         Ok(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) })
     }
+    /// The test process itself is alive unless a test overrides it to model a
+    /// probe that cannot establish liveness at all.
     fn liveness(&self, fingerprint: &ProcessFingerprint) -> ProcessLiveness {
-        self.states.lock().unwrap().get(&fingerprint.pid).copied().unwrap_or(ProcessLiveness::Unknown)
+        let default =
+            if fingerprint.pid == std::process::id() { ProcessLiveness::Alive } else { ProcessLiveness::Unknown };
+        self.states.lock().unwrap().get(&fingerprint.pid).copied().unwrap_or(default)
     }
 }
 
@@ -1500,4 +1504,45 @@ fn yielded_claim_drops_baselines_beneath_the_yielded_scope() {
     assert_eq!(outcome.kind, OutcomeKind::Ready);
     let store = coordinator.store().unwrap();
     assert_eq!(store.baselines_in_repo(&holder, &repo_root).unwrap(), [baseline("docs/guide.md")]);
+}
+
+#[test]
+fn indeterminate_liveness_holders_block_overlap_without_degrading_coverage() {
+    let unanchored = identity("unanchored");
+    let unprobed = identity("unprobed");
+    let peer = identity("peer");
+    let (temp, roots) = repos(1);
+    let root = roots[0].to_str().unwrap();
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    store.observe_delegate_parent(&unanchored, root, Some(root), None, 1.0).unwrap();
+    add_session(&mut store, &unprobed, &roots[0], 240, 1.0);
+    add_session(&mut store, &peer, &roots[0], 241, 1.0);
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(241, ProcessLiveness::Alive);
+    let coordinator = coordinator(store, probe.clone(), Arc::new(AtomicUsize::new(0)));
+
+    let start = |owner: &Identity, path: &str| {
+        coordinator.start_for(owner.clone(), &owner.session_id, &[PathBuf::from(path)], &[], &roots[0]).unwrap().kind
+    };
+    assert_eq!(start(&unanchored, "held.rs"), OutcomeKind::Ready);
+    assert_eq!(start(&unprobed, "probed.rs"), OutcomeKind::Ready);
+    assert_eq!(start(&peer, "held.rs"), OutcomeKind::Blocked);
+    assert!(coordinator.snapshot(true, &roots[0], false).unwrap().complete);
+    let store = coordinator.store().unwrap();
+    assert!(store.session(&unanchored).unwrap().is_some());
+    assert_eq!(store.work(&unprobed).unwrap().unwrap().state, WorkState::Active);
+    drop(store);
+
+    // Explicit done from the holder's identity is the recovery path.
+    coordinator.done_for(&unanchored, &roots[0]).unwrap();
+    coordinator.store().unwrap().acknowledge(&peer, None, 100.0).unwrap();
+    assert_eq!(coordinator.wait_for_repo(&peer, &roots[0], 1, 0.1, false).unwrap().kind, OutcomeKind::Ready);
+
+    // A probe that cannot establish any liveness keeps coverage fail-closed.
+    probe.set(std::process::id(), ProcessLiveness::Unknown);
+    assert!(!coordinator.snapshot(true, &roots[0], false).unwrap().complete);
+    let outcome =
+        coordinator.start_for(unanchored.clone(), "retry", &[PathBuf::from("new.rs")], &[], &roots[0]).unwrap();
+    assert_eq!((outcome.kind, outcome.detail.as_str()), (OutcomeKind::Unknown, "coverage"));
+    assert!(coordinator.store().unwrap().session(&unprobed).unwrap().is_some());
 }

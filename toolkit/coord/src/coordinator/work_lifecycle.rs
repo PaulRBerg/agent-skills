@@ -9,7 +9,7 @@ use crate::{
     error::{AppError, ErrorKind, Result},
     host::{
         any_overlap, git_blob_hashes, git_dirty_paths, git_root, normalize_work_claim_bundle, normalize_work_scopes,
-        process_sweep, relevant_dirty,
+        probe_confirms_self, process_sweep, relevant_dirty,
     },
     state::{
         BaselineRow, DraftClaimRow, DraftClaimUpdate, DraftOwner, DraftRow, EndedObservation, Store, TouchedPaths,
@@ -592,11 +592,18 @@ impl Coordinator {
             transaction.refresh_recommendations(self.clock.wall())?;
             Ok(())
         })?;
-        Ok(observations
+        // A session whose own liveness is indeterminate stays live: it keeps
+        // blocking its scopes and is never reaped. Only a probe that cannot
+        // confirm this process makes coverage unknown.
+        let unknown = observations
             .iter()
             .filter(|observation| observation.liveness == ProcessLiveness::Unknown)
             .map(|observation| observation.identity.client)
-            .collect())
+            .collect::<HashSet<_>>();
+        if unknown.is_empty() || probe_confirms_self(self.probe.as_ref()) {
+            return Ok(HashSet::new());
+        }
+        Ok(unknown)
     }
 }
 

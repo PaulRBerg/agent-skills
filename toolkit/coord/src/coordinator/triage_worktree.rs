@@ -7,13 +7,14 @@ use std::{
 };
 
 use super::{
-    triage::record_reconcile_detail,
     triage_config::main_branch,
     triage_paths::{deterministic_handoff, safe_document_path},
+    triage_run::record_reconcile_detail,
 };
 use crate::{
+    domain::{Scope, ScopeKind},
     error::{AppError, Result},
-    host::git_head_oid,
+    host::{git_head_oid, scope_covers},
 };
 
 pub(super) struct TriageWorktree {
@@ -59,16 +60,15 @@ impl TriageWorktree {
             .args(["worktree", "remove", "--force"])
             .arg(&self.path)
             .output()?;
-        if !output.status.success() &&
-            (self.path.exists() ||
-                git_text(&self.root, &["worktree", "list", "--porcelain"])?
-                    .lines()
-                    .any(|line| line.strip_prefix("worktree ").is_some_and(|path| Path::new(path) == self.path)))
-        {
-            return Err(AppError::operational(format!(
-                "could not remove triage worktree: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            )));
+        if !output.status.success() {
+            if self.path.exists() {
+                return Err(AppError::operational(format!(
+                    "could not remove triage worktree: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )));
+            }
+            // A registration whose directory is gone would otherwise pin the branch.
+            git_text(&self.root, &["worktree", "prune"])?;
         }
         if git_success(&self.root, &["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", self.branch)])? {
             git_text(&self.root, &["branch", "-D", &self.branch])?;
@@ -91,6 +91,7 @@ pub(super) fn admit_commits(
     start: &str,
     finding_ids: &[String],
     authorized_paths: &[String],
+    peer_claims: &[Scope],
     current: f64,
 ) -> Result<HashSet<String>> {
     let mut failed = HashSet::new();
@@ -119,6 +120,12 @@ pub(super) fn admit_commits(
             }
             if git_success(root, &["merge-base", "--is-ancestor", oid, "HEAD"])? {
                 return Ok(());
+            }
+            if changed.iter().any(|path| {
+                let changed = Scope { path: path.clone(), kind: ScopeKind::Exact };
+                peer_claims.iter().any(|claim| scope_covers(claim, &changed))
+            }) {
+                return Err(AppError::operational("triage commit changes a path claimed by another session's work"));
             }
             let head = git_head_oid(root).ok_or_else(|| AppError::operational("main has no HEAD"))?;
             if git_text(worktree, &["rev-list", "--parents", "-n", "1", oid])?.split_whitespace().collect::<Vec<_>>() !=
@@ -226,13 +233,32 @@ pub(super) fn validate_commit(root: &Path, start: &str, finding_id: &str, oid: &
     if matching.as_deref() != Some(oid) {
         return Err(AppError::operational("finding must map to exactly one triage commit"));
     }
-    let changed = git_text(root, &["diff-tree", "--no-commit-id", "--name-only", "-r", oid])?
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(str::to_owned)
-        .collect::<HashSet<_>>();
+    let changed = changed_regular_files(root, oid)?;
     if changed.is_empty() {
         return Err(AppError::operational("triage commit changes no paths"));
+    }
+    Ok(changed)
+}
+
+/// Paths a commit adds or modifies, rejecting deletions, renames, type
+/// changes, symlinks, gitlinks, and mode changes: only regular-file content
+/// edits (or new non-executable files) qualify as documentation fixes.
+fn changed_regular_files(root: &Path, oid: &str) -> Result<HashSet<String>> {
+    let raw = git_text(root, &["diff-tree", "--no-commit-id", "-r", "--raw", "-z", oid])?;
+    let mut fields = raw.split('\0').filter(|field| !field.is_empty());
+    let mut changed = HashSet::new();
+    while let Some(header) = fields.next() {
+        let path = fields.next().ok_or_else(|| AppError::operational("malformed triage commit diff"))?;
+        let entry = header.strip_prefix(':').unwrap_or_default().split(' ').collect::<Vec<_>>();
+        let regular = match entry[..] {
+            [_, new_mode, _, _, "A"] => new_mode == "100644",
+            [old_mode, new_mode, _, _, "M"] => old_mode == new_mode && matches!(new_mode, "100644" | "100755"),
+            _ => false,
+        };
+        if !regular {
+            return Err(AppError::operational(format!("triage commit may only edit regular files: {path}")));
+        }
+        changed.insert(path.to_owned());
     }
     Ok(changed)
 }

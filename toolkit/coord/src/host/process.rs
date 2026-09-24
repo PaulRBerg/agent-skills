@@ -100,6 +100,13 @@ where
         .collect()
 }
 
+/// Whether the probe can establish liveness at all, judged by confirming the
+/// current process. An indeterminate result for one session row only means
+/// that row cannot be reaped; it degrades coverage only when this fails.
+pub(crate) fn probe_confirms_self<P: ProcessProbe + ?Sized>(probe: &P) -> bool {
+    probe.fingerprint(std::process::id()).is_ok_and(|own| probe.liveness(&own) == ProcessLiveness::Alive)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum NativeState {
     Alive,
@@ -689,6 +696,19 @@ mod tests {
         assert_eq!(observations[0].liveness, ProcessLiveness::Alive);
         assert_eq!(observations[1].identity, identity);
         assert_eq!(observations[1].liveness, ProcessLiveness::Unknown);
+    }
+
+    #[test]
+    fn probe_confirms_self_only_while_the_probe_works() {
+        let own = std::process::id();
+        let working = fake_probe([(own, Ok(fake_process(own, 1, NativeState::Alive, "self")))]);
+        assert!(probe_confirms_self(&working));
+
+        let broken = NativeProcessProbe::with_backend(Arc::new(FakeBackend {
+            boot: Err(InspectionError::Other("no boot marker".to_owned())),
+            processes: Mutex::new(HashMap::from([(own, Ok(fake_process(own, 1, NativeState::Alive, "self")))])),
+        }));
+        assert!(!probe_confirms_self(&broken));
     }
 
     #[test]

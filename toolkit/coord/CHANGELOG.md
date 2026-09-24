@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Keep a session whose own process liveness is indeterminate (no fingerprint, as for a CLI registration outside any
+  agent or a parent row created by a late child hook) live and blocking until `done` or proven process death, instead of
+  making every `start`/`wait` on the machine return `UNKNOWN coverage`; coverage still fails closed on provider or
+  whole-probe failures. Child lifecycle hooks record the host process fingerprint when they create a missing parent row,
+  and a late `SubagentStop` no longer recreates an ended parent.
+- Ignore invalid hook payloads (missing session or subagent ID) with a fixed stderr diagnostic instead of recording a
+  Codex hook error that kept coverage incomplete until the same rare event next succeeded, and stop failing hooks whose
+  payload supplies `cwd` when the process working directory is unavailable.
+- Keep sending withdrawal, expiry, and stale notices to an accepting recommendation recipient that relabels or narrows
+  its work.
+- Share one background poll across all dashboard SSE clients instead of running a process sweep and snapshot refresh per
+  client per second; the shared snapshot still refreshes at least every heartbeat so unversioned state such as worktree
+  dirt keeps being observed.
+- Heartbeat triage workers from startup through setup and stamp runs after the scheduler's provider probe, so concurrent
+  lifecycle hooks no longer mark a setting-up worker lost; run liveness shares the worker's deadline origin and allows
+  one minute to finalize.
+- Refuse triage admission over paths another session has actively claimed, and admit only regular-file additions or
+  same-mode modifications, rejecting deletions, renames, type or mode changes, symlinks, and gitlinks.
+- Report a triage run `completed` when claimed findings were resolved before the worker's prompt was written.
+- Finish triage runs and release their claims on scheduler and worker errors; never prune an open run's logs and prune
+  on every scheduling attempt; delete `triage/<id>` even when the run's worktree directory is already gone.
 - Fix `finding resolve` re-resolving an already-terminal finding to the same state without `--commit` clearing the
   stored `commit_oid` to null; it now keeps the existing evidence when a fresh `--commit` is not supplied, matching
   the documented in-place evidence update. `reopen` still clears `commit_oid` so a later fresh resolution never

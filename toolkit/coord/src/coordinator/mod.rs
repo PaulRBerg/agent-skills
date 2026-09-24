@@ -6,6 +6,7 @@ mod triage_command;
 mod triage_config;
 mod triage_paths;
 mod triage_prompt;
+mod triage_run;
 mod triage_schema;
 mod triage_worktree;
 mod work_lifecycle;
@@ -36,9 +37,9 @@ use crate::{
     state::{DraftRow, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow},
 };
 
-#[cfg(test)]
-pub(crate) use inventory::InventoryObservation;
 pub(crate) use inventory::{HostInventory, ProviderInventory};
+#[cfg(test)]
+pub(crate) use inventory::{InventoryObservation, last_codex_hook_error};
 
 const FULL_REFRESH_SECONDS: f64 = 20.0;
 const MAX_CALLSIGN_CODEPOINTS: usize = 40;

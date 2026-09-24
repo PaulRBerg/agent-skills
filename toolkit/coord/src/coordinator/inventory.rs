@@ -37,12 +37,7 @@ impl ProviderInventory for HostInventory {
 
     fn refresh(&mut self, store: &Store, probe: &dyn ProcessProbe) -> Result<InventoryObservation> {
         let hooks = inspect_hooks(HookClient::Codex, &self.context.codex_hooks_path());
-        let last_hook_error_code = store
-            .hook_health()?
-            .into_iter()
-            .rev()
-            .find(|row| row.client == Client::Codex && row.last_error_code.is_some())
-            .and_then(|row| row.last_error_code);
+        let last_hook_error_code = last_codex_hook_error(store)?;
         let trust = if hooks.ok && last_hook_error_code.is_none() {
             Some(inspect_codex_hook_trust(Some(&hooks.path)))
         } else {
@@ -66,6 +61,16 @@ impl ProviderInventory for HostInventory {
             claude_authoritative: claude.authoritative,
         })
     }
+}
+
+/// The Codex hook-health error that makes Codex provider coverage incomplete.
+pub(crate) fn last_codex_hook_error(store: &Store) -> Result<Option<String>> {
+    Ok(store
+        .hook_health()?
+        .into_iter()
+        .rev()
+        .find(|row| row.client == Client::Codex && row.last_error_code.is_some())
+        .and_then(|row| row.last_error_code))
 }
 
 #[cfg(test)]

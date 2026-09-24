@@ -35,18 +35,23 @@ Schema v18 is the Rust implementation's clean break. It never migrates or import
 other nonzero version with actionable replacement guidance. `drafts`, `draft_claims`, and `draft_scopes` hold both
 session-owned and portable named drafts; `work_items` no longer carries a draft state. Work is one logical item per
 `(client, session_id)` with a sorted vector of repository claims. Ordinary `draft` and `start` stay current-root
-compatible and must not implicitly append or move a claim. Cross-repository work uses only the explicit atomic `bundle
-draft` and `bundle start` commands with absolute paths and at least two canonical physical Git roots; direct submission,
-draft promotion, and active updates are all-or-none. Queued bundles hold no partial active claims, and one parent FIFO
-age governs all claims to retain repository-local fairness and avoid opposite-order deadlocks.
-Session liveness is based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced
-process is removed without an age grace period, while unknown liveness fails closed and never deletes the record.
-Codex identity uses `CODEX_SESSION_ID` with legacy `CODEX_THREAD_ID` fallback. Child and persistent-fork transcript
-observations share that root owner; never replace its session or release work because a transcript differs. Classify
-child lifecycle before parent registration and update only delegate state and parent activity. Pin a private nonempty
-termination anchor only when `SessionStart` creates the row; preserve it, including an unknown anchor, on later upserts.
-Only a matching anchored `SessionEnd` may use revision-guarded cleanup. Ambiguous ends retain ownership until explicit
-`done` or proven process death. Keep transcript paths opaque and absent from public status and messages.
+compatible and must not implicitly append or move a claim. Cross-repository work uses only the explicit atomic
+`bundle draft` and `bundle start` commands with absolute paths and at least two canonical physical Git roots; direct
+submission, draft promotion, and active updates are all-or-none. Queued bundles hold no partial active claims, and one
+parent FIFO age governs all claims to retain repository-local fairness and avoid opposite-order deadlocks. Session
+liveness is based on kernel-backed process fingerprints on macOS and Linux: a confirmed dead or replaced process is
+removed without an age grace period. A session whose own liveness is indeterminate (no fingerprint, no start token, or
+an inspection error) is treated as live: it keeps its claims, drafts, and residual ownership, is never reaped on that
+basis, and does not make coverage incomplete. Coverage fails closed only on provider inventory failures or when the
+process probe cannot confirm the ai-coord process itself. Codex identity uses `CODEX_SESSION_ID` with legacy
+`CODEX_THREAD_ID` fallback. Child and persistent-fork transcript observations share that root owner; never replace its
+session or release work because a transcript differs. Classify child lifecycle before parent registration and update
+only delegate state and parent activity. A child hook that must create the missing parent row records the host process
+fingerprint when detectable and fills one into a parent row that lacks it; a `SubagentStop` for a parent row that no
+longer exists never recreates it. Pin a private nonempty termination anchor only when `SessionStart` creates the row;
+preserve it, including an unknown anchor, on later upserts. Only a matching anchored `SessionEnd` may use
+revision-guarded cleanup. Ambiguous ends retain ownership until explicit `done` or proven process death. Keep transcript
+paths opaque and absent from public status and messages.
 
 Before work that can invalidate live chats, their ledger, hooks, or coordination CLI, require the user to close other
 agents and explicitly authorize the break, then implement it from one fresh session. Use an isolated
@@ -87,8 +92,10 @@ before adjusting scopes. Acceptance means adapting your work, never that the sen
 complete: retain validation and revalidation, safely handle your partial edits without reverting anyone else's changes,
 then narrow with the ordinary or bundle start command and require READY. Verify the promised replacement before final
 completion. Source changes, expiry, and withdrawal invalidate that expectation; a recipient's change or end preserves
-the acceptance history and does not itself stale it. `MESSAGE` wait and waker guidance requires inbox inspection plus
-`recommend list` in each claimed repository before a fresh matching start obtains ownership.
+the acceptance history and does not itself stale it. While the accepting recipient's current work item keeps the same
+ID, including after relabeling or narrowing with `start`, it still receives withdrawal, expiry, and stale notices.
+`MESSAGE` wait and waker guidance requires inbox inspection plus `recommend list` in each claimed repository before a
+fresh matching start obtains ownership.
 
 An idle (≥`IDLE_YIELD_SECONDS`) holder whose overlapping scopes carry no touched-since-submission or Git-dirty evidence
 (soft, judged per whole scope) is narrowed or released to grant a blocked `start`/`wait` unless an earlier-queued waiter
@@ -474,13 +481,21 @@ The state directory remains available to the worker. It never pushes; the worktr
 admission step below changes the original checkout.
 
 The safe tier may make only unambiguous documentation fixes and records a local `Finding-ID` commit in the worktree.
-Only validated documentation commits are fast-forwarded into `main` while it is checked out and clean for those paths;
-failed admission leaves the finding pending. The worktree and its branch are removed after the run, including failures.
-Everything else is written in the worktree and copied without overwriting an existing file, then validated into the
-deterministic `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md` handoff tier while preserving the exact ledger ID in its
-`Source finding:` marker. Structured output, artifacts, commit trailers, and paths are reconciled
-before state changes. Triagers do not schedule another triager. Run metadata and stdout/stderr live under
-`$XDG_STATE_HOME/ai-coord/triage-runs/` (or `AI_COORD_STATE_DIR`) and are retained for 30 days.
+Only validated documentation commits are fast-forwarded into `main` while it is checked out and clean for those paths. A
+commit qualifies only when every changed entry adds a 100644 regular file or modifies a regular file without changing
+its mode; deletions, renames, type changes, symlinks, gitlinks, and mode changes are rejected. Admission is also refused
+when a changed path is covered by another session's active claim, including after the worker's own claim was reaped.
+Failed admission leaves the finding pending. The worktree and its branch are removed after the run, including failures
+and a worktree directory that already disappeared. Everything else is written in the worktree and copied without
+overwriting an existing file, then validated into the deterministic `.ai/task-handoffs/FINDING_<UPPERCASE_ID>.md`
+handoff tier while preserving the exact ledger ID in its `Source finding:` marker. Structured output, artifacts, commit
+trailers, and paths are reconciled before state changes. Triagers do not schedule another triager. The worker heartbeats
+its run metadata from startup, including setup, and a run counts as live until its heartbeat is 15 seconds stale or one
+minute after the 30-minute deadline measured from the ledger start; the Codex deadline shares that origin. Any
+unfinished worker or scheduler error finishes the run as failed and releases its claims. A run's outcome is `partial`
+only when a finding given to the worker stays unresolved. Run metadata and stdout/stderr live under
+`$XDG_STATE_HOME/ai-coord/triage-runs/` (or `AI_COORD_STATE_DIR`) and are pruned after 30 days by every scheduling
+attempt regardless of opt-in, except runs the ledger still holds open.
 
 `ai-coord trailer` prints the current Git attribution line:
 
@@ -531,12 +546,17 @@ Only a `SessionStart` that creates the session row can establish a nonempty tran
 Later starts and tool or child hooks cannot replace that anchor, including when it is unknown. A `SessionEnd` must match
 the owning root's anchor and pass a revision guard; branch, missing, and empty transcript ends retain ownership. A
 concurrent registration or activity update invalidates an already-observed end revision. Sessions first registered by a
-CLI command or a hook without a root anchor rely on explicit `done` or confirmed process-death cleanup. Transcript
-observations never notify release waiters; an authoritative root end releases the whole logical item and notifies each
-overlapping waiter once.
+CLI command or a hook without a root anchor rely on explicit `done` or confirmed process-death cleanup. A session with
+no detectable host process never degrades coverage but is released only by `done` from its own identity, for example
+`AI_COORD_CLIENT=codex AI_COORD_SESSION_ID=<id> ai-coord done` from a claimed worktree in a shell without another host's
+session variables; its row remains visible in status. Transcript observations never notify release waiters; an
+authoritative root end releases the whole logical item and notifies each overlapping waiter once.
 
 Hook mode is fail-open. Malformed payloads and storage errors never block the host and never expose raw data on stdout.
-`ai-coord check` reports hook-health codes and exits 2 for a usable but degraded installation.
+A supported event missing its session ID (or a subagent event missing its agent ID) is ignored with one fixed stderr
+line and records no hook-health error; operational failures still record one, which the next successful event for the
+same client and event type clears. `ai-coord check` reports hook-health codes and exits 2 for a usable but degraded
+installation.
 
 #### Subagents
 
@@ -580,13 +600,13 @@ Named drafts instead expire and are deleted after seven days without an update.
 
 Messages expire after 48 hours and are capped at 50 per inbox. Pending and accepted recommendations expire 48 hours
 after creation. Rejected, withdrawn, and stale history is retained for 48 hours after that transition; each endpoint is
-capped at 50 live incoming and 50 live outgoing recommendations.
-Their endpoint and context snapshots survive session or work deletion. On macOS and Linux, sessions are bound to a
-kernel-derived process fingerprint containing both PID and process start identity. Correlated `SessionEnd` hooks release
-immediately; after terminal closure, Ctrl+C, host crash, or another missed hook, the next fresh coordination probe
-removes a session as soon as that exact process is confirmed gone. PID reuse is treated as a different process. An
-unavailable or ambiguous liveness result fails closed: coverage becomes unknown and the session is retained. Sessions
-are never deleted merely because they are old.
+capped at 50 live incoming and 50 live outgoing recommendations. Their endpoint and context snapshots survive session or
+work deletion. On macOS and Linux, sessions are bound to a kernel-derived process fingerprint containing both PID and
+process start identity. Correlated `SessionEnd` hooks release immediately; after terminal closure, Ctrl+C, host crash,
+or another missed hook, the next fresh coordination probe removes a session as soon as that exact process is confirmed
+gone. PID reuse is treated as a different process. An ambiguous liveness result for one session retains it as live
+without degrading coverage; only a probe that cannot establish any process liveness makes coverage unknown. Sessions are
+never deleted merely because they are old.
 
 ### Development
 

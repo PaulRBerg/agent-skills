@@ -310,6 +310,14 @@ fn accepted_recommendation_requires_explicit_narrowing_and_a_fresh_sender_start(
     );
     withdrawn.clone().assert().success();
     assert_eq!(String::from_utf8_lossy(&withdrawn.stdout), format!("WITHDRAWN\t{id}\n"));
+    // Narrowing required a new label; the accepting holder is still notified.
+    let inbox = fixture.output_as("holder", &["inbox"]);
+    inbox.clone().assert().success();
+    assert!(
+        String::from_utf8_lossy(&inbox.stdout).contains(&format!("Recommendation {id} withdrawn")),
+        "{}",
+        String::from_utf8_lossy(&inbox.stdout)
+    );
 }
 
 #[test]

@@ -1,16 +1,23 @@
-use std::{os::unix::process::ExitStatusExt, sync::Mutex};
+use std::{
+    os::unix::{fs::PermissionsExt, process::ExitStatusExt},
+    sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
 use crate::{
     coordinator::{Clock, inventory::StaticInventory},
-    domain::{FindingKind, ProcessFingerprint, WorkState},
+    domain::{Client, FindingKind, ProcessFingerprint, ProcessLiveness, ProcessProbe, WorkState},
     host::NativeProcessProbe,
     state::{FindingAdd, FindingPathObservation},
 };
 
-use super::*;
+use super::{
+    super::triage_run::{HEARTBEAT_GRACE_SECONDS, RECONCILE_LOG_FILE, RUN_EXPIRY_SECONDS},
+    *,
+};
 
 const CONFIG_PATH: &str = ".agents/coord.toml";
 
@@ -34,13 +41,21 @@ impl DetachedProcessRunner for FailingLauncher {
     }
 }
 
-struct FakeClock(f64);
+struct FakeClock(Mutex<f64>);
+impl FakeClock {
+    fn at(now: f64) -> Arc<Self> {
+        Arc::new(Self(Mutex::new(now)))
+    }
+    fn set(&self, now: f64) {
+        *self.0.lock().unwrap() = now;
+    }
+}
 impl Clock for FakeClock {
     fn wall(&self) -> f64 {
-        self.0
+        *self.0.lock().unwrap()
     }
     fn monotonic(&self) -> f64 {
-        self.0
+        self.wall()
     }
     fn sleep(&self, _: Duration) {}
 }
@@ -110,15 +125,21 @@ fn fixture(repo: &Path, now: f64) -> (Coordinator, Identity) {
 }
 
 fn fixture_with_coverage(repo: &Path, now: f64, complete: bool) -> (Coordinator, Identity) {
+    let (coordinator, origin, _) = clocked_fixture(repo, now, complete);
+    (coordinator, origin)
+}
+
+fn clocked_fixture(repo: &Path, now: f64, complete: bool) -> (Coordinator, Identity, Arc<FakeClock>) {
     let state = repo.join("state");
     let store = Store::open(state.join("state.db")).unwrap();
+    let clock = FakeClock::at(now);
     let coordinator = Coordinator::with_components(
         store,
         Box::new(StaticInventory { complete, refreshes: Default::default() }),
         std::sync::Arc::new(NativeProcessProbe::new()),
-        std::sync::Arc::new(FakeClock(now)),
+        clock.clone(),
     );
-    (coordinator, Identity { client: Client::Codex, session_id: "origin".to_owned() })
+    (coordinator, Identity { client: Client::Codex, session_id: "origin".to_owned() }, clock)
 }
 
 fn add_finding(coordinator: &Coordinator, repo: &Path, summary: &str, current: f64) -> String {
@@ -210,7 +231,7 @@ fn ineligible_repository_never_reaches_the_inventory_refresh() {
         store,
         Box::new(StaticInventory { complete: true, refreshes: refreshes.clone() }),
         std::sync::Arc::new(NativeProcessProbe::new()),
-        std::sync::Arc::new(FakeClock(100.0)),
+        FakeClock::at(100.0),
     );
     let origin = Identity { client: Client::Codex, session_id: "origin".to_owned() };
     // No finding was ever recorded, so the cheap SQL precheck rules this
@@ -250,7 +271,13 @@ fn codex_command_is_ephemeral_sandboxed_offline_and_agentless() {
     let worktree = Path::new("/state/triage-runs/a/worktree");
     let state = Path::new("/state");
     let run = Path::new("/state/triage-runs/a");
-    let request = TriageRequest { worktree, state_dir: state, run_dir: run, prompt: "prompt" };
+    let request = TriageRequest {
+        worktree,
+        state_dir: state,
+        run_dir: run,
+        prompt: "prompt",
+        deadline: Duration::from_secs_f64(RUN_DEADLINE_SECONDS),
+    };
     let args = codex_args(request.worktree, request.state_dir, request.run_dir)
         .into_iter()
         .map(|arg| arg.to_string_lossy().into_owned())
@@ -504,7 +531,7 @@ fn sweep_triage_child_is_reaped_when_prompt_delivery_fails() {
     let probe = NativeProcessProbe::new();
     let fingerprint = probe.fingerprint(child.id()).unwrap();
     let prompt = "x".repeat(1024 * 1024);
-    assert!(run_triage_child(child, &prompt, &mut || Ok(())).is_err());
+    assert!(run_triage_child(child, &prompt, Duration::from_secs(30), &mut || Ok(())).is_err());
     assert_eq!(probe.liveness(&fingerprint), ProcessLiveness::Dead);
 }
 
@@ -624,6 +651,22 @@ fn commit_file(repo: &Path, path: &str, contents: &str, message: &str) -> String
     git_head_oid(repo).unwrap()
 }
 
+/// Commit a README change that keeps its name but is not a regular-file edit.
+fn commit_readme_entry(repo: &Path, change: &str, message: &str) -> String {
+    let readme = repo.join("README.md");
+    match change {
+        "symlink" => {
+            fs::remove_file(&readme).unwrap();
+            std::os::unix::fs::symlink("NOTES.md", &readme).unwrap();
+        }
+        "mode-change" => fs::set_permissions(&readme, fs::Permissions::from_mode(0o755)).unwrap(),
+        _ => fs::remove_file(&readme).unwrap(),
+    }
+    git_text(repo, &["add", "-A", "--", "README.md"]).unwrap();
+    git_text(repo, &["-c", "user.name=test", "-c", "user.email=test@invalid", "commit", "-qm", message]).unwrap();
+    git_head_oid(repo).unwrap()
+}
+
 fn fixed_output(finding_id: &str, oid: &str) -> Value {
     json!({ "results": [{
         "finding_id": finding_id, "status": "fixed", "evidence": "corrected stale prose",
@@ -709,7 +752,9 @@ fn worktree_commits_are_admitted_in_ancestry_order() {
 
 #[test]
 fn admission_failure_preserves_main_and_pending_finding_without_handoff() {
-    for obstruction in ["main-moved", "dirty-path", "unsafe-ancestor", "unauthorized-commit"] {
+    for obstruction in
+        ["main-moved", "dirty-path", "unsafe-ancestor", "unauthorized-commit", "symlink", "mode-change", "deletion"]
+    {
         let repo = repository(true);
         let (coordinator, origin) = fixture(repo.path(), 100.0);
         let id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
@@ -728,8 +773,11 @@ fn admission_failure_preserves_main_and_pending_finding_without_handoff() {
                 _ => {}
             }
             let changed = if obstruction == "unauthorized-commit" { "NOTES.md" } else { "README.md" };
-            let oid =
-                commit_file(request.worktree, changed, "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+            let message = format!("docs: fix\n\nFinding-ID: {id}");
+            let oid = match obstruction {
+                "symlink" | "mode-change" | "deletion" => commit_readme_entry(request.worktree, obstruction, &message),
+                _ => commit_file(request.worktree, changed, "correct prose\n", &message),
+            };
             let handoff = deterministic_handoff(&id);
             fs::create_dir_all(request.worktree.join(".ai/task-handoffs"))?;
             fs::write(request.worktree.join(&handoff), format!("Source finding: {id}\n"))?;
@@ -859,7 +907,7 @@ fn inactive_reconciliation_preserves_live_worktrees_and_removes_lost_or_expired_
         assert!(worktree.path.exists(), "live worker must retain its worktree");
         let oid =
             commit_file(&worktree.path, "README.md", "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
-        let current = if expired { 100.0 + RUN_DEADLINE_SECONDS } else { 100.0 + HEARTBEAT_GRACE_SECONDS + 1.0 };
+        let current = if expired { 100.0 + RUN_EXPIRY_SECONDS } else { 100.0 + HEARTBEAT_GRACE_SECONDS + 1.0 };
         if expired {
             metadata.heartbeat_at = current;
             write_metadata(&run_dir, &metadata).unwrap();
@@ -898,4 +946,240 @@ fn handoff_copy_never_overwrites_or_traverses_symlinked_parents() {
     copy_handoff(Some(source.path()), destination.path(), id).unwrap();
     assert_eq!(fs::read_to_string(destination.path().join(&relative)).unwrap(), "existing user handoff\n");
     assert!(validate_handoff(destination.path(), id, &relative).is_err());
+}
+
+fn sample_metadata(run_id: &str, started_at: f64) -> RunMetadata {
+    RunMetadata {
+        run_id: run_id.to_owned(),
+        repo_root: "/repo".to_owned(),
+        state_dir: "/state".to_owned(),
+        start_head: "0".repeat(40),
+        worktree_path: None,
+        worktree_branch: None,
+        finding_ids: Vec::new(),
+        authorized_paths: Vec::new(),
+        started_at,
+        heartbeat_at: started_at,
+        finished_at: None,
+        worker: None,
+    }
+}
+
+fn register_peer(coordinator: &Coordinator, peer: &Identity, root: &Path) {
+    let root = path_text(root).unwrap();
+    coordinator
+        .store()
+        .unwrap()
+        .upsert_session(&SessionUpdate {
+            identity: peer.clone(),
+            cwd: root.clone(),
+            repo_root: Some(root),
+            state: SessionState::Working,
+            source: "test".to_owned(),
+            name: None,
+            waiting_for: None,
+            permission_mode: None,
+            update_permission_mode: false,
+            coordination_waived: None,
+            fingerprint: Some(NativeProcessProbe::new().fingerprint(std::process::id()).unwrap()),
+            transcript_path: None,
+            started_at: Some(100.0),
+            current: 100.0,
+        })
+        .unwrap();
+}
+
+#[test]
+fn run_liveness_covers_launch_and_expires_after_the_worker_deadline() {
+    let probe = NativeProcessProbe::new();
+    let run = TriageRun {
+        id: "run".to_owned(),
+        repo_root: "/repo".to_owned(),
+        origin: Identity { client: Client::Codex, session_id: "origin".to_owned() },
+        started_at: 100.0,
+        finished_at: None,
+        outcome: None,
+    };
+    // The ledger row exists briefly before the scheduler writes run metadata.
+    assert!(run_is_live(&run, None, &probe, 100.0 + HEARTBEAT_GRACE_SECONDS));
+    assert!(!run_is_live(&run, None, &probe, 101.0 + HEARTBEAT_GRACE_SECONDS));
+    let mut metadata = sample_metadata("run", 100.0);
+    assert!(run_is_live(&run, Some(&metadata), &probe, 105.0), "a launching worker has no fingerprint yet");
+    assert!(!run_is_live(&run, Some(&metadata), &probe, 101.0 + HEARTBEAT_GRACE_SECONDS));
+    metadata.worker = Some(probe.fingerprint(std::process::id()).unwrap());
+    let deadline = 100.0 + RUN_DEADLINE_SECONDS;
+    metadata.heartbeat_at = deadline;
+    assert!(run_is_live(&run, Some(&metadata), &probe, deadline + 1.0), "the worker finalizes after its deadline");
+    metadata.heartbeat_at = 100.0 + RUN_EXPIRY_SECONDS;
+    assert!(!run_is_live(&run, Some(&metadata), &probe, 100.0 + RUN_EXPIRY_SECONDS));
+}
+
+#[test]
+fn worker_heartbeats_through_setup_and_shares_the_ledger_deadline() {
+    let repo = repository(true);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let (coordinator, origin, clock) = clocked_fixture(repo.path(), 100.0, true);
+    add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let run_root = root.join("state/triage-runs");
+    let run_dir = run_root.join(&run_id);
+    // The worker starts long after the scheduler's own heartbeat went stale.
+    let setup = 100.0 + 10.0 * HEARTBEAT_GRACE_SECONDS;
+    clock.set(setup);
+    let runner = CallbackRunner(|request: &TriageRequest<'_>| {
+        assert_eq!(request.deadline, Duration::from_secs_f64(RUN_DEADLINE_SECONDS - (setup - 100.0)));
+        coordinator.reconcile_inactive_runs(&root, &run_root, setup)?;
+        assert!(request.worktree.exists(), "a setting-up worker must not look lost");
+        let later = setup + 10.0 * HEARTBEAT_GRACE_SECONDS;
+        clock.set(later);
+        let refreshed = (0..100).any(|_| {
+            thread::sleep(Duration::from_millis(50));
+            read_metadata(&run_dir).is_ok_and(|metadata| metadata.heartbeat_at == later)
+        });
+        assert!(refreshed, "the background heartbeat keeps running while the worker is busy");
+        coordinator.reconcile_inactive_runs(&root, &run_root, later)?;
+        assert!(request.worktree.exists());
+        Err(AppError::operational("simulated runner stop"))
+    });
+    coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
+    assert_eq!(
+        coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap().outcome.as_deref(),
+        Some("runner-failed")
+    );
+    assert_worktree_removed(&root, &run_id);
+}
+
+#[test]
+fn lost_worker_commit_is_not_admitted_over_a_peer_claim() {
+    let repo = repository(true);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    let id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let run_root = root.join("state/triage-runs");
+    let run_dir = run_root.join(&run_id);
+    let mut metadata = read_metadata(&run_dir).unwrap();
+    let worktree = TriageWorktree::new(&root, &run_dir, &run_id, 100.0);
+    worktree.create(&metadata.start_head).unwrap();
+    metadata.worktree_path = Some(worktree.path.clone());
+    metadata.worktree_branch = Some(worktree.branch.clone());
+    metadata.authorized_paths = vec!["README.md".to_owned()];
+    write_metadata(&run_dir, &metadata).unwrap();
+    commit_file(&worktree.path, "README.md", "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+    // The worker died and its claim is gone; a peer has since been granted README.md.
+    let peer = Identity { client: Client::Codex, session_id: "peer".to_owned() };
+    register_peer(&coordinator, &peer, &root);
+    let outcome = coordinator.start_for(peer, "edit readme", &[PathBuf::from("README.md")], &[], &root).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+
+    coordinator.reconcile_inactive_runs(&root, &run_root, 100.0 + HEARTBEAT_GRACE_SECONDS + 1.0).unwrap();
+
+    assert_eq!(git_head_oid(&root).as_deref(), Some(metadata.start_head.as_str()));
+    assert_eq!(fs::read_to_string(root.join("README.md")).unwrap(), "old prose\n");
+    assert_eq!(finding_state(&coordinator, &root, &id).state, FindingState::Pending);
+    let log = fs::read_to_string(run_dir.join(RECONCILE_LOG_FILE)).unwrap();
+    assert!(log.contains("claimed by another session"), "{log}");
+    assert_worktree_removed(&root, &run_id);
+}
+
+#[test]
+fn findings_resolved_before_the_prompt_do_not_make_a_run_partial() {
+    let repo = repository(true);
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    let resolved = add_finding(&coordinator, repo.path(), "already fixed", 1.0);
+    let prompted = add_finding_at(&coordinator, repo.path(), "notes prose", "NOTES.md", FindingKind::Docs, 2.0);
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let root = path_text(&crate::host::git_root(repo.path()).unwrap()).unwrap();
+    coordinator
+        .store()
+        .unwrap()
+        .resolve_finding(
+            &root,
+            &resolved,
+            &FindingResolution {
+                state: FindingState::Stale,
+                commit_oid: None,
+                canonical_id: None,
+                actor: Identity { client: Client::Codex, session_id: "source".to_owned() },
+                current: 100.0,
+            },
+        )
+        .unwrap();
+    let runner = FakeRunner {
+        result: json!({ "results": [{
+            "finding_id": prompted, "status": "stale", "evidence": "prose is already current",
+            "changed_paths": [], "validation": [], "commit_oid": null,
+            "canonical_id": null, "handoff_path": null
+        }] }),
+    };
+    coordinator.run_findings_triage_with(&run_id, repo.path(), &runner).unwrap();
+    let prompt = fs::read_to_string(repo.path().join("state/triage-runs").join(&run_id).join("prompt.txt")).unwrap();
+    assert!(prompt.contains(&prompted) && !prompt.contains(&resolved));
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("completed"));
+    assert_eq!(store.finding(&root, &prompted, 101.0).unwrap().unwrap().state, FindingState::Stale);
+}
+
+#[test]
+fn worker_setup_error_finishes_the_run_and_releases_claims() {
+    let repo = repository(true);
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let run_dir = repo.path().join("state/triage-runs").join(&run_id);
+    // Writing the prompt fails after the triager registered and claimed README.md.
+    fs::create_dir(run_dir.join("prompt.txt")).unwrap();
+    assert!(coordinator.run_findings_triage_with(&run_id, repo.path(), &FailingRunner).is_err());
+    let actor = triager_identity(&run_id);
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.triage_run(&run_id).unwrap().unwrap().outcome.as_deref(), Some("worker-failed"));
+    assert!(store.triage_claims(&run_id).unwrap().is_empty());
+    assert!(store.work(&actor).unwrap().is_none());
+    assert!(store.session(&actor).unwrap().is_none());
+    assert!(read_metadata(&run_dir).unwrap().finished_at.is_some());
+    assert!(fs::read_to_string(run_dir.join(RECONCILE_LOG_FILE)).unwrap().contains("worker-failed"));
+    assert_worktree_removed(repo.path(), &run_id);
+}
+
+#[test]
+fn log_pruning_keeps_open_runs_and_ignores_the_repository_opt_in() {
+    let repo = repository(true);
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let run_root = repo.path().join("state/triage-runs");
+    let run_dir = run_root.join(&run_id);
+    let far_future = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() + 60.0 * 24.0 * 60.0 * 60.0;
+    prune_run_logs(&coordinator, &run_root, far_future).unwrap();
+    assert!(run_dir.exists(), "an open run keeps its directory past retention");
+    coordinator.store().unwrap().finish_triage_run(&run_id, "completed", 100.0).unwrap();
+    prune_run_logs(&coordinator, &run_root, far_future).unwrap();
+    assert!(!run_dir.exists());
+
+    let disabled = repository(false);
+    let (coordinator, origin) = fixture(disabled.path(), 40.0 * 24.0 * 60.0 * 60.0);
+    let stale = disabled.path().join("state/triage-runs/stale");
+    fs::create_dir_all(&stale).unwrap();
+    let mut metadata = sample_metadata("stale", 1.0);
+    metadata.finished_at = Some(1.0);
+    write_metadata(&stale, &metadata).unwrap();
+    assert_eq!(
+        coordinator.schedule_findings_triage_for(disabled.path(), &origin, &FakeLauncher::default()).unwrap(),
+        TriageSchedule::Skipped("disabled")
+    );
+    assert!(!stale.exists());
+}
+
+#[test]
+fn cleanup_deletes_the_branch_when_the_worktree_directory_is_gone() {
+    let repo = repository(true);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let run_dir = root.join("state/triage-runs/run");
+    fs::create_dir_all(&run_dir).unwrap();
+    let worktree = TriageWorktree::new(&root, &run_dir, "run", 100.0);
+    worktree.create(&git_head_oid(&root).unwrap()).unwrap();
+    fs::remove_dir_all(&worktree.path).unwrap();
+    drop(worktree);
+    assert!(!run_dir.join(RECONCILE_LOG_FILE).exists());
+    assert_worktree_removed(&root, "run");
 }

@@ -1,66 +1,44 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     ffi::OsString,
-    fs::{self, OpenOptions},
-    io::{self, Write},
+    fs,
+    io::Write,
     path::{Component, Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
-    sync::mpsc,
+    sync::{Mutex, mpsc},
     thread,
     time::{Duration, Instant},
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
-    domain::{
-        Client, FindingState, FindingSummary, Identity, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe,
-        SessionState,
-    },
+    domain::{FindingState, FindingSummary, Identity, OutcomeKind, Scope, SessionState, WorkState},
     error::{AppError, Result},
     host::{DetachedProcessRunner, DetachedProcessSpec, NativeDetachedProcessRunner, git_head_oid},
     state::{FindingResolution, SessionUpdate, Store, TriageRun},
 };
 
 use super::{
-    Coordinator, path_text, resolved,
+    Clock, Coordinator, path_text, resolved,
     triage_command::codex_args,
     triage_config::{TriageSchedule, auto_triage_enabled, main_branch},
     triage_paths::{deterministic_handoff, safe_document_path},
     triage_prompt::triage_prompt,
+    triage_run::{
+        HEARTBEAT_SECONDS, RUN_DEADLINE_SECONDS, RunMetadata, finish_failed_schedule_run, finish_worker, lock_metadata,
+        private_output, prune_run_logs, read_metadata, read_worker_metadata, record_reconcile_detail, run_is_live,
+        triager_identity, with_heartbeat, write_metadata, write_private,
+    },
     triage_schema::result_schema,
     triage_worktree::{TriageWorktree, admit_commits, commit_for_finding, copy_handoff, git_text, validate_commit},
 };
 
 const RUN_DIRECTORY: &str = "triage-runs";
-const RUN_DEADLINE_SECONDS: f64 = 30.0 * 60.0;
-const HEARTBEAT_SECONDS: f64 = 2.0;
-const HEARTBEAT_GRACE_SECONDS: f64 = 15.0;
-const LOG_RETENTION_SECONDS: f64 = 30.0 * 24.0 * 60.0 * 60.0;
-const RECONCILE_LOG_FILE: &str = "reconcile.log";
 const RESULT_FILE: &str = "result.json";
 const SCHEMA_FILE: &str = "result-schema.json";
 const STDOUT_FILE: &str = "stdout.log";
 const STDERR_FILE: &str = "stderr.log";
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct RunMetadata {
-    run_id: String,
-    repo_root: String,
-    state_dir: String,
-    start_head: String,
-    #[serde(default)]
-    worktree_path: Option<PathBuf>,
-    #[serde(default)]
-    worktree_branch: Option<String>,
-    finding_ids: Vec<String>,
-    #[serde(default)]
-    authorized_paths: Vec<String>,
-    started_at: f64,
-    heartbeat_at: f64,
-    finished_at: Option<f64>,
-    worker: Option<ProcessFingerprint>,
-}
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,6 +75,7 @@ struct TriageRequest<'a> {
     state_dir: &'a Path,
     run_dir: &'a Path,
     prompt: &'a str,
+    deadline: Duration,
 }
 
 trait TriageRunner {
@@ -149,6 +128,13 @@ impl Coordinator {
         origin: &Identity,
         launcher: &dyn DetachedProcessRunner,
     ) -> Result<TriageSchedule> {
+        let now = self.clock.wall();
+        let state_dir = fs::canonicalize(
+            self.store_path.parent().ok_or_else(|| AppError::operational("state database has no parent directory"))?,
+        )?;
+        let run_root = state_dir.join(RUN_DIRECTORY);
+        // Retention applies to every repository's runs, independent of this one's opt-in or branch.
+        prune_run_logs(self, &run_root, now)?;
         let root = crate::host::git_root(&resolved(cwd))
             .ok_or_else(|| AppError::operational("finding triage requires a Git worktree"))?;
         if !auto_triage_enabled(&root)? {
@@ -157,13 +143,7 @@ impl Coordinator {
         if !main_branch(&root) {
             return Ok(TriageSchedule::Skipped("branch"));
         }
-        let now = self.clock.wall();
-        let state_dir = fs::canonicalize(
-            self.store_path.parent().ok_or_else(|| AppError::operational("state database has no parent directory"))?,
-        )?;
-        let run_root = state_dir.join(RUN_DIRECTORY);
         fs::create_dir_all(&run_root)?;
-        prune_run_logs(&run_root, now)?;
         self.reconcile_inactive_runs(&root, &run_root, now)?;
 
         let repo_root = path_text(&root)?;
@@ -179,74 +159,18 @@ impl Coordinator {
         if !self.refresh_inventory(&mut store, false)?.complete {
             return Ok(TriageSchedule::Skipped("coverage"));
         }
+        // Start the run's liveness clock after the probe, right before launch.
+        let now = self.clock.wall();
         let Some(start) = store.begin_triage_run(&repo_root, origin, now)? else {
             return Ok(TriageSchedule::Skipped("ineligible"));
         };
         let run_dir = run_root.join(&start.run.id);
-        if let Err(error) = fs::create_dir(&run_dir) {
-            finish_failed_schedule_run(&mut store, &start.run.id, &run_dir, "launch-failed", now, &error);
-            return Err(error.into());
-        }
-        let Some(start_head) = git_head_oid(&root) else {
-            let error = AppError::operational("finding triage requires a current Git HEAD");
-            finish_failed_schedule_run(&mut store, &start.run.id, &run_dir, "launch-failed", now, &error);
-            return Err(error);
-        };
-        let mut metadata = RunMetadata {
-            run_id: start.run.id.clone(),
-            repo_root: repo_root.clone(),
-            state_dir: path_text(&state_dir)?,
-            start_head,
-            worktree_path: None,
-            worktree_branch: None,
-            finding_ids: start.claims.iter().map(|claim| claim.finding_id.clone()).collect(),
-            authorized_paths: Vec::new(),
-            started_at: now,
-            heartbeat_at: now,
-            finished_at: None,
-            worker: None,
-        };
-        write_metadata(&run_dir, &metadata)?;
-        let executable = std::env::current_exe()
-            .map_err(|error| AppError::operational(format!("could not locate ai-coord executable: {error}")))?;
-        let spec = DetachedProcessSpec {
-            program: executable,
-            args: vec![
-                OsString::from("triage-worker"),
-                OsString::from("--run-id"),
-                OsString::from(&start.run.id),
-                OsString::from("--repo"),
-                root.as_os_str().to_owned(),
-            ],
-            current_dir: root.clone(),
-            environment: vec![
-                (OsString::from("AI_COORD_STATE_DIR"), state_dir.as_os_str().to_owned()),
-                (OsString::from("AI_COORD_TRIAGE_RUN_ID"), OsString::from(&start.run.id)),
-                (OsString::from("AI_COORD_TRIAGE_ROLE"), OsString::from("triager")),
-                (OsString::from("AI_COORD_CLIENT"), OsString::from("codex")),
-                (OsString::from("AI_COORD_SESSION_ID"), OsString::from(format!("triage:{}", start.run.id))),
-            ],
-            stdout_path: run_dir.join("worker.stdout.log"),
-            stderr_path: run_dir.join("worker.stderr.log"),
-        };
-        match launcher.spawn(&spec) {
-            Ok(worker) => {
-                metadata.worker = Some(worker);
-                if let Err(error) = write_metadata(&run_dir, &metadata) {
-                    finish_failed_schedule_run(
-                        &mut store,
-                        &start.run.id,
-                        &run_dir,
-                        "launch-metadata-failed",
-                        now,
-                        &error,
-                    );
-                    return Err(error);
-                }
-                Ok(TriageSchedule::Launched { run_id: start.run.id, finding_count: start.claims.len() })
-            }
-            Err(error) => {
-                finish_failed_schedule_run(&mut store, &start.run.id, &run_dir, "launch-failed", now, &error);
+        let finding_ids = start.claims.iter().map(|claim| claim.finding_id.clone()).collect();
+        let launch = LaunchRequest { root: &root, state_dir: &state_dir, run_dir: &run_dir, run: &start.run };
+        match launch_worker(&launch, finding_ids, self.clock.as_ref(), launcher) {
+            Ok(()) => Ok(TriageSchedule::Launched { run_id: start.run.id, finding_count: start.claims.len() }),
+            Err((outcome, error)) => {
+                finish_failed_schedule_run(&mut store, &start.run.id, &run_dir, outcome, self.clock.wall(), &error);
                 Err(error)
             }
         }
@@ -256,16 +180,17 @@ impl Coordinator {
         let repo_root = path_text(root)?;
         for run in self.store()?.active_triage_runs(&repo_root)? {
             let run_dir = run_root.join(&run.id);
-            let metadata = match read_metadata(&run_dir) {
+            let metadata = read_metadata(&run_dir);
+            if run_is_live(&run, metadata.as_ref().ok(), self.probe.as_ref(), current) {
+                continue;
+            }
+            let metadata = match metadata {
                 Ok(metadata) => Some(metadata),
                 Err(error) => {
                     record_reconcile_detail(&run_dir, current, "worker-lost", &error);
                     None
                 }
             };
-            if run_is_live(&run, metadata.as_ref(), self.probe.as_ref(), current) {
-                continue;
-            }
             let _worktree = TriageWorktree::new(root, &run_dir, &run.id, current);
             record_reconcile_detail(&run_dir, current, "worker-lost", &"triage worker is no longer live");
             if let Some(metadata) = metadata.as_ref() &&
@@ -294,8 +219,8 @@ impl Coordinator {
     fn run_findings_triage_with(&self, run_id: &str, cwd: &Path, runner: &dyn TriageRunner) -> Result<()> {
         let root = crate::host::git_root(&resolved(cwd))
             .ok_or_else(|| AppError::operational("triage worker requires a Git worktree"))?;
-        let mut store = self.store()?;
-        let run = store
+        let run = self
+            .store()?
             .triage_run(run_id)?
             .filter(|run| run.finished_at.is_none())
             .ok_or_else(|| AppError::operational(format!("triage run is not active: {run_id}")))?;
@@ -304,26 +229,51 @@ impl Coordinator {
         }
         let state_dir = fs::canonicalize(self.store_path.parent().expect("store path has parent"))?;
         let run_dir = state_dir.join(RUN_DIRECTORY).join(run_id);
-        let worktree = TriageWorktree::new(&root, &run_dir, run_id, self.clock.wall());
-        let mut metadata = read_worker_metadata(&run_dir)?;
+        let metadata = read_worker_metadata(&run_dir)?;
         if metadata.run_id != run_id ||
             metadata.repo_root != run.repo_root ||
             metadata.state_dir != path_text(&state_dir)?
         {
             return Err(AppError::operational("triage run metadata does not match the ledger"));
         }
+        let metadata = Mutex::new(metadata);
+        let worker =
+            WorkerContext { run: &run, root: &root, state_dir: &state_dir, run_dir: &run_dir, metadata: &metadata };
+        let result =
+            with_heartbeat(self.clock.as_ref(), &run_dir, &metadata, || self.run_triage_worker(&worker, runner));
+        if let Err(error) = &result {
+            // Any unfinished exit still releases the run's claims and triager session now.
+            let mut metadata = lock_metadata(&metadata);
+            if metadata.finished_at.is_none() {
+                let current = self.clock.wall();
+                record_reconcile_detail(&run_dir, current, "worker-failed", error);
+                if let Ok(mut store) = self.store() {
+                    let _ = finish_worker(&mut store, &run_dir, &mut metadata, "worker-failed", current);
+                }
+            }
+        }
+        result
+    }
 
-        if let Err(error) = reconcile_artifacts(self, &run, &metadata, &root) {
-            record_reconcile_detail(&run_dir, self.clock.wall(), "reconcile-failed", &error);
+    fn run_triage_worker(&self, worker: &WorkerContext<'_>, runner: &dyn TriageRunner) -> Result<()> {
+        let WorkerContext { run, root, state_dir, run_dir, metadata } = *worker;
+        let run_id = run.id.as_str();
+        let finish = |store: &mut Store, outcome: &str| {
+            finish_worker(store, run_dir, &mut lock_metadata(metadata), outcome, self.clock.wall())
+        };
+        let mut store = self.store()?;
+        let worktree = TriageWorktree::new(root, run_dir, run_id, self.clock.wall());
+
+        let snapshot = lock_metadata(metadata).clone();
+        if let Err(error) = reconcile_artifacts(self, run, &snapshot, root) {
+            record_reconcile_detail(run_dir, self.clock.wall(), "reconcile-failed", &error);
         }
         let pending_ids = store.pending_claimed_finding_ids(run_id)?;
         if pending_ids.is_empty() {
-            finish_worker(&mut store, &run_dir, &mut metadata, "reconciled", self.clock.wall())?;
-            return Ok(());
+            return finish(&mut store, "reconciled");
         }
-        if !main_branch(&root) {
-            finish_worker(&mut store, &run_dir, &mut metadata, "branch-changed", self.clock.wall())?;
-            return Ok(());
+        if !main_branch(root) {
+            return finish(&mut store, "branch-changed");
         }
         let findings = pending_ids
             .iter()
@@ -334,58 +284,68 @@ impl Coordinator {
             })
             .collect::<Result<Vec<_>>>()?;
         let actor = triager_identity(run_id);
-        register_triager_session(&mut store, &actor, &metadata, &root, self.clock.wall())?;
-        let authorized_paths = safe_document_paths(&root, &findings)?;
+        register_triager_session(&mut store, &actor, &snapshot, root, self.clock.wall())?;
+        let authorized_paths = safe_document_paths(root, &findings)?;
         if !authorized_paths.is_empty() {
             let paths = authorized_paths.iter().map(PathBuf::from).collect::<Vec<_>>();
-            let outcome = match self.start_for(actor, &format!("triage findings {run_id}"), &paths, &[], &root) {
+            let outcome = match self.start_for(actor, &format!("triage findings {run_id}"), &paths, &[], root) {
                 Ok(outcome) => outcome,
                 Err(error) => {
-                    record_reconcile_detail(&run_dir, self.clock.wall(), "scope-failed", &error);
-                    finish_worker(&mut store, &run_dir, &mut metadata, "scope-failed", self.clock.wall())?;
+                    record_reconcile_detail(run_dir, self.clock.wall(), "scope-failed", &error);
+                    finish(&mut store, "scope-failed")?;
                     return Err(error);
                 }
             };
             if outcome.kind != OutcomeKind::Ready {
-                record_reconcile_detail(&run_dir, self.clock.wall(), "scope-unavailable", &outcome.detail);
-                finish_worker(&mut store, &run_dir, &mut metadata, "scope-unavailable", self.clock.wall())?;
-                return Ok(());
+                record_reconcile_detail(run_dir, self.clock.wall(), "scope-unavailable", &outcome.detail);
+                return finish(&mut store, "scope-unavailable");
             }
         }
-        metadata.authorized_paths = authorized_paths;
-        write_metadata(&run_dir, &metadata)?;
-        let prompt = triage_prompt(run_id, &metadata.start_head, &findings, &metadata.authorized_paths)?;
+        let prompt = triage_prompt(run_id, &snapshot.start_head, &findings, &authorized_paths)?;
+        {
+            let mut metadata = lock_metadata(metadata);
+            metadata.authorized_paths = authorized_paths;
+            write_metadata(run_dir, &metadata)?;
+        }
         write_private(&run_dir.join(SCHEMA_FILE), serde_json::to_vec_pretty(&result_schema())?.as_slice())?;
         write_private(&run_dir.join("prompt.txt"), prompt.as_bytes())?;
 
-        metadata.worktree_path = Some(worktree.path.clone());
-        metadata.worktree_branch = Some(worktree.branch.clone());
-        write_metadata(&run_dir, &metadata)?;
-        if let Err(error) = worktree.create(&metadata.start_head) {
-            record_reconcile_detail(&run_dir, self.clock.wall(), "runner-failed", &error);
-            finish_worker(&mut store, &run_dir, &mut metadata, "runner-failed", self.clock.wall())?;
+        {
+            let mut metadata = lock_metadata(metadata);
+            metadata.worktree_path = Some(worktree.path.clone());
+            metadata.worktree_branch = Some(worktree.branch.clone());
+            write_metadata(run_dir, &metadata)?;
+        }
+        if let Err(error) = worktree.create(&snapshot.start_head) {
+            record_reconcile_detail(run_dir, self.clock.wall(), "runner-failed", &error);
+            finish(&mut store, "runner-failed")?;
             return Err(error);
         }
-        let request =
-            TriageRequest { worktree: &worktree.path, state_dir: &state_dir, run_dir: &run_dir, prompt: &prompt };
+        // The Codex deadline shares the ledger start with `run_is_live`, so setup time counts against it.
+        let remaining = run.started_at + RUN_DEADLINE_SECONDS - self.clock.wall();
+        let request = TriageRequest {
+            worktree: &worktree.path,
+            state_dir,
+            run_dir,
+            prompt: &prompt,
+            deadline: Duration::from_secs_f64(remaining.max(0.0)),
+        };
         let mut heartbeat = || {
-            let current = self.clock.wall();
-            metadata.heartbeat_at = current;
-            write_metadata(&run_dir, &metadata)?;
-            if !self.store()?.renew_triage_claims(run_id, current)? {
+            if !self.store()?.renew_triage_claims(run_id, self.clock.wall())? {
                 return Err(AppError::operational("triage run closed while worker was active"));
             }
             Ok(())
         };
         let execution = runner.run(&request, &mut heartbeat);
         let current = self.clock.wall();
-        let reconciled = match reconcile_artifacts(self, &run, &metadata, &root) {
+        let snapshot = lock_metadata(metadata).clone();
+        let reconciled = match reconcile_artifacts(self, run, &snapshot, root) {
             Ok(reconciled) => reconciled,
             Err(error) => {
-                record_reconcile_detail(&run_dir, current, "reconcile-failed", &error);
+                record_reconcile_detail(run_dir, current, "reconcile-failed", &error);
                 Reconciliation {
                     resolved: HashSet::new(),
-                    admission_failed: metadata.finding_ids.iter().cloned().collect(),
+                    admission_failed: snapshot.finding_ids.iter().cloned().collect(),
                 }
             }
         };
@@ -394,19 +354,88 @@ impl Coordinator {
             Ok(status) if !status.success() => {
                 ("runner-failed", Some(format!("triage runner exited unsuccessfully: {status}")))
             }
-            Ok(_) => match apply_result_file(self, &run, &metadata, &root, &run_dir, &reconciled) {
+            Ok(_) => match apply_result_file(self, run, &snapshot, &pending_ids, root, run_dir, &reconciled) {
                 Ok(true) => ("completed", None),
-                Ok(false) => ("partial", Some("triage result did not resolve every claimed finding".to_owned())),
+                Ok(false) => ("partial", Some("triage result did not resolve every prompted finding".to_owned())),
                 Err(error) => ("invalid-result", Some(error.to_string())),
             },
         };
         if let Some(detail) = failure_detail {
-            record_reconcile_detail(&run_dir, current, outcome, &detail);
+            record_reconcile_detail(run_dir, current, outcome, &detail);
         }
         store = self.store()?;
-        finish_worker(&mut store, &run_dir, &mut metadata, outcome, current)?;
-        Ok(())
+        finish_worker(&mut store, run_dir, &mut lock_metadata(metadata), outcome, current)
     }
+}
+
+struct WorkerContext<'a> {
+    run: &'a TriageRun,
+    root: &'a Path,
+    state_dir: &'a Path,
+    run_dir: &'a Path,
+    metadata: &'a Mutex<RunMetadata>,
+}
+
+struct LaunchRequest<'a> {
+    root: &'a Path,
+    state_dir: &'a Path,
+    run_dir: &'a Path,
+    run: &'a TriageRun,
+}
+
+/// Create the run directory and metadata, then spawn the detached worker.
+/// Errors carry the outcome under which the scheduler finishes the run.
+fn launch_worker(
+    launch: &LaunchRequest<'_>,
+    finding_ids: Vec<String>,
+    clock: &dyn Clock,
+    launcher: &dyn DetachedProcessRunner,
+) -> std::result::Result<(), (&'static str, AppError)> {
+    let failed = |error: AppError| ("launch-failed", error);
+    let LaunchRequest { root, state_dir, run_dir, run } = *launch;
+    fs::create_dir(run_dir).map_err(|error| failed(error.into()))?;
+    let start_head = git_head_oid(root)
+        .ok_or_else(|| failed(AppError::operational("finding triage requires a current Git HEAD")))?;
+    let mut metadata = RunMetadata {
+        run_id: run.id.clone(),
+        repo_root: run.repo_root.clone(),
+        state_dir: path_text(state_dir).map_err(failed)?,
+        start_head,
+        worktree_path: None,
+        worktree_branch: None,
+        finding_ids,
+        authorized_paths: Vec::new(),
+        started_at: run.started_at,
+        heartbeat_at: clock.wall(),
+        finished_at: None,
+        worker: None,
+    };
+    write_metadata(run_dir, &metadata).map_err(failed)?;
+    let executable = std::env::current_exe()
+        .map_err(|error| failed(AppError::operational(format!("could not locate ai-coord executable: {error}"))))?;
+    let spec = DetachedProcessSpec {
+        program: executable,
+        args: vec![
+            OsString::from("triage-worker"),
+            OsString::from("--run-id"),
+            OsString::from(&run.id),
+            OsString::from("--repo"),
+            root.as_os_str().to_owned(),
+        ],
+        current_dir: root.to_owned(),
+        environment: vec![
+            (OsString::from("AI_COORD_STATE_DIR"), state_dir.as_os_str().to_owned()),
+            (OsString::from("AI_COORD_TRIAGE_RUN_ID"), OsString::from(&run.id)),
+            (OsString::from("AI_COORD_TRIAGE_ROLE"), OsString::from("triager")),
+            (OsString::from("AI_COORD_CLIENT"), OsString::from("codex")),
+            (OsString::from("AI_COORD_SESSION_ID"), OsString::from(format!("triage:{}", run.id))),
+        ],
+        stdout_path: run_dir.join("worker.stdout.log"),
+        stderr_path: run_dir.join("worker.stderr.log"),
+    };
+    metadata.worker = Some(launcher.spawn(&spec).map_err(failed)?);
+    metadata.heartbeat_at = clock.wall();
+    write_metadata(run_dir, &metadata).map_err(|error| ("launch-metadata-failed", error))
 }
 
 impl TriageRunner for CodexTriageRunner {
@@ -426,7 +455,7 @@ impl TriageRunner for CodexTriageRunner {
         let child = command
             .spawn()
             .map_err(|error| AppError::operational(format!("could not launch Codex triager: {error}")))?;
-        run_triage_child(child, request.prompt, heartbeat)
+        run_triage_child(child, request.prompt, request.deadline, heartbeat)
     }
 }
 
@@ -440,14 +469,13 @@ fn configure_triage_process_group(command: &mut Command) {
 #[cfg(not(unix))]
 fn configure_triage_process_group(_: &mut Command) {}
 
-fn run_triage_child(child: Child, prompt: &str, heartbeat: &mut dyn FnMut() -> Result<()>) -> Result<ExitStatus> {
-    run_triage_child_with_limits(
-        child,
-        prompt,
-        heartbeat,
-        Duration::from_secs_f64(RUN_DEADLINE_SECONDS),
-        Duration::from_secs_f64(HEARTBEAT_SECONDS),
-    )
+fn run_triage_child(
+    child: Child,
+    prompt: &str,
+    deadline: Duration,
+    heartbeat: &mut dyn FnMut() -> Result<()>,
+) -> Result<ExitStatus> {
+    run_triage_child_with_limits(child, prompt, heartbeat, deadline, Duration::from_secs_f64(HEARTBEAT_SECONDS))
 }
 
 fn run_triage_child_with_limits(
@@ -547,23 +575,11 @@ fn safe_document_paths(root: &Path, findings: &[FindingSummary]) -> Result<Vec<S
     Ok(paths.into_iter().collect())
 }
 
-fn run_is_live(run: &TriageRun, metadata: Option<&RunMetadata>, probe: &dyn ProcessProbe, current: f64) -> bool {
-    if current - run.started_at >= RUN_DEADLINE_SECONDS {
-        return false;
-    }
-    let Some(metadata) = metadata else {
-        return false;
-    };
-    if metadata.run_id != run.id || current - metadata.heartbeat_at > HEARTBEAT_GRACE_SECONDS {
-        return false;
-    }
-    metadata.worker.as_ref().is_some_and(|fingerprint| probe.liveness(fingerprint) != ProcessLiveness::Dead)
-}
-
 fn apply_result_file(
     coordinator: &Coordinator,
     run: &TriageRun,
     metadata: &RunMetadata,
+    prompted_ids: &[String],
     root: &Path,
     run_dir: &Path,
     reconciled: &Reconciliation,
@@ -573,13 +589,15 @@ fn apply_result_file(
     }
     let bytes = fs::read(run_dir.join(RESULT_FILE))?;
     let output: TriageOutput = serde_json::from_slice(&bytes)?;
-    let claimed = metadata.finding_ids.iter().cloned().collect::<HashSet<_>>();
+    // Completeness covers only the findings the worker was asked about, not
+    // claims another session resolved before the prompt was written.
+    let prompted = prompted_ids.iter().collect::<HashSet<_>>();
     let statuses =
         output.results.iter().map(|result| (result.finding_id.clone(), result.status)).collect::<HashMap<_, _>>();
     let mut seen = HashSet::new();
     let mut complete = true;
     for result in output.results {
-        if !claimed.contains(&result.finding_id) || !seen.insert(result.finding_id.clone()) {
+        if !prompted.contains(&result.finding_id) || !seen.insert(result.finding_id.clone()) {
             complete = false;
             continue;
         }
@@ -604,7 +622,7 @@ fn apply_result_file(
             complete = false;
         }
     }
-    if seen.len() != claimed.len() {
+    if seen.len() != prompted.len() {
         complete = false;
     }
     Ok(complete)
@@ -747,6 +765,7 @@ fn reconcile_artifacts(
             &metadata.start_head,
             &metadata.finding_ids,
             &metadata.authorized_paths,
+            &peer_claimed_scopes(coordinator, run)?,
             coordinator.clock.wall(),
         )?;
     }
@@ -800,6 +819,21 @@ fn reconcile_artifacts(
     Ok(reconciled)
 }
 
+/// Scopes of every other session's active work in the run's repository. A
+/// dead worker's own claim may already be gone, so admission must not
+/// fast-forward over a path a peer has since been granted.
+fn peer_claimed_scopes(coordinator: &Coordinator, run: &TriageRun) -> Result<Vec<Scope>> {
+    let actor = triager_identity(&run.id);
+    Ok(coordinator
+        .store()?
+        .works_in_repo(&run.repo_root)?
+        .into_iter()
+        .filter(|work| work.state == WorkState::Active && work.identity != actor)
+        .filter_map(|work| work.claim(&run.repo_root).map(|claim| claim.scopes.clone()))
+        .flatten()
+        .collect())
+}
+
 fn validate_handoff(root: &Path, finding_id: &str, path: &str) -> Result<()> {
     if path != deterministic_handoff(finding_id) {
         return Err(AppError::operational("handoff path is not deterministic for the finding"));
@@ -828,147 +862,6 @@ fn validate_relative_path(path: &str) -> Result<()> {
         candidate.components().any(|component| !matches!(component, Component::Normal(_)))
     {
         return Err(AppError::operational("triage artifact path must be a normalized repository-relative path"));
-    }
-    Ok(())
-}
-
-fn finish_worker(
-    store: &mut Store,
-    run_dir: &Path,
-    metadata: &mut RunMetadata,
-    outcome: &str,
-    current: f64,
-) -> Result<()> {
-    metadata.finished_at = Some(current);
-    metadata.heartbeat_at = current;
-    if let Err(error) = write_metadata(run_dir, metadata) {
-        record_reconcile_detail(run_dir, current, outcome, &error);
-        return Err(error);
-    }
-    if let Err(error) = store.end_session(&triager_identity(&metadata.run_id)) {
-        record_reconcile_detail(run_dir, current, outcome, &error);
-        return Err(error);
-    }
-    if let Err(error) = store.finish_triage_run(&metadata.run_id, outcome, current) {
-        record_reconcile_detail(run_dir, current, outcome, &error);
-        return Err(error);
-    }
-    Ok(())
-}
-
-fn finish_failed_schedule_run(
-    store: &mut Store,
-    run_id: &str,
-    run_dir: &Path,
-    outcome: &str,
-    current: f64,
-    cause: &dyn std::fmt::Display,
-) {
-    let finish_error = store.finish_triage_run(run_id, outcome, current).err();
-    record_reconcile_detail(run_dir, current, outcome, cause);
-    if let Some(error) = finish_error {
-        record_reconcile_detail(run_dir, current, outcome, &error);
-    }
-}
-
-pub(super) fn record_reconcile_detail(run_dir: &Path, current: f64, outcome: &str, error: &dyn std::fmt::Display) {
-    let _ = append_reconcile_detail(run_dir, current, outcome, error);
-}
-
-fn append_reconcile_detail(
-    run_dir: &Path,
-    current: f64,
-    outcome: &str,
-    error: &dyn std::fmt::Display,
-) -> io::Result<()> {
-    let detail = error.to_string().split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(run_dir.join(RECONCILE_LOG_FILE))?;
-    let line = format!("{current:.6}\t{outcome}\t{detail}\n");
-    file.write_all(line.as_bytes())?;
-    file.sync_all()
-}
-
-pub(super) fn triager_identity(run_id: &str) -> Identity {
-    Identity { client: Client::Codex, session_id: format!("triage:{run_id}") }
-}
-
-fn metadata_path(run_dir: &Path) -> PathBuf {
-    run_dir.join("run.json")
-}
-
-fn read_metadata(run_dir: &Path) -> Result<RunMetadata> {
-    Ok(serde_json::from_slice(&fs::read(metadata_path(run_dir))?)?)
-}
-
-fn read_worker_metadata(run_dir: &Path) -> Result<RunMetadata> {
-    for _ in 0..40 {
-        let metadata = read_metadata(run_dir)?;
-        if metadata.worker.is_some() {
-            return Ok(metadata);
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-    Err(AppError::operational("triage worker process evidence was not recorded"))
-}
-
-fn write_metadata(run_dir: &Path, metadata: &RunMetadata) -> Result<()> {
-    let temporary = tempfile::NamedTempFile::new_in(run_dir)?;
-    write_private(temporary.path(), serde_json::to_vec_pretty(metadata)?.as_slice())?;
-    temporary.persist(metadata_path(run_dir)).map_err(|error| error.error)?;
-    Ok(())
-}
-
-fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    Ok(())
-}
-
-fn private_output(path: &Path) -> Result<Stdio> {
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    Ok(Stdio::from(options.open(path)?))
-}
-
-fn prune_run_logs(run_root: &Path, current: f64) -> Result<()> {
-    for entry in fs::read_dir(run_root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-        let age_basis = read_metadata(&entry.path()).ok().and_then(|metadata| metadata.finished_at).or_else(|| {
-            entry
-                .metadata()
-                .ok()?
-                .modified()
-                .ok()?
-                .duration_since(std::time::UNIX_EPOCH)
-                .ok()
-                .map(|age| age.as_secs_f64())
-        });
-        if age_basis.is_some_and(|timestamp| current - timestamp > LOG_RETENTION_SECONDS) {
-            fs::remove_dir_all(entry.path())?;
-        }
     }
     Ok(())
 }

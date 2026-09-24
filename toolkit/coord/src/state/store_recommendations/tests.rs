@@ -218,6 +218,27 @@ fn accepted_narrowing_and_withdrawal_preserve_the_recipient_decision() {
 }
 
 #[test]
+fn accepted_recipient_relabel_still_receives_the_withdrawal_notice() {
+    let mut fixture = Fixture::new();
+    let record = fixture.send();
+    fixture.respond(&record.id, RecommendationDecision::Accepted, "Retain parser checks");
+    update_current(&mut fixture.store, &fixture.recipient, |update| {
+        update.label = "Retain parser validation".to_owned();
+        update.claims[0].scopes = vec![scope("src/parser.rs", ScopeKind::Exact)];
+    });
+    let before = fixture.store.inbox(&fixture.recipient, false).unwrap().len();
+    fixture
+        .store
+        .with_work_transaction(|tx| {
+            tx.withdraw_recommendation(&fixture.sender, &record.id, "Replacement changed", 30.0)
+        })
+        .unwrap();
+    let inbox = fixture.store.inbox(&fixture.recipient, false).unwrap();
+    assert_eq!(inbox.len(), before + 1);
+    assert!(inbox.iter().any(|message| message.text.contains(&format!("Recommendation {} withdrawn", record.id))));
+}
+
+#[test]
 fn accepted_recipient_completion_remains_history_without_notifying_new_work() {
     let mut fixture = Fixture::new();
     let record = fixture.send();

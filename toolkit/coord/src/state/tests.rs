@@ -549,14 +549,22 @@ fn delegate_activity_preserves_all_parent_metadata_and_invalidates_a_stale_end()
     expected.last_seen = 2.0;
     expected.revision += 1;
 
-    let observed = store.observe_delegate_parent(&owner, "/child", Some("/child"), 2.0).unwrap();
+    let child_host = ProcessFingerprint { pid: 7, start_token: Some("boot:7".to_owned()) };
+
+    let observed = store.observe_delegate_parent(&owner, "/child", Some("/child"), Some(&child_host), 2.0).unwrap();
 
     assert_eq!(observed, expected);
     assert!(!store.with_work_transaction(|transaction| transaction.end_session_if_revision(&owner, revision)).unwrap());
     let unknown = identity(Client::Codex, "unknown");
-    let observed = store.observe_delegate_parent(&unknown, "/child", Some("/child"), 3.0).unwrap();
+    let observed = store.observe_delegate_parent(&unknown, "/child", Some("/child"), None, 3.0).unwrap();
     assert_eq!(observed.transcript_path, None);
     assert_eq!(observed.fingerprint, None);
+    // A later child hook that can see the host makes the inserted parent reapable.
+    let observed = store.observe_delegate_parent(&unknown, "/child", Some("/child"), Some(&child_host), 4.0).unwrap();
+    assert_eq!(observed.fingerprint, Some(child_host.clone()));
+    let late = identity(Client::Codex, "late");
+    let observed = store.observe_delegate_parent(&late, "/child", Some("/child"), Some(&child_host), 5.0).unwrap();
+    assert_eq!(observed.fingerprint, Some(child_host));
 }
 
 #[test]

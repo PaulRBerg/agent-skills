@@ -24,6 +24,7 @@ use serde_json::json;
 use tokio::{
     net::{TcpListener, lookup_host},
     sync::watch,
+    task::JoinHandle,
     time::{MissedTickBehavior, interval},
 };
 
@@ -82,6 +83,13 @@ pub(crate) struct SnapshotService<S> {
     cache: Mutex<Option<CachedSnapshot>>,
     now: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     shutdown: watch::Sender<bool>,
+    /// Latest snapshot published by the shared background poller; `None`
+    /// until the first successful poll. Every SSE stream subscribes to this
+    /// instead of polling [`SnapshotSource`] itself, so N concurrent
+    /// dashboard clients still cost one process sweep and one snapshot
+    /// refresh per tick.
+    poll_tx: watch::Sender<Option<DashboardSnapshotV2>>,
+    poll_task: Mutex<Option<JoinHandle<()>>>,
 }
 
 struct CachedSnapshot {
@@ -101,6 +109,8 @@ impl<S: SnapshotSource> SnapshotService<S> {
             cache: Mutex::new(None),
             now: Arc::new(SystemTime::now),
             shutdown: watch::channel(false).0,
+            poll_tx: watch::channel(None).0,
+            poll_task: Mutex::new(None),
         }
     }
 
@@ -130,6 +140,67 @@ impl<S: SnapshotSource> SnapshotService<S> {
     /// Deliberately bypass the snapshot cache; see [`SnapshotSource`].
     pub(crate) fn generation(&self) -> Result<u64> {
         self.source.generation()
+    }
+
+    /// Subscribe to the shared background poll, starting it lazily if this is
+    /// the first live subscriber. The poller idles out once the last
+    /// subscriber disconnects; a later subscriber restarts it. Holding the
+    /// same lock as [`SnapshotService::run_poll_loop`]'s stop check across
+    /// both the subscribe and the spawn decision closes the race where the
+    /// poller could decide to stop just as a new subscriber arrives.
+    fn subscribe_poll(self: &Arc<Self>) -> watch::Receiver<Option<DashboardSnapshotV2>> {
+        let mut task = self.poll_task.lock().expect("poll task lock poisoned");
+        let receiver = self.poll_tx.subscribe();
+        let running = task.as_ref().is_some_and(|handle| !handle.is_finished());
+        if !running {
+            let service = Arc::clone(self);
+            *task = Some(tokio::spawn(async move { service.run_poll_loop().await }));
+        }
+        receiver
+    }
+
+    /// Poll [`SnapshotSource::generation`] at most once per [`POLL_SECONDS`]
+    /// and refresh the published snapshot when it changes or every
+    /// [`HEARTBEAT_SECONDS`], so every SSE subscriber shares one process sweep
+    /// and one snapshot refresh per tick instead of running its own. The
+    /// periodic refresh keeps observing state the generation cannot see until
+    /// a snapshot records it, such as worktree dirt.
+    async fn run_poll_loop(self: Arc<Self>) {
+        let mut ticker = interval(Duration::from_secs(POLL_SECONDS));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut shutdown = self.shutdown.subscribe();
+        let mut last_generation = self.poll_tx.borrow().as_ref().map(|payload| payload.generation);
+        let mut last_refresh = Instant::now();
+
+        loop {
+            tokio::select! {
+                _ = shutdown.wait_for(|stopped| *stopped) => return,
+                _ = ticker.tick() => {}
+            }
+
+            {
+                let mut task = self.poll_task.lock().expect("poll task lock poisoned");
+                if self.poll_tx.receiver_count() == 0 {
+                    *task = None;
+                    return;
+                }
+            }
+
+            let generation_service = Arc::clone(&self);
+            let Ok(generation) = run_blocking(move || generation_service.generation()).await else {
+                continue;
+            };
+            if !should_send(last_generation, generation, last_refresh.elapsed()) {
+                continue;
+            }
+            let snapshot_service = Arc::clone(&self);
+            let Ok(payload) = run_blocking(move || snapshot_service.snapshot()).await else {
+                continue;
+            };
+            last_generation = Some(payload.generation);
+            last_refresh = Instant::now();
+            self.poll_tx.send_replace(Some(payload));
+        }
     }
 }
 
@@ -216,6 +287,7 @@ async fn snapshot<S: SnapshotSource>(
 }
 
 async fn events<S: SnapshotSource>(State(service): State<Arc<SnapshotService<S>>>) -> impl IntoResponse {
+    let poll_rx = service.subscribe_poll();
     let snapshots = stream! {
         let mut last_generation = None;
         let mut last_sent = Instant::now();
@@ -228,19 +300,12 @@ async fn events<S: SnapshotSource>(State(service): State<Arc<SnapshotService<S>>
                 _ = shutdown.wait_for(|stopped| *stopped) => break,
                 _ = ticker.tick() => {}
             }
-            let generation_service = Arc::clone(&service);
-            let Ok(generation) = run_blocking(move || generation_service.generation()).await else {
+            // Read the shared poller's latest snapshot instead of polling
+            // `SnapshotSource` directly, so N concurrent streams cost one
+            // process sweep and one snapshot refresh per tick, not N.
+            let Some(payload) = poll_rx.borrow().clone() else {
                 continue;
             };
-            if !should_send(last_generation, generation, last_sent.elapsed()) {
-                continue;
-            }
-            let snapshot_service = Arc::clone(&service);
-            let Ok(payload) = run_blocking(move || snapshot_service.snapshot()).await else {
-                continue;
-            };
-            // A still-valid cache entry can predate `generation`. Only record
-            // and emit the generation that this event actually carries.
             if !should_send(last_generation, payload.generation, last_sent.elapsed()) {
                 continue;
             }
@@ -456,6 +521,26 @@ mod tests {
         let result = tokio::time::timeout(Duration::from_secs(2), &mut server).await;
         server.abort();
         result.expect("shutdown must finish while the SSE client stays connected").unwrap();
+    }
+
+    #[tokio::test]
+    async fn sweep_shared_poller_polls_once_per_tick_regardless_of_subscriber_count() {
+        // Two independently-polling SSE clients (the pre-fix behavior) would
+        // read `generation()` roughly twice as often as one. The shared
+        // poller performs exactly one source poll per tick no matter how
+        // many subscribers are attached, so the counts below should match.
+        async fn generation_reads_with(subscribers: usize) -> usize {
+            let service = Arc::new(SnapshotService::new(Source::new(1)));
+            let receivers: Vec<_> = (0..subscribers).map(|_| service.subscribe_poll()).collect();
+            tokio::time::sleep(Duration::from_millis(3_200)).await;
+            let reads = service.source.generation_reads.load(Ordering::SeqCst);
+            drop(receivers);
+            reads
+        }
+
+        let (one, two) = tokio::join!(generation_reads_with(1), generation_reads_with(2));
+        assert!(one > 0, "expected at least one poll: one={one}");
+        assert!((one as i64 - two as i64).abs() <= 1, "one={one} two={two}");
     }
 
     #[test]

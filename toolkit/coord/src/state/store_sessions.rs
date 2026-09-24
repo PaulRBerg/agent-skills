@@ -18,20 +18,31 @@ impl Store {
     }
 
     /// Child activity proves the parent is active, not that its lifecycle identity changed.
+    /// The host fingerprint is stored only where the row has none, so a parent
+    /// first registered by a child hook stays reapable by process death.
     pub(crate) fn observe_delegate_parent(
         &mut self,
         identity: &Identity,
         cwd: &str,
         repo_root: Option<&str>,
+        fingerprint: Option<&ProcessFingerprint>,
         current: f64,
     ) -> Result<SessionRow> {
+        let (pid, start_token) = fingerprint_values(fingerprint);
         self.immediate(|transaction| {
             transaction.execute(
-                "INSERT INTO sessions(client, session_id, cwd, repo_root, state, source, started_at, last_seen, revision)
-                 VALUES (?1, ?2, ?3, ?4, 'working', 'hook', ?5, ?5, 1)
+                "INSERT INTO sessions(
+                    client, session_id, cwd, repo_root, state, pid, process_start_token,
+                    source, started_at, last_seen, revision
+                 ) VALUES (?1, ?2, ?3, ?4, 'working', ?5, ?6, 'hook', ?7, ?7, 1)
                  ON CONFLICT(client, session_id) DO UPDATE SET
-                    state = 'working', last_seen = excluded.last_seen, revision = sessions.revision + 1",
-                params![client_name(identity.client), identity.session_id, cwd, repo_root, current],
+                    state = 'working',
+                    pid = COALESCE(sessions.pid, excluded.pid),
+                    process_start_token = CASE WHEN sessions.pid IS NULL THEN excluded.process_start_token
+                                               ELSE sessions.process_start_token END,
+                    last_seen = excluded.last_seen,
+                    revision = sessions.revision + 1",
+                params![client_name(identity.client), identity.session_id, cwd, repo_root, pid, start_token, current],
             )?;
             Ok(transaction.query_row(
                 &session_select("WHERE client = ?1 AND session_id = ?2"),

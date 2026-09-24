@@ -362,14 +362,13 @@ impl WorkTransaction<'_> {
     }
 
     fn pointer(&self, record: &RecommendationRow, to_sender: bool, current: f64) -> Result<()> {
-        if !to_sender && record.decision == Some(RecommendationDecision::Accepted) {
-            let current_work = self.work(&record.recipient.identity)?;
-            if !current_work.is_some_and(|work| {
-                work.id == record.recipient.work.id &&
-                    RecommendationWork::from(&work).label == record.recipient.work.label
-            }) {
-                return Ok(());
-            }
+        // Work IDs are never reused, so an accepting recipient's relabeled or
+        // narrowed work is still the work the recommendation addressed.
+        if !to_sender &&
+            record.decision == Some(RecommendationDecision::Accepted) &&
+            !self.work(&record.recipient.identity)?.is_some_and(|work| work.id == record.recipient.work.id)
+        {
+            return Ok(());
         }
         let (sender, recipient) =
             if to_sender { (&record.recipient, &record.sender) } else { (&record.sender, &record.recipient) };
