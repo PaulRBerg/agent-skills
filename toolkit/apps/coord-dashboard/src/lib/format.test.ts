@@ -38,18 +38,40 @@ describe("getLivenessTier", () => {
 });
 
 describe("path display", () => {
+  const HOME = "/Users/testuser";
+
   test.each([
-    ["/Users/prb", "~"],
-    ["/Users/prb/projects/agent-toolkit", "~/projects/agent-toolkit"],
-    ["/Users/prb-work/project", "/Users/prb-work/project"],
+    ["/Users/testuser", "~"],
+    ["/Users/testuser/projects/agent-toolkit", "~/projects/agent-toolkit"],
+    ["/Users/testuser-work/project", "/Users/testuser-work/project"],
     ["/tmp/project", "/tmp/project"],
   ])("replaces the home directory in %s", (value, expected) => {
-    expect(displayPath(value)).toBe(expected);
+    expect(displayPath(value, HOME)).toBe(expected);
+  });
+
+  test("only abbreviates at a path boundary, never a plain substring", () => {
+    expect(displayPath("/Users/testuser-old", HOME)).toBe(
+      "/Users/testuser-old",
+    );
+    expect(displayPath("/Users/testuserx/project", HOME)).toBe(
+      "/Users/testuserx/project",
+    );
+  });
+
+  test("handles a trailing slash on the home directory", () => {
+    expect(displayPath("/Users/testuser", `${HOME}/`)).toBe("~");
+    expect(displayPath("/Users/testuser/projects", `${HOME}/`)).toBe(
+      "~/projects",
+    );
+  });
+
+  test("leaves paths untouched when no home directory is configured", () => {
+    expect(displayPath("/Users/testuser")).toBe("/Users/testuser");
   });
 
   test("shortens display paths after replacing the home directory", () => {
-    expect(shortenPath("/Users/prb")).toBe("~");
-    expect(shortenPath("/Users/prb/projects/agent-toolkit")).toBe(
+    expect(shortenPath("/Users/testuser", HOME)).toBe("~");
+    expect(shortenPath("/Users/testuser/projects/agent-toolkit", HOME)).toBe(
       "~/projects/agent-toolkit",
     );
   });

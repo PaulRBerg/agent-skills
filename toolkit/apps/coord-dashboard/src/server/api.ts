@@ -1,4 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { extname, resolve, sep } from "node:path";
 
 const API_ORIGIN = "http://127.0.0.1:4477";
@@ -22,6 +23,7 @@ export interface RequestHandlerOptions {
   distDirectory: string;
   apiOrigin?: string;
   proxyRequest?: (request: Request) => Promise<Response>;
+  homeDirectory?: string;
 }
 
 // Loopback hostnames accepted to block DNS-rebinding attacks against this 127.0.0.1-bound server.
@@ -53,11 +55,46 @@ async function fileResponse(path: string, method: string): Promise<Response | nu
   }
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Delivers the server's home directory to the client so it can abbreviate
+// paths to `~`, since browser JavaScript has no way to read it itself.
+function injectHomeDirectory(html: string, home: string): string {
+  const meta = `<meta name="dashboard-home" content="${escapeHtmlAttribute(home)}">`;
+  return html.includes("</head>") ? html.replace("</head>", `${meta}</head>`) : `${meta}${html}`;
+}
+
+async function indexResponse(indexPath: string, method: string, home: string): Promise<Response | null> {
+  try {
+    const metadata = await stat(indexPath);
+    if (!metadata.isFile()) return null;
+    const html = injectHomeDirectory(await readFile(indexPath, "utf8"), home);
+    const bytes = new TextEncoder().encode(html);
+    return new Response(responseBody(method, bytes), {
+      headers: {
+        "Content-Length": String(bytes.byteLength),
+        "Content-Type": CONTENT_TYPES[".html"],
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    console.error(`[ai-coord-dashboard] unable to serve ${indexPath}`, error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 export function createRequestHandler(options: RequestHandlerOptions): (request: Request) => Promise<Response> {
   const distDirectory = resolve(options.distDirectory);
   const indexPath = resolve(distDirectory, "index.html");
   const apiOrigin = options.apiOrigin ?? API_ORIGIN;
   const proxyRequest = options.proxyRequest ?? ((request: Request) => fetch(request));
+  const homeDirectory = options.homeDirectory ?? homedir();
 
   return async (request: Request): Promise<Response> => {
     let url: URL;
@@ -97,10 +134,16 @@ export function createRequestHandler(options: RequestHandlerOptions): (request: 
 
     const assetPath = resolve(distDirectory, `.${decodedPath}`);
     if (assetPath === distDirectory || assetPath.startsWith(`${distDirectory}${sep}`)) {
-      const asset = await fileResponse(assetPath, request.method);
+      const asset =
+        assetPath === indexPath
+          ? await indexResponse(indexPath, request.method, homeDirectory)
+          : await fileResponse(assetPath, request.method);
       if (asset) return asset;
     }
 
-    return (await fileResponse(indexPath, request.method)) ?? new Response("Not Found", { status: 404 });
+    return (
+      (await indexResponse(indexPath, request.method, homeDirectory)) ??
+      new Response("Not Found", { status: 404 })
+    );
   };
 }

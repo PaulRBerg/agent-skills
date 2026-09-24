@@ -2,7 +2,21 @@ import type { Session } from "@/lib/types";
 
 export type LivenessTier = "fresh" | "aging" | "stale";
 
-const HOME_DIRECTORY = "/Users/prb";
+let homeDirectory: string | undefined;
+
+/**
+ * Sets the home directory used to abbreviate paths to `~` when callers don't
+ * pass one explicitly. The dashboard's Bun server reads the real value via
+ * `os.homedir()` and delivers it to the client, which configures this once
+ * at startup.
+ */
+export function configureHomeDirectory(home: string | undefined): void {
+  homeDirectory = home;
+}
+
+function normalizeHome(home: string): string {
+  return home.length > 1 && home.endsWith("/") ? home.slice(0, -1) : home;
+}
 
 export function formatRelativeTime(
   timestamp: number,
@@ -36,17 +50,19 @@ export function getLivenessTier(
   return "stale";
 }
 
-export function shortenPath(value: string): string {
-  const displayValue = displayPath(value);
+export function shortenPath(value: string, home = homeDirectory): string {
+  const displayValue = displayPath(value, home);
   const segments = displayValue.split("/").filter(Boolean);
   if (segments.length <= 3) return displayValue;
   return `…/${segments.slice(-3).join("/")}`;
 }
 
-export function displayPath(value: string): string {
-  if (value === HOME_DIRECTORY) return "~";
-  if (value.startsWith(`${HOME_DIRECTORY}/`)) {
-    return `~${value.slice(HOME_DIRECTORY.length)}`;
+export function displayPath(value: string, home = homeDirectory): string {
+  if (!home) return value;
+  const normalizedHome = normalizeHome(home);
+  if (value === normalizedHome) return "~";
+  if (value.startsWith(`${normalizedHome}/`)) {
+    return `~${value.slice(normalizedHome.length)}`;
   }
   return value;
 }

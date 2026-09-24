@@ -11,19 +11,24 @@ const temporaryDirectories: string[] = [];
 
 interface FixtureOptions {
   proxyRequest?: (request: Request) => Promise<Response>;
+  homeDirectory?: string;
+  indexHtml?: string;
 }
+
+const FIXTURE_HOME = "/Users/fixture-home";
+const FIXTURE_INDEX_HTML = "<html><head><title>t</title></head><body><main>dashboard</main></body></html>";
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
-async function fixtureHandler(options: FixtureOptions = {}) {
+async function fixtureHandler({ indexHtml = FIXTURE_INDEX_HTML, homeDirectory = FIXTURE_HOME, ...options }: FixtureOptions = {}) {
   const distDirectory = await mkdtemp(join(tmpdir(), "ai-coord-dashboard-api-"));
   temporaryDirectories.push(distDirectory);
   await mkdir(join(distDirectory, "assets"));
-  await writeFile(join(distDirectory, "index.html"), "<main>dashboard</main>", "utf8");
+  await writeFile(join(distDirectory, "index.html"), indexHtml, "utf8");
   await writeFile(join(distDirectory, "assets", "app.js"), "export {};", "utf8");
-  return createRequestHandler({ distDirectory, ...options });
+  return createRequestHandler({ distDirectory, homeDirectory, ...options });
 }
 
 describe("request handler", () => {
@@ -96,13 +101,37 @@ describe("request handler", () => {
     const asset = await handler(new Request("http://localhost/assets/app.js"));
     const fallback = await handler(new Request("http://localhost/repository/example"));
     const head = await handler(new Request("http://localhost/repository/example", { method: "HEAD" }));
+    const expectedHtml = FIXTURE_INDEX_HTML.replace(
+      "</head>",
+      `<meta name="dashboard-home" content="${FIXTURE_HOME}"></head>`,
+    );
 
     expect(asset.headers.get("Content-Type")).toBe("text/javascript; charset=utf-8");
     expect(await asset.text()).toBe("export {};");
-    expect(await fallback.text()).toBe("<main>dashboard</main>");
+    expect(await fallback.text()).toBe(expectedHtml);
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
-    expect(head.headers.get("Content-Length")).toBe(String(Buffer.byteLength("<main>dashboard</main>")));
+    expect(head.headers.get("Content-Length")).toBe(String(Buffer.byteLength(expectedHtml)));
+  });
+
+  it("injects the server's home directory into served HTML for the client to read", async () => {
+    const handler = await fixtureHandler({ homeDirectory: '/Users/o\'<hara> & "co"' });
+    const index = await handler(new Request("http://localhost/index.html"));
+    const fallback = await handler(new Request("http://localhost/repository/example"));
+
+    const expectedMeta =
+      '<meta name="dashboard-home" content="/Users/o\'&lt;hara&gt; &amp; &quot;co&quot;">';
+    expect(await index.text()).toContain(expectedMeta);
+    expect(await fallback.text()).toContain(expectedMeta);
+  });
+
+  it("prepends the home directory meta tag when the document has no <head>", async () => {
+    const handler = await fixtureHandler({ indexHtml: "<main>dashboard</main>" });
+    const response = await handler(new Request("http://localhost/missing"));
+
+    expect(await response.text()).toBe(
+      `<meta name="dashboard-home" content="${FIXTURE_HOME}"><main>dashboard</main>`,
+    );
   });
 
   it("rejects unsupported static methods and malformed URL escapes", async () => {
