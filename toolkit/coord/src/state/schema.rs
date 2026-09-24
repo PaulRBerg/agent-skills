@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{AppError, Result};
 
-pub(crate) const SCHEMA_VERSION: i64 = 18;
+pub(crate) const SCHEMA_VERSION: i64 = 19;
 
 const STATEMENTS: &[&str] = &[
     "CREATE TABLE sessions (
@@ -198,7 +198,6 @@ const STATEMENTS: &[&str] = &[
         id TEXT PRIMARY KEY,
         repo_root TEXT NOT NULL,
         summary TEXT NOT NULL,
-        normalized_summary TEXT NOT NULL,
         kind TEXT CHECK (kind IS NULL OR kind IN ('bug', 'docs', 'improvement')),
         state TEXT NOT NULL CHECK (state IN (
             'pending', 'handed-off', 'fixed', 'stale', 'rejected', 'duplicate'
@@ -220,7 +219,7 @@ const STATEMENTS: &[&str] = &[
     "CREATE INDEX findings_repo_state_idx
         ON findings(repo_root, state, updated_at DESC, id)",
     "CREATE INDEX findings_dedup_idx
-        ON findings(repo_root, normalized_summary, state)",
+        ON findings(repo_root, summary, state)",
     "CREATE TABLE finding_paths (
         finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
         path TEXT NOT NULL,
@@ -270,8 +269,7 @@ const STATEMENTS: &[&str] = &[
     "CREATE TABLE triage_runs (
         id TEXT PRIMARY KEY,
         repo_root TEXT NOT NULL,
-        runner_client TEXT NOT NULL CHECK (runner_client IN ('codex', 'claude')),
-        runner_session_id TEXT NOT NULL,
+        origin TEXT NOT NULL,
         started_at REAL NOT NULL,
         finished_at REAL,
         outcome TEXT

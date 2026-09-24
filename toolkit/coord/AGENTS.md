@@ -31,7 +31,7 @@ ladders, old-format importers, deprecated CLI aliases, dual reads or writes, ret
 hook recognition by default. Rejecting an incompatible persisted version with an actionable error is required safety
 behavior, not backward compatibility.
 
-Schema v18 is the Rust implementation's clean break. It never migrates or imports an older ledger; reject v17 and every
+Schema v19 is the Rust implementation's clean break. It never migrates or imports an older ledger; reject v18 and every
 other nonzero version with actionable replacement guidance. `drafts`, `draft_claims`, and `draft_scopes` hold both
 session-owned and portable named drafts; `work_items` no longer carries a draft state. Work is one logical item per
 `(client, session_id)` with a sorted vector of repository claims. Ordinary `draft` and `start` stay current-root
@@ -583,7 +583,7 @@ subagents must voluntarily honor the rule above instead of relying on enforcemen
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
 `AI_COORD_STATE_DIR` to isolate development and validation. The directory is mode `0700` and the database is mode
 `0600`; SQLite uses WAL, foreign keys, and atomic immediate transactions. A fresh database is created directly at
-internal schema v18. Any other nonzero schema, including v17, is rejected without migration, import, deletion, or
+internal schema v19. Any other nonzero schema, including v18, is rejected without migration, import, deletion, or
 replacement, while the public `status --json` schema is v8. This is an isolated-state break with no migration or
 compatibility path. Close agents and explicitly choose any backup, removal, installation, and relinking rollout before
 retrying with incompatible state.

@@ -82,8 +82,8 @@ impl Store {
             let stored_origin = format!("triage:{}/{}", client_name(origin.client), origin.session_id);
             transaction.execute(
                 "INSERT INTO triage_runs(
-                    id, repo_root, runner_client, runner_session_id, started_at
-                 ) VALUES (?1, ?2, 'codex', ?3, ?4)",
+                    id, repo_root, origin, started_at
+                 ) VALUES (?1, ?2, ?3, ?4)",
                 params![id, repo_root, stored_origin, current],
             )?;
             let lease_expires_at = current + TRIAGE_LEASE_SECONDS;
@@ -112,7 +112,7 @@ impl Store {
 
     pub(crate) fn active_triage_runs(&self, repo_root: &str) -> Result<Vec<TriageRun>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, repo_root, runner_session_id, started_at, finished_at, outcome
+            "SELECT id, repo_root, origin, started_at, finished_at, outcome
              FROM triage_runs
              WHERE repo_root = ?1 AND finished_at IS NULL
              ORDER BY started_at, id",
@@ -136,7 +136,7 @@ impl Store {
         Ok(self
             .connection
             .query_row(
-                "SELECT id, repo_root, runner_session_id, started_at, finished_at, outcome
+                "SELECT id, repo_root, origin, started_at, finished_at, outcome
                  FROM triage_runs WHERE id = ?1",
                 [id],
                 |row| {
@@ -306,7 +306,6 @@ mod tests {
             .add_finding(&FindingAdd {
                 repo_root: root.to_string_lossy().into_owned(),
                 summary: format!("finding {id}"),
-                normalized_summary: format!("finding {id}"),
                 kind: Some(FindingKind::Docs),
                 paths: vec![format!("docs/{id}.md")],
                 head_oid: None,

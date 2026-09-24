@@ -72,7 +72,7 @@ fn save_work(store: &mut Store, update: &WorkUpdate) -> crate::error::Result<i64
 }
 
 #[test]
-fn new_store_has_exact_v18_schema_and_runtime_pragmas() {
+fn new_store_has_exact_v19_schema_and_runtime_pragmas() {
     let temporary = tempdir().unwrap();
     let path = temporary.path().join("private/state.db");
     let store = Store::open(&path).unwrap();
@@ -272,7 +272,7 @@ fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     assert_eq!(
         error.to_string(),
         format!(
-            "state schema 17 is incompatible with required schema 18 at {}; \
+            "state schema 17 is incompatible with required schema 19 at {}; \
              close all agents and explicitly replace the ledger before retrying",
             path.display()
         )
@@ -451,7 +451,6 @@ fn codex_transcript_observations_preserve_work_and_reject_a_stale_end_revision()
         .add_finding(&FindingAdd {
             repo_root: "/repo".to_owned(),
             summary: "durable finding".to_owned(),
-            normalized_summary: "durable finding".to_owned(),
             kind: None,
             paths: Vec::new(),
             head_oid: None,
@@ -667,7 +666,6 @@ fn pruning_expires_messages_but_never_findings_or_sessions() {
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "old finding".into(),
-            normalized_summary: "old finding".into(),
             kind: None,
             paths: vec![],
             head_oid: None,
@@ -693,7 +691,6 @@ fn findings_deduplicate_exact_open_records_and_preserve_terminal_recurrence() {
     let mut input = FindingAdd {
         repo_root: "/repo".into(),
         summary: "same finding".into(),
-        normalized_summary: "same finding".into(),
         kind: Some(FindingKind::Bug),
         paths: vec!["docs/a.md".into(), "src/a.rs".into()],
         head_oid: Some("head-one".into()),
@@ -746,7 +743,6 @@ fn current_turn_inherits_missing_sighting_ids_and_surfaces_duplicate_sightings_t
     let input = FindingAdd {
         repo_root: "/repo".into(),
         summary: "same finding".into(),
-        normalized_summary: "same finding".into(),
         kind: Some(FindingKind::Bug),
         paths: vec!["src/lib.rs".into()],
         head_oid: None,
@@ -786,7 +782,6 @@ fn explicit_sighting_turn_id_overrides_the_persisted_current_turn() {
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "different turn".into(),
-            normalized_summary: "different turn".into(),
             kind: None,
             paths: vec![],
             head_oid: None,
@@ -808,7 +803,6 @@ fn finding_creation_does_not_create_a_wait_wake_message() {
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "durable only".into(),
-            normalized_summary: "durable only".into(),
             kind: None,
             paths: vec![],
             head_oid: None,
@@ -831,7 +825,6 @@ fn finding_candidates_and_lifecycle_transitions_are_bounded_and_explicit() {
             .add_finding(&FindingAdd {
                 repo_root: "/repo".into(),
                 summary: format!("candidate {index}"),
-                normalized_summary: format!("candidate {index}"),
                 kind: None,
                 paths: vec!["src/shared.rs".into()],
                 head_oid: None,
@@ -846,7 +839,6 @@ fn finding_candidates_and_lifecycle_transitions_are_bounded_and_explicit() {
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "new report".into(),
-            normalized_summary: "new report".into(),
             kind: Some(FindingKind::Improvement),
             paths: vec!["src/shared.rs".into()],
             head_oid: None,
@@ -861,8 +853,8 @@ fn finding_candidates_and_lifecycle_transitions_are_bounded_and_explicit() {
         .connection
         .execute(
             "INSERT INTO triage_runs(
-                id, repo_root, runner_client, runner_session_id, started_at
-             ) VALUES ('run-one', '/repo', 'claude', 'author', 10.0)",
+                id, repo_root, origin, started_at
+             ) VALUES ('run-one', '/repo', 'author', 10.0)",
             [],
         )
         .unwrap();
@@ -909,7 +901,6 @@ fn resolving_an_already_terminal_finding_with_the_same_state_updates_its_evidenc
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "rebase-prone finding".into(),
-            normalized_summary: "rebase-prone finding".into(),
             kind: None,
             paths: vec![],
             head_oid: None,
@@ -975,7 +966,6 @@ fn re_resolving_the_same_state_without_a_commit_keeps_prior_evidence() {
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "commit-only rebase".into(),
-            normalized_summary: "commit-only rebase".into(),
             kind: None,
             paths: vec![],
             head_oid: None,
@@ -1028,7 +1018,6 @@ fn reopening_clears_commit_oid_before_a_fresh_resolution() {
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "reopen then resolve".into(),
-            normalized_summary: "reopen then resolve".into(),
             kind: None,
             paths: vec![],
             head_oid: None,
@@ -1081,7 +1070,6 @@ fn resolving_a_terminal_finding_with_a_different_state_requires_reopen_first() {
         .add_finding(&FindingAdd {
             repo_root: "/repo".into(),
             summary: "needs reopen".into(),
-            normalized_summary: "needs reopen".into(),
             kind: None,
             paths: vec![],
             head_oid: None,
@@ -1134,7 +1122,6 @@ fn resolving_a_terminal_duplicate_with_a_new_canonical_updates_it_and_still_reje
             .add_finding(&FindingAdd {
                 repo_root: "/repo".into(),
                 summary: summary.into(),
-                normalized_summary: summary.into(),
                 kind: None,
                 paths: vec![],
                 head_oid: None,

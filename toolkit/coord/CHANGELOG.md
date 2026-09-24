@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Break the internal ledger at schema v19 (reject v18 and every other nonzero version without migration) to drop the
+  redundant `findings.normalized_summary` column, which always equaled `summary` (exact-match deduplication now uses
+  `summary`), and the constant `triage_runs.runner_client` column, renaming `triage_runs.runner_session_id` to `origin`
+  for the stored triage origin it holds.
 - Keep a session whose own process liveness is indeterminate (no fingerprint, as for a CLI registration outside any
   agent or a parent row created by a late child hook) live and blocking until `done` or proven process death, instead of
   making every `start`/`wait` on the machine return `UNKNOWN coverage`; coverage still fails closed on provider or

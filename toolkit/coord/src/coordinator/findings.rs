@@ -36,7 +36,6 @@ impl Coordinator {
             .collect();
         self.store()?.add_finding(&FindingAdd {
             repo_root: path_text(&root)?,
-            normalized_summary: summary.clone(),
             summary,
             kind,
             paths,

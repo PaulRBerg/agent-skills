@@ -187,7 +187,6 @@ fn record_finding(coordinator: &Coordinator, repo: &Path, identity: &Identity, s
         .add_finding(&FindingAdd {
             repo_root: fs::canonicalize(repo).unwrap().to_string_lossy().into_owned(),
             summary: summary.into(),
-            normalized_summary: summary.into(),
             kind: None,
             paths: vec![],
             head_oid: None,

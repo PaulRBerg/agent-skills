@@ -177,7 +177,6 @@ pub(crate) struct MessageRow {
 pub(crate) struct FindingAdd {
     pub(crate) repo_root: String,
     pub(crate) summary: String,
-    pub(crate) normalized_summary: String,
     pub(crate) kind: Option<FindingKind>,
     pub(crate) paths: Vec<String>,
     pub(crate) head_oid: Option<String>,

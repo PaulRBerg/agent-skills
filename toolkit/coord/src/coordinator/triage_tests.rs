@@ -161,7 +161,6 @@ fn add_finding_at(
         .add_finding(&FindingAdd {
             repo_root: path_text(&repo).unwrap(),
             summary: summary.to_owned(),
-            normalized_summary: summary.to_owned(),
             kind: Some(kind),
             paths: vec![finding_path.to_owned()],
             head_oid: git_head_oid(&repo),

@@ -100,8 +100,8 @@ impl Store {
         self.immediate(|transaction| {
             let existing_ids = finding_ids(
                 transaction,
-                "repo_root = ?1 AND normalized_summary = ?2 AND state IN ('pending', 'handed-off')",
-                params![input.repo_root, input.normalized_summary],
+                "repo_root = ?1 AND summary = ?2 AND state IN ('pending', 'handed-off')",
+                params![input.repo_root, input.summary],
             )?;
             let mut exact_id = None;
             for id in existing_ids {
@@ -118,17 +118,10 @@ impl Store {
                 let id = new_id();
                 transaction.execute(
                     "INSERT INTO findings(
-                        id, repo_root, summary, normalized_summary, kind, state,
+                        id, repo_root, summary, kind, state,
                         created_at, updated_at
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?6)",
-                    params![
-                        id,
-                        input.repo_root,
-                        input.summary,
-                        input.normalized_summary,
-                        input.kind.map(finding_kind_name),
-                        input.current,
-                    ],
+                     ) VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?5)",
+                    params![id, input.repo_root, input.summary, input.kind.map(finding_kind_name), input.current,],
                 )?;
                 for path in &input.paths {
                     transaction
@@ -368,14 +361,13 @@ impl Store {
 }
 
 fn exact_open_peer(connection: &Connection, repo_root: &str, id: &str) -> Result<Option<String>> {
-    let normalized_summary: String =
-        connection.query_row("SELECT normalized_summary FROM findings WHERE id = ?1", [id], |row| row.get(0))?;
+    let summary: String = connection.query_row("SELECT summary FROM findings WHERE id = ?1", [id], |row| row.get(0))?;
     let paths = finding_paths(connection, id)?;
     let ids = finding_ids(
         connection,
-        "repo_root = ?1 AND id != ?2 AND normalized_summary = ?3
+        "repo_root = ?1 AND id != ?2 AND summary = ?3
          AND state IN ('pending', 'handed-off')",
-        params![repo_root, id, normalized_summary],
+        params![repo_root, id, summary],
     )?;
     for candidate_id in ids {
         if finding_paths(connection, &candidate_id)? == paths {
