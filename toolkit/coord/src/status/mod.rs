@@ -83,12 +83,15 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
         let machine_wide = snapshot.scope.kind == SnapshotScopeKindV2::Machine;
         let scope = if machine_wide { "machine-wide" } else { snapshot.scope.repo_root.as_deref().unwrap_or("") };
         lines.push(format!(
-            "Findings ({scope}): pending={}; triaging={}; handed-off={}. `ai-coord finding list` shows details.",
-            finding_counts.0, finding_counts.1, finding_counts.2
+            "Findings ({}): pending={}; triaging={}; handed-off={}. `ai-coord finding list` shows details.",
+            terminal_field(scope),
+            finding_counts.0,
+            finding_counts.1,
+            finding_counts.2
         ));
     }
     for handoff in &snapshot.handoffs {
-        lines.push(format!("Task handoffs ({}): {}.", handoff.repo_root, handoff.count));
+        lines.push(format!("Task handoffs ({}): {}.", terminal_field(&handoff.repo_root), handoff.count));
     }
 
     let states = snapshot.sessions.iter().map(|session| session.state).collect::<Vec<_>>();
@@ -460,6 +463,18 @@ mod tests {
         assert!(rendered.contains("waived-one\t/repo\twaived"));
         assert!(rendered.contains("waived-two\t/repo\twaived"));
         assert!(!rendered.contains("count=2"));
+    }
+
+    #[test]
+    fn rendering_sanitizes_repo_root_in_finding_and_handoff_lines() {
+        let mut snapshot = snapshot(vec![], vec![]);
+        snapshot.scope.repo_root = Some("/repo\u{1b}[2Jdirty".into());
+        snapshot.findings = vec![finding("pending-id", "summary", FindingState::Pending, false)];
+        snapshot.handoffs.push(crate::domain::SnapshotHandoffV4 { repo_root: "/repo\u{1b}[2Jdirty".into(), count: 1 });
+        let rendered = render_status_at(&snapshot, 100.0);
+        assert!(!rendered.contains('\u{1b}'));
+        assert!(rendered.contains("Findings (/repo [2Jdirty): pending=1"));
+        assert!(rendered.contains("Task handoffs (/repo [2Jdirty): 1."));
     }
 
     #[test]

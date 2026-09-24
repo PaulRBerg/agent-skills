@@ -1,4 +1,4 @@
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::{
     domain::{Client, Identity},
@@ -38,6 +38,15 @@ pub(crate) struct TriageRunStart {
 }
 
 impl Store {
+    /// Cheap read-only eligibility check usable before an expensive provider
+    /// probe, so a hook can skip scheduling as `ineligible` without paying for
+    /// full inventory discovery. `begin_triage_run` re-checks the same guards
+    /// atomically in its immediate transaction, since this snapshot can be
+    /// stale by the time it runs.
+    pub(crate) fn triage_precheck_eligible(&self, repo_root: &str, current: f64) -> Result<bool> {
+        triage_eligible(&self.connection, repo_root, current)
+    }
+
     /// Atomically re-check quiescence, cooldown, singleton state, and claim the
     /// oldest pending findings. An empty result means another caller won or an
     /// eligibility guard changed before this transaction acquired the lock.
@@ -48,35 +57,7 @@ impl Store {
         current: f64,
     ) -> Result<Option<TriageRunStart>> {
         self.immediate(|transaction| {
-            if transaction.query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM work_claims
-                    JOIN work_items ON work_items.id = work_claims.work_id
-                    WHERE work_claims.repo_root = ?1
-                 )",
-                [repo_root],
-                |row| row.get::<_, bool>(0),
-            )? {
-                return Ok(None);
-            }
-            if transaction.query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM triage_runs
-                    WHERE repo_root = ?1 AND finished_at IS NULL
-                 )",
-                [repo_root],
-                |row| row.get::<_, bool>(0),
-            )? {
-                return Ok(None);
-            }
-            if transaction.query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM triage_runs
-                    WHERE repo_root = ?1 AND started_at > ?2
-                 )",
-                params![repo_root, current - TRIAGE_COOLDOWN_SECONDS],
-                |row| row.get::<_, bool>(0),
-            )? {
+            if !triage_eligible(transaction, repo_root, current)? {
                 return Ok(None);
             }
 
@@ -233,6 +214,52 @@ impl Store {
         )?;
         Ok(statement.query_map([run_id], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?)
     }
+}
+
+/// Shared cheap-SQL eligibility guard: no active or queued work in the
+/// repository, no open triage run, the cooldown has elapsed, and at least one
+/// unclaimed pending finding exists.
+fn triage_eligible(connection: &Connection, repo_root: &str, current: f64) -> Result<bool> {
+    if connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM work_claims
+            JOIN work_items ON work_items.id = work_claims.work_id
+            WHERE work_claims.repo_root = ?1
+         )",
+        [repo_root],
+        |row| row.get::<_, bool>(0),
+    )? {
+        return Ok(false);
+    }
+    if connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM triage_runs
+            WHERE repo_root = ?1 AND finished_at IS NULL
+         )",
+        [repo_root],
+        |row| row.get::<_, bool>(0),
+    )? {
+        return Ok(false);
+    }
+    if connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM triage_runs
+            WHERE repo_root = ?1 AND started_at > ?2
+         )",
+        params![repo_root, current - TRIAGE_COOLDOWN_SECONDS],
+        |row| row.get::<_, bool>(0),
+    )? {
+        return Ok(false);
+    }
+    Ok(connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM findings f
+            LEFT JOIN finding_claims c ON c.finding_id = f.id
+            WHERE f.repo_root = ?1 AND f.state = 'pending' AND c.finding_id IS NULL
+         )",
+        [repo_root],
+        |row| row.get::<_, bool>(0),
+    )?)
 }
 
 fn run_is_open(transaction: &Transaction<'_>, run_id: &str) -> Result<bool> {

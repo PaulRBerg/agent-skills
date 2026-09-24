@@ -201,6 +201,30 @@ fn incomplete_coverage_does_not_create_or_launch_a_run() {
 }
 
 #[test]
+fn ineligible_repository_never_reaches_the_inventory_refresh() {
+    let repo = repository(true);
+    let state = repo.path().join("state");
+    let store = Store::open(state.join("state.db")).unwrap();
+    let refreshes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(StaticInventory { complete: true, refreshes: refreshes.clone() }),
+        std::sync::Arc::new(NativeProcessProbe::new()),
+        std::sync::Arc::new(FakeClock(100.0)),
+    );
+    let origin = Identity { client: Client::Codex, session_id: "origin".to_owned() };
+    // No finding was ever recorded, so the cheap SQL precheck rules this
+    // repository out before the expensive provider probe would otherwise run.
+    let launcher = FakeLauncher::default();
+    assert_eq!(
+        coordinator.schedule_findings_triage_for(repo.path(), &origin, &launcher).unwrap(),
+        TriageSchedule::Skipped("ineligible")
+    );
+    assert_eq!(refreshes.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(launcher.specs.lock().unwrap().is_empty());
+}
+
+#[test]
 fn launch_failure_writes_the_specific_reconcile_detail() {
     let repo = repository(true);
     let (coordinator, origin) = fixture(repo.path(), 100.0);

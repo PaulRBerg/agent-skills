@@ -271,6 +271,14 @@ impl Store {
                     finding_state_name(finding.state)
                 )));
             }
+            // A same-state re-resolution updates evidence in place; a missing
+            // `--commit` keeps the previously recorded OID instead of erasing it.
+            let is_re_resolution = finding.state == resolution.state;
+            let commit_oid = if is_re_resolution {
+                resolution.commit_oid.clone().or_else(|| finding.commit_oid.clone())
+            } else {
+                resolution.commit_oid.clone()
+            };
             match (resolution.state, resolution.canonical_id.as_deref()) {
                 (FindingState::Duplicate, Some(canonical_id)) => {
                     if canonical_id == id {
@@ -295,7 +303,7 @@ impl Store {
                 params![
                     finding_state_name(resolution.state),
                     resolution.current,
-                    resolution.commit_oid.as_deref(),
+                    commit_oid.as_deref(),
                     resolution.canonical_id.as_deref(),
                     id
                 ],
@@ -308,7 +316,7 @@ impl Store {
                 resolution.state,
                 &resolution.actor,
                 None,
-                resolution.commit_oid.as_deref(),
+                commit_oid.as_deref(),
                 resolution.canonical_id.as_deref(),
                 resolution.current,
             )?;

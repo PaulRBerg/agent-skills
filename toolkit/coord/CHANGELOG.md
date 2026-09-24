@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fix `finding resolve` re-resolving an already-terminal finding to the same state without `--commit` clearing the
+  stored `commit_oid` to null; it now keeps the existing evidence when a fresh `--commit` is not supplied, matching
+  the documented in-place evidence update. `reopen` still clears `commit_oid` so a later fresh resolution never
+  inherits stale evidence.
+- Sanitize `repo_root` in status's `Findings (…)` and `Task handoffs (…)` summary lines like every other terminal
+  field, so a repository path containing control characters can no longer corrupt the plain-text output.
+- Apply the private `0600` file mode to a freshly created `state.db` before schema initialization and WAL enablement
+  instead of after, since SQLite creates the `-wal`/`-shm` sidecar files with the main database file's mode and could
+  previously create them with a wider default mode.
+- Skip scheduling detached finding triage as `ineligible` using a cheap SQL precheck (active/queued work, an open run,
+  the 24-hour cooldown, unclaimed pending findings) before probing provider coverage, so Stop/SessionEnd/`done` hooks
+  no longer pay for a multi-second inventory refresh — which can spawn `codex app-server` — on an already-ineligible
+  repository; `begin_triage_run` still re-checks the same guards atomically.
+
 - Reject `ai-coord serve` requests whose `Host` header does not name `localhost`, `127.0.0.1`, or `[::1]` with 403, and
   a missing or unparseable `Host` with 400, closing a DNS-rebinding path to the local dashboard API; the Vite and Bun
   dashboard proxies are unaffected.

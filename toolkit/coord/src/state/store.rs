@@ -37,6 +37,10 @@ impl Store {
         create_directory(parent)?;
 
         let mut connection = Connection::open(&path)?;
+        // SQLite creates -wal/-shm with the main database file's mode, so the
+        // private mode must be applied before schema init and WAL enablement
+        // can create them.
+        set_private_file_permissions(&path)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
         connection.busy_timeout(Duration::from_secs(5))?;
         schema::initialize(&mut connection, &path)?;
@@ -45,7 +49,6 @@ impl Store {
         enable_wal(&connection)?;
         connection.busy_timeout(Duration::from_secs(5))?;
         connection.pragma_update(None, "synchronous", "NORMAL")?;
-        set_private_file_permissions(&path)?;
 
         Ok(Self { connection, path })
     }

@@ -230,6 +230,36 @@ fn opening_store_does_not_change_an_existing_shared_directory() {
     assert_eq!(database.metadata().unwrap().permissions().mode() & 0o777, 0o600);
 }
 
+#[cfg(unix)]
+#[test]
+fn freshly_opened_store_sidecar_wal_and_shm_files_are_private() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+
+    let temporary = tempdir().unwrap();
+    let path = temporary.path().join("state.db");
+    let store = Store::open(&path).unwrap();
+    // A read query is enough to force SQLite to attach the WAL shared-memory
+    // file alongside the already-created -wal file.
+    store
+        .connection
+        .query_row("SELECT value FROM metadata WHERE key = 'generation'", [], |row| row.get::<_, i64>(0))
+        .unwrap();
+
+    for suffix in ["", "-wal", "-shm"] {
+        let sidecar = temporary.path().join(format!("state.db{suffix}"));
+        let Ok(metadata) = fs::metadata(&sidecar) else {
+            continue;
+        };
+        assert_eq!(
+            metadata.permissions().mode() & 0o777,
+            0o600,
+            "{} is not private (mode {:04o})",
+            sidecar.display(),
+            metadata.permissions().mode() & 0o777
+        );
+    }
+}
+
 #[test]
 fn incompatible_schema_is_rejected_without_schema_or_journal_mutation() {
     let temporary = tempdir().unwrap();
@@ -931,6 +961,112 @@ fn resolving_an_already_terminal_finding_with_the_same_state_updates_its_evidenc
 }
 
 #[test]
+fn re_resolving_the_same_state_without_a_commit_keeps_prior_evidence() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Claude, "author");
+    let added = store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "commit-only rebase".into(),
+            normalized_summary: "commit-only rebase".into(),
+            kind: None,
+            paths: vec![],
+            head_oid: None,
+            observations: vec![],
+            author: author.clone(),
+            turn_id: None,
+            current: 1.0,
+        })
+        .unwrap()
+        .finding;
+    let first = store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: Some("abcdef0".into()),
+                canonical_id: None,
+                actor: author.clone(),
+                current: 2.0,
+            },
+        )
+        .unwrap();
+    assert_eq!(first.commit_oid, Some("abcdef0".into()));
+
+    let updated = store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: None,
+                canonical_id: None,
+                actor: author.clone(),
+                current: 3.0,
+            },
+        )
+        .unwrap();
+    assert_eq!(updated.state, FindingState::Fixed);
+    assert_eq!(updated.commit_oid, Some("abcdef0".into()), "same-state re-resolution must not erase prior evidence");
+    assert_eq!(updated.updated_at, 3.0);
+}
+
+#[test]
+fn reopening_clears_commit_oid_before_a_fresh_resolution() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let author = identity(Client::Claude, "author");
+    let added = store
+        .add_finding(&FindingAdd {
+            repo_root: "/repo".into(),
+            summary: "reopen then resolve".into(),
+            normalized_summary: "reopen then resolve".into(),
+            kind: None,
+            paths: vec![],
+            head_oid: None,
+            observations: vec![],
+            author: author.clone(),
+            turn_id: None,
+            current: 1.0,
+        })
+        .unwrap()
+        .finding;
+    store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: Some("abcdef0".into()),
+                canonical_id: None,
+                actor: author.clone(),
+                current: 2.0,
+            },
+        )
+        .unwrap();
+
+    let reopened = store.reopen_finding("/repo", &added.id, &author, 3.0).unwrap();
+    assert_eq!(reopened.commit_oid, None);
+
+    let fresh = store
+        .resolve_finding(
+            "/repo",
+            &added.id,
+            &FindingResolution {
+                state: FindingState::Fixed,
+                commit_oid: None,
+                canonical_id: None,
+                actor: author.clone(),
+                current: 4.0,
+            },
+        )
+        .unwrap();
+    assert_eq!(fresh.commit_oid, None, "a fresh resolution after reopen must not leak prior evidence");
+}
+
+#[test]
 fn resolving_a_terminal_finding_with_a_different_state_requires_reopen_first() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
@@ -1342,46 +1478,48 @@ fn work_schema_constraints_and_cascades_are_enforced() {
     let owner = identity(Client::Codex, "owner");
     store.upsert_session(&session_update(&owner, 0.0)).unwrap();
 
-    assert!(
-        store
-            .connection
-            .execute(
-                "INSERT INTO work_items(
-                    client, session_id, label, state, blocked_reason,
-                    draft_created_at, submitted_at, updated_at, revision
-                 ) VALUES ('codex', 'missing', 'bad', 'draft', NULL, 1, NULL, 1, 1)",
-                [],
-            )
-            .is_err()
-    );
-    assert!(
-        store
-            .connection
-            .execute(
-                "INSERT INTO work_items(
-                    client, session_id, label, state, blocked_reason,
-                    draft_created_at, submitted_at, updated_at, revision
-                 ) VALUES ('codex', 'owner', 'bad', 'draft', NULL, NULL, 1, 1, 1)",
-                [],
-            )
-            .is_err()
-    );
+    // No matching row in `sessions` for `codex/missing`: FOREIGN KEY.
+    let missing_session = store
+        .connection
+        .execute(
+            "INSERT INTO work_items(
+                client, session_id, label, state, blocked_reason,
+                submitted_at, updated_at, revision
+             ) VALUES ('codex', 'missing', 'bad', 'active', NULL, 1, 1, 1)",
+            [],
+        )
+        .unwrap_err();
+    assert!(missing_session.to_string().contains("FOREIGN KEY constraint failed"), "{missing_session}");
+
+    // 'draft' is not a valid work state: CHECK.
+    let invalid_state = store
+        .connection
+        .execute(
+            "INSERT INTO work_items(
+                client, session_id, label, state, blocked_reason,
+                submitted_at, updated_at, revision
+             ) VALUES ('codex', 'owner', 'bad', 'draft', NULL, 1, 1, 1)",
+            [],
+        )
+        .unwrap_err();
+    assert!(invalid_state.to_string().contains("CHECK constraint failed"), "{invalid_state}");
 
     save_work(&mut store, &work_update(&owner)).unwrap();
     let work = store.work(&owner).unwrap().unwrap();
     let claim_id = work.claim("/repo").unwrap().id;
-    assert!(
-        store
-            .connection
-            .execute(
-                "INSERT INTO work_items(
-                    client, session_id, label, state, blocked_reason,
-                    draft_created_at, submitted_at, updated_at, revision
-                 ) VALUES ('codex', 'owner', 'duplicate', 'draft', NULL, 2, NULL, 2, 1)",
-                [],
-            )
-            .is_err()
-    );
+
+    // `codex/owner` already has a work item: UNIQUE(client, session_id).
+    let duplicate_owner = store
+        .connection
+        .execute(
+            "INSERT INTO work_items(
+                client, session_id, label, state, blocked_reason,
+                submitted_at, updated_at, revision
+             ) VALUES ('codex', 'owner', 'duplicate', 'active', NULL, 2, 2, 1)",
+            [],
+        )
+        .unwrap_err();
+    assert!(duplicate_owner.to_string().contains("UNIQUE constraint failed"), "{duplicate_owner}");
     assert!(
         store
             .connection

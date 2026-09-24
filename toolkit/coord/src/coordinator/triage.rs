@@ -166,12 +166,20 @@ impl Coordinator {
         prune_run_logs(&run_root, now)?;
         self.reconcile_inactive_runs(&root, &run_root, now)?;
 
+        let repo_root = path_text(&root)?;
         let mut store = self.store()?;
         store.release_orphaned_claims(now)?;
+        // Cheap SQL precheck before the potentially multi-second provider probe
+        // (which can spawn `codex app-server`): skip early when active/queued
+        // work, an open run, the cooldown, or no unclaimed pending findings
+        // already rule out a run. `begin_triage_run` re-checks atomically below.
+        if !store.triage_precheck_eligible(&repo_root, now)? {
+            return Ok(TriageSchedule::Skipped("ineligible"));
+        }
         if !self.refresh_inventory(&mut store, false)?.complete {
             return Ok(TriageSchedule::Skipped("coverage"));
         }
-        let Some(start) = store.begin_triage_run(&path_text(&root)?, origin, now)? else {
+        let Some(start) = store.begin_triage_run(&repo_root, origin, now)? else {
             return Ok(TriageSchedule::Skipped("ineligible"));
         };
         let run_dir = run_root.join(&start.run.id);
@@ -186,7 +194,7 @@ impl Coordinator {
         };
         let mut metadata = RunMetadata {
             run_id: start.run.id.clone(),
-            repo_root: path_text(&root)?,
+            repo_root: repo_root.clone(),
             state_dir: path_text(&state_dir)?,
             start_head,
             worktree_path: None,
