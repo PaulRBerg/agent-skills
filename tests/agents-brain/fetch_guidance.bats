@@ -63,8 +63,8 @@ case "$source_url" in
     effective_url='https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra.md'
     artifact_kind=gpt
     ;;
-  *prompting-claude-fable-5-1.md)
-    effective_url='https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1.md'
+  *prompting-claude-opus-5-5.md)
+    effective_url='https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5.md'
     artifact_kind=claude
     ;;
   *)
@@ -86,7 +86,7 @@ write_body() {
     } >"$output_file"
   else
     {
-      printf '%s\n' '---' 'title: Prompting Claude Fable 5.1' '---' "version=$version"
+      printf '%s\n' '---' 'title: Prompting Claude Opus 5.5' '---' "version=$version"
       index=0
       while [ "$index" -lt 80 ]; do
         printf 'Claude prompting fixture padding line %s.\n' "$index"
@@ -252,19 +252,19 @@ age_cache() {
 }
 
 @test 'supports the fixed Claude guide and refreshes it without validators' {
-  run "$helper" claude-fable-5-1
+  run "$helper" claude-opus-5-5
   [ "$status" -eq 0 ]
-  [[ "$output" == *'fetched claude-fable-5-1'* ]]
-  grep -Fq 'title: Prompting Claude Fable 5.1' "$cache_dir/claude-fable-5-1-prompting.md"
+  [[ "$output" == *'fetched claude-opus-5-5'* ]]
+  grep -Fq 'title: Prompting Claude Opus 5.5' "$cache_dir/claude-opus-5-5-prompting.md"
 
-  run "$helper" claude-fable-5-1
+  run "$helper" claude-opus-5-5
   [ "$status" -eq 0 ]
-  [[ "$output" == *'cached claude-fable-5-1 last validated at'* ]]
-  age_cache claude-fable-5-1 86401
+  [[ "$output" == *'cached claude-opus-5-5 last validated at'* ]]
+  age_cache claude-opus-5-5 86401
 
-  run "$helper" claude-fable-5-1
+  run "$helper" claude-opus-5-5
   [ "$status" -eq 0 ]
-  [[ "$output" == *'fetched claude-fable-5-1'* ]]
+  [[ "$output" == *'fetched claude-opus-5-5'* ]]
   [ "$(cat "$fake_state/count")" -eq 2 ]
   run grep -Fq 'If-' "$fake_state/requests"
   [ "$status" -eq 1 ]

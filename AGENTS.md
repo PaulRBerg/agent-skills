@@ -5,16 +5,17 @@ human-facing; put maintainer and agent guidance here.
 
 ## Model Optimization
 
-Optimize every skill and other agent-facing content for GPT-6 Astra and Claude Fable 5.1. The summaries below are
+Optimize every skill and other agent-facing content for GPT-6 Astra and Claude Opus 5.5. The summaries below are
 reminders, not substitutes for the live guides. Read both guides before complex, long-running, multi-tool, or
 orchestration-heavy work because their recommendations may evolve.
 
 - [GPT-6 Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra#prompting-best-practices):
   Complete authorized work under stated assumptions; make user-instruction precedence over skills explicit; specify
   writing and delegation preferences; and keep verification proportional to the change.
-- [Claude Fable 5.1 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1):
-  Calibrate effort with evals; request progress updates; batch independent tool calls; preserve decisions across
-  compaction; verify changing facts; and finish the requested scope with targeted edits and proportionate tests.
+- [Claude Opus 5.5 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5):
+  Calibrate effort instead of prompting for more thinking; never ask for reasoning in response text; name the premature
+  stops to avoid and the stops that are wanted; treat text-only turns as reports, not completion; request brief progress
+  updates; explore relevant sources before acting; and name concrete patterns to avoid instead of generic style advice.
 
 ## User-Facing Communication
 

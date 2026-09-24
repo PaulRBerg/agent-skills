@@ -2,7 +2,7 @@
 argument-hint:
   <polish|create> [path] [target ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run] [--force]
 compatibility:
-  Requires curl and a writable user cache directory; network populates or refreshes the GPT-6 Astra and Claude Fable 5.1
+  Requires curl and a writable user cache directory; network populates or refreshes the GPT-6 Astra and Claude Opus 5.5
   prompting guides.
 name: agents-brain
 skill-dependencies:
@@ -29,13 +29,13 @@ reporting completed or planned changes, validation, and any blockers.
 
 ## Model and Context Optimization
 
-Optimize skills and other agent-facing context for GPT-6 Astra and Claude Fable 5.1 while preserving README.md as clear
+Optimize skills and other agent-facing context for GPT-6 Astra and Claude Opus 5.5 while preserving README.md as clear
 human-facing documentation. Before complex, long-running, multi-tool, or orchestration-heavy context work, resolve
 `scripts/fetch-guidance.sh` relative to this skill directory, run it once for `gpt-6-astra` and once for
-`claude-fable-5-1`, and read both returned files completely. The helper retrieves the official
+`claude-opus-5-5`, and read both returned files completely. The helper retrieves the official
 [GPT-6 Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra#prompting-best-practices)
 and
-[Claude Fable 5.1 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1)
+[Claude Opus 5.5 prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5)
 because their recommendations may evolve. Simple context work does not require either guide.
 
 Accept an integrity-valid `cached` guide for 24 hours. Use `--refresh` for explicitly latest or change-sensitive work,
