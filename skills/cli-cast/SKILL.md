@@ -73,6 +73,10 @@ require a separate policy-exception approval. Record its source, transaction typ
 the transaction review. Apply the selected policy to every signer and do not silently substitute a different tier or
 transaction type. Do not reuse Ethereum fee values on another chain.
 
+Elsewhere, absent a selected policy, set an EIP-1559 max fee with headroom over the latest base fee, such as
+`2 * baseFee + priorityFee`, instead of passing `eth_gasPrice` as the cap. The charge stays base fee plus tip, while an
+exact cap can fall below the base fee before signing and force a revised review.
+
 #### Chain-specific gas accounting
 
 Resolve the chain's active fee model before choosing a transaction type or subtracting fees from a balance. Use current

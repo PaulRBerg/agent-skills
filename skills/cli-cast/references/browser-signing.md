@@ -156,3 +156,13 @@ or changed payload requires a new review and signature. Never silently reuse or 
 On a port conflict, missing browser, rejected wallet request, timeout, chain mismatch, or account mismatch, stop and
 report the failure. Do not silently fall back to a private key or retry a broadcast. If the user selects another signer,
 update the transaction review when the sender or command changes.
+
+Classify each failure before retrying:
+
+- `Wallet connection timeout` before `Wallet connected`, or `ChainSwitch rejected`: nothing was signed. Confirm the
+  sender nonce is unchanged, then retry the same reviewed command.
+- A signed request rejected by an RPC for another chain, such as `nonce too low` with a different chain ID or `minNonce`
+  in the error: the wallet's network state is inconsistent. The printed hash was signed; look it up on the reviewed
+  chain and confirm the nonce is unchanged. Ask the user to reset the `localhost:9545` site network in the wallet before
+  retrying.
+- Each command switches the wallet to its chain. Sending first on the already connected chain avoids a switch prompt.
