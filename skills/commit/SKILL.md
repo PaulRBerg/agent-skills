@@ -1,5 +1,6 @@
 ---
-argument-hint: "[--all] [--staged] [--natural] [--push] [--close <issue_numbers>] [--finding <finding_ids>]"
+argument-hint:
+  "[--all] [--staged] [--natural] [--conventional] [--push] [--close <issue_numbers>] [--finding <finding_ids>]"
 compatibility: Requires Git and ai-commit with automatic ai-coord stale-dirt baseline discovery on PATH.
 effort: medium
 name: commit
