@@ -37,7 +37,7 @@ case "$artifact" in
   gpt-6-astra)
     source_url='https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra.md'
     body_name='gpt-6-astra-prompting.md'
-    content_marker='# Using GPT-6 Astra'
+    content_marker='model: gpt-6-astra'
     ;;
   claude-fable-5-1)
     source_url='https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1.md'

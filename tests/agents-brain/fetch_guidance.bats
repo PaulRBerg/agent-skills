@@ -77,7 +77,7 @@ write_body() {
   version=$1
   if [ "$artifact_kind" = gpt ]; then
     {
-      printf '%s\n' '# Using GPT-6 Astra' "version=$version"
+      printf '%s\n' '---' 'latestModelInfo:' '  model: gpt-6-astra' '---' '# Using GPT-6' "version=$version"
       index=0
       while [ "$index" -lt 80 ]; do
         printf 'GPT prompting fixture padding line %s.\n' "$index"
