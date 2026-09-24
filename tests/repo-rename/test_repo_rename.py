@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -16,7 +17,7 @@ SCRIPT = REPO_ROOT / "skills" / "repo-rename" / "scripts" / "repo-rename.py"
 
 class RepoRenameTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(prefix="repo.rename_")
         self.root = Path(self.temp.name)
         self.repo = self.root / "old-repo"
         self.repo.mkdir()
@@ -151,13 +152,13 @@ class RepoRenameTests(unittest.TestCase):
         claude = self.root / "custom-claude"
         self.env["CLAUDE_CONFIG_DIR"] = str(claude)
         old_path = str(self.repo.resolve())
-        project = claude / "projects" / old_path.replace("/", "-")
+        project = claude / "projects" / re.sub(r"[^A-Za-z0-9]", "-", old_path)
         project.mkdir(parents=True)
         (project / "session.jsonl").write_text(json.dumps({"cwd": old_path}), encoding="utf-8")
         result = self.run_script("new-repo", "--apply", "--confirm", "owner/old-repo->owner/new-repo")
         self.assertEqual(result.returncode, 0, result.stderr)
         new_path = str((self.root / "new-repo").resolve())
-        moved = claude / "projects" / new_path.replace("/", "-")
+        moved = claude / "projects" / re.sub(r"[^A-Za-z0-9]", "-", new_path)
         self.assertFalse(project.exists())
         self.assertEqual(json.loads((moved / "session.jsonl").read_text())["cwd"], new_path)
 

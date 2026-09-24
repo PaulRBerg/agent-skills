@@ -34,7 +34,7 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 
 1. Check whether the repository has any active AI chat transcript before treating continuity preservation as in scope:
    - Claude Code: resolve `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-repo-path>` (the absolute repo path with
-     each `/` and `.` replaced by `-`) and check it exists and is non-empty.
+     every non-alphanumeric character replaced by `-`) and check it exists and is non-empty.
    - Codex: resolve `${CODEX_HOME:-~/.codex}/sessions` and check whether any session file references the exact absolute
      repo path.
    - If neither exists, state that the transcript-continuity update does not apply; the rename may still proceed for the

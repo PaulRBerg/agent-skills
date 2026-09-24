@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,10 @@ class Replacement:
     path: Path
     pairs: tuple[tuple[bytes, bytes], ...]
     occurrences: int
+
+
+def claude_project_name(root: Path) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "-", str(root))
 
 
 def run(*args: str, cwd: Path | None = None) -> str:
@@ -87,7 +92,7 @@ def collect_replacements(
         if occurrences:
             replacements.append(Replacement(path, path_pair, occurrences))
 
-    project = claude_projects / str(old_root).replace("/", "-")
+    project = claude_projects / claude_project_name(old_root)
     claude_active = project.is_dir() and next(project.iterdir(), None) is not None
     if claude_active or replacements:
         candidates = set()
@@ -135,8 +140,8 @@ def preflight(new_name: str, *, include_local_state: bool = False) -> dict[str, 
         new_remote = f"git@github.com:{owner}/{new_name}.git"
 
     claude_projects, _ = continuity_paths()
-    old_claude = claude_projects / str(old_root).replace("/", "-")
-    new_claude = claude_projects / str(new_root).replace("/", "-")
+    old_claude = claude_projects / claude_project_name(old_root)
+    new_claude = claude_projects / claude_project_name(new_root)
     if old_claude.exists() and new_claude.exists():
         raise RenameError(f"target Claude project directory exists: {new_claude}")
 
