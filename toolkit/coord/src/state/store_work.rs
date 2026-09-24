@@ -316,24 +316,6 @@ fn save_work(transaction: &Transaction<'_>, update: &WorkUpdate) -> Result<i64> 
             transaction.execute("DELETE FROM work_baselines WHERE claim_id = ?1", [claim_id])?;
             insert_baselines(transaction, claim_id, baselines)?;
         }
-        for path in &claim.residual_paths {
-            transaction.execute(
-                "INSERT INTO residual_owners(
-                    repo_root, path, client, session_id, released_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT(repo_root, path) DO UPDATE SET
-                    client = excluded.client,
-                    session_id = excluded.session_id,
-                    released_at = excluded.released_at",
-                params![
-                    claim.repo_root,
-                    path,
-                    client_name(update.identity.client),
-                    update.identity.session_id,
-                    update.updated_at,
-                ],
-            )?;
-        }
     }
     for claim_id in retained.into_values() {
         transaction.execute("DELETE FROM work_claims WHERE id = ?1", [claim_id])?;
@@ -366,8 +348,6 @@ fn normalized_claims(claims: &[WorkClaimUpdate]) -> Result<Vec<WorkClaimUpdate>>
                 return Err(AppError::usage(format!("duplicate baseline path in {}", claim.repo_root)));
             }
         }
-        claim.residual_paths.sort();
-        claim.residual_paths.dedup();
     }
     claims.sort_by(|left, right| left.repo_root.cmp(&right.repo_root));
     if claims.windows(2).any(|pair| pair[0].repo_root == pair[1].repo_root) {

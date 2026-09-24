@@ -51,7 +51,6 @@ fn work_update(identity: &Identity) -> WorkUpdate {
             blocked_reason: None,
             scopes: vec![Scope { path: "src/state".to_owned(), kind: ScopeKind::Recursive }],
             baselines: Some(vec![BaselineRow { path: "src/state/mod.rs".to_owned(), oid: "old-oid".to_owned() }]),
-            residual_paths: Vec::new(),
         }],
         submitted_at: Some(1.0),
         updated_at: 1.0,
@@ -65,7 +64,6 @@ fn work_claim(repo_root: &str, path: &str, oid: &str) -> WorkClaimUpdate {
         blocked_reason: None,
         scopes: vec![Scope { path: path.to_owned(), kind: ScopeKind::Exact }],
         baselines: Some(vec![BaselineRow { path: path.to_owned(), oid: oid.to_owned() }]),
-        residual_paths: Vec::new(),
     }
 }
 
@@ -1232,9 +1230,14 @@ fn one_work_retains_stable_repository_claims_and_isolates_children() {
     let mut update = work_update(&owner);
     update.claims = vec![work_claim("/repo-b", "src/b.rs", "b-old"), work_claim("/repo-a", "src/a.rs", "a-old")];
     update.claims[0].blocked_reason = Some("waiting for repo b".to_owned());
-    update.claims[0].residual_paths = vec!["src/b.rs".to_owned()];
     update.claims[1].scopes.push(Scope { path: "README.md".to_owned(), kind: ScopeKind::Exact });
     let work_id = save_work(&mut store, &update).unwrap();
+    // Residual ownership is recorded through the production API, independent of `save_work`.
+    store
+        .with_work_transaction(|transaction| {
+            transaction.record_residual_owners("/repo-b", &["src/b.rs".to_owned()], &owner, 1.0)
+        })
+        .unwrap();
     let original = store.work(&owner).unwrap().unwrap();
 
     assert_eq!(original.id, work_id);
@@ -1301,8 +1304,13 @@ fn work_save_is_atomic_and_cas_rollback_preserves_all_claims() {
     invalid.claims[0].scopes = vec![Scope { path: "replacement.rs".to_owned(), kind: ScopeKind::Exact }];
     invalid.claims[0].baselines =
         Some(vec![BaselineRow { path: "replacement.rs".to_owned(), oid: "replacement".to_owned() }]);
-    invalid.claims[0].residual_paths = vec!["not-observed.rs".to_owned()];
-    assert!(save_work(&mut store, &invalid).is_err());
+    // An unobserved residual path violates residual_owners' FK to dirt_observations in the
+    // same transaction, so the otherwise-valid claim update must roll back with it.
+    let result = store.with_work_transaction(|transaction| {
+        transaction.save_work(&invalid)?;
+        transaction.record_residual_owners("/repo", &["not-observed.rs".to_owned()], &owner, 2.0)
+    });
+    assert!(result.is_err());
     assert_eq!(store.work(&owner).unwrap().unwrap(), before);
     assert_eq!(store.baselines_in_repo(&owner, "/repo").unwrap(), baselines_before);
     assert_eq!(store.generation().unwrap(), generation);

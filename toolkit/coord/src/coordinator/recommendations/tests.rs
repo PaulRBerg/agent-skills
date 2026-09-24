@@ -131,13 +131,7 @@ fn scope(path: &str, recursive: bool) -> Scope {
 }
 
 fn claim(root: &Path, scopes: Vec<Scope>) -> WorkClaimUpdate {
-    WorkClaimUpdate {
-        repo_root: root.to_string_lossy().into_owned(),
-        blocked_reason: None,
-        scopes,
-        baselines: None,
-        residual_paths: Vec::new(),
-    }
+    WorkClaimUpdate { repo_root: root.to_string_lossy().into_owned(), blocked_reason: None, scopes, baselines: None }
 }
 
 fn register(store: &mut Store, identity: &Identity, root: &Path, pid: u32, state: SessionState) {
@@ -201,7 +195,6 @@ fn send_preserves_long_normalized_evidence_bundle_context_and_ownership() {
                 blocked_reason: claim.blocked_reason.clone(),
                 scopes: claim.scopes.clone(),
                 baselines: None,
-                residual_paths: Vec::new(),
             })
             .collect::<Vec<_>>();
         if owner == &fixture.recipient {

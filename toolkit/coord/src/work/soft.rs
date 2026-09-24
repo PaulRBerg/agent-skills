@@ -111,7 +111,6 @@ fn yield_untouched_scopes(
                 blocked_reason: claim.blocked_reason.clone(),
                 scopes: claim.scopes.clone(),
                 baselines: None,
-                residual_paths: Vec::new(),
             });
             continue;
         };
@@ -133,7 +132,6 @@ fn yield_untouched_scopes(
             blocked_reason: claim.blocked_reason.clone(),
             scopes: remaining,
             baselines: Some(baselines),
-            residual_paths: Vec::new(),
         });
     }
     if claims.is_empty() {
@@ -358,7 +356,6 @@ mod tests {
                         blocked_reason: None,
                         scopes: owned.clone(),
                         baselines: None,
-                        residual_paths: Vec::new(),
                     }],
                     submitted_at: Some(1.0),
                     updated_at: 1.0,

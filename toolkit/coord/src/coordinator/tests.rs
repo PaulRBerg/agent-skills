@@ -109,7 +109,6 @@ impl ProviderInventory for MutatingInventory {
                                 blocked_reason: Some("coverage".to_owned()),
                                 scopes: vec![Scope { path: path.clone(), kind: ScopeKind::Exact }],
                                 baselines: None,
-                                residual_paths: Vec::new(),
                             }],
                             submitted_at: Some(*submitted_at),
                             updated_at: 200.0,
@@ -134,7 +133,6 @@ impl ProviderInventory for MutatingInventory {
                                     blocked_reason: claim.blocked_reason.clone(),
                                     scopes: claim.scopes.clone(),
                                     baselines: None,
-                                    residual_paths: Vec::new(),
                                 })
                                 .collect(),
                             submitted_at: current.submitted_at,
@@ -1486,7 +1484,6 @@ fn yielded_claim_drops_baselines_beneath_the_yielded_scope() {
                     blocked_reason: None,
                     scopes: work.claims[0].scopes.clone(),
                     baselines: Some(vec![baseline("docs/guide.md"), baseline("src/lib.rs")]),
-                    residual_paths: Vec::new(),
                 }],
                 submitted_at: work.submitted_at,
                 updated_at: work.updated_at,

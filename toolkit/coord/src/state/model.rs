@@ -93,7 +93,6 @@ pub(crate) struct WorkClaimUpdate {
     pub(crate) scopes: Vec<Scope>,
     /// `None` preserves retained claim baselines; `Some` replaces all of them.
     pub(crate) baselines: Option<Vec<BaselineRow>>,
-    pub(crate) residual_paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

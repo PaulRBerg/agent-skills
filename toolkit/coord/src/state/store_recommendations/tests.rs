@@ -97,7 +97,6 @@ fn work_update(identity: &Identity) -> WorkUpdate {
             blocked_reason: Some("holder".to_owned()),
             scopes: vec![scope("src", ScopeKind::Recursive)],
             baselines: Some(vec![BaselineRow { path: "src/legacy.rs".to_owned(), oid: "old-oid".to_owned() }]),
-            residual_paths: vec![],
         }],
         submitted_at: Some(1.0),
         updated_at: 1.0,
@@ -181,7 +180,6 @@ fn material_changes_at_either_endpoint_stale_pending_including_other_bundle_clai
                         blocked_reason: None,
                         scopes: vec![scope("other", ScopeKind::Exact)],
                         baselines: None,
-                        residual_paths: vec![],
                     });
                 }
             });
@@ -706,7 +704,6 @@ fn complete_sorted_snapshots_ignore_claim_ids_and_keep_other_work_data_unchanged
             blocked_reason: Some("unrelated".to_owned()),
             scopes: vec![scope("z", ScopeKind::Exact), scope("a", ScopeKind::Recursive)],
             baselines: None,
-            residual_paths: vec![],
         });
     });
     let before = fixture.store.works().unwrap();

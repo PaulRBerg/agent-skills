@@ -258,7 +258,6 @@ impl WorkCoordinator<'_> {
                                 blocked_reason: None,
                                 scopes: claim.scopes.clone(),
                                 baselines: None,
-                                residual_paths: Vec::new(),
                             })
                             .collect(),
                         submitted_at: existing.submitted_at,
@@ -699,7 +698,6 @@ fn claim_updates(
                 blocked_reason: evaluation.reason.clone(),
                 scopes: claim.scopes.clone(),
                 baselines,
-                residual_paths: Vec::new(),
             })
         })
         .collect()
