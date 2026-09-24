@@ -20,9 +20,9 @@ before relying on fields absent from the live page.
 `--dangerously-bypass-hook-trust` bypasses hook trust for one Codex invocation. It is not a persistent trust grant; do
 not recommend it as a replacement for a narrowly authorized configuration update.
 
-## Local implementation notes: Codex CLI 0.146.0
+## Local implementation notes: Codex CLI 0.156.1
 
-Everything in this section was verified against `codex-cli 0.146.0` and its generated app-server JSON Schema. It is not
+Everything in this section was verified against `codex-cli 0.156.1` and its generated app-server JSON Schema. It is not
 a promise about older or newer versions.
 
 Start the app-server over stdio and exchange JSONL. Send `initialize`, wait for its response, then send the

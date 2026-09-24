@@ -205,8 +205,8 @@ Kickoff, once per wave:
 
 | Agent | Scope               | Model · effort      | Budget | State       |
 | ----- | ------------------- | ------------------- | ------ | ----------- |
-| A1    | `internal/pricing`  | `gpt-6-sol` · high  | ≤30m   | 🚀 launched |
-| A2    | `internal/backfill` | `gpt-6-sol` · high  | ≤30m   | 🚀 launched |
+| A1    | `internal/pricing`  | `gpt-6-sol` · high  | ≤20m   | 🚀 launched |
+| A2    | `internal/backfill` | `gpt-6-sol` · high  | ≤20m   | 🚀 launched |
 | A3    | `internal/evidence` | `gpt-6-sol` · xhigh | ≤40m   | 🚀 launched |
 ```
 
@@ -221,7 +221,7 @@ Wave status, on each digest or completion:
 | -------------------- | ---------- | -------------------------- |
 | A1 · gpt-6-sol/high  | ⏳ 15m/20m | ran `cargo test`           |
 | A2 · gpt-6-sol/high  | ✅ 8m      | done — 3 files, tests pass |
-| A3 · gpt-6-sol/xhigh | ⏳ 15m/20m | no recent activity         |
+| A3 · gpt-6-sol/xhigh | ⏳ 15m/40m | no recent activity         |
 ```
 
 At full settlement, use the final watcher settlement record. A wave with failures still reaches 100%; its heading and

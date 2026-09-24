@@ -76,8 +76,8 @@ violated invariants fail; noisy, equivalent, or worker-discarded results are rep
    approach.
 7. Stop at the first batch criterion, hard session limit, user interruption, satisfied target, helper-reported
    convergence, or result that invalidates the remaining batch. Do not substitute an unassigned hypothesis.
-8. Read `loop-rules.md` only for ambiguous keep/discard judgment, noise handling, backlog maintenance, or thrash
-   recovery.
+8. Read `<skill-dir>/references/loop-rules.md` only for ambiguous keep/discard judgment, noise handling, backlog
+   maintenance, or thrash recovery.
 
 ## Batch Result
 
