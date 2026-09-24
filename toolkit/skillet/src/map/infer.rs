@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    env,
     fs::{self, File},
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
@@ -14,7 +13,7 @@ use crate::{
     catalog::{Catalog, Skill},
     dependency::DependencyIdentifier,
     error::Error,
-    exclusions::{agent_state_path, directory_name_is_excluded},
+    exclusions::{agent_state_path, broad_excluded_roots, directory_name_is_excluded},
     traversal::{RootMode, walk_error_is_recoverable},
 };
 
@@ -165,6 +164,7 @@ fn scan_root(
 ) -> Result<(), Error> {
     let mut builder = WalkBuilder::new(root);
     let scan_root = root.to_path_buf();
+    let excluded_roots = (mode == RootMode::Broad).then(|| broad_excluded_roots(include_catalog_sources));
     builder
         .hidden(false)
         .parents(true)
@@ -173,7 +173,7 @@ fn scan_root(
         .git_exclude(true)
         .follow_links(false)
         .sort_by_file_path(|left, right| left.cmp(right))
-        .filter_entry(move |entry| reference_entry_allowed(entry, &scan_root, mode, include_catalog_sources));
+        .filter_entry(move |entry| reference_entry_allowed(entry, &scan_root, excluded_roots.as_deref()));
 
     for entry in builder.build() {
         let entry = match entry {
@@ -482,7 +482,7 @@ fn read_line(path: &Path, requested_line: u64) -> Result<String, Error> {
     Ok(result)
 }
 
-fn reference_entry_allowed(entry: &DirEntry, scan_root: &Path, mode: RootMode, include_catalog_sources: bool) -> bool {
+fn reference_entry_allowed(entry: &DirEntry, scan_root: &Path, excluded_roots: Option<&[PathBuf]>) -> bool {
     let path = entry.path();
     if path == scan_root {
         return true;
@@ -493,43 +493,10 @@ fn reference_entry_allowed(entry: &DirEntry, scan_root: &Path, mode: RootMode, i
     if agent_state_path(path) {
         return false;
     }
-    if mode == RootMode::Broad && broad_home_path_is_excluded(path, scan_root, include_catalog_sources) {
+    if excluded_roots.is_some_and(|excluded_roots| {
+        excluded_roots.iter().any(|excluded| !scan_root.starts_with(excluded) && path.starts_with(excluded))
+    }) {
         return false;
     }
     true
-}
-
-fn broad_home_path_is_excluded(path: &Path, scan_root: &Path, include_catalog_sources: bool) -> bool {
-    let Some(home) = env::var_os("HOME").map(PathBuf::from) else {
-        return false;
-    };
-    let mut roots = vec![
-        ".Trash",
-        ".agents",
-        ".bun/install/cache",
-        ".cache",
-        ".cargo/git",
-        ".cargo/registry",
-        ".claude",
-        ".codex",
-        ".local/share/bun/install/cache",
-        ".local/share/cargo/git",
-        ".local/share/cargo/registry",
-        ".local/share/pnpm/store",
-        ".local/share/rustup",
-        ".local/share/uv",
-        ".local/state/skills",
-        ".npm",
-        ".pnpm-store",
-        ".rustup",
-        "Library",
-        "go/pkg/mod",
-    ];
-    if !include_catalog_sources {
-        roots.extend(["projects/agent-skills", "sablier/agent-skills", "sablier/sablier-skills"]);
-    }
-    roots
-        .into_iter()
-        .map(|relative| home.join(relative))
-        .any(|excluded| !scan_root.starts_with(&excluded) && path.starts_with(excluded))
 }

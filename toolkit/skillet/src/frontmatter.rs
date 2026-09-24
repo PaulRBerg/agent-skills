@@ -323,7 +323,6 @@ fn extract_frontmatter(fields: &[(Spanned<String>, Spanned<YamlValue>)]) -> Fron
                 };
                 frontmatter.skill_dependencies = Some(Located::at(dependency_list, field_location));
             }
-            "license" | "allowed-tools" | "when_to_use" | "arguments" | "disallowed-tools" | "hooks" | "paths" => {}
             _ => {}
         }
     }

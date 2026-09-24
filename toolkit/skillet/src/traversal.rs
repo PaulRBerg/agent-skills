@@ -11,7 +11,7 @@ use serde::Serialize;
 
 use crate::{
     error::Error,
-    exclusions::{agent_state_path, directory_name_is_excluded},
+    exclusions::{agent_state_path, broad_excluded_roots, directory_name_is_excluded},
 };
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -301,36 +301,4 @@ fn broad_entry_allowed(entry: &DirEntry, scan_root: &Path, excluded_roots: &[Pat
         return false;
     }
     true
-}
-
-fn broad_excluded_roots(include_catalog_sources: bool) -> Vec<PathBuf> {
-    let Some(home) = env::var_os("HOME").map(PathBuf::from) else {
-        return Vec::new();
-    };
-    let mut relative_roots = vec![
-        ".Trash",
-        ".agents",
-        ".bun/install/cache",
-        ".cache",
-        ".cargo/git",
-        ".cargo/registry",
-        ".claude",
-        ".codex",
-        ".local/share/bun/install/cache",
-        ".local/share/cargo/git",
-        ".local/share/cargo/registry",
-        ".local/share/pnpm/store",
-        ".local/share/rustup",
-        ".local/share/uv",
-        ".local/state/skills",
-        ".npm",
-        ".pnpm-store",
-        ".rustup",
-        "Library",
-        "go/pkg/mod",
-    ];
-    if !include_catalog_sources {
-        relative_roots.extend(["projects/agent-skills", "sablier/agent-skills", "sablier/sablier-skills"]);
-    }
-    relative_roots.into_iter().map(|relative| home.join(relative)).collect()
 }

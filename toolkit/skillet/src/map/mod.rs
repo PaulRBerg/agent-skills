@@ -14,6 +14,11 @@ use crate::{
     cli::MapArgs,
     dependency::SkillName,
     error::Error,
+    exclusions::{
+        ALWAYS_IGNORED_HOME_PATHS, BROAD_SCAN_CACHE_PATHS, CATALOG_SOURCE_HOME_PATHS, CLAUDE_AGENT_STATE_DIRECTORIES,
+        CLAUDE_AGENT_STATE_FILES, CODEX_AGENT_STATE_DIRECTORIES, CODEX_AGENT_STATE_FILE_GLOBS, CODEX_AGENT_STATE_FILES,
+        EXCLUDED_DIRECTORY_NAMES, MACOS_PROTECTED_HOME_PATHS,
+    },
     frontmatter::InstallTargets,
     traversal::ExposureScope,
 };
@@ -256,83 +261,110 @@ fn duplicate_records(catalog: &Catalog, selected: &BTreeSet<String>) -> Vec<Dupl
 }
 
 fn skipped_record() -> SkippedRecord {
-    let mut directories: Vec<_> =
-        [".git", ".next", ".venv", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"]
-            .into_iter()
-            .map(|name| format!("**/{name}/**"))
-            .collect();
-    directories.extend(
-        [
-            "**/.claude/backups/**",
-            "**/.claude/debug/**",
-            "**/.claude/file-history/**",
-            "**/.claude/image-cache/**",
-            "**/.claude/logs/**",
-            "**/.claude/paste-cache/**",
-            "**/.claude/plans/**",
-            "**/.claude/projects/**",
-            "**/.claude/session-env/**",
-            "**/.claude/shell-snapshots/**",
-            "**/.claude/statsig/**",
-            "**/.claude/tasks/**",
-            "**/.claude/todos/**",
-            "**/.codex/.tmp/**",
-            "**/.codex/archived_sessions/**",
-            "**/.codex/backups/**",
-            "**/.codex/cache/**",
-            "**/.codex/generated_images/**",
-            "**/.codex/log/**",
-            "**/.codex/logs/**",
-            "**/.codex/sessions/**",
-            "**/.codex/shell_snapshots/**",
-            "**/.codex/sqlite/**",
-            "**/.codex/threads/**",
-            "**/.codex/tmp/**",
-        ]
-        .into_iter()
-        .map(str::to_owned),
-    );
+    let mut directories: Vec<_> = EXCLUDED_DIRECTORY_NAMES.iter().map(|name| format!("**/{name}/**")).collect();
+    directories.extend(CLAUDE_AGENT_STATE_DIRECTORIES.iter().map(|name| format!("**/.claude/{name}/**")));
+    directories.extend(CODEX_AGENT_STATE_DIRECTORIES.iter().map(|name| format!("**/.codex/{name}/**")));
+
+    let mut files: Vec<_> = CLAUDE_AGENT_STATE_FILES.iter().map(|name| format!("**/.claude/{name}")).collect();
+    files.extend(CODEX_AGENT_STATE_FILES.iter().map(|name| format!("**/.codex/{name}")));
+    files.extend(CODEX_AGENT_STATE_FILE_GLOBS.iter().map(|glob| format!("**/.codex/{glob}")));
+
     SkippedRecord {
         directories,
-        files: vec![
-            "**/.claude/history.jsonl".to_owned(),
-            "**/.claude/remote-settings.json".to_owned(),
-            "**/.claude/stats-cache.json".to_owned(),
-            "**/.codex/history.jsonl".to_owned(),
-            "**/.codex/session_index.jsonl".to_owned(),
-            "**/.codex/*.sqlite*".to_owned(),
-            "**/.codex/*.bak".to_owned(),
-        ],
-        macos_protected_home_paths: vec!["~/Library".to_owned(), "~/.Trash".to_owned()],
-        always_ignored_home_paths: vec![
-            "~/.agents".to_owned(),
-            "~/.claude".to_owned(),
-            "~/.codex".to_owned(),
-            "~/.local/state/skills".to_owned(),
-        ],
-        broad_scan_cache_paths: [
-            "~/.cache",
-            "~/.npm",
-            "~/.rustup",
-            "~/.cargo/git",
-            "~/.cargo/registry",
-            "~/.bun/install/cache",
-            "~/.pnpm-store",
-            "~/.local/share/uv",
-            "~/.local/share/rustup",
-            "~/.local/share/cargo/git",
-            "~/.local/share/cargo/registry",
-            "~/.local/share/bun/install/cache",
-            "~/.local/share/pnpm/store",
-            "~/go/pkg/mod",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect(),
-        catalog_sources: vec![
-            "~/projects/agent-skills".to_owned(),
-            "~/sablier/agent-skills".to_owned(),
-            "~/sablier/sablier-skills".to_owned(),
-        ],
+        files,
+        macos_protected_home_paths: MACOS_PROTECTED_HOME_PATHS.iter().map(|path| format!("~/{path}")).collect(),
+        always_ignored_home_paths: ALWAYS_IGNORED_HOME_PATHS.iter().map(|path| format!("~/{path}")).collect(),
+        broad_scan_cache_paths: BROAD_SCAN_CACHE_PATHS.iter().map(|path| format!("~/{path}")).collect(),
+        catalog_sources: CATALOG_SOURCE_HOME_PATHS.iter().map(|path| format!("~/{path}")).collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::skipped_record;
+
+    #[test]
+    fn skipped_record_contents_are_pinned() {
+        let record = skipped_record();
+        assert_eq!(
+            record.directories,
+            vec![
+                "**/.git/**",
+                "**/.next/**",
+                "**/.venv/**",
+                "**/build/**",
+                "**/coverage/**",
+                "**/dist/**",
+                "**/node_modules/**",
+                "**/out/**",
+                "**/target/**",
+                "**/vendor/**",
+                "**/.claude/backups/**",
+                "**/.claude/debug/**",
+                "**/.claude/file-history/**",
+                "**/.claude/image-cache/**",
+                "**/.claude/logs/**",
+                "**/.claude/paste-cache/**",
+                "**/.claude/plans/**",
+                "**/.claude/projects/**",
+                "**/.claude/session-env/**",
+                "**/.claude/shell-snapshots/**",
+                "**/.claude/statsig/**",
+                "**/.claude/tasks/**",
+                "**/.claude/todos/**",
+                "**/.codex/.tmp/**",
+                "**/.codex/archived_sessions/**",
+                "**/.codex/backups/**",
+                "**/.codex/cache/**",
+                "**/.codex/generated_images/**",
+                "**/.codex/log/**",
+                "**/.codex/logs/**",
+                "**/.codex/sessions/**",
+                "**/.codex/shell_snapshots/**",
+                "**/.codex/sqlite/**",
+                "**/.codex/threads/**",
+                "**/.codex/tmp/**",
+            ]
+        );
+        assert_eq!(
+            record.files,
+            vec![
+                "**/.claude/history.jsonl",
+                "**/.claude/remote-settings.json",
+                "**/.claude/stats-cache.json",
+                "**/.codex/history.jsonl",
+                "**/.codex/session_index.jsonl",
+                "**/.codex/*.sqlite*",
+                "**/.codex/*.bak",
+            ]
+        );
+        assert_eq!(record.macos_protected_home_paths, vec!["~/Library", "~/.Trash"]);
+        assert_eq!(
+            record.always_ignored_home_paths,
+            vec!["~/.agents", "~/.claude", "~/.codex", "~/.local/state/skills"]
+        );
+        assert_eq!(
+            record.broad_scan_cache_paths,
+            vec![
+                "~/.cache",
+                "~/.npm",
+                "~/.rustup",
+                "~/.cargo/git",
+                "~/.cargo/registry",
+                "~/.bun/install/cache",
+                "~/.pnpm-store",
+                "~/.local/share/uv",
+                "~/.local/share/rustup",
+                "~/.local/share/cargo/git",
+                "~/.local/share/cargo/registry",
+                "~/.local/share/bun/install/cache",
+                "~/.local/share/pnpm/store",
+                "~/go/pkg/mod",
+            ]
+        );
+        assert_eq!(
+            record.catalog_sources,
+            vec!["~/projects/agent-skills", "~/sablier/agent-skills", "~/sablier/sablier-skills"]
+        );
     }
 }
