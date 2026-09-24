@@ -43,8 +43,9 @@ When the package manager config has an exclude list, pass matching Taze excludes
 taze major -r --maturity-period 7 --maturity-period-exclude react,webpack
 ```
 
-Append the same maturity flags to every Taze scan and write command in the workflow. After Taze writes manifests, run
-the project package manager install as usual; the package manager remains the final enforcement layer for direct and
+`run-taze.sh` adds these flags itself for Bun lockfile projects and rejects extra options; Taze infers them for pnpm and
+Yarn. Append the same maturity flags only to direct Taze scan and write commands. After Taze writes manifests, run the
+project package manager install as usual; the package manager remains the final enforcement layer for direct and
 transitive resolution.
 
 ## Update Bun Catalogs

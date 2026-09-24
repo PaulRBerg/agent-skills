@@ -18,5 +18,6 @@ The OpenAI language-model configuration supports `strict?: boolean` and enables 
 requirements. The provider consumes this option while preparing tools; do not forward it as an unrelated top-level
 request field.
 
-Use `"in_memory"` for prompt-cache retention. Before adding a provider workaround for request or response behavior,
-inspect the installed provider source and changelog so application code does not duplicate a fixed package concern.
+Prompt-cache retention accepts `"in_memory"` or `"24h"`; spell the in-memory value with an underscore. Before adding a
+provider workaround for request or response behavior, inspect the installed provider source and changelog so application
+code does not duplicate a fixed package concern.

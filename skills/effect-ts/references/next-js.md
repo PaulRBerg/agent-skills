@@ -15,8 +15,9 @@ before relying on an API because the package is experimental.
 
 ## Pick the Cache by Lifetime
 
-- `reactCache(effectFn)` deduplicates work within one React request. It rejects Effects requiring `Scope`; move resource
-  acquisition into a Layer.
+- `reactCache(effectFn)` from `@prb/effect-next/react-cache` deduplicates work within one React request. It rejects
+  Effects requiring `Scope`; move resource acquisition into a Layer. The root export's `reactCache(effect, runtime)` is
+  a different Promise-returning helper.
 - `cachedEffect` and `cachedEffectWithKey` implement cross-request cache-aside behavior with an explicit store, TTL,
   optional stale-while-revalidate window, Schema, and failure policy.
 - Cache-control helpers build browser/CDN headers. Set visibility explicitly and keep browser, generic CDN, and Vercel
