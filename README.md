@@ -36,7 +36,7 @@ bunx skills add PaulRBerg/agent-skills
 | copy-transcript-path | Copy the active Claude Code or Codex CLI transcript path                  |
 | effect-ts            | Effect 3 patterns and source-aligned guidance                             |
 | evm-atlas            | EVM lookup + DEX transaction/order interpretation                         |
-| fresh-eyes-sweep     | Meticulous whole-repository audit and verified fixes                      |
+| fresh-eyes-sweep     | Whole-repository audit of code, tests, and comments with verified fixes   |
 | frontend-design      | Distinctive, subject-specific frontend design                             |
 | git-squash           | Squash PR branch with semantic commit message                             |
 | grill-me             | Relentlessly stress-test plans and designs                                |
@@ -55,7 +55,6 @@ bunx skills add PaulRBerg/agent-skills
 | skill-map            | Find skill dependencies and references across machine                     |
 | skill-writing        | Bootstrap a project-local agent skill                                     |
 | spreadsheets         | Opinionated CSV/TSV/XLSX wrangling on macOS                               |
-| stale-comments-audit | Audit and fix stale comments in JavaScript, TypeScript, and Go            |
 | tailwind-css         | Tailwind CSS v4 styling guidance                                          |
 | task-handoff         | Create one single- or cross-repository Codex task handoff plan            |
 | todo-archive         | Archive checked TODO.md tasks into .ai/todos                              |

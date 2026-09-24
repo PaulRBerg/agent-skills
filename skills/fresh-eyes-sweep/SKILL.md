@@ -8,8 +8,8 @@ skill-dependencies:
   - code-polish
   - commit
 description:
-  Audit an entire repository with fresh eyes for correctness errors, bugs, omissions, duplication, inconsistencies, and
-  other evidenced mistakes; fix every safe issue and verify the result.
+  Audit an entire repository with fresh eyes for correctness errors, bugs, omissions, duplication, inconsistencies,
+  stale or duplicate tests, stale comments, and other evidenced mistakes; fix every safe issue and verify the result.
 ---
 
 # Fresh Eyes Sweep
@@ -182,6 +182,38 @@ defect risk measurably improves, review by severity, fix evidenced defects, and 
 On long runs, post updates only after coherent slices settle, using the ledger summary's exact bar and counts. The bar
 means path accounting, not depth of inspection.
 
+### Tests
+
+Review tests as code under the same first-principles questions, aiming for a smaller suite that catches the same or more
+defects. For each test, identify the required behavior it protects, then:
+
+- Delete tests that are stale or unhelpful: they target removed or renamed behavior kept alive only by mocks or
+  fixtures; cannot fail (no meaningful assertion, asserting a mock's own return value, tautologies); pin incidental
+  implementation details or call sequences no requirement depends on; restate language, framework, or dependency
+  behavior; or are skipped or commented out with no live reason.
+- Merge tests that effectively prove the same thing: identical paths differing only in inputs become one table-driven or
+  parameterized test; a narrower test fully subsumed by another test's assertions goes; duplicates across files collapse
+  into the owning suite.
+
+Before deleting or merging, confirm the protected behavior is obsolete or still covered by a named retained test; use
+coverage output, or a temporary targeted break of the code, when the overlap is not obvious. A merge keeps every
+distinct assertion, input, and diagnosable failure message. Keep regression tests for fixed bugs unless another test
+demonstrably covers the same case. Never delete or skip a failing or flaky test to get green: fix the cause or mark it
+`reported`. Run the affected suites before and after, and record the test-count delta.
+
+### Comments
+
+Compare every comment with the code, callers, and history it describes. Fix only clear `STALE` (describes behavior the
+code no longer has), `ORPHANED` (names a missing symbol, path, flag, or concept), `MISLEADING` (materially suggests
+different behavior), or `REDUNDANT` (narrates self-explanatory code without intent, constraint, or context) comments.
+Rewrite when the correct claim is proven; otherwise remove. Never change executable code merely to make a comment true,
+and leave useful rationale and imperfect-but-accurate wording alone.
+
+Treat behavior-bearing comments as code: compiler and tool directives (`//go:*`, build constraints, cgo preambles,
+`go:embed`, `@ts-expect-error`, lint suppressions, coverage pragmas), license headers, public API docs, and concurrency,
+ownership, or safety contracts. Edit them only when the tooling semantics are proven and validated by the relevant
+tooling; otherwise mark them `reported`.
+
 ## Verify and Report
 
 Run the narrowest check proving each fix, including every discovered typecheck, lint, and format/import-order gate
@@ -195,9 +227,10 @@ coverage, fixes, and checks against tool output before claiming completion.
 Lead with
 `### ✅ Sweep ledger complete — <accounted>/<mapped> files accounted (<inspected> inspected, <excluded> excluded)` only
 when helper `complete` is true; otherwise use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
-counts. Include a compact `Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results.
-When non-empty, also include reverted experiments with the failed evidence, unresolved findings with their evidence,
-risk, and required decision, the overnight backlog when applicable, and residual risk with its next proving check. On
+counts, plus deleted and merged tests with the test-count delta and fixed comments when non-zero. Include a compact
+`Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results. When non-empty, also
+include reverted experiments with the failed evidence, unresolved findings with their evidence, risk, and required
+decision, the overnight backlog when applicable, and residual risk with its next proving check. On
 `### ⛔ Sweep incomplete`, name the ledger path so the next session can resume from `pending`. Do not dump the scratch
 ledger's contents, unrelated pre-existing changes, or bulk data; include task-relevant evidence when it materially
 supports the report.
