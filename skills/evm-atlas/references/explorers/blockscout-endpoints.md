@@ -86,8 +86,6 @@ Default **20 credits** per call. Exceptions:
 | **Pro**      | $199/mo | 500M / month | 30 rps                           |
 | **Business** | $999/mo | 3B / month   | 50 rps                           |
 
-`scripts/blockscout-detect-plan.sh` reports Builder as `plan=standard` and Business as `plan=unknown`.
-
 Public per-instance hosts are not credit-metered but throttle keyless traffic to **3 rps / 300 per minute** per IP,
 including hosted `*.blockscout.com` subdomains; exceeding it returns `429`. Their bot protection can also return `403`
 with an HTML "Just a moment..." challenge instead of JSON. Switch to the keyed gateway rather than backing off

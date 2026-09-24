@@ -3,10 +3,10 @@
 #
 # Reads the rate-limit/credit response headers the PRO host returns on every
 # call. x-ratelimit-limit maps directly to the plan tier:
-#   5 -> free, 15 -> standard, 30 -> pro
+#   5 -> free, 15 -> builder, 30 -> pro, 50 -> business
 #
 # Outputs key=value lines on stdout:
-#   plan=<free|standard|pro|unknown>
+#   plan=<free|builder|pro|business|unknown>
 #   rate_limit_rps=<int>
 #   rate_limit_remaining=<int>
 #   rate_limit_reset=<int seconds>
@@ -45,8 +45,9 @@ credits=$(hval "x-credits-remaining")
 
 case "$rps" in
   5)  plan="free" ;;
-  15) plan="standard" ;;
+  15) plan="builder" ;;
   30) plan="pro" ;;
+  50) plan="business" ;;
   *)  plan="unknown" ;;
 esac
 

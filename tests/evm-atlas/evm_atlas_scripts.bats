@@ -103,7 +103,7 @@ setup() {
   run "$BLOCKSCOUT"
 
   [ "$status" -eq 0 ]
-  [ "$output" = $'plan=standard\nrate_limit_rps=15\nrate_limit_remaining=9\nrate_limit_reset=42\ncredits_remaining=123' ]
+  [ "$output" = $'plan=builder\nrate_limit_rps=15\nrate_limit_remaining=9\nrate_limit_reset=42\ncredits_remaining=123' ]
   [[ "$(<"$MOCK_CURL_LOG")" == *"authorization: Bearer test-key"* ]]
 }
 
