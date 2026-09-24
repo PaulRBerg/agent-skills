@@ -9,8 +9,9 @@ use std::{
 use async_stream::stream;
 use axum::{
     Json, Router,
-    extract::State,
-    http::StatusCode,
+    extract::{Request, State},
+    http::{HeaderMap, StatusCode, header::HOST},
+    middleware::{self, Next},
     response::{
         IntoResponse, Response,
         sse::{Event, Sse},
@@ -140,7 +141,49 @@ pub(crate) fn router<S: SnapshotSource>(service: SnapshotService<S>) -> Router {
         .route("/api/snapshot", get(snapshot::<S>))
         .route("/api/events", get(events::<S>))
         .fallback(not_found)
+        .layer(middleware::from_fn(require_loopback_host))
         .with_state(state)
+}
+
+/// Reject any request whose `Host` header does not name loopback, so a page
+/// loaded from another origin cannot use DNS rebinding to read this local API
+/// through the browser's same-origin allowance for loopback addresses. The
+/// Vite dev proxy and the Bun dashboard proxy both forward a loopback `Host`.
+async fn require_loopback_host(request: Request, next: Next) -> Response {
+    match loopback_host_status(request.headers()) {
+        Ok(()) => next.run(request).await,
+        Err(status) => status.into_response(),
+    }
+}
+
+fn loopback_host_status(headers: &HeaderMap) -> std::result::Result<(), StatusCode> {
+    let host = headers.get(HOST).ok_or(StatusCode::BAD_REQUEST)?;
+    let host = host.to_str().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let hostname = host_hostname(host).ok_or(StatusCode::BAD_REQUEST)?;
+    if hostname.eq_ignore_ascii_case("localhost") || hostname == "127.0.0.1" || hostname == "::1" {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
+}
+
+/// Strip an optional `:port` suffix (or `[...]` brackets around an IPv6
+/// address) from a `Host` header value, per RFC 9110 §7.2.
+fn host_hostname(host: &str) -> Option<&str> {
+    if host.is_empty() {
+        return None;
+    }
+    if let Some(rest) = host.strip_prefix('[') {
+        return rest.split(']').next().filter(|value| !value.is_empty());
+    }
+    match host.rsplit_once(':') {
+        Some((name, port))
+            if !name.is_empty() && !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            Some(name)
+        }
+        _ => Some(host),
+    }
 }
 
 /// Bind and serve the standard local-only dashboard endpoint.
@@ -426,6 +469,71 @@ mod tests {
     #[test]
     fn timestamps_are_dashboard_parseable_rfc3339() {
         assert_eq!(rfc3339_utc(UNIX_EPOCH + Duration::from_secs(1_722_729_600)), "2024-08-04T00:00:00+00:00");
+    }
+
+    #[tokio::test]
+    async fn sweep_server_rejects_a_forged_host_header() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(SnapshotService::new(Source::new(1)))).await.unwrap();
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"GET /api/snapshot HTTP/1.1\r\nHost: evil.example.com\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 403"), "{response}");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn sweep_server_rejects_a_missing_host_header() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(SnapshotService::new(Source::new(1)))).await.unwrap();
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream.write_all(b"GET /api/snapshot HTTP/1.0\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.0 400"), "{response}");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn sweep_server_accepts_loopback_host_header_variants() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        for host_header in ["127.0.0.1", "LOCALHOST:9999", "[::1]:4477"] {
+            let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                axum::serve(listener, router(SnapshotService::new(Source::new(1)))).await.unwrap();
+            });
+
+            let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+            stream
+                .write_all(
+                    format!("GET /api/snapshot HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).await.unwrap();
+            assert!(response.starts_with("HTTP/1.1 200"), "{host_header}: {response}");
+            server.abort();
+        }
     }
 
     #[tokio::test]

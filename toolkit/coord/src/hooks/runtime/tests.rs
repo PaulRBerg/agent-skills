@@ -1007,6 +1007,92 @@ fn post_tool_payloads_record_normalized_deduplicated_touched_paths() {
 }
 
 #[test]
+fn out_of_scope_write_and_touched_paths_accept_bracket_route_names() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let holder = Identity { client: Client::Claude, session_id: "holder".into() };
+    register(&coordinator, &holder, &repo, 401);
+    assert_eq!(
+        coordinator.start_for(holder.clone(), "work", &[], &[repo.join("app")], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    coordinator.store().unwrap().set_session_callsign(&holder, "🦊 Swift Otter").unwrap();
+
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    // `app/[slug]/page.tsx` contains bracket characters a user-supplied scope
+    // literal would reject; the touched-path normalizer must still accept it.
+    let output = runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_name":"Write", "tool_input":{"file_path": repo.join("app/[slug]/page.tsx")}
+        }),
+    );
+    assert!(output.contains("wrote app/[slug]/page.tsx owned by 🦊 Swift Otter"), "{output}");
+
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    let touched = coordinator
+        .store()
+        .unwrap()
+        .touched(&Identity { client: Client::Claude, session_id: "self".into() }, &root)
+        .unwrap()
+        .paths;
+    assert_eq!(touched, vec!["app/[slug]/page.tsx".to_owned()]);
+}
+
+#[test]
+fn touched_paths_accept_names_over_the_scope_length_cap() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let long_name = format!("{}.rs", "x".repeat(130));
+    assert!(long_name.chars().count() > crate::host::MAX_SCOPE_CHARS);
+    runtime.ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_name":"Write", "tool_input":{"file_path": repo.join(&long_name)}
+        }),
+    );
+
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    let touched = coordinator
+        .store()
+        .unwrap()
+        .touched(&Identity { client: Client::Claude, session_id: "self".into() }, &root)
+        .unwrap()
+        .paths;
+    assert_eq!(touched, vec![long_name]);
+}
+
+#[test]
+fn apply_patch_move_to_targets_are_recorded_as_touched() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("codex", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    runtime.ingest(
+        "codex",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolUse",
+            "tool_name":"apply_patch",
+            "tool_input":{"command":"*** Begin Patch\n*** Update File: src/old.rs\n*** Move to: src/new.rs\n*** End Patch"}
+        }),
+    );
+
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    let touched = coordinator
+        .store()
+        .unwrap()
+        .touched(&Identity { client: Client::Codex, session_id: "self".into() }, &root)
+        .unwrap()
+        .paths;
+    assert_eq!(touched, vec!["src/new.rs".to_owned(), "src/old.rs".to_owned()]);
+}
+
+#[test]
 fn touched_cap_drops_oldest_and_discloses_truncation() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);

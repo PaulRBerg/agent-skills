@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- Reject `ai-coord serve` requests whose `Host` header does not name `localhost`, `127.0.0.1`, or `[::1]` with 403, and
+  a missing or unparseable `Host` with 400, closing a DNS-rebinding path to the local dashboard API; the Vite and Bun
+  dashboard proxies are unaffected.
+- Always print the foreground `ai-coord wait` guidance for a blocked or dirty-settling `bundle start` outcome, since
+  Claude's waker hook filter never matches `ai-coord bundle start` and previously stranded a Claude session told to
+  wait for a waker that would never run.
+- Validate `start`'s positional scopes before opening the coordination ledger, so an existing directory passed without
+  `--recursive` is rejected with exit 64 even when the ledger is incompatible or unreadable, matching `draft`.
+- Carry `draft --name NAME`/`bundle draft --name NAME` through to the corrected-command suggestion for a directory
+  scope or misordered `--recursive` argument, so the re-run command keeps targeting the same named draft.
+- Resolve `start`, `bundle start`, and `wait`'s stderr guidance client best-effort so an identity-resolution error can
+  no longer turn a printed `READY`/`BLOCKED`/... outcome's exit code into a generic error exit.
+- Make the waker's `MESSAGE` feedback accurate when the count is pending recommendations rather than unread messages.
+- Split scope-path normalization into a repository-relative path normalizer (resolution, repository boundary, and
+  control-character rejection) plus the `draft`/`start` scope-literal rules (globs, the 120-character cap) layered on
+  top of it; best-effort touched-path tracking now uses only the normalizer, so writes to names a scope literal would
+  reject (`app/[slug]/page.tsx`, a name over 120 characters) are recorded and checked against active claims like any
+  other write. Also record `apply_patch`'s `*** Move to: ` rename targets as touched.
+- Delete the promoted named or unnamed draft in the same transaction that promotes it over active work, and reject a
+  one-claim draft promotion that would move or collapse existing work, matching direct `start`.
+- Apply an idle holder's soft-scope yield only in the transaction that actually grants the requester's work, keep
+  `last_seen` on inventory observations so idle Claude holders remain eligible to yield, and drop baselines outside a
+  claim that was narrowed by a yield.
+
 - Isolate detached finding triagers in per-run worktrees; admit only validated documentation commits by fast-forward
   into checked-out `main`, copy deterministic handoffs without overwriting, and remove worktrees and branches on exit.
 

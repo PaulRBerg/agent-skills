@@ -11,7 +11,7 @@ use crate::{
     coordinator::{Coordinator, normalize_callsign},
     domain::{Client, Identity, Outcome, SessionState, WorkState, client_name, sanitize},
     error::{AppError, Result},
-    host::{git_dirty_paths, git_root, host_process_reference, normalize_scopes, relevant_dirty},
+    host::{git_dirty_paths, git_root, host_process_reference, normalize_repo_path, relevant_dirty},
     state::SessionUpdate,
 };
 
@@ -576,7 +576,7 @@ fn touched_paths(payload: &Value, cwd: &Path, root: &Path) -> Vec<String> {
     collect_touched(payload, &mut raw);
     let mut normalized = raw
         .into_iter()
-        .filter_map(|path| normalize_scopes(&[PathBuf::from(path)], cwd, root).ok()?.into_iter().next())
+        .filter_map(|path| normalize_repo_path(&PathBuf::from(path), cwd, root).ok())
         .collect::<Vec<_>>();
     normalized.sort();
     normalized.dedup();
@@ -599,7 +599,7 @@ fn collect_touched(value: &Value, paths: &mut Vec<String>) {
             let Some(command) = input.get("command").and_then(Value::as_str)
         {
             for line in command.lines() {
-                for prefix in ["*** Add File: ", "*** Update File: ", "*** Delete File: "] {
+                for prefix in ["*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: "] {
                     if let Some(path) = line.strip_prefix(prefix) {
                         paths.push(path.to_owned());
                     }

@@ -141,49 +141,61 @@ pub(crate) fn git_root(cwd: &Path) -> Option<PathBuf> {
     weakly_canonical(Path::new(value)).ok()
 }
 
-pub(crate) fn normalize_scopes(raw_scopes: &[PathBuf], cwd: &Path, root: &Path) -> Result<Vec<String>> {
+/// Normalize `raw` to a repository-relative path: resolve it against `cwd`
+/// (missing components included), enforce the repository boundary, and reject
+/// non-printable output. This is the shared resolution every path normalizer
+/// needs; it deliberately omits the scope-literal rules in [`normalize_scopes`]
+/// (globs, the length cap) because best-effort touched-path observation must
+/// accept names a user-supplied scope literal would reject, such as
+/// `app/[slug]/page.tsx` or a path over the scope length cap.
+pub(crate) fn normalize_repo_path(raw: &Path, cwd: &Path, root: &Path) -> Result<String> {
     let root = weakly_canonical(root)
         .map_err(|error| AppError::usage(format!("could not resolve repository root: {error}")))?;
+    let display = raw.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
+    let expanded = crate::expand_tilde(raw);
+    let candidate = if expanded.is_absolute() { expanded } else { cwd.join(expanded) };
+    let preserve_final_symlink =
+        std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink());
+    let resolved = if preserve_final_symlink {
+        let parent =
+            candidate.parent().ok_or_else(|| AppError::usage(format!("scope is outside repository: {display}")))?;
+        let name =
+            candidate.file_name().ok_or_else(|| AppError::usage(format!("scope is outside repository: {display}")))?;
+        weakly_canonical(parent)
+            .map(|parent| parent.join(name))
+            .map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?
+    } else {
+        weakly_canonical(&candidate).map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?
+    };
+    let relative =
+        resolved.strip_prefix(&root).map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?;
+    let value = if relative.as_os_str().is_empty() {
+        ".".to_owned()
+    } else {
+        relative
+            .to_str()
+            .ok_or_else(|| AppError::usage("normalized scope is not valid UTF-8"))?
+            .replace(std::path::MAIN_SEPARATOR, "/")
+            .trim_start_matches("./")
+            .trim_end_matches('/')
+            .to_owned()
+    };
+    if value.chars().any(char::is_control) {
+        return Err(AppError::usage(format!("scope contains non-printable characters: {display:?}")));
+    }
+    Ok(value)
+}
+
+/// Normalize user-supplied scope literals: layers the glob and length rules
+/// documented for `draft`/`start` on top of [`normalize_repo_path`].
+pub(crate) fn normalize_scopes(raw_scopes: &[PathBuf], cwd: &Path, root: &Path) -> Result<Vec<String>> {
     let mut normalized = Vec::new();
     for raw_scope in raw_scopes {
         let display = raw_scope.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
         if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
             return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
         }
-        let expanded = crate::expand_tilde(raw_scope);
-        let candidate = if expanded.is_absolute() { expanded } else { cwd.join(expanded) };
-        let preserve_final_symlink =
-            std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink());
-        let resolved = if preserve_final_symlink {
-            let parent =
-                candidate.parent().ok_or_else(|| AppError::usage(format!("scope is outside repository: {display}")))?;
-            let name = candidate
-                .file_name()
-                .ok_or_else(|| AppError::usage(format!("scope is outside repository: {display}")))?;
-            weakly_canonical(parent)
-                .map(|parent| parent.join(name))
-                .map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?
-        } else {
-            weakly_canonical(&candidate)
-                .map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?
-        };
-        let relative = resolved
-            .strip_prefix(&root)
-            .map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?;
-        let value = if relative.as_os_str().is_empty() {
-            ".".to_owned()
-        } else {
-            relative
-                .to_str()
-                .ok_or_else(|| AppError::usage("normalized scope is not valid UTF-8"))?
-                .replace(std::path::MAIN_SEPARATOR, "/")
-                .trim_start_matches("./")
-                .trim_end_matches('/')
-                .to_owned()
-        };
-        if value.chars().any(char::is_control) {
-            return Err(AppError::usage(format!("scope contains non-printable characters: {display:?}")));
-        }
+        let value = normalize_repo_path(raw_scope, cwd, root)?;
         if value.chars().count() > MAX_SCOPE_CHARS {
             return Err(AppError::usage(format!("scope exceeds {MAX_SCOPE_CHARS} characters: {display:?}")));
         }

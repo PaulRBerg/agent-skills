@@ -435,6 +435,37 @@ fn bundle_done_recovery_command_releases_every_claim_from_a_quoted_root() {
 }
 
 #[test]
+fn blocked_bundle_start_never_promises_a_claude_waker() {
+    let fixture = Fixture::new();
+    let second = fixture._temporary.path().join("bundle-second-repo");
+    fs::create_dir_all(second.join("src")).unwrap();
+    assert!(Command::new("git").args(["init", "--quiet"]).current_dir(&second).status().unwrap().success());
+    let mut holder = spawn_synthetic_host(&fixture, "bundle-holder");
+    assert_strong_session(&fixture, "bundle-holder");
+    let first_path = fixture.root.join("src/a.rs").to_string_lossy().into_owned();
+    let second_path = second.join("src/b.rs").to_string_lossy().into_owned();
+    fixture.output_as("bundle-holder", &["bundle", "start", "two roots", &first_path, &second_path]).assert().success();
+
+    // Claude's waker hook filter never matches `ai-coord bundle start`, so the
+    // guidance must stay foreground even for a Claude-flavored caller.
+    let blocked = fixture
+        .command()
+        .env("AI_COORD_CLIENT", "claude")
+        .env("AI_COORD_SESSION_ID", "bundle-waiter")
+        .args(["bundle", "start", "same two roots", &first_path, &second_path])
+        .output()
+        .expect("run blocked bundle start");
+    blocked.assert().failure().code(3);
+    assert!(String::from_utf8_lossy(&blocked.stdout).starts_with("BLOCKED\t"));
+    let stderr = String::from_utf8_lossy(&blocked.stderr);
+    assert!(stderr.contains("run `ai-coord wait` in the foreground"), "{stderr}");
+    assert!(!stderr.contains("waker"), "{stderr}");
+
+    let _ = holder.kill();
+    let _ = holder.wait();
+}
+
+#[test]
 fn bundle_draft_promotion_and_ordinary_mismatch_are_explicit() {
     let fixture = Fixture::new();
     let second = fixture._temporary.path().join("z-repo");
@@ -742,6 +773,36 @@ fn directory_scope_errors_include_copy_paste_ready_recursive_commands() {
         output.assert().stdout(predicate::str::is_empty());
         assert!(String::from_utf8_lossy(&output.stderr).contains(expected));
     }
+}
+
+#[test]
+fn directory_scope_rejection_preserves_a_named_draft_flag() {
+    let fixture = Fixture::new();
+
+    let output = fixture.output(&["draft", "--name", "plan1", "shared plan", "src"]);
+    output.assert().failure().code(64);
+    output.assert().stdout(predicate::str::is_empty());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("re-run: ai-coord draft --name 'plan1' --recursive 'src' 'shared plan'")
+    );
+}
+
+#[test]
+fn direct_start_rejects_a_directory_scope_before_opening_an_incompatible_or_unreadable_ledger() {
+    let fixture = Fixture::new();
+    fs::create_dir_all(&fixture.state).unwrap();
+    let connection = Connection::open(fixture.state.join("state.db")).unwrap();
+    connection.pragma_update(None, "user_version", 17).unwrap();
+    drop(connection);
+
+    let output = fixture.output(&["start", "regenerate all reports", "src"]);
+    output.assert().failure().code(64);
+    output.assert().stdout(predicate::str::is_empty());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("re-run: ai-coord start --recursive 'src' 'regenerate all reports'")
+    );
 }
 
 #[test]

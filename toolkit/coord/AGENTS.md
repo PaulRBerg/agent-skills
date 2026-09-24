@@ -285,8 +285,9 @@ ai-coord wait -t 60  # explicit timeout, capped at one hour
 
 Editing requires the matching `ai-coord start` or `ai-coord bundle start` form to return `READY`. Every terminal `start`,
 `wait`, and `done` outcome also prints one concise next-step sentence to stderr while preserving the stdout TSV contract.
-`wait` checks the SQLite generation counter each second and performs full inventory, Git, and arbitration refreshes only
-when coordination state changes or every 20 seconds as a fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness
+`wait` checks the SQLite generation counter each second and performs full inventory, Git, and arbitration refreshes when
+coordination state changes, every second while the work is blocked by dirty-settling, or otherwise every 20 seconds as a
+fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness
 wakes with exit 3; `UNKNOWN` exits 2. After any such wake, inspect the reported state and re-arm with the matching start
 form as needed. Each wait recheck pins the observed work-item ID and revision before Git evidence and again in the
 arbitration transaction. A concurrent lifecycle change is retried within the original timeout instead of recreating or
@@ -322,7 +323,9 @@ readiness wake still requires the matching ordinary or bundle start form to retu
 the ownership recheck. Unknown coverage, timeout, and release state explicitly
 that no edit scope is owned. Repeated start calls may launch multiple independent wakers for the same session; each exits
 on the first terminal outcome. Codex sessions use `ai-coord wait` in the foreground.
-The waker resolves the Git root from its hook payload and observes only that root's queued row.
+The waker resolves the Git root from its hook payload and observes only that root's queued row. There is no bundle
+waker: Claude's waker hook filter never matches `ai-coord bundle start`, so a blocked bundle start always prints the
+foreground `ai-coord wait` guidance, even in Claude Code.
 
 Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
 planning presence from active implementation work.
@@ -497,7 +500,8 @@ attribution, findings, wakers, and lifecycle bookkeeping remain active. The next
 as does any explicit ordinary or bundle `draft`/`start` write escalation, without releasing existing work.
 Claude's `PostToolBatch` hook and Codex's `PostToolUse` hook report the unread count once, route inspection to
 `ai-coord inbox`, and identify message text as peer-reported data rather than instructions or authority. Peer text, IDs,
-prompts, and tool payloads are never injected. When other live work makes a repository non-quiet, prompt context adds a
+prompts, and tool payloads are never injected, except that the out-of-scope write warning below names the offending
+claim's holder by callsign or session-ID prefix. When other live work makes a repository non-quiet, prompt context adds a
 scope-gate reminder only when it fits the 200-character budget. Post-tool hooks also record best-effort touched paths
 and emit one `ai-coord done` nudge per transition to clean owned scopes.
 
@@ -551,6 +555,10 @@ that should hold its claims — either an
 `touched`, `inbox`, `msg`, `recommend list`, `recommend show`, `finding`, `baseline`, `trailer`, and `name` remain
 available to delegates.
 
+This detects only those two rules. A Claude subagent inherits its parent's `CLAUDE_CODE_SESSION_ID` with no
+distinguishing environment signal, so the guard cannot tell it apart from its parent and never rejects it; Claude
+subagents must voluntarily honor the rule above instead of relying on enforcement.
+
 ### Storage and retention
 
 State lives at `$XDG_STATE_HOME/ai-coord/state.db`, defaulting to `~/.local/state/ai-coord/state.db`. Set
@@ -567,8 +575,9 @@ session-owned drafts, and complete provider health cache rows. Transcript paths 
 JSON. The ledger never stores cached provider errors, hook hashes, plan bodies, transcript contents, or arbitrary hook
 payloads; opt-in triage prompts and model output exist only in the 30-day run artifacts described above. Composite
 session foreign keys cascade draft and submitted work cleanup on authoritative session end, dead-process reconciliation,
-and session supersession, but only for a session-owned (unnamed) draft: a named draft has no owning session and that
-cascade never touches it. Named drafts instead expire and are deleted after seven days without an update.
+session supersession, and an authoritative Claude inventory observation removing a Claude session row absent from it,
+but only for a session-owned (unnamed) draft: a named draft has no owning session and that cascade never touches it.
+Named drafts instead expire and are deleted after seven days without an update.
 
 Messages expire after 48 hours and are capped at 50 per inbox. Pending and accepted recommendations expire 48 hours
 after creation. Rejected, withdrawn, and stale history is retained for 48 hours after that transition; each endpoint is
@@ -612,4 +621,7 @@ cd apps/coord-dashboard && bun run dev
 ```
 
 `ai-coord serve` listens on `127.0.0.1:4477` by default. Vite proxies `/api` requests to that address, so the dashboard
-development server can use its own origin.
+development server can use its own origin. It rejects any request whose `Host` header does not name `localhost`,
+`127.0.0.1`, or `[::1]` (any port, case-insensitive) with 403, and a missing or unparseable `Host` with 400, so a page
+loaded from another origin cannot reach this local API through DNS rebinding; the Vite and Bun dashboard proxies send a
+loopback `Host` and keep working.
