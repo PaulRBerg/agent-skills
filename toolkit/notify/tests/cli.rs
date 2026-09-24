@@ -52,12 +52,16 @@ impl TestEnv {
     }
 
     fn write_runtime_config(&self, database: &Path, log: &Path) {
+        self.write_runtime_config_with_export(database, log, false);
+    }
+
+    fn write_runtime_config_with_export(&self, database: &Path, log: &Path, export_before_cleanup: bool) {
         let path = self.config_path();
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(
             path,
             format!(
-                "cleanup:\n  auto_cleanup_enabled: false\n  export_before_cleanup: false\n\
+                "cleanup:\n  auto_cleanup_enabled: false\n  export_before_cleanup: {export_before_cleanup}\n\
                  database:\n  path: {}\n\
                  logging:\n  level: DEBUG\n  path: {}\n\
                  notification:\n  threshold_seconds: 0\n",
@@ -66,6 +70,18 @@ impl TestEnv {
             ),
         )
         .unwrap();
+    }
+
+    fn export_dir(&self) -> PathBuf {
+        self.xdg.join("ai-notify/exports")
+    }
+
+    fn export_files(&self) -> Vec<PathBuf> {
+        match fs::read_dir(self.export_dir()) {
+            Ok(entries) => entries.map(|entry| entry.unwrap().path()).collect(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(error) => panic!("cannot read export directory: {error}"),
+        }
     }
 }
 
@@ -123,7 +139,7 @@ fn test_notification_succeeds_when_notifier_is_unavailable() {
 }
 
 #[test]
-fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_usage() {
+fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_nonblocking() {
     let environment = TestEnv::new();
     let payload = r#"{"type":"agent-turn-complete","input-messages":["hello"],"last-assistant-message":"done"}"#;
 
@@ -134,18 +150,20 @@ fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_usage() {
     environment.run(&["codex", no_reply], "").success();
     environment.run(&["codex", "--stdin"], no_reply).success();
 
-    environment.run(&["codex", "{"], "").code(2).stderr(predicate::str::contains("Failed to parse JSON"));
+    // Payload parse/validation failures must exit 1 (non-blocking), never exit 2: Codex treats a
+    // blocking hook exit differently from a plain callback failure.
+    environment.run(&["codex", "{"], "").code(1).stderr(predicate::str::contains("Failed to parse JSON"));
     environment
         .run(&["codex", "{}"], "")
-        .code(2)
+        .code(1)
         .stderr(predicate::str::contains("Codex payload must include type \"agent-turn-complete\""));
     environment
         .run(&["codex", r#"{"type":"agent-turn-complete","input-messages":42}"#], "")
-        .code(2)
+        .code(1)
         .stderr(predicate::str::contains("Codex input-messages must be a string or an array of strings or objects"));
     environment
         .run(&["codex", r#"{"type":"agent-turn-complete","last-assistant-message":42}"#], "")
-        .code(2)
+        .code(1)
         .stderr(predicate::str::contains("Codex last-assistant-message must be a string, array, or object"));
 }
 
@@ -374,6 +392,47 @@ fn cleanup_dry_run_cancellation_and_deletion_use_configured_database() {
 }
 
 #[test]
+fn cleanup_exports_only_the_deleted_rows_and_skips_the_file_when_none_expire() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config_with_export(&database, &log, true);
+
+    // Nothing is expired yet: cleanup must not write an export file at all.
+    environment
+        .run(&["cleanup", "--days", "30"], "y\n")
+        .success()
+        .stdout(predicate::str::contains("Sessions deleted: 0").and(predicate::str::contains("Sessions exported: 0")));
+    assert!(environment.export_files().is_empty());
+
+    let old = r#"{"session_id":"expired","prompt":"old work","cwd":"/tmp/project"}"#;
+    let recent = r#"{"session_id":"kept","prompt":"recent work","cwd":"/tmp/project"}"#;
+    environment.run(&["event", "user-prompt-submit"], old).success();
+    environment.run(&["event", "user-prompt-submit"], recent).success();
+    let connection = Connection::open(&database).unwrap();
+    connection
+        .execute("UPDATE sessions SET created_at = datetime('now', '-40 days') WHERE session_id = 'expired'", [])
+        .unwrap();
+    drop(connection);
+
+    environment
+        .run(&["cleanup", "--days", "30"], "y\n")
+        .success()
+        .stdout(predicate::str::contains("Sessions deleted: 1").and(predicate::str::contains("Sessions exported: 1")));
+
+    let files = environment.export_files();
+    assert_eq!(files.len(), 1);
+    let exported: serde_json::Value = serde_json::from_slice(&fs::read(&files[0]).unwrap()).unwrap();
+    let rows = exported.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["session_id"], "expired");
+
+    let remaining: i64 =
+        Connection::open(&database).unwrap().query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0)).unwrap();
+    assert_eq!(remaining, 1);
+}
+
+#[test]
 fn cleanup_dry_run_and_cancellation_do_not_create_a_missing_database() {
     let environment = TestEnv::new();
     let database = environment._root.path().join("state/missing.db");
@@ -444,5 +503,42 @@ fn every_claude_event_path_runs_with_custom_database_and_log_paths() {
         environment.run(&["event", event], payload).success();
     }
 
-    environment.run(&["event", "stop"], "not json").code(2);
+    // Hook event payload failures must exit 1 (non-blocking) rather than 2: Claude Code and Codex
+    // treat a hook's exit 2 as a blocking decision (e.g. Stop keeps the agent going).
+    environment.run(&["event", "stop"], "not json").code(1);
+}
+
+#[test]
+fn event_payload_failures_never_exit_2() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    environment.run(&["event", "stop"], "not json").code(1).stderr(predicate::str::contains("Failed to parse JSON"));
+    environment.run(&["event", "stop"], "[]").code(1).stderr(predicate::str::contains("must be an object"));
+    environment
+        .run(&["event", "stop"], r#"{"cwd":"/tmp/../etc"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Path traversal detected in cwd"));
+    environment
+        .run(&["event", "stop"], r#"{"cwd":42}"#)
+        .code(1)
+        .stderr(predicate::str::contains("cwd must be a string"));
+    environment
+        .run(&["event", "stop"], r#"{"session_id":""}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Invalid session_id"));
+    environment
+        .run(&["event", "stop"], r#"{"cwd":"/tmp/project"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Missing session_id in input"));
+    environment
+        .run(&["event", "codex"], r#"{"hook_event_name":"UserPromptSubmit","session_id":"s"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Codex hook payload must include turn_id"));
+    environment
+        .run(&["event", "codex"], r#"{"hook_event_name":"Other","session_id":"s","turn_id":"t"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Codex hook must be UserPromptSubmit or Stop"));
 }

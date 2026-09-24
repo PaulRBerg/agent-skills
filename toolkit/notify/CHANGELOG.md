@@ -27,6 +27,13 @@
 - Suppress Codex internal automatic-title and rename-suggestion notifications while preserving user title requests
 - Accept Codex callbacks with a null `last-assistant-message` as an absent reply
 
+### Fixed
+
+- Hook event commands (`ai-notify event ...` and the legacy `ai-notify codex` callback) now exit 1 instead of 2 on an
+  invalid payload, so Claude Code and Codex no longer treat a malformed hook payload as a blocking decision
+- Automatic and manual cleanup now export only the session rows about to be deleted, and only when there are any,
+  instead of exporting every row before every cleanup run
+
 ## [1.0.0] - 2025-01-22
 
 ### Added

@@ -47,25 +47,25 @@ pub trait SessionState {
 
 /// Parses a JSON object and applies the common CLI payload validation.
 pub fn parse_payload(payload: &str) -> Result<Value> {
-    let value =
-        serde_json::from_str(payload).map_err(|error| AppError::usage(format!("Failed to parse JSON: {error}")))?;
+    let value = serde_json::from_str(payload)
+        .map_err(|error| AppError::hook_payload(format!("Failed to parse JSON: {error}")))?;
     validate_payload(&value)?;
     Ok(value)
 }
 
 /// Rejects non-object payloads, traversal-bearing cwd values, and invalid session IDs.
 pub fn validate_payload(payload: &Value) -> Result<()> {
-    let object = payload.as_object().ok_or_else(|| AppError::usage("JSON payload must be an object"))?;
+    let object = payload.as_object().ok_or_else(|| AppError::hook_payload("JSON payload must be an object"))?;
     if let Some(cwd) = object.get("cwd") {
-        let cwd = cwd.as_str().ok_or_else(|| AppError::usage("cwd must be a string"))?;
+        let cwd = cwd.as_str().ok_or_else(|| AppError::hook_payload("cwd must be a string"))?;
         if Path::new(cwd).components().any(|component| component == Component::ParentDir) {
-            return Err(AppError::usage("Path traversal detected in cwd"));
+            return Err(AppError::hook_payload("Path traversal detected in cwd"));
         }
     }
     if let Some(session_id) = object.get("session_id") {
-        let session_id = session_id.as_str().ok_or_else(|| AppError::usage("session_id must be a string"))?;
+        let session_id = session_id.as_str().ok_or_else(|| AppError::hook_payload("session_id must be a string"))?;
         if session_id.is_empty() || session_id.len() > 255 {
-            return Err(AppError::usage("Invalid session_id"));
+            return Err(AppError::hook_payload("Invalid session_id"));
         }
     }
     Ok(())
@@ -221,7 +221,7 @@ pub fn handle_codex_hook(
     let session_id = required_session_id(object)?;
     let turn_id = string(object, "turn_id");
     if turn_id.is_empty() {
-        return Err(AppError::usage("Codex hook payload must include turn_id"));
+        return Err(AppError::hook_payload("Codex hook payload must include turn_id"));
     }
     // Steering can submit multiple prompts per turn; isolate state from other turns and clients.
     let key = format!("codex:{session_id}:{turn_id}");
@@ -251,7 +251,7 @@ pub fn handle_codex_hook(
             }
             state.cleanup_if_due();
         }
-        _ => return Err(AppError::usage("Codex hook must be UserPromptSubmit or Stop")),
+        _ => return Err(AppError::hook_payload("Codex hook must be UserPromptSubmit or Stop")),
     }
     Ok(())
 }
@@ -263,7 +263,7 @@ pub fn handle_codex_notify(payload: &Value, config: &AppConfig, notifier: &mut i
     let event = first_value(object, &["type", "event"])
         .and_then(Value::as_str)
         .filter(|event| !event.is_empty())
-        .ok_or_else(|| AppError::usage("Codex payload must include type \"agent-turn-complete\""))?;
+        .ok_or_else(|| AppError::hook_payload("Codex payload must include type \"agent-turn-complete\""))?;
     if event != CODEX_EVENT_TYPE {
         return Ok(());
     }
@@ -394,7 +394,9 @@ fn validate_codex_input_messages(messages: Option<&Value>) -> Result<()> {
     match messages {
         None => Ok(()),
         Some(messages) if !matches!(messages, Value::Object(_)) && is_codex_message_text(messages) => Ok(()),
-        Some(_) => Err(AppError::usage("Codex input-messages must be a string or an array of strings or objects")),
+        Some(_) => {
+            Err(AppError::hook_payload("Codex input-messages must be a string or an array of strings or objects"))
+        }
     }
 }
 
@@ -402,7 +404,7 @@ fn validate_codex_message_text(message: Option<&Value>, field: &str) -> Result<(
     match message {
         None | Some(Value::Null) => Ok(()),
         Some(message) if is_codex_message_text(message) => Ok(()),
-        Some(_) => Err(AppError::usage(format!("Codex {field} must be a string, array, or object"))),
+        Some(_) => Err(AppError::hook_payload(format!("Codex {field} must be a string, array, or object"))),
     }
 }
 
@@ -418,13 +420,13 @@ fn is_codex_message_text(message: &Value) -> bool {
 }
 
 fn object(payload: &Value) -> Result<&Map<String, Value>> {
-    payload.as_object().ok_or_else(|| AppError::usage("JSON payload must be an object"))
+    payload.as_object().ok_or_else(|| AppError::hook_payload("JSON payload must be an object"))
 }
 fn string<'a>(object: &'a Map<String, Value>, key: &str) -> &'a str {
     object.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 fn required_session_id(object: &Map<String, Value>) -> Result<&str> {
-    optional_session_id(object).ok_or_else(|| AppError::usage("Missing session_id in input"))
+    optional_session_id(object).ok_or_else(|| AppError::hook_payload("Missing session_id in input"))
 }
 fn optional_session_id(object: &Map<String, Value>) -> Option<&str> {
     object.get("session_id").and_then(Value::as_str).filter(|value| !value.is_empty())

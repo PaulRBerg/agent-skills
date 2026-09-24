@@ -8,16 +8,14 @@ use crate::{
     error::{AppError, Result},
 };
 
+/// Held only to flush buffered log records via `WorkerGuard`'s `Drop` impl on process exit; the
+/// caller never reads the field itself.
 #[derive(Debug)]
-pub struct LoggingGuard(Option<WorkerGuard>);
+pub struct LoggingGuard(#[allow(dead_code)] Option<WorkerGuard>);
 
 impl LoggingGuard {
     pub const fn disabled() -> Self {
         Self(None)
-    }
-
-    pub const fn is_enabled(&self) -> bool {
-        self.0.is_some()
     }
 }
 

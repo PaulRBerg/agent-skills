@@ -2,7 +2,7 @@ use std::{
     env, fmt, fs,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{Arc, Once, OnceLock},
+    sync::{Arc, OnceLock},
 };
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -220,28 +220,15 @@ impl LoadedConfig {
 pub struct ConfigLoader {
     path: PathBuf,
     loaded: OnceLock<LoadedConfig>,
-    warned: Once,
-}
-
-impl Default for ConfigLoader {
-    fn default() -> Self {
-        Self::new(config_path())
-    }
 }
 
 impl ConfigLoader {
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into(), loaded: OnceLock::new(), warned: Once::new() }
+        Self { path: path.into(), loaded: OnceLock::new() }
     }
 
     pub fn path(&self) -> &Path {
         &self.path
-    }
-
-    pub fn load(&self) -> Arc<AppConfig> {
-        let loaded = self.load_report();
-        self.warned.call_once(|| loaded.emit_warning());
-        loaded.config
     }
 
     pub fn load_report(&self) -> LoadedConfig {
@@ -257,13 +244,6 @@ impl ConfigLoader {
         self.save(&config)?;
         Ok(config)
     }
-}
-
-static RUNTIME_CONFIG: OnceLock<Arc<AppConfig>> = OnceLock::new();
-
-/// Returns the process-wide runtime configuration, loaded at most once.
-pub fn runtime_config() -> Arc<AppConfig> {
-    Arc::clone(RUNTIME_CONFIG.get_or_init(|| ConfigLoader::default().load()))
 }
 
 pub fn xdg_config_home() -> PathBuf {
@@ -434,7 +414,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = ConfigLoader::new(path).load();
+        let config = ConfigLoader::new(path).load_report().config;
 
         assert_eq!(config.notification.threshold_seconds, 15);
         assert_eq!(config.notification.mode, NotificationMode::All);
@@ -479,7 +459,7 @@ mod tests {
         assert!(text.contains("level: DEBUG  # Log level"));
         assert!(text.contains("path: /tmp/custom.db  # Path to SQLite database file"));
         assert!(text.contains("path: /tmp/custom.log  # Path to log file"));
-        assert_eq!(&*ConfigLoader::new(path).load(), &config);
+        assert_eq!(&*ConfigLoader::new(path).load_report().config, &config);
     }
 
     #[test]

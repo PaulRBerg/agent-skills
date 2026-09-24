@@ -18,6 +18,7 @@ use serde::Serialize;
 use crate::{
     config::{AppConfig, cleanup_marker_path, export_dir},
     error::{AppError, Result},
+    events::JobInfo,
 };
 
 const SCHEMA_VERSION: i32 = 1;
@@ -68,14 +69,6 @@ pub struct SessionRecord {
     pub duration_seconds: Option<i64>,
 }
 
-/// Details from the newest completed turn in a Claude session.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct JobInfo {
-    pub job_number: Option<i64>,
-    pub duration_seconds: Option<i64>,
-    pub prompt: Option<String>,
-}
-
 /// Results from exporting and removing expired session rows.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CleanupStats {
@@ -92,9 +85,6 @@ pub struct SessionStore {
     export_before_cleanup: bool,
     retention_days: u32,
 }
-
-/// Compatibility name matching the former Python implementation.
-pub type SessionTracker = SessionStore;
 
 impl SessionStore {
     /// Creates a store for the YAML-configured database and ensures schema-v1 exists.
@@ -182,7 +172,7 @@ impl SessionStore {
     }
 
     /// Returns the newest completed turn's job number, duration, and prompt.
-    pub fn get_job_info(&self, session_id: &str) -> JobInfo {
+    pub fn job_info(&self, session_id: &str) -> JobInfo {
         let Some(connection) = self.connection("get job info") else {
             return JobInfo::default();
         };
@@ -205,12 +195,13 @@ impl SessionStore {
     }
 
     /// Returns the job number of the newest active turn, if one exists.
-    pub fn get_active_job_number(&self, session_id: &str) -> Option<i64> {
+    #[cfg(test)]
+    fn get_active_job_number(&self, session_id: &str) -> Option<i64> {
         self.query_optional("get active job number", session_id, "job_number")
     }
 
     /// Returns the prompt of the newest active turn, if one exists.
-    pub fn get_active_prompt(&self, session_id: &str) -> Option<String> {
+    pub fn active_prompt(&self, session_id: &str) -> Option<String> {
         let connection = self.connection("get active prompt")?;
         match connection.query_row(
             "SELECT prompt FROM sessions
@@ -229,19 +220,6 @@ impl SessionStore {
         }
     }
 
-    /// Concise aliases for event adapters.
-    pub fn job_info(&self, session_id: &str) -> JobInfo {
-        self.get_job_info(session_id)
-    }
-
-    pub fn active_job_number(&self, session_id: &str) -> Option<i64> {
-        self.get_active_job_number(session_id)
-    }
-
-    pub fn active_prompt(&self, session_id: &str) -> Option<String> {
-        self.get_active_prompt(session_id)
-    }
-
     /// Exports every schema column in newest-first order. `days` limits rows to the recent window.
     pub fn export_to_json(&self, output_path: &Path, days: Option<u32>) -> usize {
         let Some(connection) = self.connection("export sessions") else {
@@ -254,12 +232,16 @@ impl SessionStore {
                 return 0;
             }
         };
+        Self::write_export(output_path, &records)
+    }
 
+    /// Writes `records` to `output_path` as pretty JSON, returning the number of rows written.
+    fn write_export(output_path: &Path, records: &[SessionRecord]) -> usize {
         let result: Result<()> = (|| {
             let parent = output_path.parent().filter(|path| !path.as_os_str().is_empty()).unwrap_or(Path::new("."));
             fs::create_dir_all(parent)?;
             let file = fs::File::create(output_path)?;
-            serde_json::to_writer_pretty(file, &records)?;
+            serde_json::to_writer_pretty(file, records)?;
             Ok(())
         })();
         match result {
@@ -274,15 +256,10 @@ impl SessionStore {
         }
     }
 
-    /// Deletes rows older than the retention period, optionally writing a full JSON backup first.
+    /// Deletes rows older than the retention period. When `export_before` is set, the rows about
+    /// to be deleted (and only those, and only when there are any) are exported first.
     pub fn cleanup_old_data(&self, retention_days: u32, export_before: bool) -> CleanupStats {
         let mut stats = CleanupStats::default();
-        if export_before {
-            let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-            let path = export_dir().join(format!("sessions_before_cleanup_{timestamp}.json"));
-            stats.rows_exported = self.export_to_json(&path, None);
-        }
-
         let size_before = file_size(&self.database_path);
         let Some(connection) = self.connection("clean up sessions") else {
             return stats;
@@ -290,6 +267,19 @@ impl SessionStore {
         // `created_at` is schema-v1 SQLite text (CURRENT_TIMESTAMP), so use SQLite's matching
         // datetime representation instead of binding a Unix integer.
         let modifier = format!("-{retention_days} days");
+
+        if export_before {
+            match self.read_expired_records(&connection, &modifier) {
+                Ok(records) if !records.is_empty() => {
+                    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+                    let path = export_dir().join(format!("sessions_before_cleanup_{timestamp}.json"));
+                    stats.rows_exported = Self::write_export(&path, &records);
+                }
+                Ok(_) => {}
+                Err(error) => tracing::error!(%error, "failed to read expired sessions for export"),
+            }
+        }
+
         match connection.execute("DELETE FROM sessions WHERE created_at < datetime('now', ?1)", [&modifier]) {
             Ok(rows_deleted) => stats.rows_deleted = rows_deleted,
             Err(error) => {
@@ -391,6 +381,7 @@ impl SessionStore {
         }
     }
 
+    #[cfg(test)]
     fn query_optional(&self, operation: &str, session_id: &str, column: &str) -> Option<i64> {
         let connection = self.connection(operation)?;
         let query = format!(
@@ -426,6 +417,15 @@ impl SessionStore {
         };
         rows.collect()
     }
+
+    /// Reads the rows that `cleanup_old_data` is about to delete for the given `-N days` modifier.
+    fn read_expired_records(&self, connection: &Connection, modifier: &str) -> rusqlite::Result<Vec<SessionRecord>> {
+        let mut statement = connection.prepare(
+            "SELECT id, session_id, created_at, prompt, cwd, job_number, stopped_at, last_wait_at, duration_seconds
+             FROM sessions WHERE created_at < datetime('now', ?1) ORDER BY created_at DESC, id DESC",
+        )?;
+        statement.query_map([modifier], record_from_row)?.collect()
+    }
 }
 
 impl crate::events::SessionState for SessionStore {
@@ -446,12 +446,7 @@ impl crate::events::SessionState for SessionStore {
     }
 
     fn job_info(&self, session_id: &str) -> crate::events::JobInfo {
-        let info = Self::job_info(self, session_id);
-        crate::events::JobInfo {
-            job_number: info.job_number,
-            duration_seconds: info.duration_seconds,
-            prompt: info.prompt,
-        }
+        Self::job_info(self, session_id)
     }
 
     fn cleanup_if_due(&self) {
@@ -521,7 +516,7 @@ mod tests {
         let store = SessionStore::from_database_path(directory.path().join("sessions.db")).unwrap();
 
         store.track_prompt("session-1", "first", "/tmp");
-        assert_eq!(store.active_job_number("session-1"), Some(1));
+        assert_eq!(store.get_active_job_number("session-1"), Some(1));
         assert_eq!(store.active_prompt("session-1").as_deref(), Some("first"));
         store.mark_waiting("session-1");
         store.mark_stopped("session-1");

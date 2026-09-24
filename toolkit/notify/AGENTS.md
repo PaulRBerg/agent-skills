@@ -22,12 +22,16 @@ platform-independent; CI runs on Ubuntu with nightly Rust.
 - Commands under `ai-notify event` read hook JSON from stdin. `event codex` handles native `UserPromptSubmit` and `Stop`,
   tracking prompts under a `codex:<session_id>:<turn_id>` key in the existing SQLite schema. The legacy `ai-notify codex`
   callback accepts JSON as its final argument or via `--stdin` without creating a tracked SQLite session.
+- Hook event commands (`ai-notify event ...` and the legacy `ai-notify codex` callback) never exit 2 on an invalid
+  payload; parse and validation failures there exit 1, because Claude Code and Codex treat a hook's exit 2 as a blocking
+  decision (e.g. Stop would keep the agent going, PreToolUse would block the tool). Only clap CLI usage errors and
+  non-hook commands (`config`, `link`, `check`, `cleanup`, `test`) still use exit 2.
 - `integrations::HOOK_SPECS` is the source of truth for installed Claude hooks. The integration inspector derives its
   required event set from that list so `link claude` and `check` stay aligned.
 - Preserve unrelated settings and hooks when changing integration writers. `link codex` must continue to refuse a
   different root `notify` value unless forced; profile names resolve to sibling `<profile>.config.toml` files.
-- Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. Runtime configuration is cached for
-  the life of the process.
+- Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. `ConfigLoader` caches the loaded
+  configuration for its own lifetime (one load per CLI invocation).
 - Claude `Stop` defers completion while `background_tasks` or `session_crons` are present. `StopFailure` alerts only in
   `all` mode and bypasses duration and prompt filters. Both Codex integrations omit duration filtering, suppress internal
   title-generation prompts, and apply notification mode and prompt-prefix exclusions.

@@ -9,6 +9,10 @@ pub enum ErrorKind {
     Usage,
     Configuration,
     Integration,
+    /// An invalid hook/callback payload. Hook commands read from an external tool's stdin or
+    /// argv, and their host (Claude Code, Codex) treats exit 2 as a blocking decision, so these
+    /// errors must exit 1 like other runtime failures instead of exit 2 like a CLI usage error.
+    HookPayload,
 }
 
 impl ErrorKind {
@@ -16,7 +20,7 @@ impl ErrorKind {
     pub const fn code(self) -> u8 {
         match self {
             Self::Usage => 2,
-            Self::Operational | Self::Configuration | Self::Integration => 1,
+            Self::Operational | Self::Configuration | Self::Integration | Self::HookPayload => 1,
         }
     }
 }
@@ -35,6 +39,10 @@ impl AppError {
 
     pub fn usage(message: impl Into<String>) -> Self {
         Self { kind: ErrorKind::Usage, message: message.into() }
+    }
+
+    pub fn hook_payload(message: impl Into<String>) -> Self {
+        Self { kind: ErrorKind::HookPayload, message: message.into() }
     }
 
     pub fn configuration(message: impl Into<String>) -> Self {
@@ -80,5 +88,6 @@ mod tests {
         assert_eq!(ErrorKind::Operational.code(), 1);
         assert_eq!(ErrorKind::Configuration.code(), 1);
         assert_eq!(ErrorKind::Integration.code(), 1);
+        assert_eq!(ErrorKind::HookPayload.code(), 1);
     }
 }
