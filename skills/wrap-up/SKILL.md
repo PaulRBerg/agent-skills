@@ -7,6 +7,7 @@ coordination: exempt
 disable-model-invocation: true
 name: wrap-up
 skill-dependencies:
+  - commit
   - task-handoff
 description:
   Wind down a long-running session fast when the user must leave — freeze new work, preserve active subagents, secure
