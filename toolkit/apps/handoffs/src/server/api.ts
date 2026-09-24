@@ -18,6 +18,13 @@ const CONTENT_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
+// Loopback hostnames accepted to block DNS-rebinding attacks against this 127.0.0.1-bound server.
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function isLoopbackHost(hostname: string): boolean {
+  return LOOPBACK_HOSTNAMES.has(hostname.toLowerCase());
+}
+
 function responseBody(method: string, bytes: Uint8Array): BodyInit | null {
   return method === "HEAD" ? null : (bytes as BodyInit);
 }
@@ -46,7 +53,16 @@ export function createRequestHandler(options: RequestHandlerOptions): (request: 
   const indexPath = resolve(distDirectory, "index.html");
 
   return async (request: Request): Promise<Response> => {
-    const url = new URL(request.url);
+    let url: URL;
+    try {
+      url = new URL(request.url);
+    } catch {
+      return new Response("Bad Request", { status: 400 });
+    }
+
+    if (!isLoopbackHost(url.hostname)) {
+      return new Response("Forbidden", { status: 403 });
+    }
 
     if (url.pathname === "/api/handoffs") {
       if (request.method !== "GET") {

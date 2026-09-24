@@ -76,6 +76,32 @@ describe("request handler", () => {
     logged.mockRestore();
   });
 
+  it("rejects forged Host headers on API and static routes (DNS-rebinding guard)", async () => {
+    const handler = await fixtureHandler();
+    const api = await handler(new Request("http://evil.example:1234/api/handoffs"));
+    const asset = await handler(new Request("http://evil.example:1234/assets/app.js"));
+
+    expect(api.status).toBe(403);
+    expect(asset.status).toBe(403);
+  });
+
+  it("accepts loopback Host headers with any port", async () => {
+    const handler = await fixtureHandler();
+    for (const host of ["localhost:9999", "127.0.0.1:9999", "[::1]:9999", "LOCALHOST:9999"]) {
+      const response = await handler(new Request(`http://${host}/api/handoffs`));
+      expect(response.status).toBe(200);
+    }
+  });
+
+  it("returns 400 for an unparseable request URL", async () => {
+    const handler = await fixtureHandler();
+    const request = { url: "/api/handoffs", method: "GET" } as unknown as Request;
+
+    const response = await handler(request);
+
+    expect(response.status).toBe(400);
+  });
+
   it("serves assets and GET/HEAD SPA fallbacks", async () => {
     const handler = await fixtureHandler();
     const asset = await handler(new Request("http://localhost/assets/app.js"));
