@@ -81,19 +81,23 @@ Hitting this too on {platform}. Repro: {minimal steps}.
 
 **Repro report**:
 
-```markdown
+````markdown
 Reproduced on {platform} with {version}. Steps:
 
 1. {step}
 2. {step}
 3. {step}
 
-Expected: {...} Actual: {...}
+Expected: {...}
+
+Actual: {...}
 
 Relevant log:
 
-\`\`\` {log snippet} \`\`\`
 ```
+{log snippet}
+```
+````
 
 **Proposed solution**:
 

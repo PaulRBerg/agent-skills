@@ -1,7 +1,8 @@
 # Discussion Update Workflow
 
-Update an existing GitHub discussion's title, body, category, labels, or images with `gh discussion edit`. Discussion
-state changes and comment editing belong to `comment-discussion.md`. Load [posting.md](posting.md) before the write.
+Update an existing GitHub discussion's title, body, category, labels, or images with `gh discussion edit`. Comment
+editing belongs to `comment-discussion.md`; `gh discussion` has no close or reopen command, so state changes are out of
+scope. Load [posting.md](posting.md) before the write.
 
 ## Validate Prerequisites
 

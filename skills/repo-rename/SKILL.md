@@ -33,8 +33,8 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 ## Workflow
 
 1. Check whether the repository has any active AI chat transcript before treating continuity preservation as in scope:
-   - Claude Code: resolve `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<absolute-repo-path-with-/-replaced-by-->` and check
-     it exists and is non-empty.
+   - Claude Code: resolve `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-repo-path>` (the absolute repo path with
+     each `/` and `.` replaced by `-`) and check it exists and is non-empty.
    - Codex: resolve `${CODEX_HOME:-~/.codex}/sessions` and check whether any session file references the exact absolute
      repo path.
    - If neither exists, state that the transcript-continuity update does not apply; the rename may still proceed for the
@@ -54,10 +54,11 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
    remote, folder, config, transcripts, or repository files.
 
 4. Otherwise present the complete preview and require explicit confirmation in a subsequent user message. Explain that
-   the confirmation authorizes the GitHub rename, local folder move, origin update, and every listed
-   continuity/repository replacement. Lead with `### ⚠️ Rename preview — no changes made`; show GitHub, folder, origin,
-   replacement counts, and rollback coverage in compact tables, then the exhaustive file/count list. Put the exact
-   confirmation token alone in code formatting. If any preview fact changes, regenerate it and ask again.
+   the confirmation authorizes the GitHub rename, local folder move, Claude project-folder move when enabled, origin
+   update, and every listed continuity/repository replacement. Lead with `### ⚠️ Rename preview — no changes made`; show
+   GitHub, folder, origin, replacement counts, and rollback coverage in compact tables, then the exhaustive file/count
+   list. Put the exact confirmation token alone in code formatting. If any preview fact changes, regenerate it and ask
+   again.
 
 5. After confirmation, pass the preview's exact token:
 

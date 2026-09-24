@@ -10,7 +10,8 @@ See `context.md > Auth Validation`. The label fetch below is the auth check.
 ## Parse Repository Argument
 
 The **first token** is the repo name (without org prefix) → `sablier-labs/{repo_name}`. Remove it from arguments;
-remaining text is the issue description.
+remaining text is the issue description. Parse `--check` and handle it per
+`posting.md > Error Handling and Idempotency`.
 
 Example: `lockup "Bug in cliff streams"` → `repository = sablier-labs/lockup`
 
