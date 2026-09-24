@@ -86,10 +86,10 @@ Default **20 credits** per call. Exceptions:
 | **Pro**      | $199/mo | 500M / month | 30 rps                           |
 | **Business** | $999/mo | 3B / month   | 50 rps                           |
 
-Public per-instance hosts are not credit-metered but throttle keyless traffic to **3 rps / 300 per minute** per IP,
-including hosted `*.blockscout.com` subdomains; exceeding it returns `429`. Their bot protection can also return `403`
-with an HTML "Just a moment..." challenge instead of JSON. Switch to the keyed gateway rather than backing off
-repeatedly.
+Public per-instance hosts are not credit-metered but throttle keyless traffic per IP, including hosted
+`*.blockscout.com` subdomains. The backend default is **300 requests per minute** (`API_RATE_LIMIT_BY_IP` over a `1m`
+window); operators may change it, and exceeding it returns `429`. Their bot protection can also return `403` with an
+HTML "Just a moment..." challenge instead of JSON. Switch to the keyed gateway rather than backing off repeatedly.
 
 ## Response Headers (PRO host)
 

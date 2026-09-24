@@ -61,7 +61,8 @@ credits_remaining=99880
 At the default 20 credits/call, the free 100K/day tier ≈ 5,000 calls/day. `blockscout-detect-plan.sh` itself costs ~20
 credits — do not re-run mid-session.
 
-Per-instance public hosts are not credit-metered but are rate-limited to **3 req/s (300/min) per IP**.
+Per-instance public hosts are not credit-metered but are rate-limited per IP by instance configuration; the Blockscout
+backend default is **300 requests per minute** (`API_RATE_LIMIT_BY_IP`), and operators may change it.
 
 ## Choosing an Endpoint
 
