@@ -6,7 +6,8 @@
   IDs last. Keep provider state fresh; centralize a wrapper only when several tests need it. Use jest-dom matchers only
   when the setup file imports them.
 - Await or return every promise. Wrap callback APIs in a promise; a test callback parameter is Vitest context, not a
-  completion callback. In v4, pass an options object as the second argument (a numeric final timeout remains supported).
+  completion callback. Since v4, pass an options object as the second argument (a numeric final timeout remains
+  supported).
 - Put fixture cleanup with the fixture and scenario data with its test. Use tables only where cases clarify distinct
   behavior. Use snapshots only for stable, reviewable output; focused assertions are usually better.
 - Do not commit `only`. Use skips, tags, or concurrency only with an explicit condition and safe isolation.
