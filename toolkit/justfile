@@ -44,8 +44,8 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 @check: rust-check coord-dashboard-check handoffs-check
 
 # Delete the ai-coord ledger (state.db plus its -wal/-shm files) after a [y/N] confirmation.
+[script("bash")]
 reset-coord-ledger:
-    #!/usr/bin/env bash
     set -euo pipefail
     if [[ -n "${AI_COORD_STATE_DIR:-}" ]]; then
         dir="$AI_COORD_STATE_DIR"
