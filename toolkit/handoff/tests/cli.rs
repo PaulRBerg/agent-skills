@@ -152,6 +152,36 @@ fn create_abbreviates_home_paths_throughout_the_handoff_file() {
 }
 
 #[test]
+fn create_does_not_abbreviate_a_sibling_directory_sharing_the_home_prefix() {
+    let harness = Harness::new("home-sibling");
+    // `harness.home` is `<root>/home`; this repository's absolute path is `<root>/home-sibling`, so
+    // it has `harness.home`'s path as a literal text prefix without actually being under it.
+    let repository = harness.repo("home-sibling", true);
+    let draft = harness.root.join("draft.md");
+    fs::write(&draft, format!("# Home sibling\n\nRepository: `{}`\n", repository.display())).unwrap();
+
+    let output = harness.command([
+        "create",
+        "--repo",
+        repository.to_str().unwrap(),
+        "--category",
+        "implementation",
+        "--task",
+        "do not abbreviate a sibling path",
+        "--draft",
+        draft.to_str().unwrap(),
+        "--no-clipboard",
+        "SIBLING.md",
+    ]);
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let target = repository.join(".ai/task-handoffs/SIBLING.md");
+    let contents = fs::read_to_string(target).unwrap();
+    assert!(contents.contains(&format!("Repository: `{}`", repository.display())));
+    assert!(!contents.contains('~'));
+}
+
+#[test]
 fn create_rejects_existing_and_non_ignored_targets() {
     let harness = Harness::new("create-rejections");
     let repository = harness.repo("ignored", true);
@@ -782,6 +812,8 @@ fn archive_validates_location_and_uses_desktop_origin_and_collision_suffix() {
     assert!(destination.starts_with(&format!("{}/ARCHIVE_ME_", archive_directory.display())));
     assert!(destination.ends_with(".md"));
     assert_eq!(fs::read_to_string(destination).unwrap(), "# Finished\n");
+    // The pre-existing destination is never replaced, only sidestepped with a timestamped name.
+    assert_eq!(fs::read_to_string(archive_directory.join("ARCHIVE_ME.md")).unwrap(), "prior\n");
 
     let nested = harness.root.join("repo/.ai/task-handoffs/nested/NOT_DIRECT.md");
     fs::create_dir_all(nested.parent().unwrap()).unwrap();

@@ -11,7 +11,17 @@ pub(crate) fn home() -> Result<PathBuf> {
     if !home.is_absolute() {
         return Err(Error::operational(format!("HOME is not absolute: {}", home.display())));
     }
-    Ok(home)
+    Ok(strip_trailing_slashes(&home))
+}
+
+/// Drops trailing `/` characters so home-path comparisons see a canonical, slash-free prefix.
+/// Never strips below the root.
+fn strip_trailing_slashes(path: &Path) -> PathBuf {
+    let Some(text) = path.to_str() else {
+        return path.to_path_buf();
+    };
+    let trimmed = text.trim_end_matches('/');
+    PathBuf::from(if trimmed.is_empty() { "/" } else { trimmed })
 }
 
 pub(crate) fn shell_quote(value: &str) -> String {
@@ -43,4 +53,18 @@ pub(crate) fn absolute_regular_handoff(path: &Path) -> Result<PathBuf> {
         )));
     }
     Ok(absolute)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_trailing_slashes_removes_one_or_many_without_going_below_root() {
+        assert_eq!(strip_trailing_slashes(Path::new("/Users/prb/")), PathBuf::from("/Users/prb"));
+        assert_eq!(strip_trailing_slashes(Path::new("/Users/prb///")), PathBuf::from("/Users/prb"));
+        assert_eq!(strip_trailing_slashes(Path::new("/Users/prb")), PathBuf::from("/Users/prb"));
+        assert_eq!(strip_trailing_slashes(Path::new("/")), PathBuf::from("/"));
+        assert_eq!(strip_trailing_slashes(Path::new("///")), PathBuf::from("/"));
+    }
 }

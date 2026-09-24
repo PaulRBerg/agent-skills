@@ -243,7 +243,37 @@ fn compose(
 }
 
 fn abbreviate_home_paths(contents: String, home: &str) -> String {
-    if home == "/" { contents } else { contents.replace(home, "~") }
+    if home.is_empty() || home == "/" {
+        return contents;
+    }
+    let mut result = String::with_capacity(contents.len());
+    let mut rest = contents.as_str();
+    while let Some(offset) = rest.find(home) {
+        let (before, from_match) = rest.split_at(offset);
+        let after_home = &from_match[home.len()..];
+        let boundary = after_home.chars().next().is_none_or(|next| next == '/' || !is_path_component_char(next));
+        result.push_str(before);
+        if boundary {
+            result.push('~');
+            rest = after_home;
+        } else {
+            // `home` is a prefix of a sibling path component (e.g. home `/Users/prb` inside
+            // `/Users/prb-old`); keep it verbatim and resume scanning just past this character so
+            // later, independent occurrences of `home` are still abbreviated.
+            let mut chars = from_match.chars();
+            result.push(chars.next().expect("home is non-empty"));
+            rest = chars.as_str();
+        }
+    }
+    result.push_str(rest);
+    result
+}
+
+/// Characters that can continue a path component for the purpose of the boundary check above:
+/// if `home` is immediately followed by one of these, the match is a longer sibling name rather
+/// than a path boundary.
+fn is_path_component_char(character: char) -> bool {
+    character.is_ascii_alphanumeric() || character == '_' || character == '-' || character == '.'
 }
 
 fn yaml_quote(value: &str) -> String {
@@ -568,4 +598,34 @@ fn copy_and_verify(command: &str) -> Result<()> {
 
 fn utf8_path<'a>(path: &'a Path, label: &str) -> Result<&'a str> {
     path.to_str().ok_or_else(|| Error::operational(format!("{label} is not valid UTF-8: {}", path.display())))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn abbreviates_home_at_path_boundaries() {
+        let home = "/Users/prb";
+        assert_eq!(abbreviate_home_paths("/Users/prb/projects/repo".to_owned(), home), "~/projects/repo");
+        assert_eq!(abbreviate_home_paths("/Users/prb".to_owned(), home), "~");
+        assert_eq!(
+            abbreviate_home_paths("cd /Users/prb/one && cd /Users/prb/two".to_owned(), home),
+            "cd ~/one && cd ~/two"
+        );
+    }
+
+    #[test]
+    fn does_not_abbreviate_a_sibling_that_merely_shares_the_home_prefix() {
+        let home = "/Users/prb";
+        assert_eq!(abbreviate_home_paths("/Users/prb-old/app".to_owned(), home), "/Users/prb-old/app");
+        assert_eq!(abbreviate_home_paths("/Users/prb.bak".to_owned(), home), "/Users/prb.bak");
+        assert_eq!(abbreviate_home_paths("/Users/prb_backup".to_owned(), home), "/Users/prb_backup");
+    }
+
+    #[test]
+    fn root_and_empty_home_are_left_untouched() {
+        assert_eq!(abbreviate_home_paths("/Users/prb/repo".to_owned(), "/"), "/Users/prb/repo");
+        assert_eq!(abbreviate_home_paths("/Users/prb/repo".to_owned(), ""), "/Users/prb/repo");
+    }
 }
