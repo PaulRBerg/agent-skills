@@ -8,7 +8,7 @@ inventories remain on the existing provider routes.
 
 1. Validate the address, then resolve any named chain against `references/generated/target-mainnets.json`. Do not send a
    non-target chain to Blockscan.
-2. Open `https://blockscan.com/address/<addr>` with `mcp__chrome_devtools.new_page`, using Chromium rather than a direct
+2. Open `https://blockscan.com/address/<addr>` with Chrome DevTools `new_page`, using Chromium rather than a direct
    Blockscan API or a general web search.
 3. Wait for the address page and `Token Holdings` portfolio to replace any initial `Just a moment...` challenge, then
    take a current accessibility snapshot.
@@ -17,8 +17,8 @@ inventories remain on the existing provider routes.
 5. Capture the page's `Last updated` value when present. Treat displayed amounts and fiat values as Blockscan's current,
    formatted portfolio data rather than exact raw-unit balances.
 
-Use `mcp__chrome_devtools.evaluate_script` when the accessibility snapshot does not expose a stable chain identifier.
-Match support by exact chain ID with:
+Use Chrome DevTools `evaluate_script` when the accessibility snapshot does not expose a stable chain identifier. Match
+support by exact chain ID with:
 
 ```text
 input.address-transaction-chain[data-chainid="<chain-id>"]

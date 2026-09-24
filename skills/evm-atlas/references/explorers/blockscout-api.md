@@ -319,6 +319,7 @@ Use the completion format in `SKILL.md`: preserve full identifiers and use a com
 | `404` on `api.blockscout.com/{id}/…` | Resolve the target through Chainscout; use its per-instance route only when it qualifies for the exception above. |
 | `429` / `x-ratelimit-remaining: 0`   | Rate limited. Back off until `x-ratelimit-reset` (seconds); retain the keyed gateway route.                       |
 | `503`                                | Transient gateway error. Retry within the bounded policy; otherwise report a coverage gap.                        |
+| `403` HTML "Just a moment..." page   | Bot challenge on a hosted `*.blockscout.com` instance. Use the keyed gateway, not repeated scripted retries.      |
 | Compat `{"status":"0", …}`           | Etherscan-shaped error (`No transactions found`, bad address, etc.).                                              |
 
 ## Reference Files
@@ -337,5 +338,3 @@ For features beyond this skill (blocks, smart contracts, search, stats, NFT inst
 - AI-friendly docs index: `https://docs.blockscout.com/llms.txt`
 - Per-instance interactive schema: `https://{instance}/api-docs`
 - PRO OpenAPI spec: `https://docs.blockscout.com/openapi-specs/pro-api.yaml`
-
-Use `WebFetch` to retrieve these for extended capabilities.

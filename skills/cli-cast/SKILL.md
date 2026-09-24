@@ -192,9 +192,10 @@ method is available; never ask for a key in chat or print it.
 `cast send` signs and broadcasts in one command. Run it only after the review approval. So do the Cast 1.8.3+ helpers
 `cast erc20-token transfer|approve|mint|burn`, `cast erc20-token permit --broadcast`,
 `cast erc4626 deposit|mint|withdraw|redeem`, and `cast safe propose|sign|execute`: apply the same Prepare, Simulate, and
-Review phases to them; a Safe proposal or confirmation is a signature artifact that needs its own payload review.
-Signing a message or typed data, including `cast erc20-token permit` without `--broadcast`, also requires a review of
-the exact payload, domain, chain binding, and intended use before approval.
+Review phases to them; a Safe proposal or confirmation is a signature artifact that needs its own payload review. Treat
+any other subcommand whose installed help shows it signs or submits, such as `cast safe create`, `add-delegate`, or
+`remove-delegate`, the same way. Signing a message or typed data, including `cast erc20-token permit` without
+`--broadcast`, also requires a review of the exact payload, domain, chain binding, and intended use before approval.
 
 Pass the selected fees explicitly: EIP-1559 uses `--gas-price` and `--priority-gas-price`; a fixed legacy policy uses
 `--legacy --gas-price` without `--priority-gas-price`. Under the default Ethereum policy, use the approved Rabby Slow

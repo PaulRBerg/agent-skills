@@ -510,8 +510,6 @@ See `references/generated/etherscan-chains.md` for the free-tier target chain li
 curl -s "https://api.etherscan.io/v2/api?chainid=137&module=account&action=balance&address=0x...&tag=latest&apikey=$ETHERSCAN_API_KEY"
 ```
 
-For the target-filtered list of supported chains, see `references/generated/etherscan-chains.md`.
-
 ## Wei to Human-Readable Conversion
 
 API responses return balances in the smallest unit (wei for ETH, smallest decimals for tokens).
@@ -634,11 +632,9 @@ If rate limited, wait briefly and retry.
 
 ## Fallback Documentation
 
-For use cases not covered by this skill (transaction history, contract verification, gas estimates, etc.), fetch the
-AI-friendly documentation:
+For read-only use cases not covered by this skill (gas estimates, block or network stats, etc.), fetch the AI-friendly
+documentation:
 
 ```
 https://docs.etherscan.io/llms.txt
 ```
-
-Use `WebFetch` to retrieve this documentation for extended API capabilities.

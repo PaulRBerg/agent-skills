@@ -63,9 +63,17 @@ Default **20 credits** per call. Exceptions:
 | -------------------------------------------------- | ------- |
 | (default — all unlisted)                           | 20      |
 | `api/v2/search/quick`                              | 25      |
+| `api/v2/tokens`                                    | 30      |
+| `api/v2/tokens/{hash}/transfers`                   | 30      |
 | `api/v2/transactions/{hash}/logs`                  | 30      |
 | `api/v2/transactions/{hash}/token-transfers`       | 30      |
+| `api/v2/transactions/{hash}/state-changes`         | 30      |
+| `api/v2/addresses/{hash}/token-transfers`          | 30      |
+| `api/v2/addresses/{hash}/logs`                     | 30      |
 | `api/v2/transactions/{hash}/internal-transactions` | 40      |
+| `api/v2/addresses/{hash}/internal-transactions`    | 40      |
+| `api/v2/smart-contracts/verification/config`       | 40      |
+| `api/v2/transactions/{hash}/summary`               | 50      |
 | `api/v2/transactions/{hash}/raw-trace`             | 50      |
 | `api/v2/addresses/{hash}/coin-balance-history`     | 50      |
 
@@ -74,23 +82,27 @@ Default **20 credits** per call. Exceptions:
 | Plan         | Price   | Credits      | Rate limit (`x-ratelimit-limit`) |
 | ------------ | ------- | ------------ | -------------------------------- |
 | **Free**     | $0      | 100K / day   | 5 rps                            |
-| **Standard** | $49/mo  | 100M / month | 15 rps                           |
+| **Builder**  | $49/mo  | 100M / month | 15 rps                           |
 | **Pro**      | $199/mo | 500M / month | 30 rps                           |
+| **Business** | $999/mo | 3B / month   | 50 rps                           |
+
+`scripts/blockscout-detect-plan.sh` reports Builder as `plan=standard` and Business as `plan=unknown`.
 
 Public per-instance hosts are not credit-metered but throttle keyless traffic to **3 rps / 300 per minute** per IP,
-including hosted `*.blockscout.com` subdomains; exceeding it returns `429`. Switch to the keyed gateway rather than
-backing off repeatedly.
+including hosted `*.blockscout.com` subdomains; exceeding it returns `429`. Their bot protection can also return `403`
+with an HTML "Just a moment..." challenge instead of JSON. Switch to the keyed gateway rather than backing off
+repeatedly.
 
 ## Response Headers (PRO host)
 
 Returned on every PRO call — read them instead of guessing tier or remaining budget:
 
-| Header                  | Meaning                             |
-| ----------------------- | ----------------------------------- |
-| `x-ratelimit-limit`     | Requests/sec for the plan (5/15/30) |
-| `x-ratelimit-remaining` | Requests left in the current second |
-| `x-ratelimit-reset`     | Seconds until the window resets     |
-| `x-credits-remaining`   | Credits left in the current window  |
+| Header                  | Meaning                                |
+| ----------------------- | -------------------------------------- |
+| `x-ratelimit-limit`     | Requests/sec for the plan (5/15/30/50) |
+| `x-ratelimit-remaining` | Requests left in the current second    |
+| `x-ratelimit-reset`     | Seconds until the window resets        |
+| `x-credits-remaining`   | Credits left in the current window     |
 
 ## Authoritative Docs
 

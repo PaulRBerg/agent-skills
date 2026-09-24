@@ -16,8 +16,8 @@ candidate chain's provider in turn. Blockscan's formatted summary is not raw tra
 
 ## Chromium Workflow
 
-1. Open `https://blockscan.com/tx/<hash>` with `mcp__chrome_devtools.new_page`, using Chromium rather than a direct API
-   or a general web search.
+1. Open `https://blockscan.com/tx/<hash>` with Chrome DevTools `new_page`, using Chromium rather than a direct API or a
+   general web search.
 2. Wait for the transaction heading to replace any initial `Just a moment...` challenge, then take a current
    accessibility snapshot.
 3. Identify the chain from the `<h1>` heading (`<Chain> Transaction Details`) and the `View on <Explorer>` link's
