@@ -103,10 +103,7 @@ test("planner detects target layout, symlink, deletion, and stale lock metadata"
     recursive: true,
   });
   fs.symlinkSync(
-    path.relative(
-      path.join(fixture.claudeRoot, "skills"),
-      path.join(fixture.agentsRoot, "skills", "gone"),
-    ),
+    path.relative(path.join(fixture.claudeRoot, "skills"), path.join(fixture.agentsRoot, "skills", "gone")),
     path.join(fixture.claudeRoot, "skills", "gone"),
   );
 
@@ -203,6 +200,28 @@ test("apply batches one remove and one add per target group, then verifies clean
   assert.deepEqual(commands.map(commandKind), ["remove", "shared", "claude", "codex"]);
   assert.equal(run(fixture, "check").status, 0);
   assert.equal(readLock(fixture).skills.gone, undefined);
+});
+
+test("scoped check accepts a completed source deletion but still rejects unknown names", () => {
+  const fixture = createFixture();
+  git(fixture.sourceRoot, "rm", "-rq", "skills/gamma");
+  git(fixture.sourceRoot, "commit", "-m", "delete gamma");
+  git(fixture.sourceRoot, "push");
+
+  const applied = run(
+    fixture,
+    "apply",
+    "--expected-head",
+    git(fixture.sourceRoot, "rev-parse", "HEAD"),
+    "--skill",
+    "gamma",
+  );
+  assert.equal(applied.status, 0, applied.stderr);
+  const checked = run(fixture, "check", "--skill", "gamma");
+  assert.equal(checked.status, 0, checked.stderr);
+  const unknown = run(fixture, "check", "--skill", "never-existed");
+  assert.notEqual(unknown.status, 0);
+  assert.match(unknown.stderr, /Unknown source-owned skill: never-existed/);
 });
 
 test("apply guards reject dirty sources, HEAD and upstream mismatches, malformed locks, and concurrent runs", () => {

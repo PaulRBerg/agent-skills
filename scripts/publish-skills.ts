@@ -143,7 +143,10 @@ function createPlan(requestedSkills: string[], { emptyMeansAll = true }: { empty
     .map(([name]) => name);
   const candidateNames = [...new Set([...sourceSkills.keys(), ...sourceOwnedLockNames])].sort();
   const selected = requestedSkills.length > 0 ? requestedSkills : emptyMeansAll ? candidateNames : [];
-  const unknown = selected.filter((name) => !candidateNames.includes(name));
+  // A completed deletion leaves no source or lock entry; its name stays valid while source history has it.
+  const unknown = selected.filter(
+    (name) => !candidateNames.includes(name) && !git(["log", "-1", "--format=%H", "--", `skills/${name}`]),
+  );
   if (unknown.length > 0)
     throw new Error(`Unknown source-owned skill${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`);
 
@@ -153,14 +156,16 @@ function createPlan(requestedSkills: string[], { emptyMeansAll = true }: { empty
     const skill = sourceSkills.get(name);
     const lockEntry = lock.data.skills[name];
     if (!skill) {
-      addDrift(
-        drifts,
-        name,
-        "source",
-        "deleted",
-        path.join(config.sourceRoot, "skills", name),
-        "source skill was deleted",
-      );
+      if (candidateNames.includes(name)) {
+        addDrift(
+          drifts,
+          name,
+          "source",
+          "deleted",
+          path.join(config.sourceRoot, "skills", name),
+          "source skill was deleted",
+        );
+      }
       inspectDeletedTargets(name, drifts);
       continue;
     }
