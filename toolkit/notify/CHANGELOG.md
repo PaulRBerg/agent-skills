@@ -33,6 +33,13 @@
   invalid payload, so Claude Code and Codex no longer treat a malformed hook payload as a blocking decision
 - Automatic and manual cleanup now export only the session rows about to be deleted, and only when there are any,
   instead of exporting every row before every cleanup run
+- `Stop` now closes every open tracked turn for a session, not just the newest, so an interrupted or otherwise abandoned
+  older turn can no longer resurface as the active prompt on a later `Stop`
+- `ai-notify check` now validates a configured Codex `notify` argv by parsing it (plus an appended placeholder payload)
+  through the real CLI definition, so it no longer reports OK for shapes that fail at runtime such as
+  `ai-notify codex --stdin` or `ai-notify event codex`
+- `ai-notify config edit` now runs `$EDITOR` through a shell, so an `EDITOR` value with its own arguments (e.g.
+  `EDITOR="code -w"`) works instead of failing to start
 
 ## [1.0.0] - 2025-01-22
 

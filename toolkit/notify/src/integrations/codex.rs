@@ -241,12 +241,13 @@ fn render_item(item: &Item) -> String {
     item.to_string().trim().to_owned()
 }
 
-/// Returns whether a parsed Codex `notify` value invokes ai-notify's Codex callback.
+/// Returns whether a parsed Codex `notify` value invokes ai-notify's Codex callback in a shape
+/// that actually works when Codex appends the JSON payload as the final argument.
 ///
-/// Accepted representations are an argv array whose program basename is `ai-notify` and which
-/// contains a later standalone `codex` argument; a string whose whitespace-split argv has that
-/// same shape; or Codex Desktop's four-element `SkyComputerUseClient` wrapper around the exact
-/// `["ai-notify", "codex"]` callback.
+/// Accepted representations are an argv array or a whitespace-split string that
+/// [`crate::cli::codex_notify_argv_runs`] confirms parses to a working invocation, or Codex
+/// Desktop's four-element `SkyComputerUseClient` wrapper around the exact `["ai-notify",
+/// "codex"]` callback.
 fn notify_uses_ai_notify(item: &Item) -> bool {
     let Some(value) = item.as_value() else {
         return false;
@@ -254,20 +255,14 @@ fn notify_uses_ai_notify(item: &Item) -> bool {
     match value {
         Value::Array(array) => {
             (array.iter().all(|value| value.as_str().is_some()) &&
-                argv_uses_ai_notify(array.iter().filter_map(Value::as_str))) ||
+                crate::cli::codex_notify_argv_runs(&array.iter().filter_map(Value::as_str).collect::<Vec<_>>())) ||
                 desktop_wrapper_previous_notify_equals(array, CODEX_NOTIFY_COMMAND)
         }
-        Value::String(command) => argv_uses_ai_notify(command.value().split_whitespace()),
+        Value::String(command) => {
+            crate::cli::codex_notify_argv_runs(&command.value().split_whitespace().collect::<Vec<_>>())
+        }
         _ => false,
     }
-}
-
-fn argv_uses_ai_notify<'a>(mut argv: impl Iterator<Item = &'a str>) -> bool {
-    let Some(program) = argv.next() else {
-        return false;
-    };
-    Path::new(program).file_name().and_then(|name| name.to_str()) == Some("ai-notify") &&
-        argv.any(|argument| argument == "codex")
 }
 
 #[cfg(test)]
@@ -340,10 +335,24 @@ mod tests {
 
     #[test]
     fn check_accepts_array_command_with_ai_notify_basename_and_codex_argument() {
+        assert_eq!(inspect_status("notify = [\"/opt/ai-tools/ai-notify\", \"codex\"]\n"), IntegrationStatus::Ok);
+    }
+
+    #[test]
+    fn check_rejects_stdin_flag_that_ignores_codexs_appended_payload() {
+        // Codex still appends the JSON payload as the final argument, but `--stdin` makes
+        // ai-notify read from stdin instead, so this shape fails at runtime.
         assert_eq!(
             inspect_status("notify = [\"/opt/ai-tools/ai-notify\", \"codex\", \"--stdin\"]\n"),
-            IntegrationStatus::Ok
+            IntegrationStatus::Partial
         );
+    }
+
+    #[test]
+    fn check_rejects_the_hook_style_event_codex_shape() {
+        // `ai-notify event codex` reads a hook payload from stdin and does not accept a trailing
+        // positional argument, so Codex's appended payload fails clap parsing at runtime.
+        assert_eq!(inspect_status("notify = [\"ai-notify\", \"event\", \"codex\"]\n"), IntegrationStatus::Partial);
     }
 
     #[test]

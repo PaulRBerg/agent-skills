@@ -119,6 +119,20 @@ fn config_show_edit_and_reset_are_isolated_and_confirmed() {
     edit.assert().success().stdout(predicate::str::contains("Configuration is valid"));
     assert!(edit_target.exists());
 
+    // An EDITOR value with its own arguments (e.g. "code -w") must be split like git does,
+    // instead of being run as a single program named "fake-editor --flag".
+    fs::write(&editor, "#!/bin/sh\n[ \"$1\" = \"--flag\" ] || exit 1\ntest -f \"$2\" || exit 1\nexit 0\n").unwrap();
+    let flagged_target = environment._root.path().join("edited2/config.yaml");
+    let mut edit_with_flag = environment.command();
+    edit_with_flag.env("EDITOR", format!("{} --flag", editor.display())).args([
+        "config",
+        "edit",
+        "--path",
+        flagged_target.to_str().unwrap(),
+    ]);
+    edit_with_flag.assert().success().stdout(predicate::str::contains("Configuration is valid"));
+    assert!(flagged_target.exists());
+
     environment.run(&["config", "reset", "--path", config.to_str().unwrap()], "n\n").code(1);
     assert!(fs::read_to_string(&config).unwrap().contains("17"));
 

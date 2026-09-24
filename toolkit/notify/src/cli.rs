@@ -159,6 +159,27 @@ pub fn entrypoint() -> ExitCode {
     }
 }
 
+/// Returns whether `argv` is an `ai-notify` invocation that will actually receive Codex's JSON
+/// payload when Codex appends it as the final argument, by parsing `argv` plus a placeholder
+/// payload through the real CLI definition and applying the same runtime rule as [`run_codex`]:
+/// `--stdin` ignores an appended argument, so only `Command::Codex { stdin: false, .. }` works.
+pub fn codex_notify_argv_runs(argv: &[&str]) -> bool {
+    let Some((program, rest)) = argv.split_first() else {
+        return false;
+    };
+    if Path::new(program).file_name().and_then(|name| name.to_str()) != Some("ai-notify") {
+        return false;
+    }
+    let mut full = Vec::with_capacity(rest.len() + 2);
+    full.push("ai-notify");
+    full.extend_from_slice(rest);
+    full.push("{}");
+    match Cli::try_parse_from(full) {
+        Ok(cli) => matches!(cli.command, Command::Codex { stdin: false, payload: Some(_) }),
+        Err(_) => false,
+    }
+}
+
 /// Execute a parsed command. Keeping parsing separate makes the Clap surface reusable in tests.
 pub fn run(cli: Cli) -> Result<()> {
     let loader = loader_for(&cli.command)?;
@@ -229,9 +250,15 @@ fn run_config(command: ConfigCommand, loader: &ConfigLoader, config: &AppConfig)
             }
             let editor = env::var_os("EDITOR").filter(|value| !value.is_empty()).unwrap_or_else(|| "vi".into());
             println!("Opening {} in {}...", display_path(loader.path()), editor.to_string_lossy());
-            let result = ProcessCommand::new(&editor).arg(loader.path()).status().map_err(|error| {
-                AppError::operational(format!("failed to start editor {}: {error}", editor.to_string_lossy()))
-            })?;
+            // EDITOR may embed arguments (e.g. "code -w"), so run it through a shell the way git
+            // does instead of treating it as a single program name.
+            let script = format!("{} \"$@\"", editor.to_string_lossy());
+            let result =
+                ProcessCommand::new("/bin/sh").arg("-c").arg(&script).arg("sh").arg(loader.path()).status().map_err(
+                    |error| {
+                        AppError::operational(format!("failed to start editor {}: {error}", editor.to_string_lossy()))
+                    },
+                )?;
             if !result.success() {
                 return Err(AppError::operational(format!("editor exited with status {result}")));
             }

@@ -128,7 +128,8 @@ impl SessionStore {
         }
     }
 
-    /// Marks the newest active turn for a session as complete.
+    /// Marks every active turn for a session as complete, so an interrupted or otherwise
+    /// abandoned older turn can never be reported later as though it were still active.
     pub fn mark_stopped(&self, session_id: &str) {
         let Some(connection) = self.connection("mark stopped") else {
             return;
@@ -137,12 +138,7 @@ impl SessionStore {
             "UPDATE sessions
              SET stopped_at = CURRENT_TIMESTAMP,
                  duration_seconds = CAST((julianday(CURRENT_TIMESTAMP) - julianday(created_at)) * 86400 AS INTEGER)
-             WHERE id = (
-                 SELECT id FROM sessions
-                 WHERE session_id = ?1 AND stopped_at IS NULL
-                 ORDER BY id DESC
-                 LIMIT 1
-             )",
+             WHERE session_id = ?1 AND stopped_at IS NULL",
             [session_id],
         ) {
             Ok(0) => tracing::warn!(session_id, "no active session found to mark stopped"),
@@ -526,6 +522,24 @@ mod tests {
             JobInfo { job_number: Some(1), duration_seconds: Some(0), prompt: Some("first".to_owned()) }
         );
         assert_eq!(store.active_prompt("session-1"), None);
+    }
+
+    #[test]
+    fn mark_stopped_closes_every_open_prompt_not_just_the_newest() {
+        let directory = tempdir().unwrap();
+        let store = SessionStore::from_database_path(directory.path().join("sessions.db")).unwrap();
+
+        // Simulates an interrupted turn ("first") that never received its own Stop, followed by
+        // a normal turn ("second") that does.
+        store.track_prompt("session-1", "first", "/tmp");
+        store.track_prompt("session-1", "second", "/tmp");
+        store.mark_stopped("session-1");
+
+        // A later Stop with no newer tracked prompt (e.g. after a task-notification turn that
+        // fires no UserPromptSubmit) must not resurrect the stale "first" prompt as active.
+        assert_eq!(store.active_prompt("session-1"), None);
+        store.mark_stopped("session-1");
+        assert_eq!(store.job_info("session-1").prompt.as_deref(), Some("second"));
     }
 
     #[test]
