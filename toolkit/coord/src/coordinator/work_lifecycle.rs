@@ -226,6 +226,7 @@ impl Coordinator {
                 draft.claims[0].repo_root,
             )));
         }
+        require_ordinary_item(store.work(identity)?.as_ref(), &root, "start")?;
         revalidate_draft(&draft.claims)?;
         self.ensure_session(&mut store, identity, &cwd, Some(&root))?;
         store.set_coordination_waived(identity, false)?;

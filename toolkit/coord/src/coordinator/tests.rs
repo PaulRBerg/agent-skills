@@ -24,7 +24,7 @@ use crate::{
     },
     error::Result,
     host::{ClaudeSessionObservation, WorkClaimRequest, git_blob_hashes, git_dirty_paths},
-    state::{BaselineRow, SessionUpdate, Store, WorkClaimUpdate, WorkUpdate},
+    state::{BaselineRow, DraftClaimUpdate, DraftOwner, SessionUpdate, Store, WorkClaimUpdate, WorkUpdate},
     work::{DIRT_HOLD_SECONDS, WorkCoordinator},
 };
 
@@ -487,6 +487,83 @@ fn named_draft_wrong_repository_guidance_does_not_suggest_done() {
     let error = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[1]).unwrap_err();
     assert!(error.to_string().contains("run ai-coord start --draft plan1 there"));
     assert!(!error.to_string().contains("ai-coord done"));
+}
+
+#[test]
+fn promoting_a_named_draft_over_active_work_consumes_the_drafts() {
+    let promoter = identity("promoter");
+    let (_temp, roots, coordinator) = fixture(1, &[(&promoter, 0, 68)]);
+    let repo_root = roots[0].to_string_lossy().into_owned();
+    let a = Scope { path: "a.rs".to_owned(), kind: ScopeKind::Exact };
+    coordinator.start_for(promoter.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    coordinator.draft_for(promoter.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    coordinator.draft_for(promoter.clone(), Some("plan2"), "same", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    let unnamed =
+        DraftClaimUpdate { repo_root, scopes: vec![Scope { path: "b.rs".to_owned(), kind: ScopeKind::Exact }] };
+    coordinator.store().unwrap().save_draft(DraftOwner::Session(promoter.clone()), "mine", &[unnamed], 100.0).unwrap();
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(store.draft_named("plan1").unwrap().is_none());
+    assert!(store.draft_for_session(&promoter).unwrap().is_none());
+    assert_eq!(store.work(&promoter).unwrap().unwrap().claims[0].scopes, vec![a.clone()]);
+    let error = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("no draft named plan1"));
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan2"), &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(store.draft_named("plan2").unwrap().is_none());
+    let work = store.work(&promoter).unwrap().unwrap();
+    assert_eq!((work.label.as_str(), work.claims[0].scopes.clone()), ("same", vec![a]));
+}
+
+#[test]
+fn one_claim_draft_promotion_cannot_move_or_collapse_existing_work() {
+    let moved = identity("moved");
+    let bundled = identity("bundled");
+    let (_temp, roots, coordinator) = fixture(2, &[(&moved, 1, 69), (&bundled, 0, 70)]);
+    coordinator.start_for(moved.clone(), "other root", &[PathBuf::from("m.rs")], &[], &roots[1]).unwrap();
+    coordinator.start_bundle_for(bundled.clone(), "bundle", &files(&roots, &["x.rs", "y.rs"]), &[], &roots[0]).unwrap();
+    coordinator.draft_for(moved.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    let draft = coordinator.store().unwrap().draft_named("plan1").unwrap().unwrap();
+    let moved_work = coordinator.store().unwrap().work(&moved).unwrap().unwrap();
+    let bundled_work = coordinator.store().unwrap().work(&bundled).unwrap().unwrap();
+
+    let error = coordinator.promote_draft_for(&moved, Some("plan1"), &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("cannot be changed by ai-coord start; use ai-coord bundle start"));
+    let mut store = coordinator.store().unwrap();
+    let inventory = InventoryResult { complete: true, providers: Vec::new() };
+    let error = WorkCoordinator { store: &mut store }
+        .promote_draft(&bundled, draft.clone(), None, &inventory, 100.0)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("existing work has 2 repository claim(s) and cannot be changed by ai-coord start")
+    );
+    assert_eq!(store.draft_named("plan1").unwrap().unwrap(), draft);
+    assert_eq!(store.work(&moved).unwrap().unwrap(), moved_work);
+    assert_eq!(store.work(&bundled).unwrap().unwrap(), bundled_work);
+}
+
+#[test]
+fn blocked_expansion_through_draft_promotion_keeps_the_draft() {
+    let promoter = identity("promoter");
+    let contender = identity("contender");
+    let (_temp, roots, coordinator) = fixture(1, &[(&promoter, 0, 71), (&contender, 0, 72)]);
+    coordinator.start_for(promoter.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    coordinator.start_for(contender, "held", &[PathBuf::from("held.rs")], &[], &roots[0]).unwrap();
+    let requested = [PathBuf::from("old.rs"), PathBuf::from("held.rs")];
+    coordinator.draft_for(promoter.clone(), Some("plan1"), "expand", &requested, &[], &roots[0]).unwrap();
+    let draft = coordinator.store().unwrap().draft_named("plan1").unwrap().unwrap();
+    let before = coordinator.store().unwrap().work(&promoter).unwrap().unwrap();
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap();
+    assert_eq!((outcome.kind, outcome.code), (OutcomeKind::Active, 3));
+    assert!(outcome.detail.starts_with("update-blocked:"));
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.draft_named("plan1").unwrap().unwrap(), draft);
+    assert_eq!(store.work(&promoter).unwrap().unwrap(), before);
 }
 
 #[cfg(unix)]

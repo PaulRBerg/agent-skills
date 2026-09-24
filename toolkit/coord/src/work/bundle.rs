@@ -118,11 +118,11 @@ impl WorkCoordinator<'_> {
         let existing = self.store.work(identity)?;
         let session_draft_exists = self.store.draft_for_session(identity)?.is_some();
         verify_submission(existing.as_ref(), existing.as_ref(), submission, session_draft_exists)?;
-        if claims.len() == 1 && matches!(submission, Submission::Direct) {
+        if claims.len() == 1 && matches!(submission, Submission::Direct | Submission::Draft { .. }) {
             require_ordinary_item(existing.as_ref(), &claims[0].repo_root, "start")?;
         }
         if let Some(active) = existing.as_ref().filter(|work| work.state == WorkState::Active) {
-            return self.update_active(identity, label, claims, inventory, active, current);
+            return self.update_active(identity, label, claims, inventory, active, submission, current);
         }
         let evidence = gather_evidence(&claims, existing.as_ref(), claims.len() > 1)?;
         let mut submitted_at = existing
@@ -140,12 +140,7 @@ impl WorkCoordinator<'_> {
                 let current_work = transaction.work(identity)?;
                 let session_draft_exists = transaction.draft_for_session(identity)?.is_some();
                 verify_submission(current_work.as_ref(), existing.as_ref(), submission, session_draft_exists)?;
-                if let Submission::Draft { id, updated_at, .. } = submission {
-                    let current_draft = transaction.draft_by_id(id)?;
-                    if !current_draft.is_some_and(|draft| draft.updated_at == updated_at) {
-                        return Err(AppError::retry("draft changed during promotion"));
-                    }
-                }
+                verify_draft(transaction, submission)?;
                 let submitted_at = match submitted_at {
                     Some(submitted_at) => submitted_at,
                     None => {
@@ -217,12 +212,7 @@ impl WorkCoordinator<'_> {
                     updated_at: current,
                     expected_revision: current_work.as_ref().map(|work| work.revision),
                 })?;
-                if let Submission::Draft { id, extra_delete, .. } = submission {
-                    transaction.delete_draft(id)?;
-                    if let Some(extra) = extra_delete.filter(|extra| *extra != id) {
-                        transaction.delete_draft(extra)?;
-                    }
-                }
+                delete_promoted_drafts(transaction, submission)?;
                 if should_notify {
                     notify_contenders(transaction, identity, label, &claims, &evaluations, &evidence, current)?;
                 }
@@ -237,6 +227,7 @@ impl WorkCoordinator<'_> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn update_active(
         &mut self,
         identity: &Identity,
@@ -244,6 +235,7 @@ impl WorkCoordinator<'_> {
         claims: Vec<WorkClaimRequest>,
         inventory: &InventoryResult,
         existing: &WorkRow,
+        submission: Submission,
         current: f64,
     ) -> Result<Outcome> {
         let same = same_claim_vector(existing, &claims);
@@ -252,6 +244,7 @@ impl WorkCoordinator<'_> {
             return self.store.with_work_transaction(|transaction| {
                 let current_work = transaction.work(identity)?;
                 verify_active(current_work.as_ref(), existing)?;
+                verify_draft(transaction, submission)?;
                 if existing.label != label {
                     transaction.save_work(&WorkUpdate {
                         identity: identity.clone(),
@@ -273,6 +266,7 @@ impl WorkCoordinator<'_> {
                         expected_revision: Some(existing.revision),
                     })?;
                 }
+                delete_promoted_drafts(transaction, submission)?;
                 Ok(Outcome::new(OutcomeKind::Ready, 0, "").with_paths(request_paths(&claims, qualified)))
             });
         }
@@ -284,23 +278,11 @@ impl WorkCoordinator<'_> {
             let step = self.store.with_work_transaction(|transaction| {
                 let current_work = transaction.work(identity)?;
                 verify_active(current_work.as_ref(), existing)?;
+                verify_draft(transaction, submission)?;
                 let work = transaction.works()?;
                 let observations = refresh_observations(transaction, &evidence, current)?;
                 let residuals =
                     read_residuals_for_roots(transaction, evidence.iter().map(|item| item.repo_root.as_str()))?;
-                let existing_scopes = existing_claim_scopes(existing);
-                let evaluations = evaluate_claims(
-                    &claims,
-                    inventory.complete,
-                    &evidence,
-                    &observations,
-                    &residuals,
-                    &work,
-                    identity,
-                    existing.submitted_at.unwrap_or(current),
-                    current,
-                    (!narrowing).then_some(&existing_scopes),
-                );
                 if let Some(inspection) = evidence.iter().find(|item| item.inspection.is_some()) {
                     return Ok(ArbitrationStep::Complete(
                         Outcome::new(
@@ -311,16 +293,27 @@ impl WorkCoordinator<'_> {
                         .with_paths(work_paths(existing, qualified)),
                     ));
                 }
-                if !narrowing && evaluations.iter().any(|evaluation| evaluation.reason.is_some()) {
+                let evaluations = if narrowing {
+                    advisory_evaluations(&claims, &evidence, &observations, &residuals, &work, identity, current)
+                } else {
+                    evaluate_claims(
+                        &claims,
+                        inventory.complete,
+                        &evidence,
+                        &observations,
+                        &residuals,
+                        &work,
+                        identity,
+                        existing.submitted_at.unwrap_or(current),
+                        current,
+                        Some(&existing_claim_scopes(existing)),
+                    )
+                };
+                if evaluations.iter().any(|evaluation| evaluation.reason.is_some()) {
                     return blocked_outcome(&claims, &evaluations, transaction, Some((existing, qualified)))
                         .map(ArbitrationStep::Complete);
                 }
-                let successful_evaluations = if narrowing {
-                    advisory_evaluations(&claims, &evidence, &observations, &residuals, &work, identity, current)
-                } else {
-                    evaluations
-                };
-                let missing = missing_advisory_baselines(&claims, &successful_evaluations, &attempted_baselines);
+                let missing = missing_advisory_baselines(&claims, &evaluations, &attempted_baselines);
                 if !missing.is_empty() {
                     return Ok(ArbitrationStep::Prepare(missing));
                 }
@@ -329,8 +322,7 @@ impl WorkCoordinator<'_> {
                     transaction.record_residual_owners(repo_root, paths, identity, current)?;
                 }
                 let waiters = newly_unblocked_waiters(existing, &claims, &work, identity);
-                let updates =
-                    claim_updates(transaction, identity, &claims, &successful_evaluations, &prepared_baselines, true)?;
+                let updates = claim_updates(transaction, identity, &claims, &evaluations, &prepared_baselines, true)?;
                 transaction.save_work(&WorkUpdate {
                     identity: identity.clone(),
                     label: label.to_owned(),
@@ -341,8 +333,9 @@ impl WorkCoordinator<'_> {
                     updated_at: current,
                     expected_revision: Some(existing.revision),
                 })?;
+                delete_promoted_drafts(transaction, submission)?;
                 notify_waiters(transaction, identity, existing, &waiters, qualified, current)?;
-                Ok(ArbitrationStep::Complete(ready_outcome(&claims, &successful_evaluations)))
+                Ok(ArbitrationStep::Complete(ready_outcome(&claims, &evaluations)))
             })?;
             match step {
                 ArbitrationStep::Complete(outcome) => return Ok(outcome),
@@ -376,9 +369,8 @@ fn verify_submission(
     session_draft_exists: bool,
 ) -> Result<()> {
     match submission {
-        Submission::Draft { .. } => {}
-        Submission::Direct => {
-            if session_draft_exists {
+        Submission::Direct | Submission::Draft { .. } => {
+            if matches!(submission, Submission::Direct) && session_draft_exists {
                 return Err(AppError::operational(
                     "a draft exists; update it with ai-coord draft, then submit it with ai-coord start --draft",
                 ));
@@ -388,6 +380,23 @@ fn verify_submission(
             }
         }
         Submission::Wait { id, revision } => verify_wait_submission(current, id, revision)?,
+    }
+    Ok(())
+}
+fn verify_draft(transaction: &WorkTransaction<'_>, submission: Submission) -> Result<()> {
+    if let Submission::Draft { id, updated_at, .. } = submission &&
+        !transaction.draft_by_id(id)?.is_some_and(|draft| draft.updated_at == updated_at)
+    {
+        return Err(AppError::retry("draft changed during promotion"));
+    }
+    Ok(())
+}
+fn delete_promoted_drafts(transaction: &WorkTransaction<'_>, submission: Submission) -> Result<()> {
+    if let Submission::Draft { id, extra_delete, .. } = submission {
+        transaction.delete_draft(id)?;
+        if let Some(extra) = extra_delete.filter(|extra| *extra != id) {
+            transaction.delete_draft(extra)?;
+        }
     }
     Ok(())
 }
@@ -868,6 +877,16 @@ mod tests {
             blockers(&[contender], &owner, "/b", &[scope("src/lib.rs", false)], WorkState::Queued, Some(0.5),)
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn draft_submission_rejects_a_changed_work_revision() {
+        let expected = work("owner", WorkState::Active, vec![claim("/a", vec![scope("a.rs", false)])], 1.0);
+        let current = WorkRow { revision: 2, ..expected.clone() };
+        let submission = Submission::Draft { id: 1, updated_at: 1.0, extra_delete: None };
+        assert!(verify_submission(Some(&expected), Some(&expected), submission, false).is_ok());
+        let error = verify_submission(Some(&current), Some(&expected), submission, false).unwrap_err();
+        assert_eq!(error.to_string(), "work item changed during arbitration");
     }
 
     #[test]
