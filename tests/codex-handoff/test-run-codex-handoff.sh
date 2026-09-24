@@ -158,12 +158,12 @@ fake_path="$fake_bin:$PATH"
 expected_result='{"status":"completed","summary":"done","changed_files":[],"verification":[],"residual_risks":[],"blockers":[]}'
 
 help_output="$("$runner" --help)"
-[[ "$help_output" == *'Allowed models: gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna'* ]] ||
+[[ "$help_output" == *'Allowed models: gpt-6-astra, gpt-6-sol, gpt-6-luna'* ]] ||
   fail "runner help omits a supported model"
 [[ "$help_output" != *'ephemeral'* ]] || fail "runner help incorrectly describes sessions as ephemeral"
 [[ "$help_output" == *'--resume SESSION_ID'* ]] || fail "runner help omits --resume"
 
-for model in gpt-6-astra gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna; do
+for model in gpt-6-astra gpt-6-sol gpt-6-luna; do
   for effort in medium high xhigh max; do
     actual_result="$(
       cd "$repo"
@@ -185,7 +185,7 @@ assert_arg never
 assert_arg -C
 assert_arg "$repo_root"
 assert_arg -m
-assert_arg gpt-5.6-luna
+assert_arg gpt-6-luna
 assert_arg -c
 assert_arg 'model_reasoning_effort="max"'
 assert_arg 'service_tier="default"'
@@ -207,7 +207,7 @@ resume_session='019fcb20-ada2-79c1-9628-6ef651b80414'
 resume_result="$(
   cd "$repo"
   printf '%s\n' 'approved continuation' | PATH="$fake_path" "$runner" \
-    --model gpt-5.6-sol --effort high --timeout-seconds 5 --resume "$resume_session"
+    --model gpt-6-sol --effort high --timeout-seconds 5 --resume "$resume_session"
 )"
 [[ "$resume_result" == "$expected_result" ]] || fail "resume mode returned an unexpected result"
 exec_line="$(grep -nFx -- 'exec' "$args_file" | cut -d: -f1)"
@@ -223,7 +223,7 @@ model_line="$(grep -nFx -- '-m' "$args_file" | cut -d: -f1)"
 (
   cd "$repo"
   printf '%s\n' 'approved continuation' | PATH="$fake_path" "$runner" \
-    --model gpt-5.6-sol --effort high --timeout-seconds 5 --resume=thread-name >/dev/null
+    --model gpt-6-sol --effort high --timeout-seconds 5 --resume=thread-name >/dev/null
 )
 assert_arg thread-name
 
@@ -231,7 +231,7 @@ assert_arg thread-name
 readonly_result="$(
   cd "$repo"
   printf '%s\n' 'approved research' | PATH="$fake_path" "$runner" \
-    --model gpt-5.6-sol --effort high --timeout-seconds 5 --read-only
+    --model gpt-6-sol --effort high --timeout-seconds 5 --read-only
 )"
 [[ "$readonly_result" == "$expected_result" ]] || fail "read-only mode returned an unexpected result"
 assert_arg --sandbox
@@ -246,7 +246,7 @@ rg -Fx --quiet -- '--dangerously-bypass-approvals-and-sandbox' "$args_file" &&
 (
   cd "$repo"
   printf '%s\n' 'approved implementation' | PATH="$fake_path" "$runner" \
-    --model gpt-5.6-sol --effort high --timeout-seconds 5 \
+    --model gpt-6-sol --effort high --timeout-seconds 5 \
     --result-file "$result_artifact"
 ) >"$stdout_file" 2>"$stderr_file"
 [[ ! -s "$stdout_file" ]] || fail "artifact mode must keep stdout empty"
@@ -259,43 +259,43 @@ exec_line="$(grep -nFx -- 'exec' "$args_file" | cut -d: -f1)"
 
 (
   cd "$repo"
-  expect_failure 64 'must be gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, or gpt-5.6-luna' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-unknown --effort high --timeout-seconds 5
+  expect_failure 64 'must be gpt-6-astra, gpt-6-sol, or gpt-6-luna' env PATH="$fake_path" \
+    "$runner" --model gpt-6-unknown --effort high --timeout-seconds 5
   expect_failure 64 'must be medium, high, xhigh, or max' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-sol --effort low --timeout-seconds 5
+    "$runner" --model gpt-6-sol --effort low --timeout-seconds 5
   expect_failure 64 'must be medium, high, xhigh, or max' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-sol --effort ultra --timeout-seconds 5
+    "$runner" --model gpt-6-sol --effort ultra --timeout-seconds 5
   expect_failure 64 'must be a positive integer' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 0
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 0
   expect_failure 64 'session ID must be non-empty' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 --resume=
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 --resume=
   expect_failure 69 'not authenticated' env PATH="$fake_path" FAKE_AUTH_FAIL=1 \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5
   expect_failure 69 'lacks --dangerously-bypass-approvals-and-sandbox' env PATH="$fake_path" \
     FAKE_HELP_MISSING=--dangerously-bypass-approvals-and-sandbox \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5
   expect_failure 69 'lacks --sandbox' env PATH="$fake_path" FAKE_HELP_MISSING=--sandbox \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 --read-only
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 --read-only
   expect_failure 69 'lacks required flag: --output-schema' env PATH="$fake_path" FAKE_HELP_MISSING=--output-schema \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5
   expect_failure 64 'must be different paths' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 \
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 \
     --progress-file "$tmp_dir/same-output" --result-file "$tmp_dir/same-output"
   expect_failure 66 'cannot create result file' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 \
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 \
     --result-file "$tmp_dir/missing-result-dir/result.json"
   expect_failure 17 'simulated codex failure' env PATH="$fake_path" FAKE_EXIT=17 \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5
   expect_failure 70 'without a structured result' env PATH="$fake_path" FAKE_NO_RESULT=1 \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5
   expect_failure 124 'timed out after 1s' env PATH="$fake_path" FAKE_SLEEP=3 \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 1
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 1
 )
 
 set +e
 (
   cd "$repo"
-  PATH="$fake_path" "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 </dev/null
+  PATH="$fake_path" "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 </dev/null
 ) >"$stdout_file" 2>"$stderr_file"
 empty_rc=$?
 set -e
@@ -307,7 +307,7 @@ set +e
 (
   cd "$tmp_dir/non-git"
   printf '%s\n' 'approved implementation' | PATH="$fake_path" "$runner" \
-    --model gpt-5.6-sol --effort high --timeout-seconds 5
+    --model gpt-6-sol --effort high --timeout-seconds 5
 ) >"$stdout_file" 2>"$stderr_file"
 non_git_rc=$?
 set -e
@@ -318,7 +318,7 @@ set +e
 (
   cd "$repo"
   printf '%s\n' 'approved implementation' | PATH="/usr/bin:/bin" "$runner" \
-    --model gpt-5.6-sol --effort high --timeout-seconds 5
+    --model gpt-6-sol --effort high --timeout-seconds 5
 ) >"$stdout_file" 2>"$stderr_file"
 missing_codex_rc=$?
 set -e
@@ -330,7 +330,7 @@ success_progress="$tmp_dir/success.progress.jsonl"
 (
   cd "$repo"
   printf '%s\n' 'approved implementation' | PATH="$fake_path" "$runner" \
-    --model gpt-5.6-terra --effort high --timeout-seconds 5 \
+    --model gpt-6-sol --effort high --timeout-seconds 5 \
     --progress-file "$success_progress" --result-file "$result_artifact"
 ) >"$stdout_file" 2>"$stderr_file"
 [[ ! -s "$stdout_file" ]] || fail "progress plus artifact mode must keep stdout empty"
@@ -355,15 +355,15 @@ noresult_progress="$tmp_dir/noresult.progress.jsonl"
 (
   cd "$repo"
   expect_failure 17 'simulated codex failure' env PATH="$fake_path" FAKE_EXIT=17 \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 --progress-file "$error_progress"
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 --progress-file "$error_progress"
   assert_file_contains '--- Codex last activity' "$stderr_file"
   assert_file_contains 'implementation done' "$stderr_file"
   assert_file_contains 'codex-handoff: elapsed=' "$stderr_file"
   grep -Fq -- '--- Codex stdout' "$stderr_file" && fail "progress mode should not tail codex stdout"
   expect_failure 124 'timed out after 1s' env PATH="$fake_path" FAKE_SLEEP=3 \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 1 --progress-file "$timeout_progress"
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 1 --progress-file "$timeout_progress"
   expect_failure 70 'without a structured result' env PATH="$fake_path" FAKE_NO_RESULT=1 \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 --progress-file "$noresult_progress"
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 --progress-file "$noresult_progress"
 )
 assert_file_contains '"type":"handoff.failed","reason":"error","rc":17' "$error_progress"
 assert_file_contains '"type":"handoff.failed","reason":"timeout"' "$timeout_progress"
@@ -377,13 +377,13 @@ done
 (
   cd "$repo"
   json_gate_result="$(printf '%s\n' 'approved implementation' | PATH="$fake_path" FAKE_HELP_MISSING=--json \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5)"
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5)"
   [[ "$json_gate_result" == "$expected_result" ]] || fail "missing --json help must not fail without --progress-file"
   expect_failure 69 'lacks required flag: --json' env PATH="$fake_path" FAKE_HELP_MISSING=--json \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 \
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 \
     --progress-file "$tmp_dir/gate.progress.jsonl"
   expect_failure 66 'cannot create progress file' env PATH="$fake_path" \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 5 \
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 5 \
     --progress-file "$tmp_dir/missing-dir/progress.jsonl"
 )
 
@@ -394,7 +394,7 @@ ignore_completed="$tmp_dir/ignore-term-completed"
   cd "$repo"
   printf '%s\n' 'approved implementation' | PATH="$fake_path" FAKE_IGNORE_TERM_FOR=9 \
     FAKE_IGNORE_COMPLETED_FILE="$ignore_completed" \
-    "$runner" --model gpt-5.6-sol --effort high --timeout-seconds 30 \
+    "$runner" --model gpt-6-sol --effort high --timeout-seconds 30 \
     --progress-file "$cancel_progress" >"$stdout_file" 2>"$stderr_file" &
   runner_pid=$!
   sleep 1
