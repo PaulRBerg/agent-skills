@@ -290,7 +290,9 @@ fn upsert_session(transaction: &rusqlite::Transaction<'_>, update: &SessionUpdat
                     transcript_path = CASE WHEN sessions.client = 'codex' THEN sessions.transcript_path
                                            ELSE COALESCE(excluded.transcript_path, sessions.transcript_path) END,
                     source = excluded.source,
-                    last_seen = excluded.last_seen,
+                    -- An inventory observation proves presence, not activity.
+                    last_seen = CASE WHEN excluded.source = 'observer' THEN sessions.last_seen
+                                     ELSE excluded.last_seen END,
                     revision = sessions.revision + 1",
         params![
             client_name(update.identity.client),

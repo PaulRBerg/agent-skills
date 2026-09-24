@@ -8,7 +8,7 @@ use std::{
 use super::{
     RepoEvidence, WorkCoordinator, blockers, evidence_for, existing_claim_scopes, expansion_blockers,
     foreign_residuals, gather_evidence, merge_baselines,
-    messages::{MAX_MESSAGE_CHARS, conflict_detail, identity_display, notify_contenders},
+    messages::{MAX_MESSAGE_CHARS, conflict_detail, notify_contenders},
     output_path, partition_dirty, path_text, request_paths, request_work_overlap, require_ordinary_item,
     same_claim_vector, same_work_vectors, soft, unattributed_dirty, validate_claim_vector, work_in_repo, work_paths,
     work_vector_covers_requests, work_vectors_overlap, write_baselines,
@@ -169,7 +169,7 @@ impl WorkCoordinator<'_> {
                     current,
                     None,
                 );
-                soften_evaluations(
+                let yields = soft::soften_evaluations(
                     transaction,
                     identity,
                     &claims,
@@ -179,14 +179,18 @@ impl WorkCoordinator<'_> {
                     submitted_at,
                     current,
                 )?;
-                let blocked_reason = evaluations.iter().find_map(|evaluation| evaluation.reason.clone());
-                let state = if blocked_reason.is_some() { WorkState::Queued } else { WorkState::Active };
-                if state == WorkState::Active {
+                let state = if evaluations.iter().any(|evaluation| evaluation.reason.is_some()) {
+                    yields.restore(&mut evaluations);
+                    WorkState::Queued
+                } else {
                     let missing = missing_advisory_baselines(&claims, &evaluations, &attempted_baselines);
                     if !missing.is_empty() {
                         return Ok(ArbitrationStep::Prepare(missing));
                     }
-                }
+                    yields.apply(transaction, identity, claims.len() > 1, current)?;
+                    WorkState::Active
+                };
+                let blocked_reason = evaluations.iter().find_map(|evaluation| evaluation.reason.clone());
                 let decision = if state == WorkState::Active {
                     ready_outcome(&claims, &evaluations)
                 } else {
@@ -514,85 +518,6 @@ fn evaluate_claims(
             ClaimEvaluation { advisory, ..ClaimEvaluation::default() }
         })
         .collect()
-}
-
-/// Nullifies each "overlap" evaluation whose contenders are all idle and whose
-/// scopes overlapping the request are all soft (untouched), narrowing those
-/// contenders' claims in place and notifying them of what they yielded. A claim
-/// that an earlier-queued waiter also overlaps is re-blocked as "waiter" instead,
-/// so a yield never lets a newcomer jump the FIFO queue; that waiter's own recheck
-/// triggers the yield. Only the non-expansion path softens; `update_active`
-/// expansion never does.
-#[allow(clippy::too_many_arguments)]
-fn soften_evaluations(
-    transaction: &WorkTransaction<'_>,
-    identity: &Identity,
-    claims: &[WorkClaimRequest],
-    evaluations: &mut [ClaimEvaluation],
-    evidence: &[RepoEvidence],
-    work: &[WorkRow],
-    submitted_at: f64,
-    current: f64,
-) -> Result<()> {
-    let qualified = claims.len() > 1;
-    // One entry per distinct contender identity, so a contender blocking the
-    // request in more than one repository (a bundle) is narrowed with exactly one
-    // `save_work` covering every repository, instead of one write per repository
-    // racing against its own stale revision.
-    let mut aggregate: Vec<(WorkRow, Vec<soft::RepoYield>)> = Vec::new();
-    for (claim, evaluation) in claims.iter().zip(evaluations.iter_mut()) {
-        if evaluation.reason.as_deref() != Some("overlap") || evaluation.contenders.is_empty() {
-            continue;
-        }
-        let repo_root = claim.repo_root.to_str().expect("validated root");
-        let dirty = &evidence_for(evidence, repo_root).dirty;
-        let mut plans = Vec::with_capacity(evaluation.contenders.len());
-        for contender in &evaluation.contenders {
-            let contender_claim = contender.claim(repo_root).expect("repository contender");
-            let overlap = soft::overlapping_scopes(&claim.scopes, &contender_claim.scopes);
-            let paths = soft::evidence_paths(transaction, contender, repo_root, dirty)?;
-            let soft_overlap = soft::soft_subset(&overlap, &paths);
-            let session = transaction.session(&contender.identity)?;
-            let qualifies = soft::is_idle_holder(session.as_ref(), current) && soft_overlap.len() == overlap.len();
-            plans.push((contender.clone(), soft_overlap, qualifies));
-        }
-        if plans.iter().all(|(_, _, qualifies)| *qualifies) {
-            let repo_work = work_in_repo(work, repo_root);
-            let earlier =
-                blockers(&repo_work, identity, repo_root, &claim.scopes, WorkState::Queued, Some(submitted_at));
-            if !earlier.is_empty() {
-                evaluation.reason = Some("waiter".to_owned());
-                evaluation.contenders = earlier;
-                continue;
-            }
-            evaluation.reason = None;
-            for (contender, soft_overlap, _) in plans {
-                match aggregate.iter_mut().find(|(existing, _)| existing.identity == contender.identity) {
-                    Some((_, entries)) => entries.push((repo_root.to_owned(), soft_overlap)),
-                    None => aggregate.push((contender, vec![(repo_root.to_owned(), soft_overlap)])),
-                }
-            }
-        }
-    }
-    if aggregate.is_empty() {
-        return Ok(());
-    }
-    let requester_display = identity_display(identity, transaction)?;
-    for (contender, yields) in aggregate {
-        let session = transaction.session(&contender.identity)?;
-        let minutes = soft::idle_minutes(session.as_ref(), current);
-        soft::yield_untouched_scopes(
-            transaction,
-            identity,
-            &requester_display,
-            &contender,
-            &yields,
-            qualified,
-            minutes,
-            current,
-        )?;
-    }
-    Ok(())
 }
 
 fn advisory_evaluations(

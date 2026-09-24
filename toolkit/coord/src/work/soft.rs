@@ -8,13 +8,19 @@
 //! fresh requester instead of blocking it.
 
 use crate::{
-    domain::{Identity, Scope, ScopeKind, SessionState, sanitize},
+    domain::{Identity, Scope, ScopeKind, SessionState, WorkState, sanitize},
     error::Result,
-    host::{scope_covers, scopes_overlap},
+    host::{WorkClaimRequest, relevant_dirty, scope_covers, scopes_overlap},
     state::{SessionRow, WorkClaimUpdate, WorkRow, WorkTransaction, WorkUpdate},
 };
 
-use super::{messages::MAX_MESSAGE_CHARS, qualify_path};
+use super::{
+    RepoEvidence, blockers,
+    bundle::ClaimEvaluation,
+    evidence_for,
+    messages::{MAX_MESSAGE_CHARS, identity_display},
+    qualify_path, work_in_repo,
+};
 
 /// A holder session idle at least this long yields its untouched overlapping scopes.
 pub(crate) const IDLE_YIELD_SECONDS: f64 = 300.0;
@@ -86,7 +92,7 @@ pub(crate) fn untouched_overlap(
 /// Yielded scopes are soft by construction, so no dirt beneath them needs residual
 /// attribution.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn yield_untouched_scopes(
+fn yield_untouched_scopes(
     transaction: &WorkTransaction<'_>,
     requester: &Identity,
     requester_display: &str,
@@ -97,36 +103,39 @@ pub(crate) fn yield_untouched_scopes(
     current: f64,
 ) -> Result<()> {
     let mut yielded_paths = Vec::new();
-    let claims = contender
-        .claims
-        .iter()
-        .filter_map(|claim| {
-            let Some((repo_root, yielded)) = yields.iter().find(|(root, _)| *root == claim.repo_root) else {
-                return Some(WorkClaimUpdate {
-                    repo_root: claim.repo_root.clone(),
-                    blocked_reason: claim.blocked_reason.clone(),
-                    scopes: claim.scopes.clone(),
-                    baselines: None,
-                    residual_paths: Vec::new(),
-                });
-            };
-            for scope in yielded {
-                yielded_paths.push(if qualified { qualify_path(repo_root, &scope.path) } else { scope.path.clone() });
-            }
-            let remaining = claim.scopes.iter().filter(|scope| !yielded.contains(scope)).cloned().collect::<Vec<_>>();
-            if remaining.is_empty() {
-                None
-            } else {
-                Some(WorkClaimUpdate {
-                    repo_root: claim.repo_root.clone(),
-                    blocked_reason: claim.blocked_reason.clone(),
-                    scopes: remaining,
-                    baselines: None,
-                    residual_paths: Vec::new(),
-                })
-            }
-        })
-        .collect::<Vec<_>>();
+    let mut claims = Vec::with_capacity(contender.claims.len());
+    for claim in &contender.claims {
+        let Some((repo_root, yielded)) = yields.iter().find(|(root, _)| *root == claim.repo_root) else {
+            claims.push(WorkClaimUpdate {
+                repo_root: claim.repo_root.clone(),
+                blocked_reason: claim.blocked_reason.clone(),
+                scopes: claim.scopes.clone(),
+                baselines: None,
+                residual_paths: Vec::new(),
+            });
+            continue;
+        };
+        for scope in yielded {
+            yielded_paths.push(if qualified { qualify_path(repo_root, &scope.path) } else { scope.path.clone() });
+        }
+        let remaining = claim.scopes.iter().filter(|scope| !yielded.contains(scope)).cloned().collect::<Vec<_>>();
+        if remaining.is_empty() {
+            continue;
+        }
+        // Baselines stay claim-local: drop those beneath a yielded scope.
+        let baselines = transaction
+            .baselines_in_repo(&contender.identity, repo_root)?
+            .into_iter()
+            .filter(|row| !relevant_dirty(&remaining, std::slice::from_ref(&row.path)).is_empty())
+            .collect();
+        claims.push(WorkClaimUpdate {
+            repo_root: claim.repo_root.clone(),
+            blocked_reason: claim.blocked_reason.clone(),
+            scopes: remaining,
+            baselines: Some(baselines),
+            residual_paths: Vec::new(),
+        });
+    }
     if claims.is_empty() {
         transaction.delete_work(&contender.identity)?;
     } else {
@@ -153,6 +162,114 @@ pub(crate) fn yield_untouched_scopes(
     let repo_root = (!qualified).then(|| yields[0].0.as_str());
     transaction.send_message(requester, &contender.identity, &message, repo_root, current)?;
     Ok(())
+}
+
+/// Yields planned during evaluation and applied only in the transaction that
+/// grants the requester.
+#[derive(Default)]
+pub(crate) struct YieldPlan {
+    /// Original "overlap" evaluations of the claims the plan unblocked, by claim index.
+    softened: Vec<(usize, ClaimEvaluation)>,
+    /// One entry per distinct contender identity, so a contender blocking the
+    /// request in more than one repository (a bundle) is narrowed with exactly one
+    /// `save_work` covering every repository, instead of one write per repository
+    /// racing against its own stale revision.
+    contenders: Vec<(WorkRow, Vec<RepoYield>)>,
+}
+
+impl YieldPlan {
+    /// Reinstates the blocking evaluations when the requester stays queued, so its
+    /// outcome, per-claim reasons, and holder notices reflect unyielded claims.
+    pub(crate) fn restore(self, evaluations: &mut [ClaimEvaluation]) {
+        for (index, evaluation) in self.softened {
+            evaluations[index] = evaluation;
+        }
+    }
+
+    /// Narrows every planned contender and notifies it of what it yielded.
+    pub(crate) fn apply(
+        self,
+        transaction: &WorkTransaction<'_>,
+        identity: &Identity,
+        qualified: bool,
+        current: f64,
+    ) -> Result<()> {
+        if self.contenders.is_empty() {
+            return Ok(());
+        }
+        let requester_display = identity_display(identity, transaction)?;
+        for (contender, yields) in self.contenders {
+            let session = transaction.session(&contender.identity)?;
+            let minutes = idle_minutes(session.as_ref(), current);
+            yield_untouched_scopes(
+                transaction,
+                identity,
+                &requester_display,
+                &contender,
+                &yields,
+                qualified,
+                minutes,
+                current,
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// Nullifies each "overlap" evaluation whose contenders are all idle and whose
+/// scopes overlapping the request are all soft (untouched), planning to narrow
+/// those contenders' claims. A claim that an earlier-queued waiter also overlaps
+/// is re-blocked as "waiter" instead, so a yield never lets a newcomer jump the
+/// FIFO queue; that waiter's own recheck triggers the yield. Only the
+/// non-expansion path softens; `update_active` expansion never does.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn soften_evaluations(
+    transaction: &WorkTransaction<'_>,
+    identity: &Identity,
+    claims: &[WorkClaimRequest],
+    evaluations: &mut [ClaimEvaluation],
+    evidence: &[RepoEvidence],
+    work: &[WorkRow],
+    submitted_at: f64,
+    current: f64,
+) -> Result<YieldPlan> {
+    let mut plan = YieldPlan::default();
+    for (index, (claim, evaluation)) in claims.iter().zip(evaluations.iter_mut()).enumerate() {
+        if evaluation.reason.as_deref() != Some("overlap") || evaluation.contenders.is_empty() {
+            continue;
+        }
+        let repo_root = claim.repo_root.to_str().expect("validated root");
+        let dirty = &evidence_for(evidence, repo_root).dirty;
+        let mut plans = Vec::with_capacity(evaluation.contenders.len());
+        for contender in &evaluation.contenders {
+            let contender_claim = contender.claim(repo_root).expect("repository contender");
+            let overlap = overlapping_scopes(&claim.scopes, &contender_claim.scopes);
+            let paths = evidence_paths(transaction, contender, repo_root, dirty)?;
+            let soft_overlap = soft_subset(&overlap, &paths);
+            let session = transaction.session(&contender.identity)?;
+            let qualifies = is_idle_holder(session.as_ref(), current) && soft_overlap.len() == overlap.len();
+            plans.push((contender.clone(), soft_overlap, qualifies));
+        }
+        if plans.iter().all(|(_, _, qualifies)| *qualifies) {
+            let repo_work = work_in_repo(work, repo_root);
+            let earlier =
+                blockers(&repo_work, identity, repo_root, &claim.scopes, WorkState::Queued, Some(submitted_at));
+            if !earlier.is_empty() {
+                evaluation.reason = Some("waiter".to_owned());
+                evaluation.contenders = earlier;
+                continue;
+            }
+            plan.softened.push((index, evaluation.clone()));
+            evaluation.reason = None;
+            for (contender, soft_overlap, _) in plans {
+                match plan.contenders.iter_mut().find(|(existing, _)| existing.identity == contender.identity) {
+                    Some((_, entries)) => entries.push((repo_root.to_owned(), soft_overlap)),
+                    None => plan.contenders.push((contender, vec![(repo_root.to_owned(), soft_overlap)])),
+                }
+            }
+        }
+    }
+    Ok(plan)
 }
 
 #[cfg(test)]
@@ -200,5 +317,87 @@ mod tests {
         assert!(!is_idle_holder(Some(&session), IDLE_YIELD_SECONDS - 1.0));
         assert!(is_idle_holder(Some(&session), IDLE_YIELD_SECONDS));
         assert!(!is_idle_holder(None, IDLE_YIELD_SECONDS));
+    }
+
+    #[test]
+    fn planned_yield_persists_nothing_until_applied() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let mut store = crate::state::Store::open(temp.path().join("state.db")).unwrap();
+        let holder = Identity { client: Client::Codex, session_id: "holder".to_owned() };
+        let requester = Identity { client: Client::Codex, session_id: "requester".to_owned() };
+        for identity in [&holder, &requester] {
+            store
+                .upsert_session(&crate::state::SessionUpdate {
+                    identity: identity.clone(),
+                    cwd: "/repo".to_owned(),
+                    repo_root: Some("/repo".to_owned()),
+                    state: SessionState::Idle,
+                    source: "test".to_owned(),
+                    name: None,
+                    waiting_for: None,
+                    permission_mode: None,
+                    update_permission_mode: false,
+                    coordination_waived: None,
+                    fingerprint: None,
+                    transcript_path: None,
+                    started_at: Some(0.0),
+                    current: 0.0,
+                })
+                .unwrap();
+        }
+        let owned = vec![scope("src", true)];
+        store
+            .with_work_transaction(|transaction| {
+                transaction.save_work(&WorkUpdate {
+                    identity: holder.clone(),
+                    label: "holder".to_owned(),
+                    state: WorkState::Active,
+                    blocked_reason: None,
+                    claims: vec![WorkClaimUpdate {
+                        repo_root: "/repo".to_owned(),
+                        blocked_reason: None,
+                        scopes: owned.clone(),
+                        baselines: None,
+                        residual_paths: Vec::new(),
+                    }],
+                    submitted_at: Some(1.0),
+                    updated_at: 1.0,
+                    expected_revision: None,
+                })?;
+                Ok(())
+            })
+            .unwrap();
+        let claims = vec![WorkClaimRequest { repo_root: "/repo".into(), scopes: vec![scope("src/lib.rs", false)] }];
+        let evidence = vec![RepoEvidence {
+            repo_root: "/repo".to_owned(),
+            dirty: Vec::new(),
+            hashes: Vec::new(),
+            benign: Vec::new(),
+            inspection: None,
+        }];
+        // Evaluate like an arbitration pass that ends in `Prepare`: plan, then commit without applying.
+        store
+            .with_work_transaction(|transaction| {
+                let work = transaction.works()?;
+                let mut evaluations = vec![ClaimEvaluation::default()];
+                evaluations[0].reason = Some("overlap".to_owned());
+                evaluations[0].contenders = work.clone();
+                let plan = soften_evaluations(
+                    transaction,
+                    &requester,
+                    &claims,
+                    &mut evaluations,
+                    &evidence,
+                    &work,
+                    2.0,
+                    IDLE_YIELD_SECONDS,
+                )?;
+                assert!(evaluations[0].reason.is_none());
+                assert_eq!(plan.contenders.len(), 1);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(store.work(&holder).unwrap().unwrap().claims[0].scopes, owned);
+        assert!(store.inbox(&holder, true).unwrap().is_empty());
     }
 }

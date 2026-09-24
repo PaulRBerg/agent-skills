@@ -23,8 +23,8 @@ use crate::{
         ScopeKind, SessionState, WorkState,
     },
     error::Result,
-    host::{WorkClaimRequest, git_blob_hashes, git_dirty_paths},
-    state::{SessionUpdate, Store, WorkClaimUpdate, WorkUpdate},
+    host::{ClaudeSessionObservation, WorkClaimRequest, git_blob_hashes, git_dirty_paths},
+    state::{BaselineRow, SessionUpdate, Store, WorkClaimUpdate, WorkUpdate},
     work::{DIRT_HOLD_SECONDS, WorkCoordinator},
 };
 
@@ -1294,4 +1294,136 @@ fn idle_contender_blocking_a_two_root_bundle_is_narrowed_once_with_one_message()
     assert!(inbox[0].text.contains("Yielded untouched scopes"));
     assert!(inbox[0].text.contains(roots[0].join("src").to_str().unwrap()));
     assert!(inbox[0].text.contains(roots[1].join("src").to_str().unwrap()));
+}
+
+/// A complete inventory whose Claude provider authoritatively reports these sessions.
+struct ClaudeInventory(Vec<ClaudeSessionObservation>);
+
+impl ProviderInventory for ClaudeInventory {
+    fn cache_key(&self) -> &str {
+        "claude"
+    }
+
+    fn refresh(&mut self, _store: &Store, _probe: &dyn ProcessProbe) -> Result<InventoryObservation> {
+        Ok(InventoryObservation {
+            result: InventoryResult { complete: true, providers: Vec::new() },
+            claude_sessions: self.0.clone(),
+            claude_authoritative: true,
+        })
+    }
+}
+
+#[test]
+fn authoritative_inventory_does_not_reset_an_idle_claude_holders_yield_clock() {
+    let holder = Identity { client: Client::Claude, session_id: "claude-holder".to_owned() };
+    let requester = identity("requester");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    for (identity, pid) in [(&holder, 220), (&requester, 221)] {
+        add_session(&mut store, identity, &roots[0], pid, 1.0);
+        probe.set(pid, ProcessLiveness::Alive);
+    }
+    let observation = ClaudeSessionObservation {
+        identity: holder.clone(),
+        cwd: roots[0].clone(),
+        repo_root: Some(roots[0].clone()),
+        state: SessionState::Idle,
+        name: None,
+        waiting_for: None,
+        pid: Some(220),
+        fingerprint: Some(ProcessFingerprint { pid: 220, start_token: Some("token-220".to_owned()) }),
+        started_at: 1.0,
+    };
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(ClaudeInventory(vec![observation])),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 220, -1000.0);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    let session = store.session(&holder).unwrap().unwrap();
+    assert_eq!((session.source.as_str(), session.last_seen), ("observer", -1000.0));
+    assert!(store.work(&holder).unwrap().is_none());
+    assert!(store.inbox(&holder, true).unwrap()[0].text.contains("Yielded untouched scopes src"));
+}
+
+#[test]
+fn partially_blocked_bundle_leaves_the_idle_holder_unyielded() {
+    let idle = identity("idle");
+    let busy = identity("busy");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(2, &[(&idle, 0, 222), (&busy, 1, 223), (&requester, 0, 224)]);
+    coordinator.start_for(idle.clone(), "idle", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    coordinator.start_for(busy.clone(), "busy", &[], &[PathBuf::from("src")], &roots[1]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &idle, &roots[0], 222, -1000.0);
+
+    let outcome = coordinator
+        .start_bundle_for(requester.clone(), "requester", &files(&roots, &["src/lib.rs", "src/lib.rs"]), &[], &roots[0])
+        .unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+    assert_eq!(outcome.holders, ["codex/idle", "codex/busy"]);
+
+    let store = coordinator.store().unwrap();
+    let queued = store.work(&requester).unwrap().unwrap();
+    assert_eq!(queued.state, WorkState::Queued);
+    assert_eq!(queued.claim(roots[0].to_str().unwrap()).unwrap().blocked_reason.as_deref(), Some("overlap"));
+    let held = store.work(&idle).unwrap().unwrap();
+    assert_eq!(
+        held.claim(roots[0].to_str().unwrap()).unwrap().scopes,
+        [Scope { path: "src".to_owned(), kind: ScopeKind::Recursive }]
+    );
+    let inbox = store.inbox(&idle, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.starts_with("Queued behind your work: requester"));
+    assert!(inbox[0].text.contains("untouched:"));
+}
+
+#[test]
+fn yielded_claim_drops_baselines_beneath_the_yielded_scope() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 225), (&requester, 0, 226)]);
+    let repo_root = roots[0].to_str().unwrap().to_owned();
+    coordinator
+        .start_for(holder.clone(), "holder", &[], &[PathBuf::from("src"), PathBuf::from("docs")], &roots[0])
+        .unwrap();
+    let mut store = coordinator.store().unwrap();
+    let work = store.work(&holder).unwrap().unwrap();
+    let baseline = |path: &str| BaselineRow { path: path.to_owned(), oid: "0".repeat(40) };
+    store
+        .with_work_transaction(|transaction| {
+            transaction.save_work(&WorkUpdate {
+                identity: holder.clone(),
+                label: work.label.clone(),
+                state: work.state,
+                blocked_reason: None,
+                claims: vec![WorkClaimUpdate {
+                    repo_root: repo_root.clone(),
+                    blocked_reason: None,
+                    scopes: work.claims[0].scopes.clone(),
+                    baselines: Some(vec![baseline("docs/guide.md"), baseline("src/lib.rs")]),
+                    residual_paths: Vec::new(),
+                }],
+                submitted_at: work.submitted_at,
+                updated_at: work.updated_at,
+                expected_revision: Some(work.revision),
+            })?;
+            Ok(())
+        })
+        .unwrap();
+    idle_since(&mut store, &holder, &roots[0], 225, -1000.0);
+    drop(store);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.baselines_in_repo(&holder, &repo_root).unwrap(), [baseline("docs/guide.md")]);
 }
