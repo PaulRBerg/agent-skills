@@ -1,5 +1,5 @@
 ---
-argument-hint: <skill-name>
+argument-hint: [skill-name]
 compatibility:
   Requires curl and a writable user cache directory; network populates or refreshes the agentskills.io specification.
 name: skill-writing
@@ -29,7 +29,10 @@ orchestration-heavy skill because their recommendations may evolve.
 
 ## Input
 
-- **skill-name** (required): a kebab-case name such as `my-skill`. Stop if it is missing or invalid.
+- **skill-name** (optional): a kebab-case name such as `my-skill`. If omitted, derive the shortest unambiguous
+  kebab-case domain name for the skill's purpose, without repeating the repository or app name as context (for example
+  `price-estimator`, not `budget-price-estimator`), and state the derived name in the completion report. Stop only when
+  a supplied name is invalid or collides with an existing skill (see the collision check in step 2).
 
 Reject `--global`, explicit destination paths, and other scope overrides. The invocation working directory is the only
 supported scope.
