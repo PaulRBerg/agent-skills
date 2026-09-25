@@ -171,6 +171,50 @@ class NamingLedgerTests(unittest.TestCase):
             self.assertEqual(by_path["c.py"]["status"], "excluded")
             self.assertEqual(by_path["c.py"]["reason"], "generated fixture")
 
+    def test_mark_from_file_promotes_pending_records(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = make_repo(root)
+            for path in ("a.py", "b.py", "c.py"):
+                (repo / path).write_text(f"{path} = 1\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-qm", "initial")
+            ledger = root / "ledger.json"
+            self.helper("init", "--root", str(repo), "--ledger", str(ledger))
+            dispositions = root / "dispositions.tsv"
+            dispositions.write_text(
+                "pending\ta.py\tplanned: rename group 1\n"
+                "retained\tb.py\t\n"
+                "pending\tc.py\t\n"
+            )
+
+            failed = self.helper(
+                "mark", "--ledger", str(ledger), "--from-file", str(dispositions),
+                "--pending-as", "blocked", check=False,
+            )
+            self.assertEqual(failed.returncode, 64)
+            self.assertIn("blocked status requires a reason", failed.stderr)
+
+            result = json.loads(
+                self.helper(
+                    "mark", "--ledger", str(ledger), "--from-file", str(dispositions),
+                    "--pending-as", "renamed",
+                ).stdout
+            )
+            self.assertEqual(result["applied"], 3)
+            self.assertTrue(result["complete"])
+            by_path = {item["path"]: item for item in json.loads(ledger.read_text())["files"]}
+            self.assertEqual(by_path["a.py"]["status"], "renamed")
+            self.assertEqual(by_path["a.py"]["reason"], "planned: rename group 1")
+            self.assertEqual(by_path["b.py"]["status"], "retained")
+            self.assertEqual(by_path["c.py"]["status"], "renamed")
+
+            invalid = self.helper(
+                "mark", "--ledger", str(ledger), "--status", "renamed", "--path", "a.py",
+                "--pending-as", "renamed", check=False,
+            )
+            self.assertEqual(invalid.returncode, 2)
+
     def test_mark_from_file_unknown_paths_fail_closed_or_skip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

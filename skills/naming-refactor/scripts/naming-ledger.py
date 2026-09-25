@@ -152,7 +152,7 @@ def summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_dispositions(path: Path) -> list[tuple[str, str, str]]:
+def load_dispositions(path: Path, pending_as: str | None = None) -> list[tuple[str, str, str]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError) as exc:
@@ -174,6 +174,8 @@ def load_dispositions(path: Path) -> list[tuple[str, str, str]]:
         reason = fields[2] if len(fields) == 3 else ""
         if status not in STATUSES:
             raise LedgerError(f"dispositions line {line_number}: unknown status: {status}")
+        if status == "pending" and pending_as is not None:
+            status = pending_as
         if not path:
             raise LedgerError(f"dispositions line {line_number}: path cannot be empty")
         if path in first_line_by_path:
@@ -230,7 +232,7 @@ def init_command(args: argparse.Namespace) -> dict[str, Any]:
 def mark_command(args: argparse.Namespace) -> dict[str, Any]:
     payload = load(args.ledger)
     if args.from_file is not None:
-        dispositions = load_dispositions(args.from_file)
+        dispositions = load_dispositions(args.from_file, args.pending_as)
         by_path = {item["path"]: item for item in payload["files"]}
         missing = [path for _, path, _ in dispositions if path not in by_path]
         if missing and not args.skip_unknown:
@@ -333,6 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     mark.add_argument("--path", action="append", default=[])
     mark.add_argument("--reason")
     mark.add_argument("--skip-unknown", action="store_true")
+    mark.add_argument("--pending-as", choices=[status for status in STATUSES if status != "pending"])
     mark.set_defaults(handler=mark_command)
     pending = subparsers.add_parser("pending")
     pending.add_argument("--ledger", type=Path, required=True)
@@ -354,6 +357,8 @@ def main() -> int:
         parser.error("mark --from-file cannot be used with --path or --reason")
     if args.command == "mark" and args.from_file is None and args.skip_unknown:
         parser.error("mark --skip-unknown requires --from-file")
+    if args.command == "mark" and args.from_file is None and args.pending_as is not None:
+        parser.error("mark --pending-as requires --from-file")
     try:
         if getattr(args, "limit", 1) is not None and getattr(args, "limit", 1) < 1:
             raise LedgerError("--limit must be positive")

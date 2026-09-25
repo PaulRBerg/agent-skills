@@ -59,6 +59,10 @@ uv run "<skill-dir>/scripts/naming-ledger.py" mark \
   --ledger <scratch.json> --from-file <dispositions.tsv>
 ```
 
+A subagent reports a planned but unverified rename as `pending`. After the wave is verified, apply its file with
+`--pending-as renamed` (or another final status) instead of rewriting the TSV; reasons carry over, and `excluded` or
+`blocked` still require one.
+
 Dispositions paths are relative to the repository root and must match ledger entries exactly. The ledger maps only
 tracked and non-ignored untracked files; gitignored artifacts, cache files, and bare directories are never ledger paths.
 Unknown paths fail the batch closed. Rerun with `--skip-unknown` only after reviewing the reported paths and confirming
@@ -115,16 +119,20 @@ validated rename group, or marked blocked with concrete evidence.
 ## Acquire the Implementation Scope
 
 After completing the codebase analysis and rename map, present the evidence-backed refactor plan, including its rename
-groups, dependency waves, contract boundaries, risks, and proving checks. Before editing, use the repository's
-coordination mechanism to acquire a claim covering the complete worktree. For `ai-coord`, run
-`ai-coord start 'naming refactor' --recursive '.'` and proceed only after it returns `READY`; `BLOCKED`, `UNKNOWN`, and
-pathless `INTENT` results do not authorize edits and cannot be overridden by user confirmation. Hold the claim through
-final verification.
+groups, dependency waves, contract boundaries, risks, and proving checks. Before each wave, use the repository's
+coordination mechanism to claim the cumulative write set: every path already written plus the wave's definitions,
+consumers found by search, moved paths on both sides, and moved directories recursively. A claim that drops an earlier
+wave's paths is invalid. Claim the complete worktree (`--recursive '.'`) only when a wave's consumers cannot be
+enumerated, such as a rename of a pervasive identifier or a top-level directory move. For `ai-coord`, run
+`ai-coord start 'naming refactor' <paths>... [--recursive <dir>]...` and proceed only after it returns `READY`;
+`BLOCKED`, `UNKNOWN`, and pathless `INTENT` results do not authorize edits and cannot be overridden by user
+confirmation. Hold the claim through final verification.
 
 After acquiring the claim, re-read the current commit and worktree status, refresh the ledger, and compare the
 repository with the recorded baseline. Reinspect every path whose content or presence changed during analysis, then
 update the rename map, contract boundaries, and proving checks before implementing. The ledger refresh detects path
-changes, not content changes to existing paths.
+changes, not content changes to existing paths. Because other writers may touch unclaimed paths, re-search for the old
+names immediately before each wave and during final verification, and extend the claim to any new consumer.
 
 If the repository has no reliable coordination mechanism, ask the user to confirm that no other coding agent will write
 to the repository through implementation and verification. Stop until the user explicitly confirms that fallback window;
@@ -133,7 +141,7 @@ do not infer it from a stable worktree, absent processes, or the initial invocat
 ## Execute in Verified Waves
 
 With the implementation scope active, apply rename groups in coherent dependency waves. Keep every delegated write
-within the same coordination ownership. If scope ownership is lost or an uncovered writer appears, stop before
+within the claimed write set. If scope ownership is lost or another writer appears in a claimed path, stop before
 continuing.
 
 - Prefer language-server, compiler, or AST-aware rename support for symbols. Use exact text replacement only after
