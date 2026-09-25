@@ -157,9 +157,11 @@ and deduplication; idempotency and repeat-run behavior; atomicity and interrupti
 completeness; bounded concurrency, cancellation, and resource cleanup; and secret, log, path, temporary-file, and
 command safety.
 
-Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available; add a
-focused regression test when useful. Mark `reported` when a safe fix would alter a public contract, intent is ambiguous,
-or verification is unavailable. Do not add speculative features, broad refactors, or cosmetic churn.
+Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available; write
+a missing test or fix an in-scope residual risk whenever the fix can be verified, rather than reporting it. Mark
+`reported` only for real decisions: intent is ambiguous, a safe fix would change a public contract for consumers outside
+the repository, or no verification is available. Give every `reported` finding a recommended fix and its blast radius.
+Do not add speculative features, broad refactors, or cosmetic churn.
 
 Treat source files over 1000 lines and test files over 2000 lines as discovery candidates only. Split a file only when
 cohesion, coupling, change risk, or testability establishes a better seam; line count alone is not evidence. When a
@@ -229,11 +231,18 @@ Lead with
 when helper `complete` is true; otherwise use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
 counts, plus deleted and merged tests with the test-count delta and fixed comments when non-zero. Include a compact
 `Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results. When non-empty, also
-include reverted experiments with the failed evidence, unresolved findings with their evidence, risk, and required
-decision, the overnight backlog when applicable, and residual risk with its next proving check. On
-`### ⛔ Sweep incomplete`, name the ledger path so the next session can resume from `pending`. Do not dump the scratch
-ledger's contents, unrelated pre-existing changes, or bulk data; include task-relevant evidence when it materially
-supports the report.
+include reverted experiments with the failed evidence, each `reported` finding with its evidence, recommended fix, and
+blast radius, and the overnight backlog when applicable. On `### ⛔ Sweep incomplete`, name the ledger path so the next
+session can resume from `pending`. Do not dump the scratch ledger's contents, unrelated pre-existing changes, or bulk
+data; include task-relevant evidence when it materially supports the report.
 
-Completion requires every mapped path accounted for, every finding fixed and verified or reported with evidence, and
-every relevant check passing or its failure attributed.
+In an interactive (non-overnight) run with any `reported` findings, end with one decision question listing them: fix all
+as recommended, pick specific items, or leave them reported. Treat invocation wording that already authorizes fixing
+(for example "fix any/all problems" or "I will follow your judgement") as that approval up front and skip the question,
+except for destructive actions, external writes, and purchases, which still need explicit confirmation regardless of
+invocation wording. On approval, run a fix wave over the approved items under the same sweep rules — confirm, fix,
+verify, update the ledger, and rerun `$code-polish` — then report the updated ledger and check results. During an
+autonomous overnight run, skip the question and leave `reported` findings in the overnight backlog instead.
+
+Completion requires every mapped path accounted for, every finding fixed and verified, fixed by an approved fix wave, or
+reported with evidence and a pending decision, and every relevant check passing or its failure attributed.
