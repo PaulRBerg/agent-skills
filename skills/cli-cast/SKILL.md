@@ -42,6 +42,13 @@ Otherwise use the nonsecret public RPC verified by `evm-atlas`. Never construct,
 Treat Cast stderr as secret-bearing because Foundry may reveal a resolved alias URL on transport failure; never repeat
 that output in chat, logs, or external reports.
 
+Resolve every RPC value from `evm-atlas`'s current read packet or the RouteMesh alias above; hard-coding a public RPC
+URL, such as a literal `https://` endpoint typed from memory or a prior response, in a prepare, simulate, or verify
+command violates this delegation even when the chain matches. When a local `cast` command against that provider returns
+a `--json` hex quantity, decode it with `cast to-dec <hex>` or a field-select form such as `cast receipt <hash> <field>`
+or `cast tx <hash> <field>`; do not pipe `--json` output through `jq tonumber`, which fails on hex strings and on
+`null`.
+
 ## Authority Phases
 
 ### Read
