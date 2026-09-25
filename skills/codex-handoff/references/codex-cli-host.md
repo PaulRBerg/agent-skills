@@ -72,7 +72,9 @@ Before implementation wave 1, the parent promotes the named draft recorded over 
 during the shared Plan Phase: `ai-coord start --draft <plan-slug>` (or `ai-coord bundle start --draft <plan-slug>` for
 two or more Git roots). Only when promotion reports `no draft named ...`, use the plan's explicit
 `ai-coord start '<label>' '<path>'...` fallback (or `ai-coord bundle start '<label>' '<absolute-path>'...`) over that
-union; require `READY` before launch.
+union; require `READY` before launch. When the claim queues or blocks, run `ai-coord wait` as a foreground command with
+a command timeout above its `-t` value (300 seconds by default), apply the shared wake handling, and repeat until
+`READY`; never end the turn between waits.
 
 After plan approval, call `spawn_agent` for each implementation worker with:
 

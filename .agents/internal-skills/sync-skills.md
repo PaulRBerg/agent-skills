@@ -74,19 +74,22 @@ their content here, the sync run reads both skills directly:
    follow-on work; workers report new out-of-scope prerequisites, the parent extends scope and delegates without
    re-asking.
 6. Pre-plan research delegation: zero agents by default, parent-only decision, read-only agents, findings not
-   decisions/plans, budget capped at three agents (`R1`-`R3`), optional `Research:` traceability line.
+   decisions/plans, budget capped at three agents (`R1`-`R3`), optional `Research:` traceability line; research that
+   contradicts a user-stated fact is asked before planning, never absorbed into scope.
 7. Strategy selection: sequential/parallel/hybrid criteria, disjoint-write-scope requirement, wave semantics,
    slowest-agent note, whole-handoff eight-implementation-agent limit with stable IDs and dependencies.
 8. Single-validation-owner rule: aggregate checks run once and every other agent runs only checks proving its own edits.
    Attribute failures by first ruling out the handoff's changes and tool side effects, including downstream failures;
-   continue only past evidenced unrelated failures while the handoff's own checks pass.
+   continue only past evidenced unrelated failures while the handoff's own checks pass. Verification is sized to the
+   outcome; briefs add no validation machinery the plan does not call for.
 9. Polish-selection rules: `$code-polish` risk-trigger list (file count alone is not a trigger); `$agents-brain polish`
    targets README.md, AGENTS.md, CLAUDE.md, durable context docs, project-installed skills under `.agents/skills`, and
    existing git-tracked source-catalog skills under `skills/` for prose-only edits; installed copies under managed
    agent-config roots remain excluded; either, both, or neither pass may run.
 10. Before-launch session-claim guidance: the parent owns a claim covering every delegated write scope and requires
-    `READY` before implementation launch. Delegates use the parent identity, treat its claim as authorization, and never
-    run coordination lifecycle commands; identity propagation is host-specific.
+    `READY` before implementation launch; a queued or blocked claim runs `ai-coord wait` and re-submits on each wake,
+    never ending the turn to pause. Delegates use the parent identity, treat its claim as authorization, and never run
+    coordination lifecycle commands; identity propagation and wait mechanics are host-specific.
 11. Platform-agnostic agent prompt requirements: outcome + brief, write scope and dirty-work boundaries, validation
     assignment, soft time budget, authority boundary, delegation context, stopping rule, reporting requirement.
 12. Structured result-field contract: status, summary, changed files, verification (command + outcome), residual risks,
@@ -101,15 +104,17 @@ their content here, the sync run reads both skills directly:
     verification, credible recurrence and durable reuse (not size/difficulty); reject one-offs and speculative value,
     allow at most one two-sentence `$task-handoff` suggestion, and stay silent otherwise.
 15. Completion rules: success verification, dependent gating on failure, changed-files union dedupe, ordered/scoped
-    polish invocation, polish skip/failure conditions, cross-repository `$commit` behavior.
+    polish invocation, polish skip/failure conditions (including an explicit hurry or wrap-up request), same-pattern
+    sites the outcome covers fixed before reporting, cross-repository `$commit` behavior.
 16. Adapter integrity: adapters implement the shared prompt/result/failure/completion contracts without weakening them;
     the shared entrypoint loads exactly one adapter.
 17. Companion-skill composition: a task naming another skill is a composition where the companion defines the work and
     the handoff owns delegation mechanics; the parent runs the companion's discovery/judgment/planning phases and folds
-    them into the plan; handoff-contract precedence over overlapping companion mechanics with companion user-decision
-    gates still binding; agents never load skills by name — briefs inline the needed companion excerpts;
-    companion-required polish maps onto the Plan Phase passes and runs once; Completion satisfies both report contracts;
-    optional `Companion skills:` plan line after `Research:`.
+    them into the plan, except that audit-heavy discovery is mapped and sliced for implementation agents; a companion
+    absent from the skill list is read directly from the host skill root; handoff-contract precedence over overlapping
+    companion mechanics with companion user-decision gates still binding; agents never load skills by name — briefs
+    inline the needed companion excerpts; companion-required polish maps onto the Plan Phase passes and runs once;
+    Completion satisfies both report contracts; optional `Companion skills:` plan line after `Research:`.
 
 Out of scope unless the request explicitly names it: host selection, launch, and continuation mechanics; research
 mechanics; Claude-adapter-only content; Codex-adapter-only content; each skill's model defaults and its failed-agent

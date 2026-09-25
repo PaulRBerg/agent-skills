@@ -67,6 +67,10 @@ cannot weaken this shared contract.
   the handoff and launch follow-on agents for the newly discovered scope without asking again. The worker that
   discovered the need still stops at its assigned scope and returns evidence; the parent owns scope expansion,
   repository coordination, and delegation.
+- Size verification to the requested outcome. Never add validation machinery (gates, manifests, checkpoints, hash pins,
+  journals, receipts) unless the approved plan explicitly calls for it. An explicit user request to hurry or wrap up
+  overrides optional repeat checks and required polish passes: commit the validated work and report what was skipped or
+  left unverified.
 
 Use `$ARGUMENTS` as the task when present; otherwise use the active user request. A task naming another skill follows
 Companion Skills.
@@ -79,7 +83,13 @@ handoff owns delegation mechanics.
 
 - Load the companion skill and run its discovery, judgment, and planning phases in the parent. Route read-only discovery
   through this skill's research agents when materially faster, then fold the companion's method, findings, and
-  constraints into the handoff plan.
+  constraints into the handoff plan. A companion missing from the host's skill list may be installed but hidden by
+  `disable-model-invocation: true`: read its `SKILL.md` directly from the host skill root
+  (`~/.claude/skills/<name>/SKILL.md` in Claude Code, `~/.agents/skills/<name>/SKILL.md` in Codex) before concluding it
+  is absent.
+- When the companion's discovery is itself the bulk of the work — an audit or sweep over a whole repository or large
+  file set — the parent maps the scope and slices it instead of reading it inline. After plan approval, each
+  implementation agent audits and fixes its own slice under the companion's rules, inlined in its brief.
 - This contract overrides the companion's overlapping plan approval, agent limits and stable IDs, single validation
   owner, result fields, failure classification, commit ownership, and completion reporting, even when the companion
   prescribes its own subagent, validation, or commit mechanics. Its user-decision gates still bind; this skill's plan
@@ -129,6 +139,10 @@ do not produce an implementation plan or begin edits.
 ## Plan Phase
 
 Enter this phase only for an implementation handoff.
+
+When research — delegated or the parent's own — contradicts a fact the user stated explicitly (quantities, which items,
+which accounts), ask through the host's user-question mechanism before writing the plan; never widen the plan's default
+scope to fit the research.
 
 Produce a decision-complete plan with this section and the selected adapter's exact manifest table:
 
@@ -193,7 +207,8 @@ Build a self-contained, outcome-first prompt for every implementation agent. Inc
 1. The approved overall outcome plus the agent's implementation brief, dependencies, and completion evidence.
 2. Its exact write scope, relevant repository constraints, known dirty-work boundaries, and prerequisite agent results.
 3. Its validation assignment per the Plan Phase's single validation owner: scoped checks it must run and, unless it owns
-   validation, that it must not run aggregate checks.
+   validation, that it must not run aggregate checks. Never brief new validation machinery the approved plan does not
+   call for.
 4. A soft time budget matching its manifest sizing, with the instruction to return `blocked` with partial evidence
    rather than grinding past it.
 5. This authority boundary: inspect, edit only within the assigned scope, and validate locally; never commit, push,
@@ -217,7 +232,10 @@ Add the selected adapter's command, permission, transport, and host-tool constra
 
 Before implementation wave 1, the parent promotes the plan's named draft to acquire the full manifest write-scope union.
 Use the plan's recorded explicit start fallback only when promotion reports `no draft named ...`; require `READY` before
-launching agents.
+launching agents. When promotion or start queues or blocks instead, never end the turn to pause: run `ai-coord wait`
+through the adapter's wait mechanics. It also returns on non-readiness wake events (message, unknown coverage, work
+release, 300-second default timeout); on each wake, handle `MESSAGE` events through `ai-coord inbox`, re-submit the
+recorded promote or start command, and diagnose stale blockers.
 
 Launch agents through the selected adapter in the approved strategy and dependency waves. Do not add agents or change
 models, efforts, scopes, or validation ownership merely because a worker is slow or quiet. Do revise the manifest and
@@ -275,10 +293,13 @@ placeholder.
 
 - After every required agent completes, deduplicate the union of reported `changed_files` and confirm the combined
   verification evidence proves the approved plan.
-- If any required agent failed, skip every planned polish pass. Otherwise, invoke each required pass once with only its
-  applicable paths from that union: `$code-polish` first in its default simplify-then-review mode, then
-  `$agents-brain polish` with its eligible context targets. Invoke only one when only one is required. Do not seed
-  either pass with paths outside the union or let it broaden beyond its declared workflow authority.
+- Before the completion report, fix remaining same-pattern sites the approved outcome covers through follow-on agents
+  per Failure Classification; never list them as optional or out-of-scope items.
+- If any required agent failed, or the user explicitly asked to hurry or wrap up, skip every planned polish pass and
+  report the skip. Otherwise, invoke each required pass once with only its applicable paths from that union:
+  `$code-polish` first in its default simplify-then-review mode, then `$agents-brain polish` with its eligible context
+  targets. Invoke only one when only one is required. Do not seed either pass with paths outside the union or let it
+  broaden beyond its declared workflow authority.
 - Reconcile in-scope files actually changed by each polish pass into the final changed-files set and verification. A
   required polish pass that blocks, fails, or writes outside its supported scope blocks later polish and
   cross-repository commits.

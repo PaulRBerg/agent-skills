@@ -78,9 +78,11 @@ Before implementation wave 1, the Claude parent promotes the named draft recorde
 union during the shared Plan Phase: `ai-coord start --draft <plan-slug>` (or `ai-coord bundle start --draft <plan-slug>`
 for two or more Git roots). Only when promotion reports `no draft named ...`, use the plan's explicit
 `ai-coord start '<label>' '<path>'...` fallback (or `ai-coord bundle start '<label>' '<absolute-path>'...`) over that
-union. Name exact files individually and use `--recursive` only for true subtrees; require `READY` before launch. Hold
-that claim through reconciliation, required polish, and commit; the parent claim authorizes each delegate's assigned
-writes and is not a conflict.
+union. Name exact files individually and use `--recursive` only for true subtrees; require `READY` before launch. When
+the claim queues or blocks, run `ai-coord wait` as a background Bash task (`run_in_background: true`) so its return
+wakes the session, and apply the shared wake handling; never end the turn to pause. Hold that claim through
+reconciliation, required polish, and commit; the parent claim authorizes each delegate's assigned writes and is not a
+conflict.
 
 One work item per session requires the full union up front. When follow-on work expands the scope, do so only at a wave
 boundary: run `ai-coord done`, then start a fresh item over the enlarged union before launching the next wave.
