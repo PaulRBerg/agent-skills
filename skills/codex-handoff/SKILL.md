@@ -307,6 +307,11 @@ placeholder.
   from each additional repository after its work, validation, and required polish complete, scoped to files changed
   there; do not commit incomplete, blocked, unexpected, or out-of-scope changes. Push only when the user explicitly
   requested it.
+- When the handoff pushed commits and the repository defines CI workflows, such as `.github/workflows`, watch the pushed
+  head's runs before the completion report (`gh run list --commit <sha>`, then `gh run watch <run-id>`, in the
+  background when the host supports it). Fix failures attributable to the handoff as follow-on work and report the CI
+  outcome. When changed code behaves differently by platform and local checks covered only one, name the unverified
+  platforms as a risk.
 - Finish with the selected adapter's completion report, including strategy, wave and agent counts, each agent's
   requested configuration, status, and summary, plus combined changed files, verification, polish when run (listing each
   pass and outcome), automatic cross-repository commit hashes when any, and `Issues and caveats` when present. Write

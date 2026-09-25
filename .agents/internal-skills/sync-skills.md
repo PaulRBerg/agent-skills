@@ -105,7 +105,8 @@ their content here, the sync run reads both skills directly:
     allow at most one two-sentence `$task-handoff` suggestion, and stay silent otherwise.
 15. Completion rules: success verification, dependent gating on failure, changed-files union dedupe, ordered/scoped
     polish invocation, polish skip/failure conditions (including an explicit hurry or wrap-up request), same-pattern
-    sites the outcome covers fixed before reporting, cross-repository `$commit` behavior.
+    sites the outcome covers fixed before reporting, cross-repository `$commit` behavior, CI watch on pushed commits
+    before the completion report.
 16. Adapter integrity: adapters implement the shared prompt/result/failure/completion contracts without weakening them;
     the shared entrypoint loads exactly one adapter.
 17. Companion-skill composition: a task naming another skill is a composition where the companion defines the work and
