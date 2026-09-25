@@ -1,6 +1,10 @@
 ---
-compatibility: Designed for Codex and Claude Code; rendered-browser or screenshot tooling is preferred for verification.
+compatibility:
+  Designed for Codex and Claude Code; prefer the chromium-browser skill for rendered verification when available,
+  otherwise the host's DevTools/browser tool.
 name: frontend-design
+skill-dependencies:
+  - chromium-browser
 description:
   Use when creating or substantially redesigning web interfaces, landing pages, dashboards, components, or other
   frontend UI where visual direction and implementation quality matter. Produces subject-specific art direction,
@@ -91,9 +95,15 @@ default the result fell back on and revise it.
 
 ### 5. Render, inspect, and revise
 
-Run the repository's narrowest relevant formatter, lint, type, test, and build checks. Then use the available browser or
-screenshot tooling to inspect the implemented UI at representative narrow and wide viewports and exercise every changed
-interaction and state.
+Run the repository's narrowest relevant formatter, lint, type, test, and build checks. Then do rendered verification
+with the chromium-browser skill when it is available in this session; otherwise use the host's DevTools/browser tool. Do
+not fall back to Computer Use or ad-hoc Playwright scripts while a DevTools browser tool is available.
+
+Scale the inspection matrix to the change. Repository instructions may reduce the viewport/state matrix, including
+waiving multi-viewport checks; follow them. Absent such instructions, a small edit to existing UI needs verification
+only of the changed states at one representative viewport, while a new or substantially redesigned surface needs
+representative narrow and wide viewports and every changed interaction and state. Behavior belongs in the repository's
+automated tests where they exist; use the browser for visual, layout, and theme questions.
 
 Check the rendered result for content hierarchy, subject specificity, asset loading, overflow, overlap, truncation,
 contrast, focus, hover, motion, empty/error states, and theme variants in scope. Compare it with the brief and the art

@@ -44,7 +44,11 @@ selected replay when rendered inspection adds evidence.
    deliberately bringing a page to the foreground or recovering the closed-page context described below.
 4. Navigate or mutate a pre-existing page only when the task explicitly depends on that page's current state. Never
    close a pre-existing page.
-5. At completion, close only the recorded pages created by this task unless the user asked to leave one open.
+5. Before closing an owned page that is currently selected, `select_page` a previously observed surviving page (for
+   example the page selected before this task opened its own) with `bringToFront: false`, then `close_page` the owned
+   page by its ID. If the close still returns the closed-page error described in Troubleshooting, treat it as a likely
+   success and confirm once using that recovery rather than retrying the close.
+6. At completion, close only the recorded pages created by this task unless the user asked to leave one open.
 
 ## Interaction and Evidence
 
