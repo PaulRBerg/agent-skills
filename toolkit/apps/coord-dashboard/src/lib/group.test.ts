@@ -112,4 +112,18 @@ describe("groupSnapshotByRepo", () => {
       lastActivity: null,
     });
   });
+
+  test("omits repositories that only have findings or messages", () => {
+    const lanes = groupSnapshotByRepo({
+      ...sampleSnapshot,
+      sessions: [],
+      work: [],
+      drafts: [],
+      delegates: [],
+      handoffs: [],
+    });
+
+    expect(sampleSnapshot.findings.length + sampleSnapshot.messages.length).toBeGreaterThan(0);
+    expect(lanes).toEqual([]);
+  });
 });

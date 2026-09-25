@@ -143,11 +143,8 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
   snapshot.drafts.forEach((draft) =>
     draft.claims.forEach((claim) => roots.add(claim.repo_root)),
   );
-  snapshot.findings.forEach((finding) => roots.add(finding.repo_root));
+  // Findings and messages have their own panels, so they never create a lane on their own.
   snapshot.handoffs.forEach((handoff) => roots.add(handoff.repo_root));
-  snapshot.messages.forEach((message) => {
-    if (message.repo_root) roots.add(message.repo_root);
-  });
 
   return [...roots]
     .map((repoRoot): RepoLaneModel => {
