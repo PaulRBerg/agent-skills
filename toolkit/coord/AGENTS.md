@@ -322,7 +322,8 @@ message ends with an ` untouched: …` suffix listing its own overlapping scopes
 else kept the request queued. A yielded holder that keeps writing to a narrowed-away path sees the out-of-scope write
 warning below and must re-run `ai-coord start`.
 
-In Claude Code, a blocked `ai-coord start` launches a background waker that wakes the session when its work is promoted,
+In Claude Code, a blocked `ai-coord start` launches a background waker, armed on both `PostToolUse` and
+`PostToolUseFailure` because a pipe can mask the blocked exit code, that wakes the session when its work is promoted,
 a message or pending recommendation arrives, the work is released, coverage becomes unknown, or the waker times out. A
 readiness wake still requires the matching ordinary or bundle start form to return `READY`; message wakes identify
 `inbox` and `recommend list` in each claimed repository as inspection surfaces, then require the matching start form as
@@ -645,3 +646,7 @@ development server can use its own origin. It rejects any request whose `Host` h
 `127.0.0.1`, or `[::1]` (any port, case-insensitive) with 403, and a missing or unparseable `Host` with 400, so a page
 loaded from another origin cannot reach this local API through DNS rebinding; the Vite and Bun dashboard proxies send a
 loopback `Host` and keep working.
+
+On this machine, launchd runs the installed `ai-coord serve` as `local.ai-coord-api` and the dashboard's `bun run start`
+as `local.ai-coord-dashboard`. `just install-cli` restarts only the API service. The dashboard rebuilds a stale `dist` on
+startup, so after dashboard changes restart it with `launchctl kickstart -k "gui/$(id -u)/local.ai-coord-dashboard"`.

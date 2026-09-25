@@ -1318,6 +1318,29 @@ fn waker_requires_a_payload_root_claim_then_reevaluates_the_whole_bundle() {
 }
 
 #[test]
+fn waker_arms_on_successful_post_tool_use_only_for_queued_work() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let holder = Identity { client: Client::Codex, session_id: "holder".into() };
+    let waiter = Identity { client: Client::Claude, session_id: "waiter".into() };
+    register(&coordinator, &holder, &repo, 210);
+    register(&coordinator, &waiter, &repo, 211);
+    let scope = [PathBuf::from("src/lib.rs")];
+    coordinator.start_for(holder.clone(), "holder", &scope, &[], &repo).unwrap();
+    let runtime = HookRuntime::new(&coordinator);
+    let payload = json!({"session_id":"waiter", "cwd":repo, "hook_event_name":"PostToolUse"});
+    assert!(runtime.waker("claude", &payload).is_none());
+    assert_eq!(
+        coordinator.start_for(waiter.clone(), "waiter", &scope, &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Blocked
+    );
+    coordinator.done_for(&holder, &repo).unwrap();
+    coordinator.store().unwrap().acknowledge(&waiter, None, 100.0).unwrap();
+    assert_eq!(runtime.waker("claude", &payload).unwrap().kind, crate::domain::OutcomeKind::Ready);
+    assert!(runtime.waker("claude", &json!({"session_id":"waiter", "cwd":repo, "hook_event_name":"Stop"})).is_none());
+}
+
+#[test]
 fn session_end_cleans_identity_wide_bundle_work_and_deduplicates_wakeup() {
     let temp = TempDir::new().unwrap();
     let (coordinator, first) = runtime(&temp);

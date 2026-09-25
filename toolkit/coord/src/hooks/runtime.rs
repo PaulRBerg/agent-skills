@@ -313,7 +313,8 @@ impl<'a> HookRuntime<'a> {
 
     pub(crate) fn waker(&self, client: &str, payload: &Value) -> Option<Outcome> {
         let event = payload.get("hook_event_name").and_then(Value::as_str).unwrap_or("unknown");
-        if client != "claude" || event != "PostToolUseFailure" {
+        // Piping a blocked start (`ai-coord start … | tail`) masks its exit code, so arm on either tool outcome.
+        if client != "claude" || !matches!(event, "PostToolUse" | "PostToolUseFailure") {
             return None;
         }
         let result: Result<Option<Outcome>> = (|| {
@@ -388,7 +389,7 @@ fn supported_events(client: Client) -> impl Iterator<Item = &'static str> {
         Client::Codex => HookClient::Codex,
         Client::Claude => HookClient::Claude,
     };
-    hook_specs(client).iter().map(|spec| spec.event)
+    hook_specs(client).iter().filter(|spec| spec.command.starts_with("ai-coord hook ")).map(|spec| spec.event)
 }
 
 fn permission_mode(payload: &Value) -> (bool, Option<String>) {

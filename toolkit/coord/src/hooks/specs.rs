@@ -172,6 +172,16 @@ const CLAUDE_HOOK_SPECS: &[HookSpec] = &[
         async_rewake: None,
     },
     HookSpec {
+        event: "PostToolUse",
+        command: "ai-coord waker claude",
+        matcher: Some("Bash"),
+        timeout: Some(3600),
+        additional_context_limit: None,
+        if_filter: Some("Bash(ai-coord start *)"),
+        async_: Some(true),
+        async_rewake: Some(true),
+    },
+    HookSpec {
         event: "PostToolUseFailure",
         command: "ai-coord waker claude",
         matcher: Some("Bash"),
@@ -200,11 +210,15 @@ mod tests {
         let claude = hook_specs(Client::Claude);
 
         assert_eq!(codex.len(), 7);
-        assert_eq!(claude.len(), 8);
+        assert_eq!(claude.len(), 9);
         assert_eq!(codex[0].matcher, Some("startup|resume|clear"));
         assert_eq!(codex[1].additional_context_limit, Some(200));
-        assert_eq!(claude[7].if_filter, Some("Bash(ai-coord start *)"));
-        assert_eq!(claude[7].async_, Some(true));
-        assert_eq!(claude[7].async_rewake, Some(true));
+        for waker in &claude[7..] {
+            assert_eq!(waker.command, "ai-coord waker claude");
+            assert_eq!(waker.if_filter, Some("Bash(ai-coord start *)"));
+            assert_eq!(waker.async_, Some(true));
+            assert_eq!(waker.async_rewake, Some(true));
+        }
+        assert_eq!([claude[7].event, claude[8].event], ["PostToolUse", "PostToolUseFailure"]);
     }
 }
