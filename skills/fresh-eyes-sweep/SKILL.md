@@ -127,6 +127,10 @@ next session.
 - Reconcile every wave before starting dependents. Use a fresh-context verifier after each nontrivial wave.
 - Subagents and workers never commit. The coordinating session commits settled slices serially as checkpoint commits, so
   only one process touches the Git index.
+- A session holds one coordination claim, and each new claim replaces the last. When the repository uses a claim-based
+  coordinator such as `ai-coord`, claim the union of every in-flight writing slice (running agents plus the
+  coordinator's own edits) before launching a writer. Widen to a new union, never to a scope that drops a slice still
+  being written, and release only after every in-flight slice is reconciled and committed.
 - On lint-staged or other hook failures during a checkpoint commit, follow `$commit`'s failure-recovery guidance rather
   than diagnosing index contention here.
 
@@ -224,7 +228,11 @@ until a pass finds no new evidenced issue. Before declaring completion, revisit 
 the result, including the sweep's own additions; passing checks alone does not justify unnecessary complexity. During a
 supplied deadline's validation window, reconcile owned edits and run the aggregate format, lint, type, test, build, and
 invariant checks justified by the final changed-file union. Compare final results with the recorded baseline. Audit
-coverage, fixes, and checks against tool output before claiming completion.
+coverage, fixes, and checks against tool output before claiming completion. When the sweep pushed commits and the
+repository defines CI workflows, such as `.github/workflows`, watch the pushed head's runs before reporting
+(`gh run list --commit <sha>`, then `gh run watch <run-id>`, in the background when the host supports it); fix failures
+attributable to the sweep and report the CI outcome. When changed code behaves differently by platform and local checks
+covered only one, name the unverified platforms as a risk.
 
 Lead with
 `### ✅ Sweep ledger complete — <accounted>/<mapped> files accounted (<inspected> inspected, <excluded> excluded)` only
