@@ -50,8 +50,14 @@ ai-commit prepare [--all | --staged] [--natural | --conventional] --diff full \
   [--exclude-baseline '<path>=<oid>']... [-- <session-modified-paths>...]
 ```
 
-- Default mode requires every path edited in this session. For a rename, include both old and new names, including
-  case-only file or directory renames.
+- Read the full preparation output; never pipe it through `tail`, `head`, `awk`, `grep`, or similar. It carries both the
+  printed transaction ID and the diff step 3 must analyze, and a truncating pipe discards the evidence along with the
+  ID.
+- Before default-mode preparation, run the repository's formatter on this session's edited paths only, so a formatting
+  pre-commit hook cannot modify the content after it is pinned.
+- Build the path list from this session's edited paths, never by parsing `git status` or `git status --porcelain`
+  output, which can include another agent's untracked or modified files. Default mode requires every path edited in this
+  session; for a rename, include both old and new names, including case-only file or directory renames.
 - Before default-mode preparation, run `ai-coord touched` when available and reconcile its output against the session
   path list: add missed session-edited paths, but ignore paths this session did not semantically change because touched
   paths are best-effort evidence, not authority. Skip this cross-check silently when the command is unavailable or the

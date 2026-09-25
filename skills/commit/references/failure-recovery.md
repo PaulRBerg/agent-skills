@@ -31,7 +31,9 @@ immutable; another evidenced content defect requires another explicit diagnosis,
 ## Prepared Snapshot Drift
 
 The exact diagnostic prefix `snapshot-check hook modified prepared content` identifies a content failure before commit
-creation: a verification hook tried to change the validation-only prepared snapshot.
+creation: a verification hook tried to change the validation-only prepared snapshot. Running the repository's formatter
+on session-edited paths before `prepare` (SKILL.md step 2) prevents most of this drift; use this recovery when it still
+occurs.
 
 1. Do not retry the transaction, add `--no-verify`, or make the shared worktree temporarily match the prepared index.
 2. Record the repository-relative paths named by the diagnostic, then run `ai-commit discard <transaction-id>` and
