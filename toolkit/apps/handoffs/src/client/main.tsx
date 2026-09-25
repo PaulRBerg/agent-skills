@@ -1,6 +1,7 @@
 import { Drawer } from "@base-ui/react/drawer";
+import { Tabs } from "@base-ui/react/tabs";
 import rehypeShiki from "@shikijs/rehype";
-import { Archive, FileText, FolderGit2, FolderOpen, Menu, RefreshCw, X } from "lucide-react";
+import { FileText, FolderGit2, Menu, RefreshCw, X } from "lucide-react";
 import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MarkdownHooks } from "react-markdown";
@@ -11,6 +12,7 @@ import type { HandoffCategory, HandoffRecord, HandoffsResponse } from "../shared
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
+type HandoffState = HandoffRecord["state"];
 
 interface HandoffGroup {
   root: string;
@@ -25,6 +27,8 @@ const categoryNames: Record<HandoffCategory, string> = {
   audit: "Audit",
   operations: "Operations",
 };
+
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const markdownRehypePlugins: PluggableList = [
   [
@@ -58,128 +62,135 @@ function friendlyRoot(root: string): string {
   return root.replace(/^\/Users\/[^/]+/, "~");
 }
 
-function formatMoment(value: string): string {
+/** Formats a timestamp as `21 Sep`, adding the year when it differs from the current one or when forced. */
+function formatDate(value: string, withYear = false): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
 
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  const dayMonth = `${date.getDate()} ${monthNames[date.getMonth()]}`;
+  return withYear || date.getFullYear() !== new Date().getFullYear() ? `${dayMonth} ${date.getFullYear()}` : dayMonth;
 }
 
 function categoryLabel(category: HandoffCategory | null): string {
   return category ? categoryNames[category] : "Uncategorized";
 }
 
-function HandoffNavigation({
-  archived,
-  live,
-  onSelect,
-  selectedPath,
-}: {
-  archived: HandoffGroup[];
-  live: HandoffGroup[];
-  onSelect: (path: string) => void;
-  selectedPath: string | null;
-}) {
-  return (
-    <nav aria-label="Handoff index" className="handoff-index">
-      <IndexSection groups={live} icon={<FolderOpen aria-hidden="true" size={15} />} label="Live" onSelect={onSelect} selectedPath={selectedPath} />
-      <IndexSection
-        archived
-        groups={archived}
-        icon={<Archive aria-hidden="true" size={15} />}
-        label="Archived"
-        onSelect={onSelect}
-        selectedPath={selectedPath}
-      />
-    </nav>
-  );
-}
+/** Drops a leading `# Title` line that repeats the record title already shown in the reader header. */
+function stripDuplicateTitle(markdown: string, title: string): string {
+  const lines = markdown.split("\n");
+  const index = lines.findIndex((line) => line.trim() !== "");
+  const heading = /^#\s+(.+)$/.exec(lines[index]?.trimEnd() ?? "")?.[1];
+  if (heading?.trim() !== title.trim()) return markdown;
 
-function IndexSection({
-  archived = false,
-  groups,
-  icon,
-  label,
-  onSelect,
-  selectedPath,
-}: {
-  archived?: boolean;
-  groups: HandoffGroup[];
-  icon: React.ReactNode;
-  label: string;
-  onSelect: (path: string) => void;
-  selectedPath: string | null;
-}) {
-  const count = groups.reduce((total, group) => total + group.handoffs.length, 0);
-
-  return (
-    <section className="index-section" data-archived={archived || undefined}>
-      <h2 className="index-heading">
-        {icon}
-        <span>{label}</span>
-        <span className="index-count" aria-label={`${count} ${label.toLowerCase()} handoffs`}>
-          {count}
-        </span>
-      </h2>
-      {groups.length === 0 ? (
-        <p className="index-empty">No {label.toLowerCase()} handoffs.</p>
-      ) : (
-        groups.map((group) => (
-          <section className="repository-group" key={`${group.root}\u0000${group.repository}`}>
-            <header className="repository-header">
-              <div className="repository-title-row">
-                <FolderGit2 aria-hidden="true" size={15} strokeWidth={1.8} />
-                <h3 title={group.repository}>{group.repository}</h3>
-                <span
-                  className="repository-count"
-                  aria-label={`${group.handoffs.length} handoff${group.handoffs.length === 1 ? "" : "s"}`}
-                >
-                  {group.handoffs.length}
-                </span>
-              </div>
-              <p className="repository-root" title={group.root}>
-                {friendlyRoot(group.root)}
-              </p>
-            </header>
-            <ul>
-              {group.handoffs.map((handoff) => (
-                <li key={handoff.path}>
-                  <button
-                    aria-current={selectedPath === handoff.path ? "page" : undefined}
-                    className="handoff-link"
-                    data-selected={selectedPath === handoff.path || undefined}
-                    onClick={() => onSelect(handoff.path)}
-                    type="button"
-                  >
-                    <span className="handoff-link-title">{handoff.title}</span>
-                    <span className="handoff-link-meta">
-                      {handoff.category ? categoryLabel(handoff.category) : handoff.filename}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))
-      )}
-    </section>
-  );
+  const next = lines[index + 1]?.trim() === "" ? index + 2 : index + 1;
+  return lines.slice(next).join("\n");
 }
 
 function SidebarBrand() {
   return (
     <div className="sidebar-brand">
-      <p className="eyebrow">Local dispatch</p>
       <h1>AI Handoffs</h1>
-      <p>Read-only task records, arranged by their point of origin.</p>
     </div>
   );
+}
+
+function HandoffIndex({
+  archived,
+  live,
+  onSelect,
+  onTabChange,
+  selectedPath,
+  tab,
+}: {
+  archived: HandoffGroup[];
+  live: HandoffGroup[];
+  onSelect: (path: string) => void;
+  onTabChange: (tab: HandoffState) => void;
+  selectedPath: string | null;
+  tab: HandoffState;
+}) {
+  const liveCount = live.reduce((total, group) => total + group.handoffs.length, 0);
+  const archivedCount = archived.reduce((total, group) => total + group.handoffs.length, 0);
+
+  return (
+    <nav aria-label="Handoff index" className="handoff-index">
+      <Tabs.Root className="index-tabs" onValueChange={(value) => onTabChange(value as HandoffState)} value={tab}>
+        <Tabs.List className="tab-list">
+          <Tabs.Tab aria-label={`Live, ${liveCount} handoffs`} className="tab" value="live">
+            Live <span className="tab-count">{liveCount}</span>
+          </Tabs.Tab>
+          <Tabs.Tab aria-label={`Archived, ${archivedCount} handoffs`} className="tab" value="archived">
+            Archived <span className="tab-count">{archivedCount}</span>
+          </Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel className="tab-panel" value="live">
+          <GroupList empty="No live handoffs." groups={live} onSelect={onSelect} selectedPath={selectedPath} />
+        </Tabs.Panel>
+        <Tabs.Panel className="tab-panel" value="archived">
+          <GroupList empty="No archived handoffs." groups={archived} onSelect={onSelect} selectedPath={selectedPath} />
+        </Tabs.Panel>
+      </Tabs.Root>
+    </nav>
+  );
+}
+
+function GroupList({
+  empty,
+  groups,
+  onSelect,
+  selectedPath,
+}: {
+  empty: string;
+  groups: HandoffGroup[];
+  onSelect: (path: string) => void;
+  selectedPath: string | null;
+}) {
+  if (groups.length === 0) return <p className="index-empty">{empty}</p>;
+
+  return groups.map((group) => (
+    <section className="repository-group" key={`${group.root}\u0000${group.repository}`}>
+      <header className="repository-header" title={`${group.root}/${group.repository}`}>
+        <FolderGit2 aria-hidden="true" size={14} strokeWidth={1.8} />
+        <h2 className="repository-path">
+          <span className="repository-name">{group.repository}</span>
+          <span className="repository-root">{friendlyRoot(group.root)}</span>
+        </h2>
+        <span
+          aria-label={`${group.handoffs.length} handoff${group.handoffs.length === 1 ? "" : "s"}`}
+          className="repository-count"
+        >
+          {group.handoffs.length}
+        </span>
+      </header>
+      <ul>
+        {group.handoffs.map((handoff) => {
+          const selected = selectedPath === handoff.path;
+          const category = categoryLabel(handoff.category);
+          return (
+            <li key={handoff.path}>
+              <button
+                aria-current={selected ? "page" : undefined}
+                className="handoff-row"
+                data-selected={selected || undefined}
+                onClick={() => onSelect(handoff.path)}
+                title={`${category} · ${handoff.title}`}
+                type="button"
+              >
+                <span aria-hidden="true" className={`row-dot category-${handoff.category ?? "none"}`} />
+                <span className="row-title">
+                  <span className="sr-only">{category}: </span>
+                  {handoff.title}
+                </span>
+                <time className="row-date" dateTime={handoff.modifiedAt}>
+                  {formatDate(handoff.modifiedAt)}
+                </time>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  ));
 }
 
 function MarkdownDocument({ markdown }: { markdown: string }) {
@@ -192,58 +203,70 @@ function MarkdownDocument({ markdown }: { markdown: string }) {
   );
 }
 
-function HandoffArticle({ handoff }: { handoff: HandoffRecord }) {
-  const recordedAt = handoff.created ?? handoff.modifiedAt;
-  const recordedLabel = handoff.created ? "Created" : "Modified";
+function HandoffLocation({ handoff }: { handoff: HandoffRecord }) {
+  const remainder = handoff.path.startsWith(handoff.root) ? handoff.path.slice(handoff.root.length) : null;
+  if (remainder === null) return <p className="document-location">{handoff.path}</p>;
+
+  const repositoryPrefix = `/${handoff.repository}`;
+  const hasRepository = remainder.startsWith(`${repositoryPrefix}/`);
 
   return (
-    <article aria-labelledby="handoff-title" className="document-sheet">
-      <header className="document-header">
-        <div className="document-kicker">
-          <span className={`category-mark category-${handoff.category ?? "uncategorized"}`}>{categoryLabel(handoff.category)}</span>
-          <span className="record-state">{handoff.state}</span>
-        </div>
-        <h2 id="handoff-title">{handoff.title}</h2>
-        <p className="document-summary">
-          {recordedLabel} <time dateTime={recordedAt}>{formatMoment(recordedAt)}</time>
-        </p>
-      </header>
+    <p className="document-location" title={handoff.path}>
+      {friendlyRoot(handoff.root)}
+      {hasRepository ? (
+        <>
+          /<strong>{handoff.repository}</strong>
+          {remainder.slice(repositoryPrefix.length)}
+        </>
+      ) : (
+        remainder
+      )}
+    </p>
+  );
+}
 
-      <div className="document-layout">
-        <MarkdownDocument markdown={handoff.markdown} />
-        <aside aria-label="Handoff provenance" className="provenance-rail">
-          <p className="eyebrow">Provenance</p>
-          <dl>
-            <div>
-              <dt>Filename</dt>
-              <dd>{handoff.filename}</dd>
-            </div>
-            <div>
-              <dt>Repository</dt>
-              <dd>{handoff.repository}</dd>
-            </div>
-            <div>
-              <dt>Root</dt>
-              <dd className="path-value" title={handoff.root}>{friendlyRoot(handoff.root)}</dd>
-            </div>
-            <div>
-              <dt>Location</dt>
-              <dd className="path-value" title={handoff.path}>{handoff.path}</dd>
-            </div>
-            <div>
-              <dt>Record</dt>
-              <dd>{handoff.format === "frontmatter" ? "Structured frontmatter" : "Legacy handoff"}</dd>
-            </div>
-          </dl>
-        </aside>
-      </div>
+function HandoffArticle({ handoff }: { handoff: HandoffRecord }) {
+  const recordedAt = handoff.created ?? handoff.modifiedAt;
+  const markdown = useMemo(() => stripDuplicateTitle(handoff.markdown, handoff.title), [handoff.markdown, handoff.title]);
+
+  return (
+    <article aria-labelledby="handoff-title" className="document">
+      <header className="document-header">
+        <p className="document-state">
+          <span className="state-dot" data-state={handoff.state} aria-hidden="true" />
+          <span>{handoff.state === "live" ? "Live" : "Archived"}</span>
+          <span aria-hidden="true" className="separator">·</span>
+          <span className={`category-${handoff.category ?? "none"}`}>{categoryLabel(handoff.category)}</span>
+        </p>
+        <h2 id="handoff-title">{handoff.title}</h2>
+        <p className="document-meta">
+          {handoff.created ? "Created" : "Modified"} <time dateTime={recordedAt}>{formatDate(recordedAt, true)}</time>
+          <span aria-hidden="true"> · </span>
+          <code>{handoff.filename}</code>
+          <span aria-hidden="true"> · </span>
+          {handoff.format === "frontmatter" ? "Structured frontmatter" : "Legacy handoff"}
+        </p>
+        <HandoffLocation handoff={handoff} />
+      </header>
+      <MarkdownDocument markdown={markdown} />
     </article>
+  );
+}
+
+function StatusState({ children, role, title }: { children: React.ReactNode; role?: "alert" | "status"; title: string }) {
+  return (
+    <div className="status-state" data-error={role === "alert" || undefined} role={role}>
+      <FileText aria-hidden="true" size={22} />
+      <h2>{title}</h2>
+      {children}
+    </div>
   );
 }
 
 function App() {
   const [handoffs, setHandoffs] = useState<HandoffRecord[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [tab, setTab] = useState<HandoffState | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -280,51 +303,55 @@ function App() {
   }, [loadHandoffs]);
 
   const selected = handoffs.find((handoff) => handoff.path === selectedPath) ?? null;
+  // Until the reader picks a tab, follow the state of the selected record.
+  const activeTab = tab ?? selected?.state ?? "live";
   const liveGroups = useMemo(() => groupByProvenance(handoffs.filter((handoff) => handoff.state === "live")), [handoffs]);
   const archivedGroups = useMemo(
     () => groupByProvenance(handoffs.filter((handoff) => handoff.state === "archived")),
     [handoffs],
   );
-  const selectHandoff = (path: string) => setSelectedPath(path);
+
+  const renderIndex = (onSelect: (path: string) => void) =>
+    loadState === "ready" ? (
+      <HandoffIndex
+        archived={archivedGroups}
+        live={liveGroups}
+        onSelect={onSelect}
+        onTabChange={setTab}
+        selectedPath={selectedPath}
+        tab={activeTab}
+      />
+    ) : null;
 
   return (
     <main className="app-shell">
       <aside className="desktop-sidebar">
         <SidebarBrand />
-        {loadState === "ready" ? (
-          <HandoffNavigation archived={archivedGroups} live={liveGroups} onSelect={selectHandoff} selectedPath={selectedPath} />
-        ) : null}
+        {renderIndex(setSelectedPath)}
       </aside>
 
       <div className="reader-shell">
         <header className="mobile-bar">
           <Drawer.Root onOpenChange={setDrawerOpen} open={drawerOpen} swipeDirection="left">
             <Drawer.Trigger aria-label="Open handoff index" className="drawer-trigger" title="Open handoff index">
-              <Menu aria-hidden="true" size={20} />
+              <Menu aria-hidden="true" size={18} />
             </Drawer.Trigger>
-            <span className="mobile-title">AI Handoffs</span>
+            <span className="mobile-title">{selected?.title ?? "AI Handoffs"}</span>
             <Drawer.Portal>
               <Drawer.Backdrop className="drawer-backdrop" />
               <Drawer.Viewport className="drawer-viewport">
                 <Drawer.Popup aria-label="Handoff index" className="drawer-popup">
-                  <Drawer.Content>
+                  <Drawer.Content className="drawer-content">
                     <div className="drawer-header">
                       <SidebarBrand />
                       <Drawer.Close aria-label="Close handoff index" className="drawer-close" title="Close handoff index">
-                        <X aria-hidden="true" size={20} />
+                        <X aria-hidden="true" size={18} />
                       </Drawer.Close>
                     </div>
-                    {loadState === "ready" ? (
-                      <HandoffNavigation
-                        archived={archivedGroups}
-                        live={liveGroups}
-                        onSelect={(path) => {
-                          selectHandoff(path);
-                          setDrawerOpen(false);
-                        }}
-                        selectedPath={selectedPath}
-                      />
-                    ) : null}
+                    {renderIndex((path) => {
+                      setSelectedPath(path);
+                      setDrawerOpen(false);
+                    })}
                   </Drawer.Content>
                 </Drawer.Popup>
               </Drawer.Viewport>
@@ -334,36 +361,28 @@ function App() {
 
         <section aria-live="polite" className="reader-content">
           {loadState === "loading" ? (
-            <div className="status-state" role="status">
-              <FileText aria-hidden="true" size={28} />
-              <h2>Opening the index</h2>
+            <StatusState role="status" title="Opening the index">
               <p>Reading the available handoff records.</p>
-            </div>
+            </StatusState>
           ) : null}
           {loadState === "error" ? (
-            <div className="status-state status-error" role="alert">
-              <FileText aria-hidden="true" size={28} />
-              <h2>Unable to reach the handoff index</h2>
+            <StatusState role="alert" title="Unable to reach the handoff index">
               <p>{error}</p>
               <button className="retry-button" onClick={() => void loadHandoffs()} type="button">
-                <RefreshCw aria-hidden="true" size={16} />
+                <RefreshCw aria-hidden="true" size={14} />
                 Try again
               </button>
-            </div>
+            </StatusState>
           ) : null}
           {loadState === "ready" && handoffs.length === 0 ? (
-            <div className="status-state">
-              <FileText aria-hidden="true" size={28} />
-              <h2>No handoffs found</h2>
+            <StatusState title="No handoffs found">
               <p>The watched locations are empty. This viewer does not create or change handoffs.</p>
-            </div>
+            </StatusState>
           ) : null}
           {loadState === "ready" && handoffs.length > 0 && !selected ? (
-            <div className="status-state">
-              <FileText aria-hidden="true" size={28} />
-              <h2>Select a handoff</h2>
+            <StatusState title="Select a handoff">
               <p>Choose a record from the index to read its complete brief.</p>
-            </div>
+            </StatusState>
           ) : null}
           {loadState === "ready" && selected ? <HandoffArticle handoff={selected} /> : null}
         </section>
