@@ -77,3 +77,7 @@ cli_packages := "commit coord handoff notify skillet"
     for pkg in {{cli_packages}}; do \
         cargo install --quiet --path "$pkg" --locked --force --root "$HOME/.local"; \
     done
+    # A running `ai-coord serve` keeps the old binary and rejects newer ledger schemas.
+    if launchctl print "gui/$(id -u)/local.ai-coord-api" >/dev/null 2>&1; then \
+        launchctl kickstart -k "gui/$(id -u)/local.ai-coord-api"; \
+    fi
