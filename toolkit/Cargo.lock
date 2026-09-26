@@ -55,7 +55,6 @@ dependencies = [
  "tokio",
  "unicode-casefold",
  "unicode-normalization",
- "unicode-segmentation",
  "wait-timeout",
 ]
 
@@ -2166,12 +2165,6 @@ checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
 dependencies = [
  "tinyvec",
 ]
-
-[[package]]
-name = "unicode-segmentation"
-version = "1.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
 
 [[package]]
 name = "unicode-width"

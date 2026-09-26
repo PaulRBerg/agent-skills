@@ -23,7 +23,6 @@ sha2.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 tokio = { version = "1.47", features = ["full"] }
-unicode-segmentation = "1.12"
 unicode-casefold = "0.2"
 unicode-normalization = "0.1"
 wait-timeout.workspace = true
