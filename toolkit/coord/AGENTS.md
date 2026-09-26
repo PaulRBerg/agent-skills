@@ -169,7 +169,7 @@ additionally requires Bun. Automatic Codex hook trust requires Codex CLI 0.146.0
 accepted only when the required app-server protocol and trust semantics still validate.
 
 ```sh
-cargo install --locked --git 'https://github.com/PaulRBerg/agent-toolkit' ai-coord
+cargo install --locked --git 'https://github.com/PaulRBerg/agent-toolkit' ai-coord --root "$HOME/.local"
 ai-coord link all
 ai-coord check
 ```
@@ -337,10 +337,10 @@ foreground `ai-coord wait` guidance, even in Claude Code.
 Sessions whose hooks report plan mode are labeled `planning` in `status` and the dashboard, so peers can distinguish
 planning presence from active implementation work.
 
-When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks byte-for-byte. Run `ai-coord baseline` to
-print their blob OIDs and pass affected paths to the commit skill's baseline exclusion. `baseline` is a stable machine
-contract: zero or more `path<TAB>oid` records, with normalized repository-relative paths and empty output when no
-baselines exist. A session that finishes with uncommitted dirt retains residual ownership and can reclaim it
+When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks byte-for-byte. `ai-commit prepare` asks
+`ai-coord baseline` for these baselines and excludes their pre-existing portions automatically. `baseline` is a stable
+machine contract: zero or more `path<TAB>oid` records, with normalized repository-relative paths and empty output when
+no baselines exist. A session that finishes with uncommitted dirt retains residual ownership and can reclaim it
 immediately while its session row exists. Session end, confirmed process death, or supersession releases that
 attribution during the next process reconciliation, and the leftover edits become ordinary stale dirt.
 
