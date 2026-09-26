@@ -142,8 +142,12 @@ Keep the receipt compact and forward its outcome lines without decoration:
 - `PUSHED <branch>` or `PUSHED_NEW <branch>` proves propagation and completes push-authorized or push-only work.
 - `PUSHED <transaction-id> <commit-oid>` is the retained proof returned when an already-pushed transaction is replayed.
 - `BEHIND <branch> <count>` is safe noncompletion, never completion: `ai-commit` fetched and refused to integrate or
-  push. A preceding `COMMITTED` still proves the local commit; after the user reconciles the branch, replay the same
-  transaction command (or rerun `ai-commit push` for push-only work).
+  push. A preceding `COMMITTED` still proves the local commit. Run `git fetch`, then verify the branch is still behind
+  its upstream, the working tree and index are clean, and no other Git operation (rebase, merge, cherry-pick, revert,
+  bisect) is in progress. If all hold, run `git pull --rebase --no-autostash` and replay the same transaction command
+  (or rerun `ai-commit push` for push-only work). On rebase conflicts, run `git rebase --abort` for only that rebase and
+  ask the user before resolving. If the tree is dirty or another Git operation is in progress, stop and report. Never
+  autostash.
 
 Do not report unrelated tree state, ahead/behind counts not emitted by the command, staging narration, or successful
 hook activity. Add only a required one-line bypass disclosure from the recovery reference.

@@ -3,7 +3,6 @@ argument-hint: "[task]"
 compatibility:
   The Claude Code host requires Git, /bin/bash, Python 3, and an authenticated Codex CLI with dangerous bypass support;
   the Codex CLI host requires native subagents.
-disable-model-invocation: false
 metadata:
   install-targets: claude-code codex
 name: codex-handoff

@@ -18,8 +18,8 @@ Squash the current feature branch into one commit representing its net change re
 - `--subject <line>`: require this exact first line in the replacement commit message.
 - `--base <branch>`: override default-branch detection.
 
-Without `--subject`, the agent writes a conventional-commit subject from the surviving net diff. Without `--base`, the
-helper resolves `origin/HEAD`, then local/remote `main`, `master`, or `trunk`.
+Without `--subject`, the agent writes a subject from the surviving net diff in the repository's message format. Without
+`--base`, the helper resolves `origin/HEAD`, then local/remote `main`, `master`, or `trunk`.
 
 ## Plan Interface
 
@@ -44,14 +44,18 @@ table before mutation.
 Inspect the plan's commits and the net diff from `mergeBase..originalHead`. The net diff is authoritative; intermediate
 commits supply intent and attribution only. Inspect targeted hunks when the summary is ambiguous.
 
-Use `--subject` exactly when supplied. Otherwise choose the conventional type from the surviving outcome: `feat`, `fix`,
-`refactor`, `docs`, `test`, `build`, `ci`, `chore(deps)`, `style`, `perf`, `ai`, or `chore`. Do not call the change
-`chore` merely because it is a squash.
+Use `--subject` exactly when supplied. Otherwise read `format` under `[message]` in `<git-root>/.agents/commit.toml`;
+its value is `natural` or `conventional`, and an absent file or key means `conventional`.
 
-Keep the subject imperative, lowercase after the prefix, specific, and without a trailing period. Add at most five body
-bullets for distinct surviving outcomes; omit the body when the subject is sufficient. Do not dump paths or statistics.
-Append one `Co-authored-by: Name <email>` trailer for each plan author other than the current Git user. The agent owns
-all semantic wording and must ensure every statement is supported by the net diff.
+- `natural`: write a natural-language imperative subject with no type prefix, such as `Add retry to webhook delivery`.
+- `conventional`: choose the type from the surviving outcome: `feat`, `fix`, `refactor`, `docs`, `test`, `build`, `ci`,
+  `chore(deps)`, `style`, `perf`, `revert`, `ai`, or `chore`. Do not call the change `chore` merely because it is a
+  squash. Keep the subject lowercase after the prefix.
+
+Keep the subject imperative, specific, and without a trailing period. Add at most five body bullets for distinct
+surviving outcomes; omit the body when the subject is sufficient. Do not dump paths or statistics. Append one
+`Co-authored-by: Name <email>` trailer for each plan author other than the current Git user. The agent owns all semantic
+wording and must ensure every statement is supported by the net diff.
 
 Write the final message to a scratch file outside the repository.
 

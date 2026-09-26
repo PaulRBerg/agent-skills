@@ -61,8 +61,8 @@ ai-skillet doctor --root . --dependencies-only
 - Frontmatter validation accepts the portable Agent Skills fields, Claude Code extensions, and repository extensions as
   one supported union. It reports unknown top-level fields; invalid field, item, and metadata-value types; invalid
   enumerated values; and `agent` or `background` used without `context: fork`.
-- Explicit `disable-model-invocation: false` and `user-invocable: true` produce redundant-default warnings. Omit those
-  fields to preserve the same effective defaults.
+- Explicit `disable-model-invocation: false` and `user-invocable: true` restate the effective defaults and are accepted
+  without findings.
 - Prompt-hygiene warnings are advisory and never auto-fix: stale model pins, oversized unconditional Markdown
   references, conflicting requirement/prohibition language, and missing completion evidence.
 - Coordination-exemption errors are report-only: `coordination: exempt` must be paired with the catalog's canonical
@@ -85,8 +85,8 @@ Each permitted repair is staged and atomically renamed into place, preserving th
 failed safe fix exits 3 without partially rewriting its target.
 
 `--fix-safe` does not rewrite frontmatter, descriptions, README rows, `references/version.txt`, or relative links.
-Unknown fields, invalid types or values, cross-field errors, redundant defaults, and coordination declarations are
-report-only. Make those edits manually and verify with a fresh audit.
+Unknown fields, invalid types or values, cross-field errors, and coordination declarations are report-only. Make those
+edits manually and verify with a fresh audit.
 
 ## Related Skills
 

@@ -93,7 +93,8 @@ access to the named repositories but none of this transcript. Include:
   (or `ai-coord bundle start '<label>' '<absolute-path>'...`) over the same scope union. Use the fallback only when
   promotion reports `no draft named ...`, such as after the draft expires in seven days or the ledger is replaced. Use
   `--recursive` only when the handoff genuinely cannot enumerate a subtree. Recording a draft changes coordination state
-  only, grants no scope, and remains within this skill's coordination exemption;
+  only, grants no scope, and remains within this skill's coordination exemption. Autonomous findings triage is the
+  exception: see the noninteractive triage section below;
 - assumptions resolved from repository evidence or explicit user decisions.
 
 Add a `## Execution approach` section. For a simple task, direct the receiving session to execute this one isolated
@@ -191,7 +192,10 @@ ai-handoff create --no-clipboard \
   'FINDING_<UPPERCASE_ID>.md'
 ```
 
-This mode keeps publication and structural validation but skips `pbcopy` and `pbpaste`. Never overwrite an existing
+This mode keeps publication and structural validation but skips `pbcopy` and `pbpaste`. The autonomous triage worker
+runs as an ai-coord delegate that rejects lifecycle commands, so it skips `ai-coord draft` and the promote command and
+records only the explicit `ai-coord start '<label>' '<path>'...` (or
+`ai-coord bundle start '<label>' '<absolute-path>'...`) command over the scope union. Never overwrite an existing
 deterministic finding handoff: resolve the existing handoff before creating another one. When creating a finding handoff
 interactively rather than through the autonomous triage runtime, run the following only after successful publication so
 the ledger record moves from `pending` to `handed-off`. Preserve the ledger ID's original spelling:

@@ -1,6 +1,6 @@
 ---
 argument-hint:
-  <create-pr|update-pr|create-issue|update-issue|comment-issue|create-discussion|update-discussion|comment-discussion>
+  <create-pr|update-pr|create-issue|update-issue|issue-claude-code|issue-codex-cli|issue-sablier|comment-issue|create-discussion|update-discussion|comment-discussion>
   [options]
 compatibility: Authenticated GitHub CLI >= 2.97.0
 coordination: exempt

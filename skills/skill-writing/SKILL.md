@@ -1,5 +1,5 @@
 ---
-argument-hint: [skill-name]
+argument-hint: "[skill-name]"
 compatibility:
   Requires curl and a writable user cache directory; network populates or refreshes the agentskills.io specification.
 name: skill-writing
