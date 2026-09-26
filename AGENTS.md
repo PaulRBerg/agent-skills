@@ -66,8 +66,8 @@ Treat visual structure as information architecture, not decoration.
 
 Run `just` to list every recipe with its description; the `justfile` is authoritative. Notable, non-obvious facts:
 
-- After editing Markdown, run `just prettier-write` then `just prettier-check`, in that order; if `prettier-check`
-  fails, fix only the files you changed.
+- After editing Markdown, run `just prettier-write <changed files>` then `just prettier-check <changed files>`, in that
+  order; if `prettier-check` fails, fix only the files you changed.
 - `package.json` exists only for local formatting, type-checking, and hook wiring; there is no build step.
 - Treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the verification surface
   unless a task introduces a narrower check.
@@ -102,7 +102,7 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
   targets sort before this source repository. If another agent has a queued claim overlapping any active claim, resolve
   or wait out that conflict before publishing. Require `READY` for the complete target claim set in `@publish-skills`.
 - When creating, renaming, or deleting a catalog or internal skill, follow `@skill-lifecycle`. For catalog creation,
-  also follow `@skill-authoring`. `just readme-skills-check` must pass.
+  also follow `@skill-authoring`. `just skill-check` must pass.
 - Before creating or editing `SKILL.md` frontmatter, `agents/openai.yaml`, `metadata.install-targets`, or
   `skill-dependencies`, read `@skill-authoring` — it is the authoritative metadata reference; do not guess field
   semantics.
@@ -121,8 +121,8 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
   directly in the owning skill and discover target-project conventions at runtime. Refer to an external repository only
   when it is genuinely required to perform the skill's task.
 - Write skill content for end users and other repos, not for this repo. Skills must not assume this repo's own tooling
-  (e.g. `just prettier-write`, `just skill-invocation-check`) is present elsewhere; have skills detect and use whatever
-  the target repo provides instead of naming this repo's recipes.
+  (e.g. `just prettier-write`, `just skill-check`) is present elsewhere; have skills detect and use whatever the target
+  repo provides instead of naming this repo's recipes.
 - Resolve `references/`, `scripts/`, `examples/`, and `assets/` paths relative to the owning skill directory.
 - Bash scripts must be compatible with Bash v3.2 (`/bin/bash`) because macOS ships that system version and skills may
   run in Bash-based environments.

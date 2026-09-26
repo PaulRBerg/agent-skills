@@ -163,8 +163,9 @@ Codex `allow_implicit_invocation` defaults to `true`; when set to `false`, Codex
 prompt, but explicit `$skill` invocation still works. The Claude-equivalent implicit-invocation gate is the inverse of
 `disable-model-invocation`.
 
-`SKILL.md` is authoritative for invocation policy. When changing `disable-model-invocation`, run
-`just skill-invocation-fix` to update `agents/openai.yaml` from the `SKILL.md` value.
+`SKILL.md` is authoritative for invocation policy. When changing `disable-model-invocation`, run `just skill-fix` to
+apply `ai-skillet doctor --fix-safe`, which rewrites `agents/openai.yaml`'s `policy.allow_implicit_invocation` from the
+`SKILL.md` value.
 
 ## Skill Dependencies
 

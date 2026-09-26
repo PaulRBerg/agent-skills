@@ -3,6 +3,3 @@
 .cache/
 .claude/
 .serena/
-
-# generated symlink
-CLAUDE.md

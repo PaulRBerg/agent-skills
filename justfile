@@ -11,10 +11,8 @@ prettier := "bunx --no-install prettier"
 prettier_cache := ".cache/prettier/.prettier-cache"
 prettier_globs := "\"**/*.{md,json,jsonc,yaml,yml}\""
 evm_atlas_generator := "scripts/generate-evm-atlas.ts"
-skill_invocation_script := "scripts/sync-invocation-policy.ts"
 publish_skills_script := "scripts/publish-skills.ts"
 publish_skills_test := "scripts/publish-skills.test.ts"
-readme_skills_script := "scripts/readme-skills-check.ts"
 codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
 codex_handoff_wave_test := "tests/codex-handoff/test-watch-codex-wave.py"
 
@@ -126,23 +124,17 @@ alias eac := evm-atlas-check
     bun run {{ evm_atlas_generator }} --discover-routemesh
 alias eadr := evm-atlas-discover-routemesh
 
-# Check SKILL.md invocation fields against agents/openai.yaml
+# Check skill invocation metadata, README skill tables, and dependencies for drift
 [group("checks")]
-@skill-invocation-check:
-    bun run {{ skill_invocation_script }}
-alias sic := skill-invocation-check
+@skill-check:
+    ai-skillet doctor --root .
+alias sc := skill-check
 
-# Update agents/openai.yaml invocation policy from SKILL.md
+# Apply safe fixes for skill invocation metadata, README skill tables, and dependencies
 [group("checks")]
-@skill-invocation-fix:
-    bun run {{ skill_invocation_script }} --fix
-alias sif := skill-invocation-fix
-
-# Check skill dependency declarations
-[group("checks")]
-@skill-dependencies-check:
-    ai-skillet doctor --root . --dependencies-only
-alias sdc := skill-dependencies-check
+@skill-fix:
+    ai-skillet doctor --root . --fix-safe
+alias sf := skill-fix
 
 # Check source-owned global skill installations and CLI metadata for drift
 [group("checks")]
@@ -155,12 +147,6 @@ alias psc := publish-skills-check
 @publish-skills-test:
     bun test {{ publish_skills_test }}
 alias pst := publish-skills-test
-
-# Check README skills tables match skills/ directories
-[group("checks")]
-@readme-skills-check:
-    bun run {{ readme_skills_script }}
-alias rsc := readme-skills-check
 
 # Type-check Bun TypeScript helper scripts without emitting JavaScript
 @typescript-check:

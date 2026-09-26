@@ -137,9 +137,9 @@ directly (`map` for skill-map and skill-harmonization; `doctor` for skill-doctor
 helper-resolution, wrapper, or fallback path.
 
 Keep `skill-doctor` authoritative for ai-skillet's complete extended-dialect contract: the portable, Claude Code, and
-repository field union; unknown-field, type, value, and cross-field diagnostics; redundant-default warnings; and the
-Markdown-aware coordination declaration. Preserve its report-only boundary for those findings and its narrow
-`--fix-safe` policy. Do not turn `doctor` into the primary command for the map consumers.
+repository field union; unknown-field, type, value, and cross-field diagnostics; explicit-default fields accepted
+without findings; and the Markdown-aware coordination declaration. Preserve its report-only boundary for those findings
+and its narrow `--fix-safe` policy. Do not turn `doctor` into the primary command for the map consumers.
 
 ## Workflow
 
@@ -157,9 +157,11 @@ Markdown-aware coordination declaration. Preserve its report-only boundary for t
 After editing Markdown, run from the repo root:
 
 ```bash
-just prettier-write
-just prettier-check
+just prettier-write <changed files>
+just prettier-check <changed files>
 ```
+
+If `prettier-check` fails, fix only the files you changed.
 
 Re-read touched sections and confirm selected groups now match on shared wording or workflow contracts and still differ
 only where their workflows require it.

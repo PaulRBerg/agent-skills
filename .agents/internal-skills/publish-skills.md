@@ -31,8 +31,10 @@ back to full-drift publication.
 
 If attributable source changes are uncommitted, run `$commit --push` from the source repository without `--all`, passing
 only those paths. If selected source changes are already committed, run `ai-commit push` to verify propagation even when
-unrelated paths are dirty. On a `BEHIND` receipt, stop before touching global installations and report that branch
-reconciliation is required.
+unrelated paths are dirty. On a `BEHIND` receipt, before touching global installations: if the working tree and index
+are clean and no other Git operation is in progress, fetch and verify those conditions, then run a conflict-free
+`git pull --rebase --no-autostash` and rerun `ai-commit push`; on conflicts, abort only that rebase and ask before
+resolving. If the tree or index is dirty, stop and report that branch reconciliation is required. Never autostash.
 
 Keep this work under the source-repository claim through its commit and push, then run `ai-coord done` for that claim
 before acquiring the target claims.
@@ -103,8 +105,8 @@ preserve the claims and stop with the evidence.
 bun run scripts/publish-skills.ts check
 ```
 
-with the same `--skill` filters, plus `just readme-skills-check`. Completion requires zero drift, both checks passing,
-and every commit created here pushed.
+with the same `--skill` filters, plus `just skill-check`. Completion requires zero drift, both checks passing, and every
+commit created here pushed.
 
 ## Report
 
