@@ -159,7 +159,7 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
 - `ai-skillet doctor --root "<scope>/.agents/skills/<name>"` exits 0. This is the canonical local schema and policy
   gate.
 - Finish with `### 🧩 Skill created: <name>`, a tree of created paths, and `### ✅ Verified` with the exact checks. Link
-  both absolute source and symlink paths.
+  files by their absolute `.agents/skills/<name>/` source paths, never through the `.claude/skills/<name>` symlink.
 - Offer to commit the new skill. When the host project's standing instructions require prompt commits, commit without
   further prompting.
 
