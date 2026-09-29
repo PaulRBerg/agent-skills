@@ -168,8 +168,8 @@ format = "natural"
 command = ["cargo", "test", "--locked"]
 ```
 
-`format` must be `"natural"` or `"conventional"`. An absent file defaults to conventional format; an invalid file is a
-usage error. Explicit `--natural` or `--conventional` always wins for that preparation.
+`format` must be `"natural"` or `"conventional"`. An absent file or `[message]` table defaults to conventional format;
+an invalid file is a usage error. Explicit `--natural` or `--conventional` always wins for that preparation.
 
 `validation.command` is optional. When configured, it must be one non-empty argv vector (no shell form, empty argv
 elements, or NUL bytes). `prepare` freezes that argv in its journal without running it. Both `validate` and `commit`

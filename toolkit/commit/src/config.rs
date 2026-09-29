@@ -10,6 +10,7 @@ use crate::{
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Config {
+    #[serde(default)]
     message: MessageConfig,
     #[serde(default)]
     validation: Option<ValidationConfig>,
@@ -19,6 +20,12 @@ struct Config {
 #[serde(deny_unknown_fields)]
 struct MessageConfig {
     format: MessageFormat,
+}
+
+impl Default for MessageConfig {
+    fn default() -> Self {
+        Self { format: MessageFormat::Conventional }
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -106,6 +106,9 @@ fn local_config_selects_message_format_and_absence_defaults_to_conventional() {
 
     harness.write(".agents/commit.toml", "[message]\nformat = \"conventional\"\n");
     assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "conventional");
+
+    harness.write(".agents/commit.toml", "[validation]\ncommand = [\"true\"]\n");
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "conventional");
 }
 
 #[test]
