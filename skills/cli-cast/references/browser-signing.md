@@ -40,9 +40,14 @@ the receipt.
 
 Use the public address supplied by the user or already known from the connected wallet as `OWNER` for preparation.
 Resolve ENS through `$evm-atlas`. Do not load key material to discover an address. Use `cast wallet address --browser`
-only if that exact subcommand's current help exposes `--browser`; otherwise ask for the public address. At signing,
-confirm the connected account matches the reviewed `OWNER`, `--from`, and chain. An account change requires a revised
-review.
+only if that exact subcommand's current help exposes `--browser`; otherwise ask for the public address.
+
+`cast send --browser` does not enforce `--from` or `--nonce`: the wallet signs with its active account and may
+substitute that account's nonce, so a mismatch broadcasts from the wrong sender. Immediately before each approved
+broadcast, run `cast wallet address --browser` (when its help exposes `--browser`) and require the result to equal the
+reviewed `OWNER`; otherwise have the user confirm the active wallet account first. On a mismatch, stop and ask the user
+to switch accounts; an account change requires a revised review. After broadcast, verify the transaction's `from` and
+nonce against the review as part of receipt verification.
 
 ## Approved Broadcast
 
