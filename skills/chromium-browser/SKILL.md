@@ -62,7 +62,8 @@ selected replay when rendered inspection adds evidence.
 - When a cookie consent popup appears, select only necessary or essential cookies by default, including through its
   settings when needed. If no such option is available, accept all cookies and continue.
 - Use `filePath` for large screenshots, snapshots, traces, recordings, or response bodies, writing only to a
-  task-authorized workspace path or a temporary location. Unrestricted path capability is not write authorization.
+  task-authorized path inside the server's workspace roots, such as a git-ignored `.ai/` directory; the server rejects
+  paths outside them, including agent scratchpads. Unrestricted path capability is not write authorization.
 - Parallelize independent pages when useful, but preserve causal order for calls targeting the same page.
 
 ## Authority and Privacy
