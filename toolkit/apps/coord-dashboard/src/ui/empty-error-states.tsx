@@ -1,4 +1,4 @@
-import { RadioTower, TerminalSquare } from "lucide-react";
+import { RadioTower, SquareTerminal } from "lucide-react";
 
 export function EmptySessions() {
   return (
@@ -32,7 +32,7 @@ export function ApiErrorState({
       <div
         className={`flex gap-3 ${compact ? "items-start" : "flex-col items-start"}`}
       >
-        <TerminalSquare
+        <SquareTerminal
           aria-hidden="true"
           className="size-5 shrink-0 text-danger"
           strokeWidth={1.7}

@@ -16,7 +16,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2024",
-    "types": ["bun"]
+    "types": ["bun", "vite/client"]
   },
   "include": ["src", "vite.config.ts"]
 }
