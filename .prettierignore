@@ -1,5 +1,4 @@
 # local agent state
-.agents/skills/
 .cache/
 .claude/
 .serena/

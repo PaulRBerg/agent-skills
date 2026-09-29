@@ -197,6 +197,7 @@ test("apply batches one remove and one add per target group, then verifies clean
   assert.match(result.stdout, /Apply completed and verified/);
   const commands = readCommandLog(fixture);
   assert.equal(commands.length, 4);
+  assert(commands.every((args) => args[0] === "skills@1.7.0"));
   assert.deepEqual(commands.map(commandKind), ["remove", "shared", "claude", "codex"]);
   assert.equal(run(fixture, "check").status, 0);
   assert.equal(readLock(fixture).skills.gone, undefined);

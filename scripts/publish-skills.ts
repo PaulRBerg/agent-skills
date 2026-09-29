@@ -66,6 +66,8 @@ type RepoClaim = { canonical: boolean; paths: Array<{ path: string; scope: Claim
 
 const repository = "PaulRBerg/agent-skills";
 const sourceUrl = "https://github.com/PaulRBerg/agent-skills.git";
+// Pinned: apply requires the v3 global lock format this release writes.
+const skillsCli = "skills@1.7.0";
 const validSkillName = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const scriptRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const homeDir = os.homedir();
@@ -635,14 +637,14 @@ function buildCommands(groups: Groups): Array<{ args: string[]; label: string }>
   const commands: Array<{ args: string[]; label: string }> = [];
   if (groups.remove.length > 0) {
     commands.push({
-      args: ["skills", "remove", "--global", "--skill", ...groups.remove, "--yes"],
+      args: [skillsCli, "remove", "--global", "--skill", ...groups.remove, "--yes"],
       label: `remove: ${groups.remove.join(", ")}`,
     });
   }
   if (groups.shared.length > 0) {
     commands.push({
       args: [
-        "skills",
+        skillsCli,
         "add",
         repository,
         "--global",
@@ -658,13 +660,13 @@ function buildCommands(groups: Groups): Array<{ args: string[]; label: string }>
   }
   if (groups.claude.length > 0) {
     commands.push({
-      args: ["skills", "add", repository, "--global", "--agent", "claude-code", "--skill", ...groups.claude, "--yes"],
+      args: [skillsCli, "add", repository, "--global", "--agent", "claude-code", "--skill", ...groups.claude, "--yes"],
       label: `claude: ${groups.claude.join(", ")}`,
     });
   }
   if (groups.codex.length > 0) {
     commands.push({
-      args: ["skills", "add", repository, "--global", "--agent", "codex", "--skill", ...groups.codex, "--yes"],
+      args: [skillsCli, "add", repository, "--global", "--agent", "codex", "--skill", ...groups.codex, "--yes"],
       label: `codex: ${groups.codex.join(", ")}`,
     });
   }

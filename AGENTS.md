@@ -101,6 +101,8 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
   source changes under the source-repository claim, then release that claim before acquiring targets: home-directory
   targets sort before this source repository. If another agent has a queued claim overlapping any active claim, resolve
   or wait out that conflict before publishing. Require `READY` for the complete target claim set in `@publish-skills`.
+  This source-then-target sequence is the documented exception to the global rule that multi-root writes take one
+  `ai-coord bundle start`; the target set itself still uses one bundle when it spans two or more roots.
 - When creating, renaming, or deleting a catalog or internal skill, follow `@skill-lifecycle`. For catalog creation,
   also follow `@skill-authoring`. `just skill-check` must pass.
 - Before creating or editing `SKILL.md` frontmatter, `agents/openai.yaml`, `metadata.install-targets`, or

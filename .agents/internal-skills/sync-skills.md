@@ -28,7 +28,8 @@ Files:
 Keep the shared host-detection guard at the start of each `## Supported Chat Hosts` block textually identical. The guard
 requires detecting the current chat host before any work and stopping unsupported harnesses with
 `This skill only works in Claude Code or Codex CLI.` Preserve any skill-specific prose that follows the guard under the
-same heading.
+same heading. The guard is the heading plus its first paragraph; verify it with the exact-block check under
+Verification.
 
 ### Commit Workflow Semantics
 
@@ -153,6 +154,32 @@ and its narrow `--fix-safe` policy. Do not turn `doctor` into the primary comman
 6. If no drift exists, make no edits and report that the selected groups are already aligned.
 
 ## Verification
+
+When the Supported Chat Hosts group is selected, extract and compare its exact guard blocks from the repo root:
+
+```bash
+bash <<'EOF'
+extract_guard() {
+  awk '
+    $0 == "## Supported Chat Hosts" { in_block = 1; print; next }
+    in_block && NF { in_guard = 1; print; next }
+    in_guard { exit }
+  ' "$1"
+}
+
+reference='skills/agents-docs/SKILL.md'
+rc=0
+if [ -z "$(extract_guard "$reference")" ]; then
+  echo "missing Supported Chat Hosts guard: $reference" >&2
+  rc=1
+fi
+for skill_file in 'skills/agents-introspection/SKILL.md' 'skills/copy-transcript-path/SKILL.md'; do
+  diff -u --label "$reference" --label "$skill_file" \
+    <(extract_guard "$reference") <(extract_guard "$skill_file") || rc=1
+done
+exit "$rc"
+EOF
+```
 
 After editing Markdown, run from the repo root:
 
