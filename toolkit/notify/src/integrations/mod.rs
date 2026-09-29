@@ -7,8 +7,9 @@ pub use claude::{
     ClaudeHooksReport, ClaudeHooksUpdate, HOOK_SPECS, HookSpec, ensure_claude_hooks, inspect_claude_hooks,
 };
 pub use codex::{
-    CODEX_NOTIFY_COMMAND, CodexNotifyReport, CodexNotifyUpdate, inspect_codex_notify, resolve_codex_config_path,
-    set_codex_notify, validate_codex_profile_name,
+    CODEX_HOOK_EVENTS, CODEX_NOTIFY_COMMAND, CodexHooksReport, CodexIntegrationReport, CodexNotifyReport,
+    CodexNotifyUpdate, inspect_codex_integration, inspect_codex_notify, resolve_codex_config_path, set_codex_notify,
+    validate_codex_profile_name,
 };
 
 /// The state of one integration as observed by an inspector.

@@ -26,6 +26,7 @@ platform-independent; CI runs on Ubuntu with nightly Rust.
   payload; parse and validation failures there exit 1, because Claude Code and Codex treat a hook's exit 2 as a blocking
   decision (e.g. Stop would keep the agent going, PreToolUse would block the tool). Only clap CLI usage errors and
   non-hook commands (`config`, `link`, `check`, `cleanup`, `test`) still use exit 2.
+- `integrations::CODEX_HOOK_EVENTS` lists the native Codex events `check` requires for `ai-notify event codex`.
 - `integrations::HOOK_SPECS` is the source of truth for installed Claude hooks. The integration inspector derives its
   required event set from that list so `link claude` and `check` stay aligned.
 - Preserve unrelated settings and hooks when changing integration writers. `link codex` must continue to refuse a
@@ -298,8 +299,9 @@ recorded, such as when hooks are installed during a turn, the completion still r
 hooks preserve the Codex notification mode and prompt-prefix filters and do not apply `threshold_seconds`.
 
 Codex 0.155.1 disables native hooks in internal title-generation threads, so those threads never invoke these handlers.
-See the [native hook contract](https://learn.chatgpt.com/docs/hooks). Use `/hooks` to inspect this integration;
-`ai-notify check` and `ai-notify link codex` inspect and configure the legacy callback described below.
+See the [native hook contract](https://learn.chatgpt.com/docs/hooks). Use `/hooks` to review trust for this integration;
+`ai-notify check` reports these handlers from `~/.codex/hooks.json`, and `ai-notify link codex` configures only the
+legacy callback described below.
 
 #### Legacy notify callback
 
@@ -356,7 +358,7 @@ Codex 0.155.1 runs these requests in hidden ephemeral threads that disable `feat
 
 ### Integration Check
 
-Use the built-in checker to see whether Claude Code hooks and Codex notify are configured:
+Use the built-in checker to see whether Claude Code hooks and Codex notifications are configured:
 
 ```bash
 ai-notify check
@@ -364,6 +366,12 @@ ai-notify check
 # Check the effective base + profile configuration
 ai-notify check --profile review
 ```
+
+Codex is OK when either mechanism is fully configured: `~/.codex/hooks.json` has `ai-notify event codex` command
+handlers for both `UserPromptSubmit` and `Stop` (any matcher, since Codex ignores it for those events), or the effective
+legacy `notify` runs `ai-notify codex`. The output lists each contributing source and any missing native hook event. A
+malformed `hooks.json` or Codex config, or a missing profile file, reports `ERROR` and exits 1. Inline `[hooks]` tables
+and project `.codex/hooks.json` files are not inspected.
 
 ### How It Works
 

@@ -371,6 +371,21 @@ fn check_treats_missing_as_diagnostic_and_parse_errors_as_failures() {
     fs::create_dir_all(codex.parent().unwrap()).unwrap();
     fs::write(codex, "notify = [\"broken\"\n").unwrap();
     second.run(&["check"], "").code(1).stdout(predicate::str::contains("Codex CLI notify: ERROR"));
+
+    let third = TestEnv::new();
+    let hooks = third.home.join(".codex/hooks.json");
+    fs::create_dir_all(hooks.parent().unwrap()).unwrap();
+    let handler = r#"[{"hooks": [{"type": "command", "command": "ai-notify event codex"}]}]"#;
+    fs::write(&hooks, format!(r#"{{"hooks": {{"UserPromptSubmit": {handler}, "Stop": {handler}}}}}"#)).unwrap();
+    third.run(&["check", "--profile", "review"], "").code(1).stdout(
+        predicate::str::contains("Codex CLI notify (profile 'review'): ERROR")
+            .and(predicate::str::contains("Profile config not found")),
+    );
+    fs::write(third.home.join(".codex/review.config.toml"), "").unwrap();
+    third.run(&["check", "--profile", "review"], "").success().stdout(
+        predicate::str::contains("Codex CLI notify (profile 'review'): OK")
+            .and(predicate::str::contains("~/.codex/hooks.json (native hooks: UserPromptSubmit, Stop)")),
+    );
 }
 
 #[test]

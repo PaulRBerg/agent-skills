@@ -14,7 +14,7 @@ use crate::{
     error::{AppError, Result},
     events,
     integrations::{
-        CODEX_NOTIFY_COMMAND, IntegrationStatus, ensure_claude_hooks, inspect_claude_hooks, inspect_codex_notify,
+        CODEX_NOTIFY_COMMAND, IntegrationStatus, ensure_claude_hooks, inspect_claude_hooks, inspect_codex_integration,
         set_codex_notify,
     },
     logging,
@@ -164,20 +164,29 @@ pub fn entrypoint() -> ExitCode {
 /// payload through the real CLI definition and applying the same runtime rule as [`run_codex`]:
 /// `--stdin` ignores an appended argument, so only `Command::Codex { stdin: false, .. }` works.
 pub fn codex_notify_argv_runs(argv: &[&str]) -> bool {
-    let Some((program, rest)) = argv.split_first() else {
-        return false;
-    };
+    parse_ai_notify_argv(argv, Some("{}"))
+        .is_some_and(|cli| matches!(cli.command, Command::Codex { stdin: false, payload: Some(_) }))
+}
+
+/// Returns whether `argv` is an `ai-notify` invocation of the native Codex hook handler,
+/// `ai-notify event codex`, which reads the hook payload from stdin.
+pub fn codex_hook_argv_runs(argv: &[&str]) -> bool {
+    parse_ai_notify_argv(argv, None)
+        .is_some_and(|cli| matches!(cli.command, Command::Event { event: EventCommand::Codex }))
+}
+
+/// Parse `argv` through the real CLI definition when its program has the basename `ai-notify`,
+/// optionally appending a trailing argument the caller supplies at runtime.
+fn parse_ai_notify_argv(argv: &[&str], trailing: Option<&str>) -> Option<Cli> {
+    let (program, rest) = argv.split_first()?;
     if Path::new(program).file_name().and_then(|name| name.to_str()) != Some("ai-notify") {
-        return false;
+        return None;
     }
     let mut full = Vec::with_capacity(rest.len() + 2);
     full.push("ai-notify");
     full.extend_from_slice(rest);
-    full.push("{}");
-    match Cli::try_parse_from(full) {
-        Ok(cli) => matches!(cli.command, Command::Codex { stdin: false, payload: Some(_) }),
-        Err(_) => false,
-    }
+    full.extend(trailing);
+    Cli::try_parse_from(full).ok()
 }
 
 /// Execute a parsed command. Keeping parsing separate makes the Clap surface reusable in tests.
@@ -378,7 +387,7 @@ fn check_integrations(profile: Option<&str>) -> Result<()> {
     let codex_root = home_path(".codex")?;
     let project_root = env::current_dir()?;
     let claude = inspect_claude_hooks(&claude_root, &project_root);
-    let codex = inspect_codex_notify(&codex_root, profile);
+    let codex = inspect_codex_integration(&codex_root, profile);
 
     println!("Integration status:");
     println!("Claude Code hooks: {}", status_label(claude.status));
@@ -407,19 +416,38 @@ fn check_integrations(profile: Option<&str>) -> Result<()> {
     let label =
         profile.map_or_else(|| "Codex CLI notify".to_owned(), |name| format!("Codex CLI notify (profile '{name}')"));
     println!("{label}: {}", status_label(codex.status));
-    if !codex.paths.is_empty() {
+    let hooks = &codex.hooks;
+    let notify = &codex.notify;
+    let hooks_contribute = !hooks.installed_events.is_empty();
+    let notify_contributes = notify.status == IntegrationStatus::Ok;
+    if hooks_contribute || notify_contributes {
+        println!("  Contributing sources:");
+        if hooks_contribute {
+            println!("    - {} (native hooks: {})", display_path(&hooks.path), hooks.installed_events.join(", "));
+        }
+        if let Some(path) = notify.path.as_ref().filter(|_| notify_contributes) {
+            println!("    - {} (legacy notify)", display_path(path));
+        }
+    }
+    if hooks_contribute && !hooks.missing_events.is_empty() {
+        println!("  Missing native hook events: {}", hooks.missing_events.join(", "));
+    }
+    if let Some(error) = &hooks.error {
+        println!("  Native hooks error: {error}");
+    }
+    if !notify.paths.is_empty() {
         println!("  Active configs:");
-        for path in &codex.paths {
+        for path in &notify.paths {
             println!("    - {}", display_path(path));
         }
     }
-    if let Some(path) = &codex.path {
+    if let Some(path) = &notify.path {
         println!("  Effective notify source: {}", display_path(path));
     }
-    if let Some(notify) = &codex.notify {
-        println!("  notify: {notify}");
+    if let Some(value) = &notify.notify {
+        println!("  notify: {value}");
     }
-    if let Some(error) = &codex.error {
+    if let Some(error) = &notify.error {
         println!("  Error: {error}");
     }
 

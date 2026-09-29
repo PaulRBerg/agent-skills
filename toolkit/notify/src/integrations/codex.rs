@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use serde_json::Value as JsonValue;
 use toml_edit::{Array, DocumentMut, Item, Value};
 
 use crate::{
@@ -14,6 +15,9 @@ use super::IntegrationStatus;
 
 /// The callback command installed in Codex's root `notify` key.
 pub const CODEX_NOTIFY_COMMAND: &[&str] = &["ai-notify", "codex"];
+
+/// The native Codex hook events that `ai-notify event codex` must receive.
+pub const CODEX_HOOK_EVENTS: &[&str] = &["UserPromptSubmit", "Stop"];
 
 /// The result of changing a Codex notify setting.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -40,6 +44,44 @@ pub struct CodexNotifyReport {
 
 impl CodexNotifyReport {
     /// Whether parsing or profile resolution failed and a CLI must exit non-zero.
+    pub fn has_error(&self) -> bool {
+        self.status == IntegrationStatus::Error
+    }
+}
+
+/// Native Codex hook coverage read from `hooks.json` in the Codex config directory.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CodexHooksReport {
+    pub path: PathBuf,
+    pub installed_events: Vec<String>,
+    pub missing_events: Vec<String>,
+    pub error: Option<String>,
+}
+
+impl CodexHooksReport {
+    pub fn status(&self) -> IntegrationStatus {
+        if self.error.is_some() {
+            IntegrationStatus::Error
+        } else if self.missing_events.is_empty() {
+            IntegrationStatus::Ok
+        } else if self.installed_events.is_empty() {
+            IntegrationStatus::Missing
+        } else {
+            IntegrationStatus::Partial
+        }
+    }
+}
+
+/// Codex notification coverage from native hooks and the legacy `notify` callback combined.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CodexIntegrationReport {
+    pub status: IntegrationStatus,
+    pub hooks: CodexHooksReport,
+    pub notify: CodexNotifyReport,
+}
+
+impl CodexIntegrationReport {
+    /// Whether either source failed to parse or resolve and a CLI must exit non-zero.
     pub fn has_error(&self) -> bool {
         self.status == IntegrationStatus::Error
     }
@@ -187,6 +229,69 @@ pub fn inspect_codex_notify(config_root: &Path, profile: Option<&str>) -> CodexN
         profile: profile.map(ToOwned::to_owned),
         paths: loaded_paths,
     }
+}
+
+/// Inspect both Codex mechanisms; either one fully configured makes the integration OK.
+pub fn inspect_codex_integration(config_root: &Path, profile: Option<&str>) -> CodexIntegrationReport {
+    let hooks = inspect_codex_hooks(config_root);
+    let notify = inspect_codex_notify(config_root, profile);
+    let status = match (hooks.status(), notify.status) {
+        (IntegrationStatus::Error, _) | (_, IntegrationStatus::Error) => IntegrationStatus::Error,
+        (IntegrationStatus::Ok, _) | (_, IntegrationStatus::Ok) => IntegrationStatus::Ok,
+        (IntegrationStatus::Missing, IntegrationStatus::Missing) => IntegrationStatus::Missing,
+        _ => IntegrationStatus::Partial,
+    };
+    CodexIntegrationReport { status, hooks, notify }
+}
+
+/// Inspect `hooks.json` for native hook handlers that run `ai-notify event codex`.
+fn inspect_codex_hooks(config_root: &Path) -> CodexHooksReport {
+    let path = config_root.join("hooks.json");
+    let (installed_events, error) = match codex_hook_events(&path) {
+        Ok(events) => (events, None),
+        Err(error) => (Vec::new(), Some(error.message)),
+    };
+    let missing_events = CODEX_HOOK_EVENTS
+        .iter()
+        .filter(|event| !installed_events.iter().any(|installed| installed == *event))
+        .map(|event| (*event).to_owned())
+        .collect();
+    CodexHooksReport { path, installed_events, missing_events, error }
+}
+
+fn codex_hook_events(path: &Path) -> Result<Vec<String>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = fs::read_to_string(path)?;
+    let data: JsonValue = serde_json::from_str(&text)
+        .map_err(|error| AppError::integration(format!("failed to parse {}: {error}", path.display())))?;
+    let Some(root) = data.as_object() else {
+        return Err(AppError::integration(format!("{} must contain a JSON object at the root", path.display())));
+    };
+    let Some(hooks) = root.get("hooks") else {
+        return Ok(Vec::new());
+    };
+    let Some(hooks) = hooks.as_object() else {
+        return Err(AppError::integration(format!("{}: hooks field must be an object", path.display())));
+    };
+    Ok(CODEX_HOOK_EVENTS
+        .iter()
+        .filter(|event| hooks.get(**event).is_some_and(groups_run_codex_hook))
+        .map(|event| (*event).to_owned())
+        .collect())
+}
+
+/// Codex ignores matchers for `UserPromptSubmit` and `Stop`, so any matcher group counts.
+fn groups_run_codex_hook(groups: &JsonValue) -> bool {
+    groups.as_array().into_iter().flatten().any(|group| {
+        group.get("hooks").and_then(JsonValue::as_array).into_iter().flatten().any(|hook| {
+            hook.get("type").and_then(JsonValue::as_str) == Some("command") &&
+                hook.get("command").and_then(JsonValue::as_str).is_some_and(|command| {
+                    crate::cli::codex_hook_argv_runs(&command.split_whitespace().collect::<Vec<_>>())
+                })
+        })
+    })
 }
 
 fn load_document(path: &Path) -> Result<DocumentMut> {
@@ -392,6 +497,76 @@ mod tests {
         assert_eq!(report.status, IntegrationStatus::Partial);
         assert_eq!(report.path, Some(root.join("review.config.toml")));
         assert_eq!(report.paths, vec![base, root.join("review.config.toml")]);
+    }
+
+    const NATIVE_HOOKS: &str = r#"{"hooks": {
+        "UserPromptSubmit": [
+            {"hooks": [{"type": "command", "command": "ai-coord hook codex"}]},
+            {"hooks": [{"type": "command", "command": "ai-notify event codex", "timeout": 5}]}
+        ],
+        "Stop": [{"hooks": [{"type": "command", "command": "/opt/bin/ai-notify event codex"}]}]
+    }}"#;
+
+    fn inspect_integration(config: Option<&str>, hooks: Option<&str>) -> CodexIntegrationReport {
+        let directory = tempdir().unwrap();
+        if let Some(config) = config {
+            fs::write(directory.path().join("config.toml"), config).unwrap();
+        }
+        if let Some(hooks) = hooks {
+            fs::write(directory.path().join("hooks.json"), hooks).unwrap();
+        }
+        inspect_codex_integration(directory.path(), None)
+    }
+
+    #[test]
+    fn integration_is_ok_with_native_hooks_only() {
+        let report = inspect_integration(Some("notify = [\"other\", \"turn-ended\"]\n"), Some(NATIVE_HOOKS));
+
+        assert_eq!(report.status, IntegrationStatus::Ok);
+        assert_eq!(report.hooks.installed_events, CODEX_HOOK_EVENTS);
+        assert!(report.hooks.missing_events.is_empty());
+        assert_eq!(report.notify.status, IntegrationStatus::Partial);
+    }
+
+    #[test]
+    fn integration_is_partial_when_native_hooks_miss_an_event() {
+        let hooks = r#"{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "ai-notify event stop"}]}],
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "ai-notify event codex"}]}]}}"#;
+        let report = inspect_integration(None, Some(hooks));
+
+        assert_eq!(report.status, IntegrationStatus::Partial);
+        assert_eq!(report.hooks.missing_events, vec!["Stop"]);
+    }
+
+    #[test]
+    fn integration_keeps_legacy_notify_behavior_without_native_hooks() {
+        let ok = inspect_integration(Some("notify = [\"ai-notify\", \"codex\"]\n"), None);
+        assert_eq!(ok.status, IntegrationStatus::Ok);
+        assert_eq!(ok.notify.status, IntegrationStatus::Ok);
+        assert_eq!(ok.hooks.status(), IntegrationStatus::Missing);
+
+        let other = inspect_integration(Some("notify = [\"other\"]\n"), None);
+        assert_eq!(other.status, IntegrationStatus::Partial);
+    }
+
+    #[test]
+    fn integration_is_missing_without_either_mechanism() {
+        let report = inspect_integration(Some("model = \"gpt-5.6\"\n"), Some(r#"{"hooks": {}}"#));
+
+        assert_eq!(report.status, IntegrationStatus::Missing);
+        assert!(!report.has_error());
+    }
+
+    #[test]
+    fn integration_surfaces_malformed_hooks_json() {
+        let report = inspect_integration(Some("notify = [\"ai-notify\", \"codex\"]\n"), Some("{\"hooks\": ["));
+
+        assert!(report.has_error());
+        assert!(report.hooks.error.unwrap().contains("failed to parse"));
+
+        let schema = inspect_integration(None, Some(r#"{"hooks": []}"#));
+        assert!(schema.has_error());
+        assert!(schema.hooks.error.unwrap().contains("hooks field must be an object"));
     }
 
     #[test]
