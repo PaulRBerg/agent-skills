@@ -1,5 +1,5 @@
 ---
-argument-hint: "[--dry-run] [package ...]"
+argument-hint: "[--dry-run] [package ...] [repo-path ...]"
 effort: medium
 model: sonnet
 name: node-deps-bumper
@@ -21,6 +21,12 @@ When an effective package-manager minimum-release-age policy exists, it provides
 versions; read [references/conditional-workflows.md](references/conditional-workflows.md). The committed lockfile and
 frozen deployment install provide reproducibility. Exact-pin only when the user or repository requires it, a known
 compatibility constraint justifies it, or the package will run without a committed lockfile and frozen install.
+
+## Multiple Repositories
+
+When the user names two or more repositories or asks to sync or align dependencies across repositories, read
+[references/multi-repo-alignment.md](references/multi-repo-alignment.md). It runs the Workflow below per repository and
+adds shared-target selection, one cross-repository major batch, and per-repository commits.
 
 ## Workflow
 
