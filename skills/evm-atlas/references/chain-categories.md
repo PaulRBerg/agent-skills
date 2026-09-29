@@ -31,6 +31,14 @@ into child-chain gas, not added again as a separate wei fee. Fixing the legacy b
 charge. ZK covers distinct execution and proving systems, so use the named chain's fee branch rather than inferring a
 shared fee model from its proof technology.
 
+Scroll charges its L1 data fee on the full signed RLP bytes, and under Feynman that fee scales with byte length. Its
+`L1GasPriceOracle` predeploy (`0x5300000000000000000000000000000000000002`) prices exactly the bytes passed to
+`getL1Fee(bytes)` and, unlike OP Stack's `GasPriceOracle`, adds no signature overhead. A quote on an unsigned
+empty-calldata EIP-1559 transfer (about 46 bytes) is therefore less than half the charge on the signed transaction
+(about 114 bytes). Quote a maximum-size signed stand-in instead: the final fields serialized with nonzero 32-byte
+`r`/`s` placeholders. Verified 2026-09-29: the oracle quote on real signed bytes at the parent block equals the receipt
+`l1Fee`.
+
 Filecoin FEVM is an Alt L1 exception. FVM fee translation and overestimation require bespoke evidence; do not generalize
 Ethereum-style L1 fee behavior to it. A fresh EOA recipient does not alter the standard top-level transfer gas cost: the
 `25000` new-account `CALL` cost concerns the contract opcode, not a top-level transfer. Still exclude precompiles and
