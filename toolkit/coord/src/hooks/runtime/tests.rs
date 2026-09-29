@@ -1442,6 +1442,33 @@ fn out_of_scope_write_with_no_claim_points_at_ai_coord_start() {
 }
 
 #[test]
+fn out_of_scope_writes_to_git_ignored_paths_are_silent() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    fs::write(repo.join(".gitignore"), "out/\n").unwrap();
+    fs::create_dir_all(repo.join("out")).unwrap();
+    fs::write(repo.join("out/tracked.txt"), "x").unwrap();
+    let add = ["add", "-f", ".gitignore", "out/tracked.txt"];
+    assert!(std::process::Command::new("git").args(add).current_dir(&repo).status().unwrap().success());
+    let runtime = HookRuntime::new(&coordinator);
+    runtime.ingest("claude", &json!({"session_id":"self", "cwd":repo, "hook_event_name":"SessionStart"}));
+    let write = |path: &str| {
+        runtime.ingest(
+            "claude",
+            &json!({
+                "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+                "tool_name":"Write", "tool_input":{"file_path": repo.join(path)}
+            }),
+        )
+    };
+
+    let ignored = write("out/quote.md");
+    assert!(!ignored.contains("outside your claim"), "{ignored}");
+    let tracked = write("out/tracked.txt");
+    assert!(tracked.contains("wrote out/tracked.txt outside your claim; run ai-coord start"), "{tracked}");
+}
+
+#[test]
 fn writes_inside_the_callers_own_claim_are_silent() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);

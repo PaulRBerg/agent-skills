@@ -433,6 +433,30 @@ fn parse_git_dirty_paths(output: &[u8]) -> Result<Vec<String>> {
     Ok(dirty)
 }
 
+/// Return the subset of repository-relative `paths` that Git ignores. Tracked
+/// files never match, even under an ignore pattern. Fails open to an empty list.
+pub(crate) fn git_ignored_paths(root: &Path, paths: &[String]) -> Vec<String> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let input = paths.iter().flat_map(|path| path.bytes().chain([0])).collect::<Vec<_>>();
+    let output = run_output_with_input_timeout(
+        Command::new("git").args(["-C"]).arg(root).args(["check-ignore", "-z", "--stdin"]),
+        Some(&input),
+        GIT_INSPECTION_TIMEOUT,
+    );
+    // Exit 1 means no path is ignored; anything above is an error.
+    let Some(output) = output.ok().filter(|output| output.status.code() == Some(0)) else {
+        return Vec::new();
+    };
+    output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .filter_map(|entry| std::str::from_utf8(entry).ok().map(str::to_owned))
+        .collect()
+}
+
 #[cfg(test)]
 pub(crate) fn git_blob_hash(root: &Path, path: &str, write: bool) -> String {
     git_blob_hashes(root, &[path.to_owned()], write)

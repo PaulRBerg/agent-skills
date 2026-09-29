@@ -11,7 +11,7 @@ use crate::{
     coordinator::{Coordinator, normalize_callsign},
     domain::{Client, Identity, Outcome, SessionState, WorkState, client_name, sanitize},
     error::{AppError, Result},
-    host::{git_dirty_paths, git_root, host_process_reference, normalize_repo_path, relevant_dirty},
+    host::{git_dirty_paths, git_ignored_paths, git_root, host_process_reference, normalize_repo_path, relevant_dirty},
     state::SessionUpdate,
 };
 
@@ -546,8 +546,9 @@ fn generated_callsign(identity: &Identity, attempt: usize) -> String {
 
 /// Classify this event's touched paths against active work claims in `repo_root`
 /// and report at most one out-of-scope write. Own writes (covered by the caller's
-/// own active claim) are silent; a peer's active claim is reported by name; anything
-/// else is reported as unclaimed. Fails open to no fragment on any lookup error.
+/// own active claim) and Git-ignored paths are silent; a peer's active claim is
+/// reported by name; anything else is reported as unclaimed. Fails open to no
+/// fragment on any lookup error.
 fn scope_watch_fragment(
     store: &crate::state::Store,
     identity: &Identity,
@@ -565,13 +566,17 @@ fn scope_watch_fragment(
     let covers =
         |scopes: &[crate::domain::Scope], path: &String| !relevant_dirty(scopes, std::slice::from_ref(path)).is_empty();
 
+    let unowned = paths
+        .iter()
+        .filter(|path| !own_claim.as_ref().is_some_and(|claim| covers(&claim.scopes, path)))
+        .cloned()
+        .collect::<Vec<_>>();
+    let ignored = git_ignored_paths(Path::new(repo_root), &unowned);
+
     let mut peer_offense = None;
     let mut unclaimed_offense = None;
     let mut offending = 0usize;
-    for path in paths {
-        if own_claim.as_ref().is_some_and(|claim| covers(&claim.scopes, path)) {
-            continue;
-        }
+    for path in unowned.iter().filter(|path| !ignored.contains(path)) {
         offending += 1;
         let holder = peers.iter().find(|work| {
             work.identity != *identity &&

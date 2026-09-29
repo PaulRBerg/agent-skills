@@ -523,8 +523,9 @@ and emit one `ai-coord done` nudge per transition to clean owned scopes.
 The same post-tool hooks lead `additionalContext` with an out-of-scope write warning for Write, Edit, NotebookEdit, and
 `apply_patch` calls (Bash writes are not seen): `wrote <path> owned by <holder>` when another session's active claim
 covers the path, or `wrote <path> outside your claim; run ai-coord start` when nothing does, with ` (+N more)` appended
-for additional offending paths in the same event. It stays silent for writes inside the caller's own active claim and
-for `#noc`-waived sessions, and shares the existing 200-character hook context budget.
+for additional offending paths in the same event. It stays silent for writes inside the caller's own active claim, for
+untracked Git-ignored paths (`git check-ignore`), and for `#noc`-waived sessions, and shares the existing 200-character
+hook context budget.
 
 Stop hooks never require a finding report or continue a turn because finding IDs are absent. IDs voluntarily included in
 a main final response are marked as user-surfaced; other findings stay internal. After a main Stop or SessionEnd,
