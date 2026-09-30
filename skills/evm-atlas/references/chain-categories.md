@@ -48,12 +48,13 @@ empty-calldata EOA transfer estimated `21000`. Because receipts lack `effectiveG
 the signed `gasPrice` plus an exact receipt-block balance reconciliation.
 
 IoTeX (`4689`) is an Alt L1 exception. Legacy transactions are debited exactly `gasUsed * gasPrice` with no refund or
-extra debit. Contract-call receipts report `effectiveGasPrice` equal to the signed `gasPrice`, but empty-calldata
-transfer receipts omit it, so verify those by exact receipt-block balance reconciliation. An empty-calldata EOA transfer
-charges `10000` gas, not `21000`, and `eth_estimateGas` still returns `21000`; a `21000` gas limit therefore leaves
-`11000 * gasPrice` behind. For an exact drain, use a `10000` gas limit, which `eth_call` and the node accept, instead of
-the estimate. Verified 2026-09-30: two empty-calldata transfers used exactly `10000` gas, and sender balance deltas
-reconciled to `value + gasUsed * gasPrice`; an exact-zero sweep at that limit left a `0` balance.
+extra debit. Receipts, including an empty-calldata transfer's on RouteMesh and the public RPC (verified 2026-09-30),
+report `effectiveGasPrice` equal to the signed `gasPrice`; if one omits it, fall back to exact receipt-block balance
+reconciliation. An empty-calldata EOA transfer charges `10000` gas, not `21000`, and `eth_estimateGas` still returns
+`21000`; a `21000` gas limit therefore leaves `11000 * gasPrice` behind. For an exact drain, use a `10000` gas limit,
+which `eth_call` and the node accept, instead of the estimate. Verified 2026-09-30: two empty-calldata transfers used
+exactly `10000` gas, and sender balance deltas reconciled to `value + gasUsed * gasPrice`; an exact-zero sweep at that
+limit left a `0` balance.
 
 Filecoin FEVM is an Alt L1 exception. FVM fee translation and overestimation require bespoke evidence; do not generalize
 Ethereum-style L1 fee behavior to it. A fresh EOA recipient does not alter the standard top-level transfer gas cost: the
