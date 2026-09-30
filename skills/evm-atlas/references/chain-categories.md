@@ -11,7 +11,7 @@ the row first, then report its category with the chain evidence.
 | L2 OP    | `op-stack` | Ineligible for a guaranteed direct exact-zero transfer: automatic uncapped L1 data fees and operator fees can add to execution gas.                                                                                                                                                                                                                |
 | Nitro    | `nitro`    | Ineligible for a guaranteed direct exact-zero transfer: parent-chain posting economics and CollectTips-dependent charged pricing prevent the required fixed total debit proof.                                                                                                                                                                     |
 | ZK       | `zk`       | Includes ZK Stack, validium, and hybrid targets. Linea and Taiko can be eligible when a standard fixed legacy debit is proven at inclusion. Scroll and Morph are ineligible because of separate dynamic L1 fees. ZK Stack targets, including ZKsync Era, Abstract, and Sophon, are ineligible because pubdata, overhead, and refunds are variable. |
-| Alt L2   | `alt-l2`   | Fallback category. Treat as unknown: require bespoke target proof of the complete debit, or block.                                                                                                                                                                                                                                                 |
+| Alt L2   | `alt-l2`   | Fallback category. Treat as unknown: require bespoke target proof of the complete debit, or block. Lightlink can be eligible when a standard fixed legacy debit is proven at inclusion.                                                                                                                                                            |
 
 Category is only the first gate. An eligible category still requires current target-specific evidence that the
 transaction is an ordinary empty-calldata transfer, uses a fixed full charge at inclusion, has no additional debit or
@@ -38,6 +38,14 @@ empty-calldata EIP-1559 transfer (about 46 bytes) is therefore less than half th
 (about 114 bytes). Quote a maximum-size signed stand-in instead: the final fields serialized with nonzero 32-byte
 `r`/`s` placeholders. Verified 2026-09-29: the oracle quote on real signed bytes at the parent block equals the receipt
 `l1Fee`.
+
+Lightlink (`1890`) is an Alt L2 exception. It runs a Geth 1.10 fork without London: blocks carry no `baseFeePerGas`,
+`eth_maxPriorityFeePerGas` and `eth_feeHistory` are unsupported, and receipts omit `effectiveGasPrice`, so use legacy
+pricing only. No separate L1 data, operator, or rollup fee is debited from the sender. Enterprise Mode gasless
+transactions are signed with `gasPrice = 0`; the node does not reprice a signed nonzero price. Verified 2026-09-30:
+consecutive-block sender balance deltas equalled `gasUsed * gasPrice` exactly for ordinary legacy transactions, and an
+empty-calldata EOA transfer estimated `21000`. Because receipts lack `effectiveGasPrice`, verify the charged price as
+the signed `gasPrice` plus an exact receipt-block balance reconciliation.
 
 Filecoin FEVM is an Alt L1 exception. FVM fee translation and overestimation require bespoke evidence; do not generalize
 Ethereum-style L1 fee behavior to it. A fresh EOA recipient does not alter the standard top-level transfer gas cost: the
@@ -66,4 +74,5 @@ construct, simulate, and account for a transaction.
 - [Filecoin FIP-0091](https://github.com/filecoin-project/FIPs/blob/master/FIPS/fip-0091.md),
   [FEVM gas differences](https://docs.filecoin.io/smart-contracts/filecoin-evm-runtime/difference-with-ethereum), and
   [Filecoin gas estimation](https://docs.filecoin.io/reference/exchanges/exchange-integration#automatic-gas-values)
+- [LightLink Enterprise Mode](https://docs.lightlink.io/lightlink-protocol/building-on-lightlink/enterprise-mode-overview)
 - [Geth top-level transaction gas](https://github.com/ethereum/go-ethereum/blob/master/core/state_transition.go)
