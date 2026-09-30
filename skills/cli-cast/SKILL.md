@@ -73,6 +73,11 @@ assumptions without signing. Obtain every on-chain fact through `evm-atlas`; do 
 preparation. Select a supported signer under Sign and Broadcast and check its command capabilities before simulation or
 helper construction.
 
+Request both the confirmed nonce at the numeric checkpoint block and the pending nonce. When they differ, or a wallet
+reports `replacement transaction underpriced`, a queued transaction occupies the lowest unconfirmed nonce, and later
+nonces stay stuck behind it. Target that nonce with fees that clear the node's replacement bump, usually 10-20% on both
+the fee cap and the tip, instead of queueing another transaction behind it.
+
 For Ethereum mainnet, the default gas policy is [references/ethereum-gas.md](references/ethereum-gas.md): fetch a fresh
 Rabby `slow` quote and bind its EIP-1559 fee pair before simulation. The user or a consuming skill may explicitly choose
 a different gas policy, including a fixed legacy gas price for an exact-zero sweep. Honor that choice; it does not

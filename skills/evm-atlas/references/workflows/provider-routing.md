@@ -234,3 +234,10 @@ evidence, but empty account lists cannot establish historical inactivity.
 
 For OP Mainnet data before `2021-11-11`, read `references/explorers/optimism-pre-regenesis.md` before interpreting
 provider or RPC results.
+
+For IoTeX (`4689`) nonce reads, `eth_getTransactionCount` with `latest` returns the actpool pending nonce, identical to
+`pending`, on both RouteMesh and the public RPC; only a numeric block selector returns the confirmed count. The nodes
+expose no `txpool_*` methods, and `eth_getBlockByNumber("pending")` omits actpool transactions. Report the confirmed
+nonce from the numeric checkpoint and treat `pending - confirmed` as the count of queued transactions. Verified
+2026-09-30: `latest` and `pending` both returned `11` while the numeric block returned `10`, and the sender's last mined
+transaction had nonce `9`.
