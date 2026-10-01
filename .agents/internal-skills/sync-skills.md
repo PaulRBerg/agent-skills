@@ -43,6 +43,7 @@ Treat these as in scope:
 - `$commit` owns Conventional Prefix or Natural Language message semantics; `ai-commit` owns deterministic preparation,
   commit, index, and push mechanics. Consumer skills invoke `$commit` scoped to attributable paths instead of restating
   that boundary or duplicating bypass and recovery rules.
+- `toolkit/commit/` is the `ai-commit` source that owns those deterministic mechanics.
 - Workflows that require propagation treat `BEHIND` as safe noncompletion, never as a successful push.
 
 Treat these as out of scope unless the request explicitly names them:
@@ -135,7 +136,8 @@ Files:
 
 Keep the same ai-skillet minimum version, `1.0.0+`. Each consumer must invoke its appropriate ai-skillet subcommand
 directly (`map` for skill-map and skill-harmonization; `doctor` for skill-doctor), with no retired Python, uv, ripgrep,
-helper-resolution, wrapper, or fallback path.
+helper-resolution, wrapper, or fallback path. `toolkit/skillet/` and the workspace version in `toolkit/Cargo.toml` are
+the producer whose contract the `1.0.0+` minimum tracks.
 
 Keep `skill-doctor` authoritative for ai-skillet's complete extended-dialect contract: the portable, Claude Code, and
 repository field union; unknown-field, type, value, and cross-field diagnostics; explicit-default fields accepted

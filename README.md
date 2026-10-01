@@ -13,6 +13,14 @@ PRB's collection of AI agent skills. Designed to work across agents, but primari
 bunx skills add PaulRBerg/agent-skills
 ```
 
+Install the CLIs the skills rely on:
+
+```sh
+cargo install --locked --git https://github.com/PaulRBerg/agent-skills ai-commit ai-coord ai-handoff ai-notify ai-skillet
+```
+
+From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
+
 ## Skills
 
 | Skill                  | Description                                                                |
@@ -72,6 +80,18 @@ bunx skills add PaulRBerg/agent-skills
 
 Some mechanical skills pin `model: sonnet` in their frontmatter so they do not spend a more capable inherited model
 where deterministic tooling already carries the workflow.
+
+## CLIs
+
+| Tool                                                    | Description                                                               |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [ai-commit](toolkit/commit/)                            | Prepare and commit immutable Git snapshots safely in shared working trees |
+| [ai-coord](toolkit/coord/)                              | Coordinate parallel Codex and Claude Code agents                          |
+| [ai-handoff](toolkit/handoff/)                          | Create and archive agent task handoffs                                    |
+| [ai-notify](toolkit/notify/)                            | Deliver desktop notifications for Claude Code and Codex CLI               |
+| [ai-skillet](toolkit/skillet/)                          | Inspect and maintain agent-skill catalogs                                 |
+| [Coordination dashboard](toolkit/apps/coord-dashboard/) | Local live view of ai-coord state                                         |
+| [AI Handoffs](toolkit/apps/handoffs/)                   | Local, read-only task-handoff viewer                                      |
 
 ## References
 

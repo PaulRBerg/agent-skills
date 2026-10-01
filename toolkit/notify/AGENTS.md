@@ -12,16 +12,17 @@ platform-independent; CI runs on Ubuntu with nightly Rust.
 
 ## Development Workflow
 
-- Use the rolling nightly toolchain and lockfile declared at the monorepo root for every Cargo build, test, and install.
-- Run the package from the monorepo root with `cargo run -p ai-notify --locked -- ...`.
+- Use the rolling nightly toolchain and lockfile declared in `toolkit/` for every Cargo build, test, and install.
+- Run the package from `toolkit/` with `cargo run -p ai-notify --locked -- ...`.
 - Prefer `cargo test -p ai-notify --locked` for focused verification and `just rust-check` for the aggregate Rust gate.
 - Do not run `just install-cli` for ordinary verification; it installs every workspace binary under `~/.local`.
 
 ## Architecture and Invariants
 
-- Commands under `ai-notify event` read hook JSON from stdin. `event codex` handles native `UserPromptSubmit` and `Stop`,
-  tracking prompts under a `codex:<session_id>:<turn_id>` key in the existing SQLite schema. The legacy `ai-notify codex`
-  callback accepts JSON as its final argument or via `--stdin` without creating a tracked SQLite session.
+- Commands under `ai-notify event` read hook JSON from stdin. `event codex` handles native `UserPromptSubmit` and
+  `Stop`, tracking prompts under a `codex:<session_id>:<turn_id>` key in the existing SQLite schema. The legacy
+  `ai-notify codex` callback accepts JSON as its final argument or via `--stdin` without creating a tracked SQLite
+  session.
 - Hook event commands (`ai-notify event ...` and the legacy `ai-notify codex` callback) never exit 2 on an invalid
   payload; parse and validation failures there exit 1, because Claude Code and Codex treat a hook's exit 2 as a blocking
   decision (e.g. Stop would keep the agent going, PreToolUse would block the tool). Only clap CLI usage errors and
@@ -34,8 +35,8 @@ platform-independent; CI runs on Ubuntu with nightly Rust.
 - Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. `ConfigLoader` caches the loaded
   configuration for its own lifetime (one load per CLI invocation).
 - Claude `Stop` defers completion while `background_tasks` or `session_crons` are present. `StopFailure` alerts only in
-  `all` mode and bypasses duration and prompt filters. Both Codex integrations omit duration filtering, suppress internal
-  title-generation prompts, and apply notification mode and prompt-prefix exclusions.
+  `all` mode and bypasses duration and prompt filters. Both Codex integrations omit duration filtering, suppress
+  internal title-generation prompts, and apply notification mode and prompt-prefix exclusions.
 - SQLite uses WAL mode with `synchronous=NORMAL`; session data is intentionally transient rather than strictly durable.
 
 ## Testing
@@ -72,10 +73,10 @@ notifications for key events.
 
 #### Installation
 
-Install the CLI directly from the monorepo:
+Install the CLI directly from the agent-skills repository:
 
 ```bash
-cargo install --git https://github.com/PaulRBerg/agent-toolkit ai-notify --locked --root "$HOME/.local"
+cargo install --git https://github.com/PaulRBerg/agent-skills ai-notify --locked --root "$HOME/.local"
 ```
 
 Re-run the command to update. Installation targets `~/.local/bin`; configure integrations separately with
@@ -91,7 +92,7 @@ cargo test -p ai-notify --locked
 cargo run -p ai-notify --locked -- --help
 ```
 
-Run `just rust-check` from the monorepo root for the complete Rust workspace gate.
+Run `just rust-check` from `toolkit/` for the complete Rust workspace gate.
 
 ### Features
 
@@ -291,8 +292,8 @@ For Codex versions supporting native hooks, merge these handlers into `~/.codex/
 ```
 
 Review and trust the two exact definitions through Codex's `/hooks` interface. Remove ai-notify from the legacy `notify`
-callback to prevent duplicate notifications. If Codex Desktop owns a `SkyComputerUseClient` wrapper, preserve the wrapper
-and remove only its ai-notify `--previous-notify` forwarding arguments.
+callback to prevent duplicate notifications. If Codex Desktop owns a `SkyComputerUseClient` wrapper, preserve the
+wrapper and remove only its ai-notify `--previous-notify` forwarding arguments.
 
 `UserPromptSubmit` retains task context for `Stop`; a repeated stop for a tracked turn is ignored. If no prompt was
 recorded, such as when hooks are installed during a turn, the completion still reports the available result. Native

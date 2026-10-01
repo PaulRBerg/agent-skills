@@ -60,6 +60,8 @@ Treat visual structure as information architecture, not decoration.
 - `skills/<name>/assets/` contains bundled media or other static assets.
 - `.agents/internal-skills/<name>.md` contains repo-private internal skills referenced with `@`.
 - `tests/<name>/` contains tests for that skill's helpers; `scripts/` contains catalog tooling.
+- `toolkit/` is the Rust workspace and Bun apps that own the `ai-*` CLIs the skills and the global coordination workflow
+  rely on; follow `toolkit/AGENTS.md` there.
 - `README.md` lists every skill and stays minimal.
 - Claude Code reads `AGENTS.md` directly; do not add a `CLAUDE.md`.
 
@@ -69,7 +71,9 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
 
 - After editing Markdown, run `just prettier-write <changed files>` then `just prettier-check <changed files>`, in that
   order; if `prettier-check` fails, fix only the files you changed.
-- `package.json` exists only for local formatting, type-checking, and hook wiring; there is no build step.
+- The root `package.json` exists only for local formatting, type-checking, and hook wiring; there is no build step.
+- Toolkit changes verify with `just toolkit::check` (or narrower toolkit recipes). CLI changes go live only via
+  `just toolkit::install-cli`, under the install-authorization rules in `toolkit/AGENTS.md`.
 - Treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the verification surface
   unless a task introduces a narrower check.
 
