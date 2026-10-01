@@ -269,6 +269,26 @@ test("fails an address after maxAttempts while the rest of the queue continues",
   ]);
 });
 
+test("halts the run after consecutive rate-limited attempts instead of retrying every address", async () => {
+  const [doc, dead] = [DOC.toLowerCase(), DEAD.toLowerCase()];
+  const blocked = [429, 429, 429];
+  const page = createPage({
+    [doc]: { chains: [], usedChainsStatuses: blocked },
+    [dead]: { chains: [], usedChainsStatuses: blocked },
+  });
+
+  await page.api.start([DOC, DEAD], { ...FAST, haltAfter: 3 });
+  const { status, records } = await finish(page.api);
+
+  expect(page.routes).toEqual([`/profile/${doc}`, `/profile/${dead}`, `/profile/${doc}`]);
+  expect(status).toMatchObject({ running: false, ok: 0, failed: 2, pending: 0, rateLimited: 3, blocked: true });
+  const reason = "rate-limit block: run halted after 3 consecutive rate-limited attempts";
+  expect(records).toEqual([
+    { address: doc, status: "failed", attempts: 2, error: reason, chains: [], tokens: [] },
+    { address: dead, status: "failed", attempts: 1, error: reason, chains: [], tokens: [] },
+  ]);
+});
+
 test("routes through / before collecting the profile already displayed", async () => {
   const doc = DOC.toLowerCase();
   const page = createPage({ [doc]: { chains: [] } }, `/profile/${DOC}`);

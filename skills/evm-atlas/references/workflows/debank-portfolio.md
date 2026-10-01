@@ -30,12 +30,14 @@ async () => window.__debankCollect.start(["<addr>"])
 
 `start` lowercases and de-duplicates the addresses, throws for an invalid address, an active run, or a failed
 `chain/list` call, and otherwise returns `{ queued }` without waiting for the run, so awaiting it surfaces those errors.
-An optional second argument sets `{ timeoutMs: 30000, maxAttempts: 3, cooldownMs: 20000 }` (the defaults).
+An optional second argument sets `{ timeoutMs: 30000, maxAttempts: 3, cooldownMs: 20000, haltAfter: 3 }` (the defaults).
 
 4. Poll `window.__debankCollect.status()` with short `evaluate_script` calls until `running` is `false`. It returns
-   `{ running, total, done, ok, failed, pending, rateLimited, startedAt, elapsedMs }`, with `startedAt` an ISO string. A
-   profile takes about 2.5 s (1.2-4.6 s). A `429`, error, or timeout pauses the page for `cooldownMs` and requeues the
-   address until `maxAttempts`, after which its record is `failed`.
+   `{ running, total, done, ok, failed, pending, rateLimited, blocked, startedAt, elapsedMs }`, with `startedAt` an ISO
+   string. A profile takes about 2.5 s (1.2-4.6 s). A `429`, error, or timeout pauses the page for `cooldownMs` and
+   requeues the address until `maxAttempts`, after which its record is `failed`. After `haltAfter` consecutive failed
+   attempts that saw a `429`, the run stops with `blocked: true` and fails every queued address; see Rate Limits and WAF
+   Blocks.
 5. Save `window.__debankCollect.results()` by calling `evaluate_script` with
    `function: () => window.__debankCollect.results()` and a `filePath`. The path must be inside the MCP workspace roots
    (a git-ignored project directory); other paths are refused. `results()` returns the latest run's completed records in
@@ -77,6 +79,25 @@ render in an iframe), so a loop never needs one page per address.
   show "No assets yet" with a "Request too fast" toast, `429`s on the balance endpoints remove the wallet table, and DOM
   rows can linger from the previous profile after a route change.
 
+## Rate Limits and WAF Blocks
+
+`Request too fast` (HTTP `429`, body `error_code: 429`, or the page toast) is DeBank's WAF rejecting the request. It is
+a coverage gap, never evidence about the wallet, and never a reason to call `api.debank.com` another way. Classify it by
+how it arrived:
+
+- **Unsigned call.** A direct `fetch`, `curl`, or WebFetch of `api.debank.com` balance endpoints always gets `429`, so
+  retrying it never works. Switch to the collector; never present the `429` as DeBank being down.
+- **Burst.** `rateLimited > 0` while records still finish `ok` is the collector absorbing short bursts; no action.
+- **Block.** `status().blocked` is `true`, or `start` throws `chain/list failed: HTTP 429`. DeBank is rejecting this
+  client. Do not reload, re-paste, open more pages, or restart in a loop: each request prolongs it. Close any second
+  page, wait at least two minutes, then run one retry on a single page with only the `failed` addresses and
+  `{ cooldownMs: 60000 }`. If that run is also `blocked` or `start` still throws, stop using DeBank for this task and
+  take the remaining addresses through Fallbacks.
+
+Confirm a block in Chromium before reporting it: the `status()` output, the record `error` strings, or the `429`
+responses in `list_network_requests`. Report it as `DeBank WAF rate-limit block ("Request too fast")` with the
+verification method, the retry made, and the affected addresses.
+
 ## Chain Mapping
 
 - DeBank names chains by slug (`eth`, `scrl`, `xdai`, `era`). The collector maps slugs to chain IDs through the
@@ -102,8 +123,9 @@ render in an iframe), so a loop never needs one page per address.
 
 - Target chains missing from `chain/list`: use `blockscan-balances.md` when Blockscan lists the chain ID, otherwise
   `provider-routing.md`.
-- Navigation fails, an error or challenge persists, or an address's record is `failed` (it has already retried
-  `maxAttempts` times): use `blockscan-balances.md`, then `address-sweeps.md` for remaining target chains.
+- Navigation fails, an error or challenge persists, an address's record is `failed`, or a WAF block survives the one
+  retry in Rate Limits and WAF Blocks: use `blockscan-balances.md`, then `address-sweeps.md` for remaining target
+  chains.
 - Chrome DevTools MCP or Chromium is unavailable: use `address-sweeps.md` (or the API passes in `address-usd-value.md`).
 - On-chain precision required: confirm with RPC `balanceOf` and `eth_getBalance` as `address-usd-value.md` does.
 

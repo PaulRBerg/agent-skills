@@ -131,28 +131,34 @@
     return { chains, tokens };
   }
 
-  async function drain(current, { timeoutMs, maxAttempts, cooldownMs }) {
+  function failedRecord(address, attempts, error) {
+    return { address, status: "failed", attempts, error, chains: [], observedAt: new Date().toISOString(), tokens: [] };
+  }
+
+  async function drain(current, { timeoutMs, maxAttempts, cooldownMs, haltAfter }) {
     const queue = [...current.addresses];
+    // Consecutive failed attempts that saw a 429; a sustained streak means DeBank's WAF is blocking this client.
+    let limitedStreak = 0;
     while (queue.length > 0) {
       const address = queue.shift();
       const attempts = (current.attempts.get(address) ?? 0) + 1;
       current.attempts.set(address, attempts);
+      const limitedBefore = current.rateLimited;
       try {
         const { chains, tokens } = await collect(address, timeoutMs);
         const observedAt = new Date().toISOString();
         current.records.set(address, { address, status: "ok", attempts, chains, observedAt, tokens });
+        limitedStreak = 0;
       } catch (error) {
+        limitedStreak = current.rateLimited > limitedBefore ? limitedStreak + 1 : 0;
         if (attempts < maxAttempts) queue.push(address);
-        else {
-          current.records.set(address, {
-            address,
-            status: "failed",
-            attempts,
-            error: error.message,
-            chains: [],
-            observedAt: new Date().toISOString(),
-            tokens: [],
-          });
+        else current.records.set(address, failedRecord(address, attempts, error.message));
+        if (limitedStreak >= haltAfter) {
+          current.blocked = true;
+          const reason = `rate-limit block: run halted after ${limitedStreak} consecutive rate-limited attempts`;
+          for (const queued of queue)
+            current.records.set(queued, failedRecord(queued, current.attempts.get(queued) ?? 0, reason));
+          break;
         }
         if (queue.length > 0) await sleep(cooldownMs);
       }
@@ -173,7 +179,7 @@
     return ids;
   }
 
-  async function start(addresses, { timeoutMs = 30000, maxAttempts = 3, cooldownMs = 20000 } = {}) {
+  async function start(addresses, { timeoutMs = 30000, maxAttempts = 3, cooldownMs = 20000, haltAfter = 3 } = {}) {
     if (run && !run.finishedAt) throw new Error("a run is already active; poll status() until running is false");
     if (!Array.isArray(addresses)) throw new Error("addresses must be an array");
     const invalid = addresses.filter((address) => typeof address !== "string" || !ADDRESS.test(address));
@@ -184,6 +190,7 @@
       attempts: new Map(),
       records: new Map(),
       rateLimited: 0,
+      blocked: false,
       startedAt: Date.now(),
       finishedAt: null,
     };
@@ -194,7 +201,7 @@
       run = null;
       throw error;
     }
-    drain(current, { timeoutMs, maxAttempts, cooldownMs });
+    drain(current, { timeoutMs, maxAttempts, cooldownMs, haltAfter });
     return { queued: unique.length };
   }
 
@@ -210,6 +217,7 @@
       failed: records.length - ok,
       pending: total - records.length,
       rateLimited: run ? run.rateLimited : 0,
+      blocked: run ? run.blocked : false,
       startedAt: run ? new Date(run.startedAt).toISOString() : null,
       elapsedMs: run ? (run.finishedAt ?? Date.now()) - run.startedAt : 0,
     };
