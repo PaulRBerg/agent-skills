@@ -59,8 +59,8 @@ printf '%s\n' "$count" >"$count_file"
 printf '%s\n' "$conditional_header" >>"$FAKE_CURL_STATE_DIR/requests"
 
 case "$source_url" in
-  *latest-model/gpt-6-astra.md)
-    effective_url='https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra.md'
+  *latest-model.md)
+    effective_url='https://developers.openai.com/api/docs/guides/latest-model.md'
     artifact_kind=gpt
     ;;
   *prompting-claude-opus-5-5.md)
@@ -77,7 +77,7 @@ write_body() {
   version=$1
   if [ "$artifact_kind" = gpt ]; then
     {
-      printf '%s\n' '---' 'latestModelInfo:' '  model: gpt-6-astra' '---' '# Using GPT-6' "version=$version"
+      printf '%s\n' '# Using GPT-6' '### GPT-6.1 Sol' '## Prompting best practices' "version=$version"
       index=0
       while [ "$index" -lt 80 ]; do
         printf 'GPT prompting fixture padding line %s.\n' "$index"
@@ -211,42 +211,42 @@ age_cache() {
   mv "$test_root/meta.next" "$cache_dir/$artifact.meta"
 }
 
-@test 'fetches and reuses a fresh GPT-6 Astra guide without revalidation' {
-  run "$helper" gpt-6-astra
+@test 'fetches and reuses a fresh GPT-6.1 Sol guide without revalidation' {
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  [[ "$output" == *'fetched gpt-6-astra'* ]]
-  [ -s "$cache_dir/gpt-6-astra-prompting.md" ]
-  validated_epoch=$(sed -n 's/^validated_at_epoch=//p' "$cache_dir/gpt-6-astra.meta")
+  [[ "$output" == *'fetched gpt-6.1-sol'* ]]
+  [ -s "$cache_dir/gpt-6.1-sol-prompting.md" ]
+  validated_epoch=$(sed -n 's/^validated_at_epoch=//p' "$cache_dir/gpt-6.1-sol.meta")
 
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  [[ "$output" == *'cached gpt-6-astra last validated at'* ]]
-  [ "$(sed -n 's/^validated_at_epoch=//p' "$cache_dir/gpt-6-astra.meta")" = "$validated_epoch" ]
+  [[ "$output" == *'cached gpt-6.1-sol last validated at'* ]]
+  [ "$(sed -n 's/^validated_at_epoch=//p' "$cache_dir/gpt-6.1-sol.meta")" = "$validated_epoch" ]
   [ "$(cat "$fake_state/count")" -eq 1 ]
-  grep -Fq 'version=v1' "$cache_dir/gpt-6-astra-prompting.md"
+  grep -Fq 'version=v1' "$cache_dir/gpt-6.1-sol-prompting.md"
 }
 
-@test 'conditionally revalidates an older GPT-6 Astra guide with its ETag' {
-  run "$helper" gpt-6-astra
+@test 'conditionally revalidates an older GPT-6.1 Sol guide with its ETag' {
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  age_cache gpt-6-astra 86401
+  age_cache gpt-6.1-sol 86401
 
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  [[ "$output" == *'revalidated gpt-6-astra'* ]]
+  [[ "$output" == *'revalidated gpt-6.1-sol'* ]]
   grep -Fq 'If-None-Match: "v1"' "$fake_state/requests"
   [ "$(cat "$fake_state/count")" -eq 2 ]
 }
 
 @test 'conditionally revalidates with Last-Modified when no ETag is available' {
   export FAKE_CURL_MODE=last-modified
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  age_cache gpt-6-astra 86401
+  age_cache gpt-6.1-sol 86401
 
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  [[ "$output" == *'revalidated gpt-6-astra'* ]]
+  [[ "$output" == *'revalidated gpt-6.1-sol'* ]]
   grep -Fq 'If-Modified-Since: Tue, 11 Aug 2026 08:00:00 GMT' "$fake_state/requests"
   [ "$(cat "$fake_state/count")" -eq 2 ]
 }
@@ -271,81 +271,81 @@ age_cache() {
 }
 
 @test 'atomically replaces changed content and metadata' {
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
 
-  age_cache gpt-6-astra 86401
+  age_cache gpt-6.1-sol 86401
   export FAKE_CURL_MODE=updated
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  [[ "$output" == *'fetched gpt-6-astra'* ]]
-  grep -Fq 'version=v2' "$cache_dir/gpt-6-astra-prompting.md"
-  grep -Fq 'etag="v2"' "$cache_dir/gpt-6-astra.meta"
+  [[ "$output" == *'fetched gpt-6.1-sol'* ]]
+  grep -Fq 'version=v2' "$cache_dir/gpt-6.1-sol-prompting.md"
+  grep -Fq 'etag="v2"' "$cache_dir/gpt-6.1-sol.meta"
 }
 
 @test 'uses a recently validated cache after retrieval failure' {
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  age_cache gpt-6-astra 86401
+  age_cache gpt-6.1-sol 86401
 
   export FAKE_CURL_MODE=failure
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  [[ "$output" == *'stale gpt-6-astra'* ]]
-  [[ "$output" == *"$cache_dir/gpt-6-astra-prompting.md"* ]]
+  [[ "$output" == *'stale gpt-6.1-sol'* ]]
+  [[ "$output" == *"$cache_dir/gpt-6.1-sol-prompting.md"* ]]
 }
 
 @test 'rejects expired fallback entries and forced-refresh failures' {
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  age_cache gpt-6-astra 604900
+  age_cache gpt-6.1-sol 604900
 
   export FAKE_CURL_MODE=failure
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -ne 0 ]
   [[ "$output" == *'no cache validated within seven days'* ]]
 
   export FAKE_CURL_MODE=normal
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
   export FAKE_CURL_MODE=failure
-  run "$helper" --refresh gpt-6-astra
+  run "$helper" --refresh gpt-6.1-sol
   [ "$status" -ne 0 ]
-  [[ "$output" == *'forced refresh failed for gpt-6-astra'* ]]
+  [[ "$output" == *'forced refresh failed for gpt-6.1-sol'* ]]
 }
 
 @test 'fails closed on invalid content or an unexpected redirect' {
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  original_checksum=$(cksum "$cache_dir/gpt-6-astra-prompting.md")
+  original_checksum=$(cksum "$cache_dir/gpt-6.1-sol-prompting.md")
 
   export FAKE_CURL_MODE=bad-content
-  run "$helper" --refresh gpt-6-astra
+  run "$helper" --refresh gpt-6.1-sol
   [ "$status" -ne 0 ]
   [[ "$output" == *'retrieved invalid content'* ]]
-  [ "$original_checksum" = "$(cksum "$cache_dir/gpt-6-astra-prompting.md")" ]
+  [ "$original_checksum" = "$(cksum "$cache_dir/gpt-6.1-sol-prompting.md")" ]
 
   export FAKE_CURL_MODE=bad-url
-  run "$helper" --refresh gpt-6-astra
+  run "$helper" --refresh gpt-6.1-sol
   [ "$status" -ne 0 ]
   [[ "$output" == *'refused unexpected final URL'* ]]
-  [ "$original_checksum" = "$(cksum "$cache_dir/gpt-6-astra-prompting.md")" ]
+  [ "$original_checksum" = "$(cksum "$cache_dir/gpt-6.1-sol-prompting.md")" ]
 }
 
 @test 'recovers from an unconditional 304 with one full retry' {
   export FAKE_CURL_MODE=recover-304
-  run "$helper" gpt-6-astra
+  run "$helper" gpt-6.1-sol
   [ "$status" -eq 0 ]
-  [[ "$output" == *'fetched gpt-6-astra'* ]]
+  [[ "$output" == *'fetched gpt-6.1-sol'* ]]
   [ "$(cat "$fake_state/count")" -eq 2 ]
 }
 
 @test 'serializes concurrent writers' {
   export FAKE_CURL_MODE=slow
-  "$helper" gpt-6-astra >"$test_root/first.out" 2>"$test_root/first.err" &
+  "$helper" gpt-6.1-sol >"$test_root/first.out" 2>"$test_root/first.err" &
   first_pid=$!
   sleep 0.1
-  "$helper" gpt-6-astra >"$test_root/second.out" 2>"$test_root/second.err" &
+  "$helper" gpt-6.1-sol >"$test_root/second.out" 2>"$test_root/second.err" &
   second_pid=$!
 
   wait "$first_pid"
@@ -356,8 +356,8 @@ age_cache() {
   [ "$first_rc" -eq 0 ]
   [ "$second_rc" -eq 0 ]
   [ "$(cat "$fake_state/count")" -eq 1 ]
-  grep -Fq 'version=v1' "$cache_dir/gpt-6-astra-prompting.md"
-  grep -Fq 'cached gpt-6-astra' "$test_root/second.err"
+  grep -Fq 'version=v1' "$cache_dir/gpt-6.1-sol-prompting.md"
+  grep -Fq 'cached gpt-6.1-sol' "$test_root/second.err"
 }
 
 @test 'rejects unknown artifacts' {

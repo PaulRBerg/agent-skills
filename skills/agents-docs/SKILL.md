@@ -30,12 +30,18 @@ questions to their relevant source.
 Treat `$imagegen` and Codex image-prompting questions as Codex product questions even when detailed supporting model
 guidance lives in OpenAI's API Cookbook.
 
+Treat GPT-6.1 Sol prompting for Codex as a Codex product question, with supporting guidance from OpenAI's model docs.
+
 ## Route official sources
 
 - For Codex, start only at `https://developers.openai.com`. Resolve `scripts/fetch-doc.sh` relative to this skill
   directory, run `fetch-doc.sh codex-manual`, search the returned path narrowly with `rg`, and read only the matching
   heading range into context. The fixed manual and schema endpoints may redirect to their exact
   `https://learn.chatgpt.com/docs/` counterparts.
+- For GPT-6.1 Sol prompting in Codex, read the
+  [GPT-6.1 Sol prompting guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices)
+  in the shared GPT-6 guide. Evaluate its family-wide recommendations on Sol; confirm Codex settings against the product
+  documentation before applying API parameters.
 - For `$imagegen` and Codex image-prompting questions, read the manual's exact
   [Image generation](https://learn.chatgpt.com/docs/image-generation) topic first. When detailed prompting patterns or
   production examples are needed, also read the
