@@ -39,6 +39,15 @@ empty-calldata EIP-1559 transfer (about 46 bytes) is therefore less than half th
 `r`/`s` placeholders. Verified 2026-09-29: the oracle quote on real signed bytes at the parent block equals the receipt
 `l1Fee`.
 
+Linea (`59144`) is eligible as a ZK target. Blocks carry `baseFeePerGas = 7`; legacy transactions are debited exactly
+`gasUsed * gasPrice` with no L1 or other extra debit; receipts report `effectiveGasPrice` equal to the signed
+`gasPrice`; and an empty-calldata EOA transfer estimates and uses `21000` gas. `linea_estimateGas` returns the
+sequencer's profitability floor as `baseFeePerGas + priorityFeePerGas`, while `eth_gasPrice` and
+`eth_maxPriorityFeePerGas` sit above it, rose about 50% within two minutes, and differed between reads at one head;
+price from the highest suggestion observed at the checkpoint. Verified 2026-10-01: a third-party empty-calldata legacy
+transfer in block `32202314` reconciled to `value + 21000 * gasPrice` across its block, and an exact-zero sweep at
+`21000` gas left a `0` balance.
+
 Lightlink (`1890`) is an Alt L2 exception. It runs a Geth 1.10 fork without London: blocks carry no `baseFeePerGas`,
 `eth_maxPriorityFeePerGas` and `eth_feeHistory` are unsupported, and receipts omit `effectiveGasPrice`, so use legacy
 pricing only. No separate L1 data, operator, or rollup fee is debited from the sender. Enterprise Mode gasless
