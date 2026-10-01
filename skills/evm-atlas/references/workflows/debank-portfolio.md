@@ -6,10 +6,36 @@ chains than Blockscan, including non-Etherscan chains. For one named chain, use
 `references/workflows/blockscan-balances.md`. Historical balances, NFT inventories, and transaction history stay on
 `references/workflows/provider-routing.md`.
 
+## Global Queue
+
+DeBank's WAF limits the whole browser, so every agent on this host shares one allowance and one agent's burst blocks the
+rest. Hold a lease from `scripts/debank-gate.py` for all debank.com work: navigating, pasting the collector, `start`,
+and DOM reads. Leases are granted one at a time in FIFO order; state lives under
+`${XDG_STATE_HOME:-~/.local/state}/evm-atlas/debank-gate`.
+
+<!-- prettier-ignore -->
+```sh
+python3 scripts/debank-gate.py acquire --label '<skill>: <purpose>' --profiles <n>
+```
+
+- Each command prints one JSON line. Exit 0 with `"status": "granted"` means proceed and keep the `ticket`. Exit 3 with
+  `"status": "queued"` (after `--wait`, default 240 s) reports `position`, `holder`, and `cooldownUntil`: rerun
+  `acquire` with `--ticket <ticket>` to keep the place. A ticket not polled for 120 s is dropped. In Claude Code, run
+  `acquire --wait 3600` in the background and continue when it exits.
+- `--profiles` is the number of addresses the lease covers, at most 25. Bulk work takes one lease per batch, so other
+  agents' single-address checks get a turn between batches.
+- A lease expires after `--ttl` (600 s). Run `renew --ticket <ticket>` before then for longer work. Exit 4 (`"lost"`)
+  means it expired and another agent may hold the gate: stop touching DeBank and acquire again.
+- When done, or on any failure, close the owned DeBank page, then run `release --ticket <ticket>`.
+- On a WAF block, run `block --ticket <ticket>`: it releases the lease and pauses the queue for every agent for 15
+  minutes.
+- `status` shows the holder, cooldown, and queue. Never touch debank.com without a lease, even when the queue is long. A
+  caller that cannot wait uses Fallbacks and reports the queue wait as the cause.
+
 ## Chromium Workflow
 
-1. Validate each address (20-byte hex), then open an owned page on `https://debank.com/profile/<addr>` with Chrome
-   DevTools `new_page`. When the cookie dialog appears, choose `Reject`.
+1. With a lease held, validate each address (20-byte hex), then open an owned page on
+   `https://debank.com/profile/<addr>` with Chrome DevTools `new_page`. When the cookie dialog appears, choose `Reject`.
 2. Never call `api.debank.com` balance endpoints yourself (DeBank's Cloud OpenAPI is paid). The profile page's calls are
    `fetch` GETs signed by the app (`x-api-*` headers): unsigned calls, even from inside the page, return
    `429 Request too fast`, and `credentials: 'include'` fails CORS. The collector captures the app's own responses
@@ -65,12 +91,11 @@ An optional second argument sets `{ timeoutMs: 30000, maxAttempts: 3, cooldownMs
 One `start` call takes any number of addresses and routes a single owned page through their profiles (DeBank refuses to
 render in an iframe), so a loop never needs one page per address.
 
-- Use at most two owned pages, opened with `new_page` (they report visible, so timers are not throttled). Two concurrent
-  pages ran without errors; three started at once triggered a burst `429`, and each profile costs about `10 + <chains>`
-  requests. Split the addresses round-robin into two slices, paste the script and `start` the first slice, then start
-  the second page a few seconds later.
-- The loop runs without being awaited, so no DevTools protocol timeout applies; poll `status()` with short calls and
-  save `results()` per page.
+- Use one owned page, opened with `new_page` (it reports visible, so timers are not throttled). Each profile costs about
+  `10 + <chains>` requests, and bulk runs were blocked after every 30-55 profiles.
+- Split the addresses into batches of at most 25. Per batch: `acquire --profiles <batch size>`, `start` the batch, poll,
+  save `results()`, then `release` and acquire again for the next batch.
+- The loop runs without being awaited, so no DevTools protocol timeout applies; poll `status()` with short calls.
 - A new `start` throws while a run is active and clears the previous results once it begins. To abort an active run,
   reload the page and paste the script again.
 - A `failed` record is a coverage gap, never an empty wallet; handle it per Fallbacks. An `ok` record with no tokens is
@@ -88,12 +113,11 @@ how it arrived:
 - **Unsigned call.** A direct `fetch`, `curl`, or WebFetch of `api.debank.com` balance endpoints always gets `429`, so
   retrying it never works. Switch to the collector; never present the `429` as DeBank being down.
 - **Burst.** `rateLimited > 0` while records still finish `ok` is the collector absorbing short bursts; no action.
-- **Block.** `status().blocked` is `true`, or `start` throws `chain/list failed: HTTP 429`. DeBank is rejecting the
-  whole browser, so one agent's bulk run also blocks every other agent's DeBank reads. Bulk runs were blocked after
-  every 30-55 profiles, for 5-13 minutes each time. Do not reload, re-paste, open more pages, or restart in a loop: each
-  request prolongs it. For a single-address check, go to Fallbacks now instead of waiting. For a bulk run, close any
-  second page and retry only the `failed` addresses once on a single page after at least 15 minutes; if that run is also
-  `blocked`, take the remaining addresses through Fallbacks.
+- **Block.** `status().blocked` is `true`, `start` throws `chain/list failed: HTTP 429`, or the toast persists. DeBank
+  is rejecting the whole browser; blocks lasted 5-13 minutes. Do not reload, re-paste, open more pages, or restart in a
+  loop: each request prolongs it. Close the page and run `debank-gate.py block --ticket <ticket>` so every queued agent
+  waits out the cooldown instead of extending it. Then acquire again for the `failed` addresses only; the queue grants
+  the lease after the cooldown. If that retry is also blocked, take the remaining addresses through Fallbacks.
 
 Confirm a block in Chromium before reporting it: the `status()` output, the record `error` strings, or the `429`
 responses in `list_network_requests`. Report it as `DeBank WAF rate-limit block ("Request too fast")` with the

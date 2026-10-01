@@ -87,10 +87,10 @@ amount.
 
 For many addresses, run API passes first: native batches across all target chains, Blockscout token lists, one
 `balanceOf` confirmation batch per chain, then CoinGecko contract prices for confirmed holdings. Run the DeBank
-collector for the addresses that still have gap chains, across at most two owned pages as `debank-portfolio.md` directs,
-then Blockscan one page at a time for what remains. Keep request concurrency at or below each provider's limit
-(Blockscout `x-ratelimit-limit`; CoinGecko plan quota); back off on `429` as the provider references direct. Never run
-unbounded parallel requests.
+collector for the addresses that still have gap chains, in gated batches as `debank-portfolio.md` directs, then
+Blockscan one page at a time for what remains. Keep request concurrency at or below each provider's limit (Blockscout
+`x-ratelimit-limit`; CoinGecko plan quota); back off on `429` as the provider references direct. Never run unbounded
+parallel requests.
 
 ## Pricing Hygiene
 

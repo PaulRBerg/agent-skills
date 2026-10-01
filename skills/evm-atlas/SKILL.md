@@ -51,6 +51,8 @@ the target. Do not infer a historical category or maintain a prose roster of tar
 - Keyless Blockscout is sunset (July 2026) and hosted `*.blockscout.com` instance subdomains also rate-limit keyless
   traffic, so route every Blockscout-hosted chain through the keyed `https://api.blockscout.com/{chain_id}` gateway. See
   `references/explorers/blockscout-endpoints.md`.
+- Every agent on the host shares DeBank's rate limit. Hold a `scripts/debank-gate.py` lease for any debank.com access,
+  including a quick profile look; see the Global Queue in `references/workflows/debank-portfolio.md`.
 - An unreachable or erroring indexer is a coverage gap, never evidence of zero activity. Confirm in Chromium before
   recording an endpoint as down or blocked, and state the verification method in results.
 
