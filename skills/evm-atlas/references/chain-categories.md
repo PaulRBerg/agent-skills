@@ -79,6 +79,14 @@ signed `gasPrice`; and an empty-calldata EOA transfer estimates and uses `21000`
 empty-calldata legacy transfers in block `125118813` reconciled to `value + 21000 * gasPrice` across their block, and an
 exact-zero sweep at `21000` gas left a `0` balance.
 
+Gnosis (`100`) is eligible as an ordinary Alt L1 target. Legacy transactions are debited exactly `gasUsed * gasPrice`
+with no refund or extra debit; receipts report `effectiveGasPrice` equal to the signed `gasPrice`, and an empty-calldata
+EOA transfer estimates and uses `21000` gas. Base fees are only tens of wei and volatile: a 1024-block `eth_feeHistory`
+window spanned 8-53 wei, and the base fee doubled within minutes, so a price derived from one block can fall below the
+inclusion base fee and wait in the mempool. Verified 2026-10-01: a third-party empty-calldata legacy transfer at 14 wei
+in block `48535334` reconciled to `value + 21000 * gasPrice` across its block, and an exact-zero sweep at `21000` gas
+and 16 wei left a `0` balance after waiting for the base fee to fall back.
+
 Filecoin FEVM is an Alt L1 exception. FVM fee translation and overestimation require bespoke evidence; do not generalize
 Ethereum-style L1 fee behavior to it. A fresh EOA recipient does not alter the standard top-level transfer gas cost: the
 `25000` new-account `CALL` cost concerns the contract opcode, not a top-level transfer. Still exclude precompiles and
