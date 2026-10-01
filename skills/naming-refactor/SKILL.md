@@ -25,8 +25,9 @@ Make every name in the current repository communicate one coherent domain model,
 - Preserve pre-existing work. Local edits, file moves, directory restructuring, and non-destructive validation are
   authorized. Do not commit, push, publish, or write externally unless the user or repository instructions require it.
 - Serialize implementation and verification against intersecting repository writes. Complete codebase analysis and the
-  refactor plan first, then acquire a coordination scope covering the complete worktree before the first edit. If no
-  reliable coordination mechanism is available, require the user to confirm an exclusive write window instead.
+  refactor plan first, then claim the cumulative write set before each wave as defined under Acquire the Implementation
+  Scope. Claim the complete worktree only when consumers cannot be enumerated. If no reliable coordination mechanism is
+  available, require the user to confirm an exclusive write window instead.
 - A verified no-op is valid only after exhaustive coverage. Do not rename a clear, conventional name merely to create
   churn, but do not retain a weak name to minimize diff size.
 
