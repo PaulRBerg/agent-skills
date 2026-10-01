@@ -77,15 +77,21 @@ If the intent is unclear, select `polish` in `--dry-run` mode and report the sma
 
 ## Authority
 
+- Apply explicit user instructions and established authorization before this skill's defaults. Do not ask again for an
+  unchanged decision; preserve host restrictions and required destructive-action approval.
 - Explicit create, update, polish, repair, fix, or equivalent intent authorizes in-scope local writes. Inspection-only
   intent and `--dry-run` do not.
 - Require explicit confirmation before deleting README.md, AGENTS.md, regular CLAUDE.md files, or context-doc targets.
   `--force` authorizes documented overwrites, not deletions. The one standing exception is a CLAUDE.md symlink to a
   sibling AGENTS.md when the installed Claude Code reads AGENTS.md natively (see Claude Code Compatibility): delete it
   without asking.
-- Treat a broad write request as authorization for the requested scope. Otherwise, preview a change set larger than a
-  handful of files and stop before writing.
+- Resolve scope from the requested outcome. Preview a large change set, then continue when it is already authorized;
+  file count alone is not an approval boundary. Ask only when an unresolved choice changes scope or intended meaning.
 - Do not expand from documentation work into source changes, skill creation, or external writes.
+
+Complete authorized discovery, edits, and validation before reporting completion. When one target needs input, continue
+independent targets and identify the exact unresolved choice. If a skill rule requires a pause, cite that rule and
+explain why existing authorization does not cover the next action.
 
 ## Arguments
 
@@ -193,16 +199,13 @@ AGENTS.md otherwise. In `--dry-run`, report commands that would depend on planne
 Lead with `### ✅ Context updated` only after writes and required validation pass,
 `### ⚠️ Context updated — validation failed` when files were written but required checks fail,
 `### 🔎 Context preview — no files written` in dry-run mode, or `### ⛔ Context blocked — no files written` for a
-pre-write stop. Then report only:
+pre-write stop. Follow with the workflow and scope, material changes, exact validation commands and outcomes, and any
+remaining limitation. Use short prose for a small change; add headings or tables only when they organize repeated
+information, and a tree only when directory ownership matters. Follow the user's requested report format.
 
-1. `🧭 Mode and scope`: workflow, dry-run status, target counts, and relative paths in a compact table.
-2. `📦 Changes`: completed or planned changes grouped by directory; use a tree when it makes path ownership clearer.
-3. `🧪 Validation`: exact commands, result, and any justified skip in a table.
-4. `Issues and caveats`: conflicts, advisories, unrecognized flags, limitations, and unverified assumptions, grouped as
-   `Resolved` (verified fixes with evidence) and `Open` (remaining impact and next step). Omit empty groups and the
-   whole section when empty. Report each item once; put neutral context and agreed decisions under changes or scope.
-   Reserve `blocker` for something preventing required work and `risk` for a specific potential adverse outcome. A
-   workaround leaves an item open when the underlying issue still affects the result.
+When issues need a separate section, group verified fixes with evidence as `Resolved` and remaining problems as `Open`,
+with impact and next action. Omit empty groups and report each item once. Reserve `blocker` for something preventing
+required work and `risk` for a specific potential adverse outcome. A workaround leaves the underlying issue open.
 
 Keep paths, commands, guard-rail errors, symlink targets, and user-authored content exact and undecorated. Omit empty
 detail and stop once the selected targets meet the completion bar.

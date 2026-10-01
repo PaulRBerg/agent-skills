@@ -161,8 +161,8 @@ ln -s "../../.agents/skills/<name>" "<scope>/.claude/skills/<name>"
   gate.
 - Finish with `### 🧩 Skill created: <name>`, a tree of created paths, and `### ✅ Verified` with the exact checks. Link
   files by their absolute `.agents/skills/<name>/` source paths, never through the `.claude/skills/<name>` symlink.
-- Offer to commit the new skill. When the host project's standing instructions require prompt commits, commit without
-  further prompting.
+- Commit when the request or standing instructions authorize it; otherwise offer to commit. Do not ask again for
+  authorization already given.
 
 Keep helper stdout, commands, paths, frontmatter, and generated skill content undecorated unless the new skill's output
 contract requires otherwise.

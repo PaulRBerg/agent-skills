@@ -54,8 +54,9 @@ Judge the diff against the user's request. Prioritize `CRITICAL → HIGH → MED
 - **LOW**: localized clarity or style issue with a real maintenance cost.
 
 Every finding must cite a verified location, triggering input/state, failure mode, blast radius, and evidence in the
-changed code. Merge duplicates and apply the smallest defensible fix. When intent is ambiguous, stop or record the
-assumption instead of guessing.
+changed code. Merge duplicates and apply the smallest defensible fix. Resolve ambiguous intent from the request and
+repository first. State routine assumptions; ask only when the answer changes behavior or scope, and continue
+independent in-scope fixes while that item waits.
 
 Select every applicable profile and read it once:
 
@@ -88,11 +89,12 @@ scope. Reserve `blocker` for something preventing required work and `risk` for a
 workaround leaves an item open when the underlying issue still affects the result. Completion requires fixed scope,
 traceable edits/findings, and validation evidence.
 
-Render a successful report as `### ✨ Code polish — ✅ complete`, a small summary-count table, a compact `Scope`
-summary, `### ✨ Simplifications`, `### 🧪 Verification`, and `### Issues and caveats`, omitting inapplicable sections.
-When review ran and found no defects, state `✅ No verified review findings.` If a stop condition below prevents
-completion, lead with `### ✨ Code polish — ⛔ blocked` and report the evidence and required decision. Keep severity
-tokens, profile IDs, commands, locations, reproduction inputs, and security evidence exact and undecorated.
+Lead a successful report with `### ✨ Code polish — ✅ complete`, then summarize scope, meaningful changes, and
+verification. Use short prose for small results; add tables or sections only when they clarify multiple changes or
+findings, and honor the user's requested format. When review ran and found no defects, state
+`✅ No verified review findings.` If a stop condition below prevents completion, lead with
+`### ✨ Code polish — ⛔ blocked` and report the evidence and required decision. Keep severity tokens, profile IDs,
+commands, locations, reproduction inputs, and security evidence exact and undecorated.
 
 Stop when behavior parity or required high-risk validation cannot be established, or a fix requires an unrequested
 public-contract change or larger redesign.

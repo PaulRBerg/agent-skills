@@ -19,8 +19,8 @@ branches, and local conventions.
 Detect CONTRIBUTING.md next to documentation targets. Never edit it; advise the user when stable agent guidance should
 move into sibling AGENTS.md.
 
-If a non-broad request would touch more than a handful of files, switch to dry-run, show the planned targets, and stop
-before writing.
+Preview unexpectedly large target sets against the requested outcome. Continue within existing authorization; ask only
+before adding outcomes or changing meaning the user has not authorized, not merely because many files are involved.
 
 ## Context Economy Audit
 

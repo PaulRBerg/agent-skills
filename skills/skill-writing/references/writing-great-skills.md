@@ -56,8 +56,9 @@ Choose:
 
 - **Model-invoked** (omit `disable-model-invocation`): the agent and other skills can reach it. Write a model-facing
   description with one trigger phrase per distinct branch.
-- **User-invoked** (`disable-model-invocation: true`): only the human, typing its name, can invoke it — no other skill
-  can. Its description becomes a human-facing one-line summary.
+- **User-invoked** (`disable-model-invocation: true`): disable automatic model selection. Its description becomes a
+  human-facing one-line summary. An explicitly authorized workflow may still load its instructions through supported
+  host mechanisms; absence from automatic discovery does not prove it is unavailable.
 
 Inline what every branch needs. Route conditional detail directly from `SKILL.md`; the wording of the link must say when
 to read it. Co-locate a concept's definition, rules, and caveats. Keep each meaning in one authoritative place.
@@ -125,6 +126,25 @@ authority, destructive-action, scope, or likely model-failure boundary.
 If a workflow completes prematurely, sharpen its completion criterion first; split later steps behind a real context
 boundary only when observed behavior still justifies it.
 
+Make authority and follow-through concrete:
+
+- State that explicit user instructions take precedence over skill defaults. Carry established approvals forward;
+  preserve host restrictions and required approval for destructive or external actions.
+- Resolve discoverable facts before asking. Use stated assumptions for routine reversible choices; ask when missing
+  user-owned input would change scope, safety, or the intended outcome, and continue independent work.
+- Before requesting approval, prepare the concrete result the user must review within existing authority. When a skill
+  rule causes a pause, identify the rule and the action still lacking authorization.
+- Finish authorized work through its required validation. Progress summaries, offers to continue, and milestones do not
+  establish completion. Name real stop conditions, including read-only scope, hard limits, and missing authority.
+
+Choose the smallest checks that prove the changed behavior and satisfy repository requirements. Add regression tests for
+meaningful failure modes, not tests that mirror a reversible text or configuration edit. Reuse passing evidence while
+its inputs remain unchanged; broaden or repeat checks only for new edits, failures, or unresolved risk.
+
+Specify delegation when it helps: independent scopes, dependencies, write ownership, and one owner for aggregate checks.
+Use the smallest effective team, honor the user's delegation preference and host limits, and keep dependent mutations
+sequential. A file-count threshold alone is not a reason to delegate.
+
 ## Design Background Reporting
 
 When a skill launches background jobs or agents, decide whether the wait may be long or opaque from expected runtime and
@@ -143,6 +163,8 @@ their evidence, and the next action.
 
 Lead with the outcome and keep the output shape proportional to the information:
 
+- Prefer concise, direct prose for simple results. Add headings, lists, and tables when they clarify the information; do
+  not require a multi-section report for a one-line outcome. Honor the user's requested format.
 - Use `🔎` preview/read-only, `⏳` running, `✅` verified success, `⚠️` caveat/approval/risk, `⛔` blocked/not written,
   `❓` unknown, and `↩` reverted/rolled back consistently; pair every status symbol with text.
 - Use at most one non-status domain icon per heading. Reserve tables for repeated fields, trees for real structure, and
