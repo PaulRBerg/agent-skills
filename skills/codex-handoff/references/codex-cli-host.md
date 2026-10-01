@@ -13,8 +13,8 @@ When the user has not specified a model preference, use these tiers for research
 | Work                                                                              | Model         | Effort             |
 | --------------------------------------------------------------------------------- | ------------- | ------------------ |
 | Bounded research or routine implementation                                        | `gpt-6-luna`  | `high`             |
-| Involved research or implementation                                               | `gpt-6-sol`   | `medium` or `high` |
-| Semantic or cross-cutting implementation                                          | `gpt-6-sol`   | `xhigh`            |
+| Involved research or implementation                                               | `gpt-6.1-sol` | `medium` or `high` |
+| Semantic or cross-cutting implementation                                          | `gpt-6.1-sol` | `xhigh`            |
 | Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra` | `xhigh`            |
 
 Under this default selection, Astra at `xhigh` is the ceiling and Astra is implementation-only. Research agents use Luna
@@ -49,9 +49,9 @@ edit as a contract violation.
 Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                                  | Effort                  | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | -------------------------------------- | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                                    | Effort                  | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | ---------------------------------------- | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6.1-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
 Use the native configuration table above for every manifest row unless the user's explicit preference overrides its
