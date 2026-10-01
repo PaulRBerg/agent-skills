@@ -1,6 +1,6 @@
 # Agent Skills
 
-PRB's collection of AI agent skills. Designed to work across agents, but primarily built for
+PRB's collection of AI agent skills and the CLIs they rely on. Designed to work across agents, but primarily built for
 [Claude Code](https://claude.com/product/claude-code) and [Codex](https://github.com/openai/codex).
 
 > [!WARNING] This catalog intentionally reflects Paul's preferred tools, defaults, safety boundaries, and writing voice;

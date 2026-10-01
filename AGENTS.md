@@ -74,8 +74,8 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
 - The root `package.json` exists only for local formatting, type-checking, and hook wiring; there is no build step.
 - Toolkit changes verify with `just toolkit::check` (or narrower toolkit recipes). CLI changes go live only via
   `just toolkit::install-cli`, under the install-authorization rules in `toolkit/AGENTS.md`.
-- Treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the verification surface
-  unless a task introduces a narrower check.
+- For catalog changes, treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the
+  verification surface unless a task introduces a narrower check.
 
 ## Resource-Safe Search
 
