@@ -74,10 +74,11 @@ file-mutating post-tool payloads. Its stable output is one path per line, with a
 content. Status schema v8 exposes required session `coordination_waived` booleans and complete sorted work `claims`
 vectors, plus a top-level `drafts` array that work never nests; dashboard and terminal status home a logical bundle
 once, with nested claim blockers and queue positions. Hooks derive prompt/nudge/waker work from the payload's Git-root
-claim; authoritative end cleanup releases the whole logical item. Residual ownership recorded by `done` is reclaimable
-only while the owner's session row exists; `reconcile_ended` releases attribution whose owner is gone so orphaned dirt
-degrades to the stale-dirt advisory instead of a permanent `residual` blocker. The detailed operator reference below is
-part of this document.
+claim; authoritative end cleanup releases the whole logical item. Residual ownership recorded by `done`, narrowing, or
+an observed unclaimed post-tool write is the owner's own work (no `stale-dirt` or baseline on reclaim) and is
+reclaimable only while the owner's session row exists; `reconcile_ended` releases attribution whose owner is gone so
+orphaned dirt degrades to the stale-dirt advisory instead of a permanent `residual` blocker. The detailed operator
+reference below is part of this document.
 
 `recommend send`, `recommend respond`, and `recommend withdraw` are owning-agent-only; delegates may safely use
 `recommend list` and `recommend show` for their shared parent. Recommendations are durable advisory records, not
@@ -340,9 +341,12 @@ planning presence from active implementation work.
 When `READY` includes `stale-dirt:<paths>`, preserve those pre-existing hunks byte-for-byte. `ai-commit prepare` asks
 `ai-coord baseline` for these baselines and excludes their pre-existing portions automatically. `baseline` is a stable
 machine contract: zero or more `path<TAB>oid` records, with normalized repository-relative paths and empty output when
-no baselines exist. A session that finishes with uncommitted dirt retains residual ownership and can reclaim it
-immediately while its session row exists. Session end, confirmed process death, or supersession releases that
-attribution during the next process reconciliation, and the leftover edits become ordinary stale dirt.
+no baselines exist. A session that finishes with uncommitted dirt, narrows dirty paths out of its claim, or makes an
+observed post-tool write to a dirty path outside every active claim retains residual ownership. It reclaims that dirt
+immediately as its own, without `stale-dirt` or baselines, while its session row exists; other sessions are blocked by
+the named `residual` holder instead of settling unattributed dirt. Session end, confirmed process death, or supersession
+releases that attribution during the next process reconciliation, and the leftover edits become ordinary stale dirt.
+Bash writes are not observed and still settle as unattributed dirt.
 
 `ai-coord touched` prints normalized repository-relative paths written by this session's observed post-tool events, one
 per line. `!TRUNCATED` is the first record when the bounded 1,000-path set dropped older observations. Collection is

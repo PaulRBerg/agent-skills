@@ -1495,6 +1495,41 @@ fn writes_inside_the_callers_own_claim_are_silent() {
 }
 
 #[test]
+fn observed_unclaimed_writes_stay_reclaimable_by_the_writer() {
+    let temp = TempDir::new().unwrap();
+    let (coordinator, repo) = runtime(&temp);
+    let writer = Identity { client: Client::Claude, session_id: "self".into() };
+    let peer = Identity { client: Client::Claude, session_id: "peer".into() };
+    register(&coordinator, &writer, &repo, 303);
+    register(&coordinator, &peer, &repo, 304);
+    assert_eq!(
+        coordinator.start_for(writer.clone(), "work", &[repo.join("src/a.rs")], &[], &repo).unwrap().kind,
+        crate::domain::OutcomeKind::Ready
+    );
+    fs::create_dir_all(repo.join("src")).unwrap();
+    fs::write(repo.join("src/b.rs"), "unclaimed\n").unwrap();
+    HookRuntime::new(&coordinator).ingest(
+        "claude",
+        &json!({
+            "session_id":"self", "cwd":repo, "hook_event_name":"PostToolBatch",
+            "tool_name":"Write", "tool_input":{"file_path": repo.join("src/b.rs")}
+        }),
+    );
+
+    let blocked = coordinator.start_for(peer.clone(), "peer", &[repo.join("src/b.rs")], &[], &repo).unwrap();
+    assert_eq!(blocked.kind, crate::domain::OutcomeKind::Blocked);
+    assert_eq!(blocked.holders, ["claude/self"]);
+    coordinator.done_for(&peer, &repo).unwrap();
+
+    let scopes = [repo.join("src/a.rs"), repo.join("src/b.rs")];
+    let expanded = coordinator.start_for(writer.clone(), "work", &scopes, &[], &repo).unwrap();
+    assert_eq!(expanded.kind, crate::domain::OutcomeKind::Ready);
+    assert_eq!(expanded.detail, "");
+    let root = fs::canonicalize(&repo).unwrap().to_string_lossy().into_owned();
+    assert!(coordinator.store().unwrap().baselines_in_repo(&writer, &root).unwrap().is_empty());
+}
+
+#[test]
 fn waived_sessions_never_report_out_of_scope_writes() {
     let temp = TempDir::new().unwrap();
     let (coordinator, repo) = runtime(&temp);

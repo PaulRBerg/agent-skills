@@ -178,16 +178,21 @@ fn partition_dirty(
     let mut fresh = Vec::new();
     let mut advisory = Vec::new();
     for path in dirty {
+        let owner = residuals.iter().find(|row| row.path == *path).map(|row| &row.identity);
+        // The requester's own residual dirt is its work, not pre-existing dirt to baseline.
+        if owner == Some(identity) {
+            continue;
+        }
         let leaf = Scope { path: path.clone(), kind: ScopeKind::Exact };
         let benign = benign.iter().any(|scope| scopes_overlap(scope, &leaf));
-        let residual_own = residuals.iter().any(|row| row.path == *path && row.identity == *identity);
         let stale = observations
             .iter()
             .find(|row| row.path == *path)
             .is_some_and(|row| current - row.first_seen >= DIRT_HOLD_SECONDS);
-        if benign || residual_own || stale {
+        if benign || stale {
             advisory.push(path.clone());
-        } else {
+        } else if owner.is_none() {
+            // Foreign residual dirt is attributed; `foreign_residuals` reports its holder.
             fresh.push(path.clone());
         }
     }

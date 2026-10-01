@@ -11,7 +11,10 @@ use crate::{
     coordinator::{Coordinator, normalize_callsign},
     domain::{Client, Identity, Outcome, SessionState, WorkState, client_name, sanitize},
     error::{AppError, Result},
-    host::{git_dirty_paths, git_ignored_paths, git_root, host_process_reference, normalize_repo_path, relevant_dirty},
+    host::{
+        git_blob_hashes, git_dirty_paths, git_ignored_paths, git_root, host_process_reference, normalize_repo_path,
+        relevant_dirty,
+    },
     state::SessionUpdate,
 };
 
@@ -236,6 +239,22 @@ impl<'a> HookRuntime<'a> {
                 if !paths.is_empty() {
                     let repo_root = path_text(root)?;
                     store.record_touched(&identity, &repo_root, &paths, self.coordinator.now())?;
+                    let own_scopes = store
+                        .work(&identity)?
+                        .filter(|work| work.state == WorkState::Active)
+                        .and_then(|work| work.claim(&repo_root).map(|claim| claim.scopes.clone()))
+                        .unwrap_or_default();
+                    let outside = paths
+                        .iter()
+                        .filter(|path| relevant_dirty(&own_scopes, std::slice::from_ref(*path)).is_empty())
+                        .collect::<Vec<_>>();
+                    let dirty = if outside.is_empty() { Vec::new() } else { git_dirty_paths(root).unwrap_or_default() };
+                    let dirty_written =
+                        outside.into_iter().filter(|path| dirty.contains(path)).cloned().collect::<Vec<_>>();
+                    if !dirty_written.is_empty() {
+                        let hashes = git_blob_hashes(root, &dirty_written, false);
+                        store.record_unclaimed_writes(&identity, &repo_root, &hashes, self.coordinator.now())?;
+                    }
                     if !session.coordination_waived {
                         scope_fragment = scope_watch_fragment(&store, &identity, &repo_root, &paths);
                     }

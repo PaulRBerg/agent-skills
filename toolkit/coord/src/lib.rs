@@ -358,6 +358,8 @@ fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
                 _ =>
                     "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and run `ai-coord wait`.".to_owned(),
             },
+        OutcomeKind::Active if outcome.detail.starts_with("update-unknown:dirty-settling:") =>
+            "ai-coord: The old edit scope remains active; unattributed dirt in the requested expansion settles for at most about 90 seconds, so edit only the listed scopes and re-run the same start after that.".to_owned(),
         OutcomeKind::Active =>
             "ai-coord: The old edit scope remains active because the requested expansion failed; inspect the result before retrying.".to_owned(),
         OutcomeKind::Message =>
@@ -930,6 +932,13 @@ mod tests {
             guidance,
             "ai-coord: Unattributed dirt is settling for at most about 90 seconds; do not edit or escalate it, and run `ai-coord wait`."
         );
+    }
+
+    #[test]
+    fn settling_expansion_guidance_keeps_the_old_scope_and_retries_start() {
+        let outcome = Outcome::new(OutcomeKind::Active, 3, "update-unknown:dirty-settling:README.md");
+        let guidance = outcome_guidance(&outcome, Some(Client::Claude));
+        assert!(guidance.contains("edit only the listed scopes and re-run the same start"), "{guidance}");
     }
 
     #[test]

@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use crate::{
     domain::{Identity, Scope, ScopeKind, WorkState},
     error::{AppError, Result},
+    host::relevant_dirty,
 };
 
 use super::{
@@ -200,6 +201,48 @@ impl Store {
 
     pub(crate) fn residual_owners(&self, repo_root: &str) -> Result<Vec<ResidualOwnerRow>> {
         residual_owners_from(&self.connection, repo_root)
+    }
+
+    /// Attribute dirty paths this session wrote outside every active claim to the
+    /// writer, so it can reclaim its own edits instead of waiting out unattributed
+    /// dirt. Existing observations and residual ownership are kept.
+    pub(crate) fn record_unclaimed_writes(
+        &mut self,
+        identity: &Identity,
+        repo_root: &str,
+        blob_hashes: &[(String, String)],
+        current: f64,
+    ) -> Result<()> {
+        self.immediate(|transaction| {
+            let claimed = works_from(transaction, Some(repo_root))?
+                .into_iter()
+                .filter(|work| work.state == WorkState::Active)
+                .filter_map(|work| work.claim(repo_root).map(|claim| claim.scopes.clone()))
+                .flatten()
+                .collect::<Vec<_>>();
+            let mut recorded = 0;
+            for (path, blob_hash) in blob_hashes {
+                if !relevant_dirty(&claimed, std::slice::from_ref(path)).is_empty() {
+                    continue;
+                }
+                transaction.execute(
+                    "INSERT INTO dirt_observations(repo_root, path, blob_hash, first_seen, last_seen)
+                     VALUES (?1, ?2, ?3, ?4, ?4) ON CONFLICT(repo_root, path) DO NOTHING",
+                    params![repo_root, path, blob_hash, current],
+                )?;
+                recorded += transaction.execute(
+                    "INSERT INTO residual_owners(
+                        repo_root, path, client, session_id, released_at
+                     ) VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT(repo_root, path) DO NOTHING",
+                    params![repo_root, path, client_name(identity.client), identity.session_id, current],
+                )?;
+            }
+            if recorded > 0 {
+                bump_generation(transaction)?;
+            }
+            Ok(())
+        })
     }
 
     pub(crate) fn baselines_in_repo(&self, identity: &Identity, repo_root: &str) -> Result<Vec<BaselineRow>> {
