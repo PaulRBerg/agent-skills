@@ -115,6 +115,8 @@ implemented fixes.
 
 ## Decide
 
+- Apply decisions and delegated judgment already established by the user. Ask only for unresolved choices that
+  materially change the alignment outcome; prepare the evidence and concrete proposal before requesting approval.
 - Present confirmed drift separately from judgment calls; normally offer confirmed drift as an uncontroversial fix.
 - Include the affected repositories and the exact mechanical evidence with each proposed fix.
 - Present every judgment call as an explicit user question with a recommended option and its tradeoff.
@@ -122,7 +124,8 @@ implemented fixes.
 - Ask before choosing which single-source candidates to implement, which competing workflows to retire, how deeply to
   trim duplicated material, or whether to publish now or hold changes.
 - State the default preservation option when no simplification is clearly justified.
-- Do not write the implementation plan until the user resolves every decision that changes scope or approach.
+- Resolve decisions affecting each fix before planning it. Continue independent research and already authorized fixes
+  while another choice is pending; do not treat a progress report as completion of the requested work.
 - Record each user decision verbatim beside the finding it resolves.
 - Preserve a decision's condition or exception when it limits an otherwise approved change.
 - Carry declined changes into the deliberate-no-change list rather than silently omitting them.

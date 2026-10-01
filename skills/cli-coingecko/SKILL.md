@@ -25,9 +25,10 @@ Use the installed CLI's machine-readable command catalog as the source of truth 
 
    Do not run interactive `cg auth` or write config without the user's approval.
 
-2. On an explicitly requested CLI update, run `cg update --dry-run`; run `cg update` only with approval. If automatic
-   detection is wrong, pass `--method` with `homebrew`, `npm`, `go`, or `script`. Recheck `cg version` and
-   `cg commands -o json`, then record the verified version in `references/version.txt` when maintaining this skill.
+2. On an explicitly requested CLI update, run `cg update --dry-run`, then `cg update` within that authorization. Ask
+   only if the preview reveals an action beyond the requested update. If automatic detection is wrong, pass `--method`
+   with `homebrew`, `npm`, `go`, or `script`. Recheck `cg version` and `cg commands -o json`, then record the verified
+   version in `references/version.txt` when maintaining this skill.
 
 3. Select the command, flags, enum values, output formats, endpoint, auth requirement, and `paid_only` status from
    `cg commands -o json`. Use `cg <command> --help` only when the catalog lacks a needed detail.

@@ -45,7 +45,8 @@ and change risk. Source files match above 1000 LOC; test files use a relaxed 200
    - Inspect symbol overviews, references, imports, and relevant history.
    - Use the evidence to choose extraction boundaries, target module names, migration order, and test coverage.
 
-6. Do not implement the refactor unless the user separately asks for execution.
+6. This workflow defaults to a report and plan. Implement only when the user's request already authorizes execution or
+   the user subsequently approves it; do not require a separate request for an unchanged, already authorized outcome.
 
 ## Refactor Plan Format
 

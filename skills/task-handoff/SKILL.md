@@ -97,6 +97,10 @@ access to the named repositories but none of this transcript. Include:
   exception: see the noninteractive triage section below;
 - assumptions resolved from repository evidence or explicit user decisions.
 
+Carry existing user approvals and their exact scope, conditions, and exclusions into the handoff. Distinguish them from
+actions still awaiting approval so the receiving session can continue authorized work without repeating settled
+questions. A handoff does not itself grant approval or override the receiving host's restrictions.
+
 Add a `## Execution approach` section. For a simple task, direct the receiving session to execute this one isolated
 handoff without invoking an in-session handoff skill. For a complex task, expand and canonicalize
 `~/.agents/skills/codex-handoff`, verify that `<resolved-directory>/SKILL.md` is readable, and write that resolved

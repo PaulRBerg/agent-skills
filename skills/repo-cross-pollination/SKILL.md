@@ -141,11 +141,14 @@ Save the JSON under the host's scratch or temporary directory and query it with 
 
 ## Decide
 
+- Apply decisions and delegated judgment already established by the user. Ask only for unresolved choices that
+  materially change a transfer; prepare the evidence and concrete proposal before requesting approval.
 - Present a compact table of recommended transfers with donor, recipients, evidence, benefit, and cost; offer them as
   one default-accept batch that the user can trim.
 - Present every judgment call as an explicit question with a recommended option and its tradeoff; keep alternatives
   mutually exclusive when the choice determines the plan.
-- Do not write the implementation plan until the user resolves every decision that changes scope or approach.
+- Resolve decisions affecting each transfer before planning it. Continue independent research and already authorized
+  transfers while another choice is pending; do not treat a progress report as completion of the requested work.
 - Record each decision verbatim beside its candidate, preserve its conditions, and move declined candidates to the
   rejected list.
 

@@ -45,6 +45,8 @@ cannot weaken this shared contract.
 - Run only after explicit invocation. Research-only = requested outcome is findings/evidence/assessment only, no repo
   changes or plan requested. All handoffs may run in any host mode; implementation handoffs must pass through the Plan
   Phase and receive explicit user approval before launch.
+- Reuse an already approved plan when the outcome and material constraints are unchanged. Explicit user instructions
+  take precedence over skill defaults; ask again only for an unresolved decision or action outside that authorization.
 - The parent owns decisions, the final plan, and orchestration. Delegate investigation to read-only research agents only
   when task and repository evidence make it useful before planning.
 - Research agents gather evidence and report findings only — never edit files, make design decisions, or return plans.
@@ -208,8 +210,8 @@ Build a self-contained, outcome-first prompt for every implementation agent. Inc
 3. Its validation assignment per the Plan Phase's single validation owner: scoped checks it must run and, unless it owns
    validation, that it must not run aggregate checks. Never brief new validation machinery the approved plan does not
    call for.
-4. A soft time budget matching its manifest sizing, with the instruction to return `blocked` with partial evidence
-   rather than grinding past it.
+4. A pacing estimate matching its manifest sizing and any user- or adapter-imposed hard runtime limit. A soft estimate
+   alone is not a stop condition; report partial evidence and the concrete blocker or exhausted hard limit when blocked.
 5. This authority boundary: inspect, edit only within the assigned scope, and validate locally; never commit, push,
    deploy, make external writes, or broaden scope, even when repository or host instructions favor committing finished
    work promptly. Committing stays with the parent after reconciliation.
@@ -218,7 +220,8 @@ Build a self-contained, outcome-first prompt for every implementation agent. Inc
    run coordination lifecycle commands: these are rejected with exit 64. Permit only `ai-coord status`,
    `ai-coord touched`, `ai-coord inbox`, `ai-coord msg`, and `ai-coord finding`.
 7. This stopping rule: implement the approved plan exactly; if infeasible or requiring redesign, return `blocked` with
-   evidence instead of proposing a replacement plan.
+   evidence instead of proposing a replacement plan. Continue after progress updates while authorized work remains; a
+   milestone, offer to continue, or list of nonblocking decisions is not a completed result.
 8. A requirement to return every result field: `status` (`completed` or `blocked`), `summary`, `changed_files` listing
    only files actually touched, `verification` listing every command and outcome, `residual_risks`, and `blockers`.
 
@@ -304,8 +307,8 @@ placeholder.
   cross-repository commits.
 - If approved work changes repositories on this machine other than the one where the handoff began, invoke `$commit`
   from each additional repository after its work, validation, and required polish complete, scoped to files changed
-  there; do not commit incomplete, blocked, unexpected, or out-of-scope changes. Push only when the user explicitly
-  requested it.
+  there; do not commit incomplete, blocked, unexpected, or out-of-scope changes. Push when the request or standing user
+  instructions authorize it.
 - When the handoff pushed commits and the repository defines CI workflows, such as `.github/workflows`, watch the pushed
   head's runs before the completion report (`gh run list --commit <sha>`, then `gh run watch <run-id>`, in the
   background when the host supports it). Fix failures attributable to the handoff as follow-on work and report the CI
