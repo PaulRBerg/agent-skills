@@ -8,11 +8,11 @@ skill-dependencies:
   - cli-cast
 description:
   "Use for targeted EVM chain, account, transaction, RPC, explorer, bridge, and DEX evidence: chain name/ID, native
-  symbol, RouteMesh, wallet balances via Blockscan in Chromium, cross-chain USD portfolio value or net worth, token/NFT
-  holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; Across, Bungee, deBridge, Hop,
-  Layerswap, LayerZero, LI.FI, Relay, Socket, Symbiosis; Uniswap v1-v4, Universal Router, Permit2, 1inch
-  Classic/Fusion/Fusion+, and CoW Swap, CoWSwap, CoW Protocol, or GPv2 swaps, orders, liquidity, approvals, permits,
-  rewards, migrations, wrapping, cancellations, and refunds."
+  symbol, RouteMesh, wallet balances and DeFi positions via DeBank/Blockscan in Chromium, cross-chain USD portfolio
+  value or net worth, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout;
+  Across, Bungee, deBridge, Hop, Layerswap, LayerZero, LI.FI, Relay, Socket, Symbiosis; Uniswap v1-v4, Universal Router,
+  Permit2, 1inch Classic/Fusion/Fusion+, and CoW Swap, CoWSwap, CoW Protocol, or GPv2 swaps, orders, liquidity,
+  approvals, permits, rewards, migrations, wrapping, cancellations, and refunds."
 ---
 
 # EVM Atlas
@@ -59,8 +59,9 @@ the target. Do not infer a historical category or maintain a prose roster of tar
 1. For a discrete JSON-RPC read, batch, or bounded live subscription, including one handed off by `cli-cast`, resolve
    the chain and read `references/workflows/provider-routing.md`. Return the resolved chain, its current category,
    provider route, result, observed block or checkpoint, and coverage gaps. Do not route the read back to `cli-cast`.
-2. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
-   read `references/workflows/blockscan-balances.md` first.
+2. For the current native or fungible-token balances or DeFi positions of a public wallet address across chains, read
+   `references/workflows/debank-portfolio.md` first. For one named chain, read
+   `references/workflows/blockscan-balances.md` first.
 3. For the current USD value of one or more addresses across target chains (portfolio value, net worth, drained or dust
    checks), read `references/workflows/address-usd-value.md`.
 4. For a specific transaction hash on a named chain, resolve the chain against
@@ -71,8 +72,8 @@ the target. Do not infer a historical category or maintain a prose roster of tar
    its legacy execution packet or component-specific coverage outcome instead of requiring a current-provider receipt.
    Otherwise, acquire the exact provider receipt and logs before DEX or bridge outcome interpretation.
 5. For an address-wide historical-activity or `bootstrap-discovery` sweep, read `references/workflows/address-sweeps.md`
-   and use its deterministic plan/evaluate helper. For current holdings, use
-   `references/workflows/blockscan-balances.md` first and provider routing for gaps.
+   and use its deterministic plan/evaluate helper. For current holdings, use `references/workflows/debank-portfolio.md`
+   first and provider routing for gaps.
 6. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's
    full raw receipt/logs/decoded input, or funding origin, resolve the chain and read
    `references/workflows/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and

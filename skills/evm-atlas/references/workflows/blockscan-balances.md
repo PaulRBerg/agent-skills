@@ -1,7 +1,8 @@
 # Blockscan Balances
 
-Use this reference for the current native or fungible-token balance of an existing public EVM wallet address. Prefer
-Blockscan in Chromium for both a named target chain and a wallet-wide portfolio check. Historical balances and NFT
+Use this reference for the current native or fungible-token balance of a public EVM wallet address on a named target
+chain. For a wallet-wide or cross-chain check, use `references/workflows/debank-portfolio.md` first; use Blockscan for
+target chains DeBank lacks, when DeBank fails, or as an Etherscan-family cross-check. Historical balances and NFT
 inventories remain on the existing provider routes. For per-chain and total USD value of one or more addresses, use
 `references/workflows/address-usd-value.md`.
 
@@ -32,8 +33,9 @@ Its `data-search` value includes the Blockscan chain symbol. Use that symbol to 
 
 - For a named chain, the exact `data-chainid` match proves Blockscan currently offers that chain. A matching card with a
   zero token count or `$0.00` is a successful zero result, not a fallback condition.
-- For a wallet-wide check, intersect Blockscan's `data-chainid` values with `references/generated/target-mainnets.json`.
-  Query the existing API routes for target chains outside that intersection.
+- For a wallet-wide fallback, intersect Blockscan's `data-chainid` values with the target chains still uncovered.
+  Blockscan covers only Etherscan-family chains; query the existing API routes for target chains outside that
+  intersection.
 - Ignore Blockscan chains outside the target-mainnet list. Do not report the page-wide `NET WORTH` as a target-only
   total because it can include those chains.
 - Keep successful Blockscan results when only some target chains or requested details require fallback.

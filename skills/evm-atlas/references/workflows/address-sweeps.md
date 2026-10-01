@@ -130,7 +130,8 @@ Do not claim inactivity on all EVM chains unless the exact target scope and gene
 
 ## Current Holdings
 
-For current native/token/NFT holdings, use `blockscan-balances.md` first and `provider-routing.md` for API gaps. Pin
-native state to a finalized/verified checkpoint. Treat holdings endpoints observed at a provider head as separately
-timed evidence, and never infer token/NFT emptiness from native RPC alone. Indexed token amounts can be stale: confirm
-any amount that decides an action with RPC `balanceOf`, as `address-usd-value.md` does.
+For current native/token holdings, use `debank-portfolio.md` first (`blockscan-balances.md` for a named chain or DeBank
+gaps) and `provider-routing.md` for NFTs and API gaps. Pin native state to a finalized/verified checkpoint. Treat
+holdings endpoints observed at a provider head as separately timed evidence, and never infer token/NFT emptiness from
+native RPC alone. Indexed token amounts can be stale: confirm any amount that decides an action with RPC `balanceOf`, as
+`address-usd-value.md` does.

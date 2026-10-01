@@ -1,9 +1,10 @@
 # Address USD Value
 
 Use this reference for the current USD value of one or more public EVM addresses per target chain and in total: native
-balances plus fungible ERC-20 tokens. NFTs, DeFi positions, and historical values are out of scope; route them to
-`references/workflows/provider-routing.md`. All steps are read-only. Callers own any threshold (for example, a "drained"
-or dust cutoff) and any token allow/deny policy; this workflow only returns values and coverage.
+balances plus fungible ERC-20 tokens. NFTs and historical values are out of scope; route them to
+`references/workflows/provider-routing.md`. DeFi positions stay out of every total; list them separately from
+`references/workflows/debank-portfolio.md` when requested. All steps are read-only. Callers own any threshold (for
+example, a "drained" or dust cutoff) and any token allow/deny policy; this workflow only returns values and coverage.
 
 ## Scope
 
@@ -12,7 +13,7 @@ or dust cutoff) and any token allow/deny policy; this workflow only returns valu
   may narrow token lookups to a chain subset; report unchecked chains as out of the requested token scope, not as zero.
 - For `cross-vm` rows, scope values to the chain's EVM execution environment.
 - Before keyed API calls, check presence value-free: `[ -n "$BLOCKSCOUT_API_KEY" ] && echo set || echo unset`. Without
-  the key, skip the Blockscout discovery route and fall through to Blockscan.
+  the key, skip the Blockscout discovery route and fall through to DeBank.
 
 ## Native Balances
 
@@ -37,9 +38,9 @@ or dust cutoff) and any token allow/deny policy; this workflow only returns valu
   `https://api.coingecko.com/api/v3/simple/token_price/<platform>?contract_addresses=<contract>&vs_currencies=usd`. The
   keyless endpoint accepts one contract per request, so price only holdings with a nonzero confirmed balance and pace
   requests.
-- Use an indexer price (Blockscout `exchange_rate` on `addresses/<addr>` for natives or on a token holding, a Blockscan
-  row price) only when CoinGecko omits the native asset, has no platform for the chain, or has no price for the
-  contract. Label that price with its source and apply Pricing Hygiene; Blockscout has priced tokens it lists with a
+- Use an indexer price (Blockscout `exchange_rate` on `addresses/<addr>` for natives or on a token holding, a DeBank or
+  Blockscan row price) only when CoinGecko omits the native asset, has no platform for the chain, or has no price for
+  the contract. Label that price with its source and apply Pricing Hygiene; Blockscout has priced tokens it lists with a
   zero market cap.
 - Record each price's source and the UTC observation time.
 
@@ -54,12 +55,15 @@ union of these discovery sources:
    `references/explorers/blockscout-api.md` for the per-instance exception), page
    `https://api.blockscout.com/<chainId>/api/v2/addresses/<addr>/tokens?type=ERC-20` until `next_page_params` is `null`.
    Keep each holding's `token.address_hash` and `decimals`, plus `exchange_rate` as a fallback price. An HTTP `402`
-   (plan-gated chain; see `references/explorers/blockscout-endpoints.md`) or other failure falls through to Blockscan;
-   do not retry a `402`.
-3. **Blockscan.** For target chains Blockscout does not cover, gates, or fails on, use the Chromium flow in
-   `references/workflows/blockscan-balances.md`: one `https://blockscan.com/address/<addr>` page per address covers all
-   its Blockscan chains. Match chains by exact `data-chainid`, take each row's token contract (and price as a fallback)
-   from `#js-chain-table`, and record `Last updated`.
+   (plan-gated chain; see `references/explorers/blockscout-endpoints.md`) or other failure falls through to DeBank; do
+   not retry a `402`.
+3. **DeBank.** For target chains Blockscout does not cover, gates, or fails on, use the Chromium flow in
+   `references/workflows/debank-portfolio.md`: one `https://debank.com/profile/<addr>` page per address covers all its
+   DeBank chains. Click `Show all` before extraction, map slugs to chain IDs through `chain/list` `network_id`, take
+   each row's token contract (and price as a fallback), and record `Data updated`.
+4. **Blockscan.** For remaining target chains DeBank lacks or fails on, use the Chromium flow in
+   `references/workflows/blockscan-balances.md`: match chains by exact `data-chainid`, take each row's token contract
+   (and price as a fallback) from `#js-chain-table`, and record `Last updated`.
 
 When no indexer lists a chain's tokens, report an ERC-20 discovery gap for that chain even if caller candidates were
 confirmed. Never assume zero tokens.
@@ -73,10 +77,10 @@ amount.
 ## Bulk Mode
 
 For many addresses, run API passes first: native batches across all target chains, Blockscout token lists, one
-`balanceOf` confirmation batch per chain, then CoinGecko contract prices for confirmed holdings. Open Blockscan only for
-addresses that still have gap chains, one page at a time with pacing. Keep request concurrency at or below each
-provider's limit (Blockscout `x-ratelimit-limit`; CoinGecko plan quota); back off on `429` as the provider references
-direct. Never run unbounded parallel requests.
+`balanceOf` confirmation batch per chain, then CoinGecko contract prices for confirmed holdings. Open DeBank, then
+Blockscan, only for addresses that still have gap chains, one page at a time with pacing. Keep request concurrency at or
+below each provider's limit (Blockscout `x-ratelimit-limit`; CoinGecko plan quota); back off on `429` as the provider
+references direct. Never run unbounded parallel requests.
 
 ## Pricing Hygiene
 
