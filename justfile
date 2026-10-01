@@ -3,6 +3,9 @@ set allow-duplicate-recipes
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set unstable
 
+# Rust CLIs and Bun apps from toolkit/ (run as `just toolkit::<recipe>`)
+mod toolkit
+
 # ---------------------------------------------------------------------------- #
 #                                  VARIABLES                                   #
 # ---------------------------------------------------------------------------- #

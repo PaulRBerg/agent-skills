@@ -178,6 +178,8 @@ activation_command_timeout: 180.0
 language_servers:
 - bash
 - python
+- rust
+- typescript
 
 # list of APIs (facades or facade methods, e.g. "lsp" or "lsp.get_diagnostics_for_symbol") to include in the REPL
 # that would otherwise be disabled (particularly optional methods, which are disabled by default).

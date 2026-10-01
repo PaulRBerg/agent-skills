@@ -2,3 +2,10 @@
 .cache/
 .claude/
 .serena/
+
+# toolkit build output, embedded runtime text, and parser fixtures
+toolkit/target/
+toolkit/apps/*/dist/
+toolkit/commit/src/rules/
+toolkit/apps/handoffs/src/server/fixtures/
+toolkit/skillet/tests/fixtures/
