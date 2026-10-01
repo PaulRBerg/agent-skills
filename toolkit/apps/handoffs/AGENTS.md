@@ -7,7 +7,8 @@ Local-only, read-only viewer for agent task handoffs.
 - Bind application servers only to `127.0.0.1`.
 - Reject requests whose Host is not a loopback name (`localhost`, `127.0.0.1`, `[::1]`) as a DNS-rebinding guard.
 - Never accept filesystem paths from HTTP clients.
-- Keep discovery depth-bounded to the locations encoded in `src/server/scanner.ts`; do not replace it with recursive home-directory traversal.
+- Keep discovery depth-bounded to the locations encoded in `src/server/scanner.ts`; do not replace it with recursive
+  home-directory traversal.
 - Treat missing roots and individual unreadable files as recoverable scan conditions.
 - Do not mutate, move, archive, or delete discovered handoff files.
 - Preserve the parser's legacy degradation behavior when evolving frontmatter.
