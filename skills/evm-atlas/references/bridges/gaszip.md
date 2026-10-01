@@ -29,7 +29,10 @@ Verify the contract on each other origin chain before treating a deposit as Gas.
 1. **Known origin deposit tx hash:** call `GET /v2/deposit/{hash}`. `deposit` carries origin chain, block, sender,
    recipient, `shorts`, `value`, and `status`; `txs[]` lists destination fills with `chain`, `hash`, `signer`, `value`,
    and `status`. An empty `{}` is indexing lag, not absence: observed for about six minutes after the origin receipt on
-   2026-10-01. Recheck later and verify the fill on the destination chain through provider routing.
+   2026-10-01. Recheck later and verify the fill on the destination chain through provider routing. A `txs[]` entry with
+   `refund: true`, `chain` equal to the origin, and an `errtime` is a refund to the sender on the origin chain, not a
+   destination fill; it can stay `SEEN` until Gas.zip has origin-chain liquidity. Verify it by the sender's origin
+   balance, not the signer nonce.
 2. **Known sender/recipient address:** call `GET /v2/user/{address}`. An empty `user` array has the same lag caveat.
 3. **Quote:** call `GET /v2/quotes/{originChainId}/{amountWei}/{destinationChainIds}?from=<address>&to=<address>`.
    `quotes[].expected` is destination wei; `expires` is a Unix timestamp. The output is an estimate, not a fill
