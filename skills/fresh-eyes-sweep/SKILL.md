@@ -112,19 +112,22 @@ next session.
 
 ## Subagents
 
+- Delegate independent slices when it materially improves coverage or completion time; use the smallest effective team
+  within host limits and the user's delegation preferences.
 - When the host supports model selection, choose reviewer and fixer models deliberately for the task; otherwise use the
   host default.
 - Announce the planned fan-out in one line before launching: agent count and the model of each group.
-- Cap concurrent reviewers at 4 unless the user raises it.
+- Cap concurrent reviewers at 4 unless the user raises it, always within the host's available concurrency.
 - Record each spawned task ID in the coordinator's slice plan so a later stop request resolves against real IDs. The
   ledger's `reason` records exclusions only.
 - Give writing agents stable IDs, dependency waves, exact non-overlapping write scopes, repository constraints, and
   required completion evidence. In every slice brief, completion evidence must include every discovered strict static
   gate — typecheck, lint, and format/import order — applicable to the languages in the slice's write scope, scoped as
-  narrowly as the tool permits. A gate that only runs repository-wide either runs once at slice settlement when cheap or
-  is explicitly deferred to aggregate validation in the agent's result. Assign shared manifests, lockfiles, exports, and
-  integration files to one sequential owner.
-- Reconcile every wave before starting dependents. Use a fresh-context verifier after each nontrivial wave.
+  narrowly as the tool permits. Assign each repository-wide gate to one validation owner after its affected slices
+  settle; other agents report that dependency instead of duplicating the run. Assign shared manifests, lockfiles,
+  exports, and integration files to one sequential owner.
+- Reconcile every wave before starting dependents. Use a fresh-context verifier when independent scrutiny addresses a
+  concrete risk, such as concurrency, security, or a cross-slice invariant; a routine edit alone does not require one.
 - Subagents and workers never commit. The coordinating session commits settled slices serially as checkpoint commits, so
   only one process touches the Git index.
 - A session holds one coordination claim, and each new claim replaces the last. When the repository uses a claim-based
@@ -161,8 +164,9 @@ and deduplication; idempotency and repeat-run behavior; atomicity and interrupti
 completeness; bounded concurrency, cancellation, and resource cleanup; and secret, log, path, temporary-file, and
 command safety.
 
-Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available; write
-a missing test or fix an in-scope residual risk whenever the fix can be verified, rather than reporting it. Mark
+Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available. Add a
+regression test when it protects a meaningful failure mode absent from existing coverage; do not add tests that merely
+mirror reversible prose or configuration edits. Fix verifiable in-scope residual risks rather than reporting them. Mark
 `reported` only for real decisions: intent is ambiguous, a safe fix would change a public contract for consumers outside
 the repository, or no verification is available. Give every `reported` finding a recommended fix and its blast radius.
 Do not add speculative features, broad refactors, or cosmetic churn.

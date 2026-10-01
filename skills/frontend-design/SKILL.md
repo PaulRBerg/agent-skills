@@ -95,9 +95,11 @@ default the result fell back on and revise it.
 
 ### 5. Render, inspect, and revise
 
-Run the repository's narrowest relevant formatter, lint, type, test, and build checks. Then do rendered verification
-with the chromium-browser skill when it is available in this session; otherwise use the host's DevTools/browser tool. Do
-not fall back to Computer Use or ad-hoc Playwright scripts while a DevTools browser tool is available.
+Run repository-required checks and the narrowest additional checks that prove the changed behavior; select among
+formatting, lint, typecheck, tests, and build according to the affected surface. Reuse passing evidence until edits or
+unresolved concerns invalidate it. Then do rendered verification with the chromium-browser skill when it is available in
+this session; otherwise use the host's DevTools/browser tool. Do not fall back to Computer Use or ad-hoc Playwright
+scripts while a DevTools browser tool is available.
 
 Scale the inspection matrix to the change. Repository instructions may reduce the viewport/state matrix, including
 waiving multi-viewport checks; follow them. Absent such instructions, a small edit to existing UI needs verification

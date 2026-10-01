@@ -43,9 +43,10 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
 
 2. If `--dry-run` was requested, present the plan and counts, then stop without changing manifests or lockfiles.
 
-3. Select every ranged minor/patch update marked `apply`. Never auto-approve a major package by name. Present all
-   `review-major` and unknown updates in one decision batch with current version, target version, package role when
-   discoverable, and relevant migration/release notes. Apply only the majors the user selects.
+3. Select every ranged minor/patch update marked `apply`. Reuse explicit approval of package/version transitions; never
+   auto-approve a major merely from its package name. Present unresolved `review-major` and unknown updates in one
+   decision batch with current version, target version, package role, and relevant migration/release notes. Apply only
+   authorized majors.
 
 4. If nothing is selected, report the no-op and stop. If the root manifest uses Bun catalogs, preview the exact selected
    catalog transitions from the accepted plan. Pass only selected packages present in a catalog; skip the helper when
@@ -59,14 +60,15 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
    The preview is read-only. Missing catalog entries, conflicting plan rows, unsupported versions, or a catalog value
    that no longer matches the plan fail before writes. The helper does not select upgrades.
 
-5. Before the first manifest or lockfile write, discover and run the repository's standard validation suite against the
-   existing dependency state. Prefer its advertised aggregate check; otherwise run every exposed dependency-resolution,
-   build, test, typecheck, lint, formatting-check, codegen-check, and repository-invariant command. Use frozen or
-   non-writing modes where available, and record the exact commands for the post-bump rerun. Attribute every failure
-   before deciding whether it blocks. Proceed when an unrelated pre-existing failure is reproducible, can be compared
-   after the bump, and does not prevent dependency resolution or the checks needed to detect regressions; do not fix it
-   as part of the bump. Dependency or peer-resolution conflicts, actionable unsafe behavior, or a baseline that cannot
-   provide trustworthy before/after signal block the bump. In that case, stop with
+5. Before the first manifest or lockfile write, select and run a baseline that can detect regressions from the chosen
+   updates. Honor repository-required checks; otherwise select dependency-resolution, build, test, typecheck, lint,
+   formatting, codegen, or invariant checks from the updated packages' actual consumers and risk. Use an aggregate suite
+   for shared toolchain or runtime changes, not merely because it exists. Use frozen or non-writing modes where
+   available, and record the exact commands and coverage for the post-bump rerun. Attribute every failure before
+   deciding whether it blocks. Proceed when an unrelated pre-existing failure is reproducible, can be compared after the
+   bump, and does not prevent dependency resolution or the checks needed to detect regressions; do not fix it as part of
+   the bump. Dependency or peer-resolution conflicts, actionable unsafe behavior, or a baseline that cannot provide
+   trustworthy before/after signal block the bump. In that case, stop with
    `### ⛔ Dependency bump blocked — baseline unusable` and report the exact prerequisite and diagnostics without asking
    for redundant authorization. Informational notices such as unavoidable deprecations do not block.
 
@@ -90,12 +92,14 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
 
 9. Fix every issue caused by the bump, including required source or configuration migrations, while preserving intended
    behavior. Do not suppress diagnostics, weaken validation, or change expected behavior merely to make checks pass.
-   After each fix, rerun the affected check, then rerun the complete recorded suite and require no new failures against
-   the accepted baseline. Only unrelated pre-existing failures meeting step 5's comparison requirements may remain. If
-   no clear safe fix exists within the task's authority, stop with `### ⚠️ Dependency regression decision required`.
-   Present all such issues in one table with the evidence, affected locations, fix and revert options, and likely
-   effects. Do not report completion until the user chooses, the fix is applied or the offending update is reverted, the
-   lockfile is regenerated, and the complete suite meets that same baseline-comparison requirement.
+   After each fix, rerun checks whose inputs or behavior changed. At completion, require valid results for the entire
+   recorded suite against the final state, with no new failures against the accepted baseline; reuse passing results
+   whose inputs remain unchanged. Only unrelated pre-existing failures meeting step 5's comparison requirements may
+   remain. If no clear safe fix exists within the task's authority, stop with
+   `### ⚠️ Dependency regression decision required`. Present all such issues in one table with the evidence, affected
+   locations, fix and revert options, and likely effects. Do not report completion until the user chooses, the fix is
+   applied or the offending update is reverted, the lockfile is regenerated, and the complete suite meets that same
+   baseline-comparison requirement.
 
 ## User-Facing Output
 

@@ -37,8 +37,9 @@ Packages found in only one repository follow that repository's plan exactly as i
 ## 4. Review Majors Once
 
 Present every shared target that crosses a major version in any repository, plus every `review` or unknown row, in one
-cross-repository decision batch: package, per-repository current → target, package role, and migration notes. Never
-auto-approve a major. A declined major leaves that package unchanged everywhere.
+cross-repository decision batch: package, per-repository current → target, package role, and migration notes. Reuse
+explicit approval of those transitions and ask only about unresolved rows; never infer major approval from a package
+name. A declined major leaves that package unchanged everywhere.
 
 ## 5. Apply Per Repository
 

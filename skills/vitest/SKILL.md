@@ -23,7 +23,11 @@ Read [patterns](references/testing-patterns.md) for component, async, fixture, s
 [configuration](references/configuration.md) for projects, migration, coverage, or reporter selection; and
 [troubleshooting](references/troubleshooting.md) for hangs, discovery, resolution, or flaky state.
 
-Run the narrowest established command for the changed behavior, then the affected package suite only when shared setup
-or contracts changed. Use `nlx vitest run` only when no project recipe or script exists. Completion requires a
-meaningful passing focused test under repository configuration and concise command/result evidence. Use
-`### 🧪 Regression covered` when red-before-green evidence exists; otherwise `### 🧪 Tests verified`.
+For test changes, run the narrowest established command for the changed behavior, then the affected package suite only
+when shared setup or contracts changed. Use `nlx vitest run` only when no project recipe or script exists. Reuse passing
+results until new edits, failures, or unresolved concerns justify another run.
+
+Completion requires a meaningful passing focused test under repository configuration and concise command/result evidence
+for test changes. A read-only explanation instead requires supporting configuration or API evidence; do not add or run
+tests merely to satisfy the change workflow. Use `### 🧪 Regression covered` when red-before-green evidence exists;
+otherwise `### 🧪 Tests verified` for executed tests.

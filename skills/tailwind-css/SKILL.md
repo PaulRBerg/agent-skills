@@ -27,10 +27,11 @@ do not redesign beyond the request.
 
 Define the intended visual and state change, reuse local conventions, and keep classes statically discoverable. If
 source registration or generated mappings change, run the real Tailwind build and confirm the expected utilities. Run
-relevant repository checks, then inspect the changed UI at representative viewports, themes, and interaction states.
-When markup is transformed by JavaScript or a component library, inspect the final DOM too. Textual class review alone
-is insufficient.
+required repository checks and inspect the changed states at one representative viewport for a small style edit. Broaden
+to narrow/wide viewports, themes, and interactions when responsive rules or shared styling changed. When markup is
+transformed by JavaScript or a component library, inspect the final DOM too. Textual class review alone is insufficient.
+Repeat checks only when subsequent edits affect their evidence.
 
-Finish with `### 🎨 Tailwind — ✅ styling updated` (or `### 🎨 Tailwind — 🔎 inspected, no files written`), a compact
-viewport/theme/state/result table, and separate code-check and rendered-inspection evidence. Add `### ⚠️ Remaining` only
-when needed; keep source UI copy and diagnostics undecorated.
+Finish with `### 🎨 Tailwind — ✅ styling updated` (or `### 🎨 Tailwind — 🔎 inspected, no files written`) and
+code-check and rendered-inspection evidence. Use prose for one inspected state and a compact table for several. Add
+`### ⚠️ Remaining` only when needed; keep source UI copy and diagnostics undecorated.
