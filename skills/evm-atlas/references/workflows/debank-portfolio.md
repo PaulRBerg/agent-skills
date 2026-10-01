@@ -88,11 +88,12 @@ how it arrived:
 - **Unsigned call.** A direct `fetch`, `curl`, or WebFetch of `api.debank.com` balance endpoints always gets `429`, so
   retrying it never works. Switch to the collector; never present the `429` as DeBank being down.
 - **Burst.** `rateLimited > 0` while records still finish `ok` is the collector absorbing short bursts; no action.
-- **Block.** `status().blocked` is `true`, or `start` throws `chain/list failed: HTTP 429`. DeBank is rejecting this
-  client. Do not reload, re-paste, open more pages, or restart in a loop: each request prolongs it. Close any second
-  page, wait at least two minutes, then run one retry on a single page with only the `failed` addresses and
-  `{ cooldownMs: 60000 }`. If that run is also `blocked` or `start` still throws, stop using DeBank for this task and
-  take the remaining addresses through Fallbacks.
+- **Block.** `status().blocked` is `true`, or `start` throws `chain/list failed: HTTP 429`. DeBank is rejecting the
+  whole browser, so one agent's bulk run also blocks every other agent's DeBank reads. Bulk runs were blocked after
+  every 30-55 profiles, for 5-13 minutes each time. Do not reload, re-paste, open more pages, or restart in a loop: each
+  request prolongs it. For a single-address check, go to Fallbacks now instead of waiting. For a bulk run, close any
+  second page and retry only the `failed` addresses once on a single page after at least 15 minutes; if that run is also
+  `blocked`, take the remaining addresses through Fallbacks.
 
 Confirm a block in Chromium before reporting it: the `status()` output, the record `error` strings, or the `429`
 responses in `list_network_requests`. Report it as `DeBank WAF rate-limit block ("Request too fast")` with the
