@@ -63,6 +63,13 @@ are not sender debits. Take the required tip from `eth_maxPriorityFeePerGas` (ob
 a third-party empty-calldata legacy transfer reconciled to `value + 21000 * gasPrice` across its block, and an
 exact-zero sweep at `21000` gas left a `0` balance.
 
+BNB Chain (`56`) is eligible as an ordinary Alt L1 target. Blocks carry `baseFeePerGas = 0`, and legacy transactions are
+debited exactly `gasUsed * gasPrice` with no refund or extra debit; receipts report `effectiveGasPrice` equal to the
+signed `gasPrice`, and an empty-calldata EOA transfer estimates and uses `21000` gas. `eth_gasPrice` and
+`eth_maxPriorityFeePerGas` both returned `0.05` gwei. Verified 2026-10-01: four third-party empty-calldata legacy
+transfers, each its sender's only transaction in the block, reconciled to `value + 21000 * gasPrice` across that block,
+and an exact-zero sweep at `21000` gas left a `0` balance.
+
 Filecoin FEVM is an Alt L1 exception. FVM fee translation and overestimation require bespoke evidence; do not generalize
 Ethereum-style L1 fee behavior to it. A fresh EOA recipient does not alter the standard top-level transfer gas cost: the
 `25000` new-account `CALL` cost concerns the contract opcode, not a top-level transfer. Still exclude precompiles and
