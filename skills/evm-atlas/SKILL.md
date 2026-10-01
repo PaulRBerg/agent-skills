@@ -10,9 +10,9 @@ description:
   "Use for targeted EVM chain, account, transaction, RPC, explorer, bridge, and DEX evidence: chain name/ID, native
   symbol, RouteMesh, wallet balances and DeFi positions via DeBank/Blockscan in Chromium, cross-chain USD portfolio
   value or net worth, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout;
-  Across, Bungee, deBridge, Hop, Layerswap, LayerZero, LI.FI, Relay, Socket, Symbiosis; Uniswap v1-v4, Universal Router,
-  Permit2, 1inch Classic/Fusion/Fusion+, and CoW Swap, CoWSwap, CoW Protocol, or GPv2 swaps, orders, liquidity,
-  approvals, permits, rewards, migrations, wrapping, cancellations, and refunds."
+  Across, Bungee, deBridge, Gas.zip, Hop, Layerswap, LayerZero, LI.FI, Relay, Socket, Symbiosis; Uniswap v1-v4,
+  Universal Router, Permit2, 1inch Classic/Fusion/Fusion+, and CoW Swap, CoWSwap, CoW Protocol, or GPv2 swaps, orders,
+  liquidity, approvals, permits, rewards, migrations, wrapping, cancellations, and refunds."
 ---
 
 # EVM Atlas
@@ -94,6 +94,7 @@ the target. Do not infer a historical category or maintain a prose roster of tar
     - Bungee / Socket: `references/bridges/bungee.md`
     - Circle / CCTP / Gateway: `references/bridges/circle.md`
     - deBridge / DLN: `references/bridges/debridge.md`
+    - Gas.zip: `references/bridges/gaszip.md`
     - Hop: `references/bridges/hop.md`
     - Layerswap: `references/bridges/layerswap.md`
     - LayerZero / Stargate / OFT / Aori: `references/bridges/layerzero.md`
