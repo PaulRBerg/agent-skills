@@ -56,6 +56,13 @@ which `eth_call` and the node accept, instead of the estimate. Verified 2026-09-
 exactly `10000` gas, and sender balance deltas reconciled to `value + gasUsed * gasPrice`; an exact-zero sweep at that
 limit left a `0` balance.
 
+Polygon PoS (`137`) is eligible as an ordinary Alt L1 target. Legacy transactions are debited exactly
+`gasUsed * gasPrice` with no refund or extra debit; receipts report `effectiveGasPrice` equal to the signed `gasPrice`,
+and an empty-calldata EOA transfer estimates and uses `21000` gas. Plain transfer receipts carry Bor system logs, which
+are not sender debits. Take the required tip from `eth_maxPriorityFeePerGas` (observed 25-30 gwei). Verified 2026-10-01:
+a third-party empty-calldata legacy transfer reconciled to `value + 21000 * gasPrice` across its block, and an
+exact-zero sweep at `21000` gas left a `0` balance.
+
 Filecoin FEVM is an Alt L1 exception. FVM fee translation and overestimation require bespoke evidence; do not generalize
 Ethereum-style L1 fee behavior to it. A fresh EOA recipient does not alter the standard top-level transfer gas cost: the
 `25000` new-account `CALL` cost concerns the contract opcode, not a top-level transfer. Still exclude precompiles and
