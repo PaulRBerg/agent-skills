@@ -12,7 +12,7 @@ or dust cutoff) and any token allow/deny policy; this workflow only returns valu
   may narrow token lookups to a chain subset; report unchecked chains as out of the requested token scope, not as zero.
 - For `cross-vm` rows, scope values to the chain's EVM execution environment.
 - Before keyed API calls, check presence value-free: `[ -n "$BLOCKSCOUT_API_KEY" ] && echo set || echo unset`. Without
-  the key, the Blockscout token route is a coverage gap for every chain that needs it.
+  the key, skip the Blockscout discovery route and fall through to Blockscan.
 
 ## Native Balances
 
@@ -32,41 +32,51 @@ or dust cutoff) and any token allow/deny policy; this workflow only returns valu
 - Price natives with one `cg price --ids <id,...> -o json` call covering every distinct native asset (ETH-native chains
   share one ID). Resolve unknown CoinGecko IDs once with `cg search <symbol-or-name> -o json`; never treat a symbol as
   unique.
-- When `cg` is unavailable or omits an asset, use Blockscout `addresses/<addr>` `exchange_rate` for that chain's native
-  asset on Blockscout-covered chains. Otherwise list the native as unpriced.
+- Price each confirmed token holding by contract from CoinGecko. Resolve each chain's platform once from
+  `https://api.coingecko.com/api/v3/asset_platforms`, matching `chain_identifier` to the chain ID, then request
+  `https://api.coingecko.com/api/v3/simple/token_price/<platform>?contract_addresses=<contract>&vs_currencies=usd`. The
+  keyless endpoint accepts one contract per request, so price only holdings with a nonzero confirmed balance and pace
+  requests.
+- Use an indexer price (Blockscout `exchange_rate` on `addresses/<addr>` for natives or on a token holding, a Blockscan
+  row price) only when CoinGecko omits the native asset, has no platform for the chain, or has no price for the
+  contract. Label that price with its source and apply Pricing Hygiene; Blockscout has priced tokens it lists with a
+  zero market cap.
 - Record each price's source and the UTC observation time.
 
 ## Fungible Tokens
 
-Indexed holdings can be stale (a Blockscout list has shown a USDT balance whose on-chain `balanceOf` was zero), so use
-Blockscout and Blockscan only to discover token contracts and prices. Pick one discovery route per chain and address, in
-this order:
+Indexed holdings can be stale (a Blockscout list has shown a USDT balance whose on-chain `balanceOf` was zero), so
+indexers only discover token contracts: amounts come from RPC and prices from CoinGecko. Per chain and address, take the
+union of these discovery sources:
 
-1. **Blockscout.** For targets the keyed gateway serves (see `references/generated/blockscout-chains.md` and
+1. **Caller candidates.** Always include contracts the caller supplies, such as tokens from its own transfer history.
+2. **Blockscout.** For targets the keyed gateway serves (see `references/generated/blockscout-chains.md` and
    `references/explorers/blockscout-api.md` for the per-instance exception), page
    `https://api.blockscout.com/<chainId>/api/v2/addresses/<addr>/tokens?type=ERC-20` until `next_page_params` is `null`.
-   Keep each holding's `token.address_hash`, `decimals`, and `exchange_rate`. An HTTP `402` (plan-gated chain; see
-   `references/explorers/blockscout-endpoints.md`) is a coverage gap for this route: do not retry it; fall through to
-   Blockscan.
-2. **Blockscan.** For target chains Blockscout does not cover, use the Chromium flow in
+   Keep each holding's `token.address_hash` and `decimals`, plus `exchange_rate` as a fallback price. An HTTP `402`
+   (plan-gated chain; see `references/explorers/blockscout-endpoints.md`) or other failure falls through to Blockscan;
+   do not retry a `402`.
+3. **Blockscan.** For target chains Blockscout does not cover, gates, or fails on, use the Chromium flow in
    `references/workflows/blockscan-balances.md`: one `https://blockscan.com/address/<addr>` page per address covers all
-   its Blockscan chains. Match chains by exact `data-chainid`, take each row's token contract and price from
-   `#js-chain-table`, and record `Last updated`.
-3. **Gap.** If neither route covers the chain, or the route fails, report an ERC-20 coverage gap for that chain. Never
-   assume zero tokens.
+   its Blockscan chains. Match chains by exact `data-chainid`, take each row's token contract (and price as a fallback)
+   from `#js-chain-table`, and record `Last updated`.
 
-Confirm every discovered holding the result counts on-chain: per chain, batch `eth_call` `balanceOf(<addr>)` (selector
-`0x70a08231`) for each token at the pinned block hash, through the same route as that chain's native reads. Add
-`decimals()` (`0x313ce567`) when discovery did not supply it. Use the RPC amount: USD value =
-`balanceOf / 10^decimals × price`. An RPC zero drops the holding; a failed or malformed confirmation is a coverage gap
-for that token, never the indexed amount.
+When no indexer lists a chain's tokens, report an ERC-20 discovery gap for that chain even if caller candidates were
+confirmed. Never assume zero tokens.
+
+Confirm every discovered holding on-chain: per chain, batch `eth_call` `balanceOf(<addr>)` (selector `0x70a08231`) for
+each token at the pinned block hash, through the same route as that chain's native reads. Add `decimals()`
+(`0x313ce567`) when discovery did not supply it. Use the RPC amount: USD value = `balanceOf / 10^decimals × price`. An
+RPC zero drops the holding; a failed or malformed confirmation is a coverage gap for that token, never the indexed
+amount.
 
 ## Bulk Mode
 
-For many addresses, run API passes first: native batches across all target chains, then Blockscout token lists, then one
-`balanceOf` confirmation batch per chain. Open Blockscan only for addresses that still have gap chains, one page at a
-time with pacing. Keep request concurrency at or below each provider's limit (Blockscout `x-ratelimit-limit`; CoinGecko
-plan quota); back off on `429` as the provider references direct. Never run unbounded parallel requests.
+For many addresses, run API passes first: native batches across all target chains, Blockscout token lists, one
+`balanceOf` confirmation batch per chain, then CoinGecko contract prices for confirmed holdings. Open Blockscan only for
+addresses that still have gap chains, one page at a time with pacing. Keep request concurrency at or below each
+provider's limit (Blockscout `x-ratelimit-limit`; CoinGecko plan quota); back off on `429` as the provider references
+direct. Never run unbounded parallel requests.
 
 ## Pricing Hygiene
 

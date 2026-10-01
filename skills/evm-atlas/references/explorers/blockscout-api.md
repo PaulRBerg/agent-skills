@@ -150,7 +150,8 @@ curl -s -H "authorization: Bearer $BLOCKSCOUT_API_KEY" \
 }
 ```
 
-`coin_balance` is the native balance in wei. See [Unit Conversion](#unit-conversion).
+`coin_balance` is the indexed native balance in wei and can lag chain state; use RPC `eth_getBalance` when the amount
+decides anything. See [Unit Conversion](#unit-conversion).
 
 ### Token Holdings
 
@@ -184,7 +185,9 @@ Each entry embeds full token metadata and balance:
 ]
 ```
 
-For ERC-721/1155, `token_id` and `token_instance` are populated. Divide `value` by `10^decimals` per token.
+For ERC-721/1155, `token_id` and `token_instance` are populated. Divide `value` by `10^decimals` per token. Indexed
+`value` can be stale (a listed USDT balance has read zero on-chain); treat these endpoints as token discovery and
+confirm amounts with RPC `balanceOf`.
 
 ### Transaction History
 
