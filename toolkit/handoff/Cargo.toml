@@ -1,0 +1,20 @@
+[package]
+authors.workspace = true
+description = "Create and archive agent task handoffs"
+edition.workspace = true
+license.workspace = true
+name = "ai-handoff"
+readme = "AGENTS.md"
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap.workspace = true
+rustix = { version = "1", features = ["fs"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+tempfile.workspace = true

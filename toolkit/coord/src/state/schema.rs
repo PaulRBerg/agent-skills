@@ -1,0 +1,356 @@
+use std::path::Path;
+
+use rusqlite::{Connection, TransactionBehavior};
+
+use crate::error::{AppError, Result};
+
+pub(crate) const SCHEMA_VERSION: i64 = 19;
+
+const STATEMENTS: &[&str] = &[
+    "CREATE TABLE sessions (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        cwd TEXT NOT NULL,
+        repo_root TEXT,
+        state TEXT NOT NULL,
+        callsign TEXT,
+        callsign_key TEXT UNIQUE,
+        name TEXT,
+        waiting_for TEXT,
+        permission_mode TEXT,
+        coordination_waived INTEGER NOT NULL DEFAULT 0 CHECK (coordination_waived IN (0, 1)),
+        pid INTEGER,
+        process_start_token TEXT,
+        transcript_path TEXT,
+        source TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        last_seen REAL NOT NULL,
+        revision INTEGER NOT NULL,
+        PRIMARY KEY (client, session_id),
+        CHECK (process_start_token IS NULL OR pid IS NOT NULL)
+    )",
+    "CREATE TABLE work_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('queued', 'active')),
+        blocked_reason TEXT,
+        submitted_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        UNIQUE (client, session_id),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE,
+        CHECK (
+            (state = 'queued' AND blocked_reason IS NOT NULL)
+            OR (state = 'active' AND blocked_reason IS NULL)
+        )
+    )",
+    "CREATE TABLE drafts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NULL,
+        owner_client TEXT NULL,
+        owner_session_id TEXT NULL,
+        label TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        CHECK (name IS NOT NULL OR (owner_client IS NOT NULL AND owner_session_id IS NOT NULL)),
+        CHECK (name IS NULL OR (owner_client IS NULL AND owner_session_id IS NULL)),
+        UNIQUE(name),
+        UNIQUE(owner_client, owner_session_id),
+        FOREIGN KEY (owner_client, owner_session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE TABLE draft_claims (
+        id INTEGER PRIMARY KEY,
+        draft_id REFERENCES drafts(id) ON DELETE CASCADE,
+        repo_root TEXT NOT NULL,
+        UNIQUE(draft_id, repo_root)
+    )",
+    "CREATE TABLE draft_scopes (
+        claim_id REFERENCES draft_claims(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        kind TEXT CHECK (kind IN ('exact','recursive')),
+        PRIMARY KEY(claim_id, path)
+    )",
+    "CREATE TABLE work_claims (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_id INTEGER NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+        repo_root TEXT NOT NULL CHECK (repo_root != ''),
+        blocked_reason TEXT,
+        UNIQUE (work_id, repo_root)
+    )",
+    "CREATE INDEX work_claims_repo_idx ON work_claims(repo_root, work_id)",
+    "CREATE TABLE work_scopes (
+        claim_id INTEGER NOT NULL REFERENCES work_claims(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('exact', 'recursive')),
+        PRIMARY KEY (claim_id, path)
+    )",
+    "CREATE TABLE work_baselines (
+        claim_id INTEGER NOT NULL REFERENCES work_claims(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        oid TEXT NOT NULL,
+        PRIMARY KEY (claim_id, path)
+    )",
+    "CREATE TABLE touched_paths (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        repo_root TEXT NOT NULL,
+        path TEXT NOT NULL,
+        touched_at REAL NOT NULL,
+        PRIMARY KEY (client, session_id, repo_root, path),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE INDEX touched_paths_session_idx
+        ON touched_paths(client, session_id, repo_root, touched_at, path)",
+    "CREATE TABLE touched_sets (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        repo_root TEXT NOT NULL,
+        truncated INTEGER NOT NULL DEFAULT 0 CHECK (truncated IN (0, 1)),
+        scopes_clean INTEGER NOT NULL DEFAULT 0 CHECK (scopes_clean IN (0, 1)),
+        PRIMARY KEY (client, session_id, repo_root),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE TABLE dirt_observations (
+        repo_root TEXT NOT NULL,
+        path TEXT NOT NULL,
+        blob_hash TEXT NOT NULL,
+        first_seen REAL NOT NULL,
+        last_seen REAL NOT NULL,
+        PRIMARY KEY (repo_root, path)
+    )",
+    "CREATE TABLE residual_owners (
+        repo_root TEXT NOT NULL,
+        path TEXT NOT NULL,
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        released_at REAL NOT NULL,
+        PRIMARY KEY (repo_root, path),
+        FOREIGN KEY (repo_root, path)
+            REFERENCES dirt_observations(repo_root, path) ON DELETE CASCADE
+    )",
+    "CREATE TABLE messages (
+        id TEXT PRIMARY KEY,
+        sender_client TEXT NOT NULL,
+        sender_session_id TEXT NOT NULL,
+        sender_callsign TEXT,
+        recipient_client TEXT NOT NULL,
+        recipient_session_id TEXT NOT NULL,
+        recipient_callsign TEXT,
+        repo_root TEXT,
+        text TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        acknowledged_at REAL,
+        notified_at REAL
+    )",
+    "CREATE INDEX messages_recipient_idx
+        ON messages(recipient_client, recipient_session_id, created_at)",
+    "CREATE TABLE recommendations (
+        id TEXT PRIMARY KEY,
+        repo_root TEXT NOT NULL,
+        sender_client TEXT NOT NULL,
+        sender_session_id TEXT NOT NULL,
+        recipient_client TEXT NOT NULL,
+        recipient_session_id TEXT NOT NULL,
+        sender_snapshot TEXT NOT NULL,
+        recipient_snapshot TEXT NOT NULL,
+        sender_fingerprint TEXT NOT NULL,
+        recipient_fingerprint TEXT NOT NULL,
+        scopes TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('defer', 'omit')),
+        reason TEXT NOT NULL,
+        replacement TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'accepted', 'rejected', 'withdrawn', 'stale')),
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        decision TEXT CHECK (decision IN ('accepted', 'rejected')),
+        decision_reason TEXT,
+        decision_at REAL,
+        invalidation_reason TEXT,
+        surfaced_at REAL,
+        CHECK (sender_client != recipient_client OR sender_session_id != recipient_session_id),
+        CHECK ((decision IS NULL AND decision_reason IS NULL AND decision_at IS NULL)
+            OR (decision IS NOT NULL AND decision_reason IS NOT NULL AND decision_at IS NOT NULL)),
+        CHECK (state != 'pending' OR decision IS NULL),
+        CHECK (state != 'accepted' OR decision IS 'accepted'),
+        CHECK (state != 'rejected' OR decision IS 'rejected'),
+        CHECK ((state IN ('withdrawn', 'stale')) = (invalidation_reason IS NOT NULL))
+    )",
+    "CREATE INDEX recommendations_sender_idx
+        ON recommendations(sender_client, sender_session_id, state, created_at)",
+    "CREATE INDEX recommendations_recipient_idx
+        ON recommendations(recipient_client, recipient_session_id, state, created_at)",
+    "CREATE TABLE current_turns (
+        client TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        PRIMARY KEY (client, session_id),
+        FOREIGN KEY (client, session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE TABLE findings (
+        id TEXT PRIMARY KEY,
+        repo_root TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        kind TEXT CHECK (kind IS NULL OR kind IN ('bug', 'docs', 'improvement')),
+        state TEXT NOT NULL CHECK (state IN (
+            'pending', 'handed-off', 'fixed', 'stale', 'rejected', 'duplicate'
+        )),
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        terminal_at REAL,
+        handoff_path TEXT,
+        commit_oid TEXT,
+        canonical_id TEXT REFERENCES findings(id),
+        CHECK (
+            (state IN ('pending', 'handed-off') AND terminal_at IS NULL)
+            OR (state IN ('fixed', 'stale', 'rejected', 'duplicate') AND terminal_at IS NOT NULL)
+        ),
+        CHECK (state != 'handed-off' OR handoff_path IS NOT NULL),
+        CHECK ((state = 'duplicate') = (canonical_id IS NOT NULL)),
+        CHECK (canonical_id IS NULL OR canonical_id != id)
+    )",
+    "CREATE INDEX findings_repo_state_idx
+        ON findings(repo_root, state, updated_at DESC, id)",
+    "CREATE INDEX findings_dedup_idx
+        ON findings(repo_root, summary, state)",
+    "CREATE TABLE finding_paths (
+        finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        PRIMARY KEY (finding_id, path)
+    )",
+    "CREATE INDEX finding_paths_path_idx ON finding_paths(path, finding_id)",
+    "CREATE TABLE finding_sightings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        author_client TEXT NOT NULL CHECK (author_client IN ('codex', 'claude')),
+        author_session_id TEXT NOT NULL,
+        turn_id TEXT,
+        head_oid TEXT,
+        created_at REAL NOT NULL,
+        surfaced_at REAL
+    )",
+    "CREATE INDEX finding_sightings_finding_idx
+        ON finding_sightings(finding_id, created_at, id)",
+    "CREATE INDEX finding_sightings_turn_idx
+        ON finding_sightings(author_client, author_session_id, turn_id, surfaced_at)",
+    "CREATE TABLE finding_observations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sighting_id INTEGER NOT NULL REFERENCES finding_sightings(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        content_sha256 TEXT,
+        UNIQUE (sighting_id, path)
+    )",
+    "CREATE TABLE finding_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        event TEXT NOT NULL CHECK (event IN ('created', 'handed-off', 'resolved', 'reopened')),
+        from_state TEXT CHECK (from_state IS NULL OR from_state IN (
+            'pending', 'handed-off', 'fixed', 'stale', 'rejected', 'duplicate'
+        )),
+        to_state TEXT NOT NULL CHECK (to_state IN (
+            'pending', 'handed-off', 'fixed', 'stale', 'rejected', 'duplicate'
+        )),
+        actor_client TEXT NOT NULL CHECK (actor_client IN ('codex', 'claude')),
+        actor_session_id TEXT NOT NULL,
+        handoff_path TEXT,
+        commit_oid TEXT,
+        canonical_id TEXT,
+        created_at REAL NOT NULL
+    )",
+    "CREATE INDEX finding_events_finding_idx
+        ON finding_events(finding_id, created_at, id)",
+    "CREATE TABLE triage_runs (
+        id TEXT PRIMARY KEY,
+        repo_root TEXT NOT NULL,
+        origin TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        finished_at REAL,
+        outcome TEXT
+    )",
+    "CREATE INDEX triage_runs_repo_idx ON triage_runs(repo_root, started_at DESC)",
+    "CREATE TABLE finding_claims (
+        finding_id TEXT PRIMARY KEY REFERENCES findings(id) ON DELETE CASCADE,
+        triage_run_id TEXT NOT NULL REFERENCES triage_runs(id) ON DELETE CASCADE,
+        claimed_at REAL NOT NULL,
+        lease_expires_at REAL NOT NULL,
+        CHECK (lease_expires_at > claimed_at)
+    )",
+    "CREATE INDEX finding_claims_lease_idx ON finding_claims(lease_expires_at)",
+    "CREATE TABLE delegates (
+        parent_client TEXT NOT NULL,
+        parent_session_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        agent_type TEXT,
+        state TEXT NOT NULL,
+        last_seen REAL NOT NULL,
+        PRIMARY KEY (parent_client, parent_session_id, agent_id),
+        FOREIGN KEY (parent_client, parent_session_id)
+            REFERENCES sessions(client, session_id) ON DELETE CASCADE
+    )",
+    "CREATE TABLE hook_health (
+        client TEXT NOT NULL,
+        event TEXT NOT NULL,
+        last_error_code TEXT,
+        last_error_at REAL,
+        last_success_at REAL,
+        PRIMARY KEY (client, event)
+    )",
+    "CREATE TABLE provider_cache (
+        context_key TEXT NOT NULL,
+        client TEXT NOT NULL CHECK (client IN ('codex', 'claude')),
+        refreshed_at REAL NOT NULL,
+        ok INTEGER NOT NULL CHECK (ok IN (0, 1)),
+        source TEXT NOT NULL,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        dropped INTEGER NOT NULL CHECK (dropped >= 0),
+        PRIMARY KEY (context_key, client)
+    )",
+    "CREATE TABLE metadata (
+        key TEXT PRIMARY KEY,
+        value INTEGER NOT NULL
+    )",
+    "INSERT INTO metadata(key, value) VALUES ('generation', 0)",
+    "INSERT INTO metadata(key, value) VALUES ('submission_clock_micros', 0)",
+];
+
+pub(super) fn initialize(connection: &mut Connection, path: &Path) -> Result<()> {
+    let current = user_version(connection)?;
+    if current == SCHEMA_VERSION {
+        return Ok(());
+    }
+    if current != 0 {
+        return Err(version_error(current, path));
+    }
+
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let current = user_version(&transaction)?;
+    if current == 0 {
+        for statement in STATEMENTS {
+            transaction.execute_batch(statement)?;
+        }
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    } else if current != SCHEMA_VERSION {
+        return Err(version_error(current, path));
+    }
+    transaction.commit()?;
+    Ok(())
+}
+
+fn user_version(connection: &Connection) -> Result<i64> {
+    Ok(connection.pragma_query_value(None, "user_version", |row| row.get(0))?)
+}
+
+fn version_error(found: i64, path: &Path) -> AppError {
+    AppError::operational(format!(
+        "state schema {found} is incompatible with required schema {SCHEMA_VERSION} at {}; \
+         close all agents and explicitly replace the ledger before retrying",
+        path.display()
+    ))
+}

@@ -1,0 +1,1579 @@
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
+
+use tempfile::TempDir;
+
+use super::{
+    Clock, Coordinator,
+    inventory::{InventoryObservation, ProviderInventory, StaticInventory},
+    normalize_callsign,
+};
+use crate::{
+    domain::{
+        Client, Identity, InventoryResult, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe, Scope,
+        ScopeKind, SessionState, WorkState,
+    },
+    error::Result,
+    host::{ClaudeSessionObservation, WorkClaimRequest, git_blob_hashes, git_dirty_paths},
+    state::{BaselineRow, DraftClaimUpdate, DraftOwner, SessionUpdate, Store, WorkClaimUpdate, WorkUpdate},
+    work::{DIRT_HOLD_SECONDS, WorkCoordinator},
+};
+
+#[derive(Default)]
+struct FakeProbe {
+    states: Mutex<HashMap<u32, ProcessLiveness>>,
+}
+
+impl FakeProbe {
+    fn set(&self, pid: u32, state: ProcessLiveness) {
+        self.states.lock().unwrap().insert(pid, state);
+    }
+}
+
+impl ProcessProbe for FakeProbe {
+    fn fingerprint(&self, pid: u32) -> Result<ProcessFingerprint> {
+        Ok(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) })
+    }
+    /// The test process itself is alive unless a test overrides it to model a
+    /// probe that cannot establish liveness at all.
+    fn liveness(&self, fingerprint: &ProcessFingerprint) -> ProcessLiveness {
+        let default =
+            if fingerprint.pid == std::process::id() { ProcessLiveness::Alive } else { ProcessLiveness::Unknown };
+        self.states.lock().unwrap().get(&fingerprint.pid).copied().unwrap_or(default)
+    }
+}
+
+#[derive(Default)]
+struct FakeClock {
+    value: Mutex<f64>,
+}
+impl FakeClock {
+    fn new(value: f64) -> Self {
+        Self { value: Mutex::new(value) }
+    }
+}
+impl Clock for FakeClock {
+    fn wall(&self) -> f64 {
+        *self.value.lock().unwrap()
+    }
+    fn monotonic(&self) -> f64 {
+        self.wall()
+    }
+    fn sleep(&self, duration: Duration) {
+        *self.value.lock().unwrap() += duration.as_secs_f64();
+    }
+}
+
+enum InventoryMutation {
+    DeleteOnce,
+    ReplaceOnce { label: String, repo_root: String, path: String, submitted_at: f64 },
+    ReviseEveryTime,
+}
+
+struct MutatingInventory {
+    identity: Identity,
+    mutation: InventoryMutation,
+    refreshes: usize,
+}
+
+impl ProviderInventory for MutatingInventory {
+    fn cache_key(&self) -> &str {
+        "mutating"
+    }
+
+    fn refresh(&mut self, store: &Store, _probe: &dyn ProcessProbe) -> Result<InventoryObservation> {
+        let mutate = self.refreshes == 0 || matches!(self.mutation, InventoryMutation::ReviseEveryTime);
+        self.refreshes += 1;
+        if mutate {
+            let mut writer = Store::open(store.path())?;
+            match &self.mutation {
+                InventoryMutation::DeleteOnce => {
+                    writer.with_work_transaction(|transaction| transaction.delete_work(&self.identity).map(|_| ()))?;
+                }
+                InventoryMutation::ReplaceOnce { label, repo_root, path, submitted_at } => {
+                    writer.work(&self.identity)?.expect("queued work to replace");
+                    writer.with_work_transaction(|transaction| {
+                        assert!(transaction.delete_work(&self.identity)?);
+                        transaction.save_work(&WorkUpdate {
+                            identity: self.identity.clone(),
+                            label: label.clone(),
+                            state: WorkState::Queued,
+                            blocked_reason: Some("coverage".to_owned()),
+                            claims: vec![WorkClaimUpdate {
+                                repo_root: repo_root.clone(),
+                                blocked_reason: Some("coverage".to_owned()),
+                                scopes: vec![Scope { path: path.clone(), kind: ScopeKind::Exact }],
+                                baselines: None,
+                            }],
+                            submitted_at: Some(*submitted_at),
+                            updated_at: 200.0,
+                            expected_revision: None,
+                        })?;
+                        Ok(())
+                    })?;
+                }
+                InventoryMutation::ReviseEveryTime => {
+                    let current = writer.work(&self.identity)?.expect("queued work to revise");
+                    writer.with_work_transaction(|transaction| {
+                        transaction.save_work(&WorkUpdate {
+                            identity: self.identity.clone(),
+                            label: current.label.clone(),
+                            state: current.state,
+                            blocked_reason: current.blocked_reason.clone(),
+                            claims: current
+                                .claims
+                                .iter()
+                                .map(|claim| WorkClaimUpdate {
+                                    repo_root: claim.repo_root.clone(),
+                                    blocked_reason: claim.blocked_reason.clone(),
+                                    scopes: claim.scopes.clone(),
+                                    baselines: None,
+                                })
+                                .collect(),
+                            submitted_at: current.submitted_at,
+                            updated_at: 200.0 + self.refreshes as f64,
+                            expected_revision: Some(current.revision),
+                        })?;
+                        Ok(())
+                    })?;
+                }
+            }
+        }
+        Ok(InventoryObservation {
+            result: InventoryResult { complete: true, providers: Vec::new() },
+            claude_sessions: Vec::new(),
+            claude_authoritative: false,
+        })
+    }
+}
+
+fn repos(count: usize) -> (TempDir, Vec<PathBuf>) {
+    let temp = TempDir::new().unwrap();
+    let mut roots = Vec::new();
+    for index in 0..count {
+        let root = temp.path().join(format!("repo-{index}"));
+        fs::create_dir_all(&root).unwrap();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(&root).status().unwrap().success());
+        roots.push(fs::canonicalize(root).unwrap());
+    }
+    roots.sort();
+    (temp, roots)
+}
+
+fn identity(id: &str) -> Identity {
+    Identity { client: Client::Codex, session_id: id.to_owned() }
+}
+
+fn add_session(store: &mut Store, identity: &Identity, root: &Path, pid: u32, current: f64) {
+    store
+        .upsert_session(&SessionUpdate {
+            identity: identity.clone(),
+            cwd: root.to_string_lossy().into_owned(),
+            repo_root: Some(root.to_string_lossy().into_owned()),
+            state: SessionState::Working,
+            source: "test".to_owned(),
+            name: None,
+            waiting_for: None,
+            permission_mode: None,
+            update_permission_mode: false,
+            coordination_waived: None,
+            fingerprint: Some(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) }),
+            transcript_path: None,
+            started_at: Some(current),
+            current,
+        })
+        .unwrap();
+}
+
+/// Overrides a fixture session to idle, backdating `last_seen` so `current - last_seen`
+/// reaches the desired idle age relative to the fixture's fixed wall clock (100.0).
+fn idle_since(store: &mut Store, identity: &Identity, root: &Path, pid: u32, last_seen: f64) {
+    store
+        .upsert_session(&SessionUpdate {
+            identity: identity.clone(),
+            cwd: root.to_string_lossy().into_owned(),
+            repo_root: Some(root.to_string_lossy().into_owned()),
+            state: SessionState::Idle,
+            source: "test".to_owned(),
+            name: None,
+            waiting_for: None,
+            permission_mode: None,
+            update_permission_mode: false,
+            coordination_waived: None,
+            fingerprint: Some(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) }),
+            transcript_path: None,
+            started_at: Some(last_seen),
+            current: last_seen,
+        })
+        .unwrap();
+}
+
+fn coordinator(store: Store, probe: Arc<FakeProbe>, refreshes: Arc<AtomicUsize>) -> Coordinator {
+    coordinator_with_coverage(store, probe, refreshes, true)
+}
+
+fn coordinator_with_coverage(
+    store: Store,
+    probe: Arc<FakeProbe>,
+    refreshes: Arc<AtomicUsize>,
+    complete: bool,
+) -> Coordinator {
+    Coordinator::with_components(
+        store,
+        Box::new(StaticInventory { complete, refreshes }),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    )
+}
+
+fn fixture(count: usize, sessions: &[(&Identity, usize, u32)]) -> (TempDir, Vec<PathBuf>, Coordinator) {
+    let (temp, roots) = repos(count);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    for (identity, root, pid) in sessions {
+        add_session(&mut store, identity, &roots[*root], *pid, 1.0);
+        probe.set(*pid, ProcessLiveness::Alive);
+    }
+    let coordinator = coordinator(store, probe, Arc::new(AtomicUsize::new(0)));
+    (temp, roots, coordinator)
+}
+
+fn files(roots: &[PathBuf], names: &[&str]) -> Vec<PathBuf> {
+    roots.iter().zip(names).map(|(root, name)| root.join(name)).collect()
+}
+
+#[test]
+fn callsigns_reject_terminal_control_characters() {
+    assert!(normalize_callsign("🚀 trusted\u{1b}[2J").is_err());
+}
+
+#[test]
+fn clean_two_root_bundle_is_one_active_item_with_sorted_claims() {
+    let owner = identity("owner");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 10)]);
+    let requested = files(&roots, &["src/lib.rs", "README.md"]);
+
+    let outcome = coordinator.start_bundle_for(owner.clone(), "bundle", &requested, &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    assert_eq!(outcome.paths, requested.iter().map(|path| path.to_string_lossy().into_owned()).collect::<Vec<_>>());
+    let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_eq!(work.state, WorkState::Active);
+    assert_eq!(
+        work.claims.iter().map(|claim| claim.repo_root.as_str()).collect::<Vec<_>>(),
+        roots.iter().map(|root| root.to_str().unwrap()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn incomplete_coverage_queues_every_bundle_claim() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(2);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 11, 1.0);
+    probe.set(11, ProcessLiveness::Alive);
+    let coordinator = coordinator_with_coverage(store, probe, Arc::new(AtomicUsize::new(0)), false);
+
+    let outcome = coordinator
+        .start_bundle_for(owner.clone(), "bundle", &files(&roots, &["a.rs", "b.rs"]), &[], &roots[0])
+        .unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Unknown);
+    assert_eq!(outcome.detail, "coverage");
+    let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_eq!(work.state, WorkState::Queued);
+    assert!(work.claims.iter().all(|claim| claim.blocked_reason.as_deref() == Some("coverage")));
+}
+
+#[test]
+fn fresh_dirt_in_one_repository_queues_the_whole_bundle() {
+    let owner = identity("owner");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 12)]);
+    fs::write(roots[1].join("dirty.rs"), "dirty\n").unwrap();
+
+    let outcome = coordinator
+        .start_bundle_for(owner.clone(), "bundle", &files(&roots, &["clean.rs", "dirty.rs"]), &[], &roots[0])
+        .unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Unknown);
+    assert!(outcome.detail.starts_with("dirty-settling:"));
+    let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_eq!(work.state, WorkState::Queued);
+    assert_eq!(work.claim(roots[0].to_str().unwrap()).unwrap().blocked_reason, None);
+    assert_eq!(work.claim(roots[1].to_str().unwrap()).unwrap().blocked_reason.as_deref(), Some("dirty"));
+}
+
+#[test]
+fn foreign_residual_in_one_repository_queues_the_whole_bundle() {
+    let owner = identity("owner");
+    let foreign = identity("foreign");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 13), (&foreign, 1, 14)]);
+    fs::write(roots[1].join("residual.rs"), "dirty\n").unwrap();
+    let dirty = git_dirty_paths(&roots[1]).unwrap();
+    let hashes = git_blob_hashes(&roots[1], &dirty, false);
+    let mut store = coordinator.store().unwrap();
+    store.observe_dirt(roots[1].to_str().unwrap(), &hashes, 0.0).unwrap();
+    store
+        .with_work_transaction(|transaction| {
+            transaction.record_residual_owners(roots[1].to_str().unwrap(), &["residual.rs".to_owned()], &foreign, 1.0)
+        })
+        .unwrap();
+    drop(store);
+
+    let outcome = coordinator
+        .start_bundle_for(owner.clone(), "bundle", &files(&roots, &["clean.rs", "residual.rs"]), &[], &roots[0])
+        .unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+    let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_eq!(work.state, WorkState::Queued);
+    assert_eq!(work.claim(roots[1].to_str().unwrap()).unwrap().blocked_reason.as_deref(), Some("residual"));
+}
+
+#[test]
+fn failed_git_inspection_identifies_the_claim_and_queues_the_bundle() {
+    let owner = identity("owner");
+    let (temp, roots, coordinator) = fixture(1, &[(&owner, 0, 14)]);
+    let missing = temp.path().join("missing-repo");
+    let mut claims = vec![
+        WorkClaimRequest {
+            repo_root: roots[0].clone(),
+            scopes: vec![Scope { path: "clean.rs".to_owned(), kind: ScopeKind::Exact }],
+        },
+        WorkClaimRequest {
+            repo_root: missing.clone(),
+            scopes: vec![Scope { path: "unknown.rs".to_owned(), kind: ScopeKind::Exact }],
+        },
+    ];
+    claims.sort_by(|left, right| left.repo_root.cmp(&right.repo_root));
+    let inventory = InventoryResult { complete: true, providers: Vec::new() };
+    let mut store = coordinator.store().unwrap();
+
+    let outcome =
+        WorkCoordinator { store: &mut store }.start_claims(&owner, "bundle", claims, &inventory, 100.0).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Unknown);
+    assert_eq!(outcome.detail, format!("inspection:{}", missing.display()));
+    let work = store.work(&owner).unwrap().unwrap();
+    assert_eq!(work.state, WorkState::Queued);
+    assert_eq!(work.claim(missing.to_str().unwrap()).unwrap().blocked_reason.as_deref(), Some("inspection"));
+}
+
+#[test]
+fn draft_promotion_modes_reject_mismatches_without_mutating_the_draft() {
+    let bundled = identity("bundled");
+    let ordinary = identity("ordinary");
+    let (_temp, roots, coordinator) = fixture(2, &[(&bundled, 0, 20), (&ordinary, 0, 21)]);
+    let requested = files(&roots, &["a.rs", "b.rs"]);
+
+    coordinator.draft_bundle_for(bundled.clone(), None, "bundle draft", &requested, &[], &roots[0]).unwrap();
+    let before = coordinator.store().unwrap().draft_for_session(&bundled).unwrap().unwrap();
+    let error = coordinator.promote_draft_for(&bundled, None, &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("bundle start --draft"));
+    assert_eq!(coordinator.store().unwrap().draft_for_session(&bundled).unwrap().unwrap(), before);
+    assert_eq!(coordinator.promote_bundle_draft_for(&bundled, None, &roots[0]).unwrap().kind, OutcomeKind::Ready);
+
+    coordinator.draft_for(ordinary.clone(), None, "one draft", &[PathBuf::from("one.rs")], &[], &roots[0]).unwrap();
+    let before = coordinator.store().unwrap().draft_for_session(&ordinary).unwrap().unwrap();
+    let error = coordinator.promote_bundle_draft_for(&ordinary, None, &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("ai-coord start --draft"));
+    assert_eq!(coordinator.store().unwrap().draft_for_session(&ordinary).unwrap().unwrap(), before);
+}
+
+#[test]
+fn sweep_draft_promotion_rejects_a_stale_draft_after_replacement() {
+    let owner = identity("owner");
+    let (_temp, roots, coordinator) = fixture(1, &[(&owner, 0, 22)]);
+    coordinator.draft_for(owner.clone(), None, "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    let old = coordinator.store().unwrap().draft_for_session(&owner).unwrap().unwrap();
+    coordinator.done_for(&owner, &roots[0]).unwrap();
+    coordinator.draft_for(owner.clone(), None, "replacement", &[PathBuf::from("new.rs")], &[], &roots[0]).unwrap();
+    let mut store = coordinator.store().unwrap();
+    let replacement = store.draft_for_session(&owner).unwrap().unwrap();
+    assert_ne!(old.id, replacement.id);
+    let inventory = InventoryResult { complete: true, providers: Vec::new() };
+    assert!(WorkCoordinator { store: &mut store }.promote_draft(&owner, old, None, &inventory, 100.0).is_err());
+    assert_eq!(store.draft_for_session(&owner).unwrap().unwrap(), replacement);
+}
+
+#[test]
+fn promoting_a_named_draft_also_clears_the_promoters_own_unnamed_draft() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, coordinator) = fixture(1, &[(&owner, 0, 60), (&promoter, 0, 61)]);
+    coordinator.draft_for(owner.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    coordinator.draft_for(promoter.clone(), None, "mine", &[PathBuf::from("b.rs")], &[], &roots[0]).unwrap();
+    assert!(coordinator.store().unwrap().draft_for_session(&promoter).unwrap().is_some());
+    assert!(coordinator.store().unwrap().draft_named("plan1").unwrap().is_some());
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    assert!(coordinator.store().unwrap().draft_named("plan1").unwrap().is_none());
+    assert!(coordinator.store().unwrap().draft_for_session(&promoter).unwrap().is_none());
+    let work = coordinator.store().unwrap().work(&promoter).unwrap().unwrap();
+    assert_eq!(work.claims[0].scopes, vec![Scope { path: "a.rs".to_owned(), kind: ScopeKind::Exact }]);
+}
+
+#[test]
+fn expired_named_drafts_are_pruned_before_reuse_or_promotion() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, fixture) = fixture(2, &[(&owner, 0, 62), (&promoter, 1, 63)]);
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        fixture.store().unwrap(),
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::new(FakeProbe::default()),
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    );
+
+    coordinator.draft_for(owner.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    clock.sleep(Duration::from_secs(8 * 24 * 60 * 60));
+
+    let error = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("no draft named plan1"));
+    coordinator.draft_for(owner, Some("plan1"), "replacement", &[PathBuf::from("b.rs")], &[], &roots[1]).unwrap();
+}
+
+#[test]
+fn expired_named_bundle_drafts_are_pruned_before_reuse_or_promotion() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, fixture) = fixture(3, &[(&owner, 0, 66), (&promoter, 2, 67)]);
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        fixture.store().unwrap(),
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::new(FakeProbe::default()),
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    );
+
+    coordinator
+        .draft_bundle_for(
+            owner.clone(),
+            Some("plan1"),
+            "named bundle",
+            &files(&roots[0..2], &["a.rs", "b.rs"]),
+            &[],
+            &roots[0],
+        )
+        .unwrap();
+    clock.sleep(Duration::from_secs(8 * 24 * 60 * 60));
+
+    let error = coordinator.promote_bundle_draft_for(&promoter, Some("plan1"), &roots[2]).unwrap_err();
+    assert!(error.to_string().contains("no draft named plan1"));
+    coordinator
+        .draft_bundle_for(
+            owner,
+            Some("plan1"),
+            "replacement bundle",
+            &files(&roots[1..3], &["c.rs", "d.rs"]),
+            &[],
+            &roots[1],
+        )
+        .unwrap();
+}
+
+#[test]
+fn named_draft_wrong_repository_guidance_does_not_suggest_done() {
+    let owner = identity("owner");
+    let promoter = identity("promoter");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 64), (&promoter, 1, 65)]);
+    coordinator.draft_for(owner, Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+
+    let error = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[1]).unwrap_err();
+    assert!(error.to_string().contains("run ai-coord start --draft plan1 there"));
+    assert!(!error.to_string().contains("ai-coord done"));
+}
+
+#[test]
+fn promoting_a_named_draft_over_active_work_consumes_the_drafts() {
+    let promoter = identity("promoter");
+    let (_temp, roots, coordinator) = fixture(1, &[(&promoter, 0, 68)]);
+    let repo_root = roots[0].to_string_lossy().into_owned();
+    let a = Scope { path: "a.rs".to_owned(), kind: ScopeKind::Exact };
+    coordinator.start_for(promoter.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    coordinator.draft_for(promoter.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    coordinator.draft_for(promoter.clone(), Some("plan2"), "same", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    let unnamed =
+        DraftClaimUpdate { repo_root, scopes: vec![Scope { path: "b.rs".to_owned(), kind: ScopeKind::Exact }] };
+    coordinator.store().unwrap().save_draft(DraftOwner::Session(promoter.clone()), "mine", &[unnamed], 100.0).unwrap();
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(store.draft_named("plan1").unwrap().is_none());
+    assert!(store.draft_for_session(&promoter).unwrap().is_none());
+    assert_eq!(store.work(&promoter).unwrap().unwrap().claims[0].scopes, vec![a.clone()]);
+    let error = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("no draft named plan1"));
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan2"), &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(store.draft_named("plan2").unwrap().is_none());
+    let work = store.work(&promoter).unwrap().unwrap();
+    assert_eq!((work.label.as_str(), work.claims[0].scopes.clone()), ("same", vec![a]));
+}
+
+#[test]
+fn one_claim_draft_promotion_cannot_move_or_collapse_existing_work() {
+    let moved = identity("moved");
+    let bundled = identity("bundled");
+    let (_temp, roots, coordinator) = fixture(2, &[(&moved, 1, 69), (&bundled, 0, 70)]);
+    coordinator.start_for(moved.clone(), "other root", &[PathBuf::from("m.rs")], &[], &roots[1]).unwrap();
+    coordinator.start_bundle_for(bundled.clone(), "bundle", &files(&roots, &["x.rs", "y.rs"]), &[], &roots[0]).unwrap();
+    coordinator.draft_for(moved.clone(), Some("plan1"), "named", &[PathBuf::from("a.rs")], &[], &roots[0]).unwrap();
+    let draft = coordinator.store().unwrap().draft_named("plan1").unwrap().unwrap();
+    let moved_work = coordinator.store().unwrap().work(&moved).unwrap().unwrap();
+    let bundled_work = coordinator.store().unwrap().work(&bundled).unwrap().unwrap();
+
+    let error = coordinator.promote_draft_for(&moved, Some("plan1"), &roots[0]).unwrap_err();
+    assert!(error.to_string().contains("cannot be changed by ai-coord start; use ai-coord bundle start"));
+    let mut store = coordinator.store().unwrap();
+    let inventory = InventoryResult { complete: true, providers: Vec::new() };
+    let error = WorkCoordinator { store: &mut store }
+        .promote_draft(&bundled, draft.clone(), None, &inventory, 100.0)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("existing work has 2 repository claim(s) and cannot be changed by ai-coord start")
+    );
+    assert_eq!(store.draft_named("plan1").unwrap().unwrap(), draft);
+    assert_eq!(store.work(&moved).unwrap().unwrap(), moved_work);
+    assert_eq!(store.work(&bundled).unwrap().unwrap(), bundled_work);
+}
+
+#[test]
+fn blocked_expansion_through_draft_promotion_keeps_the_draft() {
+    let promoter = identity("promoter");
+    let contender = identity("contender");
+    let (_temp, roots, coordinator) = fixture(1, &[(&promoter, 0, 71), (&contender, 0, 72)]);
+    coordinator.start_for(promoter.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    coordinator.start_for(contender, "held", &[PathBuf::from("held.rs")], &[], &roots[0]).unwrap();
+    let requested = [PathBuf::from("old.rs"), PathBuf::from("held.rs")];
+    coordinator.draft_for(promoter.clone(), Some("plan1"), "expand", &requested, &[], &roots[0]).unwrap();
+    let draft = coordinator.store().unwrap().draft_named("plan1").unwrap().unwrap();
+    let before = coordinator.store().unwrap().work(&promoter).unwrap().unwrap();
+
+    let outcome = coordinator.promote_draft_for(&promoter, Some("plan1"), &roots[0]).unwrap();
+    assert_eq!((outcome.kind, outcome.code), (OutcomeKind::Active, 3));
+    assert!(outcome.detail.starts_with("update-blocked:"));
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.draft_named("plan1").unwrap().unwrap(), draft);
+    assert_eq!(store.work(&promoter).unwrap().unwrap(), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn sweep_bundle_draft_revalidates_physical_repository_roots() {
+    let owner = identity("owner");
+    let (temp, roots, coordinator) = fixture(2, &[(&owner, 1, 23)]);
+    coordinator
+        .draft_bundle_for(owner.clone(), None, "draft", &files(&roots, &["a.rs", "b.rs"]), &[], &roots[1])
+        .unwrap();
+    let draft = coordinator.store().unwrap().draft_for_session(&owner).unwrap().unwrap();
+    fs::rename(&roots[0], temp.path().join("original-root")).unwrap();
+    std::os::unix::fs::symlink(&roots[1], &roots[0]).unwrap();
+    assert!(coordinator.promote_bundle_draft_for(&owner, None, &roots[1]).is_err());
+    assert_eq!(coordinator.store().unwrap().draft_for_session(&owner).unwrap().unwrap(), draft);
+}
+
+#[test]
+fn wait_reevaluates_the_whole_bundle_and_preserves_fifo_age() {
+    let holder = identity("holder");
+    let early = identity("early");
+    let late = identity("late");
+    let (_temp, roots, coordinator) = fixture(2, &[(&holder, 1, 30), (&early, 0, 31), (&late, 0, 32)]);
+    let scope = [PathBuf::from("shared.rs")];
+    coordinator.start_for(holder.clone(), "holder", &scope, &[], &roots[1]).unwrap();
+    let requested = files(&roots, &["owned.rs", "shared.rs"]);
+    assert_eq!(
+        coordinator.start_bundle_for(early.clone(), "early", &requested, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Blocked
+    );
+    assert_eq!(
+        coordinator.start_bundle_for(late.clone(), "late", &requested, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Blocked
+    );
+    let early_age = coordinator.store().unwrap().work(&early).unwrap().unwrap().submitted_at;
+    let late_age = coordinator.store().unwrap().work(&late).unwrap().unwrap().submitted_at;
+    assert!(early_age < late_age);
+
+    coordinator.done_for(&holder, &roots[1]).unwrap();
+    let mut store = coordinator.store().unwrap();
+    store.acknowledge(&early, None, 100.0).unwrap();
+    store.acknowledge(&late, None, 100.0).unwrap();
+    drop(store);
+    assert_eq!(coordinator.wait_for_repo(&early, &roots[0], 1, 0.1, false).unwrap().kind, OutcomeKind::Ready);
+    assert_eq!(coordinator.store().unwrap().work(&early).unwrap().unwrap().submitted_at, early_age);
+    let blocked = coordinator.start_bundle_for(late.clone(), "late", &requested, &[], &roots[1]).unwrap();
+    assert_eq!(blocked.kind, OutcomeKind::Blocked);
+    assert_eq!(coordinator.store().unwrap().work(&late).unwrap().unwrap().submitted_at, late_age);
+}
+
+#[test]
+fn wait_retries_a_replaced_snapshot_and_preserves_the_replacement() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 33, 1.0);
+    probe.set(33, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let original_id = queued.store().unwrap().work(&owner).unwrap().unwrap().id;
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReplaceOnce {
+                label: "replacement".to_owned(),
+                repo_root: roots[0].to_string_lossy().into_owned(),
+                path: "replacement.rs".to_owned(),
+                submitted_at: 77.0,
+            },
+            refreshes: 0,
+        }),
+        probe,
+        clock.clone(),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    assert_eq!(outcome.paths, ["replacement.rs"]);
+    let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_ne!(work.id, original_id);
+    assert_eq!(work.label, "replacement");
+    assert_eq!(work.submitted_at, Some(77.0));
+    assert_eq!(work.claims[0].scopes[0].path, "replacement.rs");
+    assert!(clock.monotonic() >= 100.1, "a stale snapshot retry must poll instead of busy-looping");
+}
+
+#[test]
+fn wait_returns_released_when_replacement_drops_the_observed_repository_claim() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(2);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 38, 1.0);
+    probe.set(38, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let initial_mismatch = queued.wait_for_repo(&owner, &roots[1], 1, 0.1, false).unwrap_err();
+    assert!(initial_mismatch.to_string().contains("current repository is not claimed"));
+    let original_id = queued.store().unwrap().work(&owner).unwrap().unwrap().id;
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReplaceOnce {
+                label: "other repo".to_owned(),
+                repo_root: roots[1].to_string_lossy().into_owned(),
+                path: "other.rs".to_owned(),
+                submitted_at: 88.0,
+            },
+            refreshes: 0,
+        }),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Released);
+    assert_eq!(outcome.code, 3);
+    assert!(outcome.detail.is_empty());
+    let replacement = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_ne!(replacement.id, original_id);
+    assert_eq!(replacement.label, "other repo");
+    assert_eq!(replacement.submitted_at, Some(88.0));
+    assert_eq!(replacement.claims[0].repo_root, roots[1].to_string_lossy());
+    assert_eq!(replacement.claims[0].scopes[0].path, "other.rs");
+}
+
+#[test]
+fn sweep_ordinary_start_rechecks_repository_after_inventory_refresh() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(2);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 39, 1.0);
+    probe.set(39, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    queued.start_for(owner.clone(), "old", &[PathBuf::from("old.rs")], &[], &roots[0]).unwrap();
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReplaceOnce {
+                label: "replacement".to_owned(),
+                repo_root: roots[1].to_string_lossy().into_owned(),
+                path: "replacement.rs".to_owned(),
+                submitted_at: 88.0,
+            },
+            refreshes: 0,
+        }),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+    assert!(coordinator.start_for(owner.clone(), "stale", &[PathBuf::from("old.rs")], &[], &roots[0]).is_err());
+    let replacement = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_eq!(replacement.label, "replacement");
+    assert_eq!(replacement.claims[0].repo_root, roots[1].to_string_lossy());
+}
+
+#[test]
+fn wait_returns_released_when_done_wins_arbitration_without_recreating_work() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 34, 1.0);
+    probe.set(34, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "queued", &[PathBuf::from("queued.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory { identity: owner.clone(), mutation: InventoryMutation::DeleteOnce, refreshes: 0 }),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Released);
+    assert_eq!(outcome.code, 3);
+    assert!(coordinator.store().unwrap().work(&owner).unwrap().is_none());
+}
+
+#[test]
+fn repeated_wait_arbitration_retries_respect_the_requested_deadline() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    add_session(&mut store, &owner, &roots[0], 35, 1.0);
+    probe.set(35, ProcessLiveness::Alive);
+    let queued = coordinator_with_coverage(store, probe.clone(), Arc::new(AtomicUsize::new(0)), false);
+    assert_eq!(
+        queued.start_for(owner.clone(), "queued", &[PathBuf::from("queued.rs")], &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Unknown
+    );
+    let submitted_at = queued.store().unwrap().work(&owner).unwrap().unwrap().submitted_at;
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        queued.store().unwrap(),
+        Box::new(MutatingInventory {
+            identity: owner.clone(),
+            mutation: InventoryMutation::ReviseEveryTime,
+            refreshes: 0,
+        }),
+        probe,
+        clock.clone(),
+    );
+
+    let outcome = coordinator.wait_for_repo(&owner, &roots[0], 1, 0.25, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Timeout);
+    assert_eq!(outcome.code, 3);
+    assert_eq!(outcome.detail, "1");
+    assert_eq!(clock.monotonic(), 101.0);
+    assert_eq!(coordinator.store().unwrap().work(&owner).unwrap().unwrap().submitted_at, submitted_at);
+}
+
+#[test]
+fn pending_message_still_wakes_wait_without_rearbitrating() {
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 36), (&waiter, 0, 37)]);
+    let scope = [PathBuf::from("shared.rs")];
+    coordinator.start_for(holder.clone(), "holder", &scope, &[], &roots[0]).unwrap();
+    assert_eq!(
+        coordinator.start_for(waiter.clone(), "waiter", &scope, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Blocked
+    );
+    let before = coordinator.store().unwrap().work(&waiter).unwrap().unwrap();
+    coordinator
+        .store()
+        .unwrap()
+        .send_message(&holder, std::slice::from_ref(&waiter), "recheck", roots[0].to_str(), 100.0)
+        .unwrap();
+
+    let outcome = coordinator.wait_for_repo(&waiter, &roots[0], 1, 0.1, false).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Message);
+    assert_eq!(outcome.code, 3);
+    assert_eq!(outcome.detail, "1");
+    assert_eq!(coordinator.store().unwrap().work(&waiter).unwrap().unwrap(), before);
+}
+
+#[test]
+fn one_repository_work_cannot_bypass_an_earlier_queued_bundle() {
+    let holder = identity("holder");
+    let bundled = identity("bundled");
+    let later = identity("later");
+    let (_temp, roots, coordinator) = fixture(2, &[(&holder, 1, 33), (&bundled, 0, 34), (&later, 0, 35)]);
+    coordinator.start_for(holder, "holder", &[PathBuf::from("shared.rs")], &[], &roots[1]).unwrap();
+    let bundled_paths = files(&roots, &["queued.rs", "shared.rs"]);
+    assert_eq!(
+        coordinator.start_bundle_for(bundled, "bundled", &bundled_paths, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Blocked
+    );
+
+    let outcome = coordinator.start_for(later, "later", &[PathBuf::from("queued.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+}
+
+#[test]
+fn opposite_input_order_competes_as_one_canonical_bundle() {
+    let first = identity("first");
+    let second = identity("second");
+    let (_temp, roots, coordinator) = fixture(2, &[(&first, 0, 40), (&second, 1, 41)]);
+    let forward = files(&roots, &["same.rs", "same.rs"]);
+    let reverse = vec![roots[1].join("same.rs"), roots[0].join("same.rs")];
+    assert_eq!(
+        coordinator.start_bundle_for(first, "first", &forward, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Ready
+    );
+    let blocked = coordinator.start_bundle_for(second.clone(), "second", &reverse, &[], &roots[1]).unwrap();
+    assert_eq!(blocked.kind, OutcomeKind::Blocked);
+    let work = coordinator.store().unwrap().work(&second).unwrap().unwrap();
+    assert_eq!(work.claims[0].repo_root, roots[0].to_string_lossy());
+    assert_eq!(work.claims[1].repo_root, roots[1].to_string_lossy());
+}
+
+#[test]
+fn blocked_active_bundle_update_is_atomic() {
+    let owner = identity("owner");
+    let contender = identity("contender");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 50), (&contender, 1, 51)]);
+    let original = files(&roots, &["old-a.rs", "old-b.rs"]);
+    coordinator.start_bundle_for(owner.clone(), "owner", &original, &[], &roots[0]).unwrap();
+    coordinator.start_for(contender, "contender", &[PathBuf::from("held.rs")], &[], &roots[1]).unwrap();
+    let before = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    let expanded = files(&roots, &["new-a.rs", "held.rs"]);
+    let outcome = coordinator.start_bundle_for(owner.clone(), "changed", &expanded, &[], &roots[0]).unwrap();
+    assert_eq!((outcome.kind, outcome.code), (OutcomeKind::Active, 3));
+    assert_eq!(coordinator.store().unwrap().work(&owner).unwrap().unwrap(), before);
+}
+
+#[test]
+fn bundle_done_records_per_root_residuals_and_wakes_a_waiter_once() {
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let (_temp, roots, coordinator) = fixture(2, &[(&holder, 0, 60), (&waiter, 1, 61)]);
+    let requested = files(&roots, &["tracked.txt", "tracked.txt"]);
+    coordinator.start_bundle_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap();
+    assert_eq!(
+        coordinator.start_bundle_for(waiter.clone(), "waiter", &requested, &[], &roots[1]).unwrap().kind,
+        OutcomeKind::Blocked
+    );
+    for root in &roots {
+        fs::write(root.join("tracked.txt"), "dirty").unwrap();
+    }
+
+    let outcome = coordinator.done_for(&holder, &roots[1]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Done);
+    assert_eq!(outcome.holders.len(), 2);
+    let store = coordinator.store().unwrap();
+    assert!(store.work(&holder).unwrap().is_none());
+    assert_eq!(store.inbox(&waiter, true).unwrap().len(), 1);
+    for root in &roots {
+        assert_eq!(store.residual_owners(root.to_str().unwrap()).unwrap()[0].path, "tracked.txt");
+    }
+}
+
+#[test]
+fn bundle_done_is_not_stranded_by_one_failed_repository_inspection() {
+    let holder = identity("holder");
+    let (_temp, roots, coordinator) = fixture(2, &[(&holder, 0, 65)]);
+    let requested = files(&roots, &["a.rs", "b.rs"]);
+    coordinator.start_bundle_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap();
+    fs::remove_dir_all(&roots[1]).unwrap();
+    assert_eq!(coordinator.done_for(&holder, &roots[0]).unwrap().kind, OutcomeKind::Done);
+    assert!(coordinator.store().unwrap().work(&holder).unwrap().is_none());
+}
+
+#[test]
+fn bundle_done_requires_a_claimed_repository() {
+    let holder = identity("holder");
+    let (_temp, roots, coordinator) = fixture(3, &[(&holder, 0, 66)]);
+    let requested = files(&roots[..2], &["a.rs", "b.rs"]);
+    coordinator.start_bundle_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap();
+    let before = coordinator.store().unwrap().work(&holder).unwrap().unwrap();
+
+    let error = coordinator.done_for(&holder, &roots[2]).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "repository bundle does not claim {}; run ai-coord done from a claimed repository to release the whole bundle:\n  cd {} && ai-coord done",
+            roots[2].display(),
+            crate::shell_quote(roots[0].to_str().unwrap())
+        )
+    );
+    assert_eq!(coordinator.store().unwrap().work(&holder).unwrap().unwrap(), before);
+    assert_eq!(coordinator.done_for(&holder, &roots[1]).unwrap().kind, OutcomeKind::Done);
+}
+
+#[test]
+fn baseline_selects_each_bundle_claim_and_rejects_an_unclaimed_root() {
+    let owner = identity("owner");
+    let (_temp, roots, coordinator) = fixture(3, &[(&owner, 0, 70)]);
+    for root in &roots[..2] {
+        fs::write(root.join("tracked.txt"), "base").unwrap();
+        assert!(Command::new("git").args(["add", "tracked.txt"]).current_dir(root).status().unwrap().success());
+        assert!(
+            Command::new("git")
+                .args(["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "base"])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        fs::write(root.join("tracked.txt"), "changed").unwrap();
+    }
+    let mut store = coordinator.store().unwrap();
+    for root in &roots[..2] {
+        let dirty = git_dirty_paths(root).unwrap();
+        store.observe_dirt(root.to_str().unwrap(), &git_blob_hashes(root, &dirty, false), 0.0).unwrap();
+    }
+    drop(store);
+    let requested = files(&roots[..2], &["tracked.txt", "tracked.txt"]);
+    assert_eq!(
+        coordinator.start_bundle_for(owner.clone(), "bundle", &requested, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Ready
+    );
+    assert_eq!(coordinator.baselines_for(&owner, &roots[0]).unwrap().len(), 1);
+    assert_eq!(coordinator.baselines_for(&owner, &roots[1]).unwrap().len(), 1);
+    assert!(coordinator.baselines_for(&owner, &roots[2]).unwrap_err().to_string().contains("does not claim"));
+}
+
+#[test]
+fn session_end_releases_the_bundle_without_residuals_and_deduplicates_wakeup() {
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let (_temp, roots, coordinator) = fixture(2, &[(&holder, 0, 80), (&waiter, 0, 81)]);
+    let requested = files(&roots, &["same.rs", "same.rs"]);
+    coordinator.start_bundle_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap();
+    coordinator.start_bundle_for(waiter.clone(), "waiter", &requested, &[], &roots[0]).unwrap();
+    for root in &roots {
+        fs::write(root.join("same.rs"), "dirty").unwrap();
+    }
+
+    coordinator.end_session_for(&holder).unwrap();
+    let store = coordinator.store().unwrap();
+    assert!(store.work(&holder).unwrap().is_none());
+    assert_eq!(store.inbox(&waiter, true).unwrap().len(), 1);
+    assert!(roots.iter().all(|root| store.residual_owners(root.to_str().unwrap()).unwrap().is_empty()));
+}
+
+#[test]
+fn repo_filtered_snapshot_includes_the_complete_claim_vector() {
+    let owner = identity("owner");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 1, 90)]);
+    let requested = files(&roots, &["a.rs", "b.rs"]);
+    coordinator.start_bundle_for(owner.clone(), "bundle", &requested, &[], &roots[1]).unwrap();
+
+    let snapshot = coordinator.snapshot(false, &roots[0], false).unwrap();
+    assert_eq!(snapshot.schema_version, 8);
+    assert_eq!(snapshot.work.len(), 1);
+    assert_eq!(snapshot.work[0].claims.len(), 2);
+    assert!(snapshot.sessions.iter().any(|session| session.identity == owner));
+}
+
+#[test]
+fn sweep_repo_message_targets_include_bundle_peers_once_and_exclude_the_sender() {
+    let sender = identity("sender");
+    let bundled = identity("bundled");
+    let local = identity("local");
+    let outside = identity("outside");
+    let (_temp, roots, coordinator) =
+        fixture(3, &[(&sender, 0, 91), (&bundled, 1, 92), (&local, 0, 93), (&outside, 2, 94)]);
+    for (owner, name, home) in [(&sender, "sender.rs", 0), (&bundled, "bundle.rs", 1), (&local, "local.rs", 0)] {
+        coordinator
+            .start_bundle_for(owner.clone(), name, &files(&roots[..2], &[name, name]), &[], &roots[home])
+            .unwrap();
+    }
+    let store = coordinator.store().unwrap();
+    let mut recipients =
+        super::resolve_targets("repo", &store.sessions().unwrap(), &store.works().unwrap(), Some(&roots[0]), &sender)
+            .unwrap();
+    recipients.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+    assert_eq!(recipients, [bundled, local]);
+}
+
+#[test]
+fn ordinary_one_claim_lifecycle_remains_current_root_scoped() {
+    let owner = identity("owner");
+    let (_temp, roots, coordinator) = fixture(2, &[(&owner, 0, 100)]);
+    coordinator.draft_for(owner.clone(), None, "draft", &[PathBuf::from("one.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(coordinator.promote_draft_for(&owner, None, &roots[0]).unwrap().kind, OutcomeKind::Ready);
+    let work = coordinator.store().unwrap().work(&owner).unwrap().unwrap();
+    assert_eq!(work.claims.len(), 1);
+    assert_eq!(coordinator.done_for(&owner, &roots[1]).unwrap().detail, "already clear");
+    assert!(coordinator.store().unwrap().work(&owner).unwrap().is_some());
+    assert_eq!(coordinator.done_for(&owner, &roots[0]).unwrap().detail, "released");
+}
+
+#[test]
+fn process_inventory_is_cached_but_confirmed_death_still_cleans_bundle_work() {
+    let owner = identity("owner");
+    let (temp, roots) = repos(2);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    add_session(&mut store, &owner, &roots[0], 110, 1.0);
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(110, ProcessLiveness::Alive);
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    let coordinator = coordinator(store, Arc::clone(&probe), Arc::clone(&refreshes));
+    let requested = files(&roots, &["a.rs", "b.rs"]);
+    coordinator.start_bundle_for(owner.clone(), "bundle", &requested, &[], &roots[0]).unwrap();
+    coordinator.snapshot(true, &roots[0], true).unwrap();
+    probe.set(110, ProcessLiveness::Dead);
+    coordinator.snapshot(true, &roots[0], true).unwrap();
+    assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    assert!(coordinator.store().unwrap().work(&owner).unwrap().is_none());
+}
+
+#[test]
+fn dead_session_release_rolls_back_when_a_waiter_notification_fails() {
+    let holder = identity("holder");
+    let first = identity("waiter-a");
+    let second = identity("waiter-b");
+    let (_temp, roots, active) = fixture(2, &[(&holder, 0, 120), (&first, 0, 121), (&second, 1, 122)]);
+    let requested = files(&roots, &["shared.rs", "shared.rs"]);
+    for owner in [&holder, &first, &second] {
+        active.start_bundle_for(owner.clone(), &owner.session_id, &requested, &[], &roots[0]).unwrap();
+    }
+    let mut store = active.store().unwrap();
+    store.update_delegate(&holder, "child", Some("explorer"), "active", 100.0).unwrap();
+    let session = store.session(&holder).unwrap().unwrap();
+    let work = store.work(&holder).unwrap().unwrap();
+    let delegates = store.delegates().unwrap();
+    let messages = store.all_messages().unwrap();
+    let generation = store.generation().unwrap();
+    let connection = rusqlite::Connection::open(store.path()).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TRIGGER reject_release_wake BEFORE INSERT ON messages
+             WHEN NEW.recipient_session_id = 'waiter-b' AND NEW.text LIKE 'Session ended; released work%'
+             BEGIN SELECT RAISE(ABORT, 'injected wake failure'); END;",
+        )
+        .unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(120, ProcessLiveness::Dead);
+    probe.set(121, ProcessLiveness::Alive);
+    probe.set(122, ProcessLiveness::Alive);
+    let coordinator = coordinator(active.store().unwrap(), probe, Arc::new(AtomicUsize::new(0)));
+
+    let error = coordinator.reconcile_processes(&mut store).unwrap_err();
+    assert!(error.to_string().contains("injected wake failure"));
+    assert_eq!(store.session(&holder).unwrap(), Some(session));
+    assert_eq!(store.work(&holder).unwrap(), Some(work));
+    assert_eq!(store.delegates().unwrap(), delegates);
+    assert_eq!(store.all_messages().unwrap(), messages);
+    assert_eq!(store.generation().unwrap(), generation);
+
+    connection.execute_batch("DROP TRIGGER reject_release_wake;").unwrap();
+    assert!(coordinator.reconcile_processes(&mut store).unwrap().is_empty());
+    assert!(store.session(&holder).unwrap().is_none());
+    assert!(store.work(&holder).unwrap().is_none());
+    assert!(store.delegates().unwrap().is_empty());
+    assert_eq!(store.inbox(&first, true).unwrap().len(), 1);
+    assert_eq!(store.inbox(&second, true).unwrap().len(), 1);
+    assert!(roots.iter().all(|root| store.residual_owners(root.to_str().unwrap()).unwrap().is_empty()));
+    let generation = store.generation().unwrap();
+    assert!(coordinator.reconcile_processes(&mut store).unwrap().is_empty());
+    assert_eq!(store.inbox(&first, true).unwrap().len(), 1);
+    assert_eq!(store.inbox(&second, true).unwrap().len(), 1);
+    assert_eq!(store.generation().unwrap(), generation);
+}
+
+#[test]
+fn confirmed_death_releases_residual_ownership_recorded_by_done() {
+    let holder = identity("holder");
+    let successor = identity("successor");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    for (identity, pid) in [(&holder, 140), (&successor, 141)] {
+        add_session(&mut store, identity, &roots[0], pid, 1.0);
+        probe.set(pid, ProcessLiveness::Alive);
+    }
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::clone(&probe) as Arc<dyn ProcessProbe>,
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    );
+    let repo_root = roots[0].to_str().unwrap();
+    let requested = files(&roots, &["tracked.txt"]);
+    assert_eq!(
+        coordinator.start_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Ready
+    );
+    fs::write(roots[0].join("tracked.txt"), "dirty").unwrap();
+    assert_eq!(coordinator.done_for(&holder, &roots[0]).unwrap().holders, ["tracked.txt"]);
+    assert_eq!(coordinator.store().unwrap().residual_owners(repo_root).unwrap()[0].identity, holder);
+
+    *clock.value.lock().unwrap() = 100.0 + DIRT_HOLD_SECONDS;
+    let blocked = coordinator.start_for(successor.clone(), "successor", &requested, &[], &roots[0]).unwrap();
+    assert_eq!(blocked.kind, OutcomeKind::Blocked);
+    assert_eq!(blocked.holders, ["codex/holder"]);
+
+    probe.set(140, ProcessLiveness::Dead);
+    let ready = coordinator.start_for(successor.clone(), "successor", &requested, &[], &roots[0]).unwrap();
+    assert_eq!(ready.kind, OutcomeKind::Ready);
+    assert_eq!(ready.detail, "stale-dirt:tracked.txt");
+    let store = coordinator.store().unwrap();
+    assert!(store.session(&holder).unwrap().is_none());
+    assert!(store.residual_owners(repo_root).unwrap().is_empty());
+    assert_eq!(store.work(&successor).unwrap().unwrap().state, WorkState::Active);
+}
+
+#[test]
+fn reexpanding_over_own_narrowed_dirt_reclaims_it_without_baselines() {
+    let holder = identity("holder");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    add_session(&mut store, &holder, &roots[0], 150, 1.0);
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(150, ProcessLiveness::Alive);
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        probe as Arc<dyn ProcessProbe>,
+        Arc::new(FakeClock::new(100.0)),
+    );
+    let repo_root = roots[0].to_str().unwrap();
+    let both = files(&roots, &["tracked.txt", "other.txt"]);
+    assert_eq!(coordinator.start_for(holder.clone(), "work", &both, &[], &roots[0]).unwrap().kind, OutcomeKind::Ready);
+    fs::write(roots[0].join("tracked.txt"), "dirty").unwrap();
+    let narrowed = files(&roots, &["other.txt"]);
+    assert_eq!(
+        coordinator.start_for(holder.clone(), "work", &narrowed, &[], &roots[0]).unwrap().kind,
+        OutcomeKind::Ready
+    );
+    assert_eq!(coordinator.store().unwrap().residual_owners(repo_root).unwrap()[0].identity, holder);
+
+    let ready = coordinator.start_for(holder.clone(), "work", &both, &[], &roots[0]).unwrap();
+    assert_eq!(ready.kind, OutcomeKind::Ready);
+    assert_eq!(ready.detail, "");
+    assert!(coordinator.store().unwrap().baselines_in_repo(&holder, repo_root).unwrap().is_empty());
+}
+
+#[test]
+fn concurrent_dead_session_probes_notify_each_waiter_once() {
+    struct ConcurrentProbe(std::sync::Barrier);
+    impl ProcessProbe for ConcurrentProbe {
+        fn fingerprint(&self, pid: u32) -> Result<ProcessFingerprint> {
+            Ok(ProcessFingerprint { pid, start_token: Some(format!("token-{pid}")) })
+        }
+        fn liveness(&self, fingerprint: &ProcessFingerprint) -> ProcessLiveness {
+            if fingerprint.pid == 130 {
+                self.0.wait();
+                ProcessLiveness::Dead
+            } else {
+                ProcessLiveness::Alive
+            }
+        }
+    }
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let (_temp, roots, active) = fixture(2, &[(&holder, 0, 130), (&waiter, 1, 131)]);
+    let requested = files(&roots, &["shared.rs", "shared.rs"]);
+    active.start_bundle_for(holder.clone(), "holder", &requested, &[], &roots[0]).unwrap();
+    active.start_bundle_for(waiter.clone(), "waiter", &requested, &[], &roots[1]).unwrap();
+    let mut first = active.store().unwrap();
+    let mut second = active.store().unwrap();
+    let coordinator = Coordinator::with_components(
+        active.store().unwrap(),
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        Arc::new(ConcurrentProbe(std::sync::Barrier::new(2))),
+        Arc::new(FakeClock::new(100.0)),
+    );
+    let generation = first.generation().unwrap();
+    std::thread::scope(|scope| {
+        let left = scope.spawn(|| coordinator.reconcile_processes(&mut first));
+        let right = scope.spawn(|| coordinator.reconcile_processes(&mut second));
+        assert!(left.join().unwrap().unwrap().is_empty());
+        assert!(right.join().unwrap().unwrap().is_empty());
+    });
+    assert!(first.session(&holder).unwrap().is_none());
+    assert!(first.work(&holder).unwrap().is_none());
+    assert_eq!(first.inbox(&waiter, true).unwrap().len(), 1);
+    assert_eq!(first.generation().unwrap(), generation + 2);
+}
+
+#[test]
+fn idle_holder_yields_the_untouched_overlapping_scope_and_keeps_the_rest() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 200), (&requester, 0, 201)]);
+    coordinator
+        .start_for(holder.clone(), "holder", &[], &[PathBuf::from("src"), PathBuf::from("docs")], &roots[0])
+        .unwrap();
+    let before = coordinator.store().unwrap().work(&holder).unwrap().unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 200, -1000.0);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+
+    let store = coordinator.store().unwrap();
+    let after = store.work(&holder).unwrap().unwrap();
+    let scopes =
+        after.claim(roots[0].to_str().unwrap()).unwrap().scopes.iter().map(|s| s.path.as_str()).collect::<Vec<_>>();
+    assert_eq!(scopes, ["docs"]);
+    assert_eq!(after.submitted_at, before.submitted_at);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("Yielded untouched scopes src"));
+    assert!(inbox[0].text.contains("re-run ai-coord start to re-acquire"));
+}
+
+#[test]
+fn yield_never_lets_a_newcomer_jump_an_earlier_queued_waiter() {
+    let holder = identity("holder");
+    let waiter = identity("waiter");
+    let newcomer = identity("newcomer");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 200), (&waiter, 0, 201), (&newcomer, 0, 202)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    let queued =
+        coordinator.start_for(waiter.clone(), "waiter", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(queued.kind, OutcomeKind::Blocked);
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 200, -1000.0);
+
+    let outcome =
+        coordinator.start_for(newcomer.clone(), "newcomer", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.work(&newcomer).unwrap().unwrap().blocked_reason.as_deref(), Some("waiter"));
+    let held = store.work(&holder).unwrap().unwrap();
+    assert_eq!(held.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1, "holder was not narrowed");
+    assert!(store.inbox(&holder, true).unwrap().iter().all(|message| !message.text.contains("Yielded")));
+    drop(store);
+
+    let promoted =
+        coordinator.start_for(waiter.clone(), "waiter", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(promoted.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(store.work(&holder).unwrap().is_none(), "holder released after yielding its only scope");
+    assert!(
+        store
+            .inbox(&holder, true)
+            .unwrap()
+            .iter()
+            .any(|message| message.text.contains("Yielded untouched scopes src to"))
+    );
+}
+
+#[test]
+fn non_idle_holder_stays_blocked_with_an_untouched_suffix() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 202), (&requester, 0, 203)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("untouched: src."));
+}
+
+#[test]
+fn touched_path_makes_an_idle_holders_scope_hard_and_the_message_omits_untouched() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 204), (&requester, 0, 205)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    let mut store = coordinator.store().unwrap();
+    idle_since(&mut store, &holder, &roots[0], 204, -1000.0);
+    store.record_touched(&holder, roots[0].to_str().unwrap(), &["src/lib.rs".to_owned()], 100.0).unwrap();
+    drop(store);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(!inbox[0].text.contains("untouched:"));
+}
+
+#[test]
+fn dirty_file_beneath_the_scope_makes_an_idle_holder_hard() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 206), (&requester, 0, 207)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 206, -1000.0);
+    fs::create_dir_all(roots[0].join("src")).unwrap();
+    fs::write(roots[0].join("src/new.rs"), "dirty\n").unwrap();
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+}
+
+#[test]
+fn narrowing_to_zero_scopes_releases_the_holders_claim_and_the_requester_is_ready() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 208), (&requester, 0, 209)]);
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 208, -1000.0);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+
+    let store = coordinator.store().unwrap();
+    assert!(store.work(&holder).unwrap().is_none());
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("Yielded untouched scopes src"));
+}
+
+#[test]
+fn exact_scope_holder_with_the_exact_path_touched_stays_hard() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 210), (&requester, 0, 211)]);
+    coordinator.start_for(holder.clone(), "holder", &[PathBuf::from("config.toml")], &[], &roots[0]).unwrap();
+    let mut store = coordinator.store().unwrap();
+    idle_since(&mut store, &holder, &roots[0], 210, -1000.0);
+    store.record_touched(&holder, roots[0].to_str().unwrap(), &["config.toml".to_owned()], 100.0).unwrap();
+    drop(store);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("config.toml")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+
+    let store = coordinator.store().unwrap();
+    let holder_work = store.work(&holder).unwrap().unwrap();
+    assert_eq!(holder_work.claim(roots[0].to_str().unwrap()).unwrap().scopes.len(), 1);
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(!inbox[0].text.contains("untouched:"));
+}
+
+#[test]
+fn idle_contender_blocking_a_two_root_bundle_is_narrowed_once_with_one_message() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(2, &[(&holder, 0, 212), (&requester, 1, 213)]);
+    coordinator.start_bundle_for(holder.clone(), "holder", &[], &files(&roots, &["src", "src"]), &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 212, -1000.0);
+
+    let outcome = coordinator
+        .start_bundle_for(requester.clone(), "requester", &files(&roots, &["src/lib.rs", "src/lib.rs"]), &[], &roots[0])
+        .unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+
+    let store = coordinator.store().unwrap();
+    // Both roots' "src" scopes were the holder's only claims, so full narrowing
+    // released the whole work item.
+    assert!(store.work(&holder).unwrap().is_none());
+    let inbox = store.inbox(&holder, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.contains("Yielded untouched scopes"));
+    assert!(inbox[0].text.contains(roots[0].join("src").to_str().unwrap()));
+    assert!(inbox[0].text.contains(roots[1].join("src").to_str().unwrap()));
+}
+
+/// A complete inventory whose Claude provider authoritatively reports these sessions.
+struct ClaudeInventory(Vec<ClaudeSessionObservation>);
+
+impl ProviderInventory for ClaudeInventory {
+    fn cache_key(&self) -> &str {
+        "claude"
+    }
+
+    fn refresh(&mut self, _store: &Store, _probe: &dyn ProcessProbe) -> Result<InventoryObservation> {
+        Ok(InventoryObservation {
+            result: InventoryResult { complete: true, providers: Vec::new() },
+            claude_sessions: self.0.clone(),
+            claude_authoritative: true,
+        })
+    }
+}
+
+#[test]
+fn authoritative_inventory_does_not_reset_an_idle_claude_holders_yield_clock() {
+    let holder = Identity { client: Client::Claude, session_id: "claude-holder".to_owned() };
+    let requester = identity("requester");
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    for (identity, pid) in [(&holder, 220), (&requester, 221)] {
+        add_session(&mut store, identity, &roots[0], pid, 1.0);
+        probe.set(pid, ProcessLiveness::Alive);
+    }
+    let observation = ClaudeSessionObservation {
+        identity: holder.clone(),
+        cwd: roots[0].clone(),
+        repo_root: Some(roots[0].clone()),
+        state: SessionState::Idle,
+        name: None,
+        waiting_for: None,
+        pid: Some(220),
+        fingerprint: Some(ProcessFingerprint { pid: 220, start_token: Some("token-220".to_owned()) }),
+        started_at: 1.0,
+    };
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(ClaudeInventory(vec![observation])),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+    coordinator.start_for(holder.clone(), "holder", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &holder, &roots[0], 220, -1000.0);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    let session = store.session(&holder).unwrap().unwrap();
+    assert_eq!((session.source.as_str(), session.last_seen), ("observer", -1000.0));
+    assert!(store.work(&holder).unwrap().is_none());
+    assert!(store.inbox(&holder, true).unwrap()[0].text.contains("Yielded untouched scopes src"));
+}
+
+#[test]
+fn partially_blocked_bundle_leaves_the_idle_holder_unyielded() {
+    let idle = identity("idle");
+    let busy = identity("busy");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(2, &[(&idle, 0, 222), (&busy, 1, 223), (&requester, 0, 224)]);
+    coordinator.start_for(idle.clone(), "idle", &[], &[PathBuf::from("src")], &roots[0]).unwrap();
+    coordinator.start_for(busy.clone(), "busy", &[], &[PathBuf::from("src")], &roots[1]).unwrap();
+    idle_since(&mut coordinator.store().unwrap(), &idle, &roots[0], 222, -1000.0);
+
+    let outcome = coordinator
+        .start_bundle_for(requester.clone(), "requester", &files(&roots, &["src/lib.rs", "src/lib.rs"]), &[], &roots[0])
+        .unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Blocked);
+    assert_eq!(outcome.holders, ["codex/idle", "codex/busy"]);
+
+    let store = coordinator.store().unwrap();
+    let queued = store.work(&requester).unwrap().unwrap();
+    assert_eq!(queued.state, WorkState::Queued);
+    assert_eq!(queued.claim(roots[0].to_str().unwrap()).unwrap().blocked_reason.as_deref(), Some("overlap"));
+    let held = store.work(&idle).unwrap().unwrap();
+    assert_eq!(
+        held.claim(roots[0].to_str().unwrap()).unwrap().scopes,
+        [Scope { path: "src".to_owned(), kind: ScopeKind::Recursive }]
+    );
+    let inbox = store.inbox(&idle, true).unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert!(inbox[0].text.starts_with("Queued behind your work: requester"));
+    assert!(inbox[0].text.contains("untouched:"));
+}
+
+#[test]
+fn yielded_claim_drops_baselines_beneath_the_yielded_scope() {
+    let holder = identity("holder");
+    let requester = identity("requester");
+    let (_temp, roots, coordinator) = fixture(1, &[(&holder, 0, 225), (&requester, 0, 226)]);
+    let repo_root = roots[0].to_str().unwrap().to_owned();
+    coordinator
+        .start_for(holder.clone(), "holder", &[], &[PathBuf::from("src"), PathBuf::from("docs")], &roots[0])
+        .unwrap();
+    let mut store = coordinator.store().unwrap();
+    let work = store.work(&holder).unwrap().unwrap();
+    let baseline = |path: &str| BaselineRow { path: path.to_owned(), oid: "0".repeat(40) };
+    store
+        .with_work_transaction(|transaction| {
+            transaction.save_work(&WorkUpdate {
+                identity: holder.clone(),
+                label: work.label.clone(),
+                state: work.state,
+                blocked_reason: None,
+                claims: vec![WorkClaimUpdate {
+                    repo_root: repo_root.clone(),
+                    blocked_reason: None,
+                    scopes: work.claims[0].scopes.clone(),
+                    baselines: Some(vec![baseline("docs/guide.md"), baseline("src/lib.rs")]),
+                }],
+                submitted_at: work.submitted_at,
+                updated_at: work.updated_at,
+                expected_revision: Some(work.revision),
+            })?;
+            Ok(())
+        })
+        .unwrap();
+    idle_since(&mut store, &holder, &roots[0], 225, -1000.0);
+    drop(store);
+
+    let outcome =
+        coordinator.start_for(requester.clone(), "requester", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert_eq!(store.baselines_in_repo(&holder, &repo_root).unwrap(), [baseline("docs/guide.md")]);
+}
+
+#[test]
+fn indeterminate_liveness_holders_block_overlap_without_degrading_coverage() {
+    let unanchored = identity("unanchored");
+    let unprobed = identity("unprobed");
+    let peer = identity("peer");
+    let (temp, roots) = repos(1);
+    let root = roots[0].to_str().unwrap();
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    store.observe_delegate_parent(&unanchored, root, Some(root), None, 1.0).unwrap();
+    add_session(&mut store, &unprobed, &roots[0], 240, 1.0);
+    add_session(&mut store, &peer, &roots[0], 241, 1.0);
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(241, ProcessLiveness::Alive);
+    let coordinator = coordinator(store, probe.clone(), Arc::new(AtomicUsize::new(0)));
+
+    let start = |owner: &Identity, path: &str| {
+        coordinator.start_for(owner.clone(), &owner.session_id, &[PathBuf::from(path)], &[], &roots[0]).unwrap().kind
+    };
+    assert_eq!(start(&unanchored, "held.rs"), OutcomeKind::Ready);
+    assert_eq!(start(&unprobed, "probed.rs"), OutcomeKind::Ready);
+    assert_eq!(start(&peer, "held.rs"), OutcomeKind::Blocked);
+    assert!(coordinator.snapshot(true, &roots[0], false).unwrap().complete);
+    let store = coordinator.store().unwrap();
+    assert!(store.session(&unanchored).unwrap().is_some());
+    assert_eq!(store.work(&unprobed).unwrap().unwrap().state, WorkState::Active);
+    drop(store);
+
+    // Explicit done from the holder's identity is the recovery path.
+    coordinator.done_for(&unanchored, &roots[0]).unwrap();
+    coordinator.store().unwrap().acknowledge(&peer, None, 100.0).unwrap();
+    assert_eq!(coordinator.wait_for_repo(&peer, &roots[0], 1, 0.1, false).unwrap().kind, OutcomeKind::Ready);
+
+    // A probe that cannot establish any liveness keeps coverage fail-closed.
+    probe.set(std::process::id(), ProcessLiveness::Unknown);
+    assert!(!coordinator.snapshot(true, &roots[0], false).unwrap().complete);
+    let outcome =
+        coordinator.start_for(unanchored.clone(), "retry", &[PathBuf::from("new.rs")], &[], &roots[0]).unwrap();
+    assert_eq!((outcome.kind, outcome.detail.as_str()), (OutcomeKind::Unknown, "coverage"));
+    assert!(coordinator.store().unwrap().session(&unprobed).unwrap().is_some());
+}

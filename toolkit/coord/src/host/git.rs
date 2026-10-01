@@ -1,0 +1,977 @@
+use std::{
+    collections::BTreeMap,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    process::{Child, Command, ExitStatus, Stdio},
+    sync::mpsc::{self, Receiver, RecvTimeoutError},
+    thread,
+    time::{Duration, Instant},
+};
+
+use crate::{
+    domain::{Scope, ScopeKind},
+    error::{AppError, Result},
+};
+use wait_timeout::ChildExt;
+
+pub(crate) const MAX_SCOPE_CHARS: usize = 120;
+pub(crate) const UNHASHABLE_BLOB_HASH: &str = "<deleted-or-unhashable>";
+
+const GIT_ROOT_TIMEOUT: Duration = Duration::from_secs(5);
+const GIT_INSPECTION_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_COMMAND_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+const GIT_BLOB_HASH_BATCH_SIZE: usize = 128;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct WorkClaimRequest {
+    pub(crate) repo_root: PathBuf,
+    pub(crate) scopes: Vec<Scope>,
+}
+
+#[derive(Debug)]
+pub(super) struct CommandOutput {
+    pub(super) status: ExitStatus,
+    pub(super) stdout: Vec<u8>,
+    pub(super) stderr: Vec<u8>,
+}
+
+/// Run a child with bounded wall time while draining both output pipes.
+pub(super) fn run_output_timeout(command: &mut Command, timeout: Duration) -> std::io::Result<CommandOutput> {
+    run_output_with_input_timeout(command, None, timeout)
+}
+
+fn run_output_with_input_timeout(
+    command: &mut Command,
+    input: Option<&[u8]>,
+    timeout: Duration,
+) -> std::io::Result<CommandOutput> {
+    if input.is_some() {
+        command.stdin(Stdio::piped());
+    }
+    let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    let mut stdout = child.stdout.take().expect("piped stdout");
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let readers = (
+        spawn_output_reader(move || read_bounded_output(&mut stdout, MAX_COMMAND_OUTPUT_BYTES)),
+        spawn_output_reader(move || read_bounded_output(&mut stderr, MAX_COMMAND_OUTPUT_BYTES)),
+    );
+    let (stdout_reader, stderr_reader) = match readers {
+        (Ok(stdout), Ok(stderr)) => (stdout, stderr),
+        (Err(error), _) | (_, Err(error)) => {
+            terminate_child(&mut child);
+            return Err(error);
+        }
+    };
+    if let Some(input) = input {
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        cleanup_on_error(stdin.write_all(input), &mut child)?;
+    }
+    let started = Instant::now();
+    let Some(status) = cleanup_on_error(child.wait_timeout(timeout), &mut child)? else {
+        terminate_child(&mut child);
+        return Err(timeout_error(timeout));
+    };
+    let remaining = timeout.saturating_sub(started.elapsed());
+    let stdout = cleanup_on_error(receive_output(&stdout_reader, remaining, timeout), &mut child)?;
+    let remaining = timeout.saturating_sub(started.elapsed());
+    let stderr = cleanup_on_error(receive_output(&stderr_reader, remaining, timeout), &mut child)?;
+    Ok(CommandOutput { status, stdout, stderr })
+}
+
+fn spawn_output_reader(
+    read: impl FnOnce() -> std::io::Result<Vec<u8>> + Send + 'static,
+) -> std::io::Result<Receiver<std::io::Result<Vec<u8>>>> {
+    let (sender, receiver) = mpsc::sync_channel(1);
+    thread::Builder::new().name("ai-coord-output".to_owned()).spawn(move || {
+        let _ = sender.send(read());
+    })?;
+    Ok(receiver)
+}
+
+fn read_bounded_output(reader: &mut impl Read, limit: usize) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(limit.saturating_add(1) as u64).read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "command output exceeded size limit"));
+    }
+    Ok(bytes)
+}
+
+fn receive_output(
+    reader: &Receiver<std::io::Result<Vec<u8>>>,
+    remaining: Duration,
+    timeout: Duration,
+) -> std::io::Result<Vec<u8>> {
+    match reader.recv_timeout(remaining) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => Err(timeout_error(timeout)),
+        Err(RecvTimeoutError::Disconnected) => Err(std::io::Error::other("command output reader stopped")),
+    }
+}
+
+fn timeout_error(timeout: Duration) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::TimedOut, format!("command timed out after {} seconds", timeout.as_secs()))
+}
+
+fn terminate_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn cleanup_on_error<T>(result: std::io::Result<T>, child: &mut Child) -> std::io::Result<T> {
+    if result.is_err() {
+        terminate_child(child);
+    }
+    result
+}
+
+pub(crate) fn git_root(cwd: &Path) -> Option<PathBuf> {
+    let output = run_output_timeout(
+        Command::new("git").args(["-C"]).arg(cwd).args(["rev-parse", "--show-toplevel"]),
+        GIT_ROOT_TIMEOUT,
+    )
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = std::str::from_utf8(output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout)).ok()?;
+    if value.is_empty() {
+        return None;
+    }
+    weakly_canonical(Path::new(value)).ok()
+}
+
+/// Normalize `raw` to a repository-relative path: resolve it against `cwd`
+/// (missing components included), enforce the repository boundary, and reject
+/// non-printable output. This is the shared resolution every path normalizer
+/// needs; it deliberately omits the scope-literal rules in [`normalize_scopes`]
+/// (globs, the length cap) because best-effort touched-path observation must
+/// accept names a user-supplied scope literal would reject, such as
+/// `app/[slug]/page.tsx` or a path over the scope length cap.
+pub(crate) fn normalize_repo_path(raw: &Path, cwd: &Path, root: &Path) -> Result<String> {
+    let root = weakly_canonical(root)
+        .map_err(|error| AppError::usage(format!("could not resolve repository root: {error}")))?;
+    let display = raw.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
+    let expanded = crate::expand_tilde(raw);
+    let candidate = if expanded.is_absolute() { expanded } else { cwd.join(expanded) };
+    let preserve_final_symlink =
+        std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink());
+    let resolved = if preserve_final_symlink {
+        let parent =
+            candidate.parent().ok_or_else(|| AppError::usage(format!("scope is outside repository: {display}")))?;
+        let name =
+            candidate.file_name().ok_or_else(|| AppError::usage(format!("scope is outside repository: {display}")))?;
+        weakly_canonical(parent)
+            .map(|parent| parent.join(name))
+            .map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?
+    } else {
+        weakly_canonical(&candidate).map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?
+    };
+    let relative =
+        resolved.strip_prefix(&root).map_err(|_| AppError::usage(format!("scope is outside repository: {display}")))?;
+    let value = if relative.as_os_str().is_empty() {
+        ".".to_owned()
+    } else {
+        relative
+            .to_str()
+            .ok_or_else(|| AppError::usage("normalized scope is not valid UTF-8"))?
+            .replace(std::path::MAIN_SEPARATOR, "/")
+            .trim_start_matches("./")
+            .trim_end_matches('/')
+            .to_owned()
+    };
+    if value.chars().any(char::is_control) {
+        return Err(AppError::usage(format!("scope contains non-printable characters: {display:?}")));
+    }
+    Ok(value)
+}
+
+/// Normalize user-supplied scope literals: layers the glob and length rules
+/// documented for `draft`/`start` on top of [`normalize_repo_path`].
+pub(crate) fn normalize_scopes(raw_scopes: &[PathBuf], cwd: &Path, root: &Path) -> Result<Vec<String>> {
+    let mut normalized = Vec::new();
+    for raw_scope in raw_scopes {
+        let display = raw_scope.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
+        if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
+            return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
+        }
+        let value = normalize_repo_path(raw_scope, cwd, root)?;
+        if value.chars().count() > MAX_SCOPE_CHARS {
+            return Err(AppError::usage(format!("scope exceeds {MAX_SCOPE_CHARS} characters: {display:?}")));
+        }
+        if !normalized.contains(&value) {
+            normalized.push(value);
+        }
+    }
+    Ok(normalized)
+}
+
+pub(crate) fn normalize_work_scopes(
+    files: &[PathBuf],
+    recursive: &[PathBuf],
+    cwd: &Path,
+    root: &Path,
+) -> Result<Vec<Scope>> {
+    let files = normalize_scopes(files, cwd, root)?;
+    let recursive = normalize_scopes(recursive, cwd, root)?;
+    if let Some(ambiguous) = files.iter().find(|value| recursive.contains(value)) {
+        return Err(AppError::usage(format!("scope cannot be both exact and recursive: {ambiguous}")));
+    }
+    for value in &files {
+        let candidate = root.join(value);
+        let symlink = std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink());
+        if !symlink && candidate.is_dir() {
+            return Err(AppError::usage(format!("directory scope requires --recursive: {value}")));
+        }
+    }
+    for value in &recursive {
+        let candidate = root.join(value);
+        if std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+            return Err(AppError::usage(format!("recursive scope cannot be a symlink: {value}")));
+        }
+        if candidate.exists() && !candidate.is_dir() {
+            return Err(AppError::usage(format!("recursive scope is not a directory: {value}")));
+        }
+    }
+    Ok(files
+        .into_iter()
+        .map(|path| Scope { path, kind: ScopeKind::Exact })
+        .chain(recursive.into_iter().map(|path| Scope { path, kind: ScopeKind::Recursive }))
+        .collect())
+}
+
+/// Normalize an explicit multi-repository claim bundle.
+///
+/// Bundle inputs are absolute because no single working directory or Git root
+/// can give relative paths an unambiguous meaning. Missing leaves are resolved
+/// through their nearest existing ancestor before the physical Git root is
+/// selected.
+pub(crate) fn normalize_work_claim_bundle(files: &[PathBuf], recursive: &[PathBuf]) -> Result<Vec<WorkClaimRequest>> {
+    if files.is_empty() && recursive.is_empty() {
+        return Err(AppError::usage("at least one scope is required"));
+    }
+
+    let mut grouped = BTreeMap::<PathBuf, (Vec<PathBuf>, Vec<PathBuf>)>::new();
+    for (paths, kind) in [(files, ScopeKind::Exact), (recursive, ScopeKind::Recursive)] {
+        for raw in paths {
+            validate_bundle_input(raw)?;
+            let root = bundle_git_root(raw, kind)?;
+            let entry = grouped.entry(root).or_default();
+            match kind {
+                ScopeKind::Exact => entry.0.push(raw.clone()),
+                ScopeKind::Recursive => entry.1.push(raw.clone()),
+            }
+        }
+    }
+    if grouped.len() < 2 {
+        return Err(AppError::usage("a repository bundle requires at least two distinct Git roots"));
+    }
+
+    grouped
+        .into_iter()
+        .map(|(repo_root, (files, recursive))| {
+            let mut scopes = normalize_work_scopes(&files, &recursive, &repo_root, &repo_root)?;
+            if scopes.iter().any(|scope| scope.is_recursive() && scope.path == ".") {
+                return Err(AppError::usage(format!(
+                    "recursive scope cannot be the repository root: {}",
+                    repo_root.display()
+                )));
+            }
+            scopes.sort_by(scope_order);
+            Ok(WorkClaimRequest { repo_root, scopes })
+        })
+        .collect()
+}
+
+fn validate_bundle_input(path: &Path) -> Result<()> {
+    let display = path.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
+    if !path.is_absolute() {
+        return Err(AppError::usage(format!("bundle scope must be absolute: {display}")));
+    }
+    if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
+        return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
+    }
+    if display.chars().any(char::is_control) {
+        return Err(AppError::usage(format!("scope contains non-printable characters: {display:?}")));
+    }
+    Ok(())
+}
+
+fn bundle_git_root(path: &Path, kind: ScopeKind) -> Result<PathBuf> {
+    let metadata = std::fs::symlink_metadata(path).ok();
+    match (kind, metadata.as_ref()) {
+        (ScopeKind::Exact, Some(metadata)) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            return Err(AppError::usage(format!("directory scope requires --recursive: {}", path.display())));
+        }
+        (ScopeKind::Recursive, Some(metadata)) if metadata.file_type().is_symlink() => {
+            return Err(AppError::usage(format!("recursive scope cannot be a symlink: {}", path.display())));
+        }
+        (ScopeKind::Recursive, Some(metadata)) if !metadata.is_dir() => {
+            return Err(AppError::usage(format!("recursive scope is not a directory: {}", path.display())));
+        }
+        _ => {}
+    }
+
+    let mut ancestor = if metadata.as_ref().is_some_and(|metadata| metadata.is_dir()) {
+        path.to_owned()
+    } else {
+        path.parent()
+            .ok_or_else(|| AppError::usage(format!("scope has no existing ancestor: {}", path.display())))?
+            .to_owned()
+    };
+    loop {
+        match std::fs::symlink_metadata(&ancestor) {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                ancestor = ancestor
+                    .parent()
+                    .ok_or_else(|| AppError::usage(format!("scope has no existing ancestor: {}", path.display())))?
+                    .to_owned();
+            }
+            Err(error) => {
+                return Err(AppError::usage(format!("could not inspect scope {}: {error}", path.display())));
+            }
+        }
+    }
+    let ancestor = weakly_canonical(&ancestor)
+        .map_err(|error| AppError::usage(format!("could not resolve scope {}: {error}", path.display())))?;
+    git_root(&ancestor).ok_or_else(|| AppError::usage(format!("scope is not in a Git worktree: {}", path.display())))
+}
+
+fn scope_order(left: &Scope, right: &Scope) -> std::cmp::Ordering {
+    left.path.cmp(&right.path).then_with(|| scope_kind_order(left.kind).cmp(&scope_kind_order(right.kind)))
+}
+
+const fn scope_kind_order(kind: ScopeKind) -> u8 {
+    match kind {
+        ScopeKind::Exact => 0,
+        ScopeKind::Recursive => 1,
+    }
+}
+
+pub(crate) fn scope_covers(covering: &Scope, covered: &Scope) -> bool {
+    covering.path == covered.path ||
+        (covering.is_recursive() &&
+            (covering.path == "." || covered.path.starts_with(&format!("{}/", covering.path))))
+}
+
+pub(crate) fn scopes_cover(covering: &[Scope], covered: &[Scope]) -> bool {
+    covered.iter().all(|value| covering.iter().any(|parent| scope_covers(parent, value)))
+}
+
+pub(crate) fn scopes_overlap(left: &Scope, right: &Scope) -> bool {
+    left.path == right.path ||
+        (left.is_recursive() && (left.path == "." || right.path.starts_with(&format!("{}/", left.path)))) ||
+        (right.is_recursive() && (right.path == "." || left.path.starts_with(&format!("{}/", right.path))))
+}
+
+pub(crate) fn any_overlap(left: &[Scope], right: &[Scope]) -> bool {
+    left.iter().any(|a| right.iter().any(|b| scopes_overlap(a, b)))
+}
+
+pub(crate) fn overlapping_paths(left: &[Scope], right: &[Scope]) -> Vec<String> {
+    let mut values = Vec::new();
+    for a in left {
+        for b in right {
+            if !scopes_overlap(a, b) {
+                continue;
+            }
+            let value = if a.path.len() >= b.path.len() { &a.path } else { &b.path };
+            if !values.contains(value) {
+                values.push(value.clone());
+            }
+        }
+    }
+    values.sort();
+    values
+}
+
+pub(crate) fn overlaps_outside_coverage(requested: &[Scope], contender: &[Scope], existing: &[Scope]) -> Vec<String> {
+    overlapping_paths(requested, contender)
+        .into_iter()
+        .filter(|path| {
+            let intersection = Scope { path: path.clone(), kind: ScopeKind::Exact };
+            !scopes_cover(existing, &[intersection])
+        })
+        .collect()
+}
+
+pub(crate) fn git_dirty_paths(root: &Path) -> Result<Vec<String>> {
+    let output = run_output_timeout(
+        Command::new("git").args(["-C"]).arg(root).args(["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
+        GIT_INSPECTION_TIMEOUT,
+    )
+    .map_err(|error| AppError::operational(format!("could not inspect Git dirt: {error}")))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let detail = if detail.is_empty() { format!("exit {}", output.status.code().unwrap_or(-1)) } else { detail };
+        return Err(AppError::operational(format!("could not inspect Git dirt: {detail}")));
+    }
+
+    parse_git_dirty_paths(&output.stdout)
+}
+
+fn parse_git_dirty_paths(output: &[u8]) -> Result<Vec<String>> {
+    let parts: Vec<&[u8]> = output.split(|byte| *byte == 0).collect();
+    let mut dirty = Vec::new();
+    let mut index = 0;
+    while index < parts.len() {
+        let entry = parts[index];
+        index += 1;
+        if entry.is_empty() || entry.len() < 4 {
+            continue;
+        }
+        let status = &entry[..2];
+        push_git_path(&mut dirty, &entry[3..])?;
+        if (status.contains(&b'R') || status.contains(&b'C')) &&
+            let Some(other) = parts.get(index)
+        {
+            push_git_path(&mut dirty, other)?;
+            index += 1;
+        }
+    }
+    Ok(dirty)
+}
+
+/// Return the subset of repository-relative `paths` that Git ignores. Tracked
+/// files never match, even under an ignore pattern. Fails open to an empty list.
+pub(crate) fn git_ignored_paths(root: &Path, paths: &[String]) -> Vec<String> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let input = paths.iter().flat_map(|path| path.bytes().chain([0])).collect::<Vec<_>>();
+    let output = run_output_with_input_timeout(
+        Command::new("git").args(["-C"]).arg(root).args(["check-ignore", "-z", "--stdin"]),
+        Some(&input),
+        GIT_INSPECTION_TIMEOUT,
+    );
+    // Exit 1 means no path is ignored; anything above is an error.
+    let Some(output) = output.ok().filter(|output| output.status.code() == Some(0)) else {
+        return Vec::new();
+    };
+    output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .filter_map(|entry| std::str::from_utf8(entry).ok().map(str::to_owned))
+        .collect()
+}
+
+#[cfg(test)]
+pub(crate) fn git_blob_hash(root: &Path, path: &str, write: bool) -> String {
+    git_blob_hashes(root, &[path.to_owned()], write)
+        .pop()
+        .map(|(_, hash)| hash)
+        .unwrap_or_else(|| UNHASHABLE_BLOB_HASH.to_owned())
+}
+
+pub(crate) fn git_blob_hashes(root: &Path, paths: &[String], write: bool) -> Vec<(String, String)> {
+    let mut hashes = vec![None; paths.len()];
+    let mut eligible = Vec::new();
+
+    for (index, path) in paths.iter().enumerate() {
+        match std::fs::symlink_metadata(root.join(path)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                hashes[index] = Some(UNHASHABLE_BLOB_HASH.to_owned());
+            }
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                hashes[index] = Some(git_symlink_blob_hash(root, path, write));
+            }
+            Ok(_) | Err(_) => eligible.push(index),
+        }
+    }
+
+    for batch in eligible.chunks(GIT_BLOB_HASH_BATCH_SIZE) {
+        let batch_paths = batch.iter().map(|index| paths[*index].as_str()).collect::<Vec<_>>();
+        let batch_hashes = git_blob_hash_batch(root, &batch_paths, write)
+            .unwrap_or_else(|| batch_paths.iter().map(|path| git_blob_hash_single(root, path, write)).collect());
+        for (index, hash) in batch.iter().zip(batch_hashes) {
+            hashes[*index] = Some(hash);
+        }
+    }
+
+    paths
+        .iter()
+        .cloned()
+        .zip(hashes.into_iter().map(|hash| hash.unwrap_or_else(|| UNHASHABLE_BLOB_HASH.to_owned())))
+        .collect()
+}
+
+fn git_symlink_blob_hash(root: &Path, path: &str, write: bool) -> String {
+    let Ok(target) = std::fs::read_link(root.join(path)) else {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    };
+    let mut command = Command::new("git");
+    command.args(["-C"]).arg(root).arg("hash-object");
+    if write {
+        command.arg("-w");
+    }
+    command.arg("--stdin");
+    let output = run_output_with_input_timeout(
+        &mut command,
+        Some(target.as_os_str().as_encoded_bytes()),
+        GIT_INSPECTION_TIMEOUT,
+    );
+    let Ok(output) = output else {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    };
+    if !output.status.success() {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if value.is_empty() { UNHASHABLE_BLOB_HASH.to_owned() } else { value }
+}
+
+fn git_blob_hash_batch(root: &Path, paths: &[&str], write: bool) -> Option<Vec<String>> {
+    if paths.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut command = Command::new("git");
+    command.args(["-C"]).arg(root).arg("hash-object");
+    if write {
+        command.arg("-w");
+    }
+    let output = run_output_timeout(command.arg("--").args(paths), GIT_INSPECTION_TIMEOUT);
+    let Ok(output) = output else {
+        return None;
+    };
+    if !output.status.success() {
+        return None;
+    }
+    let output = std::str::from_utf8(&output.stdout).ok()?;
+    let hashes = output.lines().map(str::to_owned).collect::<Vec<_>>();
+    (hashes.len() == paths.len() && hashes.iter().all(|hash| !hash.is_empty())).then_some(hashes)
+}
+
+fn git_blob_hash_single(root: &Path, path: &str, write: bool) -> String {
+    let mut command = Command::new("git");
+    command.args(["-C"]).arg(root).arg("hash-object");
+    if write {
+        command.arg("-w");
+    }
+    let output = run_output_timeout(command.args(["--", path]), GIT_INSPECTION_TIMEOUT);
+    let Ok(output) = output else {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    };
+    if !output.status.success() {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if value.is_empty() { UNHASHABLE_BLOB_HASH.to_owned() } else { value }
+}
+
+pub(crate) fn git_head_oid(root: &Path) -> Option<String> {
+    let output = run_output_timeout(
+        Command::new("git").args(["-C"]).arg(root).args(["rev-parse", "--verify", "HEAD"]),
+        GIT_INSPECTION_TIMEOUT,
+    )
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let oid = std::str::from_utf8(&output.stdout).ok()?.trim();
+    (!oid.is_empty()).then(|| oid.to_owned())
+}
+
+pub(crate) fn relevant_dirty(scopes: &[Scope], dirty_paths: &[String]) -> Vec<String> {
+    dirty_paths
+        .iter()
+        .filter(|path| {
+            let dirty = Scope { path: (*path).clone(), kind: ScopeKind::Exact };
+            scopes.iter().any(|scope| scopes_overlap(scope, &dirty))
+        })
+        .cloned()
+        .collect()
+}
+
+fn push_git_path(paths: &mut Vec<String>, bytes: &[u8]) -> Result<()> {
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    let path = std::str::from_utf8(bytes)
+        .map_err(|_| AppError::operational("could not inspect Git dirt: non-UTF-8 path in porcelain output"))?
+        .to_owned();
+    if !paths.contains(&path) {
+        paths.push(path);
+    }
+    Ok(())
+}
+
+fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {
+    let mut missing_error = None;
+    for ancestor in path.ancestors() {
+        match std::fs::canonicalize(ancestor) {
+            Ok(resolved) => {
+                let suffix = path.strip_prefix(ancestor).expect("ancestor comes from the same path");
+                return Ok(crate::lexically_normalized(resolved.join(suffix)));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => missing_error = Some(error),
+            Err(error) => return Err(error),
+        }
+    }
+    Err(missing_error.unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "path has no ancestor")))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, io::Cursor};
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    fn scope(path: &str, recursive: bool) -> Scope {
+        Scope { path: path.to_owned(), kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }
+    }
+
+    #[test]
+    fn normalizes_exact_and_recursive_scopes_and_rejects_ambiguity() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        fs::create_dir(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
+
+        let scopes =
+            normalize_work_scopes(&[PathBuf::from("src/lib.rs")], &[PathBuf::from("src")], root, root).unwrap();
+        assert_eq!(scopes, vec![scope("src/lib.rs", false), scope("src", true)]);
+        assert!(
+            normalize_work_scopes(&[PathBuf::from("src/lib.rs")], &[PathBuf::from("src/lib.rs")], root, root,).is_err()
+        );
+        assert!(normalize_work_scopes(&[PathBuf::from("src")], &[], root, root).is_err());
+    }
+
+    #[test]
+    fn groups_absolute_missing_bundle_scopes_by_physical_root() {
+        let temp = TempDir::new().unwrap();
+        let first = temp.path().join("z-repo");
+        let second = temp.path().join("a-repo");
+        fs::create_dir_all(first.join("src")).unwrap();
+        fs::create_dir_all(second.join("src")).unwrap();
+        for root in [&first, &second] {
+            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        }
+
+        let claims = normalize_work_claim_bundle(
+            &[first.join("src/z.rs"), second.join("src/b.rs"), second.join("src/a.rs")],
+            &[first.join("generated/missing")],
+        )
+        .unwrap();
+
+        assert_eq!(
+            claims.iter().map(|claim| claim.repo_root.clone()).collect::<Vec<_>>(),
+            [second.canonicalize().unwrap(), first.canonicalize().unwrap()]
+        );
+        assert_eq!(claims[0].scopes, [scope("src/a.rs", false), scope("src/b.rs", false)]);
+        assert_eq!(claims[1].scopes, [scope("generated/missing", true), scope("src/z.rs", false)]);
+    }
+
+    #[test]
+    fn bundle_rejects_relative_single_root_and_unsafe_or_mismatched_kinds() {
+        let temp = TempDir::new().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        fs::create_dir_all(first.join("dir")).unwrap();
+        fs::create_dir_all(second.join("dir")).unwrap();
+        fs::write(first.join("file.txt"), "first\n").unwrap();
+        for root in [&first, &second] {
+            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        }
+
+        assert!(normalize_work_claim_bundle(&[PathBuf::from("relative")], &[second.join("missing")]).is_err());
+        assert!(normalize_work_claim_bundle(&[first.join("missing")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[first.join("dir"), second.join("missing")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[second.join("missing")], &[first.join("file.txt")]).is_err());
+        assert!(normalize_work_claim_bundle(&[second.join("missing")], std::slice::from_ref(&first)).is_err());
+    }
+
+    #[test]
+    fn bundle_rejects_cross_kind_duplicates_after_normalization() {
+        let temp = TempDir::new().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        for root in [&first, &second] {
+            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        }
+        let duplicate = first.join("missing");
+        assert!(normalize_work_claim_bundle(&[duplicate.clone(), second.join("other")], &[duplicate]).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundle_rejects_glob_control_and_invalid_utf8_inputs() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+        let temp = TempDir::new().unwrap();
+        let invalid = temp.path().join(OsString::from_vec(vec![b'x', 0xff]));
+        assert!(normalize_work_claim_bundle(&[temp.path().join("*.rs"), temp.path().join("other")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[temp.path().join("bad\npath"), temp.path().join("other")], &[]).is_err());
+        assert!(normalize_work_claim_bundle(&[invalid, temp.path().join("other")], &[]).is_err());
+    }
+
+    #[test]
+    fn bundle_rejects_non_git_inputs() {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        assert!(normalize_work_claim_bundle(&[first.path().join("a"), second.path().join("b")], &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_globs_and_paths_outside_repository() {
+        let temp = TempDir::new().unwrap();
+        assert!(normalize_scopes(&[PathBuf::from("*.rs")], temp.path(), temp.path()).is_err());
+        assert!(normalize_scopes(&[PathBuf::from("../outside")], temp.path(), temp.path()).is_err());
+    }
+
+    #[test]
+    fn normalizes_missing_components_before_enforcing_the_repository_boundary() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("repo");
+        fs::create_dir(&root).unwrap();
+
+        assert_eq!(normalize_scopes(&[PathBuf::from("missing/../inside")], &root, &root).unwrap(), vec!["inside"]);
+        assert!(normalize_scopes(&[PathBuf::from("missing/../../outside")], &root, &root).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exact_symlink_is_literal_but_recursive_symlink_is_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().unwrap();
+        fs::create_dir(temp.path().join("real")).unwrap();
+        symlink(temp.path().join("real"), temp.path().join("link")).unwrap();
+        assert_eq!(
+            normalize_work_scopes(&[PathBuf::from("link")], &[], temp.path(), temp.path()).unwrap(),
+            vec![scope("link", false)]
+        );
+        assert!(normalize_work_scopes(&[], &[PathBuf::from("link")], temp.path(), temp.path()).is_err());
+    }
+
+    #[test]
+    fn exact_and_recursive_overlap_semantics_are_distinct() {
+        let exact_dir = scope("src", false);
+        let child = scope("src/lib.rs", false);
+        let recursive_dir = scope("src", true);
+        assert!(!scopes_overlap(&exact_dir, &child));
+        assert!(scopes_overlap(&recursive_dir, &child));
+        assert!(scopes_cover(&[recursive_dir], &[child]));
+        assert!(!scopes_cover(&[exact_dir], &[scope("src/lib.rs", false)]));
+    }
+
+    #[test]
+    fn inspects_git_root_dirt_and_blob_hashes() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::create_dir(root.join("nested")).unwrap();
+        fs::write(root.join("nested/file.txt"), "content\n").unwrap();
+
+        assert_eq!(git_root(&root.join("nested")), Some(root.canonicalize().unwrap()));
+        assert_eq!(git_dirty_paths(root).unwrap(), vec!["nested/file.txt"]);
+        assert_ne!(git_blob_hash(root, "nested/file.txt", false), UNHASHABLE_BLOB_HASH);
+        assert_eq!(git_blob_hash(root, "missing", false), UNHASHABLE_BLOB_HASH);
+        assert_eq!(relevant_dirty(&[scope("nested", true)], &["nested/file.txt".to_owned()]), vec!["nested/file.txt"]);
+    }
+
+    #[test]
+    fn git_root_preserves_trailing_whitespace_in_the_worktree_name() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("repo ");
+        fs::create_dir(&root).unwrap();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(&root).status().unwrap().success());
+
+        assert_eq!(git_root(&root), Some(root.canonicalize().unwrap()));
+    }
+
+    #[test]
+    fn hashes_more_than_one_batch_in_input_order() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        let paths = (0..129)
+            .map(|index| {
+                let path = format!("file-{index}.txt");
+                fs::write(root.join(&path), format!("content-{index}\n")).unwrap();
+                path
+            })
+            .collect::<Vec<_>>();
+
+        let hashes = git_blob_hashes(root, &paths, false);
+
+        assert_eq!(hashes.len(), paths.len());
+        assert_eq!(hashes.iter().map(|(path, _)| path).collect::<Vec<_>>(), paths.iter().collect::<Vec<_>>());
+        assert!(hashes.iter().all(|(_, hash)| hash != UNHASHABLE_BLOB_HASH));
+    }
+
+    #[test]
+    fn hashes_duplicates_special_names_and_missing_inputs_in_order() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("with spaces.txt"), "spaces\n").unwrap();
+        fs::write(root.join("with\nnewline.txt"), "newline\n").unwrap();
+        fs::write(root.join("deleted.txt"), "deleted\n").unwrap();
+        assert!(Command::new("git").args(["add", "deleted.txt"]).current_dir(root).status().unwrap().success());
+        fs::remove_file(root.join("deleted.txt")).unwrap();
+        let paths = vec![
+            "with spaces.txt".to_owned(),
+            "missing.txt".to_owned(),
+            "with spaces.txt".to_owned(),
+            "deleted.txt".to_owned(),
+            "with\nnewline.txt".to_owned(),
+        ];
+
+        let hashes = git_blob_hashes(root, &paths, false);
+
+        assert_eq!(hashes.iter().map(|(path, _)| path).collect::<Vec<_>>(), paths.iter().collect::<Vec<_>>());
+        assert_ne!(hashes[0].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes[1].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes[2].1, hashes[0].1);
+        assert_eq!(hashes[3].1, UNHASHABLE_BLOB_HASH);
+        assert_ne!(hashes[4].1, UNHASHABLE_BLOB_HASH);
+    }
+
+    #[test]
+    fn batch_failure_falls_back_without_losing_path_mapping() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("first.txt"), "first\n").unwrap();
+        fs::create_dir(root.join("not-a-blob")).unwrap();
+        fs::write(root.join("last.txt"), "last\n").unwrap();
+        let paths = vec!["first.txt".to_owned(), "not-a-blob".to_owned(), "last.txt".to_owned()];
+
+        let hashes = git_blob_hashes(root, &paths, false);
+
+        assert_eq!(hashes.iter().map(|(path, _)| path).collect::<Vec<_>>(), paths.iter().collect::<Vec<_>>());
+        assert_ne!(hashes[0].1, UNHASHABLE_BLOB_HASH);
+        assert_eq!(hashes[1].1, UNHASHABLE_BLOB_HASH);
+        assert_ne!(hashes[2].1, UNHASHABLE_BLOB_HASH);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hashes_symlink_contents_including_broken_targets() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("target.txt"), "target\n").unwrap();
+        symlink("target.txt", root.join("valid-link")).unwrap();
+        symlink("missing-target.txt", root.join("broken-link")).unwrap();
+        assert!(
+            Command::new("git")
+                .args(["add", "valid-link", "broken-link"])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let paths = vec!["valid-link".to_owned(), "broken-link".to_owned()];
+
+        let hashes = git_blob_hashes(root, &paths, false);
+        let expected = paths
+            .iter()
+            .map(|path| {
+                String::from_utf8(
+                    Command::new("git")
+                        .args(["rev-parse", &format!(":{path}")])
+                        .current_dir(root)
+                        .output()
+                        .unwrap()
+                        .stdout,
+                )
+                .unwrap()
+                .trim()
+                .to_owned()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(hashes.iter().map(|(_, hash)| hash).collect::<Vec<_>>(), expected.iter().collect::<Vec<_>>());
+        assert_ne!(hashes[0].1, git_blob_hash(root, "target.txt", false));
+    }
+
+    #[test]
+    fn read_mode_does_not_write_blobs_but_write_mode_persists_them() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("file.txt"), "content\n").unwrap();
+        let paths = vec!["file.txt".to_owned()];
+
+        let read_hash = git_blob_hashes(root, &paths, false)[0].1.clone();
+        assert_ne!(read_hash, UNHASHABLE_BLOB_HASH);
+        assert!(
+            !Command::new("git")
+                .args(["cat-file", "-e"])
+                .arg(format!("{read_hash}^{{blob}}"))
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        let write_hash = git_blob_hashes(root, &paths, true)[0].1.clone();
+        assert_eq!(write_hash, read_hash);
+        assert!(
+            Command::new("git")
+                .args(["cat-file", "-e"])
+                .arg(format!("{write_hash}^{{blob}}"))
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+
+    #[test]
+    fn git_dirt_includes_both_sides_of_a_rename() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        fs::write(root.join("before.txt"), "content\n").unwrap();
+        assert!(Command::new("git").args(["add", "before.txt"]).current_dir(root).status().unwrap().success());
+        assert!(
+            Command::new("git")
+                .args(["-c", "user.name=ai-coord test", "-c", "user.email=test@invalid", "commit", "-qm", "fixture",])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        fs::rename(root.join("before.txt"), root.join("after.txt")).unwrap();
+        assert!(
+            Command::new("git").args(["add", "before.txt", "after.txt"]).current_dir(root).status().unwrap().success()
+        );
+
+        let dirty = git_dirty_paths(root).unwrap();
+        assert!(dirty.contains(&"before.txt".to_owned()));
+        assert!(dirty.contains(&"after.txt".to_owned()));
+    }
+
+    #[test]
+    fn git_dirt_rejects_non_utf8_porcelain_paths() {
+        let error = parse_git_dirty_paths(b"?? foo\xff.txt\0").unwrap_err();
+        assert_eq!(error.to_string(), "could not inspect Git dirt: non-UTF-8 path in porcelain output");
+    }
+
+    #[test]
+    fn command_output_reader_enforces_its_byte_limit() {
+        let error = read_bounded_output(&mut Cursor::new(b"abcd"), 3).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_timeout_includes_inherited_output_pipes() {
+        let started = Instant::now();
+        let error = run_output_timeout(Command::new("/bin/sh").args(["-c", "sleep 1 &"]), Duration::from_millis(50))
+            .unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < Duration::from_millis(500));
+    }
+}

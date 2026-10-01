@@ -1,0 +1,887 @@
+use std::{collections::BTreeSet, fs};
+
+use regex::Regex;
+use serde_json::Value;
+
+use crate::{
+    catalog::{Catalog, Skill},
+    diagnostic::Diagnostic,
+    frontmatter::{Frontmatter, FrontmatterValue, SUPPORTED_FIELDS, markdown_prose},
+};
+
+use super::{
+    AuditSelection, fix,
+    model::{Counts, Finding, Fix, Report, SCHEMA_VERSION, Severity},
+    readme,
+    resource::resource_target,
+};
+
+const COORDINATION_EXEMPT_SENTENCE: &str =
+    "This skill is coordination-exempt: skip the ai-coord gate for its declared work.";
+
+pub fn build_report(catalog: &Catalog, selection: &AuditSelection, dependencies_only: bool, fix_safe: bool) -> Report {
+    let mut findings = catalog
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| selection.includes(&diagnostic.path))
+        .filter(|diagnostic| retained_shared_diagnostic(diagnostic, dependencies_only))
+        .map(shared_finding)
+        .collect::<Vec<_>>();
+    let mut fixes = Vec::new();
+    let skills = catalog.skills.iter().filter(|skill| selection.includes(skill.skill_path())).collect::<Vec<_>>();
+
+    for skill in &skills {
+        let Some(frontmatter) = skill.frontmatter.as_ref() else {
+            continue;
+        };
+        let source = match fs::read_to_string(skill.skill_path()) {
+            Ok(source) => source,
+            Err(error) => {
+                findings.push(Finding::new(
+                    "SKILL_READ_ERROR",
+                    Severity::Error,
+                    skill.skill_path(),
+                    None,
+                    false,
+                    format!("could not read SKILL.md: {error}"),
+                ));
+                continue;
+            }
+        };
+        check_required_frontmatter(skill, frontmatter, dependencies_only, &mut findings);
+        check_field_order(skill, frontmatter, dependencies_only, &mut findings);
+        if dependencies_only {
+            continue;
+        }
+
+        check_typed_frontmatter(skill, frontmatter, &mut findings);
+        check_coordination(skill, frontmatter, &source, &mut findings);
+        check_openai(skill, frontmatter, fix_safe, &mut findings, &mut fixes);
+        check_cli_version(skill, frontmatter, &mut findings);
+        check_resource_links(skill, &source, &mut findings);
+        check_prompt_hygiene(skill, frontmatter, &source, &mut findings);
+    }
+
+    let roots = selection.roots.iter().map(|root| readme::root_record(root, &skills)).collect::<Vec<_>>();
+    if !dependencies_only {
+        for root in selection.roots.iter().filter(|root| selection.checks_readme(root)) {
+            readme::check(root, &skills, &mut findings);
+        }
+    }
+
+    findings.sort();
+    findings.dedup();
+    fixes.sort();
+    fixes.dedup();
+    let counts = counts(&findings, &fixes);
+    Report { schema_version: SCHEMA_VERSION, roots, counts, findings, fixes }
+}
+
+fn retained_shared_diagnostic(diagnostic: &Diagnostic, dependencies_only: bool) -> bool {
+    diagnostic.code.starts_with("FRONTMATTER_") || diagnostic.code.starts_with("SKILL_DEPENDENC") || !dependencies_only
+}
+
+fn shared_finding(diagnostic: &Diagnostic) -> Finding {
+    Finding::new(
+        diagnostic.code.clone(),
+        Severity::Error,
+        diagnostic.path.clone(),
+        diagnostic.line,
+        false,
+        diagnostic.message.clone(),
+    )
+}
+
+fn check_required_frontmatter(
+    skill: &Skill,
+    frontmatter: &Frontmatter,
+    dependencies_only: bool,
+    findings: &mut Vec<Finding>,
+) {
+    match frontmatter.name.as_ref() {
+        None if !frontmatter.has_field("name") => findings.push(Finding::new(
+            "NAME_MISSING",
+            Severity::Error,
+            skill.skill_path(),
+            Some(2),
+            false,
+            "missing required name",
+        )),
+        None => findings.push(Finding::new(
+            "NAME_INVALID",
+            Severity::Error,
+            skill.skill_path(),
+            frontmatter.field("name").map(|field| field.line),
+            false,
+            "name must be a string",
+        )),
+        Some(name) => {
+            if crate::dependency::SkillName::parse(&name.value).is_err() {
+                findings.push(Finding::new(
+                    "NAME_INVALID",
+                    Severity::Error,
+                    skill.skill_path(),
+                    Some(name.line),
+                    false,
+                    "name must be 1-64 characters of canonical kebab-case",
+                ));
+            }
+            if !dependencies_only && name.value != skill.directory_name {
+                findings.push(Finding::new(
+                    "NAME_DIRECTORY_MISMATCH",
+                    Severity::Error,
+                    skill.skill_path(),
+                    Some(name.line),
+                    false,
+                    format!("name {:?} does not match directory {:?}", name.value, skill.directory_name),
+                ));
+            }
+        }
+    }
+
+    match frontmatter.description.as_ref() {
+        None if !frontmatter.has_field("description") => findings.push(Finding::new(
+            "DESCRIPTION_MISSING",
+            Severity::Error,
+            skill.skill_path(),
+            Some(2),
+            false,
+            "missing required description",
+        )),
+        None => findings.push(Finding::new(
+            "DESCRIPTION_INVALID",
+            Severity::Error,
+            skill.skill_path(),
+            frontmatter.field("description").map(|field| field.line),
+            false,
+            "description must be a string",
+        )),
+        Some(description) if description.value.trim().is_empty() => findings.push(Finding::new(
+            "DESCRIPTION_MISSING",
+            Severity::Error,
+            skill.skill_path(),
+            Some(description.line),
+            false,
+            "missing required description",
+        )),
+        Some(description) if !dependencies_only && description.value.chars().count() > 1024 => {
+            findings.push(Finding::new(
+                "DESCRIPTION_TOO_LONG",
+                Severity::Error,
+                skill.skill_path(),
+                Some(description.line),
+                false,
+                format!("description is {} chars; max is 1024", description.value.chars().count()),
+            ));
+        }
+        Some(_) => {}
+    }
+}
+
+fn check_field_order(skill: &Skill, frontmatter: &Frontmatter, dependencies_only: bool, findings: &mut Vec<Finding>) {
+    let actual = frontmatter.fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>();
+    let mut expected = actual.iter().filter(|name| name.as_str() != "description").cloned().collect::<Vec<_>>();
+    expected.sort();
+    if actual.iter().any(|name| name == "description") {
+        expected.push("description".to_owned());
+    }
+    if actual == expected {
+        return;
+    }
+    if frontmatter.has_field("skill-dependencies") {
+        findings.push(Finding::new(
+            "SKILL_DEPENDENCIES_FIELD_ORDER",
+            Severity::Error,
+            skill.skill_path(),
+            Some(2),
+            false,
+            "frontmatter containing skill-dependencies must be alphabetized with description last",
+        ));
+    } else if !dependencies_only {
+        findings.push(Finding::new(
+            "FRONTMATTER_FIELD_ORDER",
+            Severity::Warning,
+            skill.skill_path(),
+            Some(2),
+            false,
+            "frontmatter fields must be alphabetized with description last",
+        ));
+    }
+}
+
+fn check_typed_frontmatter(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<Finding>) {
+    for field in &frontmatter.fields {
+        if !SUPPORTED_FIELDS.contains(&field.name.as_str()) {
+            findings.push(Finding::new(
+                "FRONTMATTER_UNKNOWN_FIELD",
+                Severity::Error,
+                skill.skill_path(),
+                Some(field.line),
+                false,
+                format!("unknown frontmatter field {:?}", field.name),
+            ));
+        }
+    }
+
+    for (name, code) in [
+        ("license", "LICENSE_INVALID_TYPE"),
+        ("when_to_use", "WHEN_TO_USE_INVALID_TYPE"),
+        ("argument-hint", "ARGUMENT_HINT_INVALID"),
+        ("model", "MODEL_INVALID_TYPE"),
+        ("effort", "EFFORT_INVALID_TYPE"),
+        ("context", "CONTEXT_INVALID"),
+        ("agent", "AGENT_INVALID"),
+        ("shell", "SHELL_INVALID_TYPE"),
+        ("coordination", "COORDINATION_INVALID"),
+    ] {
+        if frontmatter.value(name).is_some_and(|value| !matches!(&value.value, FrontmatterValue::String(_))) {
+            findings.push(typed_finding(skill, frontmatter, name, code, format!("{name} must be a string")));
+        }
+    }
+    for (name, code) in [
+        ("allowed-tools", "ALLOWED_TOOLS_INVALID_TYPE"),
+        ("arguments", "ARGUMENTS_INVALID_TYPE"),
+        ("disallowed-tools", "DISALLOWED_TOOLS_INVALID_TYPE"),
+        ("paths", "PATHS_INVALID_TYPE"),
+    ] {
+        check_string_or_list_field(skill, frontmatter, name, code, findings);
+    }
+    for (name, valid, code) in [
+        ("user-invocable", frontmatter.user_invocable.is_some(), "USER_INVOCABLE_INVALID"),
+        (
+            "disable-model-invocation",
+            frontmatter.disable_model_invocation.is_some(),
+            "DISABLE_MODEL_INVOCATION_INVALID",
+        ),
+        ("background", frontmatter.background.is_some(), "BACKGROUND_INVALID_TYPE"),
+    ] {
+        check_bool_field(skill, frontmatter, name, valid, code, findings);
+    }
+    check_compatibility(skill, frontmatter, findings);
+    check_metadata(skill, frontmatter, findings);
+
+    if frontmatter.value("hooks").is_some_and(|value| !matches!(&value.value, FrontmatterValue::Mapping(_))) {
+        findings.push(typed_finding(skill, frontmatter, "hooks", "HOOKS_INVALID_TYPE", "hooks must be a mapping"));
+    }
+    if let Some(context) = frontmatter.context.as_ref() &&
+        context.value != "fork"
+    {
+        findings.push(value_finding(skill, context.line, "CONTEXT_INVALID", "context must be fork when present"));
+    }
+    if let Some(effort) = frontmatter.effort.as_ref() &&
+        !matches!(effort.value.as_str(), "low" | "medium" | "high" | "xhigh" | "max")
+    {
+        findings.push(value_finding(
+            skill,
+            effort.line,
+            "EFFORT_INVALID_VALUE",
+            "effort must be low, medium, high, xhigh, or max",
+        ));
+    }
+    if let Some(shell) = frontmatter.shell.as_ref() &&
+        !matches!(shell.value.as_str(), "bash" | "powershell")
+    {
+        findings.push(value_finding(skill, shell.line, "SHELL_INVALID_VALUE", "shell must be bash or powershell"));
+    }
+    if let Some(coordination) = frontmatter.coordination.as_ref() &&
+        coordination.value != "exempt"
+    {
+        findings.push(value_finding(
+            skill,
+            coordination.line,
+            "COORDINATION_INVALID",
+            "coordination must be exempt when present",
+        ));
+    }
+    if let Some(targets) = frontmatter.install_targets.as_ref() &&
+        targets.value.is_none() &&
+        install_targets_is_string(frontmatter)
+    {
+        findings.push(value_finding(
+            skill,
+            targets.line,
+            "INSTALL_TARGETS_INVALID",
+            "metadata.install-targets must be claude-code, codex, or claude-code codex",
+        ));
+    }
+
+    let forked = frontmatter.context.as_ref().is_some_and(|context| context.value == "fork");
+    if !forked && let Some(agent) = frontmatter.agent.as_ref() {
+        findings.push(value_finding(skill, agent.line, "AGENT_CONTEXT_REQUIRED", "agent requires context: fork"));
+    }
+    if !forked && let Some(background) = frontmatter.background.as_ref() {
+        findings.push(value_finding(
+            skill,
+            background.line,
+            "BACKGROUND_CONTEXT_REQUIRED",
+            "background requires context: fork",
+        ));
+    }
+}
+
+fn check_string_or_list_field(
+    skill: &Skill,
+    frontmatter: &Frontmatter,
+    name: &str,
+    code: &str,
+    findings: &mut Vec<Finding>,
+) {
+    let Some(value) = frontmatter.value(name) else {
+        return;
+    };
+    let invalid_line = match &value.value {
+        FrontmatterValue::String(_) => return,
+        FrontmatterValue::Sequence(items) => {
+            items.iter().find(|item| !matches!(&item.value, FrontmatterValue::String(_))).map(|item| item.line)
+        }
+        _ => Some(value.line),
+    };
+    if let Some(line) = invalid_line {
+        findings.push(value_finding(skill, line, code, format!("{name} must be a string or a list of strings")));
+    }
+}
+
+fn check_compatibility(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<Finding>) {
+    if !frontmatter.has_field("compatibility") {
+        return;
+    }
+    match frontmatter.compatibility.as_ref() {
+        None => findings.push(typed_finding(
+            skill,
+            frontmatter,
+            "compatibility",
+            "COMPATIBILITY_INVALID",
+            "compatibility must be a string",
+        )),
+        Some(value) if value.value.is_empty() => findings.push(value_finding(
+            skill,
+            value.line,
+            "COMPATIBILITY_INVALID",
+            "compatibility must be non-empty when present",
+        )),
+        Some(value) if value.value.chars().count() > 500 => findings.push(value_finding(
+            skill,
+            value.line,
+            "COMPATIBILITY_TOO_LONG",
+            format!("compatibility is {} chars; max is 500", value.value.chars().count()),
+        )),
+        Some(_) => {}
+    }
+}
+
+fn check_metadata(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<Finding>) {
+    let Some(value) = frontmatter.value("metadata") else {
+        return;
+    };
+    let FrontmatterValue::Mapping(entries) = &value.value else {
+        findings.push(typed_finding(skill, frontmatter, "metadata", "METADATA_INVALID", "metadata must be a mapping"));
+        return;
+    };
+    for entry in entries {
+        if !matches!(&entry.value.value, FrontmatterValue::String(_)) {
+            findings.push(value_finding(
+                skill,
+                entry.value.line,
+                "METADATA_VALUE_INVALID_TYPE",
+                format!("metadata entry {:?} must have a string value", entry.key.value),
+            ));
+        }
+    }
+}
+
+fn install_targets_is_string(frontmatter: &Frontmatter) -> bool {
+    let Some(value) = frontmatter.value("metadata") else {
+        return false;
+    };
+    let FrontmatterValue::Mapping(entries) = &value.value else {
+        return false;
+    };
+    entries
+        .iter()
+        .find(|entry| entry.key.value == "install-targets")
+        .is_some_and(|entry| matches!(&entry.value.value, FrontmatterValue::String(_)))
+}
+
+fn check_bool_field(
+    skill: &Skill,
+    frontmatter: &Frontmatter,
+    name: &str,
+    valid: bool,
+    code: &str,
+    findings: &mut Vec<Finding>,
+) {
+    if frontmatter.has_field(name) && !valid {
+        findings.push(typed_finding(skill, frontmatter, name, code, format!("{name} must be true or false")));
+    }
+}
+
+fn typed_finding(
+    skill: &Skill,
+    frontmatter: &Frontmatter,
+    field: &str,
+    code: &str,
+    message: impl Into<String>,
+) -> Finding {
+    Finding::new(
+        code,
+        Severity::Error,
+        skill.skill_path(),
+        frontmatter.field(field).map(|field| field.line),
+        false,
+        message,
+    )
+}
+
+fn value_finding(skill: &Skill, line: u64, code: &str, message: impl Into<String>) -> Finding {
+    Finding::new(code, Severity::Error, skill.skill_path(), Some(line), false, message)
+}
+
+fn check_coordination(skill: &Skill, frontmatter: &Frontmatter, source: &str, findings: &mut Vec<Finding>) {
+    let body_start = frontmatter_ranges(source).map_or(0, |(_, body)| body);
+    let body = &source[body_start..];
+    let prose = markdown_prose(body);
+    let normalized = prose.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mention = coordination_mention().find(&prose);
+    let exact = normalized.contains(COORDINATION_EXEMPT_SENTENCE);
+    let exempt = frontmatter.coordination.as_ref().is_some_and(|value| value.value == "exempt");
+
+    if !exempt && let Some(mention) = mention.as_ref() {
+        findings.push(Finding::new(
+            "COORDINATION_EXEMPT_FRONTMATTER_MISSING",
+            Severity::Error,
+            skill.skill_path(),
+            Some(line_at(source, body_start + mention.start())),
+            false,
+            "body declares coordination-exempt behavior but frontmatter does not set coordination: exempt",
+        ));
+    }
+    if exempt && !exact && mention.is_none() {
+        findings.push(Finding::new(
+            "COORDINATION_EXEMPT_SENTENCE_MISSING",
+            Severity::Error,
+            skill.skill_path(),
+            frontmatter.coordination.as_ref().map(|value| value.line),
+            false,
+            format!("coordination: exempt requires the canonical body sentence: {COORDINATION_EXEMPT_SENTENCE}"),
+        ));
+    } else if !exact && let Some(mention) = mention {
+        findings.push(Finding::new(
+            "COORDINATION_EXEMPT_SENTENCE_DRIFT",
+            Severity::Error,
+            skill.skill_path(),
+            Some(line_at(source, body_start + mention.start())),
+            false,
+            format!(
+                "coordination-exempt sentence differs from canonical text; expected: {COORDINATION_EXEMPT_SENTENCE}"
+            ),
+        ));
+    }
+}
+
+fn check_openai(
+    skill: &Skill,
+    frontmatter: &Frontmatter,
+    fix_safe: bool,
+    findings: &mut Vec<Finding>,
+    fixes: &mut Vec<Fix>,
+) {
+    if frontmatter.has_field("disable-model-invocation") && frontmatter.disable_model_invocation.is_none() {
+        return;
+    }
+    let expected = !frontmatter.disable_model_invocation.as_ref().is_some_and(|value| value.value);
+    let path = skill.exposure.exposure_directory().join("agents/openai.yaml");
+    if !path.exists() {
+        if skill.exposure.is_installed() {
+            return;
+        }
+        if !fix_safe {
+            let message = "missing agents/openai.yaml";
+            findings.push(Finding::new("OPENAI_METADATA_MISSING", Severity::Error, &path, None, true, message));
+        } else if let Err(error) = fix::create_metadata(&path, expected) {
+            findings.push(Finding::new(
+                "OPENAI_METADATA_FIX_FAILED",
+                Severity::FixError,
+                &path,
+                None,
+                true,
+                format!("failed to create openai.yaml: {error}"),
+            ));
+        } else {
+            fixes.push(Fix::new("OPENAI_METADATA_CREATED", &path, "created agents/openai.yaml"));
+        }
+        return;
+    }
+    let source = match fs::read_to_string(&path) {
+        Ok(source) => source,
+        Err(error) => {
+            findings.push(Finding::new(
+                "OPENAI_METADATA_READ_ERROR",
+                Severity::Error,
+                &path,
+                None,
+                false,
+                format!("could not read agents/openai.yaml: {error}"),
+            ));
+            return;
+        }
+    };
+    let parsed: Value = match serde_saphyr::from_str(&source) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            findings.push(Finding::new(
+                "OPENAI_METADATA_INVALID",
+                Severity::Error,
+                &path,
+                Some(1),
+                false,
+                format!("invalid YAML: {error}"),
+            ));
+            return;
+        }
+    };
+    let Some(object) = parsed.as_object() else {
+        findings.push(Finding::new(
+            "OPENAI_METADATA_INVALID",
+            Severity::Error,
+            &path,
+            Some(1),
+            false,
+            "agents/openai.yaml must be a mapping",
+        ));
+        return;
+    };
+    let actual = object
+        .get("policy")
+        .and_then(Value::as_object)
+        .and_then(|policy| policy.get("allow_implicit_invocation"))
+        .and_then(Value::as_bool);
+    let Some(actual) = actual else {
+        findings.push(Finding::new(
+            "OPENAI_POLICY_MISSING",
+            Severity::Error,
+            &path,
+            policy_value_line(&source),
+            false,
+            "missing boolean policy.allow_implicit_invocation",
+        ));
+        return;
+    };
+    if actual == expected {
+        return;
+    }
+    if !fix_safe {
+        findings.push(Finding::new(
+            "OPENAI_POLICY_MISMATCH",
+            Severity::Error,
+            &path,
+            policy_value_line(&source),
+            true,
+            format!("allow_implicit_invocation is {actual}, expected {expected}"),
+        ));
+    } else if let Err(error) = fix::update_policy(&path, &source, expected) {
+        findings.push(Finding::new(
+            "OPENAI_METADATA_FIX_FAILED",
+            Severity::FixError,
+            &path,
+            None,
+            true,
+            format!("failed to update openai.yaml: {error}"),
+        ));
+    } else {
+        fixes.push(Fix::new(
+            "OPENAI_POLICY_UPDATED",
+            &path,
+            format!("updated allow_implicit_invocation to {expected}"),
+        ));
+    }
+}
+
+fn check_cli_version(skill: &Skill, frontmatter: &Frontmatter, findings: &mut Vec<Finding>) {
+    let Some(name) = frontmatter.name.as_ref() else {
+        return;
+    };
+    if !name.value.starts_with("cli-") {
+        return;
+    }
+    let path = skill.exposure.exposure_directory().join("references/version.txt");
+    if !path.exists() {
+        findings.push(Finding::new(
+            "CLI_VERSION_MISSING",
+            Severity::Error,
+            &path,
+            None,
+            false,
+            "cli-* skill must maintain references/version.txt",
+        ));
+        return;
+    }
+    let source = match fs::read_to_string(&path) {
+        Ok(source) => source,
+        Err(error) => {
+            findings.push(Finding::new(
+                "CLI_VERSION_READ_ERROR",
+                Severity::Error,
+                &path,
+                None,
+                false,
+                format!("could not read references/version.txt: {error}"),
+            ));
+            return;
+        }
+    };
+    let lines = source.lines().collect::<Vec<_>>();
+    if lines.len() != 1 || !semver().is_match(lines[0]) {
+        findings.push(Finding::new(
+            "CLI_VERSION_INVALID",
+            Severity::Error,
+            &path,
+            Some(1),
+            false,
+            "references/version.txt must contain exactly one normalized semver line",
+        ));
+    }
+}
+
+fn check_resource_links(skill: &Skill, source: &str, findings: &mut Vec<Finding>) {
+    for regex in [markdown_resource(), script_resource()] {
+        for captures in regex.captures_iter(source) {
+            let Some(reference) = captures.name("path") else {
+                continue;
+            };
+            let raw = clean_reference(reference.as_str());
+            if raw.is_empty() || raw.ends_with('/') || raw.bytes().any(|byte| matches!(byte, b'*' | b'{' | b'}')) {
+                continue;
+            }
+            let Some(target) = resource_target(skill.exposure.exposure_directory(), raw) else {
+                findings.push(Finding::new(
+                    "RESOURCE_LINK_OUTSIDE_SKILL",
+                    Severity::Error,
+                    skill.skill_path(),
+                    Some(line_at(source, reference.start())),
+                    false,
+                    format!("resource link must stay inside its skill directory: {raw}"),
+                ));
+                continue;
+            };
+            if target.exists() {
+                continue;
+            }
+            findings.push(Finding::new(
+                "RESOURCE_LINK_MISSING",
+                Severity::Error,
+                skill.skill_path(),
+                Some(line_at(source, reference.start())),
+                false,
+                format!("referenced resource does not exist: {raw}"),
+            ));
+        }
+    }
+}
+
+fn check_prompt_hygiene(skill: &Skill, frontmatter: &Frontmatter, source: &str, findings: &mut Vec<Finding>) {
+    if let Some(model) = frontmatter.model.as_ref() &&
+        model.value.eq_ignore_ascii_case("opus")
+    {
+        findings.push(Finding::new(
+            "STALE_MODEL_PIN",
+            Severity::Warning,
+            skill.skill_path(),
+            Some(model.line),
+            false,
+            format!("model pin {:?} is a stale alias; verify that an explicit pin is still needed", model.value),
+        ));
+    }
+    if !completion_evidence().is_match(source) {
+        findings.push(Finding::new(
+            "COMPLETION_EVIDENCE_MISSING",
+            Severity::Warning,
+            skill.skill_path(),
+            None,
+            false,
+            "skill has no explicit completion, verification, validation, output, or report contract",
+        ));
+    }
+
+    for captures in markdown_resource().captures_iter(source) {
+        let Some(reference) = captures.name("path") else {
+            continue;
+        };
+        let raw = clean_reference(reference.as_str());
+        let Some(target) = resource_target(skill.exposure.exposure_directory(), raw) else {
+            continue;
+        };
+        if target.extension().and_then(|extension| extension.to_str()) != Some("md") || !target.is_file() {
+            continue;
+        }
+        let line_start = source[..reference.start()].rfind('\n').map_or(0, |offset| offset + 1);
+        let line_end = source[reference.end()..].find('\n').map_or(source.len(), |offset| reference.end() + offset);
+        let line = source[line_start..line_end].to_ascii_lowercase();
+        let unconditional = line.contains("mandatory") ||
+            line.contains("always read") ||
+            (line.contains("read") && line.contains("before"));
+        if !unconditional {
+            continue;
+        }
+        let Ok(reference_source) = fs::read_to_string(&target) else {
+            continue;
+        };
+        let lines = reference_source.lines().count();
+        if lines >= 400 {
+            findings.push(Finding::new(
+                "UNCONDITIONAL_REFERENCE_OVERSIZED",
+                Severity::Warning,
+                skill.skill_path(),
+                Some(line_at(source, reference.start())),
+                false,
+                format!("unconditional reference has {lines} lines: {raw}"),
+            ));
+        }
+    }
+
+    let requirements = authority_clauses(requirement(), source, true);
+    let prohibitions = authority_clauses(prohibition(), source, false);
+    'outer: for (required_offset, required) in &requirements {
+        if required.len() < 3 {
+            continue;
+        }
+        for (prohibited_offset, prohibited) in &prohibitions {
+            if prohibited.len() < 3 {
+                continue;
+            }
+            let union = required.union(prohibited).count();
+            let overlap = required.intersection(prohibited).count();
+            if union > 0 && overlap * 4 >= union * 3 {
+                findings.push(Finding::new(
+                    "CONFLICTING_AUTHORITY",
+                    Severity::Warning,
+                    skill.skill_path(),
+                    Some(line_at(source, (*required_offset).min(*prohibited_offset))),
+                    false,
+                    "similar action appears in both requirement and prohibition language; review authority",
+                ));
+                break 'outer;
+            }
+        }
+    }
+}
+
+fn counts(findings: &[Finding], fixes: &[Fix]) -> Counts {
+    Counts {
+        findings: findings.len(),
+        errors: findings.iter().filter(|finding| finding.severity == Severity::Error).count(),
+        warnings: findings.iter().filter(|finding| finding.severity == Severity::Warning).count(),
+        fixable: findings.iter().filter(|finding| finding.fixable).count(),
+        fixes: fixes.len(),
+        fix_errors: findings.iter().filter(|finding| finding.severity == Severity::FixError).count(),
+    }
+}
+
+fn frontmatter_ranges(source: &str) -> Option<(std::ops::Range<usize>, usize)> {
+    let mut lines = source.split_inclusive('\n');
+    let first = lines.next()?;
+    if first.trim_start_matches('\u{feff}').trim_end_matches(['\n', '\r']).trim_end() != "---" {
+        return None;
+    }
+    let yaml_start = first.len();
+    let mut offset = yaml_start;
+    for line in lines {
+        let content = line.trim_end_matches(['\n', '\r']).trim_end();
+        if content == "---" {
+            return Some((yaml_start..offset, offset + line.len()));
+        }
+        offset += line.len();
+    }
+    None
+}
+
+fn clean_reference(reference: &str) -> &str {
+    reference
+        .split(['#', '?'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(['.', ',', ';', ':', ')', ']', '}', '\'', '"'])
+}
+
+fn policy_value_line(source: &str) -> Option<u64> {
+    let mut in_policy = false;
+    for (index, line) in source.lines().enumerate() {
+        let content = line.trim_end_matches('\r');
+        let top_level =
+            !content.is_empty() && !content.starts_with([' ', '\t', '#']) && content != "---" && content != "...";
+        if top_level {
+            if in_policy {
+                return None;
+            }
+            in_policy = content.strip_prefix("policy:").is_some();
+        }
+        if in_policy && content.contains("allow_implicit_invocation") {
+            return Some(index as u64 + 1);
+        }
+    }
+    None
+}
+
+fn line_at(source: &str, offset: usize) -> u64 {
+    source.as_bytes()[..offset.min(source.len())].iter().filter(|byte| **byte == b'\n').count() as u64 + 1
+}
+
+fn authority_clauses(regex: &Regex, source: &str, exclude_leading_not: bool) -> Vec<(usize, BTreeSet<String>)> {
+    regex
+        .captures_iter(source)
+        .filter_map(|captures| {
+            let whole = captures.get(0)?;
+            let clause = captures.get(1)?;
+            if exclude_leading_not && clause.as_str().trim_start().to_ascii_lowercase().starts_with("not ") {
+                return None;
+            }
+            let words = word().find_iter(clause.as_str()).take(10).filter_map(|word| {
+                let word = word.as_str().to_ascii_lowercase();
+                (!matches!(word.as_str(), "the" | "a" | "an" | "to" | "of" | "and" | "or" | "when" | "if"))
+                    .then_some(word)
+            });
+            Some((whole.start(), words.collect()))
+        })
+        .collect()
+}
+
+fn coordination_mention() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| Regex::new(r"(?i)\bThis\s+skill\s+is\s+coordination-exempt\b").unwrap())
+}
+
+fn semver() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| Regex::new(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$").unwrap())
+}
+
+fn markdown_resource() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| Regex::new(r"\]\((?P<path>(?:references|scripts|assets)/[^)\s]+)\)").unwrap())
+}
+
+fn script_resource() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| {
+        Regex::new(r"(?:^|[^A-Za-z0-9_./-])uv run (?P<path>scripts/[A-Za-z0-9][A-Za-z0-9._/-]*)").unwrap()
+    })
+}
+
+fn completion_evidence() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| Regex::new(r"(?im)^##+[^\n]*\b(?:completion|verify|verification|validation|output|report|result|exit codes)\b|\b(?:success means|complete when|completion requires|completion is|finish with)\b").unwrap())
+}
+
+fn requirement() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| Regex::new(r"(?i)\b(?:always|must|required to)\s+([^.!?\n]+)").unwrap())
+}
+
+fn prohibition() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| Regex::new(r"(?i)\b(?:do not|don't|never|must not|forbid(?:s|den)?)\s+([^.!?\n]+)").unwrap())
+}
+
+fn word() -> &'static Regex {
+    static VALUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| Regex::new(r"[a-zA-Z0-9_-]+").unwrap())
+}

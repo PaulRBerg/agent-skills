@@ -1,0 +1,9 @@
+overrides:
+  - files: "*.md"
+    options:
+      printWidth: 120
+      proseWrap: "always"
+  - files: ["*.json", "*.jsonc"]
+    options:
+      printWidth: 100
+      trailingComma: "none"

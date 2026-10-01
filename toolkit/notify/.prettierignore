@@ -1,0 +1,6 @@
+# directories
+.ai/
+.serena/
+
+# files
+settings.local.json

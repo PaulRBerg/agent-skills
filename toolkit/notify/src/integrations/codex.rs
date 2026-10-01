@@ -1,0 +1,584 @@
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
+use serde_json::Value as JsonValue;
+use toml_edit::{Array, DocumentMut, Item, Value};
+
+use crate::{
+    atomic_write,
+    error::{AppError, Result},
+};
+
+use super::IntegrationStatus;
+
+/// The callback command installed in Codex's root `notify` key.
+pub const CODEX_NOTIFY_COMMAND: &[&str] = &["ai-notify", "codex"];
+
+/// The native Codex hook events that `ai-notify event codex` must receive.
+pub const CODEX_HOOK_EVENTS: &[&str] = &["UserPromptSubmit", "Stop"];
+
+/// The result of changing a Codex notify setting.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CodexNotifyUpdate {
+    pub path: PathBuf,
+    pub changed: bool,
+    pub profile: Option<String>,
+    pub conflict: bool,
+    /// The previous root `notify` value, rendered as TOML for useful CLI reporting.
+    pub previous_notify: Option<String>,
+}
+
+/// The effective Codex notify setting after applying a selected profile overlay.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CodexNotifyReport {
+    pub status: IntegrationStatus,
+    pub path: Option<PathBuf>,
+    /// The effective value, rendered as TOML.
+    pub notify: Option<String>,
+    pub error: Option<String>,
+    pub profile: Option<String>,
+    pub paths: Vec<PathBuf>,
+}
+
+impl CodexNotifyReport {
+    /// Whether parsing or profile resolution failed and a CLI must exit non-zero.
+    pub fn has_error(&self) -> bool {
+        self.status == IntegrationStatus::Error
+    }
+}
+
+/// Native Codex hook coverage read from `hooks.json` in the Codex config directory.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CodexHooksReport {
+    pub path: PathBuf,
+    pub installed_events: Vec<String>,
+    pub missing_events: Vec<String>,
+    pub error: Option<String>,
+}
+
+impl CodexHooksReport {
+    pub fn status(&self) -> IntegrationStatus {
+        if self.error.is_some() {
+            IntegrationStatus::Error
+        } else if self.missing_events.is_empty() {
+            IntegrationStatus::Ok
+        } else if self.installed_events.is_empty() {
+            IntegrationStatus::Missing
+        } else {
+            IntegrationStatus::Partial
+        }
+    }
+}
+
+/// Codex notification coverage from native hooks and the legacy `notify` callback combined.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CodexIntegrationReport {
+    pub status: IntegrationStatus,
+    pub hooks: CodexHooksReport,
+    pub notify: CodexNotifyReport,
+}
+
+impl CodexIntegrationReport {
+    /// Whether either source failed to parse or resolve and a CLI must exit non-zero.
+    pub fn has_error(&self) -> bool {
+        self.status == IntegrationStatus::Error
+    }
+}
+
+/// Validate a Codex profile name, preventing profile paths from escaping the config directory.
+pub fn validate_codex_profile_name(profile: &str) -> Result<&str> {
+    if !profile.is_empty() && profile.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')) {
+        Ok(profile)
+    } else {
+        Err(AppError::usage("Codex profile names may contain only letters, numbers, hyphens, and underscores"))
+    }
+}
+
+/// Resolve a base config file to the selected sibling profile config file.
+pub fn resolve_codex_config_path(config_path: &Path, profile: Option<&str>) -> Result<PathBuf> {
+    match profile {
+        None => Ok(config_path.to_path_buf()),
+        Some(profile) => {
+            validate_codex_profile_name(profile)?;
+            Ok(config_path.with_file_name(format!("{profile}.config.toml")))
+        }
+    }
+}
+
+/// Set Codex's exact root `notify` array, preserving unrelated TOML syntax and comments.
+pub fn set_codex_notify(
+    config_path: &Path,
+    command: &[&str],
+    profile: Option<&str>,
+    force: bool,
+) -> Result<CodexNotifyUpdate> {
+    let target_path = resolve_codex_config_path(config_path, profile)?;
+    let mut document = load_document(&target_path)?;
+    let previous = document.get("notify").map(render_item);
+
+    if let Some(item) = document.get("notify") {
+        if notify_equals(item, command) {
+            return Ok(CodexNotifyUpdate {
+                path: target_path,
+                changed: false,
+                profile: profile.map(ToOwned::to_owned),
+                conflict: false,
+                previous_notify: previous,
+            });
+        }
+        if !force {
+            return Ok(CodexNotifyUpdate {
+                path: target_path,
+                changed: false,
+                profile: profile.map(ToOwned::to_owned),
+                conflict: true,
+                previous_notify: previous,
+            });
+        }
+    }
+
+    // Replacing the value would otherwise drop an inline comment attached to the old value.
+    let decor = document.get("notify").and_then(Item::as_value).map(|value| value.decor().clone());
+    let mut replacement = command_array(command);
+    if let Some(decor) = decor {
+        *replacement.decor_mut() = decor;
+    }
+    document["notify"] = Item::Value(replacement);
+    atomic_write::replace(&target_path, document.to_string())?;
+    Ok(CodexNotifyUpdate {
+        path: target_path,
+        changed: true,
+        profile: profile.map(ToOwned::to_owned),
+        conflict: previous.is_some(),
+        previous_notify: previous,
+    })
+}
+
+/// Inspect Codex's base config and, when requested, its mandatory profile overlay.
+pub fn inspect_codex_notify(config_root: &Path, profile: Option<&str>) -> CodexNotifyReport {
+    let base_path = config_root.join("config.toml");
+    let profile_path = match resolve_codex_config_path(&base_path, profile) {
+        Ok(path) => path,
+        Err(error) => {
+            return CodexNotifyReport {
+                status: IntegrationStatus::Error,
+                path: None,
+                notify: None,
+                error: Some(error.message),
+                profile: profile.map(ToOwned::to_owned),
+                paths: Vec::new(),
+            };
+        }
+    };
+    let layer_paths =
+        if profile.is_some() { vec![base_path.clone(), profile_path.clone()] } else { vec![base_path.clone()] };
+    let mut loaded_paths = Vec::new();
+    let mut notify = None;
+    let mut notify_matches = None;
+    let mut notify_path = None;
+
+    if profile.is_some() && !profile_path.exists() {
+        return CodexNotifyReport {
+            status: IntegrationStatus::Error,
+            path: Some(profile_path.clone()),
+            notify: None,
+            error: Some(format!("Profile config not found: {}", profile_path.display())),
+            profile: profile.map(ToOwned::to_owned),
+            paths: if base_path.exists() { vec![base_path] } else { Vec::new() },
+        };
+    }
+
+    for path in layer_paths {
+        if !path.exists() {
+            continue;
+        }
+        let document = match load_document(&path) {
+            Ok(document) => document,
+            Err(error) => {
+                loaded_paths.push(path.clone());
+                return CodexNotifyReport {
+                    status: IntegrationStatus::Error,
+                    path: Some(path),
+                    notify: None,
+                    error: Some(error.message),
+                    profile: profile.map(ToOwned::to_owned),
+                    paths: loaded_paths,
+                };
+            }
+        };
+        loaded_paths.push(path.clone());
+        if let Some(item) = document.get("notify") {
+            notify_matches = Some(notify_uses_ai_notify(item));
+            notify = Some(render_item(item));
+            notify_path = Some(path);
+        }
+    }
+
+    let status = match notify_matches {
+        None => IntegrationStatus::Missing,
+        Some(true) => IntegrationStatus::Ok,
+        Some(false) => IntegrationStatus::Partial,
+    };
+    CodexNotifyReport {
+        status,
+        path: notify_path.or_else(|| loaded_paths.last().cloned()),
+        notify,
+        error: None,
+        profile: profile.map(ToOwned::to_owned),
+        paths: loaded_paths,
+    }
+}
+
+/// Inspect both Codex mechanisms; either one fully configured makes the integration OK.
+pub fn inspect_codex_integration(config_root: &Path, profile: Option<&str>) -> CodexIntegrationReport {
+    let hooks = inspect_codex_hooks(config_root);
+    let notify = inspect_codex_notify(config_root, profile);
+    let status = match (hooks.status(), notify.status) {
+        (IntegrationStatus::Error, _) | (_, IntegrationStatus::Error) => IntegrationStatus::Error,
+        (IntegrationStatus::Ok, _) | (_, IntegrationStatus::Ok) => IntegrationStatus::Ok,
+        (IntegrationStatus::Missing, IntegrationStatus::Missing) => IntegrationStatus::Missing,
+        _ => IntegrationStatus::Partial,
+    };
+    CodexIntegrationReport { status, hooks, notify }
+}
+
+/// Inspect `hooks.json` for native hook handlers that run `ai-notify event codex`.
+fn inspect_codex_hooks(config_root: &Path) -> CodexHooksReport {
+    let path = config_root.join("hooks.json");
+    let (installed_events, error) = match codex_hook_events(&path) {
+        Ok(events) => (events, None),
+        Err(error) => (Vec::new(), Some(error.message)),
+    };
+    let missing_events = CODEX_HOOK_EVENTS
+        .iter()
+        .filter(|event| !installed_events.iter().any(|installed| installed == *event))
+        .map(|event| (*event).to_owned())
+        .collect();
+    CodexHooksReport { path, installed_events, missing_events, error }
+}
+
+fn codex_hook_events(path: &Path) -> Result<Vec<String>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = fs::read_to_string(path)?;
+    let data: JsonValue = serde_json::from_str(&text)
+        .map_err(|error| AppError::integration(format!("failed to parse {}: {error}", path.display())))?;
+    let Some(root) = data.as_object() else {
+        return Err(AppError::integration(format!("{} must contain a JSON object at the root", path.display())));
+    };
+    let Some(hooks) = root.get("hooks") else {
+        return Ok(Vec::new());
+    };
+    let Some(hooks) = hooks.as_object() else {
+        return Err(AppError::integration(format!("{}: hooks field must be an object", path.display())));
+    };
+    Ok(CODEX_HOOK_EVENTS
+        .iter()
+        .filter(|event| hooks.get(**event).is_some_and(groups_run_codex_hook))
+        .map(|event| (*event).to_owned())
+        .collect())
+}
+
+/// Codex ignores matchers for `UserPromptSubmit` and `Stop`, so any matcher group counts.
+fn groups_run_codex_hook(groups: &JsonValue) -> bool {
+    groups.as_array().into_iter().flatten().any(|group| {
+        group.get("hooks").and_then(JsonValue::as_array).into_iter().flatten().any(|hook| {
+            hook.get("type").and_then(JsonValue::as_str) == Some("command") &&
+                hook.get("command").and_then(JsonValue::as_str).is_some_and(|command| {
+                    crate::cli::codex_hook_argv_runs(&command.split_whitespace().collect::<Vec<_>>())
+                })
+        })
+    })
+}
+
+fn load_document(path: &Path) -> Result<DocumentMut> {
+    if !path.exists() {
+        return Ok(DocumentMut::new());
+    }
+    let text = fs::read_to_string(path)?;
+    if text.trim().is_empty() {
+        return Ok(DocumentMut::new());
+    }
+    text.parse::<DocumentMut>()
+        .map_err(|error| AppError::integration(format!("failed to parse {}: {error}", path.display())))
+}
+
+fn command_array(command: &[&str]) -> Value {
+    let mut array = Array::new();
+    for part in command {
+        array.push(*part);
+    }
+    Value::Array(array)
+}
+
+fn notify_equals(item: &Item, command: &[&str]) -> bool {
+    let Some(array) = item.as_value().and_then(Value::as_array) else {
+        return false;
+    };
+    (array.len() == command.len() &&
+        array.iter().zip(command).all(|(actual, expected)| actual.as_str() == Some(*expected))) ||
+        desktop_wrapper_previous_notify_equals(array, command)
+}
+
+/// Codex Desktop wraps a pre-existing callback in `SkyComputerUseClient`, retaining it as
+/// a JSON-encoded argument after `--previous-notify`.
+fn desktop_wrapper_previous_notify_equals(array: &Array, command: &[&str]) -> bool {
+    if array.len() != 4 {
+        return false;
+    }
+    array.get(0).and_then(Value::as_str).is_some_and(|value| value.ends_with("/SkyComputerUseClient")) &&
+        array.get(1).and_then(Value::as_str) == Some("turn-ended") &&
+        array.get(2).and_then(Value::as_str) == Some("--previous-notify") &&
+        array.get(3).and_then(Value::as_str).is_some_and(|value| previous_notify_equals(value, command))
+}
+
+fn previous_notify_equals(value: &str, command: &[&str]) -> bool {
+    let Ok(previous) = serde_json::from_str::<Vec<String>>(value) else {
+        return false;
+    };
+    previous.len() == command.len() && previous.iter().zip(command).all(|(actual, expected)| actual == expected)
+}
+
+fn render_item(item: &Item) -> String {
+    item.to_string().trim().to_owned()
+}
+
+/// Returns whether a parsed Codex `notify` value invokes ai-notify's Codex callback in a shape
+/// that actually works when Codex appends the JSON payload as the final argument.
+///
+/// Accepted representations are an argv array or a whitespace-split string that
+/// [`crate::cli::codex_notify_argv_runs`] confirms parses to a working invocation, or Codex
+/// Desktop's four-element `SkyComputerUseClient` wrapper around the exact `["ai-notify",
+/// "codex"]` callback.
+fn notify_uses_ai_notify(item: &Item) -> bool {
+    let Some(value) = item.as_value() else {
+        return false;
+    };
+    match value {
+        Value::Array(array) => {
+            (array.iter().all(|value| value.as_str().is_some()) &&
+                crate::cli::codex_notify_argv_runs(&array.iter().filter_map(Value::as_str).collect::<Vec<_>>())) ||
+                desktop_wrapper_previous_notify_equals(array, CODEX_NOTIFY_COMMAND)
+        }
+        Value::String(command) => {
+            crate::cli::codex_notify_argv_runs(&command.value().split_whitespace().collect::<Vec<_>>())
+        }
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn inserts_root_notify_before_tables_and_preserves_comments() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        fs::write(&path, "# model selection\nmodel = \"gpt-5.6\"\n\n[features]\n# keep\nshell_snapshot = true\n")
+            .unwrap();
+
+        let update = set_codex_notify(&path, CODEX_NOTIFY_COMMAND, None, false).unwrap();
+        let output = fs::read_to_string(&path).unwrap();
+
+        assert!(update.changed);
+        assert!(output.contains("# model selection"));
+        assert!(output.contains("# keep"));
+        assert!(output.find("notify = [\"ai-notify\", \"codex\"]").unwrap() < output.find("[features]").unwrap());
+    }
+
+    #[test]
+    fn refuses_conflicts_then_force_replaces_only_root_notify() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        fs::write(&path, "# keep\nnotify = [\"other\"] # old\n\n[features]\nnotify = [\"nested\"]\n").unwrap();
+
+        let conflict = set_codex_notify(&path, CODEX_NOTIFY_COMMAND, None, false).unwrap();
+        assert!(conflict.conflict);
+        assert!(!conflict.changed);
+        let update = set_codex_notify(&path, CODEX_NOTIFY_COMMAND, None, true).unwrap();
+        let output = fs::read_to_string(&path).unwrap();
+        assert!(update.changed);
+        assert!(output.contains("# keep"));
+        assert!(output.contains("# old"));
+        assert!(output.contains("notify = [\"nested\"]"));
+    }
+
+    #[test]
+    fn preserves_codex_desktop_wrapper_with_ai_notify_as_previous_notify() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        let config = concat!(
+            "notify = [\n",
+            "  \"/Applications/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\",\n",
+            "  \"turn-ended\",\n",
+            "  \"--previous-notify\",\n",
+            "  \"[\\\"ai-notify\\\",\\\"codex\\\"]\",\n",
+            "]\n"
+        );
+        fs::write(&path, config).unwrap();
+
+        let update = set_codex_notify(&path, CODEX_NOTIFY_COMMAND, None, false).unwrap();
+
+        assert!(!update.changed);
+        assert!(!update.conflict);
+        assert_eq!(fs::read_to_string(path).unwrap(), config);
+    }
+
+    fn inspect_status(config: &str) -> IntegrationStatus {
+        let directory = tempdir().unwrap();
+        fs::write(directory.path().join("config.toml"), config).unwrap();
+        inspect_codex_notify(directory.path(), None).status
+    }
+
+    #[test]
+    fn check_accepts_array_command_with_ai_notify_basename_and_codex_argument() {
+        assert_eq!(inspect_status("notify = [\"/opt/ai-tools/ai-notify\", \"codex\"]\n"), IntegrationStatus::Ok);
+    }
+
+    #[test]
+    fn check_rejects_stdin_flag_that_ignores_codexs_appended_payload() {
+        // Codex still appends the JSON payload as the final argument, but `--stdin` makes
+        // ai-notify read from stdin instead, so this shape fails at runtime.
+        assert_eq!(
+            inspect_status("notify = [\"/opt/ai-tools/ai-notify\", \"codex\", \"--stdin\"]\n"),
+            IntegrationStatus::Partial
+        );
+    }
+
+    #[test]
+    fn check_rejects_the_hook_style_event_codex_shape() {
+        // `ai-notify event codex` reads a hook payload from stdin and does not accept a trailing
+        // positional argument, so Codex's appended payload fails clap parsing at runtime.
+        assert_eq!(inspect_status("notify = [\"ai-notify\", \"event\", \"codex\"]\n"), IntegrationStatus::Partial);
+    }
+
+    #[test]
+    fn check_accepts_whitespace_split_string_command() {
+        assert_eq!(inspect_status("notify = \"/usr/local/bin/ai-notify codex\"\n"), IntegrationStatus::Ok);
+    }
+
+    #[test]
+    fn check_accepts_codex_desktop_wrapper() {
+        let config = concat!(
+            "notify = [\n",
+            "  \"/Applications/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\",\n",
+            "  \"turn-ended\",\n",
+            "  \"--previous-notify\",\n",
+            "  \"[\\\"ai-notify\\\",\\\"codex\\\"]\",\n",
+            "]\n"
+        );
+
+        assert_eq!(inspect_status(config), IntegrationStatus::Ok);
+    }
+
+    #[test]
+    fn check_rejects_notify_substring_lookalikes() {
+        assert_eq!(inspect_status("notify = [\"my-ai-notify-proxy\", \"codex-relay\"]\n"), IntegrationStatus::Partial);
+    }
+
+    #[test]
+    fn profile_is_a_sibling_and_overlay_can_override_base() {
+        let directory = tempdir().unwrap();
+        let root = directory.path().join(".codex");
+        fs::create_dir(&root).unwrap();
+        let base = root.join("config.toml");
+        fs::write(&base, "notify = [\"ai-notify\", \"codex\"]\n").unwrap();
+        fs::write(root.join("review.config.toml"), "notify = [\"other\"]\n").unwrap();
+
+        let report = inspect_codex_notify(&root, Some("review"));
+        assert_eq!(report.status, IntegrationStatus::Partial);
+        assert_eq!(report.path, Some(root.join("review.config.toml")));
+        assert_eq!(report.paths, vec![base, root.join("review.config.toml")]);
+    }
+
+    const NATIVE_HOOKS: &str = r#"{"hooks": {
+        "UserPromptSubmit": [
+            {"hooks": [{"type": "command", "command": "ai-coord hook codex"}]},
+            {"hooks": [{"type": "command", "command": "ai-notify event codex", "timeout": 5}]}
+        ],
+        "Stop": [{"hooks": [{"type": "command", "command": "/opt/bin/ai-notify event codex"}]}]
+    }}"#;
+
+    fn inspect_integration(config: Option<&str>, hooks: Option<&str>) -> CodexIntegrationReport {
+        let directory = tempdir().unwrap();
+        if let Some(config) = config {
+            fs::write(directory.path().join("config.toml"), config).unwrap();
+        }
+        if let Some(hooks) = hooks {
+            fs::write(directory.path().join("hooks.json"), hooks).unwrap();
+        }
+        inspect_codex_integration(directory.path(), None)
+    }
+
+    #[test]
+    fn integration_is_ok_with_native_hooks_only() {
+        let report = inspect_integration(Some("notify = [\"other\", \"turn-ended\"]\n"), Some(NATIVE_HOOKS));
+
+        assert_eq!(report.status, IntegrationStatus::Ok);
+        assert_eq!(report.hooks.installed_events, CODEX_HOOK_EVENTS);
+        assert!(report.hooks.missing_events.is_empty());
+        assert_eq!(report.notify.status, IntegrationStatus::Partial);
+    }
+
+    #[test]
+    fn integration_is_partial_when_native_hooks_miss_an_event() {
+        let hooks = r#"{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "ai-notify event stop"}]}],
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "ai-notify event codex"}]}]}}"#;
+        let report = inspect_integration(None, Some(hooks));
+
+        assert_eq!(report.status, IntegrationStatus::Partial);
+        assert_eq!(report.hooks.missing_events, vec!["Stop"]);
+    }
+
+    #[test]
+    fn integration_keeps_legacy_notify_behavior_without_native_hooks() {
+        let ok = inspect_integration(Some("notify = [\"ai-notify\", \"codex\"]\n"), None);
+        assert_eq!(ok.status, IntegrationStatus::Ok);
+        assert_eq!(ok.notify.status, IntegrationStatus::Ok);
+        assert_eq!(ok.hooks.status(), IntegrationStatus::Missing);
+
+        let other = inspect_integration(Some("notify = [\"other\"]\n"), None);
+        assert_eq!(other.status, IntegrationStatus::Partial);
+    }
+
+    #[test]
+    fn integration_is_missing_without_either_mechanism() {
+        let report = inspect_integration(Some("model = \"gpt-5.6\"\n"), Some(r#"{"hooks": {}}"#));
+
+        assert_eq!(report.status, IntegrationStatus::Missing);
+        assert!(!report.has_error());
+    }
+
+    #[test]
+    fn integration_surfaces_malformed_hooks_json() {
+        let report = inspect_integration(Some("notify = [\"ai-notify\", \"codex\"]\n"), Some("{\"hooks\": ["));
+
+        assert!(report.has_error());
+        assert!(report.hooks.error.unwrap().contains("failed to parse"));
+
+        let schema = inspect_integration(None, Some(r#"{"hooks": []}"#));
+        assert!(schema.has_error());
+        assert!(schema.hooks.error.unwrap().contains("hooks field must be an object"));
+    }
+
+    #[test]
+    fn malformed_toml_and_invalid_profiles_are_reported_without_writing() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        fs::write(&path, "notify = [\"unterminated\"\n").unwrap();
+
+        assert!(set_codex_notify(&path, CODEX_NOTIFY_COMMAND, None, true).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "notify = [\"unterminated\"\n");
+        let report = inspect_codex_notify(directory.path(), Some("bad.profile"));
+        assert!(report.has_error());
+        assert!(report.error.unwrap().contains("letters, numbers"));
+    }
+}

@@ -1,0 +1,573 @@
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+};
+
+use assert_cmd::{Command, assert::Assert};
+use predicates::prelude::*;
+use rusqlite::Connection;
+use tempfile::TempDir;
+
+struct TestEnv {
+    _root: TempDir,
+    home: PathBuf,
+    xdg: PathBuf,
+    project: PathBuf,
+    bin: PathBuf,
+}
+
+impl TestEnv {
+    fn new() -> Self {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let xdg = root.path().join("xdg");
+        let project = root.path().join("project");
+        let bin = root.path().join("bin");
+        for path in [&home, &xdg, &project, &bin] {
+            fs::create_dir_all(path).unwrap();
+        }
+        Self { _root: root, home, xdg, project, bin }
+    }
+
+    fn config_path(&self) -> PathBuf {
+        self.xdg.join("ai-notify/config.yaml")
+    }
+
+    fn command(&self) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ai-notify"));
+        command
+            .env("HOME", &self.home)
+            .env("XDG_CONFIG_HOME", &self.xdg)
+            .env("PATH", &self.bin)
+            .env("AI_NOTIFY_LOG", "0")
+            .current_dir(&self.project);
+        command
+    }
+
+    fn run(&self, arguments: &[&str], input: &str) -> Assert {
+        let mut command = self.command();
+        command.args(arguments).write_stdin(input);
+        command.assert()
+    }
+
+    fn write_runtime_config(&self, database: &Path, log: &Path) {
+        self.write_runtime_config_with_export(database, log, false);
+    }
+
+    fn write_runtime_config_with_export(&self, database: &Path, log: &Path, export_before_cleanup: bool) {
+        let path = self.config_path();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            path,
+            format!(
+                "cleanup:\n  auto_cleanup_enabled: false\n  export_before_cleanup: {export_before_cleanup}\n\
+                 database:\n  path: {}\n\
+                 logging:\n  level: DEBUG\n  path: {}\n\
+                 notification:\n  threshold_seconds: 0\n",
+                database.display(),
+                log.display()
+            ),
+        )
+        .unwrap();
+    }
+
+    fn export_dir(&self) -> PathBuf {
+        self.xdg.join("ai-notify/exports")
+    }
+
+    fn export_files(&self) -> Vec<PathBuf> {
+        match fs::read_dir(self.export_dir()) {
+            Ok(entries) => entries.map(|entry| entry.unwrap().path()).collect(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(error) => panic!("cannot read export directory: {error}"),
+        }
+    }
+}
+
+#[test]
+fn version_and_usage_exit_codes_are_stable() {
+    let environment = TestEnv::new();
+    environment.run(&["--version"], "").success().stdout(predicate::str::contains("ai-notify 1.0.0"));
+
+    environment.run(&["codex"], "").code(2).stderr(predicate::str::contains("Missing JSON payload"));
+
+    environment.run(&["cleanup", "--days", "0", "--dry-run"], "").code(2);
+}
+
+#[test]
+fn config_show_edit_and_reset_are_isolated_and_confirmed() {
+    let environment = TestEnv::new();
+    let config = environment._root.path().join("custom/config.yaml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "notification:\n  threshold_seconds: 17\n").unwrap();
+
+    environment.run(&["config", "show", "--path", config.to_str().unwrap()], "").success().stdout(
+        predicate::str::contains("Current Configuration").and(predicate::str::contains("Notification Threshold: 17s")),
+    );
+
+    environment
+        .run(&["config", "show", "--path", environment._root.path().join("missing.yaml").to_str().unwrap()], "")
+        .code(2);
+
+    let editor = environment.bin.join("fake-editor");
+    fs::write(&editor, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o755)).unwrap();
+    let edit_target = environment._root.path().join("edited/config.yaml");
+    let mut edit = environment.command();
+    edit.env("EDITOR", &editor).args(["config", "edit", "--path", edit_target.to_str().unwrap()]);
+    edit.assert().success().stdout(predicate::str::contains("Configuration is valid"));
+    assert!(edit_target.exists());
+
+    // An EDITOR value with its own arguments (e.g. "code -w") must be split like git does,
+    // instead of being run as a single program named "fake-editor --flag".
+    fs::write(&editor, "#!/bin/sh\n[ \"$1\" = \"--flag\" ] || exit 1\ntest -f \"$2\" || exit 1\nexit 0\n").unwrap();
+    let flagged_target = environment._root.path().join("edited2/config.yaml");
+    let mut edit_with_flag = environment.command();
+    edit_with_flag.env("EDITOR", format!("{} --flag", editor.display())).args([
+        "config",
+        "edit",
+        "--path",
+        flagged_target.to_str().unwrap(),
+    ]);
+    edit_with_flag.assert().success().stdout(predicate::str::contains("Configuration is valid"));
+    assert!(flagged_target.exists());
+
+    environment.run(&["config", "reset", "--path", config.to_str().unwrap()], "n\n").code(1);
+    assert!(fs::read_to_string(&config).unwrap().contains("17"));
+
+    environment
+        .run(&["config", "reset", "--path", config.to_str().unwrap()], "y\n")
+        .success()
+        .stdout(predicate::str::contains("reset to defaults"));
+    assert!(fs::read_to_string(config).unwrap().contains("threshold_seconds: 10"));
+}
+
+#[test]
+fn test_notification_succeeds_when_notifier_is_unavailable() {
+    let environment = TestEnv::new();
+    environment
+        .run(&["test"], "")
+        .success()
+        .stdout(predicate::str::contains("Test notification").and(predicate::str::contains("unavailable")));
+}
+
+#[test]
+fn codex_accepts_argument_and_stdin_payloads_and_rejects_bad_json_as_nonblocking() {
+    let environment = TestEnv::new();
+    let payload = r#"{"type":"agent-turn-complete","input-messages":["hello"],"last-assistant-message":"done"}"#;
+
+    environment.run(&["codex", payload], "").success();
+    environment.run(&["codex", "--stdin"], payload).success();
+
+    let no_reply = r#"{"type":"agent-turn-complete","input-messages":["hello"],"last-assistant-message":null}"#;
+    environment.run(&["codex", no_reply], "").success();
+    environment.run(&["codex", "--stdin"], no_reply).success();
+
+    // Payload parse/validation failures must exit 1 (non-blocking), never exit 2: Codex treats a
+    // blocking hook exit differently from a plain callback failure.
+    environment.run(&["codex", "{"], "").code(1).stderr(predicate::str::contains("Failed to parse JSON"));
+    environment
+        .run(&["codex", "{}"], "")
+        .code(1)
+        .stderr(predicate::str::contains("Codex payload must include type \"agent-turn-complete\""));
+    environment
+        .run(&["codex", r#"{"type":"agent-turn-complete","input-messages":42}"#], "")
+        .code(1)
+        .stderr(predicate::str::contains("Codex input-messages must be a string or an array of strings or objects"));
+    environment
+        .run(&["codex", r#"{"type":"agent-turn-complete","last-assistant-message":42}"#], "")
+        .code(1)
+        .stderr(predicate::str::contains("Codex last-assistant-message must be a string, array, or object"));
+}
+
+#[test]
+fn native_codex_hooks_read_stdin_and_complete_the_tracked_turn_silently() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+    environment
+        .run(
+            &["event", "codex"],
+            r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","turn_id":"t","prompt":"fix tests"}"#,
+        )
+        .success()
+        .stdout("");
+    environment
+        .run(
+            &["event", "codex"],
+            r#"{"hook_event_name":"Stop","session_id":"s","turn_id":"t","last_assistant_message":null}"#,
+        )
+        .success()
+        .stdout("");
+    let connection = Connection::open(database).unwrap();
+    let (prompt, stopped): (String, bool) = connection
+        .query_row("SELECT prompt, stopped_at IS NOT NULL FROM sessions WHERE session_id = 'codex:s:t'", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(prompt, "fix tests");
+    assert!(stopped);
+}
+
+#[test]
+fn link_claude_supports_dry_run_updates_and_schema_failures() {
+    let environment = TestEnv::new();
+    let settings = environment.home.join(".claude/settings.json");
+
+    environment
+        .run(&["link", "claude", "--path", settings.to_str().unwrap(), "--dry-run"], "")
+        .success()
+        .stdout(predicate::str::contains("Would update hooks"));
+    assert!(!settings.exists());
+
+    environment.run(&["link", "claude", "--path", settings.to_str().unwrap()], "").success();
+    let contents = fs::read_to_string(&settings).unwrap();
+    assert!(contents.contains("ai-notify event stop"));
+    assert!(contents.contains("AskUserQuestion"));
+
+    let malformed = environment.home.join(".claude/bad.json");
+    fs::write(&malformed, r#"{"hooks":[]}"#).unwrap();
+    environment
+        .run(&["link", "claude", "--path", malformed.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains("hooks field must be an object"));
+}
+
+#[test]
+fn link_claude_refuses_generated_settings_for_default_and_explicit_paths() {
+    let environment = TestEnv::new();
+    let settings = environment.home.join(".claude/settings.json");
+    let source = environment.home.join(".claude/settings/hooks.jsonc");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&settings, "{\"model\":\"opus\"}\n").unwrap();
+    fs::write(&source, "// canonical hooks\n{}\n").unwrap();
+    let settings_before = fs::read(&settings).unwrap();
+    let source_before = fs::read(&source).unwrap();
+    let message = format!(
+        "update canonical hook source {} and run its normal settings generator to regenerate {}",
+        source.display(),
+        settings.display()
+    );
+
+    environment.run(&["link", "claude"], "").code(1).stderr(predicate::str::contains(&message));
+    environment
+        .run(&["link", "claude", "--path", settings.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains(&message));
+    environment
+        .run(&["link", "claude", "--path", settings.to_str().unwrap(), "--dry-run"], "")
+        .code(1)
+        .stderr(predicate::str::contains(&message));
+
+    assert_eq!(fs::read(&settings).unwrap(), settings_before);
+    assert_eq!(fs::read(&source).unwrap(), source_before);
+}
+
+#[cfg(unix)]
+#[test]
+fn link_claude_refuses_generated_settings_through_final_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    let environment = TestEnv::new();
+
+    let lexical_settings = environment._root.path().join("lexical/settings.json");
+    let lexical_source = environment._root.path().join("lexical/settings/hooks.jsonc");
+    let lexical_target = environment._root.path().join("backing.json");
+    fs::create_dir_all(lexical_source.parent().unwrap()).unwrap();
+    fs::write(&lexical_target, "{\"model\":\"opus\"}\n").unwrap();
+    fs::write(&lexical_source, "// canonical hooks\n{}\n").unwrap();
+    symlink(&lexical_target, &lexical_settings).unwrap();
+    let lexical_target_before = fs::read(&lexical_target).unwrap();
+    let lexical_source_before = fs::read(&lexical_source).unwrap();
+
+    environment
+        .run(&["link", "claude", "--path", lexical_settings.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains(lexical_source.to_str().unwrap()));
+    assert!(lexical_settings.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&lexical_target).unwrap(), lexical_target_before);
+    assert_eq!(fs::read(&lexical_source).unwrap(), lexical_source_before);
+
+    let generated_settings = environment._root.path().join("generated/settings.json");
+    let generated_source = environment._root.path().join("generated/settings/hooks.jsonc");
+    let alias = environment._root.path().join("alias.json");
+    fs::create_dir_all(generated_source.parent().unwrap()).unwrap();
+    fs::write(&generated_settings, "{\"model\":\"sonnet\"}\n").unwrap();
+    fs::write(&generated_source, "// canonical hooks\n{}\n").unwrap();
+    symlink(&generated_settings, &alias).unwrap();
+    let generated_settings_before = fs::read(&generated_settings).unwrap();
+    let generated_source_before = fs::read(&generated_source).unwrap();
+
+    environment
+        .run(&["link", "claude", "--path", alias.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains(generated_source.to_str().unwrap()));
+    assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&generated_settings).unwrap(), generated_settings_before);
+    assert_eq!(fs::read(&generated_source).unwrap(), generated_source_before);
+}
+
+#[cfg(unix)]
+#[test]
+fn link_claude_preserves_broken_final_symlink_errors() {
+    use std::os::unix::fs::symlink;
+
+    let environment = TestEnv::new();
+    let settings = environment._root.path().join("broken/settings.json");
+    let source = environment._root.path().join("broken/settings/hooks.jsonc");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "// canonical hooks\n{}\n").unwrap();
+    symlink(environment._root.path().join("missing.json"), &settings).unwrap();
+    let source_before = fs::read(&source).unwrap();
+
+    environment
+        .run(&["link", "claude", "--path", settings.to_str().unwrap()], "")
+        .code(1)
+        .stderr(predicate::str::contains("cannot resolve symlink"));
+    assert!(settings.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&source).unwrap(), source_before);
+}
+
+#[test]
+fn link_codex_preserves_conflicts_and_supports_force_and_profiles() {
+    let environment = TestEnv::new();
+    let config = environment.home.join(".codex/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "# keep\nnotify = [\"other\"]\n").unwrap();
+
+    environment
+        .run(&["link", "codex", "--path", config.to_str().unwrap()], "")
+        .code(1)
+        .stdout(predicate::str::contains("Refusing to replace"));
+    assert!(fs::read_to_string(&config).unwrap().contains("other"));
+
+    environment
+        .run(&["link", "codex", "--path", config.to_str().unwrap(), "--force"], "")
+        .success()
+        .stdout(predicate::str::contains("Replaced previous notify"));
+    assert!(fs::read_to_string(&config).unwrap().contains("[\"ai-notify\", \"codex\"]"));
+
+    environment.run(&["link", "codex", "--path", config.to_str().unwrap(), "--profile", "quiet"], "").success();
+    assert!(config.with_file_name("quiet.config.toml").exists());
+}
+
+#[test]
+fn check_treats_missing_as_diagnostic_and_parse_errors_as_failures() {
+    let environment = TestEnv::new();
+    environment.run(&["check"], "").success().stdout(
+        predicate::str::contains("Claude Code hooks: MISSING")
+            .and(predicate::str::contains("Codex CLI notify: MISSING")),
+    );
+
+    let settings = environment.home.join(".claude/settings.json");
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    fs::write(&settings, "{").unwrap();
+    environment.run(&["check"], "").code(1).stdout(predicate::str::contains("Errors:"));
+
+    let second = TestEnv::new();
+    let codex = second.home.join(".codex/config.toml");
+    fs::create_dir_all(codex.parent().unwrap()).unwrap();
+    fs::write(codex, "notify = [\"broken\"\n").unwrap();
+    second.run(&["check"], "").code(1).stdout(predicate::str::contains("Codex CLI notify: ERROR"));
+
+    let third = TestEnv::new();
+    let hooks = third.home.join(".codex/hooks.json");
+    fs::create_dir_all(hooks.parent().unwrap()).unwrap();
+    let handler = r#"[{"hooks": [{"type": "command", "command": "ai-notify event codex"}]}]"#;
+    fs::write(&hooks, format!(r#"{{"hooks": {{"UserPromptSubmit": {handler}, "Stop": {handler}}}}}"#)).unwrap();
+    third.run(&["check", "--profile", "review"], "").code(1).stdout(
+        predicate::str::contains("Codex CLI notify (profile 'review'): ERROR")
+            .and(predicate::str::contains("Profile config not found")),
+    );
+    fs::write(third.home.join(".codex/review.config.toml"), "").unwrap();
+    third.run(&["check", "--profile", "review"], "").success().stdout(
+        predicate::str::contains("Codex CLI notify (profile 'review'): OK")
+            .and(predicate::str::contains("~/.codex/hooks.json (native hooks: UserPromptSubmit, Stop)")),
+    );
+}
+
+#[test]
+fn cleanup_dry_run_cancellation_and_deletion_use_configured_database() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    let prompt = r#"{"session_id":"cleanup-session","prompt":"old work","cwd":"/tmp/project"}"#;
+    environment.run(&["event", "user-prompt-submit"], prompt).success();
+    let connection = Connection::open(&database).unwrap();
+    connection.execute("UPDATE sessions SET created_at = datetime('now', '-40 days')", []).unwrap();
+    drop(connection);
+
+    environment
+        .run(&["cleanup", "--days", "30", "--dry-run"], "")
+        .success()
+        .stdout(predicate::str::contains("Sessions to delete: 1"));
+
+    environment
+        .run(&["cleanup", "--days", "30", "--no-export"], "n\n")
+        .success()
+        .stdout(predicate::str::contains("Cleanup cancelled"));
+
+    environment
+        .run(&["cleanup", "--days", "30", "--no-export"], "y\n")
+        .success()
+        .stdout(predicate::str::contains("Sessions deleted: 1"));
+    let remaining: i64 =
+        Connection::open(database).unwrap().query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0)).unwrap();
+    assert_eq!(remaining, 0);
+}
+
+#[test]
+fn cleanup_exports_only_the_deleted_rows_and_skips_the_file_when_none_expire() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config_with_export(&database, &log, true);
+
+    // Nothing is expired yet: cleanup must not write an export file at all.
+    environment
+        .run(&["cleanup", "--days", "30"], "y\n")
+        .success()
+        .stdout(predicate::str::contains("Sessions deleted: 0").and(predicate::str::contains("Sessions exported: 0")));
+    assert!(environment.export_files().is_empty());
+
+    let old = r#"{"session_id":"expired","prompt":"old work","cwd":"/tmp/project"}"#;
+    let recent = r#"{"session_id":"kept","prompt":"recent work","cwd":"/tmp/project"}"#;
+    environment.run(&["event", "user-prompt-submit"], old).success();
+    environment.run(&["event", "user-prompt-submit"], recent).success();
+    let connection = Connection::open(&database).unwrap();
+    connection
+        .execute("UPDATE sessions SET created_at = datetime('now', '-40 days') WHERE session_id = 'expired'", [])
+        .unwrap();
+    drop(connection);
+
+    environment
+        .run(&["cleanup", "--days", "30"], "y\n")
+        .success()
+        .stdout(predicate::str::contains("Sessions deleted: 1").and(predicate::str::contains("Sessions exported: 1")));
+
+    let files = environment.export_files();
+    assert_eq!(files.len(), 1);
+    let exported: serde_json::Value = serde_json::from_slice(&fs::read(&files[0]).unwrap()).unwrap();
+    let rows = exported.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["session_id"], "expired");
+
+    let remaining: i64 =
+        Connection::open(&database).unwrap().query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0)).unwrap();
+    assert_eq!(remaining, 1);
+}
+
+#[test]
+fn cleanup_dry_run_and_cancellation_do_not_create_a_missing_database() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/missing.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    environment.run(&["cleanup", "--dry-run"], "").success().stdout(predicate::str::contains("Sessions to delete: 0"));
+    assert!(!database.exists());
+
+    environment.run(&["cleanup", "--no-export"], "n\n").success();
+    assert!(!database.exists());
+}
+
+#[test]
+fn state_commands_reject_newer_database_schema_as_operational_error() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/newer.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+    fs::create_dir_all(database.parent().unwrap()).unwrap();
+    let connection = Connection::open(&database).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE sentinel (value TEXT NOT NULL);
+             INSERT INTO sentinel (value) VALUES ('preserved');
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+    drop(connection);
+    let original = fs::read(&database).unwrap();
+    let error = format!(
+        "unsupported session database schema at {}: found version 2, supported version 1; move or remove the database file before retrying",
+        database.display()
+    );
+    let prompt = r#"{"session_id":"newer-schema","prompt":"work","cwd":"/tmp/project"}"#;
+
+    environment.run(&["event", "user-prompt-submit"], prompt).code(1).stderr(predicate::str::contains(&error));
+    environment.run(&["cleanup", "--no-export"], "y\n").code(1).stderr(predicate::str::contains(&error));
+
+    assert_eq!(fs::read(&database).unwrap(), original);
+}
+
+#[test]
+fn every_claude_event_path_runs_with_custom_database_and_log_paths() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("custom/state.db");
+    let log = environment._root.path().join("custom/logs/notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    let mut logged_prompt = environment.command();
+    logged_prompt
+        .env("AI_NOTIFY_LOG", "1")
+        .args(["event", "user-prompt-submit"])
+        .write_stdin(br#"{"session_id":"s1","prompt":"do work","cwd":"/tmp/project"}"#);
+    logged_prompt.assert().success();
+    assert!(database.exists());
+    assert!(log.exists());
+
+    let cases = [
+        ("stop", r#"{"session_id":"s1","cwd":"/tmp/project","last_assistant_message":"done"}"#),
+        ("user-prompt-submit", r#"{"session_id":"s2","prompt":"retry","cwd":"/tmp/project"}"#),
+        ("stop-failure", r#"{"session_id":"s2","cwd":"/tmp/project","error":"rate limit"}"#),
+        ("notification", r#"{"session_id":"s1","notification_type":"idle_prompt","message":"waiting for input"}"#),
+        ("permission-request", r#"{"cwd":"/tmp/project","tool_name":"Bash","tool_input":{"command":"echo ok"}}"#),
+        ("ask-user-question", r#"{"cwd":"/tmp/project","tool_input":{"questions":[{"question":"Continue?"}]}}"#),
+    ];
+    for (event, payload) in cases {
+        environment.run(&["event", event], payload).success();
+    }
+
+    // Hook event payload failures must exit 1 (non-blocking) rather than 2: Claude Code and Codex
+    // treat a hook's exit 2 as a blocking decision (e.g. Stop keeps the agent going).
+    environment.run(&["event", "stop"], "not json").code(1);
+}
+
+#[test]
+fn event_payload_failures_never_exit_2() {
+    let environment = TestEnv::new();
+    let database = environment._root.path().join("state/sessions.db");
+    let log = environment._root.path().join("logs/ai-notify.log");
+    environment.write_runtime_config(&database, &log);
+
+    environment.run(&["event", "stop"], "not json").code(1).stderr(predicate::str::contains("Failed to parse JSON"));
+    environment.run(&["event", "stop"], "[]").code(1).stderr(predicate::str::contains("must be an object"));
+    environment
+        .run(&["event", "stop"], r#"{"cwd":"/tmp/../etc"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Path traversal detected in cwd"));
+    environment
+        .run(&["event", "stop"], r#"{"cwd":42}"#)
+        .code(1)
+        .stderr(predicate::str::contains("cwd must be a string"));
+    environment
+        .run(&["event", "stop"], r#"{"session_id":""}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Invalid session_id"));
+    environment
+        .run(&["event", "stop"], r#"{"cwd":"/tmp/project"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Missing session_id in input"));
+    environment
+        .run(&["event", "codex"], r#"{"hook_event_name":"UserPromptSubmit","session_id":"s"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Codex hook payload must include turn_id"));
+    environment
+        .run(&["event", "codex"], r#"{"hook_event_name":"Other","session_id":"s","turn_id":"t"}"#)
+        .code(1)
+        .stderr(predicate::str::contains("Codex hook must be UserPromptSubmit or Stop"));
+}

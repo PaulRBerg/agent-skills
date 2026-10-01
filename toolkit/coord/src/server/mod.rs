@@ -1,0 +1,662 @@
+//! Local Axum API for the dashboard snapshot and Server-Sent Events feed.
+
+use std::{
+    convert::Infallible,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+
+use async_stream::stream;
+use axum::{
+    Json, Router,
+    extract::{Request, State},
+    http::{HeaderMap, StatusCode, header::HOST},
+    middleware::{self, Next},
+    response::{
+        IntoResponse, Response,
+        sse::{Event, Sse},
+    },
+    routing::get,
+};
+use jiff::Timestamp;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use tokio::{
+    net::{TcpListener, lookup_host},
+    sync::watch,
+    task::JoinHandle,
+    time::{MissedTickBehavior, interval},
+};
+
+use crate::{
+    domain::{Client, SnapshotV2},
+    error::{AppError, Result},
+};
+
+pub(crate) const DEFAULT_HOST: &str = "127.0.0.1";
+pub(crate) const DEFAULT_PORT: u16 = 4477;
+pub(crate) const CACHE_SECONDS: u64 = 2;
+pub(crate) const HEARTBEAT_SECONDS: u64 = 20;
+pub(crate) const POLL_SECONDS: u64 = 1;
+
+/// Dashboard-only message row.  The status schema deliberately excludes these
+/// fields; they are added only to snapshots served over HTTP/SSE.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct SnapshotMessageV1 {
+    pub(crate) id: String,
+    pub(crate) sender_client: Client,
+    pub(crate) sender_session_id: String,
+    pub(crate) sender_callsign: Option<String>,
+    pub(crate) recipient_client: Client,
+    pub(crate) recipient_session_id: String,
+    pub(crate) recipient_callsign: Option<String>,
+    pub(crate) repo_root: Option<String>,
+    pub(crate) text: String,
+    pub(crate) created_at: f64,
+    pub(crate) acknowledged_at: Option<f64>,
+}
+
+/// The dashboard's complete runtime shape, including its server metadata.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct DashboardSnapshotV2 {
+    #[serde(flatten)]
+    pub(crate) snapshot: SnapshotV2,
+    pub(crate) messages: Vec<SnapshotMessageV1>,
+    pub(crate) generated_at: String,
+    pub(crate) generation: u64,
+}
+
+/// Minimal bridge from coordination/state code to this transport layer.
+///
+/// `generation` intentionally is not cached: the event loop calls it every
+/// second so its implementation can cheaply reconcile process state and bump
+/// the counter before deciding whether clients need a new snapshot.
+pub(crate) trait SnapshotSource: Send + Sync + 'static {
+    fn snapshot(&self) -> Result<SnapshotV2>;
+    fn messages(&self) -> Result<Vec<SnapshotMessageV1>>;
+    fn generation(&self) -> Result<u64>;
+}
+
+pub(crate) struct SnapshotService<S> {
+    source: Arc<S>,
+    cache_ttl: Duration,
+    cache: Mutex<Option<CachedSnapshot>>,
+    now: Arc<dyn Fn() -> SystemTime + Send + Sync>,
+    shutdown: watch::Sender<bool>,
+    /// Latest snapshot published by the shared background poller; `None`
+    /// until the first successful poll. Every SSE stream subscribes to this
+    /// instead of polling [`SnapshotSource`] itself, so N concurrent
+    /// dashboard clients still cost one process sweep and one snapshot
+    /// refresh per tick.
+    poll_tx: watch::Sender<Option<DashboardSnapshotV2>>,
+    poll_task: Mutex<Option<JoinHandle<()>>>,
+}
+
+struct CachedSnapshot {
+    refreshed_at: Instant,
+    payload: DashboardSnapshotV2,
+}
+
+impl<S: SnapshotSource> SnapshotService<S> {
+    pub(crate) fn new(source: S) -> Self {
+        Self::with_cache_ttl(source, Duration::from_secs(CACHE_SECONDS))
+    }
+
+    pub(crate) fn with_cache_ttl(source: S, cache_ttl: Duration) -> Self {
+        Self {
+            source: Arc::new(source),
+            cache_ttl,
+            cache: Mutex::new(None),
+            now: Arc::new(SystemTime::now),
+            shutdown: watch::channel(false).0,
+            poll_tx: watch::channel(None).0,
+            poll_task: Mutex::new(None),
+        }
+    }
+
+    /// Return the process-wide cached snapshot, refreshing at most once per two
+    /// seconds in the normal constructor.
+    pub(crate) fn snapshot(&self) -> Result<DashboardSnapshotV2> {
+        let mut cache = self.cache.lock().expect("snapshot cache lock poisoned");
+        if let Some(cached) = cache.as_ref() &&
+            cached.refreshed_at.elapsed() < self.cache_ttl
+        {
+            return Ok(cached.payload.clone());
+        }
+
+        // Mutations during collection must remain visible to the next poll;
+        // a counter read afterward could acknowledge data this snapshot missed.
+        let generation = self.source.generation()?;
+        let payload = DashboardSnapshotV2 {
+            snapshot: self.source.snapshot()?,
+            messages: self.source.messages()?,
+            generated_at: rfc3339_utc((self.now)()),
+            generation,
+        };
+        *cache = Some(CachedSnapshot { refreshed_at: Instant::now(), payload: payload.clone() });
+        Ok(payload)
+    }
+
+    /// Deliberately bypass the snapshot cache; see [`SnapshotSource`].
+    pub(crate) fn generation(&self) -> Result<u64> {
+        self.source.generation()
+    }
+
+    /// Subscribe to the shared background poll, starting it lazily if this is
+    /// the first live subscriber. The poller idles out once the last
+    /// subscriber disconnects; a later subscriber restarts it. Holding the
+    /// same lock as [`SnapshotService::run_poll_loop`]'s stop check across
+    /// both the subscribe and the spawn decision closes the race where the
+    /// poller could decide to stop just as a new subscriber arrives.
+    fn subscribe_poll(self: &Arc<Self>) -> watch::Receiver<Option<DashboardSnapshotV2>> {
+        let mut task = self.poll_task.lock().expect("poll task lock poisoned");
+        let receiver = self.poll_tx.subscribe();
+        let running = task.as_ref().is_some_and(|handle| !handle.is_finished());
+        if !running {
+            let service = Arc::clone(self);
+            *task = Some(tokio::spawn(async move { service.run_poll_loop().await }));
+        }
+        receiver
+    }
+
+    /// Poll [`SnapshotSource::generation`] at most once per [`POLL_SECONDS`]
+    /// and refresh the published snapshot when it changes or every
+    /// [`HEARTBEAT_SECONDS`], so every SSE subscriber shares one process sweep
+    /// and one snapshot refresh per tick instead of running its own. The
+    /// periodic refresh keeps observing state the generation cannot see until
+    /// a snapshot records it, such as worktree dirt.
+    async fn run_poll_loop(self: Arc<Self>) {
+        let mut ticker = interval(Duration::from_secs(POLL_SECONDS));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut shutdown = self.shutdown.subscribe();
+        let mut last_generation = self.poll_tx.borrow().as_ref().map(|payload| payload.generation);
+        let mut last_refresh = Instant::now();
+
+        loop {
+            tokio::select! {
+                _ = shutdown.wait_for(|stopped| *stopped) => return,
+                _ = ticker.tick() => {}
+            }
+
+            {
+                let mut task = self.poll_task.lock().expect("poll task lock poisoned");
+                if self.poll_tx.receiver_count() == 0 {
+                    *task = None;
+                    return;
+                }
+            }
+
+            let generation_service = Arc::clone(&self);
+            let Ok(generation) = run_blocking(move || generation_service.generation()).await else {
+                continue;
+            };
+            if !should_send(last_generation, generation, last_refresh.elapsed()) {
+                continue;
+            }
+            let snapshot_service = Arc::clone(&self);
+            let Ok(payload) = run_blocking(move || snapshot_service.snapshot()).await else {
+                continue;
+            };
+            last_generation = Some(payload.generation);
+            last_refresh = Instant::now();
+            self.poll_tx.send_replace(Some(payload));
+        }
+    }
+}
+
+/// Construct the dashboard API.  It is separate from binding so callers can
+/// embed it in their own runtime or tests.
+pub(crate) fn router<S: SnapshotSource>(service: SnapshotService<S>) -> Router {
+    let state = Arc::new(service);
+    Router::new()
+        .route("/api/snapshot", get(snapshot::<S>))
+        .route("/api/events", get(events::<S>))
+        .fallback(not_found)
+        .layer(middleware::from_fn(require_loopback_host))
+        .with_state(state)
+}
+
+/// Reject any request whose `Host` header does not name loopback, so a page
+/// loaded from another origin cannot use DNS rebinding to read this local API
+/// through the browser's same-origin allowance for loopback addresses. The
+/// Vite dev proxy and the Bun dashboard proxy both forward a loopback `Host`.
+async fn require_loopback_host(request: Request, next: Next) -> Response {
+    match loopback_host_status(request.headers()) {
+        Ok(()) => next.run(request).await,
+        Err(status) => status.into_response(),
+    }
+}
+
+fn loopback_host_status(headers: &HeaderMap) -> std::result::Result<(), StatusCode> {
+    let host = headers.get(HOST).ok_or(StatusCode::BAD_REQUEST)?;
+    let host = host.to_str().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let hostname = host_hostname(host).ok_or(StatusCode::BAD_REQUEST)?;
+    if hostname.eq_ignore_ascii_case("localhost") || hostname == "127.0.0.1" || hostname == "::1" {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
+}
+
+/// Strip an optional `:port` suffix (or `[...]` brackets around an IPv6
+/// address) from a `Host` header value, per RFC 9110 §7.2.
+fn host_hostname(host: &str) -> Option<&str> {
+    if host.is_empty() {
+        return None;
+    }
+    if let Some(rest) = host.strip_prefix('[') {
+        return rest.split(']').next().filter(|value| !value.is_empty());
+    }
+    match host.rsplit_once(':') {
+        Some((name, port))
+            if !name.is_empty() && !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            Some(name)
+        }
+        _ => Some(host),
+    }
+}
+
+/// Bind and serve the standard local-only dashboard endpoint.
+pub(crate) async fn serve<S: SnapshotSource>(source: S, host: &str, port: u16) -> Result<()> {
+    let addresses = lookup_host((host, port)).await?.collect::<Vec<_>>();
+    if addresses.is_empty() || addresses.iter().any(|address| !address.ip().is_loopback()) {
+        return Err(AppError::usage("dashboard API host must resolve only to loopback addresses"));
+    }
+    let listener = TcpListener::bind(addresses.as_slice()).await.map_err(AppError::from)?;
+    println!("Serving dashboard API at http://{host}:{port}");
+    let service = SnapshotService::new(source);
+    let shutdown = service.shutdown.clone();
+    axum::serve(listener, router(service))
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            shutdown.send_replace(true);
+        })
+        .await
+        .map_err(AppError::from)
+}
+
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
+}
+
+async fn snapshot<S: SnapshotSource>(
+    State(service): State<Arc<SnapshotService<S>>>,
+) -> std::result::Result<Json<DashboardSnapshotV2>, ApiError> {
+    Ok(Json(run_blocking(move || service.snapshot()).await?))
+}
+
+async fn events<S: SnapshotSource>(State(service): State<Arc<SnapshotService<S>>>) -> impl IntoResponse {
+    let poll_rx = service.subscribe_poll();
+    let snapshots = stream! {
+        let mut last_generation = None;
+        let mut last_sent = Instant::now();
+        let mut ticker = interval(Duration::from_secs(POLL_SECONDS));
+        let mut shutdown = service.shutdown.subscribe();
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                _ = shutdown.wait_for(|stopped| *stopped) => break,
+                _ = ticker.tick() => {}
+            }
+            // Read the shared poller's latest snapshot instead of polling
+            // `SnapshotSource` directly, so N concurrent streams cost one
+            // process sweep and one snapshot refresh per tick, not N.
+            let Some(payload) = poll_rx.borrow().clone() else {
+                continue;
+            };
+            if !should_send(last_generation, payload.generation, last_sent.elapsed()) {
+                continue;
+            }
+            match sse_snapshot_event(&payload) {
+                Ok(event) => yield Ok::<Event, Infallible>(event),
+                Err(_) => continue,
+            }
+            last_generation = Some(payload.generation);
+            last_sent = Instant::now();
+        }
+    };
+    Sse::new(snapshots)
+}
+
+async fn run_blocking<T>(operation: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T>
+where
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(operation)
+        .await
+        .map_err(|error| AppError::operational(format!("dashboard worker failed: {error}")))?
+}
+
+fn should_send(last_generation: Option<u64>, generation: u64, since_last_send: Duration) -> bool {
+    last_generation != Some(generation) || since_last_send >= Duration::from_secs(HEARTBEAT_SECONDS)
+}
+
+/// Encode the exact named event framing used by the dashboard EventSource.
+#[cfg(test)]
+pub(crate) fn sse_snapshot_frame(payload: &impl Serialize) -> Result<String> {
+    Ok(format!("event: snapshot\ndata: {}\n\n", compact_json(payload)?))
+}
+
+fn sse_snapshot_event(payload: &impl Serialize) -> Result<Event> {
+    Ok(Event::default().event("snapshot").data(compact_json(payload)?))
+}
+
+fn compact_json(payload: &impl Serialize) -> Result<String> {
+    // Going through Value preserves deterministic lexical object ordering.
+    Ok(serde_json::to_string(&serde_json::to_value(payload)?)?)
+}
+
+async fn not_found() -> Response {
+    (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" }))).into_response()
+}
+
+struct ApiError(AppError);
+
+impl From<AppError> for ApiError {
+    fn from(error: AppError) -> Self {
+        Self(error)
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": self.0.message }))).into_response()
+    }
+}
+
+fn rfc3339_utc(time: SystemTime) -> String {
+    let seconds = time.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    Timestamp::from_second(seconds as i64).unwrap_or(Timestamp::UNIX_EPOCH).strftime("%Y-%m-%dT%H:%M:%S%:z").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::domain::{Identity, OutsideScopeV2, ProviderReport, SnapshotScopeKindV2, SnapshotScopeV2};
+
+    struct Source {
+        generation: AtomicU64,
+        generation_reads: AtomicUsize,
+        snapshots: AtomicUsize,
+        bump_on_snapshot: bool,
+    }
+
+    impl Source {
+        fn new(generation: u64) -> Self {
+            Self {
+                generation: AtomicU64::new(generation),
+                generation_reads: AtomicUsize::new(0),
+                snapshots: AtomicUsize::new(0),
+                bump_on_snapshot: false,
+            }
+        }
+    }
+
+    impl SnapshotSource for Source {
+        fn snapshot(&self) -> Result<SnapshotV2> {
+            self.snapshots.fetch_add(1, Ordering::SeqCst);
+            if self.bump_on_snapshot {
+                self.generation.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(SnapshotV2 {
+                schema_version: 8,
+                complete: true,
+                scope: SnapshotScopeV2 { kind: SnapshotScopeKindV2::Machine, repo_root: None },
+                self_identity: Some(Identity { client: Client::Codex, session_id: "self".into() }),
+                providers: vec![ProviderReport {
+                    client: Client::Codex,
+                    ok: true,
+                    source: "test".into(),
+                    enabled: true,
+                    dropped: 0,
+                    error: None,
+                }],
+                sessions: vec![],
+                work: vec![],
+                drafts: vec![],
+                findings: vec![],
+                handoffs: vec![],
+                delegates: vec![],
+                outside_scope: OutsideScopeV2 { sessions: 0, directories: 0 },
+            })
+        }
+        fn messages(&self) -> Result<Vec<SnapshotMessageV1>> {
+            Ok(vec![])
+        }
+        fn generation(&self) -> Result<u64> {
+            self.generation_reads.fetch_add(1, Ordering::SeqCst);
+            Ok(self.generation.load(Ordering::SeqCst))
+        }
+    }
+
+    struct BrokenSource;
+
+    impl SnapshotSource for BrokenSource {
+        fn snapshot(&self) -> Result<SnapshotV2> {
+            Err(AppError::operational("snapshot unavailable"))
+        }
+
+        fn messages(&self) -> Result<Vec<SnapshotMessageV1>> {
+            Ok(vec![])
+        }
+
+        fn generation(&self) -> Result<u64> {
+            Ok(1)
+        }
+    }
+
+    #[test]
+    fn exact_sse_frame_is_named_and_compact() {
+        assert_eq!(
+            sse_snapshot_frame(&json!({ "generation": 7 })).unwrap(),
+            "event: snapshot\ndata: {\"generation\":7}\n\n"
+        );
+    }
+
+    #[test]
+    fn snapshots_share_the_cache_but_generation_does_not() {
+        let source = Source::new(3);
+        let service = SnapshotService::with_cache_ttl(source, Duration::from_secs(2));
+        let first = service.snapshot().unwrap();
+        let second = service.snapshot().unwrap();
+        assert_eq!(first, second);
+        assert_eq!(service.source.snapshots.load(Ordering::SeqCst), 1);
+        assert_eq!(service.generation().unwrap(), 3);
+        assert_eq!(service.source.generation_reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn sweep_snapshot_generation_does_not_acknowledge_changes_during_collection() {
+        let mut source = Source::new(3);
+        source.bump_on_snapshot = true;
+        let service = SnapshotService::new(source);
+        let payload = service.snapshot().unwrap();
+        assert_eq!(payload.generation, 3);
+        assert!(should_send(Some(payload.generation), service.generation().unwrap(), Duration::ZERO));
+    }
+
+    #[tokio::test]
+    async fn sweep_server_rejects_non_loopback_binding() {
+        for host in ["0.0.0.0", "::", "192.0.2.1"] {
+            let error = tokio::time::timeout(Duration::from_millis(250), serve(BrokenSource, host, 0))
+                .await
+                .expect("non-loopback hosts must be rejected before serving")
+                .unwrap_err();
+            assert!(error.to_string().contains("loopback"), "{host}: {error}");
+        }
+    }
+
+    #[tokio::test]
+    async fn sweep_shutdown_closes_live_sse_streams() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let service = SnapshotService::new(Source::new(1));
+        let shutdown = service.shutdown.clone();
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let mut server = tokio::spawn(async move {
+            axum::serve(listener, router(service))
+                .with_graceful_shutdown(async move {
+                    stopped.await.unwrap();
+                    shutdown.send_replace(true);
+                })
+                .await
+                .unwrap();
+        });
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        client.write_all(b"GET /api/events HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut buffer = [0; 4096];
+        let mut response = String::new();
+        while !response.contains("event: snapshot") {
+            let count = tokio::time::timeout(Duration::from_secs(2), client.read(&mut buffer)).await.unwrap().unwrap();
+            assert!(count > 0);
+            response.push_str(&String::from_utf8_lossy(&buffer[..count]));
+        }
+        stop.send(()).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), &mut server).await;
+        server.abort();
+        result.expect("shutdown must finish while the SSE client stays connected").unwrap();
+    }
+
+    #[tokio::test]
+    async fn sweep_shared_poller_polls_once_per_tick_regardless_of_subscriber_count() {
+        // Two independently-polling SSE clients (the pre-fix behavior) would
+        // read `generation()` roughly twice as often as one. The shared
+        // poller performs exactly one source poll per tick no matter how
+        // many subscribers are attached, so the counts below should match.
+        async fn generation_reads_with(subscribers: usize) -> usize {
+            let service = Arc::new(SnapshotService::new(Source::new(1)));
+            let receivers: Vec<_> = (0..subscribers).map(|_| service.subscribe_poll()).collect();
+            tokio::time::sleep(Duration::from_millis(3_200)).await;
+            let reads = service.source.generation_reads.load(Ordering::SeqCst);
+            drop(receivers);
+            reads
+        }
+
+        let (one, two) = tokio::join!(generation_reads_with(1), generation_reads_with(2));
+        assert!(one > 0, "expected at least one poll: one={one}");
+        assert!((one as i64 - two as i64).abs() <= 1, "one={one} two={two}");
+    }
+
+    #[test]
+    fn generation_changes_and_heartbeats_are_sent() {
+        assert!(should_send(None, 4, Duration::ZERO));
+        assert!(!should_send(Some(4), 4, Duration::from_secs(19)));
+        assert!(should_send(Some(4), 5, Duration::ZERO));
+        assert!(should_send(Some(4), 4, Duration::from_secs(20)));
+    }
+
+    #[test]
+    fn timestamps_are_dashboard_parseable_rfc3339() {
+        assert_eq!(rfc3339_utc(UNIX_EPOCH + Duration::from_secs(1_722_729_600)), "2024-08-04T00:00:00+00:00");
+    }
+
+    #[tokio::test]
+    async fn sweep_server_rejects_a_forged_host_header() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(SnapshotService::new(Source::new(1)))).await.unwrap();
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"GET /api/snapshot HTTP/1.1\r\nHost: evil.example.com\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 403"), "{response}");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn sweep_server_rejects_a_missing_host_header() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(SnapshotService::new(Source::new(1)))).await.unwrap();
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream.write_all(b"GET /api/snapshot HTTP/1.0\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.0 400"), "{response}");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn sweep_server_accepts_loopback_host_header_variants() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        for host_header in ["127.0.0.1", "LOCALHOST:9999", "[::1]:4477"] {
+            let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                axum::serve(listener, router(SnapshotService::new(Source::new(1)))).await.unwrap();
+            });
+
+            let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+            stream
+                .write_all(
+                    format!("GET /api/snapshot HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).await.unwrap();
+            assert!(response.starts_with("HTTP/1.1 200"), "{host_header}: {response}");
+            server.abort();
+        }
+    }
+
+    #[tokio::test]
+    async fn snapshot_and_404_are_json() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(SnapshotService::new(Source::new(1)))).await.unwrap();
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream.write_all(b"GET /api/snapshot HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 200"));
+        assert!(response.contains("\"schema_version\":8"));
+
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream.write_all(b"GET /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 404"));
+        assert!(response.contains("{\"error\":\"not found\"}"));
+        server.abort();
+
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(SnapshotService::new(BrokenSource))).await.unwrap();
+        });
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream.write_all(b"GET /api/snapshot HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 500"));
+        assert!(response.contains("{\"error\":\"snapshot unavailable\"}"));
+        server.abort();
+    }
+}

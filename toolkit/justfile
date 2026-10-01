@@ -1,0 +1,83 @@
+set default-list := true
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+# Build every Rust workspace package.
+@build:
+    cargo build --workspace --locked
+
+# Run every Rust workspace test.
+@test:
+    cargo test --workspace --locked
+
+# Lint every Rust target and reject warnings.
+@lint:
+    cargo clippy --workspace --all-targets --locked -- --deny warnings
+
+# Format Rust source files.
+@fmt:
+    cargo fmt --all
+
+# Check Rust formatting.
+@fmt-check:
+    cargo fmt --all -- --check
+
+# Run the Rust validation gate.
+@rust-check: fmt-check lint test build
+
+# Run the coordination dashboard validation gate.
+@coord-dashboard-check:
+    just --justfile apps/coord-dashboard/justfile --working-directory apps/coord-dashboard check
+
+# Start the coordination dashboard development server.
+@coord-dashboard-dev:
+    just --justfile apps/coord-dashboard/justfile --working-directory apps/coord-dashboard dev
+
+# Run the handoffs validation gate.
+@handoffs-check:
+    just --justfile apps/handoffs/justfile --working-directory apps/handoffs check
+
+# Start the handoffs development server.
+@handoffs-dev:
+    just --justfile apps/handoffs/justfile --working-directory apps/handoffs dev
+
+# Run all workspace and application checks.
+@check: rust-check coord-dashboard-check handoffs-check
+
+# Delete the ai-coord ledger (state.db plus its -wal/-shm files) after a [y/N] confirmation.
+[script("bash")]
+reset-coord-ledger:
+    set -euo pipefail
+    if [[ -n "${AI_COORD_STATE_DIR:-}" ]]; then
+        dir="$AI_COORD_STATE_DIR"
+    else
+        dir="${XDG_STATE_HOME:-$HOME/.local/state}/ai-coord"
+    fi
+    db="$dir/state.db"
+    files=()
+    for file in "$db" "$db-wal" "$db-shm"; do
+        [[ -e "$file" ]] && files+=("$file")
+    done
+    if (( ${#files[@]} == 0 )); then
+        echo "No ai-coord ledger at $db"
+        exit 0
+    fi
+    printf '%s\n' "${files[@]}"
+    read -r -p "Delete these ai-coord ledger files? Close all agents first. [y/N] " reply || reply=""
+    if [[ "$reply" != [yY] && "$reply" != [yY][eE][sS] ]]; then
+        echo "Aborted; nothing deleted."
+        exit 1
+    fi
+    rm -f -- "${files[@]}"
+    echo "Deleted the ai-coord ledger."
+
+cli_packages := "commit coord handoff notify skillet"
+
+# Install all local CLI packages under ~/.local.
+@install-cli:
+    for pkg in {{cli_packages}}; do \
+        cargo install --quiet --path "$pkg" --locked --force --root "$HOME/.local"; \
+    done
+    # A running `ai-coord serve` keeps the old binary and rejects newer ledger schemas.
+    if launchctl print "gui/$(id -u)/local.ai-coord-api" >/dev/null 2>&1; then \
+        launchctl kickstart -k "gui/$(id -u)/local.ai-coord-api"; \
+    fi

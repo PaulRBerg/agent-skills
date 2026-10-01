@@ -1,0 +1,464 @@
+mod common;
+
+use ai_commit::cli::{Cli, Command};
+use clap::Parser;
+use std::{fs, time::Instant};
+
+use common::{Harness, exit_code, stderr, stdout, write_executable};
+
+#[test]
+fn commit_messages_accept_hyphen_leading_paragraphs() {
+    let transaction = "a9a4f5c260c251a8";
+    let subject = "Add shared image uploads to Yeet workflows";
+    let body = "- Centralize image validation, uploader fallback, placement, and failure handling.\n- Add full discussion updates and image support.";
+    let trailer = "Agent-Session: codex/019fd1e6-c747-7d73-b07d-638c0fab8f3b";
+
+    let cli =
+        Cli::try_parse_from(["ai-commit", "commit", transaction, "-m", subject, "-m", body, "-m", trailer, "--push"])
+            .unwrap();
+    let Command::Commit(args) = cli.command else {
+        panic!("expected commit command");
+    };
+
+    assert_eq!(args.transaction_id, transaction);
+    assert_eq!(args.messages, [subject, body, trailer]);
+    assert!(args.push);
+}
+
+#[test]
+fn validate_accepts_only_a_transaction_id_and_show_appends_pending_commit() {
+    let transaction = "a9a4f5c260c251a8";
+    let cli = Cli::try_parse_from(["ai-commit", "validate", transaction]).unwrap();
+    let Command::Validate(args) = cli.command else {
+        panic!("expected validate command");
+    };
+    assert_eq!(args.transaction_id, transaction);
+    assert!(Cli::try_parse_from(["ai-commit", "validate"]).is_err());
+    for option in ["--no-verify", "--no-gpg-sign", "--push", "--fix", "--message", "extra-id"] {
+        assert!(Cli::try_parse_from(["ai-commit", "validate", transaction, option]).is_err());
+    }
+
+    let harness = Harness::new("validate-cli-contract");
+    assert!(stdout(&harness.success(["--help"])).contains("validate"));
+    let help = stdout(&harness.success(["validate", "--help"]));
+    assert!(help.contains("validate <TRANSACTION_ID>"));
+    assert!(!help.contains("--no-verify"));
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "prepared\n");
+    let (prepared, _) = harness.prepare(&["intended.txt"]);
+    let shown = stdout(&harness.success(["show", &prepared]));
+    assert!(shown.starts_with(&format!("PREPARED {prepared}\nrepository\t")));
+    assert!(shown.contains("branch\t"));
+    assert!(shown.contains("prepared-tree\t"));
+    assert!(shown.contains("path\tintended.txt\n"));
+    assert!(shown.ends_with("pending-commit\t-\n"));
+
+    let interrupted = harness.command_with_env(
+        ["commit", &prepared, "-m", "test: pending show record"],
+        [("AI_COMMIT_TEST_FAIL_AFTER_REF_UPDATE", "1")],
+    );
+    assert_eq!(exit_code(&interrupted), 3, "{}", stderr(&interrupted));
+    let journal: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(harness.transaction_json(&prepared)).unwrap()).unwrap();
+    let pending = journal["pending_commit"]["commit_oid"].as_str().expect("pending commit oid");
+    let shown = stdout(&harness.success(["show", &prepared]));
+    assert!(shown.starts_with(&format!("PREPARED {prepared}\nrepository\t")));
+    assert!(shown.contains("prepared-tree\t"));
+    assert!(shown.contains("path\tintended.txt\n"));
+    assert!(shown.ends_with(&format!("pending-commit\t{pending}\n")));
+}
+
+#[test]
+fn commit_rejects_literal_newline_escapes() {
+    let harness = Harness::new("literal-newline-escape");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    let base = harness.git(["rev-parse", "HEAD"]);
+    harness.write("intended.txt", "changed\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+
+    let rejected = harness.command([
+        "commit",
+        &transaction,
+        "-m",
+        "test: reject escaped newline",
+        "-m",
+        "- first point\\n- second point",
+    ]);
+
+    assert_eq!(exit_code(&rejected), 2, "{}", stderr(&rejected));
+    assert!(stderr(&rejected).contains("literal \\n escape"));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), base);
+}
+
+#[test]
+fn local_config_selects_message_format_and_absence_defaults_to_conventional() {
+    let harness = Harness::new("local-config");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "conventional");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n");
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "natural");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"conventional\"\n");
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "conventional");
+
+    harness.write(".agents/commit.toml", "[validation]\ncommand = [\"true\"]\n");
+    assert_format(&harness.success(["prepare", "--porcelain", "--", "intended.txt"]), "conventional");
+}
+
+#[test]
+fn invalid_local_config_is_a_usage_error_that_identifies_the_path() {
+    let harness = Harness::new("invalid-local-config");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let config_path = harness.repo.join(".agents/commit.toml");
+
+    for source in [
+        "[message\nformat = \"natural\"\n",
+        "[message]\nformat = \"natural\"\nextra = true\n",
+        "[message]\n",
+        "[message]\nformat = \"verbose\"\n",
+    ] {
+        harness.write(".agents/commit.toml", source);
+        let invalid = harness.command(["prepare", "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        let error = stderr(&invalid);
+        assert!(error.contains("invalid config"), "{error}");
+        assert!(error.contains(&config_path.to_string_lossy().into_owned()), "{error}");
+    }
+}
+
+#[test]
+fn validation_command_config_is_argv_only_and_rejects_invalid_shapes() {
+    let harness = Harness::new("validation-config");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let config_path = harness.repo.join(".agents/commit.toml");
+
+    for source in [
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = \"true\"\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = []\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"\"]\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"\\u0000\"]\n",
+        "[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"true\"]\nextra = true\n",
+    ] {
+        harness.write(".agents/commit.toml", source);
+        let invalid = harness.command(["prepare", "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        let error = stderr(&invalid);
+        assert!(error.contains("invalid config"), "{error}");
+        assert!(error.contains(&config_path.to_string_lossy().into_owned()), "{error}");
+    }
+}
+
+#[test]
+fn validation_command_is_optional_and_frozen_when_prepared() {
+    let absent = Harness::new("validation-absent");
+    absent.write("intended.txt", "base\n");
+    absent.commit_all("base");
+    absent.write("intended.txt", "changed\n");
+    let (transaction, _) = absent.prepare(&["intended.txt"]);
+    let journal: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(absent.transaction_json(&transaction)).unwrap()).unwrap();
+    assert!(journal["validation_command"].is_null());
+
+    let configured = Harness::new("validation-frozen");
+    configured.write("intended.txt", "base\n");
+    configured.commit_all("base");
+    configured.write("intended.txt", "changed\n");
+    let validator = configured.root.join("validator");
+    let marker = configured.root.join("validator-ran");
+    write_executable(&validator, "#!/bin/sh\nset -eu\nprintf 'ran\\n' > \"$VALIDATION_MARKER\"\n");
+    configured.write(
+        ".agents/commit.toml",
+        &format!("[message]\nformat = \"conventional\"\n[validation]\ncommand = [\"{}\"]\n", validator.display()),
+    );
+    let (transaction, _) = configured.prepare(&[".agents/commit.toml", "intended.txt"]);
+    configured.write(".agents/commit.toml", "[message]\nformat = \"conventional\"\n");
+    let marker_text = marker.to_string_lossy().into_owned();
+    configured.success_with_env(
+        ["commit", &transaction, "-m", "test: frozen validation"],
+        [("VALIDATION_MARKER", &marker_text)],
+    );
+    assert_eq!(fs::read_to_string(marker).unwrap(), "ran\n");
+    assert!(configured.git(["show", "HEAD:.agents/commit.toml"]).contains("[validation]"));
+}
+
+#[test]
+fn explicit_format_overrides_local_config() {
+    let harness = Harness::new("config-override");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n");
+    let conventional = harness.success(["prepare", "--porcelain", "--conventional", "--", "intended.txt"]);
+    assert_format(&conventional, "conventional");
+
+    harness.write(".agents/commit.toml", "not valid TOML");
+    let natural = harness.success(["prepare", "--porcelain", "--natural", "--", "intended.txt"]);
+    assert_format(&natural, "natural");
+}
+
+#[test]
+fn explicit_format_does_not_bypass_declared_validation_configuration() {
+    let harness = Harness::new("validation-config-override");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n[validation]\ncommand = [\"true\"]\n");
+    for (flag, format) in [("--natural", "natural"), ("--conventional", "conventional")] {
+        let prepared = harness.success(["prepare", "--porcelain", flag, "--", "intended.txt"]);
+        assert_format(&prepared, format);
+        let transaction = prepared_id(&stdout(&prepared));
+        let journal: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(harness.transaction_json(&transaction)).unwrap()).unwrap();
+        assert_eq!(journal["validation_command"], serde_json::json!(["true"]));
+    }
+
+    harness.write(".agents/commit.toml", "[message]\nformat = \"natural\"\n[validation]\ncommand = []\n");
+    for flag in ["--natural", "--conventional"] {
+        let invalid = harness.command(["prepare", "--porcelain", flag, "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        assert!(stderr(&invalid).contains("validation.command"), "{}", stderr(&invalid));
+    }
+
+    harness.write(
+        ".agents/commit.toml",
+        "[message]\nformat = \"verbose\"\n[\"valid\\u0061tion\"]\ncommand = [\"false\"]\n",
+    );
+    for flag in ["--natural", "--conventional"] {
+        let invalid = harness.command(["prepare", "--porcelain", flag, "--", "intended.txt"]);
+        assert_eq!(exit_code(&invalid), 2, "{}", stderr(&invalid));
+        assert!(stderr(&invalid).contains("invalid config"), "{}", stderr(&invalid));
+    }
+}
+
+#[test]
+fn legacy_global_and_environment_config_are_ignored() {
+    let harness = Harness::new("legacy-config");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+
+    let global_path = harness.root.join("config/ai-commit/config.toml");
+    fs::create_dir_all(global_path.parent().unwrap()).unwrap();
+    fs::write(&global_path, format!("[message]\nnatural_repositories = [\"{}\"]\n", harness.repo.display())).unwrap();
+    let global = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
+    assert_format(&global, "conventional");
+
+    let override_path = harness.root.join("override.toml");
+    fs::write(&override_path, "not valid TOML").unwrap();
+    let environment = harness.command_with_env(
+        ["prepare", "--porcelain", "--", "intended.txt"],
+        [("AI_COMMIT_CONFIG", override_path.to_string_lossy().into_owned())],
+    );
+    assert!(environment.status.success(), "{}", stderr(&environment));
+    assert_format(&environment, "conventional");
+}
+
+#[test]
+fn trailer_is_bounded_and_accepts_only_one_agent_session_line() {
+    let harness = Harness::new("trailer");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    write_executable(&harness.shim.join("ai-coord"), "#!/bin/sh\nprintf 'Agent-Session: codex:test-session\\n'\n");
+    let valid = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
+    assert!(stdout(&valid).contains("TRAILER\tAgent-Session: codex:test-session\n"));
+
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        "#!/bin/sh\nprintf 'Agent-Session: one\\nAgent-Session: two\\n'\n",
+    );
+    let invalid = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
+    assert!(!stdout(&invalid).contains("TRAILER\t"));
+
+    write_executable(
+        &harness.shim.join("ai-coord"),
+        "#!/bin/sh\nif [ \"$1\" = trailer ]; then\n  while :; do :; done\nfi\nexit 1\n",
+    );
+    let started = Instant::now();
+    let timed_out = harness.success(["prepare", "--porcelain", "--", "intended.txt"]);
+    assert!(started.elapsed().as_secs_f32() < 2.5, "trailer command was not bounded");
+    assert!(!stdout(&timed_out).contains("TRAILER\t"));
+}
+
+#[test]
+fn porcelain_is_stable_tsv_with_exact_evidence() {
+    let harness = Harness::new("porcelain");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", "intended.txt"]);
+    let output = stdout(&output);
+    let id = output.lines().find_map(|line| line.strip_prefix("PREPARED\t")).expect("prepared ID");
+    assert_eq!(id.len(), 16);
+    assert!(id.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()));
+    for prefix in ["FORMAT\t", "RULE\t", "BRANCH\t", "CHANGE\t", "SHORTSTAT\t", "DIFF\t", "PATH\t"] {
+        assert!(output.lines().any(|line| line.starts_with(prefix)), "missing {prefix}:\n{output}");
+    }
+    assert!(output.contains("CHANGE\tM\\tintended.txt\n"));
+    assert!(output.contains("PATH\tintended.txt\n"));
+    assert!(output.contains("Subject line (\\\\<= 50 chars)"));
+}
+
+#[test]
+fn full_diff_caps_each_file_and_discloses_truncation() {
+    let harness = Harness::new("diff-cap");
+    harness.write("big.txt", "base\n");
+    harness.write("small.txt", "base\n");
+    harness.commit_all("base");
+    let big: String = (0..500).map(|index| format!("line {index}\n")).collect();
+    harness.write("big.txt", &big);
+    harness.write("small.txt", "changed\n");
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", "big.txt", "small.txt"]);
+    let output = stdout(&output);
+    let truncated =
+        output.lines().find(|line| line.starts_with("DIFF_TRUNCATED\t")).expect("big file diff is truncated");
+    assert!(truncated.starts_with("DIFF_TRUNCATED\tbig.txt\t"));
+    assert!(output.contains("DIFF\t+changed\n"));
+    assert!(!output.contains("DIFF_TRUNCATED\tsmall.txt"));
+    assert!(!output.contains("DIFF\t+line 499\n"));
+}
+
+#[test]
+fn full_diff_path_tracking_ignores_hunk_content_resembling_a_header() {
+    let harness = Harness::new("diff-hunk-decoy");
+    harness.write("trap.txt", "base\n");
+    harness.commit_all("base");
+    // The first added line's content is `++ b/decoy.txt`; the diff prefixes it with one more `+`,
+    // rendering `+++ b/decoy.txt`, which must not be mistaken for a new file-header path because
+    // it appears inside the hunk body, after `@@`.
+    let mut content = String::from("++ b/decoy.txt\n");
+    content.extend((0..500).map(|index| format!("line {index}\n")));
+    harness.write("trap.txt", &content);
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", "trap.txt"]);
+    let output = stdout(&output);
+    let truncated =
+        output.lines().find(|line| line.starts_with("DIFF_TRUNCATED\t")).expect("trap file diff is truncated");
+    assert!(truncated.starts_with("DIFF_TRUNCATED\ttrap.txt\t"), "path corrupted by hunk content: {truncated}");
+}
+
+#[test]
+fn full_diff_path_tracking_unquotes_git_quoted_headers() {
+    let harness = Harness::new("diff-quoted-path");
+    let filename = "weird\"quote.txt";
+    harness.write(filename, "base\n");
+    harness.commit_all("base");
+    let big: String = (0..500).map(|index| format!("line {index}\n")).collect();
+    harness.write(filename, &big);
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", filename]);
+    let output = stdout(&output);
+    let truncated =
+        output.lines().find(|line| line.starts_with("DIFF_TRUNCATED\t")).expect("quoted file diff is truncated");
+    assert!(
+        truncated.starts_with(&format!("DIFF_TRUNCATED\t{filename}\t")),
+        "quoted header path was not unquoted correctly: {truncated}"
+    );
+}
+
+#[test]
+fn full_diff_display_tolerates_non_utf8_content() {
+    let harness = Harness::new("diff-non-utf8");
+    harness.write("latin1.txt", "base\n");
+    harness.commit_all("base");
+    // "café\n" encoded as Latin-1: the 0xE9 byte is not valid UTF-8 on its own.
+    fs::write(harness.repo.join("latin1.txt"), [b'c', b'a', b'f', 0xE9, b'\n']).unwrap();
+    let output = harness.success(["prepare", "--porcelain", "--diff", "full", "--", "latin1.txt"]);
+    let output = stdout(&output);
+    assert!(output.contains("PREPARED\t"));
+    assert!(output.lines().any(|line| line.starts_with("DIFF\t")));
+}
+
+#[test]
+fn staged_and_all_modes_capture_their_documented_scope() {
+    let staged = Harness::new("staged");
+    staged.write("one.txt", "base\n");
+    staged.write("two.txt", "base\n");
+    staged.commit_all("base");
+    staged.write("one.txt", "staged snapshot\n");
+    staged.git(["add", "one.txt"]);
+    staged.write("one.txt", "later worktree\n");
+    staged.write("two.txt", "unstaged\n");
+    let output = staged.success(["prepare", "--staged", "--porcelain"]);
+    let transaction = prepared_id(&stdout(&output));
+    assert!(stdout(&output).contains("PATH\tone.txt\n"));
+    assert!(!stdout(&output).contains("PATH\ttwo.txt\n"));
+    staged.success(["commit", &transaction, "-m", "test: staged exact"]);
+    assert_eq!(staged.git(["show", "HEAD:one.txt"]), "staged snapshot");
+    assert_eq!(staged.git(["show", "HEAD:two.txt"]), "base");
+    assert_eq!(staged.read("one.txt"), "later worktree\n");
+
+    let all = Harness::new("all");
+    all.write("one.txt", "base\n");
+    all.commit_all("base");
+    all.write("one.txt", "changed\n");
+    all.write("two.txt", "untracked\n");
+    let output = all.success(["prepare", "--all", "--porcelain"]);
+    let transaction = prepared_id(&stdout(&output));
+    assert!(stdout(&output).contains("PATH\tone.txt\n"));
+    assert!(stdout(&output).contains("PATH\ttwo.txt\n"));
+    all.success(["commit", &transaction, "-m", "test: all changes"]);
+    assert_eq!(all.git(["show", "HEAD:two.txt"]), "untracked");
+}
+
+#[test]
+fn repository_root_paths_and_flag_errors_are_validated() {
+    let harness = Harness::new("paths");
+    harness.write("intended.txt", "base\n");
+    harness.write("nested/keep.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let from_subdir =
+        harness.command_at(&harness.repo.join("nested"), ["prepare", "--porcelain", "--", "../intended.txt"]);
+    assert!(from_subdir.status.success(), "{}", stderr(&from_subdir));
+    assert!(stdout(&from_subdir).contains("PATH\tintended.txt\n"));
+
+    let no_paths = harness.command(["prepare"]);
+    assert_eq!(exit_code(&no_paths), 2);
+    let outside = harness.command(["prepare", "--", "../outside.txt"]);
+    assert_eq!(exit_code(&outside), 2);
+    let metadata = harness.command(["prepare", "--", ".git/index"]);
+    assert_eq!(exit_code(&metadata), 2);
+    let controls = harness.command(["prepare", "--", "bad\nname"]);
+    assert_eq!(exit_code(&controls), 2);
+    let incompatible = harness.command(["prepare", "--all", "--", "intended.txt"]);
+    assert_eq!(exit_code(&incompatible), 2);
+    let formats = harness.command(["prepare", "--natural", "--conventional", "--", "intended.txt"]);
+    assert_eq!(exit_code(&formats), 2);
+}
+
+#[test]
+fn signing_failure_is_retryable_and_explicit_bypass_succeeds() {
+    let harness = Harness::new("signing");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    let failing_signer = harness.root.join("failing-gpg");
+    write_executable(&failing_signer, "#!/bin/sh\nprintf 'intentional signing failure\\n' >&2\nexit 1\n");
+    harness.git(["config", "commit.gpgsign", "true"]);
+    harness.git(["config", "gpg.program", failing_signer.to_str().unwrap()]);
+    let failed = harness.command(["commit", &transaction, "-m", "test: signed"]);
+    assert_eq!(exit_code(&failed), 1);
+    assert!(stderr(&failed).contains("failed to sign"));
+    let bypassed = harness.success(["commit", &transaction, "-m", "test: unsigned", "--no-gpg-sign"]);
+    assert!(stdout(&bypassed).contains("COMMITTED"));
+}
+
+fn prepared_id(output: &str) -> String {
+    output.lines().find_map(|line| line.strip_prefix("PREPARED\t")).expect("PREPARED record").to_owned()
+}
+
+fn assert_format(output: &std::process::Output, expected: &str) {
+    assert!(stdout(output).contains(&format!("FORMAT\t{expected}\n")), "{}", stdout(output));
+}

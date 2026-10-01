@@ -1,0 +1,28 @@
+[package]
+authors.workspace = true
+description = "Desktop notification system for Claude Code and Codex CLI"
+edition.workspace = true
+license.workspace = true
+name = "ai-notify"
+readme = "AGENTS.md"
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+clap.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml_ng = "0.10"
+strip-ansi-escapes = "0.2"
+tempfile.workspace = true
+thiserror.workspace = true
+toml_edit = { version = "0.25", features = ["serde"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
