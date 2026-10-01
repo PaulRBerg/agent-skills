@@ -79,6 +79,14 @@ signed `gasPrice`; and an empty-calldata EOA transfer estimates and uses `21000`
 empty-calldata legacy transfers in block `125118813` reconciled to `value + 21000 * gasPrice` across their block, and an
 exact-zero sweep at `21000` gas left a `0` balance.
 
+Avalanche C-Chain (`43114`) is eligible as an ordinary Alt L1 target. Legacy transactions are debited exactly
+`gasUsed * gasPrice` with no refund or extra debit; receipts report `effectiveGasPrice` equal to the signed `gasPrice`;
+and an empty-calldata EOA transfer estimates and uses `21000` gas. Block-level `blockGasCost` is not a sender debit.
+`eth_gasPrice` can sit below the latest `baseFeePerGas` (observed 5.0 vs 5.047 gwei), so price from
+`baseFeePerGas + eth_maxPriorityFeePerGas` when it is higher. Verified 2026-10-01: third-party empty-calldata legacy
+transfers in blocks `96539423` and `96539426` reconciled to `value + 21000 * gasPrice` across their blocks, and an
+exact-zero sweep at `21000` gas left a `0` balance.
+
 Gnosis (`100`) is eligible as an ordinary Alt L1 target. Legacy transactions are debited exactly `gasUsed * gasPrice`
 with no refund or extra debit; receipts report `effectiveGasPrice` equal to the signed `gasPrice`, and an empty-calldata
 EOA transfer estimates and uses `21000` gas. Base fees are only tens of wei and volatile: a 1024-block `eth_feeHistory`
