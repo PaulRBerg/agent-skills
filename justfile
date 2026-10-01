@@ -12,6 +12,7 @@ prettier_cache := ".cache/prettier/.prettier-cache"
 prettier_globs := "\"**/*.{md,json,jsonc,yaml,yml}\""
 evm_atlas_generator := "scripts/generate-evm-atlas.ts"
 evm_atlas_generator_test := "scripts/generate-evm-atlas.test.ts"
+debank_collect_test := "tests/evm-atlas/debank-collect.test.ts"
 publish_skills_script := "scripts/publish-skills.ts"
 publish_skills_test := "scripts/publish-skills.test.ts"
 codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
@@ -119,10 +120,10 @@ alias eag := evm-atlas-generate
     bun run {{ evm_atlas_generator }} --check
 alias eac := evm-atlas-check
 
-# Exercise the evm-atlas generator against fixture registries
+# Exercise the evm-atlas generator against fixture registries and the DeBank collector against a simulated page
 [group("checks")]
 @evm-atlas-test:
-    bun test {{ evm_atlas_generator_test }}
+    bun test {{ evm_atlas_generator_test }} {{ debank_collect_test }}
 alias eat := evm-atlas-test
 
 # Refresh atlas-overlays.json routeMesh flags through the routemesh CLI (network call)

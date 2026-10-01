@@ -8,88 +8,112 @@ chains than Blockscan, including non-Etherscan chains. For one named chain, use
 
 ## Chromium Workflow
 
-1. Validate the address, then open `https://debank.com/profile/<addr>` with Chrome DevTools `new_page`. Do not call
-   `api.debank.com` balance endpoints directly: outside the page they return `429 Request too fast`, and DeBank's Cloud
-   OpenAPI is paid.
-2. When the cookie dialog appears, choose `Reject`. Wait for `Data updated`, then record its age (for example
-   `3 mins ago`): DeBank renders cached balances first.
-3. Read per-chain USD values from the `All Chain` summary; click `Unfold <n> chains` when present.
-4. The wallet table hides small balances. When completeness matters (token discovery, dust, or drained checks), click
-   `Show all` below it before extracting.
-5. Extract wallet rows with `evaluate_script`:
+1. Validate each address (20-byte hex), then open an owned page on `https://debank.com/profile/<addr>` with Chrome
+   DevTools `new_page`. When the cookie dialog appears, choose `Reject`.
+2. Never call `api.debank.com` balance endpoints yourself (DeBank's Cloud OpenAPI is paid). The profile page's calls are
+   `fetch` GETs signed by the app (`x-api-*` headers): unsigned calls, even from inside the page, return
+   `429 Request too fast`, and `credentials: 'include'` fails CORS. The collector captures the app's own responses
+   instead.
+3. **Token discovery**, for one address or many, uses the collector. Read `scripts/debank-collect.js` and pass its whole
+   contents verbatim as the `evaluate_script` `function`; the file has no trailing `;` on purpose, so it stays a
+   pasteable arrow function. It returns `{ installed: true, reused: false }` (`reused: true` when the page already has
+   it), installs `window.__debankCollect`, and wraps `window.fetch` to record the app's `used_chains` and `balance_list`
+   responses. Per address it routes the page to the profile and succeeds once `used_chains` and a `balance_list` for
+   every listed chain return 200 with `error_code` 0. DeBank lists the chains an address used, not the chains where it
+   holds tokens, so an `ok` record with chains can hold zero tokens. The API includes small balances the UI folds, so no
+   `Show all` click is needed. Start the run with a second `evaluate_script` call:
 
 <!-- prettier-ignore -->
 ```js
-async () => {
-  const { data } = await (await fetch("https://api.debank.com/chain/list")).json();
-  const chainIds = Object.fromEntries(data.chains.map((c) => [c.id, c.network_id]));
-  const header = [...document.querySelectorAll(".db-table-header")].find((h) =>
-    /^Token\s*Price\s*Amount\s*USD Value$/.test(h.innerText.trim()),
-  );
-  if (!header) return { error: "wallet table not found" };
-  const table = header.parentElement;
-  return [...table.querySelectorAll('a[href*="/token/"]')].map((a) => {
-    let row = a;
-    while (row.parentElement !== table && row.innerText.split("\n").filter((s) => s.trim()).length < 4) {
-      row = row.parentElement;
-    }
-    const [, , slug, token] = new URL(a.href).pathname.split("/");
-    const [symbol, price, amount, usd] = row.innerText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const contract = /^0x[0-9a-f]{40}$/i.test(token) ? token : "native";
-    return { chainId: chainIds[slug] ?? null, slug, contract, symbol, price, amount, usd };
-  });
-}
+async () => window.__debankCollect.start(["<addr>"])
 ```
 
-6. DeFi protocol sections follow the wallet table, each with a protocol name, USD value, and position type. Read them
-   from a fresh snapshot when the user requests positions.
+`start` lowercases and de-duplicates the addresses, throws for an invalid address, an active run, or a failed
+`chain/list` call, and otherwise returns `{ queued }` without waiting for the run, so awaiting it surfaces those errors.
+An optional second argument sets `{ timeoutMs: 30000, maxAttempts: 3, cooldownMs: 20000 }` (the defaults).
+
+4. Poll `window.__debankCollect.status()` with short `evaluate_script` calls until `running` is `false`. It returns
+   `{ running, total, done, ok, failed, pending, rateLimited, startedAt, elapsedMs }`, with `startedAt` an ISO string. A
+   profile takes about 2.5 s (1.2-4.6 s). A `429`, error, or timeout pauses the page for `cooldownMs` and requeues the
+   address until `maxAttempts`, after which its record is `failed`.
+5. Save `window.__debankCollect.results()` by calling `evaluate_script` with
+   `function: () => window.__debankCollect.results()` and a `filePath`. The path must be inside the MCP workspace roots
+   (a git-ignored project directory); other paths are refused. `results()` returns the latest run's completed records in
+   input order, and a new `start` clears them, so save first. Each record has `address`, `status` (`ok` or `failed`),
+   `attempts`, `error` (when `failed`), `chains` (the `used_chains` slugs), `observedAt` (ISO string), and `tokens`,
+   each `{ chainId, chain, contract, symbol, decimals, rawAmount, amount, price }`. `contract` is the lowercased ERC-20
+   address or `"native"`, `chainId` is the chain's numeric `network_id` (`null` when `chain/list` has none for the
+   slug), and `rawAmount` is an exact decimal string in raw units. A `failed` record carries `chains: []` and
+   `tokens: []`; those arrays mean nothing, and only `status` counts.
+6. Read the `All Chain` summary and the DeFi protocol sections from the DOM only, on that address's own profile (after a
+   run, the page shows the last address collected). Wait for `Data updated`; click `Unfold <n> chains` when present,
+   then read per-chain USD values from the summary. DeFi sections follow the wallet table, each with a protocol name,
+   USD value, and position type; read them from a fresh snapshot when the user requests positions.
+
+- `Data updated <age>` is the DeFi project-snapshot time, not wallet-token freshness. `20727 days ago` (the Unix epoch)
+  means `portfolio/project_list` failed to load and says nothing about tokens. Token observation time is each record's
+  `observedAt`.
+- The DOM wallet table folds small balances behind a toggle reading "Tokens with small balances are not displayed. Show
+  all". It appears only when the wallet has at least 15 tokens and at least 4 are under min(0.1% of wallet USD, $1000).
+  Click `Show all` only when you must read the table itself; the clickable is a `<span>` with an `<svg>` child, so a
+  leaf-element text matcher never finds it. Scraping the folded table misses those tokens.
 
 ## Many Addresses
 
-DeBank refuses to render in an iframe, so read many profiles on one owned page through the app's client router: per
-address, `history.pushState({}, "", "/profile/<addr>")` then `dispatchEvent(new PopStateEvent("popstate"))`, wait until
-the page shows that address and `Data updated`, wait for the extracted rows to stop changing, then extract. A loop that
-awaits many profiles inside one `evaluate_script` call can exceed the DevTools protocol timeout and lose every result:
-start the loop without awaiting it, accumulate results on `window`, and poll them with short `evaluate_script` calls.
-Reload the page before restarting a loop, because a timed-out call keeps navigating in the page.
+One `start` call takes any number of addresses and routes a single owned page through their profiles (DeBank refuses to
+render in an iframe), so a loop never needs one page per address.
+
+- Use at most two owned pages, opened with `new_page` (they report visible, so timers are not throttled). Two concurrent
+  pages ran without errors; three started at once triggered a burst `429`, and each profile costs about `10 + <chains>`
+  requests. Split the addresses round-robin into two slices, paste the script and `start` the first slice, then start
+  the second page a few seconds later.
+- The loop runs without being awaited, so no DevTools protocol timeout applies; poll `status()` with short calls and
+  save `results()` per page.
+- A new `start` throws while a run is active and clears the previous results once it begins. To abort an active run,
+  reload the page and paste the script again.
+- A `failed` record is a coverage gap, never an empty wallet; handle it per Fallbacks. An `ok` record with no tokens is
+  DeBank's indexed zero.
+- Never read the page UI to decide that a wallet is empty. During rate limiting, a `429` on `used_chains` makes the page
+  show "No assets yet" with a "Request too fast" toast, `429`s on the balance endpoints remove the wallet table, and DOM
+  rows can linger from the previous profile after a route change.
 
 ## Chain Mapping
 
-- DeBank names chains by slug (`eth`, `scrl`, `xdai`, `era`). Map slugs to chain IDs only through the `network_id` field
-  of the keyless `https://api.debank.com/chain/list`, then match target rows by exact chain ID, never by display name.
-- A token link `/token/<slug>/<0x-address>` carries the ERC-20 contract; a non-hex token segment (`/token/eth/eth`,
-  `/token/matic/matic`) is the chain's native asset.
-- Slug `undefined` (for example Hyperliquid spot and perps balances) is off-EVM: report it with DeFi positions, never as
-  a target chain.
+- DeBank names chains by slug (`eth`, `scrl`, `xdai`, `era`). The collector maps slugs to chain IDs through the
+  `network_id` field of the keyless `https://api.debank.com/chain/list`. Match target chains by exact `chainId`, never
+  by slug or display name.
+- A token whose `chainId` is `null` (`chain/list` has no numeric `network_id` for its slug, as for non-EVM balances such
+  as Hyperliquid spot and perps) is not a target chain: report it with DeFi positions, never as a target chain.
 
 ## Coverage and Scope
 
-- Derive coverage at runtime: target chains whose ID appears in `chain/list` are DeBank-supported. A supported target
-  chain absent from the profile is DeBank's indexed zero, not an RPC-confirmed zero.
-- Ignore non-target chains. Sum target-chain rows for any target-only total; never report the page-wide total as one.
-- Treat amounts, prices, and USD values as DeBank's formatted display data, not raw-unit balances. Amounts are rounded,
-  and subscript notation compresses leading zeros (`0.0₅3` = `0.000003`).
-- DeBank's spam filtering and pricing are its own. Apply the Pricing Hygiene in `address-usd-value.md` before using
-  DeBank values in totals.
+- Derive coverage at runtime: target chains whose ID appears in `chain/list` are DeBank-supported. `used_chains` bounds
+  the chains the collector queries, so a supported target chain absent from a record is DeBank's indexed zero, not an
+  RPC-confirmed zero.
+- Ignore non-target chains. Sum target-chain tokens for any target-only total; never report the page-wide total as one.
+- DeBank drops spam server-side (every returned token had `is_scam` and `is_suspicious` false), so it never reports spam
+  tokens, and absence from a record does not show that a token is not held.
+- `rawAmount` is exact in raw units (with `decimals`); `amount` and `price` are DeBank's. They are still indexer data,
+  and `address-usd-value.md` confirms amounts by RPC before using them. Apply the Pricing Hygiene there before using
+  DeBank prices in totals.
 - Keep DeFi positions separate from wallet balances.
 
 ## Fallbacks
 
 - Target chains missing from `chain/list`: use `blockscan-balances.md` when Blockscan lists the chain ID, otherwise
   `provider-routing.md`.
-- Navigation fails, an error or challenge persists, the page rate-limits, or the wallet table is absent: use
-  `blockscan-balances.md`, then `address-sweeps.md` for remaining target chains.
+- Navigation fails, an error or challenge persists, or an address's record is `failed` (it has already retried
+  `maxAttempts` times): use `blockscan-balances.md`, then `address-sweeps.md` for remaining target chains.
 - Chrome DevTools MCP or Chromium is unavailable: use `address-sweeps.md` (or the API passes in `address-usd-value.md`).
-- Exact or raw precision required: confirm with RPC `balanceOf` and `eth_getBalance` as `address-usd-value.md` does.
+- On-chain precision required: confirm with RPC `balanceOf` and `eth_getBalance` as `address-usd-value.md` does.
 
 Report which condition caused each fallback.
 
 ## Output
 
-Return the profile URL, `Data updated` age, one row per non-empty target chain (name, ID, native and token amounts,
-DeBank USD), the target-only sum, and DeFi positions as a separate labeled list (protocol, chain, position type, USD).
-Add counts of excluded non-target chains and coverage gaps with their cause. Separate fallback-derived facts by
-provider.
+Return the profile URL and the collector `observedAt` per address; add the `Data updated` age only when DeFi positions
+were read, labeled as the DeFi snapshot time. Then one row per non-empty target chain (name, ID, native and token
+amounts, DeBank USD), the target-only sum, and DeFi positions as a separate labeled list (protocol, chain, position
+type, USD). For many addresses, also give the saved results path and the `ok` and `failed` counts. Add counts of
+excluded non-target chains and coverage gaps (including each `failed` address) with their cause. Separate
+fallback-derived facts by provider.
