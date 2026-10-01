@@ -290,9 +290,12 @@ curl -s "${api_url}?module=account&action=balance&address=0xADDR"
 ```
 
 Use the helper's `api_url` for API requests; `instance_url` is the page host. An explicit `explorerApiUrl` in
-`target-mainnets.json` takes precedence over a Chainscout URL. Morph (`2818`) uses
+`target-mainnets.json` or a Blockscout overlay `apiUrl` takes precedence over a Chainscout URL. Morph (`2818`) uses
 `https://explorer-api.morph.network/api` for its API and `https://explorer.morph.network` for pages, verified in
-Chromium and through the API on 2026-09-15.
+Chromium and through the API on 2026-09-15. Linea (`59144`) uses `https://api-explorer.linea.build/api` for its API;
+`https://explorer.linea.build` serves only pages and returns HTML `404` under `/api`, verified through the frontend's
+`NEXT_PUBLIC_API_HOST` and the API on 2026-10-01. When a self-hosted page host returns HTML for `/api`, read its
+`/assets/envs.js` `NEXT_PUBLIC_API_HOST` before reporting the instance down.
 
 Superseed (`5330`) is not a usable Blockscout instance despite its stale Chainscout entry. Chromium verified on
 2026-09-15 that `https://explorer.superseed.xyz` serves Conduit Explorer and explicitly lacks historical transactions,

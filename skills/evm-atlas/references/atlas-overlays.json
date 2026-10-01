@@ -240,7 +240,9 @@
       "blockscout": {
         "status": "observed",
         "hostedBy": "self",
-        "instanceUrl": "https://explorer.linea.build/"
+        "instanceUrl": "https://explorer.linea.build/",
+        "apiUrl": "https://api-explorer.linea.build/api",
+        "notes": "Separate API host; see resolve-chain.sh api_url"
       }
     },
     "mode": {

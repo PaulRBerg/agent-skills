@@ -27,6 +27,8 @@ type Registry = {
 };
 
 type BlockscoutOverlay = {
+  /** Verified API base when the instance serves its API from another host. */
+  apiUrl?: string;
   hostedBy?: string;
   instanceUrl?: string;
   notes?: string;
@@ -231,6 +233,10 @@ function validateOverlay(data: AtlasOverlay, registryChains: Array<{ slug: strin
     if (row.blockscout.status === "observed") {
       assertString(row.blockscout.hostedBy, `${chain.slug}.blockscout.hostedBy`);
       assertString(row.blockscout.instanceUrl, `${chain.slug}.blockscout.instanceUrl`);
+    }
+    if (row.blockscout.apiUrl !== undefined) {
+      if (row.blockscout.status !== "observed") fail(`${chain.slug}.blockscout.apiUrl requires status observed.`);
+      assertString(row.blockscout.apiUrl, `${chain.slug}.blockscout.apiUrl`);
     }
     if (row.blockscout.status === "unsafe") {
       assertString(row.blockscout.notes, `${chain.slug}.blockscout.notes`);
@@ -506,13 +512,13 @@ function resolveChainScript(registryChains: RegistryChain[], data: AtlasOverlay)
     const pattern = overlayRow(data, chain).chainscoutNamePattern ?? chain.name;
     return `    ${chain.chainId}) printf '%s\\n' '${singleQuote(pattern)}' ;;`;
   });
-  const apiOverrides = registryChains.flatMap((chain) =>
-    chain.explorer.apiUrl
-      ? [
-          `  ${chain.chainId}) instance='${singleQuote(explorerBaseUrl(chain))}/'; api='${singleQuote(chain.explorer.apiUrl)}' ;;`,
-        ]
-      : [],
-  );
+  const apiOverrides = registryChains.flatMap((chain) => {
+    const blockscout = overlayRow(data, chain).blockscout;
+    const [instance, api] = blockscout.apiUrl
+      ? [blockscout.instanceUrl ?? "", blockscout.apiUrl]
+      : [`${explorerBaseUrl(chain)}/`, chain.explorer.apiUrl];
+    return api ? [`  ${chain.chainId}) instance='${singleQuote(instance)}'; api='${singleQuote(api)}' ;;`] : [];
+  });
   const unsafeCases = registryChains
     .filter((chain) => overlayRow(data, chain).blockscout.status === "unsafe")
     .map((chain) => {
@@ -618,7 +624,7 @@ function resolveChainScript(registryChains: RegistryChain[], data: AtlasOverlay)
     'rollup=$(sval "rollupType")',
     "",
     'api="${instance%/}/api"',
-    "# Explicit registry API bases override stale Chainscout page-host routes.",
+    "# Explicit registry or overlay API bases override Chainscout page-host routes.",
     'case "$chain_id" in',
     ...apiOverrides,
     "esac",

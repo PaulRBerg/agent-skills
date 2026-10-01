@@ -55,7 +55,7 @@ Observed on 2026-07-08. Presence here does not override the canonical explorer/R
 | Gnosis          | `100`      | xDAI   | blockscout | https://gnosis.blockscout.com/                   |                                                   |
 | HyperEVM        | `999`      | HYPE   | self       | https://www.hyperscan.com/                       | Chainscout marks `isTestnet=true`                 |
 | Lightlink       | `1890`     | ETH    | blockscout | https://phoenix.lightlink.io/                    |                                                   |
-| Linea           | `59144`    | ETH    | self       | https://explorer.linea.build/                    |                                                   |
+| Linea           | `59144`    | ETH    | self       | https://explorer.linea.build/                    | Separate API host; see resolve-chain.sh api_url   |
 | Mode            | `34443`    | ETH    | blockscout | https://explorer.mode.network/                   |                                                   |
 | Morph           | `2818`     | ETH    | self       | https://explorer.morph.network/                  | Separate API host; see explorerApiUrl             |
 | Optimism        | `10`       | ETH    | blockscout | https://explorer.optimism.io/                    |                                                   |

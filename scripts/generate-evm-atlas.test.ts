@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 type FixtureOptions = {
+  blockscout?: Record<string, unknown>;
   categories?: Array<string | undefined>;
   schemaVersion?: number;
 };
 
-function createFixture({ categories = ["mainnet", "zk"], schemaVersion = 3 }: FixtureOptions = {}) {
+function createFixture({ blockscout, categories = ["mainnet", "zk"], schemaVersion = 3 }: FixtureOptions = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "atlas-generator-"));
   const script = path.join(root, "scripts/generate-evm-atlas.ts");
   const references = path.join(root, "skills/evm-atlas/references");
@@ -50,7 +51,7 @@ function createFixture({ categories = ["mainnet", "zk"], schemaVersion = 3 }: Fi
             fallbackPublicRpcs: ["https://fallback.example"],
             routeMesh: false,
             etherscan: { support: "unsupported" },
-            blockscout: { status: "absent" },
+            blockscout: (slug === "standard" && blockscout) || { status: "absent" },
           },
         ]),
       ),
@@ -93,6 +94,28 @@ test("generator preserves chain categories and independent explorer templates", 
         explorerTxUrl: "https://explorer.example/tx/{tx_hash}",
       },
     ]);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("generator routes a Blockscout overlay API host into resolve-chain.sh", () => {
+  const fixture = createFixture({
+    blockscout: {
+      status: "observed",
+      hostedBy: "self",
+      instanceUrl: "https://blockscout.example/",
+      apiUrl: "https://api-blockscout.example/api",
+    },
+  });
+  try {
+    const result = fixture.run();
+    expect(result.stderr.toString()).toBe("");
+    expect(result.exitCode).toBe(0);
+    const script = readFileSync(path.join(fixture.root, "skills/evm-atlas/scripts/resolve-chain.sh"), "utf8");
+    expect(script).toContain(
+      "  1) instance='https://blockscout.example/'; api='https://api-blockscout.example/api' ;;",
+    );
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }

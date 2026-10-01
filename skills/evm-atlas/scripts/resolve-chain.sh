@@ -127,8 +127,9 @@ layer=$(nval "layer")
 rollup=$(sval "rollupType")
 
 api="${instance%/}/api"
-# Explicit registry API bases override stale Chainscout page-host routes.
+# Explicit registry or overlay API bases override Chainscout page-host routes.
 case "$chain_id" in
+  59144) instance='https://explorer.linea.build/'; api='https://api-explorer.linea.build/api' ;;
   2818) instance='https://explorer.morph.network/'; api='https://explorer-api.morph.network/api' ;;
 esac
 
