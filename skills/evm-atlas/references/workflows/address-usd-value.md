@@ -17,8 +17,11 @@ example, a "drained" or dust cutoff) and any token allow/deny policy; this workf
 
 ## Native Balances
 
-1. Per chain, pin one block: `routemesh rpc <chainId> eth_getBlockByNumber --params='["finalized",false]'` (use
-   `"latest"` only when the chain rejects `finalized`, and say so) and record its tag, number, hash, and timestamp.
+1. Per chain, pin one block: `routemesh rpc <chainId> eth_getBlockByNumber --params='["finalized",false]'` and record
+   its tag, number, hash, and timestamp. Use `"latest"` when the chain rejects `finalized`, and say so. For a
+   post-transfer check, when the finalized head predates the caller's verified receipt block, use a canonical `"latest"`
+   checkpoint at or after that receipt block; record the reason and label it unfinalized. Never use pre-transfer state
+   as the post-transfer balance.
 2. Send one `routemesh rpc <chainId> --json -` batch with an `eth_getBalance` request per address, each using the
    EIP-1898 `{ "blockHash": "<hash>", "requireCanonical": true }` selector. Apply the numeric-block fallback and
    same-endpoint block-identity checks from `provider-routing.md` when a provider rejects that selector.
