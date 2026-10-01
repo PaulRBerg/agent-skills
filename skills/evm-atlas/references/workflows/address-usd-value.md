@@ -34,10 +34,15 @@ example, a "drained" or dust cutoff) and any token allow/deny policy; this workf
   share one ID). Resolve unknown CoinGecko IDs once with `cg search <symbol-or-name> -o json`; never treat a symbol as
   unique.
 - Price each confirmed token holding by contract from CoinGecko. Resolve each chain's platform once from
-  `https://api.coingecko.com/api/v3/asset_platforms`, matching `chain_identifier` to the chain ID, then request
+  `https://api.coingecko.com/api/v3/asset_platforms`, matching `chain_identifier` to the chain ID. Map contracts to coin
+  IDs with one keyless `https://api.coingecko.com/api/v3/coins/list?include_platform=true` download (match the platform
+  and lowercased contract), then price every mapped ID in one `cg price --ids <id,...> -o json` call.
+- For a contract the coin list does not map, request
   `https://api.coingecko.com/api/v3/simple/token_price/<platform>?contract_addresses=<contract>&vs_currencies=usd`. The
-  keyless endpoint accepts one contract per request, so price only holdings with a nonzero confirmed balance and pace
-  requests.
+  keyless endpoint accepts one contract per request, so query only holdings with a nonzero confirmed balance and pace
+  requests. It can also quote contracts CoinGecko does not list (`coins/<platform>/contract/<contract>` returns
+  `coin not found`), including a dead token quoted at hundreds of dollars; treat such a quote as unlisted, count the
+  token as unpriced, and report the quote separately.
 - Use an indexer price (Blockscout `exchange_rate` on `addresses/<addr>` for natives or on a token holding, a DeBank or
   Blockscan row price) only when CoinGecko omits the native asset, has no platform for the chain, or has no price for
   the contract. Label that price with its source and apply Pricing Hygiene; Blockscout has priced tokens it lists with a

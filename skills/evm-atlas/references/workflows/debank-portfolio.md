@@ -47,6 +47,15 @@ async () => {
 6. DeFi protocol sections follow the wallet table, each with a protocol name, USD value, and position type. Read them
    from a fresh snapshot when the user requests positions.
 
+## Many Addresses
+
+DeBank refuses to render in an iframe, so read many profiles on one owned page through the app's client router: per
+address, `history.pushState({}, "", "/profile/<addr>")` then `dispatchEvent(new PopStateEvent("popstate"))`, wait until
+the page shows that address and `Data updated`, wait for the extracted rows to stop changing, then extract. A loop that
+awaits many profiles inside one `evaluate_script` call can exceed the DevTools protocol timeout and lose every result:
+start the loop without awaiting it, accumulate results on `window`, and poll them with short `evaluate_script` calls.
+Reload the page before restarting a loop, because a timed-out call keeps navigating in the page.
+
 ## Chain Mapping
 
 - DeBank names chains by slug (`eth`, `scrl`, `xdai`, `era`). Map slugs to chain IDs only through the `network_id` field
