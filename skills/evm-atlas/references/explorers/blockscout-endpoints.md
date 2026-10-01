@@ -86,6 +86,11 @@ Default **20 credits** per call. Exceptions:
 | **Pro**      | $199/mo | 500M / month | 30 rps                           |
 | **Business** | $999/mo | 3B / month   | 50 rps                           |
 
+Some chains are plan-gated on the keyed gateway: plans below Builder get HTTP `402` "requires Builder/Business/Pro plan"
+for at least Polygon PoS (`137`), Base (`8453`), and ZKsync Era (`324`). Treat `402` as a coverage gap for that route
+and fall through to the next one; do not retry. The gateway's bot protection also rejects Python's default `urllib`
+user-agent; scripted requests must send an explicit `User-Agent` header.
+
 Public per-instance hosts are not credit-metered but throttle keyless traffic per IP, including hosted
 `*.blockscout.com` subdomains. The backend default is **300 requests per minute** (`API_RATE_LIMIT_BY_IP` over a `1m`
 window); operators may change it, and exceeding it returns `429`. Their bot protection can also return `403` with an

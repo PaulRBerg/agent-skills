@@ -2,7 +2,8 @@
 
 Use this reference for the current native or fungible-token balance of an existing public EVM wallet address. Prefer
 Blockscan in Chromium for both a named target chain and a wallet-wide portfolio check. Historical balances and NFT
-inventories remain on the existing provider routes.
+inventories remain on the existing provider routes. For per-chain and total USD value of one or more addresses, use
+`references/workflows/address-usd-value.md`.
 
 ## Chromium Workflow
 

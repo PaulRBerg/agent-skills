@@ -8,11 +8,11 @@ skill-dependencies:
   - cli-cast
 description:
   "Use for targeted EVM chain, account, transaction, RPC, explorer, bridge, and DEX evidence: chain name/ID, native
-  symbol, RouteMesh, wallet balances via Blockscan in Chromium, token/NFT holdings/transfers, tx history, funding origin
-  via Etherscan/Blockscout/Chainscout; Across, Bungee, deBridge, Hop, Layerswap, LayerZero, LI.FI, Relay, Socket,
-  Symbiosis; Uniswap v1-v4, Universal Router, Permit2, 1inch Classic/Fusion/Fusion+, and CoW Swap, CoWSwap, CoW
-  Protocol, or GPv2 swaps, orders, liquidity, approvals, permits, rewards, migrations, wrapping, cancellations, and
-  refunds."
+  symbol, RouteMesh, wallet balances via Blockscan in Chromium, cross-chain USD portfolio value or net worth, token/NFT
+  holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout; Across, Bungee, deBridge, Hop,
+  Layerswap, LayerZero, LI.FI, Relay, Socket, Symbiosis; Uniswap v1-v4, Universal Router, Permit2, 1inch
+  Classic/Fusion/Fusion+, and CoW Swap, CoWSwap, CoW Protocol, or GPv2 swaps, orders, liquidity, approvals, permits,
+  rewards, migrations, wrapping, cancellations, and refunds."
 ---
 
 # EVM Atlas
@@ -61,30 +61,32 @@ the target. Do not infer a historical category or maintain a prose roster of tar
    provider route, result, observed block or checkpoint, and coverage gaps. Do not route the read back to `cli-cast`.
 2. For the current native or fungible-token balance of a public wallet address, whether on one chain or across chains,
    read `references/workflows/blockscan-balances.md` first.
-3. For a specific transaction hash on a named chain, resolve the chain against
+3. For the current USD value of one or more addresses across target chains (portfolio value, net worth, drained or dust
+   checks), read `references/workflows/address-usd-value.md`.
+4. For a specific transaction hash on a named chain, resolve the chain against
    `references/generated/target-mainnets.json`, then read `references/workflows/provider-routing.md` directly for the
    transaction facts. Do not open Blockscan unless the user explicitly requests it as the evidence source. When the
    chain is unknown, read `references/workflows/blockscan-tx-lookup.md` once to resolve it. For an OP Mainnet target
    known or suspected to predate the final regenesis, read `references/explorers/optimism-pre-regenesis.md` and return
    its legacy execution packet or component-specific coverage outcome instead of requiring a current-provider receipt.
    Otherwise, acquire the exact provider receipt and logs before DEX or bridge outcome interpretation.
-4. For an address-wide historical-activity or `bootstrap-discovery` sweep, read `references/workflows/address-sweeps.md`
+5. For an address-wide historical-activity or `bootstrap-discovery` sweep, read `references/workflows/address-sweeps.md`
    and use its deterministic plan/evaluate helper. For current holdings, use
    `references/workflows/blockscan-balances.md` first and provider routing for gaps.
-5. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's
+6. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's
    full raw receipt/logs/decoded input, or funding origin, resolve the chain and read
    `references/workflows/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and
    exceptional-chain routing.
-6. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
-7. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
-8. For DEX prompts, wallet-facing DEX history, or suspected DEX transaction evidence, resolve the target chain and read
+7. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
+8. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
+9. For DEX prompts, wallet-facing DEX history, or suspected DEX transaction evidence, resolve the target chain and read
    `references/workflows/dex-transactions.md`. Load only the matching protocol-family reference:
    - Uniswap v1-v4, Universal Router, or Permit2: `references/dexes/uniswap.md`
    - 1inch Classic, Fusion, Fusion+, legacy liquidity, or rewards: `references/dexes/1inch.md`
    - CoW Swap, CoWSwap, CoW Protocol, or GPv2: `references/dexes/cow-protocol.md`
-9. Treat 1inch and CoW as execution protocols. Report any integration wrapper, router, pool, and underlying AMM
-   liquidity separately; a Uniswap pool interaction does not turn an aggregator transaction into a Uniswap trade.
-10. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
+10. Treat 1inch and CoW as execution protocols. Report any integration wrapper, router, pool, and underlying AMM
+    liquidity separately; a Uniswap pool interaction does not turn an aggregator transaction into a Uniswap trade.
+11. For bridge-related prompts or transaction evidence, confirm known origin/destination chains are targets, then load
     only the matching reference:
 
     - Across: `references/bridges/across.md`
@@ -99,7 +101,7 @@ the target. Do not infer a historical category or maintain a prose roster of tar
     - Symbiosis: `references/bridges/symbiosis.md`
     - 1inch Fusion+: `references/dexes/1inch.md`
 
-11. Treat bridge and DEX APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
+12. Treat bridge and DEX APIs as enrichment. Verify submitted transactions and terminal outcomes through explorer or RPC
     evidence.
 
 ## Completion
