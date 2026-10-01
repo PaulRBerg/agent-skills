@@ -36,7 +36,10 @@ Verify the contract on each other origin chain before treating a deposit as Gas.
    guarantee.
 4. **Supported chains, limits, and liquidity:** call `GET /v2/chains`. Per chain: `chain` (chain ID), `short`,
    `inbound`, `minInbound`/`maxInbound` and `minOutbound`/`maxOutbound` (USD), the `*Native` wei equivalents, and `bal`
-   (destination liquidity in wei). Check the destination's `maxOutbound` and `bal` before relying on a quote.
+   (destination liquidity in wei). Check the destination's `maxOutbound` and `bal` before relying on a quote. A quote
+   above `maxOutbound` fails with `Chain Limit Exceeded`, so larger amounts need sequential deposits; re-quote and
+   recheck `bal` before each, because fills drain it. Observed 2026-10-01: a deposit accepted while destination
+   liquidity was short stayed `SEEN` with a null fill hash, and later quotes returned `Insufficent Liquidity`.
 
 Example status lookup:
 
