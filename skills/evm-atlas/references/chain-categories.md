@@ -31,6 +31,17 @@ into child-chain gas, not added again as a separate wei fee. Fixing the legacy b
 charge. ZK covers distinct execution and proving systems, so use the named chain's fee branch rather than inferring a
 shared fee model from its proof technology.
 
+HyperEVM (`999`) is eligible for an exact-zero ordinary EOA transfer. It uses Cancun and EIP-1559; both base and
+priority fees are burned, but legacy transactions still pay their full signed `gasPrice`. An empty-calldata transfer
+estimates and uses `21000` gas, with no separate sender fee. Verified 2026-10-02: a legacy sweep reconciled to
+`value + 21000 * gasPrice`, its receipt reported that signed price, and the sender's balance was zero. Use the HyperEVM
+historical-state route in [provider routing](workflows/provider-routing.md) for checkpointed balance and nonce evidence.
+
+On HyperEVM, both RouteMesh and the public RPC returned only five blocks for a 1024-block `eth_feeHistory` request.
+Validate the returned span: `oldestBlock + baseFeePerGas.length - 2` must equal the requested newest block. Recover a
+longer window with bounded five-block requests at decreasing newest blocks; verify gap-free coverage and take the
+maximum across the complete window. Do not treat a successful truncated response as the requested history.
+
 Scroll charges its L1 data fee on the full signed RLP bytes, and under Feynman that fee scales with byte length. Its
 `L1GasPriceOracle` predeploy (`0x5300000000000000000000000000000000000002`) prices exactly the bytes passed to
 `getL1Fee(bytes)` and, unlike OP Stack's `GasPriceOracle`, adds no signature overhead. A quote on an unsigned
@@ -115,6 +126,7 @@ construct, simulate, and account for a transaction.
 ## Sources
 
 - [EIP-1559](https://eips.ethereum.org/EIPS/eip-1559)
+- [HyperEVM fee semantics](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm)
 - [OP Stack transaction fees](https://docs.optimism.io/op-stack/transactions/fees)
 - [Arbitrum gas and fees](https://docs.arbitrum.io/how-arbitrum-works/deep-dives/gas-and-fees) and
   [Nitro L1 pricing](https://github.com/OffchainLabs/nitro/blob/master/arbos/l1pricing/l1pricing.go)
