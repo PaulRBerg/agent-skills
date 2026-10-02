@@ -32,7 +32,12 @@ Verify the contract on each other origin chain before treating a deposit as Gas.
    2026-10-01. Recheck later and verify the fill on the destination chain through provider routing. A `txs[]` entry with
    `refund: true`, `chain` equal to the origin, and an `errtime` is a refund to the sender on the origin chain, not a
    destination fill; it can stay `SEEN` until Gas.zip has origin-chain liquidity. Verify it by the sender's origin
-   balance, not the signer nonce.
+   balance, not the signer nonce. `errtime` advances on each failed retry, so a recent value means Gas.zip is still
+   retrying. Users have no on-chain recovery path: deposits stay in the deposit contract, which only its `owner` can
+   `withdraw`, while fills and refunds are paid from the separate signer balance. Observed 2026-10-02: the Nova contract
+   held about 1 ETH while the Nova signer `bal` was below the pending refund. For stuck refunds, compare the contract
+   balance with the origin `bal` and point the user to Gas.zip support (Discord or Telegram, linked from
+   `https://www.gas.zip/`) with the deposit hash.
 2. **Known sender/recipient address:** call `GET /v2/user/{address}`. An empty `user` array has the same lag caveat.
 3. **Quote:** call `GET /v2/quotes/{originChainId}/{amountWei}/{destinationChainIds}?from=<address>&to=<address>`.
    `quotes[].expected` is destination wei; `expires` is a Unix timestamp. The output is an estimate, not a fill
