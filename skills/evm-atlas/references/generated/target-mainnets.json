@@ -402,7 +402,10 @@
       "explorerUrl": "https://explorer.sophon.xyz",
       "explorerAddressUrl": "https://explorer.sophon.xyz/address/{address}",
       "explorerTxUrl": "https://explorer.sophon.xyz/tx/{tx_hash}",
-      "routeMesh": true
+      "routeMesh": true,
+      "defunct": {
+        "since": "2026-06-25"
+      }
     },
     {
       "chainName": "Superseed",
