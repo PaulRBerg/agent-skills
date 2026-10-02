@@ -415,7 +415,11 @@
       "explorerUrl": "https://explorer.superseed.xyz",
       "explorerAddressUrl": "https://explorer.superseed.xyz/address/{address}",
       "explorerTxUrl": "https://explorer.superseed.xyz/tx/{tx_hash}",
-      "routeMesh": true
+      "routeMesh": true,
+      "defunct": {
+        "finalStateBlock": 31688848,
+        "since": "2026-08-15"
+      }
     },
     {
       "chainName": "Taiko",

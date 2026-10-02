@@ -15,6 +15,7 @@ type RegistryChain = {
   aliases: string[];
   category: ChainCategory;
   chainId: number;
+  defunct?: { finalStateBlock?: number; since: string };
   explorer: { addressUrl: string; apiUrl?: string; txUrl: string };
   name: string;
   nativeCurrency: { symbol: string };
@@ -335,6 +336,7 @@ function targetMainnets(registryChains: RegistryChain[], data: AtlasOverlay) {
       ...(chain.explorer.apiUrl ? { explorerApiUrl: chain.explorer.apiUrl } : {}),
       explorerTxUrl: chain.explorer.txUrl,
       routeMesh: row.routeMesh,
+      ...(chain.defunct ? { defunct: chain.defunct } : {}),
     };
   });
 }

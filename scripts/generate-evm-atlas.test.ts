@@ -38,6 +38,7 @@ function createFixture({ blockscout, categories = ["mainnet", "zk"], schemaVersi
     accountActivityModel: "ethereum-eoa",
     nativeCurrency: { symbol: "ETH" },
     explorer: { addressUrl, txUrl: "https://explorer.example/tx/{tx_hash}" },
+    ...(slug === "split" ? { defunct: { finalStateBlock: 7, since: "2026-08-15" } } : {}),
   }));
   writeFileSync(path.join(registry, "data/chains.json"), JSON.stringify({ schemaVersion, chains }));
   writeFileSync(
@@ -69,7 +70,7 @@ function createFixture({ blockscout, categories = ["mainnet", "zk"], schemaVersi
   };
 }
 
-test("generator preserves chain categories and independent explorer templates", () => {
+test("generator preserves chain categories, explorer templates, and defunct status", () => {
   const fixture = createFixture();
   try {
     for (const mode of ["--write", "--check"]) {
@@ -92,8 +93,10 @@ test("generator preserves chain categories and independent explorer templates", 
         explorerUrl: "https://explorer.example",
         explorerAddressUrl: "https://portfolio.example/{address}/history?chain=split",
         explorerTxUrl: "https://explorer.example/tx/{tx_hash}",
+        defunct: { finalStateBlock: 7, since: "2026-08-15" },
       },
     ]);
+    expect(output.chains[0]).not.toHaveProperty("defunct");
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }

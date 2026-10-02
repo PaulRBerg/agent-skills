@@ -299,7 +299,8 @@ Chromium and through the API on 2026-09-15. Linea (`59144`) uses `https://api-ex
 
 Superseed (`5330`) is not a usable Blockscout instance despite its stale Chainscout entry. Chromium verified on
 2026-09-15 that `https://explorer.superseed.xyz` serves Conduit Explorer and explicitly lacks historical transactions,
-holdings, and transfers. Use the target RPC for state facts; preserve indexed-history coverage as unknown.
+holdings, and transfers. The chain is also defunct (see its `defunct` target row), so no replacement indexer is
+expected. Use the target RPC for state facts; preserve indexed-history coverage as unknown.
 
 Per-instance hosts are community-operated for many chains, so uptime and indexing depth vary. Do not use one to bypass
 missing credentials, rate limits, or transient errors on a Blockscout-hosted target.
