@@ -60,13 +60,17 @@ model selection. Do not add artificial timeout budgets: native agent lifetime an
 ## Execution Mechanics
 
 The ai-coord session that performs writes owns the claim. Native Codex subagents inherit the parent session identity, so
-the parent owns the coordination claim for every delegated write scope. The guard now rejects a delegate's
-`ai-coord draft`, `ai-coord start`, `ai-coord bundle draft`, `ai-coord bundle start`, `ai-coord wait`, or
+the parent owns the coordination claim for every delegated write scope. When the guard recognizes the delegate, it
+rejects `ai-coord draft`, `ai-coord start`, `ai-coord bundle draft`, `ai-coord bundle start`, `ai-coord wait`, or
 `ai-coord done` with exit 64 and
 `lifecycle commands are not allowed from a delegate of <client>/<session>; the parent's claim covers this work`. Every
 worker prompt must forbid those lifecycle commands and permit only `ai-coord status`, `ai-coord touched`,
 `ai-coord inbox`, `ai-coord msg`, and `ai-coord finding`. Include this fact in every worker prompt so the parent's claim
 is treated as authorization rather than a conflict; unrelated claims on the exact assigned scope can still block work.
+The native thread-ID guard requires an active delegate record; missing lifecycle records can leave it unable to reject a
+child's command. Worker prompts must therefore require stopping writes and notifying the parent on a scope warning,
+never repairing claims themselves. The parent re-acquires the complete manifest scope union and requires `READY` before
+resuming delegated edits; a child must not replace the union with its own subset.
 
 Before implementation wave 1, the parent promotes the named draft recorded over the full manifest write-scope union
 during the shared Plan Phase: `ai-coord start --draft <plan-slug>` (or `ai-coord bundle start --draft <plan-slug>` for
