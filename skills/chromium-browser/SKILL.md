@@ -1,6 +1,6 @@
 ---
 compatibility:
-  Requires PRB's attach-only Chrome DevTools MCP wrapper at ~/.local/libexec/mcp/chrome-devtools and an existing
+  Requires PRB's attach-only Chrome DevTools MCP wrapper at ~/.local/libexec/mcp/chrome-devtools.sh and an existing
   remote-debugging Chromium browser.
 name: chromium-browser
 description:
@@ -20,7 +20,7 @@ If the user selects another available browser integration, follow its tool contr
 
 ## Environment Contract
 
-- Treat `~/.local/libexec/mcp/chrome-devtools` and the tools exposed in the current session as authoritative. The
+- Treat `~/.local/libexec/mcp/chrome-devtools.sh` and the tools exposed in the current session as authoritative. The
   wrapper owns server versioning, flags, logging, and browser attachment; do not run the MCP package directly.
 - The MCP attaches to an existing remote-debugging browser. Never launch a fallback browser or create another profile
   when attachment fails.
