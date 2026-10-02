@@ -57,6 +57,10 @@ sleep/retry loop; surface the incompatible `ai-commit`/hook path and update it b
   failure. Never bypass a failure caused by, or plausibly affected by, the prepared paths. The flag bypasses pre-commit
   and commit-msg hooks for that attempt; it does not change repository configuration. After success disclose exactly one
   line: `Commit created with hooks bypassed — unrelated failure ("<short error>")`.
+- **Configured validation failure:** `prepared validation failed` comes from the repository's `.agents/commit.toml`
+  validation command, which `--no-verify` does not bypass. When the diagnostic and prepared diff prove an unrelated
+  pre-existing failure, keep the transaction prepared, notify the failure's owner with `ai-coord msg`, and retry the
+  same transaction after the repair lands. Never edit the validation config to get past it.
 - **Signing failure:** when commit creation fails at signing after hooks passed, and the error names the configured
   signer rather than content or a hook, retry the same transaction once with `--no-gpg-sign`. Examples include an
   unreachable 1Password or YubiKey signer, `failed to fill whole buffer`, `ssh-agent`, `gpg failed to sign the data`, or
