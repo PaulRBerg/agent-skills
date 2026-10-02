@@ -194,6 +194,29 @@ Etherscan paths and its chain ID collides with a non-target Chainscout entry. Us
 Ronin browser evidence. Browser availability does not establish a supported programmatic API route; use documented
 credentials for API access and never extract or reproduce the site's private request-signing headers.
 
+### ZKsync official explorer fallback
+
+For resolved ZKsync Era (`324`), a Blockscout plan-gating error does not exhaust historical sources. Inspect
+`https://explorer.zksync.io/address/<address>` in Chromium. Its Transactions and Transfers tabs use
+`https://block-explorer-api.mainnet.zksync.io`; preserve the actual request parameters observed in the browser. Verified
+on 2026-10-02, the newest-first lists crossed a requested monthly boundary and matched independently verified token
+receipts. Stop pagination only after covering the whole requested interval, and verify the fixed cutoff block and
+successor through RPC.
+
+The official [API docs](https://block-explorer-api.mainnet.zksync.io/docs) and
+[OpenAPI schema](https://block-explorer-api.mainnet.zksync.io/docs-json) document Etherscan-compatible `/api` queries:
+`module=account` with `action=txlist`, `txlistinternal`, `tokentx`, or `tokennfttx`; use `address`, `startblock`,
+`endblock`, `page`, `offset`, and `sort`. The documented cap is 1000 items, with at most 100 per page; partition block
+ranges when necessary. Validate HTTP, JSON status, pagination, and timestamps before treating an empty period as
+covered.
+
+Keep the channel limits explicit: `txlistinternal` covers transfers, not every zero-value internal call. The
+[explorer token model](https://github.com/matter-labs/block-explorer/blob/main/packages/api/src/token/token.entity.ts)
+supports native currency, ERC-20, and ERC-721; do not infer ERC-1155 coverage from its Transfers tab or `tokennfttx`.
+When ERC-1155 transfer coverage is required, query standard `TransferSingle` and `TransferBatch` logs through provider
+routing over the verified block range, filtering the wallet separately in indexed `from` and `to` positions (topics 2
+and 3). Preserve any RPC range or provider failures and use the normal public-RPC fallback.
+
 ### OKLink historical fallback
 
 For resolved Scroll (`534352`) and Ronin (`2020`) targets, [OKLink](https://www.oklink.com/) is an independent browser
@@ -213,6 +236,13 @@ Scrollscan now serves Blockscout. Its native v2 internal-transaction list can re
 while the compatibility API reports unprocessed internal transactions, even when global indexing indicators report
 completion. Preserve that semantic failure; the native list is useful positive evidence, not an independent fallback or
 proof that the missing traces are empty.
+
+For a bounded-period task, a warning on a broader historical query does not localize missing traces to that period.
+Resolve and independently verify the period's start and end blocks, then repeat the keyed compatibility query with those
+exact bounds. A valid, exhausted response without the incomplete status can establish period coverage while the original
+historical warning remains recorded. Verified on 2026-10-02: a genesis-to-cutoff query returned status `2`, while the
+requested month alone returned status `0`, `message="No internal transactions found"`, and `result=[]`. Accept that
+exact empty-result shape; do not treat arbitrary status `0` errors as successful negatives.
 
 Ronin's [2026 migration announcement](https://blog.roninchain.com/p/ronin-is-home) sunsets the legacy explorer. The new
 `explorer.roninchain.com` Blockscout deployment did not serve the pre-migration 2025 cutoff; the legacy
