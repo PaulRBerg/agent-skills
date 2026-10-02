@@ -45,14 +45,15 @@ removed without an age grace period. A session whose own liveness is indetermina
 an inspection error) is treated as live: it keeps its claims, drafts, and residual ownership, is never reaped on that
 basis, and does not make coverage incomplete. Coverage fails closed only on provider inventory failures or when the
 process probe cannot confirm the ai-coord process itself. Codex identity uses `CODEX_SESSION_ID` with legacy
-`CODEX_THREAD_ID` fallback. Child and persistent-fork transcript observations share that root owner; never replace its
-session or release work because a transcript differs. Classify child lifecycle before parent registration and update
-only delegate state and parent activity. A child hook that must create the missing parent row records the host process
-fingerprint when detectable and fills one into a parent row that lacks it; a `SubagentStop` for a parent row that no
-longer exists never recreates it. Pin a private nonempty termination anchor only when `SessionStart` creates the row;
-preserve it, including an unknown anchor, on later upserts. Only a matching anchored `SessionEnd` may use
-revision-guarded cleanup. Ambiguous ends retain ownership until explicit `done` or proven process death. Keep transcript
-paths opaque and absent from public status and messages.
+`CODEX_THREAD_ID` fallback. Independent Codex roots can share one app-server process fingerprint; a new root must not
+supersede another root or release its claims. Child and persistent-fork transcript observations share their root owner;
+never replace its session or release work because a transcript differs. Classify child lifecycle before parent
+registration and update only delegate state and parent activity. A child hook that must create the missing parent row
+records the host process fingerprint when detectable and fills one into a parent row that lacks it; a `SubagentStop` for
+a parent row that no longer exists never recreates it. Pin a private nonempty termination anchor only when
+`SessionStart` creates the row; preserve it, including an unknown anchor, on later upserts. Only a matching anchored
+`SessionEnd` may use revision-guarded cleanup. Ambiguous ends retain ownership until explicit `done` or proven process
+death. Keep transcript paths opaque and absent from public status and messages.
 
 Before work that can invalidate live chats, their ledger, hooks, or coordination CLI, require the user to close other
 agents and explicitly authorize the break, then implement it from one fresh session. Use an isolated

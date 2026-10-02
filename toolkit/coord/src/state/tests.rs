@@ -635,11 +635,11 @@ fn reconcile_releases_residual_ownership_whose_session_row_is_gone() {
 }
 
 #[test]
-fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_state() {
+fn new_claude_identity_on_the_same_strong_process_supersedes_stale_top_level_state() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();
-    let stale = identity(Client::Codex, "stale");
-    let fresh = identity(Client::Codex, "fresh");
+    let stale = identity(Client::Claude, "stale");
+    let fresh = identity(Client::Claude, "fresh");
     store.upsert_session(&session_update(&stale, 1.0)).unwrap();
     save_work(&mut store, &work_update(&stale)).unwrap();
     store.update_delegate(&stale, "child", Some("explorer"), "active", 1.0).unwrap();
@@ -652,6 +652,29 @@ fn new_identity_on_the_same_strong_client_process_supersedes_stale_top_level_sta
     assert!(store.work(&stale).unwrap().is_none());
     assert!(store.delegates().unwrap().is_empty());
     assert!(store.session(&fresh).unwrap().is_some());
+}
+
+#[test]
+fn codex_roots_sharing_an_app_server_preserve_existing_work_and_delegates() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let first = identity(Client::Codex, "first");
+    let second = identity(Client::Codex, "second");
+    store.upsert_session(&session_update(&first, 1.0)).unwrap();
+    save_work(&mut store, &work_update(&first)).unwrap();
+    store.update_delegate(&first, "child", Some("explorer"), "active", 1.0).unwrap();
+    let session = store.session(&first).unwrap();
+    let work = store.work(&first).unwrap();
+    let delegates = store.delegates().unwrap();
+
+    let mut update = session_update(&second, 2.0);
+    update.fingerprint = Some(ProcessFingerprint { pid: 42, start_token: Some("boot:42".to_owned()) });
+    store.upsert_session_superseding(&update).unwrap();
+
+    assert_eq!(store.session(&first).unwrap(), session);
+    assert_eq!(store.work(&first).unwrap(), work);
+    assert_eq!(store.delegates().unwrap(), delegates);
+    assert!(store.session(&second).unwrap().is_some());
 }
 
 #[test]

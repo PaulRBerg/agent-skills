@@ -52,9 +52,12 @@ impl Store {
         })
     }
 
-    /// Register a new top-level identity and retire an older identity bound to
-    /// the same strong client process fingerprint in the same transaction.
+    /// Register a top-level identity, preserving Codex roots that share an
+    /// app-server process. Only Claude identities supersede by fingerprint.
     pub(crate) fn upsert_session_superseding(&mut self, update: &SessionUpdate) -> Result<SessionRow> {
+        if update.identity.client == crate::domain::Client::Codex {
+            return self.upsert_session(update);
+        }
         self.immediate(|transaction| {
             let mut superseded = Vec::new();
             if let Some(fingerprint) = update.fingerprint.as_ref().filter(|value| value.start_token.is_some()) {
