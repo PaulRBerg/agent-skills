@@ -39,6 +39,14 @@ empty-calldata EIP-1559 transfer (about 46 bytes) is therefore less than half th
 `r`/`s` placeholders. Verified 2026-09-29: the oracle quote on real signed bytes at the parent block equals the receipt
 `l1Fee`.
 
+Morph (`2818`) charges its L1 data fee the same way, from its `L1GasPriceOracle` predeploy
+(`0x530000000000000000000000000000000000000F`). Post-Curie, the fee on the full signed bytes is
+`(commitScalar * l1BaseFee + len(raw) * l1BlobBaseFee * blobScalar) / 1e9`, readable through the oracle's
+`commitScalar()`, `l1BaseFee()`, `l1BlobBaseFee()`, `blobScalar()`, and `isCurie()` getters. `getL1Fee(bytes)` adds no
+signature overhead, so quote the same maximum-size signed stand-in. The constant commit term dominates an empty-calldata
+transfer. Verified 2026-10-02: the stand-in quote equals the formula and the receipt `l1Fee`; the transfer used `21000`
+gas with `effectiveGasPrice = baseFee + maxPriorityFeePerGas`.
+
 Linea (`59144`) is eligible as a ZK target. Blocks carry `baseFeePerGas = 7`; legacy transactions are debited exactly
 `gasUsed * gasPrice` with no L1 or other extra debit; receipts report `effectiveGasPrice` equal to the signed
 `gasPrice`; and an empty-calldata EOA transfer estimates and uses `21000` gas. `linea_estimateGas` returns the
