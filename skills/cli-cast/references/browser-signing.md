@@ -1,7 +1,8 @@
 # Browser Wallet Signing
 
-Check capabilities and establish the public sender during preparation. Open a signing request only after the transaction
-or message review in `SKILL.md` has been explicitly approved.
+Check capabilities and establish the public sender during preparation. Open a signing request after the review and
+authority checks in `SKILL.md`. A user-requested contract call needs no additional chat approval or manual wallet click;
+complete its wallet confirmations through the configured browser automation after verifying the request below.
 
 ## Availability
 
@@ -40,16 +41,18 @@ the receipt.
 
 Use the public address supplied by the user or already known from the connected wallet as `OWNER` for preparation.
 Resolve ENS through `$evm-atlas`. Do not load key material to discover an address. Use `cast wallet address --browser`
-only if that exact subcommand's current help exposes `--browser`; otherwise ask for the public address.
+only if that exact subcommand's current help exposes `--browser`; otherwise inspect the connected wallet's public
+account through browser automation. Ask for the public address only when it cannot be established from available
+evidence.
 
 `cast send --browser` does not enforce `--from` or `--nonce`: the wallet signs with its active account and may
-substitute that account's nonce, so a mismatch broadcasts from the wrong sender. Immediately before each approved
+substitute that account's nonce, so a mismatch broadcasts from the wrong sender. Immediately before each authorized
 broadcast, run `cast wallet address --browser` (when its help exposes `--browser`) and require the result to equal the
-reviewed `OWNER`; otherwise have the user confirm the active wallet account first. On a mismatch, stop and ask the user
-to switch accounts; an account change requires a revised review. After broadcast, verify the transaction's `from` and
+reviewed `OWNER`; otherwise inspect the active wallet account. On a mismatch, select the already authorized account and
+recheck it before proceeding; never substitute a different sender. After broadcast, verify the transaction's `from` and
 nonce against the review as part of receipt verification.
 
-## Approved Broadcast
+## Authorized Broadcast
 
 Run the exact reviewed command, for example:
 
@@ -69,15 +72,24 @@ The example uses the default Ethereum fee policy. Use the user- or consumer-sele
 specified. For a fixed legacy policy, replace the fee pair with `--legacy --gas-price "$GAS_PRICE"` and preserve the
 reviewed gas limit. Do not pass EIP-1559 priority-fee flags with a legacy transaction.
 
+For an authorized contract call, inspect the wallet request and verify its chain, account, target, decoded intent,
+calldata, native value, nonce, transaction type, gas settings, and authorization list (if present) against the review.
+Complete the matching connection, chain-switch, and signing/confirmation prompts yourself. Reject mismatched requests;
+rebuild and review changes under `SKILL.md` before proceeding. Do not ask the user to click merely because a wallet
+confirmation is present. If the configured tools cannot inspect or operate the prompt, or unlocking/hardware interaction
+requires the user, report that concrete limitation and request only the necessary interaction. Never bypass host
+restrictions or expose secrets to automate it.
+
 Unless the reviewed workflow fixes its fees, the user may deliberately edit the gas limit, gas price, max fee per gas,
 or max priority fee per gas in Rabby's confirmation UI, including by selecting a different tier. Treat their approval of
 the final wallet screen as authorization for those gas settings. Apply `SKILL.md`'s chain-specific accounting to the
 resulting reserve, additional fees, and affordability; an execution fee cap may not cap the total cost. Do not reject,
 stop, request another approval, or resimulate solely because those values differ from the reviewed command.
 
-This exception applies only to gas settings changed and approved in the wallet UI. Confirm the chain, account, target,
-calldata, native value, nonce, and authorization list (if present) still match the reviewed transaction; reject the
-request if any of those fields change.
+This exception applies only to gas settings deliberately changed and approved by the user in the wallet UI. Agent
+confirmation preserves reviewed fees; wallet-selected changes require simulation and a revised review first. Confirm the
+chain, account, target, calldata, native value, nonce, and authorization list (if present) still match the reviewed
+transaction; reject the request if any of those fields change.
 
 For a workflow whose transfer value depends on its fee reserve, including exact-zero and best-effort sweeps, preserve
 the reviewed transaction type, gas limit, and gas price or both EIP-1559 fee caps. Reject wallet changes before signing
@@ -90,11 +102,11 @@ receipt before reporting success.
 
 ## Timing
 
-Wallet approval is an unbounded human-interaction step, not network latency: the wait is for a person to notice and
-click a prompt, which can exceed a typical command timeout. Run the broadcast command with a generous timeout, or in the
-background, so the process outlives the approval wait. A short synchronous timeout risks killing the process after the
-wallet has already broadcast but before `cast` prints the hash back — the transaction still lands on-chain, but the
-operator loses the hash and cannot immediately confirm it.
+Run the browser broadcast command in a persistent session or in the background so the agent can operate wallet prompts
+while Cast waits. Preserve the process until the wallet responds; when user-only interaction is needed, its duration is
+unbounded. A short synchronous timeout risks killing the process after the wallet has already broadcast but before
+`cast` prints the hash back — the transaction still lands on-chain, but the operator loses the hash and cannot
+immediately confirm it.
 
 Add `--async` to every browser-signed broadcast, not only as a fallback: it prints the transaction hash as soon as
 signing and broadcast succeed and exits without also waiting for a receipt, shrinking the window in which a timeout can
@@ -110,8 +122,8 @@ non-broadcast. Before concluding nothing was sent:
 
 - Ask `$evm-atlas` to repeat the raw `eth_getTransactionByHash` lookup over 30-60 seconds to allow mempool propagation,
   rather than accepting one immediate miss as final.
-- Ask the user to check their wallet's own pending-activity view — the wallet knows definitively whether it submitted
-  the transaction, independent of any RPC endpoint the agent queries.
+- Inspect the wallet's pending-activity view through browser automation; ask the user only if it is inaccessible. The
+  wallet records submission independently of any RPC endpoint the agent queries.
 
 Only report the outcome as resolved (confirmed or genuinely never sent) once one of these gives a positive or a stable,
 repeated negative result.
@@ -168,6 +180,6 @@ Classify each failure before retrying:
   sender nonce is unchanged, then retry the same reviewed command.
 - A signed request rejected by an RPC for another chain, such as `nonce too low` with a different chain ID or `minNonce`
   in the error: the wallet's network state is inconsistent. The printed hash was signed; look it up on the reviewed
-  chain and confirm the nonce is unchanged. Ask the user to reset the `localhost:9545` site network in the wallet before
-  retrying.
+  chain and confirm the nonce is unchanged. Reset the `localhost:9545` site network to the reviewed chain through
+  browser automation, or ask the user only if that control is inaccessible, before retrying.
 - Each command switches the wallet to its chain. Sending first on the already connected chain avoids a switch prompt.

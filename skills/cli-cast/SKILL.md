@@ -51,6 +51,14 @@ or `cast tx <hash> <field>`; do not pipe `--json` output through `jq tonumber`, 
 
 ## Authority Phases
 
+An instruction to execute a contract call authorizes its preparation, simulation, signing, broadcast, and necessary
+wallet confirmations within the requested scope. Present the review, then proceed without a separate chat approval or
+manual wallet click from the user. Apply existing authorization across phases; a read-only, prepare-only, or
+simulation-only request does not authorize execution. Explicit user instructions take precedence over skill defaults;
+honor user-imposed approval gates and host restrictions. Ask only when execution needs authority or a material decision
+the user has not supplied. Message/typed-data signatures and EIP-7702 authorizations retain their separate payload and
+use approvals below.
+
 ### Read
 
 Local ABI encoding/decoding and selector derivation may run without transaction approval. Delegate chain, block, fee,
@@ -149,7 +157,7 @@ whose value depends on the reserve must preserve all reviewed fields under the f
 Refunded or unspent gas is normally already reflected in the final charged fee and sender balance; do not subtract it
 again. Treat asynchronous refunds, such as Arbitrum retryable tickets, separately: never spend an expected credit before
 it arrives or claim a snapshot balance is permanent. Discovery of unrelated pending refunds is not implicit in a plain
-transfer. A consuming sweep must state its residual-balance policy and any known pending credits before approval.
+transfer. A consuming sweep must state its residual-balance policy and any known pending credits in the review.
 
 ### Simulate
 
@@ -157,9 +165,9 @@ Simulate the exact prepared call, preserving sender, target, value, calldata, no
 fee fields, then estimate gas. Delegate bounded `eth_call` and `eth_estimateGas` evidence to `evm-atlas`. When an RPC
 error contradicts the supplied gas or checkpointed balance, have atlas diagnose the exact simulation path before
 attributing it to transaction invalidity or chain-wide type support. Changing fields to make a diagnostic call pass does
-not validate the prepared transaction. Preserve the consuming workflow's simulation and approval requirements. Use a
-local fork, project simulation, or Cast trace only when the simulation requires a continuous provider, following Resolve
-Chain and Provider. A successful simulation is evidence, not authorization to sign.
+not validate the prepared transaction. Preserve the consuming workflow's simulation requirements and user-imposed
+approval gates. Use a local fork, project simulation, or Cast trace only when the simulation requires a continuous
+provider, following Resolve Chain and Provider. A successful simulation is evidence, not authorization to sign.
 
 When exact EIP-7702 simulation needs a signed authorization, use the reference's approved authorization-signing stage
 first; transaction signing and broadcast still follow simulation and transaction approval.
@@ -178,35 +186,39 @@ Before a transaction signature or broadcast, present one concrete review contain
 - simulation command and outcome;
 - selected signer and the exact signing/broadcast command with secrets redacted.
 
-Lead the review with `### ⚠️ Transaction approval required`. Put repeated fields in a compact table, keep the exact
-command in a fenced block, and state precisely what confirmation authorizes. Stop and require explicit user confirmation
-of this review in a subsequent message. If any reviewed field changes outside the browser-wallet exception below,
-simulate again and present a revised review. Existing explicit approval of the concrete payload and its stated use
-remains valid; EIP-7702 authorization signatures follow the reference's conditional staged review.
+For an authorized contract call, lead with `### ⏳ Transaction review` and continue to signing and broadcast in the same
+turn. Put repeated fields in a compact table and keep the exact command in a fenced block. For other transactions or an
+explicit approval gate, use `### ⚠️ Transaction approval required` and obtain confirmation of the concrete review unless
+existing approval already covers it. If reviewed fields change outside the browser-wallet exception below, simulate
+again and present a revised review; proceed when the revision remains within the user's authorized intent and limits,
+otherwise request the missing authorization. EIP-7702 signatures follow the reference's staged review.
 
 For browser signing only, the reviewed gas limit and fees are starting values unless the consuming workflow requires
 them to remain fixed. The user may deliberately change the gas limit, gas price, max fee per gas, or max priority fee
 per gas in the wallet confirmation UI. Their approval of that final wallet screen authorizes those edited gas settings;
 apply chain-specific accounting to the additional fees and resulting affordability. Do not stop, require a second
 approval, or resimulate solely because they differ from the prepared values. Continue only when the chain, sender,
-target, calldata, native value, nonce, authorization list (if present), and decoded intent still match the approved
+target, calldata, native value, nonce, authorization list (if present), and decoded intent still match the authorized
 review. Wallet changes to any of those fields require rejection and a revised review.
+
+When the agent confirms the wallet request, preserve the reviewed gas settings. The user-edit exception does not
+authorize the agent to accept wallet-selected fee changes; rebuild, simulate, and review those changes first.
 
 When fees determine the transfer value or another reviewed invariant, such as leaving exactly zero native balance, the
 browser exception does not apply. Preserve the reviewed transaction type, gas limit, and fee values. If the wallet
-changes them, reject before signing, recompute the dependent values, simulate, and obtain approval of the revised
-review.
+changes them, reject before signing, recompute the dependent values, simulate, and apply the revised-review authority
+rule above.
 
 ### Sign and Broadcast
 
 Read [references/browser-signing.md](references/browser-signing.md) for browser capability checks and sender handling;
-open a signing request only after approval. Prefer browser, encrypted keystore, or hardware wallet in that order unless
-the user or consuming skill restricts the signer. A browser-only workflow must stop if browser signing is unavailable;
-never substitute another signer. Use an environment-backed private key only when the user explicitly opts in or no safer
-method is available; never ask for a key in chat or print it.
+open a signing request only after review and within the authority established above. Prefer browser, encrypted keystore,
+or hardware wallet in that order unless the user or consuming skill restricts the signer. A browser-only workflow must
+stop if browser signing is unavailable; never substitute another signer. Use an environment-backed private key only when
+the user explicitly opts in or no safer method is available; never ask for a key in chat or print it.
 
-`cast send` signs and broadcasts in one command. Run it only after the review approval. So do the Cast 1.8.3+ helpers
-`cast erc20-token transfer|approve|mint|burn`, `cast erc20-token permit --broadcast`,
+`cast send` signs and broadcasts in one command. Run it after review when execution is authorized. So do the Cast 1.8.3+
+helpers `cast erc20-token transfer|approve|mint|burn`, `cast erc20-token permit --broadcast`,
 `cast erc4626 deposit|mint|withdraw|redeem`, and `cast safe propose|sign|execute`: apply the same Prepare, Simulate, and
 Review phases to them; a Safe proposal or confirmation is a signature artifact that needs its own payload review. Treat
 any other subcommand whose installed help shows it signs or submits, such as `cast safe create`, `add-delegate`, or
@@ -214,8 +226,8 @@ any other subcommand whose installed help shows it signs or submits, such as `ca
 `--broadcast`, also requires a review of the exact payload, domain, chain binding, and intended use before approval.
 
 Pass the selected fees explicitly: EIP-1559 uses `--gas-price` and `--priority-gas-price`; a fixed legacy policy uses
-`--legacy --gas-price` without `--priority-gas-price`. Under the default Ethereum policy, use the approved Rabby Slow
-pair. Before opening the signer, recheck the active chain's gas and additional-fee requirements and that the approved
+`--legacy --gas-price` without `--priority-gas-price`. Under the default Ethereum policy, use the reviewed Rabby Slow
+pair. Before opening the signer, recheck the active chain's gas and additional-fee requirements and that the reviewed
 cap or legacy gas price covers its current base fee where applicable. If fees must change before signing, simulate again
 and present a revised review; never silently change the selected policy. Wallet fee edits follow Review, including its
 fixed-fee exception. Message and typed-data signatures consume no gas.
@@ -230,8 +242,8 @@ successful receipt or `### ↩ Transaction reverted` for a mined failure. For an
 `### ⛔ Broadcast unresolved — do not retry` and state the evidence still needed. Do not retry a failed or uncertain
 broadcast without first checking whether the transaction exists — for browser-wallet signing specifically, read
 [references/browser-signing.md](references/browser-signing.md)'s Timing and Recovering sections before concluding
-nothing was sent: a killed or timed-out process does not prove non-broadcast, since wallet approval is an unbounded
-human wait and the wallet may broadcast via its own RPC provider.
+nothing was sent: a killed or timed-out process does not prove non-broadcast, since wallet interaction can outlast the
+command and the wallet may broadcast via its own RPC provider.
 
 ## Stop Conditions
 
