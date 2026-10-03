@@ -14,6 +14,12 @@ changed behavior.
 Use regular `it` for pure synchronous tests. Do not call `Effect.runPromise`, `runSync`, or another runtime launcher
 inside an Effect test; that escapes the test runtime and can silently replace test services.
 
+## Destructure Tuple Cases
+
+`it.effect.each(cases)` passes each case as one argument. For tuple rows, use a callback such as
+`([label, value]) => ...`; regular Vitest `it.each` instead spreads tuple members into separate arguments.
+`@effect/vitest` 0.29 delegates to Vitest `it.for`; verify the installed adapter when versions differ.
+
 ## Advance Virtual Time Deliberately
 
 Under `it.effect`, time does not advance until the test calls `TestClock.adjust` or `TestClock.setTime`. Fork the effect
