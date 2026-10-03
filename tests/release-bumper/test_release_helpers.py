@@ -184,6 +184,30 @@ class ChangelogTests(unittest.TestCase):
         self.assertTrue(validator.validate(text, "2.0.0", "2026-07-22", "release-2.0.0"))
         self.assertTrue(validator.validate(text.replace("[2.0.0]", "2.0.0", 1), "2.0.0", "2026-07-22", None))
 
+    def test_accepts_wrapped_items_and_rejects_nested_lists(self) -> None:
+        text = """# Changelog
+
+## [2.0.0] - 2026-07-22
+
+### Changed
+
+- **Breaking:** Change the runtime contract so that this long entry wraps onto
+  a continuation line ([`abc1234`](https://github.com/acme/demo/commit/abc1234))
+
+[2.0.0]: https://github.com/acme/demo/releases/tag/v2.0.0
+"""
+        self.assertEqual(validator.validate(text, "2.0.0", "2026-07-22", "v2.0.0"), [])
+        nested = text.replace("  a continuation", "  - a nested item", 1)
+        self.assertIn(
+            "category Changed contains a nested list item",
+            validator.validate(nested, "2.0.0", "2026-07-22", "v2.0.0"),
+        )
+        orphan = text.replace("- **Breaking:**", "  **Breaking:**", 1)
+        self.assertIn(
+            "category Changed contains non-list content",
+            validator.validate(orphan, "2.0.0", "2026-07-22", "v2.0.0"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
