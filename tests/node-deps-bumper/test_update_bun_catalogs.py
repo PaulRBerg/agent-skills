@@ -51,6 +51,45 @@ class UpdateBunCatalogsTests(unittest.TestCase):
             self.assertEqual(updated["workspaces"]["catalogs"]["testing"]["react"], "~19.0.0")
             self.assertEqual(updated["workspaces"]["catalogs"]["testing"]["jest"], "30.0.0")
 
+    def test_equivalent_rows_preserve_catalog_prefixes_and_override(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package.json"
+            original = {
+                "catalog": {"react": "^18.2.0", "jest": "~29.0.0"},
+                "overrides": {"react": "18.2.0"},
+            }
+            package.write_text(json.dumps(original))
+            plan = root / "plan.json"
+            plan.write_text(json.dumps({"updates": [
+                {"package": "react", "current": "^18.2.0", "available": "^19.0.0"},
+                {"package": "react", "current": "18.2.0", "available": "19.0.0"},
+                {"package": "jest", "current": "~29.0.0", "available": "~30.0.0"},
+            ]}))
+            self.run_helper(root, plan)
+            self.assertEqual(json.loads(package.read_text()), original)
+            self.run_helper(root, plan, "--write")
+            updated = json.loads(package.read_text())
+            self.assertEqual(updated["catalog"], {"react": "^19.0.0", "jest": "~30.0.0"})
+            self.assertEqual(updated["overrides"], original["overrides"])
+
+    def test_conflicting_versions_and_stale_prefix_fail_without_writing(self) -> None:
+        for current, available in [("18.3.0", "19.0.0"), ("18.2.0", "20.0.0"), ("~18.2.0", "~19.0.0")]:
+            with self.subTest(current=current, available=available), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                package = root / "package.json"
+                package.write_text(json.dumps({"catalog": {"react": "^18.2.0", "jest": "29.0.0"}}))
+                before = package.read_bytes()
+                plan = root / "plan.json"
+                plan.write_text(json.dumps({"updates": [
+                    {"package": "react", "current": "~18.2.0", "available": "~19.0.0"},
+                    {"package": "react", "current": current, "available": available},
+                    {"package": "jest", "current": "29.0.0", "available": "30.0.0"},
+                ]}))
+                result = self.run_helper(root, plan, "--write", check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(package.read_bytes(), before)
+
     def test_stale_plan_fails_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

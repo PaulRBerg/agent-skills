@@ -35,22 +35,23 @@ def selected_names(values: list[str]) -> list[str]:
     return list(dict.fromkeys(names))
 
 
-def plan_updates(plan: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]:
+def plan_updates(plan: dict[str, Any], names: list[str]) -> dict[str, list[dict[str, Any]]]:
     updates = plan.get("updates")
     if not isinstance(updates, list):
         raise CatalogError("plan updates must be an array")
-    selected: dict[str, dict[str, Any]] = {}
+    selected: dict[str, list[dict[str, Any]]] = {}
     for name in names:
         matches = [entry for entry in updates if isinstance(entry, dict) and entry.get("package") == name]
         if not matches:
             raise CatalogError(f"selected package is missing from plan: {name}")
-        normalized = {(entry.get("current"), entry.get("available")) for entry in matches}
+        normalized = {
+            (parse_version(entry.get("current"), f"plan current for {name}")[1],
+             parse_version(entry.get("available"), f"plan available for {name}")[1])
+            for entry in matches
+        }
         if len(normalized) != 1:
             raise CatalogError(f"ambiguous plan entries for package: {name}")
-        entry = matches[0]
-        parse_version(entry.get("current"), f"plan current for {name}")
-        parse_version(entry.get("available"), f"plan available for {name}")
-        selected[name] = entry
+        selected[name] = matches
     return selected
 
 
@@ -81,12 +82,13 @@ def catalog_maps(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return maps
 
 
-def update_document(document: dict[str, Any], selected: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
+def update_document(document: dict[str, Any], selected: dict[str, list[dict[str, Any]]]) -> list[dict[str, str]]:
     maps = catalog_maps(document)
     changes: list[dict[str, str]] = []
-    for package, entry in selected.items():
-        plan_prefix, plan_current = parse_version(entry["current"], f"plan current for {package}")
-        _available_prefix, available = parse_version(entry["available"], f"plan available for {package}")
+    for package, entries in selected.items():
+        plan_prefixes = {parse_version(entry["current"], f"plan current for {package}")[0] for entry in entries}
+        _, plan_current = parse_version(entries[0]["current"], f"plan current for {package}")
+        _, available = parse_version(entries[0]["available"], f"plan available for {package}")
         occurrences = [(catalog_name, catalog) for catalog_name, catalog in maps if package in catalog]
         if not occurrences:
             raise CatalogError(f"selected package is missing from Bun catalogs: {package}")
@@ -96,9 +98,9 @@ def update_document(document: dict[str, Any], selected: dict[str, dict[str, Any]
                 raise CatalogError(
                     f"stale plan for {package} in catalog {catalog_name}: catalog has {current}, plan has {plan_current}"
                 )
-            if plan_prefix and prefix != plan_prefix:
+            if "" not in plan_prefixes and prefix not in plan_prefixes:
                 raise CatalogError(
-                    f"stale plan prefix for {package} in catalog {catalog_name}: catalog has {prefix!r}, plan has {plan_prefix!r}"
+                    f"stale plan prefix for {package} in catalog {catalog_name}: catalog has {prefix!r}, plan has {sorted(plan_prefixes)!r}"
                 )
             replacement = f"{prefix}{available}"
             changes.append({"package": package, "catalog": catalog_name, "from": catalog[package], "to": replacement})
