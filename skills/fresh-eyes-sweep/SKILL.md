@@ -9,7 +9,8 @@ skill-dependencies:
   - commit
 description:
   Audit an entire repository with fresh eyes for correctness errors, bugs, omissions, duplication, inconsistencies,
-  stale or duplicate tests, stale comments, and other evidenced mistakes; fix every safe issue and verify the result.
+  stale, duplicate, or tautological tests, stale comments, and other evidenced mistakes; fix every safe issue and verify
+  the result.
 ---
 
 # Fresh Eyes Sweep
@@ -165,11 +166,11 @@ completeness; bounded concurrency, cancellation, and resource cleanup; and secre
 command safety.
 
 Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available. Add a
-regression test when it protects a meaningful failure mode absent from existing coverage; do not add tests that merely
-mirror reversible prose or configuration edits. Fix verifiable in-scope residual risks rather than reporting them. Mark
-`reported` only for real decisions: intent is ambiguous, a safe fix would change a public contract for consumers outside
-the repository, or no verification is available. Give every `reported` finding a recommended fix and its blast radius.
-Do not add speculative features, broad refactors, or cosmetic churn.
+regression test when it protects a meaningful failure mode absent from existing coverage; do not add tautological tests
+or tests that merely mirror reversible prose or configuration edits. Fix verifiable in-scope residual risks rather than
+reporting them. Mark `reported` only for real decisions: intent is ambiguous, a safe fix would change a public contract
+for consumers outside the repository, or no verification is available. Give every `reported` finding a recommended fix
+and its blast radius. Do not add speculative features, broad refactors, or cosmetic churn.
 
 Treat source files over 1000 lines and test files over 2000 lines as discovery candidates only. Split a file only when
 cohesion, coupling, change risk, or testability establishes a better seam; line count alone is not evidence. When a
@@ -197,10 +198,14 @@ means path accounting, not depth of inspection.
 Review tests as code under the same first-principles questions, aiming for a smaller suite that catches the same or more
 defects. For each test, identify the required behavior it protects, then:
 
+- Delete tautological tests: tests that pass by construction, so no plausible defect in the code under test can fail
+  them. Typical shapes: asserting a mock's or fixture's own configured value; deriving the expected value with the code
+  under test or a copy of its logic; asserting a constant, type, or literal equals itself; and restating language,
+  framework, or dependency behavior. A quick check: mentally break the implementation; if the test still passes, it is
+  tautological.
 - Delete tests that are stale or unhelpful: they target removed or renamed behavior kept alive only by mocks or
-  fixtures; cannot fail (no meaningful assertion, asserting a mock's own return value, tautologies); pin incidental
-  implementation details or call sequences no requirement depends on; restate language, framework, or dependency
-  behavior; or are skipped or commented out with no live reason.
+  fixtures; have no meaningful assertion; pin incidental implementation details or call sequences no requirement depends
+  on; or are skipped or commented out with no live reason.
 - Merge tests that effectively prove the same thing: identical paths differing only in inputs become one table-driven or
   parameterized test; a narrower test fully subsumed by another test's assertions goes; duplicates across files collapse
   into the owning suite.
