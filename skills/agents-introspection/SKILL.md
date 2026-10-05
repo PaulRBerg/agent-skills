@@ -55,6 +55,11 @@ names, issue IDs, and skill names.
 In a Codex read-only sandbox, or whenever `uv` cannot write its cache, skip the helper. In either case, go directly to
 the Manual Fallback below. In either case, do not retry `uv run`.
 
+When the user or an invoking skill sets a history scope, use that scope in place of the default `--since`,
+`--max-sessions`, archive, and five-body limits below. A history scope can set a time window, a session count, specific
+sessions, archived sessions, or other relevant projects. Do not widen a scope that the user stated. Report the applied
+scope in `🗂 Historical coverage`.
+
 1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
    the chosen keywords, `--since 60d`, `--excerpts`, and `--max-sessions 8`. Encode synonyms as one OR-group keyword
    (`--keyword 'a|b'`) rather than separate `--keyword` flags.
