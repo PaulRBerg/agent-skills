@@ -16,22 +16,22 @@ index reconciliation, and push mechanics.
 
 Run every command from the target repository cwd. Do not surround `ai-commit` with extra `git status`, `git log`, or
 `git diff` calls: preparation provides the complete evidence for this workflow. Use `--porcelain` only in deterministic
-automation that explicitly parses its stable TSV records; the normal skill flow consumes the human-readable sections.
+automation that explicitly parses its stable TSV records. The normal skill flow consumes the human-readable sections.
 
 ## 1. Parse Arguments
 
 Arguments: `$ARGUMENTS`
 
-- `ai-commit` selects the message format from repository config; pass `--natural` or `--conventional` only as an
+- `ai-commit` selects the message format from repository config. Pass `--natural` or `--conventional` only as an
   explicit one-off override, never to reproduce repository policy.
 - `--all`: capture all worktree and index changes. This intentionally risks including another agent's work.
-- `--staged`: capture exactly the current index; do not add session paths. It conflicts with `--all`.
+- `--staged`: capture exactly the current index. Do not add session paths. It conflicts with `--all`.
 - `--natural`: force Natural Language Format for this commit.
 - `--conventional`: force Conventional Prefix Format for this commit.
 - `--push`: request a push after commit. Otherwise push only when standing instructions authorize it.
-- `--close <issue_numbers>`: append one `Closes #N` trailer per positive decimal issue number; accept comma- or
+- `--close <issue_numbers>`: append one `Closes #N` trailer per positive decimal issue number. Accept comma- or
   space-separated input.
-- `--finding <finding_ids>`: append one `Finding-ID: <id>` trailer per ledger finding this commit fixes; accept comma-
+- `--finding <finding_ids>`: append one `Finding-ID: <id>` trailer per ledger finding this commit fixes. Accept comma-
   or space-separated input. Also infer a finding from context when this session's commit fixes a specific ledger
   finding. Never include or resolve findings the commit does not actually fix.
 - In Conventional Prefix Format, a positional type keyword overrides the inferred type. In Natural Language Format, a
@@ -50,29 +50,30 @@ ai-commit prepare [--all | --staged] [--natural | --conventional] --diff full \
   [--exclude-baseline '<path>=<oid>']... [-- <session-modified-paths>...]
 ```
 
-- Read the full preparation output; never pipe it through `tail`, `head`, `awk`, `grep`, or similar. It carries both the
+- Read the full preparation output. Never pipe it through `tail`, `head`, `awk`, `grep`, or similar. It carries both the
   printed transaction ID and the diff step 3 must analyze, and a truncating pipe discards the evidence along with the
   ID.
 - Use `--diff summary` instead only when the full diff is too large to read in one pass (for example, a repository-wide
-  migration across hundreds of files) and this session already reviewed the content; compose the message from the
-  name-status, shortstat, and that review.
+  migration across hundreds of files) and this session already reviewed the content. In that case, compose the message
+  from the name-status, shortstat, and that review.
 - Before default-mode preparation, run the repository's formatter on this session's edited paths only, so a formatting
   pre-commit hook cannot modify the content after it is pinned.
 - Build the path list from this session's edited paths, never by parsing `git status` or `git status --porcelain`
   output, which can include another agent's untracked or modified files. Default mode requires every path edited in this
-  session; for a rename, include both old and new names, including case-only file or directory renames.
+  session. For a rename, include both old and new names, including case-only file or directory renames.
 - Before default-mode preparation, run `ai-coord touched` when available and reconcile its output against the session
-  path list: add missed session-edited paths, but ignore paths this session did not semantically change because touched
-  paths are best-effort evidence, not authority. Skip this cross-check silently when the command is unavailable or the
-  session is unrecognized.
+  path list. For that cross-check, add missed session-edited paths. Ignore paths this session did not semantically
+  change. Touched paths are best-effort evidence, not authority. When the command is unavailable or the session is
+  unrecognized, skip this cross-check silently.
 - `--all` accepts no explicit paths and captures all tracked, untracked, modified, deleted, and staged changes.
 - `--staged` accepts neither explicit paths nor baseline exclusions and captures the shared index exactly.
 - `ai-commit prepare` automatically applies this session's ai-coord stale-dirt baselines. Auto-applied exclusions appear
   in the preparation evidence and must be disclosed unchanged. Explicit `--exclude-baseline` remains available for
   overrides, and `--no-auto-baseline` disables discovery for deterministic automation. Never revert unrelated changes.
+
   If coordination re-entry records this session's completed edits as a baseline, compare its blob IDs with retained
   session or preparation evidence. Use `--no-auto-baseline` only when every selected file's entire delta is attributable
-  to the authorized task; preserve exclusions for mixed ownership or uncertain attribution.
+  to the authorized task. Preserve exclusions for mixed ownership or uncertain attribution.
 
 Preparation pins the exact tree and delta under the printed transaction ID without changing the shared index. Keep that
 ID. The later commit reuses the transaction instead of recomputing intended content from the mutable worktree or shared
@@ -83,10 +84,10 @@ problem and retry preparation within the authorized scope.
 ## 3. Analyze and Compose
 
 Analyze the single prepared full diff. Do not replace a valid preparation merely to get different evidence. Oversized
-per-file sections arrive cut with a `DIFF_TRUNCATED` disclosure; their name-status and shortstat evidence still governs
+per-file sections arrive cut with a `DIFF_TRUNCATED` disclosure. Their name-status and shortstat evidence still governs
 the message.
 
-- Use the printed message format and message-format rules. `ai-commit` is the source of those rules; do not load a
+- Use the printed message format and message-format rules. `ai-commit` is the source of those rules. Do not load a
   separate Conventional or Natural reference.
 - Apply positional overrides, detect breaking changes, infer scope or context from the code, and include a body only
   when it adds material rationale.
@@ -95,12 +96,12 @@ the message.
 - Add one `Finding-ID: <id>` trailer per finding supplied by `--finding` or inferred from context that this commit
   actually fixes. De-duplicate finding IDs.
 - Append the exact `Agent-Session:` line from the preparation trailer section when present. `ai-commit` has already
-  validated it; do not synthesize or repair a missing or malformed trailer.
+  validated it. Do not synthesize or repair a missing or malformed trailer.
 
 Compose one subject paragraph, an optional body paragraph, and one final trailer paragraph containing all `Closes`,
 `Finding-ID`, and `Agent-Session` lines.
 
-`ai-commit` receives every `-m` value verbatim and rejects a literal `\\n`; write real line breaks inside the quoted
+`ai-commit` receives every `-m` value verbatim and rejects a literal `\\n`. Write real line breaks inside the quoted
 argument, as in the step 4 example.
 
 ## 4. Commit the Transaction
@@ -119,38 +120,40 @@ ai-commit commit <transaction-id> -m '<subject>' -m '- first material change
 ```
 
 Append `--push` when explicitly requested or authorized by standing instructions. The same command handles default,
-`--all`, and `--staged` transactions; never stage or commit them with direct Git commands.
+`--all`, and `--staged` transactions. Never stage or commit them with direct Git commands.
 
 Transactions are idempotent. After an interruption, lock race, or retryable exit, retry the same transaction ID and
-message arguments; do not prepare a replacement from newer mutable state. A replay recovers or returns the retained
-receipt without creating a duplicate commit. Never delete an index lock.
+message arguments. For those retryable failures, do not prepare a replacement from newer mutable state. A replay
+recovers or returns the retained receipt without creating a duplicate commit. Never delete an index lock.
 
 For a deterministic content failure proven to precede commit creation, correct the authorized work and supersede the
-uncommitted preparation using the recovery reference. This includes `snapshot-check hook modified prepared content`; an
+uncommitted preparation using the recovery reference. This includes `snapshot-check hook modified prepared content`. An
 immutable retry cannot repair content pinned in a failed snapshot. Existing task authority covers this recovery.
 
 Read [references/failure-recovery.md](references/failure-recovery.md) before superseding a failed preparation or adding
 `--no-verify` or `--no-gpg-sign`. Bypass flags are explicit per-attempt recovery options, not first-attempt defaults.
 
-After `COMMITTED <transaction-id> <commit-oid>` (the OID is a 12-character abbreviation; pass it as-is), resolve every
-included finding with `ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'`.
+After `COMMITTED <transaction-id> <commit-oid>`, resolve every included finding with
+`ai-coord finding resolve '<id>' --as fixed --commit '<commit-oid>'`. The OID is a 12-character abbreviation. Pass it
+as-is.
 
 ## 5. Completion and Receipt
 
 Keep the receipt compact and forward its outcome lines without decoration:
 
-- `COMMITTED <transaction-id> <commit-oid>` proves commit creation or idempotent recovery; without push authorization it
-  is completion.
+- `COMMITTED <transaction-id> <commit-oid>` proves commit creation or idempotent recovery. Without push authorization,
+  it is completion.
 - `HOOK_ADDED <path>` identifies content introduced by a hook outside the prepared path set. Disclose every such line.
 - `PUSHED <branch>` or `PUSHED_NEW <branch>` proves propagation and completes push-authorized or push-only work.
 - `PUSHED <transaction-id> <commit-oid>` is the retained proof returned when an already-pushed transaction is replayed.
 - `BEHIND <branch> <count>` is safe noncompletion, never completion: `ai-commit` fetched and refused to integrate or
-  push. A preceding `COMMITTED` still proves the local commit. Run `git fetch`, then verify the branch is still behind
-  its upstream, the working tree and index are clean, and no other Git operation (rebase, merge, cherry-pick, revert,
-  bisect) is in progress. If all hold, run `git pull --rebase --no-autostash` and replay the same transaction command
-  (or rerun `ai-commit push` for push-only work). On rebase conflicts, run `git rebase --abort` for only that rebase and
-  ask the user before resolving. If the tree is dirty or another Git operation is in progress, stop and report. Never
-  autostash.
+  push. A preceding `COMMITTED` still proves the local commit.
+
+  Run `git fetch`, then verify the branch is still behind its upstream, the working tree and index are clean, and no
+  other Git operation (rebase, merge, cherry-pick, revert, bisect) is in progress. If all hold, run
+  `git pull --rebase --no-autostash` and replay the same transaction command (or rerun `ai-commit push` for push-only
+  work). On rebase conflicts, run `git rebase --abort` for only that rebase and ask the user before resolving. If the
+  tree is dirty or another Git operation is in progress, stop and report. Never autostash.
 
 Do not report unrelated tree state, ahead/behind counts not emitted by the command, staging narration, or successful
 hook activity. Add only a required one-line bypass disclosure from the recovery reference.

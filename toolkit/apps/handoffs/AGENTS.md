@@ -7,7 +7,7 @@ Local-only, read-only viewer for agent task handoffs.
 - Bind application servers only to `127.0.0.1`.
 - Reject requests whose Host is not a loopback name (`localhost`, `127.0.0.1`, `[::1]`) as a DNS-rebinding guard.
 - Never accept filesystem paths from HTTP clients.
-- Keep discovery depth-bounded to the locations encoded in `src/server/scanner.ts`; do not replace it with recursive
+- Keep discovery depth-bounded to the locations encoded in `src/server/scanner.ts`. Do not replace it with recursive
   home-directory traversal.
 - Treat missing roots and individual unreadable files as recoverable scan conditions.
 - Do not mutate, move, archive, or delete discovered handoff files.
@@ -18,4 +18,4 @@ Local-only, read-only viewer for agent task handoffs.
 - Use Bun 1.4.2 and the exact dependency pins in `package.json`.
 - Prefer the `just` recipes for development, targeted tests, type-checking, builds, and cold-start serving.
 - Keep server behavior behind testable parser, scanner, freshness, and request-handler seams.
-- Run targeted tests while iterating; use `just check` only for aggregate validation.
+- Run targeted tests while iterating. Use `just check` only for aggregate validation.

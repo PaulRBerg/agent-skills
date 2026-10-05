@@ -5,7 +5,7 @@
 ## Stack
 
 Use Bun, Vite, React 19, and strict TypeScript. Styling is Tailwind v4 through `@tailwindcss/vite`, with tokens in
-`@theme inline`; UI primitives are Base UI, icons are Lucide, and variants use `tailwind-variants`. Tests use Vitest.
+`@theme inline`. UI primitives use Base UI, icons use Lucide, and variants use `tailwind-variants`. Tests use Vitest.
 There is no router, state library, or React Compiler.
 
 ## Conventions

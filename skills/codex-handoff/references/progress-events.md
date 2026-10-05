@@ -1,26 +1,28 @@
 # Progress Stream Reference
 
-When `run-codex-handoff.sh` is invoked with `--progress-file PATH`, the file is a live JSONL stream: every line Codex
-emits under `codex exec --json`, followed by one wrapper-authored sentinel. Pre-launch validation failures exit nonzero
-before the stream exists and write no sentinel; after the run starts, the wrapper writes exactly one. Tail it for
-real-time watching and post-mortems. Pass `--result-file PATH` separately to keep the final structured result in an
-artifact and leave background-task stdout empty.
+When `run-codex-handoff.sh` is invoked with `--progress-file PATH`, the file is a live JSONL stream. It contains every
+line Codex emits under `codex exec --json`, followed by one wrapper-authored sentinel. Pre-launch validation failures
+exit nonzero before the stream exists. Those failures write no sentinel. After the run starts, the wrapper writes
+exactly one sentinel.
 
-Sessions persist: record the `thread.started` session ID, then pass `--resume SESSION_ID` to continue that session with
+Tail the stream for real-time watching and post-mortems. Pass `--result-file PATH` separately to keep the final
+structured result in an artifact and leave background-task stdout empty.
+
+Sessions persist. Record the `thread.started` session ID. Then pass `--resume SESSION_ID` to continue that session with
 the same wrapper controls and a new stdin prompt.
 
 ## Codex events
 
-One JSON object per line, each with a top-level `type`
+Codex emits one JSON object per line. Each has a top-level `type`
 ([non-interactive mode docs](https://learn.chatgpt.com/docs/non-interactive-mode)):
 
-| Event                                              | Meaning                                                       |
-| -------------------------------------------------- | ------------------------------------------------------------- |
-| `thread.started`, `turn.started`                   | Session/turn lifecycle                                        |
-| `turn.completed`                                   | Turn finished; carries `usage` with `output_tokens` etc.      |
-| `turn.failed`                                      | Turn failed; carries error details                            |
-| `item.started` / `item.updated` / `item.completed` | Work items; `item.type` identifies the activity               |
-| `error`                                            | Unrecoverable stream error; the wrapper still owns settlement |
+| Event                                              | Meaning                                                                |
+| -------------------------------------------------- | ---------------------------------------------------------------------- |
+| `thread.started`, `turn.started`                   | Session/turn lifecycle                                                 |
+| `turn.completed`                                   | The turn finished. The event includes `usage`, such as `output_tokens` |
+| `turn.failed`                                      | The turn failed. The event includes error details                      |
+| `item.started` / `item.updated` / `item.completed` | Work items. `item.type` identifies the activity                        |
+| `error`                                            | Unrecoverable stream error. The wrapper still owns settlement          |
 
 Item types in Codex CLI 0.156.1: `agent_message` (assistant text), `reasoning`, `command_execution` (has `command` and
 `status`), `file_change`, `mcp_tool_call`, `collab_tool_call`, `web_search`, `todo_list` (plan updates), and `error`
@@ -36,31 +38,33 @@ Example:
 
 The app-server protocol documents separate `model/safetyBuffering/updated` and `model/rerouted` notifications
 ([turn events](https://learn.chatgpt.com/docs/app-server#turn-events)), but they are not part of the documented
-`codex exec --json` event set. Verified against Codex CLI 0.156.1; later versions may differ, so treat the forwarded
-event set as version-dependent, not guaranteed. Do not invent equivalent JSONL events or infer a safety check from
-silence. A quiet period may be ordinary work or transient buffering, and an independent server-side policy reroute may
-leave the responding model unknowable.
+`codex exec --json` event set. This distinction was verified against Codex CLI 0.156.1. Later versions may differ. Treat
+the forwarded event set as version-dependent, not guaranteed. Do not invent equivalent JSONL events or infer a safety
+check from silence. A quiet period may be ordinary work or transient buffering, and an independent server-side policy
+reroute may leave the responding model unknowable.
 
 In status digests, say `no recent activity` and keep watching until the wrapper sentinel or approved timeout. Do not
-cancel, retry, extend, downgrade to a suggested faster model, or relaunch because the stream is quiet; preserve normal
+cancel, retry, extend, downgrade to a suggested faster model, or relaunch because the stream is quiet. Preserve normal
 timeout and failure handling.
 
 ## Wrapper sentinel
 
-The wrapper appends exactly one terminal line per run; its presence — not process state — is the completion signal:
+The wrapper appends exactly one terminal line per run. Its presence, rather than process state, is the completion
+signal:
 
-| Sentinel                                                                | Emitted when                                                   |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `{"type":"handoff.completed","elapsed_seconds":N,"output_tokens":M}`    | Success; last `turn.completed` value (thread-cumulative total) |
-| `{"type":"handoff.failed","reason":"timeout","elapsed_seconds":N}`      | Wrapper timeout hit                                            |
-| `{"type":"handoff.failed","reason":"error","rc":R,"elapsed_seconds":N}` | Codex nonzero exit or missing result                           |
-| `{"type":"handoff.failed","reason":"cancelled","elapsed_seconds":N}`    | Wrapper received INT/TERM                                      |
+| Sentinel                                                                | Emitted when                                                                          |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `{"type":"handoff.completed","elapsed_seconds":N,"output_tokens":M}`    | Success. The token count is the last `turn.completed` value (thread-cumulative total) |
+| `{"type":"handoff.failed","reason":"timeout","elapsed_seconds":N}`      | Wrapper timeout hit                                                                   |
+| `{"type":"handoff.failed","reason":"error","rc":R,"elapsed_seconds":N}` | Codex nonzero exit or missing result                                                  |
+| `{"type":"handoff.failed","reason":"cancelled","elapsed_seconds":N}`    | Wrapper received INT/TERM                                                             |
 
 The result JSON itself is in the path passed to `--result-file`, not in this progress file. Without `--result-file`, the
-wrapper writes the result to stdout for backward compatibility. Token accounting is best-effort; `output_tokens` is
-omitted when no value parses. `turn.completed` usage is the thread-cumulative total, so a `--resume` run's count
-includes every prior run of that thread — that run's own usage is its sentinel total minus the prior run's sentinel
-total.
+wrapper writes the result to stdout for backward compatibility. Token accounting is best-effort. When no value parses,
+the wrapper omits `output_tokens`. `turn.completed` usage is the thread-cumulative total. Thus, a `--resume` run's count
+includes every prior run of that thread.
+
+That run's own usage is its sentinel total minus the prior run's sentinel total.
 
 ## Wave watcher
 
@@ -74,16 +78,19 @@ bash scripts/watch-codex-wave.sh \
 
 Its stdout is machine-readable JSONL. `watcher.digest` reports elapsed/budget, event count, last relevant activity, and
 delayed-file state. `watcher.sentinel` preserves the wrapper sentinel and reason. `watcher.settlement` supplies exact
-settled counts, percentage, and ten-cell bar. A completed wave exits `0`; any failed agent sentinel settles normally and
-makes the watcher exit `1` after all agents settle. If an unsettled agent exceeds its budget plus a 120-second grace,
-the watcher synthesizes `{"type":"handoff.failed","reason":"no-sentinel"}` and settles it as failed; a wrapper sentinel
-arriving after that settlement is ignored. This only backstops a dead wrapper; the wrapper remains the timeout
-authority. Malformed or otherwise invalid progress emits `watcher.failed` and exits as an invariant failure, not an
-agent result.
+settled counts, percentage, and ten-cell bar. A completed wave exits `0`. Any failed agent sentinel settles normally and
+makes the watcher exit `1` after all agents settle.
+
+If an unsettled agent exceeds its budget plus a 120-second grace, the watcher synthesizes
+`{"type":"handoff.failed","reason":"no-sentinel"}` and settles it as failed. The watcher ignores a wrapper sentinel
+arriving after that settlement. This only backstops a dead wrapper. The wrapper remains the timeout authority. Malformed
+or otherwise invalid progress emits `watcher.failed` and exits as an invariant failure, not an agent result.
 
 `watcher.digest.lastActivity` is deliberately privacy-minimal. It carries only `type` for messages, reasoning, web
-searches, todo lists, and item or stream errors; `type` plus `status` for file changes; `type`, `command`, and `status`
-for command execution; `type`, `server`, `tool`, and `status` for MCP calls; and `type`, `tool`, and `status` for
-collaboration calls. Missing fields are omitted. Never include message or reasoning text, search queries, arguments,
-results, prompts, thread IDs, agent states, or error messages. Neither a stream `error` nor an item `error` settles an
-agent; only the wrapper sentinel does.
+searches, todo lists, and item or stream errors. It carries `type` plus `status` for file changes. It carries `type`,
+`command`, and `status` for command execution. It carries `type`, `server`, `tool`, and `status` for MCP calls. It
+carries `type`, `tool`, and `status` for collaboration calls.
+
+The watcher omits missing fields. Never include message or reasoning text, search queries, arguments, results, prompts,
+thread IDs, agent states, or error messages. Neither a stream `error` nor an item `error` settles an agent. Only the
+wrapper sentinel does.

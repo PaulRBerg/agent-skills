@@ -21,7 +21,7 @@ Before doing any work, identify the current chat host. If it is not Claude Code 
 
 ## Workflow
 
-Resolve `scripts/copy-transcript-path.sh` relative to this `SKILL.md` and run it with no arguments:
+Resolve `scripts/copy-transcript-path.sh` relative to this `SKILL.md`. Run the helper with no arguments:
 
 ```sh
 bash <skill-dir>/scripts/copy-transcript-path.sh
@@ -30,5 +30,5 @@ bash <skill-dir>/scripts/copy-transcript-path.sh
 Return the helper's successful stdout verbatim and stop. Do not infer a transcript from the current project, select a
 recent session, or add explanation.
 
-Successful completion requires the helper to exit 0 and its stdout to be returned verbatim. Report a helper failure as
-the outcome; it does not count as completion.
+Successful completion requires the helper to exit 0 and you to return its stdout verbatim. Report a helper failure as
+the outcome. A helper failure does not count as completion.
