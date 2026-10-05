@@ -93,9 +93,13 @@ A second failure blocks the work. Report the failed command, completed groups, a
 
 ### 3. Commit Reported Global Paths and Release Claims
 
-Group `Changed global paths` by reported repo root. Retain all claims acquired in step 2 through every target commit and
-push. Never perform a post-apply `start`. For each repo with reported changed paths, commit and push only those paths.
-For a repo with no reported diff, confirm its planned paths have no diff.
+Group `Changed global paths` by reported repo root. Before preparation, expand reported directories to individual
+repository-relative file paths for attributable publication changes, including new and deleted files. Exclude unrelated
+files within those directories.
+
+Retain all claims acquired in step 2 through every target commit and push. Never perform a post-apply `start`. For each
+repo with reported changed paths, commit and push only those file paths. For a repo with no reported diff, confirm its
+planned paths have no diff.
 
 Once every target's changes are pushed or verified absent, run `ai-coord done` once from a claimed target repository, if
 claims were acquired. For a bundle, this releases every target, not only the current repository. Never claim unreported

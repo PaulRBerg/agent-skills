@@ -58,9 +58,11 @@ ai-commit prepare [--all | --staged] [--natural | --conventional] --diff full \
   from the name-status, shortstat, and that review.
 - Before default-mode preparation, run the repository's formatter on this session's edited paths only, so a formatting
   pre-commit hook cannot modify the content after it is pinned.
-- Build the path list from this session's edited paths, never by parsing `git status` or `git status --porcelain`
-  output, which can include another agent's untracked or modified files. Default mode requires every path edited in this
-  session. For a rename, include both old and new names, including case-only file or directory renames.
+- Build the default-mode path list from individual repository-relative files with changes attributable to this session.
+  Expand directory paths to those file paths, including new and deleted files. Never build the list by parsing
+  `git status` or `git status --porcelain` output, which can include another agent's untracked or modified files.
+  Default mode requires every path edited in this session. For a rename, include both old and new file paths, including
+  case-only file or directory renames.
 - Before default-mode preparation, run `ai-coord touched` when available and reconcile its output against the session
   path list. For that cross-check, add missed session-edited paths. Ignore paths this session did not semantically
   change. Touched paths are best-effort evidence, not authority. When the command is unavailable or the session is
