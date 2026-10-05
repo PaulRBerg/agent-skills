@@ -3,8 +3,9 @@ argument-hint: <task>
 coordination: exempt
 name: agents-introspection
 description:
-  Assess recurrence risk for agent behavior using local Codex/Claude Code transcripts and recommend evidence-backed
-  durable fixes to AGENTS.md or skills. Not for routine post-success skill-evolution or agent self-improvement reviews.
+  Use local Codex/Claude Code transcripts to assess recurrence risk for agent behavior. Recommend durable fixes to
+  AGENTS.md or skills from that evidence. Not for routine post-success skill-evolution or agent self-improvement
+  reviews.
 ---
 
 # Agents Introspection
@@ -16,56 +17,56 @@ This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 Before doing any work, identify the current chat host. If it is not Claude Code or Codex CLI, stop with this error:
 `This skill only works in Claude Code or Codex CLI.`
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already placed these instructions in the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
 Determine whether prior Codex and Claude Code work in the current project establishes a recurrence risk for the user's
-task, then recommend the smallest durable intervention justified by the evidence.
+task. Then recommend the smallest durable intervention justified by the evidence.
 
-Success means the report identifies transcript coverage, separates observed behavior from inference, applies a
-consistent evidence bar, and either proposes a concrete prevention step or explains why no durable change is justified.
+Success means the report identifies transcript coverage and separates observed behavior from inference. It applies a
+consistent evidence bar. It either proposes a concrete prevention step or explains why no durable change is justified.
 
 ## Input
 
 - `<task>` (required): the task, decision, incident, or workflow to evaluate. If omitted but the current conversation
-  states it clearly, use that task; otherwise ask for the missing task.
+  states it clearly, use that task. Otherwise, ask for the missing task.
 
 ## Scope and Authority
 
 - Inspect Codex and Claude Code transcripts whose metadata or cwd resolves to the current project and any other local
   project materially relevant to the user's task. You are authorized to read relevant other-project sessions without
   asking the user. Establish relevance from task context, explicit project or path references, a shared change or
-  workflow, or session metadata; do not scan another project's history solely because it shares a basename or keyword.
+  workflow, or session metadata. Do not scan another project's history solely because it shares a basename or keyword.
 - Treat current-project transcripts as internal working evidence. Include direct excerpts when they materially improve
-  the report; do not summarize or redact solely because the model provider can see them. Never expose credentials,
+  the report. Do not summarize or redact solely because the model provider can see them. Never expose credentials,
   security secrets, or personal wallet addresses.
 - Inspect and report by default. Edit AGENTS.md or skills only when the user explicitly asks to apply or implement
-  fixes, then make the smallest in-scope local change and validate it.
+  fixes. Then make the smallest in-scope local change and validate it.
 - Never modify transcript stores. Before placing transcript evidence in a public or third-party artifact, perform an
   external-disclosure review and remove unrelated personal or customer data, unsuitable private paths or repository
   names, and unrelated transcript material. Perform external writes only when authorized.
 
 ## Bounded Retrieval
 
-Read `references/transcript-sources.md`, resolve the current project with `pwd -P`, identify any other task-relevant
-local projects, and choose 3–6 short, discriminative keywords from relevant filenames, commands, tools, errors, package
+Read `references/transcript-sources.md`. Resolve the current project with `pwd -P`. Identify any other task-relevant
+local projects. Choose 3–6 short, discriminative keywords from relevant filenames, commands, tools, errors, package
 names, issue IDs, and skill names.
 
-In a Codex read-only sandbox, or whenever `uv` cannot write its cache, skip the helper and go directly to the Manual
-Fallback below; do not retry `uv run`.
+In a Codex read-only sandbox, or whenever `uv` cannot write its cache, skip the helper. In either case, go directly to
+the Manual Fallback below. In either case, do not retry `uv run`.
 
 1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
    the chosen keywords, `--since 60d`, `--excerpts`, and `--max-sessions 8`. Encode synonyms as one OR-group keyword
    (`--keyword 'a|b'`) rather than separate `--keyword` flags.
-2. Treat source ownership as a miner invariant: every candidate is assigned once from source-native cwd, directory, and
-   history metadata, never from transcript content. Review `ownership`; reject a candidate only when fallback ownership
-   such as `turn_context.cwd` remains materially ambiguous for the task. The miner excludes conflicting ownership
-   evidence and the live session by default.
+2. Treat source ownership as a miner invariant. The miner assigns every candidate once from source-native cwd,
+   directory, and history metadata, never from transcript content. Review `ownership`. Reject a candidate only when
+   fallback ownership such as `turn_context.cwd` remains materially ambiguous for the task. The miner excludes
+   conflicting ownership evidence and the live session by default.
 3. Treat miner scores, themes, correction, failure, verification, tool, or `privacy_gaps` counts, redacted `excerpts`,
    and `modified` timestamps only as candidate-ranking and triage signals. They are heuristic and are never evidence by
    themselves. Inspect up to five highest-relevance transcript bodies through the bundled inspector digest
-   (`scripts/transcript-inspect.py`) first; open raw bodies only when the digest is insufficient, stopping earlier when
-   the evidence bar is met. Include a comparable successful session when available.
+   (`scripts/transcript-inspect.py`) first. Open raw bodies only when the digest is insufficient. Stop earlier when the
+   evidence bar is met. Include a comparable successful session when available.
 4. If evidence is insufficient, retry once with broader or OR-grouped keywords. If still weak, retry once with `--since`
    removed. If unarchived history still lacks signal, retry once with `--include-archived`.
 5. Exceed these bounds only to resolve contradictory evidence or satisfy an explicitly exhaustive request. If the helper
@@ -78,7 +79,7 @@ For unusually long searches, send sparse progress updates only when a retrieval 
 likely intervention, or the search reaches its explicit bound. Use an outcome-first line such as
 `🔎 Broadening transcript search — <verified reason and bound>` or
 `⏳ Checking archived sessions — <verified unarchived/archived coverage>`. Ground counts and coverage claims in
-miner/tool output; do not narrate routine transcript reads.
+miner/tool output. Do not narrate routine transcript reads.
 
 ## Evidence Contract
 
@@ -89,11 +90,11 @@ availability, mark it unknown and qualify the attribution.
 
 For each relevant session, record only concise, auditable observations about:
 
-- ignored or misread AGENTS.md or skill instructions;
-- wrong cwd, project root, source path, or path encoding;
-- over-broad edits, unrelated churn, overwritten user work, or destructive commands;
-- tooling, shell, parsing, retry, or verification mistakes;
-- invented claims, vague reports, or missing tests and checks;
+- ignored or misread AGENTS.md or skill instructions.
+- wrong cwd, project root, source path, or path encoding.
+- over-broad edits, unrelated churn, overwritten user work, or destructive commands.
+- tooling, shell, parsing, retry, or verification mistakes.
+- invented claims, vague reports, or missing tests and checks.
 - successful patterns that prevented mistakes.
 
 Connect each observation to the current task and label any causal or recurrence claim as inference. State conflicts and
@@ -116,13 +117,13 @@ failure that exposes a missing stable invariant. Treat lower-impact one-offs as 
 - Update an existing skill when the failure belongs clearly inside its current workflow.
 - Propose a new skill only for a repeated, reusable procedure that spans projects or repositories.
 - Add a script only when deterministic discovery, parsing, or validation would otherwise be reimplemented.
-- Recommend no durable change for one-off mistakes, weak evidence, or rules already stated clearly; report the risk and
+- Recommend no durable change for one-off mistakes, weak evidence, or rules already stated clearly. Report the risk and
   manual guardrail instead.
 
 ## Report and Stop
 
 Lead with `### 🔎 Introspection complete — <intervention or coverage-gap outcome>` for read-only work or
-`### ✅ Introspection fixes applied — <outcome>` when explicitly requested fixes were written, then report only:
+`### ✅ Introspection fixes applied — <outcome>` when explicitly requested fixes were written. Then report only:
 
 1. `🗂 Historical coverage`: project paths, sources checked, fallbacks used, and sessions inspected.
 2. `🔎 Findings`: a compact table with confidence, observed evidence, inference, relevance, and intervention. Keep
@@ -131,5 +132,6 @@ Lead with `### 🔎 Introspection complete — <intervention or coverage-gap out
 4. `🧪 Validation and gaps`: commands run, checks performed, external-disclosure constraints, and missing evidence.
 
 When fixes were explicitly requested, include exact files changed and validation outcomes. Stop after the current task
-has an evidence-backed recommendation or an explicit coverage gap; do not mine additional history merely to add examples
-or strengthen prose. Keep transcript references, paths, counters, redactions, and miner JSON exact and undecorated.
+has a recommendation supported by evidence or an explicit coverage gap. Do not mine additional history merely to add
+examples or strengthen prose. Keep transcript references, paths, counters, redactions, and miner JSON exact and
+undecorated.
