@@ -517,7 +517,7 @@ Recording a finding is a checkpoint, not completion or an assignment to another 
 maintenance authorization can fix pending or handed-off findings itself: acquire the repair scopes, revalidate against
 current files and finding state, validate the change, then commit with a `Finding-ID: <id>` trailer and resolve with
 that commit's OID. Repair authority comes from the session's instructions. The opt-in and safe-tier restrictions below
-apply only to the detached worker. Hooks require final finding IDs but do not enforce implementation completion.
+apply only to the detached worker. Hooks do not require final finding IDs and do not enforce implementation completion.
 
 Detached autonomous triage is disabled unless the repository-root `.agents/coord.toml` is committed at `HEAD` and sets:
 
