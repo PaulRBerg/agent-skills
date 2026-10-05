@@ -25,7 +25,7 @@ setup() {
     'args="$*"' \
     'case "$args" in' \
     '  *getapilimit*) printf "%s" "${MOCK_API_LIMIT_RESPONSE:-}" ;;' \
-    '  *chainid=8453*) printf "%s" "${MOCK_PAID_CHAIN_RESPONSE:-}" ;;' \
+    '  *chainid=8453*) printf "%s" "${MOCK_PAID_CHAIN_RESPONSE:-}"; exit "${MOCK_PAID_CHAIN_EXIT:-0}" ;;' \
     '  *chains.blockscout.com/api/chains/*) printf "%s" "${MOCK_CHAIN_RESPONSE:-}" ;;' \
     '  *api.blockscout.com/1/api/v2/addresses/*) printf "%b" "${MOCK_BLOCKSCOUT_HEADERS:-}" ;;' \
     '  *) exit 99 ;;' \
@@ -54,7 +54,7 @@ setup() {
 @test "Etherscan distinguishes Free from Lite with the paid-chain probe" {
   export ETHERSCAN_API_KEY="test-key"
   export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":100000,"creditsUsed":3,"creditsAvailable":99997,"limitInterval":"daily","intervalExpiryTimespan":"23:59:59"}'
-  export MOCK_PAID_CHAIN_RESPONSE='{"status":"0","message":"NOTOK","result":"Free plan"}'
+  export MOCK_PAID_CHAIN_RESPONSE='{"status":"0","message":"NOTOK","result":"Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage."}'
 
   run "$ETHERSCAN"
 
@@ -87,6 +87,41 @@ setup() {
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"getapilimit failed — message=NOTOK result=invalid key"* ]]
+}
+
+@test "Etherscan does not infer Free from quota, rate, or malformed probe responses" {
+  export ETHERSCAN_API_KEY="test-key"
+  export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":100000,"creditsUsed":3,"creditsAvailable":99997,"limitInterval":"daily","intervalExpiryTimespan":"23:59:59"}'
+
+  for response in \
+    '{"status":"0","message":"NOTOK","result":"Community Free API limit reached. Resets 2026-10-06 00:00:00 UTC."}' \
+    '{"status":"0","message":"NOTOK","result":"Max rate limit reached, please use API Key for higher rate limit"}' \
+    '{"status":"0","message":"NOTOK","result":"Invalid API Key"}' \
+    'not-json'; do
+    export MOCK_PAID_CHAIN_RESPONSE="$response"
+    run "$ETHERSCAN"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'plan=unknown\n'* ]]
+    [[ "$output" == *"paid_chains=unknown"* ]]
+    [[ "$output" == *"pro_endpoints=false"* ]]
+    [[ "$output" == *"probe inconclusive"* ]]
+  done
+}
+
+@test "Etherscan preserves unknown after a failed probe transport even with a partial success body" {
+  export ETHERSCAN_API_KEY="test-key"
+  export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":100000,"creditsUsed":3,"creditsAvailable":99997,"limitInterval":"daily","intervalExpiryTimespan":"23:59:59"}'
+  export MOCK_PAID_CHAIN_RESPONSE='{"status":"1","message":"OK","result":"0"}'
+  export MOCK_PAID_CHAIN_EXIT=22
+
+  run "$ETHERSCAN"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'plan=unknown\n'* ]]
+  [[ "$output" == *"paid_chains=unknown"* ]]
+  [[ "$output" == *"pro_endpoints=false"* ]]
+  [[ "$output" != *"test-key"* ]]
 }
 
 @test "Blockscout rejects a missing API key" {

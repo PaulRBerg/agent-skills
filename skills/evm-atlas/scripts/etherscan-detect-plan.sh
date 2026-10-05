@@ -8,8 +8,8 @@
 #   credits_available=<int>
 #   limit_interval=<string>
 #   interval_expiry=<HH:MM:SS>
-#   pro_endpoints=<true|false>
-#   paid_chains=<true|false>
+#   pro_endpoints=<true|false|unknown>
+#   paid_chains=<true|false|unknown>
 #
 # Cache the result for the session — getapilimit itself consumes 1 credit, and
 # the paid-chain probe (when needed) consumes another.
@@ -63,18 +63,22 @@ case "$credit_limit" in
     ;;
 esac
 
-# Lite ($49/mo) unlocks the paid Etherscan target chains (Base, OP,
-# Avalanche, BNB) while Free does not. Probe a Base balance to disambiguate: status=1 → Lite,
-# status=0 → Free. PRO endpoints stay false on Lite (Standard plan and up).
+# Probe Base community access: success proves Lite; only an explicit Free-tier
+# access denial proves Free. Transport, quota, and other errors leave it unknown.
+# PRO endpoints stay false for either possible plan (Standard plan and up).
 if [ "$plan" = "free_or_lite" ]; then
-  probe=$(curl -fsS "$base?chainid=8453&module=account&action=balance&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&tag=latest&apikey=$ETHERSCAN_API_KEY" 2>/dev/null || printf '{"status":"0"}')
-  probe_status=$(extract_str "$probe" "status")
-  if [ "$probe_status" = "1" ]; then
-    plan="lite"
-    paid_chains="true"
-  else
-    plan="free"
-    paid_chains="false"
+  plan="unknown"
+  paid_chains="unknown"
+  if probe=$(curl -fsS "$base?chainid=8453&module=account&action=balance&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&tag=latest&apikey=$ETHERSCAN_API_KEY" 2>/dev/null); then
+    probe_status=$(extract_str "$probe" "status")
+    probe_result=$(extract_str "$probe" "result")
+    case "$probe_status:$probe_result" in
+      1:*) plan="lite"; paid_chains="true" ;;
+      '0:Free API access is not supported for this chain.'*) plan="free"; paid_chains="false" ;;
+    esac
+  fi
+  if [ "$plan" = "unknown" ]; then
+    echo "Warning: paid-chain probe inconclusive; plan and paid-chain access remain unknown" >&2
   fi
 fi
 

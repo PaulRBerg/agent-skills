@@ -59,7 +59,7 @@ paid_chains=true
 ```
 
 `plan` is one of `free`, `lite`, `standard`, `advanced`, `professional`, `pro_plus`, `enterprise`, `unknown`. Two
-boolean fields gate behavior:
+capability fields (`true`, `false`, or `unknown`) gate behavior; only `true` authorizes a gated request:
 
 - `paid_chains=true` — paid-chain community endpoints are queryable. True for Lite and all higher tiers; use
   `references/generated/etherscan-chains.md` and its dated notes to determine which targets require it.
@@ -84,8 +84,11 @@ curl -s "https://api.etherscan.io/v2/api?chainid=1&module=getapilimit&action=get
 
 Free and Lite both report `creditLimit: 100000`. Lite raises rate-limit-per-second (5 vs 3) **and unlocks every
 supported chain's community endpoints**, but does **not** add PRO endpoints — those start at Standard. To disambiguate,
-attempt a paid-chain balance call (e.g., `chainid=8453`): status=1 → Lite, status=0 → Free. To probe PRO instead, the
-failure response is `"Sorry, it looks like you are trying to access an API Pro endpoint."`.
+attempt a Base balance call (`chainid=8453`): success → Lite; only the explicit
+`Free API access is not supported for this chain` denial → Free. Transport, rate-limit, quota, or other failures leave
+`plan=unknown` and `paid_chains=unknown`, while `pro_endpoints=false` still follows from the 100,000-credit tier. Do not
+classify generic `status=0` as Free. To probe PRO instead, the failure response is
+`"Sorry, it looks like you are trying to access an API Pro endpoint."`.
 
 `getapilimit` itself consumes 1 credit (plus 1 more for the paid-chain probe), so do not re-run mid-session.
 
