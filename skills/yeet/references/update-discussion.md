@@ -55,9 +55,9 @@ Multiple intents may apply at once:
 If no update instruction remains, stop with: `Tell me what to update — title, body, category, labels, or images.`
 
 For a body rewrite, follow `writing.md > Informal Tone` and preserve recognizable template structure. For an append,
-retain the current body byte-for-byte, add a blank line, then add the requested content. If images were requested,
-complete `context.md > Image Uploads` and treat its result as the body update; when combined with a rewrite, place the
-images in the regenerated body.
+retain the current body byte-for-byte except for its co-signature footer; add a blank line and the requested content
+before the footer per `posting.md > Model Co-signature`. If images were requested, complete `context.md > Image Uploads`
+and treat its result as the body update; when combined with a rewrite, place the images in the regenerated body.
 
 For a category change, fetch live categories with:
 

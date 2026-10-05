@@ -80,8 +80,9 @@ Only when the user explicitly asks for regeneration ("rewrite the body", "fix th
 Follow `create-issue.md`'s template and body rules and `writing.md > Informal Tone`. Preserve any existing template
 structure (sections, admonitions, file links). If the issue uses a YAML template's section headers, keep them.
 
-For appends, preserve the existing body verbatim, then append the new content with a separator (blank line) — do not
-rewrite or echo the full existing body to the user.
+For appends, preserve the existing body verbatim except for its co-signature footer, then add the new content with a
+blank line before the footer per `posting.md > Model Co-signature`. Do not rewrite or echo the full existing body to the
+user.
 
 ## Images
 

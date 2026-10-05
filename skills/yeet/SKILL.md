@@ -55,7 +55,8 @@ Each workflow is fully documented in its reference file. Load the appropriate re
 | Update Discussion  | "update discussion", "edit discussion"                                    | `references/update-discussion.md`  |
 | Comment Discussion | "comment on discussion", "reply on discussion", "edit discussion comment" | `references/comment-discussion.md` |
 
-Each workflow reference links only the shared context, writing, or posting guidance it needs. Post directly when the
+Each workflow reference links only the shared context, writing, or posting guidance it needs. Every authored body or
+comment must follow [posting.md > Model Co-signature](references/posting.md#model-co-signature). Post directly when the
 user requested creation or update; do not add a confirmation gate. After a failed write, run the linked idempotency
 check before any retry.
 
