@@ -48,6 +48,8 @@ repository templates, Paul's writing voice, idempotency, and direct posting. Rou
   on GitHub Enterprise Server.
 - `gh config set api_host <gateway> --host <host>` routes that host's API traffic through a gateway; experimental and
   not a security boundary.
+- `gh auth login` and `gh auth refresh` copy OAuth device codes to the clipboard by default (2.101+);
+  `gh config set clipboard disabled` opts out.
 - `--attach '<file>#<alt>'` on issue/PR create, edit, and comment uploads images or videos; route those writes through
   `yeet`.
 
