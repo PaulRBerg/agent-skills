@@ -36,7 +36,8 @@ loaded, inherited through a scope chain, conditional or path-scoped, or independ
 - Replace equivalent lists of prohibitions with one positive decision rule. Retain rationale only when it changes how a
   rule is interpreted, and retain one minimal example only for an exact requirement or an evidenced failure.
 - Route specialized guidance to the deepest existing applicable context or an existing on-demand doc or skill. When no
-  suitable target exists, recommend creation through the `create` workflow instead of creating or moving files here.
+  suitable target exists, assess task-backed skill candidates through the separate `maintain` creation bar; recommend
+  other context creation through `create` instead of creating or moving files here.
 - Preserve authority, safety, material exceptions, semantic completion criteria, exact commands and machine-consumed
   text, and clarity. Re-read the effective load chain after pruning to ensure no required constraint is orphaned or
   contradicted.
@@ -69,6 +70,8 @@ Keep AGENTS.md terse, imperative, repository-specific, and scoped to its directo
   observed mistakes.
 - Remove generic tutorials, historical authoring notes, file inventories, lists of installed skills, and command lists
   with no preference or warning.
+- When requested, establish continuous repo-local skill maintenance using the standing instruction in
+  `references/maintain-skills.md` from this skill. Preserve an equivalent existing rule without duplicating it.
 
 Move subtree-specific rules to the deepest common ancestor where they apply. Promote duplicated child guidance only when
 every affected child shares it. Recommend a missing nested AGENTS.md only for a distinct command, safety rule,
@@ -124,7 +127,9 @@ Polish only these existing skill classes:
   symlinked, and the repository root is neither a managed agent-config root nor nested under one, as enforced by the
   Repository Guard Rail. Edit only the SKILL.md body and existing bundled Markdown, such as files under `references/`.
 
-Never create, delete, or rename skill or bundled files, or change a skill's purpose or structure.
+Never create, delete, or rename skill or bundled files, or change a skill's purpose or structure during this pass. Route
+task-backed lifecycle opportunities to a separate `maintain` pass when authorized by the user or standing repository
+instructions; the restrictions below describe `polish`, not that separately authorized workflow.
 
 For a project-installed skill:
 
@@ -149,9 +154,11 @@ For each selected skill:
 - Preserve structure and voice; use the smallest factual edit span.
 - Leave third-party behavior and paths outside the repository unchanged unless current repository evidence
   authoritatively establishes the correction.
-- Report an obsolete skill whose central subject no longer exists; do not delete or hollow it out.
+- Record evidence for an obsolete or redundant skill or a useful merge; do not delete or hollow it out during `polish`.
+  Complete authorized lifecycle changes through `maintain` after this pass; otherwise report the candidate.
 
 ## Finish
 
 Run the completion checks and use the report contract from SKILL.md. Stop after the selected existing targets are
-accurate and validated; do not create recommended context or perform adjacent cleanup.
+accurate and validated. Then complete any separately authorized `maintain` pass before the final report; do not create
+recommended context or perform other adjacent cleanup.

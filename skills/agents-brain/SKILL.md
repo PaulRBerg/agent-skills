@@ -1,6 +1,7 @@
 ---
 argument-hint:
-  <polish|create> [path] [target ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run] [--force]
+  <polish|create|maintain> [path] [target ...] [--root-only] [--preserve] [--minimal] [--thorough|--full] [--dry-run]
+  [--force]
 compatibility:
   Requires curl and a writable user cache directory; network populates or refreshes the GPT-6.1 Sol and Claude Opus 5.5
   prompting guides.
@@ -8,8 +9,8 @@ name: agents-brain
 skill-dependencies:
   - skill-writing
 description:
-  "Create or polish repo agent context: README.md, AGENTS.md/CLAUDE.md, project-installed and source-catalog skills, and
-  other Markdown context docs."
+  "Create or polish README.md, AGENTS.md/CLAUDE.md, skills, and repo context; continuously maintain repo-local skills
+  when task evidence warrants deleting obsolete skills, merging overlapping skills, or creating a reusable skill."
 ---
 
 # Agents Brain
@@ -21,7 +22,8 @@ Create or polish repo-local context as one coherent system: human-facing README.
 (with companion CLAUDE.md symlinks only for pre-native Claude Code, per Claude Code Compatibility below), existing
 project-installed skills under `.agents/skills`, eligible source-catalog skills under `skills/<name>/`, and context docs
 — any other Markdown files, under any name or directory, whose content is durable guidance for agents or humans, such as
-conventions, command catalogs, data-format rules, workflow runbooks, and reference material.
+conventions, command catalogs, data-format rules, workflow runbooks, and reference material. Maintain repo-owned skills
+as task work reveals obsolete workflows, meaningful overlap, or recurring procedures worth capturing.
 
 Success means every selected target is grounded in repository evidence, respects its audience and scope, spends agent
 context only on guidance that changes behavior, and passes the narrowest repository-defined validation. Stop after
@@ -60,18 +62,20 @@ opportunity instead.
 
 ## Choose a Workflow
 
-Choose exactly one workflow and read only its reference.
+Choose one primary workflow and read its reference. Read `references/maintain-skills.md` additionally only for
+task-driven skill maintenance or when adding its standing instruction to repository context.
 
 For skill creation, first inspect applicable repository instructions. When they define a source catalog and lifecycle,
 stop and follow that repository-owned workflow. Use `skill-writing` only when no catalog-specific workflow exists.
 
-| User intent                                                     | Workflow                     | Reference                                           |
-| --------------------------------------------------------------- | ---------------------------- | --------------------------------------------------- |
-| Update, refresh, sync, prune, polish, repair, or fix context    | `polish`                     | `references/polish.md`                              |
-| Create, initialize, generate, or regenerate context files       | `create`                     | `references/create-docs.md`                         |
-| Audit, check, review, inspect, or suggest changes without edits | `polish` in `--dry-run` mode | `references/polish.md`                              |
-| Create or scaffold a skill                                      | Stop                         | Use repository catalog lifecycle or `skill-writing` |
-| Install, discover, remove, or rename a skill                    | Stop                         | Use a dedicated skill-management workflow           |
+| User intent                                                                          | Workflow                                      | Reference                                           |
+| ------------------------------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------------- |
+| Update, refresh, sync, prune, polish, repair, or fix context                         | `polish`                                      | `references/polish.md`                              |
+| Create, initialize, generate, or regenerate context files                            | `create`                                      | `references/create-docs.md`                         |
+| Audit, check, review, inspect, or suggest changes without edits                      | `polish` in `--dry-run` mode                  | `references/polish.md`                              |
+| Maintain or evolve repo-local skills from task evidence; review lifecycle candidates | `maintain` (read-only for review-only intent) | `references/maintain-skills.md`                     |
+| Create or scaffold a skill                                                           | Stop                                          | Use repository catalog lifecycle or `skill-writing` |
+| Install, discover, or manage skills outside task-driven repo maintenance             | Stop                                          | Use a dedicated skill-management workflow           |
 
 If the intent is unclear, select `polish` in `--dry-run` mode and report the smallest useful planned change set.
 
@@ -79,26 +83,46 @@ If the intent is unclear, select `polish` in `--dry-run` mode and report the sma
 
 - Apply explicit user instructions and established authorization before this skill's defaults. Do not ask again for an
   unchanged decision; preserve host restrictions and required destructive-action approval.
-- Explicit create, update, polish, repair, fix, or equivalent intent authorizes in-scope local writes. Inspection-only
-  intent and `--dry-run` do not.
+- Explicit create, update, polish, repair, fix, maintain, or equivalent intent authorizes in-scope local writes.
+  Inspection-only intent, Plan Mode, and `--dry-run` do not. Under `maintain`, carry out evidence-backed removal,
+  merging, and creation when the request or standing repository instructions authorize those lifecycle actions.
 - Require explicit confirmation before deleting README.md, AGENTS.md, regular CLAUDE.md files, or context-doc targets.
   `--force` authorizes documented overwrites, not deletions. The one standing exception is a CLAUDE.md symlink to a
   sibling AGENTS.md when the installed Claude Code reads AGENTS.md natively (see Claude Code Compatibility): delete it
   without asking.
 - Resolve scope from the requested outcome. Preview a large change set, then continue when it is already authorized;
   file count alone is not an approval boundary. Ask only when an unresolved choice changes scope or intended meaning.
-- Do not expand from documentation work into source changes, skill creation, or external writes.
+- Keep `polish` and `create` documentation-only. Authorized skill lifecycle work runs separately through `maintain`; its
+  repository boundary never permits external writes.
 
 Complete authorized discovery, edits, and validation before reporting completion. When one target needs input, continue
 independent targets and identify the exact unresolved choice. If a skill rule requires a pause, cite that rule and
 explain why existing authorization does not cover the next action.
 
+## Continuous Repository Skill Maintenance
+
+During an authorized implementation task, notice skill impact while reading relevant guidance, after changing the
+workflow it describes, and before the final report. Review only skills implicated by that task. When repository
+instructions or the user authorize continuous maintenance, run `maintain` for verified opportunities and complete the
+resulting changes; a recommendation alone is not completion. Finish fixed-scope workflows before this separate pass,
+except for necessary prerequisites. Read-only tasks remain read-only.
+
+Continuous means repeated attention during normal task work, not a background monitor, scheduled job, or catalog-wide
+audit. Freeze the boundary to the repository where the task was given; never follow a skill's source or installation
+into another repository or a global agent directory. A failed or blocked main task does not prevent an independent,
+authorized skill improvement supported by verified evidence.
+
+When asked to establish this behavior for future tasks, use the standing-instruction guidance in
+`references/maintain-skills.md` through `polish` for existing AGENTS.md or `create` for a missing one. Loading this
+skill in one session does not by itself make future agents run it.
+
 ## Arguments
 
 - `path`: Optional repo-relative subtree. Restrict documentation, package-root, project-skill, source-catalog skill, and
   context-doc discovery to that subtree.
-- `target ...`: Optional filters during `polish`: skill names from existing `.agents/skills/<name>/` or eligible
-  `skills/<name>/` trees, or repo-relative Markdown paths selecting specific context docs.
+- `target ...`: Optional filters during `polish` or `maintain`: skill names from existing `.agents/skills/<name>/` or
+  eligible `skills/<name>/` trees; `polish` also accepts repo-relative Markdown paths selecting context docs. `maintain`
+  without targets considers only skills implicated by the current task's evidence.
 - `--root-only`: Select only root README.md, AGENTS.md, and CLAUDE.md targets. Exclude project-installed skills,
   source-catalog skills, and context docs unless explicitly selected by `target`.
 - `--dry-run`: Report planned writes and concise diffs without changing files.
@@ -143,13 +167,14 @@ or symlink traversal. If `path`, a `target`, or an explicit request would enter 
 report that the skill must be edited in its source catalog. `--force` does not override this boundary.
 
 Outside managed agent-config roots, eligible git-tracked `skills/<name>/` source catalogs are in scope for `polish` per
-`references/polish.md`.
+`references/polish.md`, or their repository-owned lifecycle through `maintain`. Apply the stricter ownership and
+repository boundary in `references/maintain-skills.md` before lifecycle work.
 
 ## Claude Code Compatibility
 
 Claude Code v2.1.277 and later read `AGENTS.md` directly whenever no `CLAUDE.md`, `.claude/CLAUDE.md`, or
 `CLAUDE.local.md` exists in the working directory or above it, so a CLAUDE.md symlink is no longer needed. Detect the
-installed version once per run before either workflow touches CLAUDE.md:
+installed version once per run before a workflow touches CLAUDE.md:
 
 ```sh
 claude_version=$(claude --version 2>/dev/null | awk '{ print $1; exit }')
@@ -175,6 +200,9 @@ Snapshot `git status --short` before broad edits. Preserve unrelated pre-existin
 after generators or broad commands.
 
 ## Discovery and Tool Routing
+
+For `maintain`, use the task-bounded discovery in `references/maintain-skills.md`. The context-discovery rules below
+apply to `polish` and `create`.
 
 Use git-aware discovery, canonicalize every candidate beneath `repo_root`, and exclude VCS, dependency, environment, and
 build outputs. Deliberately include ignored `.agents/skills/*/SKILL.md` only when project skills are selected. Discover
@@ -214,3 +242,4 @@ detail and stop once the selected targets meet the completion bar.
 
 - `polish`: read `references/polish.md`.
 - `create`: read `references/create-docs.md`.
+- `maintain` or establishing continuous repo-local skill maintenance: read `references/maintain-skills.md`.

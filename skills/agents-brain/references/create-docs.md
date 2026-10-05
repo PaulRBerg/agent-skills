@@ -65,6 +65,8 @@ Keep AGENTS.md concise, imperative, and scoped:
   deployment, financial, recipient-scoped data-handling, and review constraints supported by evidence.
 - Exclude generic tool tutorials, long directory trees, and package-script inventories that add no preference or
   warning.
+- When the user requests continuous repo-local skill maintenance, include the standing instruction from this skill's
+  `references/maintain-skills.md`, adapted to the repository's ownership and lifecycle rules.
 
 Parent files hold shared defaults; nested files contain only local deltas.
 
