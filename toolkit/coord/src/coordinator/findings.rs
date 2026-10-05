@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     io::Read,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use sha2::{Digest, Sha256};
@@ -125,15 +125,44 @@ fn normalize_paths(paths: &[PathBuf], root: &Path) -> Result<Vec<String>> {
     for path in &normalized {
         let candidate = root.join(path);
         if std::fs::symlink_metadata(&candidate).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
-            let target = std::fs::canonicalize(&candidate)
-                .map_err(|_| AppError::usage(format!("finding path escapes repository: {path}")))?;
-            target
-                .strip_prefix(root)
-                .map_err(|_| AppError::usage(format!("finding path escapes repository: {path}")))?;
+            resolve_lenient(&candidate)
+                .filter(|target| target.starts_with(root))
+                .ok_or_else(|| AppError::usage(format!("finding path escapes repository: {path}")))?;
         }
     }
     normalized.sort();
     Ok(normalized)
+}
+
+/// Resolves symlinks like `realpath`, but tolerates a missing tail so dangling links still resolve to their target.
+fn resolve_lenient(path: &Path) -> Option<PathBuf> {
+    const MAX_SYMLINK_HOPS: usize = 40;
+    let mut resolved = PathBuf::new();
+    let mut pending: Vec<PathBuf> = path.components().rev().map(|component| component.as_os_str().into()).collect();
+    let mut hops = 0;
+    while let Some(component) = pending.pop() {
+        match component.components().next()? {
+            Component::Prefix(_) | Component::RootDir => resolved = component,
+            Component::CurDir => {}
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            Component::Normal(name) => {
+                let next = resolved.join(name);
+                if std::fs::symlink_metadata(&next).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+                    hops += 1;
+                    if hops > MAX_SYMLINK_HOPS {
+                        return None;
+                    }
+                    let target = std::fs::read_link(&next).ok()?;
+                    pending.extend(target.components().rev().map(|component| component.as_os_str().into()));
+                } else {
+                    resolved = next;
+                }
+            }
+        }
+    }
+    Some(resolved)
 }
 
 fn content_sha256(path: &Path) -> Option<String> {

@@ -658,6 +658,15 @@ fn finding_commands_deduplicate_sightings_and_enforce_lifecycle_evidence() {
     escaped.assert().failure().code(64);
     assert!(String::from_utf8_lossy(&escaped.stderr).contains("finding path escapes repository"));
 
+    std::os::unix::fs::symlink("missing.md", fixture.root.join("dangling-link")).unwrap();
+    fixture.output(&["finding", "add", "--path", "dangling-link", "dangling in-repo link"]).assert().success();
+    std::os::unix::fs::symlink(fixture._temporary.path().join("missing.txt"), fixture.root.join("dangling-outside"))
+        .unwrap();
+    let dangling_escape =
+        fixture.output(&["finding", "add", "--path", "dangling-outside", "must reject dangling escape"]);
+    dangling_escape.assert().failure().code(64);
+    assert!(String::from_utf8_lossy(&dangling_escape.stderr).contains("finding path escapes repository"));
+
     let connection = Connection::open(fixture.state.join("state.db")).unwrap();
     let observations: i64 = connection
         .query_row(
