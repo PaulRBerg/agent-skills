@@ -9,8 +9,8 @@ description: Archive checked `.ai/TODO.md` tasks into `.ai/todos/YYYY-MM/DD.md`,
 
 # TODO Archive
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
 ## Arguments
 
@@ -24,7 +24,7 @@ do not invoke this skill again through a skill tool.
 ## Workflow
 
 1. Resolve the supplied `path`, or the current directory when omitted. For an existing file, use its containing
-   directory; for a directory, use that directory. Store the absolute directory as `start_dir`, then resolve its Git
+   directory. For a directory, use that directory. Store the absolute directory as `start_dir`, then resolve its Git
    root:
 
    ```sh
@@ -47,10 +47,10 @@ do not invoke this skill again through a skill tool.
 4. Report the rewritten `.ai/TODO.md`, the created or merged archive path, the matched section (when `--hint` was
    given), and the archived/remaining task counts. If an archive for the date already exists, the helper appends the new
    batch to it, retaining one matching top-level heading. If the helper reports no checked tasks, treat it as a no-op.
-   If `--hint` matches no heading, the helper exits non-zero and lists the available sections; relay them.
+   If `--hint` matches no heading, the helper exits non-zero and lists the available sections. In that case, relay them.
 
 5. If useful, inspect only `<repo_root>/.ai/TODO.md` and the exact archive path returned by the helper. Verify their
-   contents directly; when Git ignores them, compare filesystem snapshots rather than relying on `git diff`.
+   contents directly. When Git ignores them, compare filesystem snapshots rather than relying on `git diff`.
 
 ## Helper Behavior
 
@@ -63,7 +63,7 @@ existing archive's leading H1.
 
 ## Completion
 
-Completion evidence is the helper's archive path plus archived and remaining task counts; a no-checked-task result is a
+Completion evidence is the helper's archive path plus archived and remaining task counts. A no-checked-task result is a
 successful no-op. Dry-run completion requires rendered paths/content with no filesystem changes, but the final message
 still follows the one-line formats below. Report the result as a single line (append a `(scope: "<hint>")` segment only
 when `--hint` was given), with the archive path relative to the repository root:

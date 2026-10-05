@@ -55,7 +55,7 @@ for ws in wb.worksheets:
 - `data_only=True` returns the values cached by the last application that saved the file. A workbook freshly written by
   openpyxl has no cache — formula cells read as `None` until recalculated.
 - Never save a workbook loaded with `data_only=True`: formulas are silently replaced by values, permanently.
-- Large values-only reads should not default to openpyxl; prefer `qsv excel`, DuckDB, or fastexcel.
+- Large values-only reads should not default to openpyxl. For those reads, prefer `qsv excel`, DuckDB, or fastexcel.
 - Bulk multi-sheet dump when pandas is genuinely convenient: `uv run --with pandas python -c "..."` with
   `pd.read_excel(path, sheet_name=None, dtype=str)` — `dtype=str` is non-negotiable for amount columns.
 
@@ -102,7 +102,7 @@ extra = wb.create_sheet("Extra")
 wb.save("book.xlsx")
 ```
 
-- Match the existing workbook's conventions — fonts, number formats, layout — exactly; never restyle while editing.
+- Match the existing workbook's conventions — fonts, number formats, layout — exactly. Never restyle while editing.
 - Cell coordinates are 1-based: `ws.cell(row=1, column=1)` is `A1`.
 - Keep the original file (or a copy) until the edited output is verified.
 
@@ -117,7 +117,8 @@ ws["E2"] = "=D2/$D$10"                           # absolute ref for a shared den
 ws["B2"] = "=Inputs!B2*(1+Inputs!B3)"            # assumptions live in cells, not literals
 ```
 
-- Put assumptions (rates, fees, multipliers) in dedicated cells and reference them; no magic numbers inside formulas.
+- Put assumptions (rates, fees, multipliers) in dedicated cells and reference them. Do not put magic numbers inside
+  formulas.
 - Guard divisions: `=IF(C2=0, 0, B2/C2)`.
 - Mind the offset: with one header row, list/DataFrame row `N` lands on worksheet row `N + 2`. Verify two or three
   references against the actual data before filling a whole column.
@@ -125,7 +126,7 @@ ws["B2"] = "=Inputs!B2*(1+Inputs!B3)"            # assumptions live in cells, no
 
 ## Recalculate
 
-Python libraries write formula strings without computing them; errors only become visible after a real engine
+Python libraries write formula strings without computing them. Errors only become visible after a real engine
 recalculates. Always finish with:
 
 ```sh
@@ -149,11 +150,11 @@ audits every cell and prints JSON:
 Loop until `status` is `success`: fix the listed cells, rerun. Statuses:
 
 - `success` — deliverable.
-- `errors_found` — exits `1`; fix and rerun. Typical causes: `#REF!` broken references after inserting/deleting rows or
-  columns; `#DIV/0!` unguarded division; `#VALUE!` text where a number is expected; `#NAME?` misspelled function or
+- `errors_found` — exits `1`. Fix and rerun. Typical causes: `#REF!` broken references after inserting/deleting rows or
+  columns, `#DIV/0!` unguarded division, `#VALUE!` text where a number is expected, or `#NAME?` misspelled function or
   unquoted sheet name.
-- `recalc_incomplete` — exits `1`; LibreOffice did not write cached values.
-- `error` — exits `1`; the JSON `hint` says what to do (e.g. `brew install --cask libreoffice` when LibreOffice is
+- `recalc_incomplete` — exits `1`. LibreOffice did not write cached values.
+- `error` — exits `1`. The JSON `hint` says what to do (e.g. `brew install --cask libreoffice` when LibreOffice is
   missing).
 
 Use `--soft` only when automation must capture a non-success report without failing the shell command.
@@ -171,8 +172,8 @@ duckdb -c "COPY (FROM read_xlsx('book.xlsx', sheet = 'Trades', all_varchar = tru
 duckdb -c "INSTALL excel; LOAD excel; COPY (FROM read_csv('data.tsv', delim = '\t', header = true, all_varchar = true)) TO 'data.xlsx' (FORMAT xlsx, HEADER true)"
 ```
 
-`read_xlsx` autoloads DuckDB's excel extension; `COPY ... (FORMAT xlsx)` does not — keep the
-`INSTALL excel; LOAD excel;` prefix.
+`read_xlsx` autoloads DuckDB's excel extension. `COPY ... (FORMAT xlsx)` does not. Keep the `INSTALL excel; LOAD excel;`
+prefix.
 
 `all_varchar` keeps amounts as text on both sides — the precision rule survives conversion. Type the columns only when
 explicitly asked.
@@ -188,20 +189,21 @@ When replacing an existing TSV export and the sheet shape should not change, sav
 
 ## Formatting Defaults
 
-For new workbooks; conventions in an existing template always win.
+These defaults apply to new workbooks. Conventions in an existing template always win.
 
-- One font family for the whole workbook (Calibri or Arial); bold header row; freeze it (`ws.freeze_panes = "A2"`).
+- Use one font family for the whole workbook (Calibri or Arial). Make the header row bold. Freeze it
+  (`ws.freeze_panes = "A2"`).
 - Number formats, not data mangling: set `cell.number_format` (`"yyyy-mm-dd"`, `"0.0%"`, `"#,##0.00;(#,##0.00)"`)
   instead of writing formatted strings into cells.
-- Money: a currency `number_format` like `"$#,##0.00"` or a unit-suffixed header (`value_usd`); never currency symbols
-  inside cell values.
+- Money: a currency `number_format` like `"$#,##0.00"` or a unit-suffixed header (`value_usd`). Never put currency
+  symbols inside cell values.
 - Set column widths so nothing displays truncated.
 - Zero formula errors at delivery — enforced by the recalc loop.
 
 ## Pitfalls
 
 - Homebrew-cask LibreOffice stays Gatekeeper-quarantined, and `soffice` writes `.pyc` files into the app bundle on first
-  run, breaking its signature seal — a later GUI launch then claims "LibreOffice.app is damaged". The app is fine; do
+  run, breaking its signature seal — a later GUI launch then claims "LibreOffice.app is damaged". The app is fine. Do
   not trash it: `xattr -dr com.apple.quarantine /Applications/LibreOffice.app` (or install with `--no-quarantine`).
   Headless recalculation is unaffected either way.
 - openpyxl round-trips drop charts and images, and can degrade pivot tables and other advanced features. If a workbook
@@ -209,6 +211,6 @@ For new workbooks; conventions in an existing template always win.
 - `.xlsm`: pass `keep_vba=True` to `load_workbook`, or the macros are stripped.
 - Write `datetime`/`date` objects for date cells (with a date `number_format`), not strings — strings stay text and
   break date arithmetic.
-- Column letters: use `openpyxl.utils.get_column_letter` / `column_index_from_string`; never hand-compute (column 64 is
+- Column letters: use `openpyxl.utils.get_column_letter` / `column_index_from_string`. Never hand-compute (column 64 is
   `BL`, not `BK`).
 - `.numbers` files are out of scope: ask the user to export CSV/xlsx from Numbers first (`open -a Numbers <file>`).

@@ -24,7 +24,7 @@ Use these terms consistently:
 ### 1. Classify the artifact
 
 - **Source evidence:** follow the owning project's preservation contract. Preserve source meaning, uncertainty, and any
-  required schema or row ordering; never apply house defaults silently.
+  required schema or row ordering. Never apply house defaults silently.
 - **Canonical authored table:** optimize for clear maintenance and deterministic machine use. Apply the entrypoint's
   authored text-table invariants unless the project defines a stronger convention.
 - **Generated output:** find and edit the owning source or generator. Treat the emitted table as a review surface, not
@@ -32,10 +32,10 @@ Use these terms consistently:
 
 ### 2. Define row identity
 
-State the row grain in one sentence before choosing columns. Give each row one coherent meaning; do not hide repeated
-records, nested structures, or unrelated facts in a delimited cell unless the source contract requires it.
+State the row grain in one sentence before choosing columns. Give each row one coherent meaning. Unless the source
+contract requires it, do not hide repeated records, nested structures, or unrelated facts in a delimited cell.
 
-Define the key explicitly. Use a natural key when its components are stable and unambiguous; otherwise use an owned
+Define the key explicitly. When its components are stable and unambiguous, use a natural key. Otherwise, use an owned
 stable identifier. Record whether duplicate keys or identical rows are valid. Never infer a key solely from uniqueness
 in a sample.
 
@@ -57,9 +57,9 @@ not maintain two columns that compete as the source of truth for the same fact.
 
 ### 4. Choose serialization
 
-Follow an existing table's established contract. For a newly authored text table, use the entrypoint's house defaults;
-choose CSV instead of TSV only for source fidelity or consumer interoperability. Use a real CSV/TSV parser and writer
-whenever delimiters, quotes, or newlines can occur in cells.
+Follow an existing table's established contract. For a newly authored text table, use the entrypoint's house defaults.
+For that new table, choose CSV instead of TSV only for source fidelity or consumer interoperability. Use a real CSV/TSV
+parser and writer whenever delimiters, quotes, or newlines can occur in cells.
 
 ### 5. Design validation before writing
 
@@ -77,7 +77,7 @@ or ordering:
 3. Migrate every in-scope existing row atomically, preserving values not changed by the migration.
 4. Regenerate derived artifacts through their owner.
 5. Validate the exact header and order, row counts, keys, and task-specific semantic invariants.
-6. Decide compatibility explicitly when an active consumer requires it; do not add speculative aliases or shims.
+6. When an active consumer requires compatibility, decide it explicitly. Do not add speculative aliases or shims.
 
 A schema that parses while existing rows, producers, or consumers remain stale is not a completed migration.
 

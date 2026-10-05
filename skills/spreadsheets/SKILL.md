@@ -2,8 +2,8 @@
 argument-hint: "[file]"
 name: spreadsheets
 description:
-  "Use when CSV, TSV, or Excel (.xlsx) is the primary input/output: design or review text-table schemas; inspect,
-  transform, validate, convert, or recalc formulas; or create/fix spreadsheets. Do not trigger when tabular data is
+  "Use when CSV, TSV, or Excel (.xlsx) is the primary input/output: design or review text-table schemas, inspect,
+  transform, validate, convert, or recalc formulas, or create/fix spreadsheets. Do not trigger when tabular data is
   incidental."
 ---
 
@@ -19,12 +19,12 @@ validation.
 2. Touch only requested rows, columns, formulas, and formatting. Existing file conventions override house defaults.
 3. For newly authored text tables, prefer TSV, UTF-8 without BOM, LF, one trailing newline, lowercase `snake_case`
    headers, ISO dates, `.` decimals, and `-` nulls.
-4. Read unknown text tables with BOM-tolerant UTF-8; never write a BOM.
+4. Read unknown text tables with BOM-tolerant UTF-8. Never write a BOM.
 5. Write in place atomically through a sibling temporary file, validate it, then replace the target.
-6. Escape external cells beginning with `=`, `+`, or `@`; a bare `-` null is exempt. Formula-prefix cells in trusted
+6. Escape external cells beginning with `=`, `+`, or `@`. A bare `-` null is exempt. Formula-prefix cells in trusted
    authored data are observations, not proof of injection.
 7. Treat transaction, bank, exchange, and tax data as user-owned. Use unredacted samples in internal agent reports when
-   materially useful; use `--redact-samples` for public or third-party disclosures or when the user asks.
+   materially useful. For public or third-party disclosures, or when the user asks, use `--redact-samples`.
 
 ## Factual Profiling
 
@@ -40,7 +40,7 @@ recommendations and does not infer identifiers from uniqueness. Choose the tool 
 provenance, output format, and preservation requirements.
 
 Use `--external-data` only when the cells came from an external or otherwise untrusted source and will be written to a
-formula-capable consumer. With that flag, formula-prefix cells affect `status`; without it, legitimate formulas such as
+formula-capable consumer. With that flag, formula-prefix cells affect `status`. Without it, legitimate formulas such as
 `=SUM(...)` remain factual observations and do not fail the profile.
 
 ## Tool Routing
@@ -56,24 +56,24 @@ formula-capable consumer. With that flag, formula-prefix cells affect `status`; 
 | Any `.xlsx`/`.xlsm` input or output         | Read `references/xlsx.md` first                  |
 | Exact transformation/validation recipes     | Read `references/recipes.md` only when needed    |
 
-Prefer `qsv --cache-threshold 0` where supported. When qsv stdout must remain TSV, use `-o out.tsv`; stdout otherwise
+Prefer `qsv --cache-threshold 0` where supported. When qsv stdout must remain TSV, use `-o out.tsv`. Otherwise, stdout
 defaults to CSV.
 
 ## Workflow
 
 1. For a new text table or intentional schema change, read `references/text-table-design.md` and record the intended
    table interface plus migration surface.
-2. Inspect with `peek.py`; add `profile.py` when cardinality, formula prefixes, metadata, or available tooling matters.
+2. Inspect with `peek.py`. When cardinality, formula prefixes, metadata, or available tooling matters, add `profile.py`.
    For a no-shape-change edit, save the peek JSON. For intentional row/schema changes, record the expected width and
    invariants.
 3. Decide whether formula-prefix cells are dangerous from provenance and output context. Decide the smallest tool that
-   preserves values and formatting. Avoid pandas unless necessary; if used, load every column as strings.
+   preserves values and formatting. Avoid pandas unless necessary. If you use it, load every column as strings.
 4. Apply the transformation atomically. For idempotent appends with legitimate duplicate rows, use multiset difference
    rather than set deduplication.
 5. Validate:
-   - unchanged shape: `peek.py --strict --expect-like <before-report>`;
-   - changed shape: `peek.py --strict --expect-columns <n>` plus task-specific counts/keys;
-   - authored house TSV: add `--house`;
+   - unchanged shape: `peek.py --strict --expect-like <before-report>`.
+   - changed shape: `peek.py --strict --expect-columns <n>` plus task-specific counts/keys.
+   - authored house TSV: add `--house`.
    - formulas: `uv run "<skill-dir>/scripts/recalc.py" <file.xlsx>` and require success.
 6. Report paths, row/column effects, validation, and any workbook features that could not be preserved.
 
@@ -86,7 +86,7 @@ JSON, cells, headers, formulas, paths, commands, and diagnostics undecorated.
 
 Treat generated financial tables and reports as outputs. Before editing, identify their source inputs and the
 project-provided validation and regeneration commands. Edit only the sources, validate them, then regenerate affected
-outputs; never hand-edit generated tables or reports. Cap financial output to counts and file references unless raw rows
+outputs. Never hand-edit generated tables or reports. Cap financial output to counts and file references unless raw rows
 materially support the task or were requested. Perform an external-disclosure review before sending financial data
 outside the agent workspace.
 

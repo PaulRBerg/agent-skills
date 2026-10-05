@@ -20,7 +20,7 @@ Recommend the current option that best fits the user's actual constraints, backe
 3. Search current authoritative sources. Read [references/tool-finder.md](references/tool-finder.md) only for the
    relevant ecosystem's source routing, fallback criteria, install conventions, and red flags.
 4. Compare the viable options against the user's criteria. Use adoption, maintenance, security, documentation,
-   performance, operational cost, and ecosystem fit only where they affect this decision; do not force fixed weights or
+   performance, operational cost, and ecosystem fit only where they affect this decision. Do not force fixed weights or
    a fixed number of candidates.
 5. Recommend one option when the evidence supports it. State the decisive tradeoff, material red flags, and the closest
    alternative. Say when the evidence is too close or no external tool is justified.
@@ -28,7 +28,7 @@ Recommend the current option that best fits the user's actual constraints, backe
 ## Defaults
 
 - With no repository evidence, default to JavaScript/TypeScript and Node.js tooling.
-- For JavaScript installs, prefer the repository's package manager and otherwise `ni`; for macOS CLIs, prefer an
+- For JavaScript installs, prefer the repository's package manager and otherwise `ni`. For macOS CLIs, prefer an
   official or well-maintained Homebrew formula.
 - Prefer registries, official docs, repositories, changelogs, and security advisories over secondary comparisons. For
   agent skills, search registries and GitHub because no single index is complete.
@@ -41,6 +41,6 @@ only when repeated fields make the comparison easier to scan.
 
 Lead with `### 🏆 Pick: <tool>` and the decisive reason. Follow with `### 📦 Install` and the exact command, a compact
 criteria/evidence table only when fields repeat, `### 🥈 Closest alternative` only for a credible material runner-up,
-and `### ⚠️ Caveats` only when material. Use symbols in comparison cells only with text; never manufacture scores. Keep
+and `### ⚠️ Caveats` only when material. Use symbols in comparison cells only with text. Never manufacture scores. Keep
 URL targets exact and use descriptive Markdown links for human output. Keep install commands, versions, security
 advisories, and installer-risk wording exact and undecorated.
