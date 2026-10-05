@@ -14,11 +14,11 @@ description:
 
 # Repo Harmonization
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
-Turn a list of interdependent repositories into verified alignment findings, user-approved decisions, and surgically
-implemented fixes.
+Use a list of interdependent repositories to produce verified alignment findings, user-approved decisions, and
+surgically implemented fixes.
 
 ## Arguments
 
@@ -28,29 +28,29 @@ implemented fixes.
 - Require at least two paths.
 - Require each resolved path to exist and be a Git repository.
 - Stop with a clear message identifying any missing, non-Git, or insufficient repository input.
-- Do not infer additional repositories from links, remotes, or installed copies; the supplied list defines the audit
+- Do not infer additional repositories from links, remotes, or installed copies. The supplied list defines the audit
   boundary.
 
 ## Contract
 
-- Research before any edit and keep research strictly read-only; parallelize across subagents when the host supports
-  them, otherwise investigate serially.
+- Research before any edit and keep research strictly read-only. When the host supports subagents, parallelize across
+  them. Otherwise, investigate serially.
 - Verify every alignment or duplication claim mechanically with a diff, content hash, regeneration round-trip, or
-  symlink resolution; never rely on prose inspection alone, and attach file:line evidence to every finding.
+  symlink resolution. Never rely on prose inspection alone. Attach file:line evidence to every finding.
 - Classify each finding exactly once as confirmed drift to fix, true duplication that is a single-source candidate, or
   deliberate or necessary duplication to document without changing.
 - Send judgment calls about deduplications to implement, competing workflows to retire, trim depth, and publish versus
-  hold to the user before planning; never expand beyond the approved decisions.
+  hold to the user before planning. Never expand beyond the approved decisions.
 - Treat the approved alignment outcome and resolved judgment calls, not the initial file manifest, as the implementation
   authorization boundary. When implementation discovers a related in-repository prerequisite needed to carry out those
   decisions, the orchestrator may extend the manifest, acquire coordination for the new scope, and delegate the smallest
   sufficient follow-on fix without asking again. Workers still stop at their assigned write scopes and return the
   evidence to the orchestrator.
-- Prefer surgical fixes to restructuring; add no include pipeline, templating layer, shared reference, or other
-  machinery unless it removes more complexity than it adds.
-- Respect every repository's generation pipelines and hooks; edit canonical sources only, regenerate artifacts through
-  build-only non-committing paths, and let designed commit hooks run at commit time.
-- Keep implementation agents from committing or pushing; the orchestrator commits per repository, scopes commits to task
+- Prefer surgical fixes to restructuring. Unless it removes more complexity than it adds, introduce no include pipeline,
+  templating layer, shared reference, or other machinery.
+- Respect every repository's generation pipelines and hooks. Edit canonical sources only. Regenerate artifacts through
+  build-only non-committing paths. Let designed commit hooks run at commit time.
+- Keep implementation agents from committing or pushing. The orchestrator commits per repository, scopes commits to task
   files, and honors the host's coordination and shared-worktree rules.
 
 ## Intake
@@ -85,7 +85,7 @@ implemented fixes.
 - Give every investigator the same repository boundary and pre-existing-dirt list.
 - Map canonical-versus-generated relationships and the exact build pipelines that produce generated artifacts.
 - Read build configuration and generator inputs before assigning canonical ownership to a file.
-- Identify duplicated and near-duplicated instruction, documentation, and script content; cite both sides precisely.
+- Identify duplicated and near-duplicated instruction, documentation, and script content. Cite both sides precisely.
 - Test suspected duplication with normalized diffs or content hashes appropriate to the artifact format.
 - Use byte comparison for exact copies and show the normalization used for near-duplicate claims.
 - Identify drift, including stale paths, version mismatches, contradictory rules, and unpublished changes.
@@ -103,7 +103,7 @@ implemented fixes.
 
 - Deduplicate overlapping observations without discarding the strongest file:line and mechanical evidence.
 - Keep linked but non-identical observations separate when they require different fixes or decisions.
-- Do not classify an unverified suspicion; return it to research or record it as an open question.
+- Do not classify an unverified suspicion. Return it to research or record it as an open question.
 - Regenerate suspected generated-copy drift through its build-only path and byte-verify the result with a diff.
 - Preserve the generator's inputs and command output needed to reproduce the verification.
 - Resolve symlinks and compare their targets before calling linked content duplicated or divergent.
@@ -116,8 +116,8 @@ implemented fixes.
 ## Decide
 
 - Apply decisions and delegated judgment already established by the user. Ask only for unresolved choices that
-  materially change the alignment outcome; prepare the evidence and concrete proposal before requesting approval.
-- Present confirmed drift separately from judgment calls; normally offer confirmed drift as an uncontroversial fix.
+  materially change the alignment outcome. Prepare the evidence and concrete proposal before requesting approval.
+- Present confirmed drift separately from judgment calls. Normally offer confirmed drift as an uncontroversial fix.
 - Include the affected repositories and the exact mechanical evidence with each proposed fix.
 - Present every judgment call as an explicit user question with a recommended option and its tradeoff.
 - Keep alternatives mutually exclusive where a choice determines the next plan.
@@ -125,7 +125,7 @@ implemented fixes.
   trim duplicated material, or whether to publish now or hold changes.
 - State the default preservation option when no simplification is clearly justified.
 - Resolve decisions affecting each fix before planning it. Continue independent research and already authorized fixes
-  while another choice is pending; do not treat a progress report as completion of the requested work.
+  while another choice is pending. Do not treat a progress report as completion of the requested work.
 - Record each user decision verbatim beside the finding it resolves.
 - Preserve a decision's condition or exception when it limits an otherwise approved change.
 - Carry declined changes into the deliberate-no-change list rather than silently omitting them.
@@ -141,12 +141,12 @@ implemented fixes.
 - Specify per-repository verification, commit sequencing, publish sequencing, and any dependency between repositories.
 - Identify the point at which a downstream repository can safely consume an upstream generated or installed artifact.
 - In Claude Code, prefer plan mode.
-- Delegate implementation through `$codex-handoff` when available; otherwise use host subagents, otherwise implement
-  directly.
+- When `$codex-handoff` is available, delegate implementation through it. Otherwise, use host subagents. If those are
+  also unavailable, implement directly.
 - Use disjoint per-repository write scopes for delegated work in every implementation shape.
 - Reserve aggregate cross-repository validation for one owner so it runs once after dependent edits settle.
 - Keep the plan limited to user-approved decisions. Extend it autonomously for technical prerequisites covered by those
-  decisions; report and ask only when a new finding introduces a subjective consolidation choice, changes the repository
+  decisions. Report and ask only when a new finding introduces a subjective consolidation choice, changes the repository
   set or intended outcome, or crosses an unapproved destructive, publish, or other external-write boundary.
 
 ## Implement and finalize
@@ -161,7 +161,7 @@ implemented fixes.
 - Attribute an aggregate failure before acting: first rule out effects of this task's changes, formatters, hooks, and
   generators, including downstream failures outside the approved files. Continue past a failure only when evidence
   establishes that it is unrelated and the task's own checks still pass.
-- Use `$commit` when available after validation, passing only task files; never bypass it with `git add -A`,
+- When `$commit` is available, use it after validation, passing only task files. Never bypass it with `git add -A`,
   `git commit -a`, stash, or reset.
 - Inspect each scoped commit before creating the next so an upstream commit remains independently reversible.
 - Keep commits per repository so their histories, hooks, and publication states remain independently auditable.

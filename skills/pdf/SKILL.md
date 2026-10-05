@@ -19,10 +19,10 @@ semantic validation.
    may be processed by the configured model provider. Require explicit user authorization and an external-disclosure
    review before uploading or sending document contents outside that agent workflow. Package and language-data downloads
    do not authorize document disclosure.
-2. Preserve every original PDF byte-for-byte. Write a sibling output, copy, or explicitly named destination unless the
-   user authorizes destructive replacement.
+2. Preserve every original PDF byte-for-byte. Unless the user authorizes destructive replacement, write a sibling
+   output, copy, or explicitly named destination.
 3. Preserve monetary values, identifiers, dates, signs, and displayed precision as strings. Use `decimal.Decimal` for
-   arithmetic; never infer missing rows or silently discard headers, footnotes, continuation lines, or boundary pages.
+   arithmetic. Never infer missing rows or silently discard headers, footnotes, continuation lines, or boundary pages.
 4. Inspect structure and representative renders before choosing a transformation. Use the smallest tool that preserves
    the required layout, forms, annotations, and image quality.
 5. Validate every written PDF structurally and against task semantics. A command exiting successfully is not evidence
@@ -39,7 +39,7 @@ uv run "<skill-dir>/scripts/profile.py" "<input.pdf>"
 ```
 
 The helper emits schema-versioned JSON with integrity, encryption, page geometry/rotation, image counts, and per-page
-text coverage without document text. Stop on `password_required`; password handling is outside this skill.
+text coverage without document text. Stop on `password_required`. Password handling is outside this skill.
 
 When layout, cropping, OCR quality, signatures, or form placement matters, render the first and last page, every
 structural boundary, and any page behind a discrepancy. For dense charts, tables, or technical drawings, render at
@@ -51,15 +51,15 @@ higher resolution and crop or zoom the relevant region before reading values.
 | ----------------------------------------- | ------------------------------------------------------------------------ |
 | Quick reading or page-aware extraction    | Host PDF reader when available, then `pdftotext -layout`                 |
 | Coordinates, columns, or difficult tables | Poppler bounding boxes, then `pdfplumber` through `uv run`               |
-| Image-only or materially incomplete text  | OCRmyPDF with Tesseract; default languages `eng+ron`                     |
+| Image-only or materially incomplete text  | OCRmyPDF with Tesseract. Default languages: `eng+ron`                    |
 | Merge, split, rotate, or integrity checks | qpdf                                                                     |
 | Render pages or extract embedded images   | `pdftocairo` or `pdfimages`                                              |
 | Convert ordered images into a PDF         | img2pdf                                                                  |
-| Reduce size                               | qpdf lossless rewrite first; Ghostscript only for an accepted lossy pass |
+| Reduce size                               | qpdf lossless rewrite first. Ghostscript only for an accepted lossy pass |
 | Inspect, fill, flatten, or overlay forms  | Read [references/forms.md](references/forms.md) first                    |
 
-Read [references/recipes.md](references/recipes.md) only when exact commands for the selected extraction,
-transformation, OCR, image, comparison, or compression branch are needed.
+Only when exact commands for the selected extraction, transformation, OCR, image, comparison, or compression branch are
+needed, read [references/recipes.md](references/recipes.md).
 
 ## Execute and Reconcile
 
@@ -76,6 +76,6 @@ transformation, OCR, image, comparison, or compression branch are needed.
    semantic invariants. Retain OCR sidecars or extraction intermediates only when they are requested or useful evidence.
 
 Completion requires preserved originals, intentional outputs, successful structural checks, semantic reconciliation, and
-a concise report of paths and evidence. Lead read-only reports with `### 📄 PDF — 🔎 inspected, no files written`; use
-`### 📄 PDF — ✅ updated` only after all required validation passes, and `### 📄 PDF — ⛔ not deliverable` when a
-required check fails.
+a concise report of paths and evidence. Lead read-only reports with `### 📄 PDF — 🔎 inspected, no files written`. Only
+after all required validation passes, use `### 📄 PDF — ✅ updated`. When a required check fails, use
+`### 📄 PDF — ⛔ not deliverable`.

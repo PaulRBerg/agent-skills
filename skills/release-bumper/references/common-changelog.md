@@ -1,6 +1,6 @@
 # Common Changelog
 
-Write stable release notes for consumers. The structure validator owns mechanical conformance; this reference owns the
+Write stable release notes for consumers. The structure validator owns mechanical conformance. This reference owns the
 agent's semantic and editorial decisions. Full specification: <https://common-changelog.org/>.
 
 ## Consumer Contract
@@ -12,12 +12,12 @@ agent's semantic and editorial decisions. Full specification: <https://common-ch
 - Link the release version to the matching GitHub release/tag and each change to the best PR, falling back to a commit
   only when no PR exists.
 
-Run `scripts/validate-changelog.py` with the expected version, date, and tag after writing. Fix its structural errors;
-do not ask it to decide category, wording, importance, or whether a change belongs in the release.
+Run `scripts/validate-changelog.py` with the expected version, date, and tag after writing. Fix its structural errors.
+Do not ask it to decide category, wording, importance, or whether a change belongs in the release.
 
 ## Write Entries
 
-Start each item with an imperative present-tense verb and make it understandable without its category heading:
+Start each item with an imperative present-tense verb. Make each item understandable without its category heading:
 
 ```md
 ### Added
@@ -33,8 +33,8 @@ Mark breaking effects explicitly and place them before non-breaking items in the
 - **Installer (breaking):** enable silent mode by default
 ```
 
-Use subsystem prefixes only when they improve comprehension. Keep each change self-contained and brief; longer
-explanation belongs in the linked PR/commit unless the source lacks necessary context.
+Only when subsystem prefixes improve comprehension, use them. Keep each change self-contained and brief. Unless the
+source lacks necessary context, longer explanation belongs in the linked PR/commit.
 
 ## Select Relevant Changes
 
@@ -44,7 +44,7 @@ or location. Runtime environment changes, refactors, language-feature changes, a
 release-relevant.
 
 Rephrase inconsistent commit language into product terminology. Merge related commits and fixups into one surviving
-outcome. Prefer the PR that best explains the change; include at most the few references needed to reach that context.
+outcome. Prefer the PR that best explains the change. Include at most the few references needed to reach that context.
 Author attribution is optional and useful only when the project's conventions make it meaningful.
 
 ## Prerelease Promotion

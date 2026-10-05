@@ -9,23 +9,23 @@ description:
 
 # Repo Rename
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
 Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set before applying a repository rename.
 
 ## Scope
 
 - Rename the current GitHub repository, matching local folder, and `origin` URL.
-- Update literal old paths in `~/.claude/projects`, `~/claude/projects` when present, `~/.codex/sessions`, and
-  `~/.codex/config.toml` only when the repository has an active Claude Code or Codex transcript; this continuity update
-  does not apply to repos with no active transcripts.
+- Only when the repository has an active Claude Code or Codex transcript, update literal old paths in
+  `~/.claude/projects`, `~/claude/projects` when present, `~/.codex/sessions`, and `~/.codex/config.toml`. This
+  continuity update does not apply to repos with no active transcripts.
 - Update constrained literal old-name references inside the repository, excluding VCS, dependencies (including Python
   virtual environments), caches, and generated build directories.
-- By default, skip `PROMPT.md`, `TODO.md`, and symlinks before reading replacement candidates; prune excluded
+- By default, skip `PROMPT.md`, `TODO.md`, and symlinks before reading replacement candidates. Prune excluded
   directories during discovery. When the user explicitly authorizes updating notes, dependencies, caches, or generated
   files, pass `--include-local-state` to both preview and apply. This includes those repository text files while
-  preserving file permissions; symlinks, binary files, and `.git` remain excluded.
+  preserving file permissions. Symlinks, binary files, and `.git` remain excluded.
 - The helper honors `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, gates continuity updates on active transcripts, and replaces
   only the absolute repository path in continuity stores and Codex config.
 - Do not modify other transcript stores, archives, remotes, or repositories.
@@ -37,8 +37,8 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
      every non-alphanumeric character replaced by `-`) and check it exists and is non-empty.
    - Codex: resolve `${CODEX_HOME:-~/.codex}/sessions` and check whether any session file references the exact absolute
      repo path.
-   - If neither exists, state that the transcript-continuity update does not apply; the rename may still proceed for the
-     GitHub, git, filesystem, and repository-content changes below.
+   - If neither exists, state that the transcript-continuity update does not apply. In that case, the rename may still
+     proceed for the GitHub, git, filesystem, and repository-content changes below.
 
 2. Resolve the skill directory and run the helper from the repository to produce a read-only preview:
 
@@ -55,7 +55,7 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 
 4. Otherwise present the complete preview and require explicit confirmation in a subsequent user message. Explain that
    the confirmation authorizes the GitHub rename, local folder move, Claude project-folder move when enabled, origin
-   update, and every listed continuity/repository replacement. Lead with `### ⚠️ Rename preview — no changes made`; show
+   update, and every listed continuity/repository replacement. Lead with `### ⚠️ Rename preview — no changes made`. Show
    GitHub, folder, origin, replacement counts, and rollback coverage in compact tables, then the exhaustive file/count
    list. Put the exact confirmation token alone in code formatting. If any preview fact changes, regenerate it and ask
    again.

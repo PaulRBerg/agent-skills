@@ -10,14 +10,14 @@ description: "Cut a release: bump versions, write changelogs, commit, tag."
 
 # Release Bumper
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
 Release one package or several packages with version bumps, changelog entries, commits, and tags.
 
 A non-dry-run invocation authorizes the repository-local version edits, changelogs, commits, and annotated tags defined
 by this workflow. Do not add a generic confirmation gate after the agent derives the release plan. Ask only when an
-unresolved package selection or dependency-range policy changes the release set or approach; GitHub release creation
+unresolved package selection or dependency-range policy changes the release set or approach. GitHub release creation
 remains a separate external write governed below.
 
 ## Arguments
@@ -69,7 +69,7 @@ tag. It does not judge importance, wording, or semantic category.
 ## Workflow
 
 1. Run discovery with the user arguments mapped directly. Exit `2` means the target is not a releasable Git/package
-   repository; exit `64` means invalid input. Stop on either.
+   repository. Exit `64` means invalid input. Stop on either.
 2. Require `workingTree.clean`. Do not absorb unrelated work.
 3. Resolve unknown or ambiguous package selection. An explicit user version remains single-package only. If a target's
    `previousTags` version is below its manifest version, that version shipped untagged and the reported base is stale:
@@ -77,11 +77,11 @@ tag. It does not judge importance, wording, or semantic category.
    convention, include it in the push command, and rerun discovery. Ask only when no release commit is identifiable.
 4. Inspect each target's complete `changedFiles` and the net diff from its previous tag. Decide whether the surviving
    changes warrant a release. Runtime environments, refactors, documentation, tests, and tooling can all be relevant in
-   context; filenames never decide this.
+   context. Filenames never decide this.
 5. For every relevant stable target without an explicit version, choose patch, minor, or major from the consumer-facing
    change. For beta releases, let the finalizer compute the mechanical transition.
 6. Run the finalizer. Review unsatisfied workspace edges. Accept its suggestion only for a simple dependency range when
-   that policy fits; choose peer and complex range policy explicitly. Add dependents and their agent-chosen release
+   that policy fits. Choose peer and complex range policy explicitly. Add dependents and their agent-chosen release
    versions, then rerun until the package set and dependency order are resolved.
 7. For a dry run, report the ordered package/version plan, range edits, changelog/tag/commit actions, and agent-decided
    skips. Stop before writes.
@@ -90,18 +90,18 @@ tag. It does not judge importance, wording, or semantic category.
 9. Update manifests and accepted dependency ranges. Validate every stable changelog with the helper.
 10. Format once using the repository's narrowest established command.
 11. Commit and tag dependencies before dependents. Use one commit and one annotated tag per package:
-    - single-package commit: `docs: release <version>`;
-    - monorepo commit: `docs: release <package> <version>`;
-    - single-package tag: follow observed `v<version>` or bare-semver facts;
+    - single-package commit: `docs: release <version>`.
+    - monorepo commit: `docs: release <package> <version>`.
+    - single-package tag: follow observed `v<version>` or bare-semver facts.
     - monorepo tag: follow observed package tag facts, defaulting to `<package-dir>@<version>`.
 12. Do not push. After success, recommend an exact `git push origin <tag>...` command containing only the tags created
-    by this execution; do not use `--tags`.
+    by this execution. Do not use `--tags`.
 13. Before the final report, inspect `.github/workflows/` for an active workflow that creates or publishes GitHub
     releases from pushed tags. A filename such as `release.yml` is a hint, not proof. Use `gh release list` to check
     whether the repository has an established history of maintained GitHub releases. If it does, offer to create a
     GitHub release for each new tag, pending the user's approval, according to these rules:
-    - One to three tags and applicable release CI exists: do not offer manual release creation; the tag push should
-      trigger CI.
+    - One to three tags and applicable release CI exists: do not offer manual release creation. In that case, the tag
+      push should trigger CI.
     - No applicable release CI exists: offer to create one release per new tag with `gh release create`.
     - More than three tags will be pushed together: offer to create one release per tag with `gh release create` even
       when release CI exists, because GitHub does not create tag push events above that threshold. See
@@ -112,9 +112,9 @@ tag. It does not judge importance, wording, or semantic category.
 
 ## Safety and Completion
 
-Helper failures mean malformed input, violated invariants, or failed validation; an agent decision remaining unresolved
-is data in the JSON, not a helper failure. Discovery and dry-run are read-only. Do not write changelogs before the final
-stable package set is known, and do not infer a tag convention when discovery reports observed facts.
+Helper failures mean malformed input, violated invariants, or failed validation. An unresolved agent decision is data in
+the JSON, not a helper failure. Discovery and dry-run are read-only. Do not write changelogs before the final stable
+package set is known, and do not infer a tag convention when discovery reports observed facts.
 
 Dry-run completion requires a discovery-backed, agent-reviewed action preview with zero writes. Release completion
 requires validated manifests and stable changelogs, formatting, one commit and annotated tag per package in dependency

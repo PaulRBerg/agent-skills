@@ -1,6 +1,6 @@
 # Spreadsheet Recipes
 
-Use these as starting points. Keep amounts as strings, preserve source data, and validate the output with `peek.py`.
+Use these as starting points. Keep amounts as strings. Preserve source data. Validate the output with `peek.py`.
 
 ## Exact Decimal Transform
 
@@ -51,8 +51,8 @@ for row in candidate_rows:
 
 ## Schema Validation
 
-Generate a draft schema from representative data, edit it, then validate future files. `qsv schema` creates stats
-sidecars next to its input, so run it against a temp copy when the source directory must stay clean.
+Generate a draft schema from representative data. Edit the schema, then validate future files. `qsv schema` creates
+stats sidecars next to its input. When the source directory must stay clean, run it against a temporary copy.
 
 ```sh
 tmpdir=$(mktemp -d)
@@ -72,7 +72,7 @@ uv run "<skill-dir>/scripts/peek.py" txs.tsv --strict --house
 
 ## Keyed Diff
 
-Use qsv when primary key values are unique; use daff for row/column-aware human review.
+When primary key values are unique, use qsv. Use daff for row/column-aware human review.
 
 ```sh
 qsv extdedup --select tx_id txs.tsv --no-output
@@ -82,7 +82,7 @@ bunx daff before.tsv after.tsv
 
 ## External-Disclosure Profile
 
-Use redaction when a report will be posted, published, or sent to a third party, or when the user asks. Internal agent
+When a report will be posted, published, or sent to a third party, or when the user asks, use redaction. Internal agent
 reports may include relevant unredacted samples.
 
 ```sh
@@ -94,7 +94,7 @@ availability without making transformation recommendations.
 
 ## Safe Workbook Creation
 
-Use XlsxWriter for new workbooks and write formulas, not Python-computed constants.
+Use XlsxWriter for new workbooks. Write formulas, not Python-computed constants.
 
 ```python
 #!/usr/bin/env -S uv run --script
