@@ -1,6 +1,6 @@
 ---
 compatibility:
-  Designed for Codex and Claude Code; prefer the chromium-browser skill for rendered verification when available,
+  Designed for Codex and Claude Code. Prefer the chromium-browser skill for rendered verification when available,
   otherwise the host's DevTools/browser tool.
 name: frontend-design
 skill-dependencies:
@@ -13,7 +13,7 @@ description:
 
 # Frontend Design
 
-Create a working frontend with a clear, subject-specific point of view, then prove it in the rendered UI.
+Create a working frontend with a clear, subject-specific point of view. Then prove it in the rendered UI.
 
 ## Contract
 
@@ -23,8 +23,8 @@ Create a working frontend with a clear, subject-specific point of view, then pro
   design system as authoritative. Fidelity requests override this skill's defaults.
 - Preserve the stack and working behavior. Do not replace the framework or design system, add dependencies, invent
   features, or fetch or generate media unless the request requires it.
-- Make the smallest defensible assumption when the subject, audience, or page job is missing. State it before building;
-  ask only when the answer would materially change scope or identity.
+- Make the smallest defensible assumption when the subject, audience, or page job is missing. State it before building.
+  Ask only when the answer would materially change scope or identity.
 
 ## Workflow
 
@@ -33,9 +33,9 @@ Create a working frontend with a clear, subject-specific point of view, then pro
 Inspect the affected route or component, neighboring UI, tokens, typography, assets, dependencies, and repository
 validation commands. Identify:
 
-- the concrete subject and audience;
-- the screen's single primary job and content hierarchy;
-- the existing visual language and interaction conventions;
+- the concrete subject and audience.
+- the screen's single primary job and content hierarchy.
+- the existing visual language and interaction conventions.
 - the required viewports, themes, states, and accessibility constraints.
 
 Use real product content and supplied assets wherever possible. If copy is missing, write only what the user needs to
@@ -58,28 +58,28 @@ process narration internal unless the user asked to choose among directions.
 ### 3. Run the anti-default critique
 
 Apply the **subject-swap test**: mentally replace the subject with an unrelated one. Any major choice that still works
-unchanged is probably a template default; revise it or justify why it is structurally correct.
+unchanged is probably a template default. Revise that choice or justify why it is structurally correct.
 
 Make every visual device earn its place. Cards, pills, gradients, numbering, dividers, oversized type, split heroes,
 illustrations, and animation must communicate hierarchy, function, sequence, or subject—not merely decorate. Concentrate
 expressive force in the signature and make the surrounding system support it.
 
-Name concrete patterns to avoid; generic "avoid an AI look" advice only swaps one default for another. Without a brief
-that calls for them, avoid these known model defaults: cream or off-white backgrounds, italic accent words in headlines,
-numbered `01/02/03` section labels, monospace labels, and pill-shaped buttons. After the first render, name any other
-default the result fell back on and revise it.
+Name concrete patterns to avoid. Generic "avoid an AI look" advice only replaces one default with another. Without a
+brief that calls for them, avoid these known model defaults: cream or off-white backgrounds, italic accent words in
+headlines, numbered `01/02/03` section labels, monospace labels, and pill-shaped buttons. After the first render, name
+any other default the result used and revise it.
 
 ### 4. Build the actual experience
 
 - Follow local components, tokens, styling architecture, and dependency versions before introducing new primitives.
-- Match composition to use: operational tools favor scannable information and efficient repeated actions; editorial or
+- Match composition to use: operational tools favor scannable information and efficient repeated actions. Editorial or
   marketing surfaces may use a more expressive narrative.
 - Make the first viewport establish both identity and primary purpose. For an application or tool, show the real working
   experience rather than wrapping it in an unrequested landing page.
 - Use structural devices only when they encode real relationships. Use cards for genuinely grouped or repeated objects,
   not as the default wrapper for every section, and avoid nested cards.
-- Give typography deliberate display, body, and utility roles. Use available fonts first; do not add a font dependency
-  solely to manufacture novelty.
+- Give typography deliberate display, body, and utility roles. Use available fonts first. Do not add a font dependency
+  solely for novelty.
 - Write interface copy from the user's side: specific nouns, active verbs, consistent action names, sentence case, and
   useful empty and error states. A control's label must describe its result.
 - Use familiar controls and the project's icon library. Give unfamiliar icon-only controls accessible names and visible
@@ -90,22 +90,22 @@ default the result fell back on and revise it.
   and layout shift at narrow and wide widths.
 - Preserve semantic structure, keyboard operation, visible focus, adequate contrast, and target sizes. Match the
   project's accessibility standard when it is stricter.
-- Keep selector specificity and component ownership predictable; do not rely on competing selectors or fragile cascade
+- Keep selector specificity and component ownership predictable. Do not rely on competing selectors or fragile cascade
   order to establish spacing and state.
 
 ### 5. Render, inspect, and revise
 
-Run repository-required checks and the narrowest additional checks that prove the changed behavior; select among
+Run repository-required checks and the narrowest additional checks that prove the changed behavior. Select among
 formatting, lint, typecheck, tests, and build according to the affected surface. Reuse passing evidence until edits or
 unresolved concerns invalidate it. Then do rendered verification with the chromium-browser skill when it is available in
-this session; otherwise use the host's DevTools/browser tool. Do not fall back to Computer Use or ad-hoc Playwright
+this session. Otherwise, use the host's DevTools/browser tool. Do not fall back to Computer Use or ad-hoc Playwright
 scripts while a DevTools browser tool is available.
 
 Scale the inspection matrix to the change. Repository instructions may reduce the viewport/state matrix, including
-waiving multi-viewport checks; follow them. Absent such instructions, a small edit to existing UI needs verification
-only of the changed states at one representative viewport, while a new or substantially redesigned surface needs
-representative narrow and wide viewports and every changed interaction and state. Behavior belongs in the repository's
-automated tests where they exist; use the browser for visual, layout, and theme questions.
+waiving multi-viewport checks. Follow those instructions. Absent such instructions, a small edit to existing UI needs
+verification only of the changed states at one representative viewport, while a new or substantially redesigned surface
+needs representative narrow and wide viewports and every changed interaction and state. Behavior belongs in the
+repository's automated tests where they exist. Use the browser for visual, layout, and theme questions.
 
 Check the rendered result for content hierarchy, subject specificity, asset loading, overflow, overlap, truncation,
 contrast, focus, hover, motion, empty/error states, and theme variants in scope. Compare it with the brief and the art
@@ -120,7 +120,7 @@ Completion requires the requested artifact or code, a subject-specific direction
 passing relevant local checks, and rendered inspection evidence when tooling permits. Report the direction in one
 sentence, the checks and viewports exercised, and any remaining limitation.
 
-Finish builds with `### ✨ Built: <surface>`, `🎨 Direction — <one sentence>`, and `### 🧪 Verification`; use a compact
-viewport/state/result table when several states were inspected and link screenshots or artifacts when available. Add
-`### ⚠️ Remaining` only when non-empty. Agent-report decoration does not authorize emoji or ASCII ornament in shipped
-interface copy, snapshots, or source unless the brief or design system calls for it.
+Finish builds with `### ✨ Built: <surface>`, `🎨 Direction — <one sentence>`, and `### 🧪 Verification`. When several
+states were inspected, use a compact viewport/state/result table. When screenshots or artifacts are available, link
+them. Add `### ⚠️ Remaining` only when non-empty. Agent-report decoration does not authorize emoji or ASCII ornament in
+shipped interface copy, snapshots, or source unless the brief or design system calls for it.

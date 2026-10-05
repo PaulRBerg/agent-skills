@@ -1,8 +1,9 @@
 # Browser Wallet Signing
 
-Check capabilities and establish the public sender during preparation. Open a signing request after the review and
-authority checks in `SKILL.md`. A user-requested contract call needs no additional chat approval or manual wallet click;
-complete its wallet confirmations through the configured browser automation after verifying the request below.
+Check capabilities during preparation. Establish the public sender during preparation. Open a signing request after the
+review and authority checks in `SKILL.md`. A user-requested contract call needs no additional chat approval or manual
+wallet click. After verifying the request below, complete its wallet confirmations through the configured browser
+automation.
 
 ## Availability
 
@@ -14,43 +15,47 @@ printf '%s\n' "$CAST_SEND_HELP" | rg --no-config -- '--browser'
 ```
 
 Check the help command's exit status as well as the match. Use a clean environment for help output because Cast may
-print environment-backed credential defaults. Browser support is specific to each subcommand; `send --browser` does not
+print environment-backed credential defaults. Browser support is specific to each subcommand. `send --browser` does not
 imply `wallet address --browser` or `wallet sign --browser` exists.
 
-If unavailable in a browser-only workflow, stop without a signer fallback. Otherwise the signer preferences in
-`SKILL.md` apply. Browser signing requires an interactive browser and local port `9545`; it does not work in ordinary
-headless CI or SSH sessions.
+If browser signing is unavailable in a browser-only workflow, stop without substituting another signer. Otherwise, the
+signer preferences in `SKILL.md` apply. Browser signing requires an interactive browser and local port `9545`. It does
+not work in ordinary headless CI or SSH sessions.
 
 ### EIP-7702 Authorization Boundary
 
-Read [eip7702.md](eip7702.md) before preparing delegation or revocation. Check `cast wallet sign-auth --help` in a clean
-environment separately: `send --browser` does not establish authorization-signing support. When `sign-auth` lacks
-browser support, a browser-only request needing a new authorization is blocked before opening a signer. Report the
-missing capability and supported next step; never substitute message/typed-data signing or introduce secret-entry
-automation. A different signer requires authorization under the user's signer constraints.
+Read [eip7702.md](eip7702.md) before preparing delegation or revocation. Separately check `cast wallet sign-auth --help`
+in a clean environment. `send --browser` does not establish authorization-signing support. If `sign-auth` lacks browser
+support, stop a browser-only request that needs a new authorization before opening a signer. Report the missing
+capability and supported next step. Never substitute message/typed-data signing or introduce secret-entry automation.
+
+A different signer requires authorization under the user's signer constraints.
 
 An already approved, verified authorization can accompany `cast send --auth "$SIGNED_AUTH" --browser` when the installed
 Cast and connected wallet support that type-4 transaction. The browser signs the outer transaction as its sender/fee
-payer; the authorization's recovered authority may differ. An address-valued `--auth` needs a local signer and cannot
+payer. The authorization's recovered authority may differ. An address-valued `--auth` needs a local signer and cannot
 obtain a new authorization through the browser sender. Preserve the full reviewed authorization list and transaction
-type in the wallet; reject unsupported transport, dropped tuples, or substituted authorizations. Apply the existing
-fee-edit exception only to gas settings. Verify authorization application and account code after inclusion as well as
-the receipt.
+type in the wallet.
+
+Reject unsupported transport, dropped tuples, or substituted authorizations. Apply the existing fee-edit exception only
+to gas settings. After inclusion, verify authorization application, account code, and the receipt.
 
 ## Resolve the Sender
 
-Use the public address supplied by the user or already known from the connected wallet as `OWNER` for preparation.
+For preparation, use the user's public address or the connected wallet's already known public address as `OWNER`.
 Resolve ENS through `$evm-atlas`. Do not load key material to discover an address. Use `cast wallet address --browser`
-only if that exact subcommand's current help exposes `--browser`; otherwise inspect the connected wallet's public
-account through browser automation. Ask for the public address only when it cannot be established from available
-evidence.
+only if that exact subcommand's current help exposes `--browser`. Otherwise, inspect the connected wallet's public
+account through browser automation. Ask for the public address only when available evidence cannot establish it.
 
-`cast send --browser` does not enforce `--from` or `--nonce`: the wallet signs with its active account and may
-substitute that account's nonce, so a mismatch broadcasts from the wrong sender. Immediately before each authorized
-broadcast, run `cast wallet address --browser` (when its help exposes `--browser`) and require the result to equal the
-reviewed `OWNER`; otherwise inspect the active wallet account. On a mismatch, select the already authorized account and
-recheck it before proceeding; never substitute a different sender. After broadcast, verify the transaction's `from` and
-nonce against the review as part of receipt verification.
+`cast send --browser` does not enforce `--from` or `--nonce`. The wallet signs with its active account and may
+substitute that account's nonce. Thus, a mismatch broadcasts from the wrong sender.
+
+Immediately before each authorized broadcast, run `cast wallet address --browser` when its help exposes `--browser`.
+Require the result to equal the reviewed `OWNER`. If that subcommand lacks browser support, inspect the active wallet
+account. On a mismatch, select the already authorized account. Recheck it before proceeding. Never substitute a
+different sender.
+
+After broadcast, verify the transaction's `from` and nonce against the review as part of receipt verification.
 
 ## Authorized Broadcast
 
@@ -66,67 +71,74 @@ cast send "$CONTRACT" 'transfer(address,uint256)' "$TO" "$AMOUNT" \
   --browser
 ```
 
-`$RPC_URL` is the reviewed continuous-provider transport selected under `SKILL.md`; never use it for a standalone read.
+`$RPC_URL` is the reviewed continuous-provider transport selected under `SKILL.md`. Never use it for a standalone read.
 
 The example uses the default Ethereum fee policy. Use the user- or consumer-selected policy from `SKILL.md` when one is
-specified. For a fixed legacy policy, replace the fee pair with `--legacy --gas-price "$GAS_PRICE"` and preserve the
-reviewed gas limit. Do not pass EIP-1559 priority-fee flags with a legacy transaction.
+specified. For a fixed legacy policy, replace the fee pair with `--legacy --gas-price "$GAS_PRICE"`. For that policy,
+preserve the reviewed gas limit. Do not pass EIP-1559 priority-fee flags with a legacy transaction.
 
-For an authorized contract call, inspect the wallet request and verify its chain, account, target, decoded intent,
+For an authorized contract call, inspect the wallet request. Verify its chain, account, target, decoded intent,
 calldata, native value, nonce, transaction type, gas settings, and authorization list (if present) against the review.
-Complete the matching connection, chain-switch, and signing/confirmation prompts yourself. Reject mismatched requests;
-rebuild and review changes under `SKILL.md` before proceeding. Do not ask the user to click merely because a wallet
-confirmation is present. If the configured tools cannot inspect or operate the prompt, or unlocking/hardware interaction
-requires the user, report that concrete limitation and request only the necessary interaction. Never bypass host
-restrictions or expose secrets to automate it.
+Complete the matching connection, chain-switch, and signing/confirmation prompts yourself. Reject mismatched requests.
+For a mismatched request, rebuild the transaction under `SKILL.md`. Review those changes before proceeding.
+
+Do not ask the user to click merely because a wallet confirmation is present. If the configured tools cannot inspect or
+operate the prompt, or unlocking/hardware interaction requires the user, report that concrete limitation.
+
+For that limitation, request only the necessary interaction. Never bypass host restrictions or expose secrets to
+automate it.
 
 Unless the reviewed workflow fixes its fees, the user may deliberately edit the gas limit, gas price, max fee per gas,
 or max priority fee per gas in Rabby's confirmation UI, including by selecting a different tier. Treat their approval of
 the final wallet screen as authorization for those gas settings. Apply `SKILL.md`'s chain-specific accounting to the
-resulting reserve, additional fees, and affordability; an execution fee cap may not cap the total cost. Do not reject,
+resulting reserve, additional fees, and affordability. An execution fee cap may not cap the total cost. Do not reject,
 stop, request another approval, or resimulate solely because those values differ from the reviewed command.
 
-This exception applies only to gas settings deliberately changed and approved by the user in the wallet UI. Agent
-confirmation preserves reviewed fees; wallet-selected changes require simulation and a revised review first. Confirm the
+This exception applies only to gas settings the user deliberately changes and approves in the wallet UI. When the agent
+confirms, preserve reviewed fees. Wallet-selected changes require simulation and a revised review first. Confirm the
 chain, account, target, calldata, native value, nonce, and authorization list (if present) still match the reviewed
-transaction; reject the request if any of those fields change.
+transaction. If any of those fields change, reject the request.
 
-For a workflow whose transfer value depends on its fee reserve, including exact-zero and best-effort sweeps, preserve
-the reviewed transaction type, gas limit, and gas price or both EIP-1559 fee caps. Reject wallet changes before signing
-and rebuild, simulate, and review the dependent transfer value. Cast 1.8.3+ forwards an explicit `--legacy` type to the
-browser wallet; earlier versions could drop it at the provider boundary, so confirm the wallet screen shows the reviewed
-type. If the wallet cannot preserve a legacy request, stop without submitting an EIP-1559 substitute.
+Some workflows have a transfer value that depends on the fee reserve, including exact-zero and best-effort sweeps. For
+these workflows, preserve the reviewed transaction type, gas limit, and gas price or both EIP-1559 fee caps. If the
+wallet changes those fields, reject before signing. Under that condition, rebuild the dependent transfer value. Simulate
+that value. Review it.
 
-Do not combine `--browser` with another signer flag. Capture the transaction hash, then have `$evm-atlas` verify the
+Cast 1.8.3+ forwards an explicit `--legacy` type to the browser wallet. Earlier versions could drop it at the provider
+boundary. Thus, confirm the wallet screen shows the reviewed type. If the wallet cannot preserve a legacy request, stop
+without submitting an EIP-1559 substitute.
+
+Do not combine `--browser` with another signer flag. Capture the transaction hash. Then have `$evm-atlas` verify the
 receipt before reporting success.
 
 ## Timing
 
-Run the browser broadcast command in a persistent session or in the background so the agent can operate wallet prompts
-while Cast waits. Preserve the process until the wallet responds; when user-only interaction is needed, its duration is
-unbounded. A short synchronous timeout risks killing the process after the wallet has already broadcast but before
-`cast` prints the hash back — the transaction still lands on-chain, but the operator loses the hash and cannot
-immediately confirm it.
+Run the browser broadcast command in a persistent session or in the background. This lets the agent operate wallet
+prompts while Cast waits. Preserve the process until the wallet responds. When interaction requires the user, its
+duration is unbounded.
 
-Add `--async` to every browser-signed broadcast, not only as a fallback: it prints the transaction hash as soon as
-signing and broadcast succeed and exits without also waiting for a receipt, shrinking the window in which a timeout can
-outrace the printed output. Poll for the receipt separately afterward.
+A short synchronous timeout risks killing the process after the wallet has already broadcast but before `cast` prints
+the hash. The transaction still lands on-chain, but the operator loses the hash and cannot immediately confirm it.
+
+Add `--async` to every browser-signed broadcast, not only as a fallback. It prints the transaction hash as soon as
+signing and broadcast succeed. It exits without also waiting for a receipt. This reduces the time during which a timeout
+can precede the printed output. Poll for the receipt separately afterward.
 
 ## Recovering From a Killed or Timed-Out Process
 
-If the process is killed or times out before printing a hash, its exit status alone does not prove nothing was broadcast
-— the wallet may have submitted the transaction via its own configured RPC provider, independent of the `--rpc-url`
-passed to `cast`, and mempool visibility lags and varies across providers (especially behind a load-balanced RPC
-aggregator). Do not treat a single provider's pending-transaction count or a single provider lookup miss as proof of
-non-broadcast. Before concluding nothing was sent:
+If the process is killed or times out before printing a hash, its exit status alone does not prove nothing was
+broadcast. The wallet may have submitted the transaction via its own configured RPC provider, independently of the
+`--rpc-url` passed to `cast`. Mempool visibility lags and varies across providers, especially behind a load-balanced RPC
+aggregator. Do not treat one provider's pending-transaction count or one provider lookup miss as proof of non-broadcast.
+Before concluding nothing was sent:
 
 - Ask `$evm-atlas` to repeat the raw `eth_getTransactionByHash` lookup over 30-60 seconds to allow mempool propagation,
   rather than accepting one immediate miss as final.
-- Inspect the wallet's pending-activity view through browser automation; ask the user only if it is inaccessible. The
+- Inspect the wallet's pending-activity view through browser automation. Ask the user only if it is inaccessible. The
   wallet records submission independently of any RPC endpoint the agent queries.
 
-Only report the outcome as resolved (confirmed or genuinely never sent) once one of these gives a positive or a stable,
-repeated negative result.
+Report the outcome as resolved only once one of these gives a positive or a stable, repeated negative result. A resolved
+outcome is confirmed or genuinely never sent.
 
 ## Message Signing
 
@@ -138,48 +150,51 @@ env -i PATH="$PATH" cast wallet sign --help
 env -i PATH="$PATH" cast wallet verify --help
 ```
 
-Require `sign` to expose `--browser` and `--from`; for typed data, also require `--data` and `--from-file` on both
+Require `sign` to expose `--browser` and `--from`. For typed data, also require `--data` and `--from-file` on both
 subcommands. If unavailable, stop a browser-only flow without loading a key or substituting a transaction signature.
 
 Use an EIP-712 JSON file containing `domain`, `types`, `primaryType`, and `message`. An API's `values` object is not a
-Cast `message`: use the consuming workflow's validated adapter and preserve the domain, type definitions, and all signed
-values exactly. Keep large integers as exact decimal strings or losslessly parsed integers. Do not infer a primary type
-from JSON key order or sign the raw API response.
+Cast `message`. Use the consuming workflow's validated adapter. Preserve the domain, type definitions, and all signed
+values exactly. Keep large integers as exact decimal strings or losslessly parsed integers.
+
+Do not infer a primary type from JSON key order or sign the raw API response.
 
 Present the exact plain-message bytes or full decoded EIP-712 domain, primary type, and payload. Review the owner,
 chain, verifying contract, authorizations, amounts, nonces, deadlines, and intended recipient of the signature where
-applicable. Bind the browser account to `OWNER`. Only after approval, sign and verify the same payload:
+applicable. Bind the browser account to `OWNER`. Only after approval, sign the payload. Then verify the same payload:
 
 ```sh
 SIGNATURE="$(cast wallet sign --data --from-file "$TYPED_DATA_JSON" --from "$OWNER" --browser)" || exit 1
 cast wallet verify --address "$OWNER" --data --from-file "$TYPED_DATA_JSON" "$SIGNATURE" || exit 1
 ```
 
-For plain messages, use `cast wallet sign "$MESSAGE" --from "$OWNER" --browser`, then
+For plain messages, use `cast wallet sign "$MESSAGE" --from "$OWNER" --browser`. Then use
 `cast wallet verify --address "$OWNER" "$MESSAGE" "$SIGNATURE"`. Do not use `--no-hash` for EIP-712 documents or
 ordinary prefixed messages.
 
-Message signing is a human-interaction wait: preserve the process until the wallet responds. `--async` applies to
-broadcasts, not `wallet sign`. Treat sign or verify failure as blocking; never return or submit an unverified signature.
-This local recovery check requires a signature recoverable to `OWNER`; it does not verify EIP-1271 contract-wallet
-signatures. If that check cannot establish the reviewed signer, stop this flow.
+Message signing waits for human interaction. Preserve the process until the wallet responds. `--async` applies to
+broadcasts, not `wallet sign`. Treat sign or verify failure as blocking. Never return or submit an unverified signature.
+This local recovery check requires a signature recoverable to `OWNER`.
+
+It does not verify EIP-1271 contract-wallet signatures. If that check cannot establish the reviewed signer, stop this
+flow.
 
 Return the verified signature and signer address. Submit it elsewhere only when approval explicitly covers that
-submission. For Permit2, the consuming workflow must bind the permit to its reviewed quote and state; a refreshed quote
+submission. For Permit2, the consuming workflow must bind the permit to its reviewed quote and state. A refreshed quote
 or changed payload requires a new review and signature. Never silently reuse or modify a signed payload.
 
 ## Failure Handling
 
-On a port conflict, missing browser, rejected wallet request, timeout, chain mismatch, or account mismatch, stop and
-report the failure. Do not silently fall back to a private key or retry a broadcast. If the user selects another signer,
-update the transaction review when the sender or command changes.
+On a port conflict, missing browser, rejected wallet request, timeout, chain mismatch, or account mismatch, stop. Report
+that failure. Do not silently substitute a private key or retry a broadcast. If the user selects another signer, update
+the transaction review when the sender or command changes.
 
 Classify each failure before retrying:
 
 - `Wallet connection timeout` before `Wallet connected`, or `ChainSwitch rejected`: nothing was signed. Confirm the
-  sender nonce is unchanged, then retry the same reviewed command.
+  sender nonce is unchanged. Then retry the same reviewed command.
 - A signed request rejected by an RPC for another chain, such as `nonce too low` with a different chain ID or `minNonce`
-  in the error: the wallet's network state is inconsistent. The printed hash was signed; look it up on the reviewed
-  chain and confirm the nonce is unchanged. Reset the `localhost:9545` site network to the reviewed chain through
-  browser automation, or ask the user only if that control is inaccessible, before retrying.
+  in the error: the wallet's network state is inconsistent. The printed hash was signed. Look it up on the reviewed
+  chain. Confirm the nonce is unchanged. Before retrying, reset the `localhost:9545` site network to the reviewed chain
+  through browser automation. Ask the user only if that control is inaccessible.
 - Each command switches the wallet to its chain. Sending first on the already connected chain avoids a switch prompt.

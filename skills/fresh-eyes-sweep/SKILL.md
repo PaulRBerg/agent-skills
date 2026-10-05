@@ -9,24 +9,24 @@ skill-dependencies:
   - commit
 description:
   Audit an entire repository with fresh eyes for correctness errors, bugs, omissions, duplication, inconsistencies,
-  stale, duplicate, or tautological tests, stale comments, and other evidenced mistakes; fix every safe issue and verify
-  the result.
+  stale, duplicate, or tautological tests, stale comments, and other mistakes supported by evidence. Fix every safe
+  issue and verify the result.
 ---
 
 # Fresh Eyes Sweep
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
-Inspect the requested Git scope for evidenced mistakes, fix every safe issue, and account for every mapped file. A
-verified no-op requires that coverage and a full pass that finds nothing new. Leave sound work unchanged; edits are not
-required to demonstrate a successful sweep.
+Inspect the requested Git scope for mistakes supported by evidence. Fix every safe issue. Account for every mapped file.
+A verified no-op requires that coverage and a full pass that finds nothing new. Leave sound work unchanged. Edits are
+not required to demonstrate a successful sweep.
 
 `--max-runtime DURATION` is optional: it is a positive integer followed by `m` or `h`, such as `45m` or `3h`. Reject an
 invalid duration, unknown option, or ambiguous positional input. When a deadline is supplied, calculate it before
-auditing and reserve the final 15% for aggregate validation and reporting, clamped to 5–30 minutes and never exceeding
-the total runtime. At that window, settle in-flight slices and do not start new fixes; report an incomplete sweep with
-its ledger rather than overrunning the deadline.
+auditing. In that case, reserve the final 15% for aggregate validation and reporting, clamped to 5–30 minutes and never
+exceeding the total runtime. At that window, settle in-flight slices and do not start new fixes. Report an incomplete
+sweep with its ledger rather than overrunning the deadline.
 
 ## Overnight Autonomy
 
@@ -73,7 +73,7 @@ uv run "<skill-dir>/scripts/sweep-ledger.py" summary --ledger <scratch.json>
 ```
 
 `pending` returns the next unaccounted paths in stable order. `summary` returns exact status counts, pre-existing edit
-count, completeness, percentage inputs, and a ten-cell bar. Use those facts directly; never estimate progress or
+count, completeness, percentage inputs, and a ten-cell bar. Use those facts directly. Never estimate progress or
 reimplement ledger arithmetic.
 
 ## Setup
@@ -81,30 +81,34 @@ reimplement ledger arithmetic.
 1. Require Git and read applicable repository instructions. Record the worktree root, starting commit, starting status,
    resolved scope, and any deadline and validation window.
 2. Initialize the ledger for the requested scope. The agent may additionally inspect shared configuration and
-   instructions needed to understand that scope; do not silently widen the ledger. If `init` maps more than roughly
+   instructions needed to understand that scope. Do not silently widen the ledger. If `init` maps more than roughly
    2,000 files and the user gave no `[paths]`, partition the mapped ledger into bounded, system-aware directory or
    subsystem slices and continue without asking solely because of file count. Keep the complete requested scope in the
-   ledger and preserve cross-slice invariants through the system map and aggregate validation. When a supplied deadline
-   cannot cover every slice, stop at its validation window and report the resumable frontier; ask only when no safe
-   partition can preserve a material invariant and the user must choose a narrower outcome. During an autonomous
-   overnight run, record that choice in the overnight backlog and complete everything that remains independently safe.
+   ledger and preserve cross-slice invariants through the system map and aggregate validation.
+
+   When a supplied deadline cannot cover every slice, stop at its validation window and report the resumable frontier.
+   Ask only when no safe partition can preserve a material invariant and the user must choose a narrower outcome. During
+   an autonomous overnight run, record that choice in the overnight backlog and complete everything that remains
+   independently safe.
+
 3. Classify generated, vendored, minified, binary, and bulk-data artifacts. Validate them through their generator,
    schema, or invariants when line-by-line review is inappropriate, then mark them with the agent's reason.
 4. Build a compact system map: executable entry points, workspace or package dependency directions, public interfaces,
    generators and derived artifacts, external and persisted-data seams, and the owner of each material invariant. Trace
    the highest-risk workflows end to end before choosing slices.
 5. Inspect recent history and diffs, especially the newest changes, to find affected callers, dependencies, tests,
-   configuration, and docs. Rank slices and fixes by evidenced impact: correctness, data loss, security, and externally
-   exposed personal-data or disclosure risk first; then reliability, maintainability, measured performance, and
-   developer experience. Treat recency as one prioritization signal, never as a substitute for coverage.
+   configuration, and docs. Rank slices and fixes by impact supported by evidence. Prioritize correctness, data loss,
+   security, and externally exposed personal-data or disclosure risk. Rank reliability, maintainability, measured
+   performance, and developer experience after those issues. Treat recency as one prioritization signal, never as a
+   substitute for coverage.
 6. Discover build, test, lint, typecheck, format, and codegen checks.
-7. Establish a baseline for every safe, relevant check before the first fix. If it is red, prioritize reproducible
-   failures before discretionary work; defer failures that need an unclear or prohibited action while continuing with
+7. Establish a baseline for every safe, relevant check before the first fix. If it fails, prioritize reproducible
+   failures before discretionary work. Defer failures that need an unclear or prohibited action while continuing with
    independently verifiable work.
 8. Preserve every pre-existing edit recorded by the ledger. Do not revert, absorb, commit, or report it as a finding.
 
-After mapping, report `### 🔎 Sweep mapped — <files> files · <slices> slices · ledger <scratch.json>`. Slice count is an
-agent organization choice; file count comes from the ledger.
+After mapping, report `### 🔎 Sweep mapped — <files> files · <slices> slices · ledger <scratch.json>`. The agent chooses
+the slice count for organization. File count comes from the ledger.
 
 The ledger outlives the session. A later session resumes the same sweep by pointing at the same ledger path instead of
 re-running `init`: `pending` defines the frontier, and already-accounted paths are not reinspected. Carry the ledger
@@ -113,9 +117,9 @@ next session.
 
 ## Subagents
 
-- Delegate independent slices when it materially improves coverage or completion time; use the smallest effective team
+- Delegate independent slices when it materially improves coverage or completion time. Use the smallest effective team
   within host limits and the user's delegation preferences.
-- When the host supports model selection, choose reviewer and fixer models deliberately for the task; otherwise use the
+- When the host supports model selection, choose reviewer and fixer models deliberately for the task. Otherwise, use the
   host default.
 - Announce the planned fan-out in one line before launching: agent count and the model of each group.
 - Cap concurrent reviewers at 4 unless the user raises it, always within the host's available concurrency.
@@ -125,10 +129,10 @@ next session.
   required completion evidence. In every slice brief, completion evidence must include every discovered strict static
   gate — typecheck, lint, and format/import order — applicable to the languages in the slice's write scope, scoped as
   narrowly as the tool permits. Assign each repository-wide gate to one validation owner after its affected slices
-  settle; other agents report that dependency instead of duplicating the run. Assign shared manifests, lockfiles,
+  settle. Other agents report that dependency instead of duplicating the run. Assign shared manifests, lockfiles,
   exports, and integration files to one sequential owner.
 - Reconcile every wave before starting dependents. Use a fresh-context verifier when independent scrutiny addresses a
-  concrete risk, such as concurrency, security, or a cross-slice invariant; a routine edit alone does not require one.
+  concrete risk, such as concurrency, security, or a cross-slice invariant. A routine edit alone does not require one.
 - Subagents and workers never commit. The coordinating session commits settled slices serially as checkpoint commits, so
   only one process touches the Git index.
 - A session holds one coordination claim, and each new claim replaces the last. When the repository uses a claim-based
@@ -151,29 +155,36 @@ Interrogate it in this order:
 3. After removing unnecessary pieces, what remaining logic, interfaces, or workflow can be simplified?
 
 Prefer deleting over simplifying, simplifying over optimizing, and optimizing over automating. Apply confirmed, safe
-improvements within the requested scope; this ordering does not justify dropping requirements or automating needless
+improvements within the requested scope. This ordering does not justify dropping requirements or automating needless
 work.
 
-Trace important control, data, concurrency, and error paths end to end. Hunt for concrete bugs, omissions, invalid
+Trace important control, data, concurrency, and error paths end to end. Look for concrete bugs, omissions, invalid
 assumptions, unhandled edges, security/reliability failures, inconsistencies, duplication, dead code, stale docs, and
 needless complexity. Also inspect evidenced problems in performance, dependencies, data formats and extensions,
 configuration, observability, accessibility, agent context, naming, and directory structure. Style preferences and
 unverified hunches are not findings.
 
-At applicable external and persisted-data seams, inspect validation; domain precision and units; deterministic ordering
-and deduplication; idempotency and repeat-run behavior; atomicity and interruption safety; retry and pagination
-completeness; bounded concurrency, cancellation, and resource cleanup; and secret, log, path, temporary-file, and
-command safety.
+At applicable external and persisted-data seams, inspect these concerns:
+
+- validation, domain precision, and units.
+- deterministic ordering and deduplication.
+- idempotency and repeat-run behavior.
+- atomicity and interruption safety.
+- retry and pagination completeness.
+- bounded concurrency, cancellation, and resource cleanup.
+- secret, log, path, temporary-file, and command safety.
 
 Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available. Add a
-regression test when it protects a meaningful failure mode absent from existing coverage; do not add tautological tests
+regression test when it protects a meaningful failure mode absent from existing coverage. Do not add tautological tests
 or tests that merely mirror reversible prose or configuration edits. Fix verifiable in-scope residual risks rather than
-reporting them. Mark `reported` only for real decisions: intent is ambiguous, a safe fix would change a public contract
-for consumers outside the repository, or no verification is available. Give every `reported` finding a recommended fix
-and its blast radius. Do not add speculative features, broad refactors, or cosmetic churn.
+reporting them.
+
+Mark `reported` only for real decisions: intent is ambiguous, a safe fix would change a public contract for consumers
+outside the repository, or no verification is available. Give every `reported` finding a recommended fix and its blast
+radius. Do not add speculative features, broad refactors, or cosmetic churn.
 
 Treat source files over 1000 lines and test files over 2000 lines as discovery candidates only. Split a file only when
-cohesion, coupling, change risk, or testability establishes a better seam; line count alone is not evidence. When a
+cohesion, coupling, change risk, or testability establishes a better seam. Line count alone is not evidence. When a
 confirmed structural issue requires interface or seam redesign, use `$codebase-design` when available. Centralize the
 invariant in its owning module, apply the deletion test to pass-through modules, introduce a seam only where behavior
 actually varies, and keep callers and tests on the resulting interface.
@@ -185,10 +196,11 @@ data-format or extension changes, renames, and reorganizations only when the mig
 demonstrable, and repository checks can prove it. Do not retain a performance change without a recorded baseline metric
 and repeatable benchmark.
 
-If an experiment fails its evidence bar, revert only that experiment's attributable edits; never use repository-wide
-clean, checkout, or reset commands. After each nontrivial change wave, run `$code-polish` over that wave's exact changed
-file union when available. Otherwise apply the same fixed-scope contract inline: simplify only where comprehension or
-defect risk measurably improves, review by severity, fix evidenced defects, and rerun the narrowest proving checks.
+If an experiment fails its evidence threshold, revert only that experiment's attributable edits. Never use
+repository-wide clean, checkout, or reset commands. After each nontrivial change wave, run `$code-polish` over that
+wave's exact changed file union when available. Otherwise apply the same fixed-scope contract inline: simplify only
+where comprehension or defect risk measurably improves, review by severity, fix evidenced defects, and rerun the
+narrowest proving checks.
 
 On long runs, post updates only after coherent slices settle, using the ledger summary's exact bar and counts. The bar
 means path accounting, not depth of inspection.
@@ -199,67 +211,75 @@ Review tests as code under the same first-principles questions, aiming for a sma
 defects. For each test, identify the required behavior it protects, then:
 
 - Delete tautological tests: tests that pass by construction, so no plausible defect in the code under test can fail
-  them. Typical shapes: asserting a mock's or fixture's own configured value; deriving the expected value with the code
-  under test or a copy of its logic; asserting a constant, type, or literal equals itself; and restating language,
-  framework, or dependency behavior. A quick check: mentally break the implementation; if the test still passes, it is
-  tautological.
-- Delete tests that are stale or unhelpful: they target removed or renamed behavior kept alive only by mocks or
-  fixtures; have no meaningful assertion; pin incidental implementation details or call sequences no requirement depends
-  on; or are skipped or commented out with no live reason.
-- Merge tests that effectively prove the same thing: identical paths differing only in inputs become one table-driven or
-  parameterized test; a narrower test fully subsumed by another test's assertions goes; duplicates across files collapse
-  into the owning suite.
+  them. Typical shapes include:
+  - asserting a mock's or fixture's own configured value.
+  - deriving the expected value with the code under test or a copy of its logic.
+  - asserting a constant, type, or literal equals itself.
+  - restating language, framework, or dependency behavior.
 
-Before deleting or merging, confirm the protected behavior is obsolete or still covered by a named retained test; use
-coverage output, or a temporary targeted break of the code, when the overlap is not obvious. A merge keeps every
-distinct assertion, input, and diagnosable failure message. Keep regression tests for fixed bugs unless another test
-demonstrably covers the same case. Never delete or skip a failing or flaky test to get green: fix the cause or mark it
-`reported`. Run the affected suites before and after, and record the test-count delta.
+  For a quick check, mentally break the implementation. If the test still passes, it is tautological.
+
+- Delete tests that are stale or unhelpful: they target removed or renamed behavior kept alive only by mocks or
+  fixtures, have no meaningful assertion, pin incidental implementation details or call sequences no requirement depends
+  on, or are skipped or commented out with no live reason.
+- Merge tests that effectively prove the same thing: identical paths differing only in inputs become one table-driven or
+  parameterized test. Remove a narrower test when another test's assertions fully cover it. Combine duplicates across
+  files into the owning suite.
+
+Before deleting or merging, confirm the protected behavior is obsolete or still covered by a named retained test. When
+the overlap is not obvious, use coverage output or temporarily break the targeted code.
+
+A merge keeps every distinct assertion, input, and diagnosable failure message. Keep regression tests for fixed bugs
+unless another test demonstrably covers the same case. Never delete or skip a failing or flaky test to make checks pass.
+Fix the cause or mark it `reported`. Run the affected suites before and after, and record the test-count delta.
 
 ### Comments
 
 Compare every comment with the code, callers, and history it describes. Fix only clear `STALE` (describes behavior the
 code no longer has), `ORPHANED` (names a missing symbol, path, flag, or concept), `MISLEADING` (materially suggests
 different behavior), or `REDUNDANT` (narrates self-explanatory code without intent, constraint, or context) comments.
-Rewrite when the correct claim is proven; otherwise remove. Never change executable code merely to make a comment true,
-and leave useful rationale and imperfect-but-accurate wording alone.
+When evidence proves the correct claim, rewrite the comment. Otherwise, remove it. Never change executable code merely
+to make a comment true, and leave useful rationale and imperfect-but-accurate wording alone.
 
 Treat behavior-bearing comments as code: compiler and tool directives (`//go:*`, build constraints, cgo preambles,
 `go:embed`, `@ts-expect-error`, lint suppressions, coverage pragmas), license headers, public API docs, and concurrency,
 ownership, or safety contracts. Edit them only when the tooling semantics are proven and validated by the relevant
-tooling; otherwise mark them `reported`.
+tooling. Otherwise, mark them `reported`.
 
 ## Verify and Report
 
 Run the narrowest check proving each fix, including every discovered typecheck, lint, and format/import-order gate
 applicable to its changed files, then aggregate checks scoped to changed files. Reinspect affected paths and repeat
 until a pass finds no new evidenced issue. Before declaring completion, revisit the first-principles questions against
-the result, including the sweep's own additions; passing checks alone does not justify unnecessary complexity. During a
-supplied deadline's validation window, reconcile owned edits and run the aggregate format, lint, type, test, build, and
-invariant checks justified by the final changed-file union. Compare final results with the recorded baseline. Audit
-coverage, fixes, and checks against tool output before claiming completion. When the sweep pushed commits and the
-repository defines CI workflows, such as `.github/workflows`, watch the pushed head's runs before reporting
-(`gh run list --commit <sha>`, then `gh run watch <run-id>`, in the background when the host supports it); fix failures
-attributable to the sweep and report the CI outcome. When changed code behaves differently by platform and local checks
-covered only one, name the unverified platforms as a risk.
+the result, including the sweep's own additions. Passing checks alone does not justify unnecessary complexity.
+
+During a supplied deadline's validation window, reconcile owned edits and run the aggregate format, lint, type, test,
+build, and invariant checks justified by the final changed-file union. Compare final results with the recorded baseline.
+Audit coverage, fixes, and checks against tool output before claiming completion.
+
+When the sweep pushed commits and the repository defines CI workflows, such as `.github/workflows`, watch the pushed
+head's runs before reporting (`gh run list --commit <sha>`, then `gh run watch <run-id>`, in the background when the
+host supports it). In that case, fix failures attributable to the sweep and report the CI outcome. When changed code
+behaves differently by platform and local checks covered only one, name the unverified platforms as a risk.
 
 Lead with
 `### ✅ Sweep ledger complete — <accounted>/<mapped> files accounted (<inspected> inspected, <excluded> excluded)` only
-when helper `complete` is true; otherwise use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
+when helper `complete` is true. Otherwise, use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
 counts, plus deleted and merged tests with the test-count delta and fixed comments when non-zero. Include a compact
-`Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results. When non-empty, also
-include reverted experiments with the failed evidence, each `reported` finding with its evidence, recommended fix, and
-blast radius, and the overnight backlog when applicable. On `### ⛔ Sweep incomplete`, name the ledger path so the next
-session can resume from `pending`. Do not dump the scratch ledger's contents, unrelated pre-existing changes, or bulk
-data; include task-relevant evidence when it materially supports the report.
+`Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results.
+
+When non-empty, also include reverted experiments with the failed evidence, each `reported` finding with its evidence,
+recommended fix, and blast radius, and the overnight backlog when applicable. On `### ⛔ Sweep incomplete`, name the
+ledger path so the next session can resume from `pending`. Do not dump the scratch ledger's contents, unrelated
+pre-existing changes, or bulk data. Include task-relevant evidence when it materially supports the report.
 
 In an interactive (non-overnight) run with any `reported` findings, end with one decision question listing them: fix all
 as recommended, pick specific items, or leave them reported. Treat invocation wording that already authorizes fixing
-(for example "fix any/all problems" or "I will follow your judgement") as that approval up front and skip the question,
-except for destructive actions, external writes, and purchases, which still need explicit confirmation regardless of
-invocation wording. On approval, run a fix wave over the approved items under the same sweep rules — confirm, fix,
-verify, update the ledger, and rerun `$code-polish` — then report the updated ledger and check results. During an
-autonomous overnight run, skip the question and leave `reported` findings in the overnight backlog instead.
+(for example "fix any/all problems" or "I will follow your judgement") as prior approval and skip the question, except
+for destructive actions, external writes, and purchases, which still need explicit confirmation regardless of invocation
+wording. On approval, run a fix wave over the approved items under the same sweep rules — confirm, fix, verify, update
+the ledger, and rerun `$code-polish` — then report the updated ledger and check results. During an autonomous overnight
+run, skip the question and leave `reported` findings in the overnight backlog instead.
 
 Completion requires every mapped path accounted for, every finding fixed and verified, fixed by an approved fix wave, or
 reported with evidence and a pending decision, and every relevant check passing or its failure attributed.

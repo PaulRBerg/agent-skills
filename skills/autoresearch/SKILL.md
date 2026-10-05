@@ -7,14 +7,14 @@ name: autoresearch
 skill-dependencies:
   - codex-handoff
 description:
-  Use for autoresearch or "optimize X overnight/in a loop"; plans bounded measurable experiment batches, then delegates
+  Use for autoresearch or "optimize X overnight/in a loop". Plan bounded, measurable experiment batches, then delegate
   execution through codex-handoff.
 ---
 
 # Autoresearch
 
-Use the parent for research decisions and Codex handoff workers for experiment execution. Measure consistently, retain
-only verified improvements, and stop on explicit resource or convergence limits.
+Use the parent for research decisions and Codex handoff workers for experiment execution. Measure consistently. Retain
+only verified improvements. Stop on explicit resource or convergence limits.
 
 ## Orchestration Contract
 
@@ -32,17 +32,19 @@ delegate read-only repository investigation when useful, but research workers re
 plans. Keep the parent's execution work to orchestration, integrity checks, compact result review, and selection of the
 next batch.
 
-Implementation workers execute parent-supplied ordered hypothesis batches. Default to one worker for a sequential search
-and pack multiple related hypotheses into one brief up to codex-handoff's sizing limit; never map one worker to each
-idea by default. Split only when hypotheses are genuinely independent, dependency waves require it, or one brief would
-be oversized. A worker may make local adjustments needed to execute an assigned hypothesis, but it must report rather
-than execute a materially different research direction.
+Implementation workers execute parent-supplied ordered hypothesis batches. For a sequential search, default to one
+worker. Pack multiple related hypotheses into one brief up to codex-handoff's sizing limit. Never assign one worker to
+each idea by default. Split only when hypotheses are independent, dependency waves require it, or one brief would exceed
+the size limit.
+
+A worker may make local adjustments needed to execute an assigned hypothesis. It must report a materially different
+research direction instead of executing it.
 
 ## Plan and Session Contract
 
 Resolve the objective, primary metric and direction, benchmark and correctness commands, allowed/off-limits paths,
 run/runtime/command/cost/regression limits, convergence window, and reporting cadence before approval. Infer safe facts
-from the request and repository; ask only when a missing choice changes the experiment.
+from the request and repository. Ask only when a missing choice changes the experiment.
 
 Defaults: 20 runs, two hours wall time, 10 minutes per benchmark, five minutes per correctness check, no new paid API
 spend, and convergence after five consecutive valid runs without a new retained best. Explicit `--max-runs` and
@@ -54,20 +56,20 @@ reordering hypotheses inside the approved contract is follow-on planning, not a 
 
 ## Delegated Execution
 
-Read `references/worker-loop.md` before constructing an implementation brief. Inline its applicable instructions with
+Read `references/worker-loop.md` before constructing an implementation brief. Include its applicable instructions with
 the approved contract, ordered batch, exact paths and commands, current session and best-result state or first-batch
 status, and batch stopping criteria. Codex-handoff owns the remaining prompt and result fields.
 
 The first implementation worker creates the isolation and session artifacts and records the unchanged baseline. Each
 worker leaves detailed measurements and logs in those artifacts and returns only the compact batch receipt required by
-the worker reference. The parent reconciles that receipt with the session module's JSON status, reads raw benchmark
-output only when a decision or integrity check requires it, then selects another batch or stops. Further batches under
-the unchanged contract remain follow-on work within the approved outcome.
+the worker reference. The parent reconciles that receipt with the session module's JSON status. It reads raw benchmark
+output only when a decision or integrity check requires it. It then selects another batch or stops. Further batches
+under the unchanged contract remain follow-on work within the approved outcome.
 
 ## Progress and Completion
 
 Use codex-handoff's host-native progress surface. Send parent-authored updates only from settled evidence at the
-baseline, completed batch, material best change, blocker, or final stop; do not relay per-run narration. Render the
+baseline, completed batch, material best change, blocker, or final stop. Do not relay per-run narration. Render the
 session module's exact bar, counts, metrics, budgets, and convergence facts, and name the next parent-selected batch
 without recording it as settled work.
 

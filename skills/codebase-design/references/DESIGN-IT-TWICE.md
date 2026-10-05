@@ -16,7 +16,7 @@ Before spawning sub-agents, write a user-facing explanation of the problem space
 - A rough illustrative code sketch to ground the constraints — not a proposal, just a way to make the constraints
   concrete
 
-Show this to the user, then immediately proceed to Step 2. The user reads and thinks while the sub-agents work in
+Show this to the user. Then immediately proceed to Step 2. The user reads and thinks while the sub-agents work in
 parallel.
 
 ### 2. Spawn sub-agents
@@ -42,12 +42,12 @@ Each sub-agent outputs:
 2. Usage example showing how callers use it
 3. What the implementation hides behind the seam
 4. Dependency strategy and adapters (see [DEEPENING.md](DEEPENING.md))
-5. Trade-offs — where leverage is high, where it's thin
+5. Trade-offs — where leverage is high, where it is thin
 
 ### 3. Present and compare
 
-Present designs sequentially so the user can absorb each one, then compare them in prose. Contrast by **depth**
+Present designs sequentially so the user can understand each one. Then compare them in prose. Contrast by **depth**
 (leverage at the interface), **locality** (where change concentrates), and **seam placement**.
 
-After comparing, give your own recommendation: which design you think is strongest and why. If elements from different
-designs would combine well, propose a hybrid. Be opinionated — the user wants a strong read, not a menu.
+After comparing, recommend the design you think is strongest. Explain why. If elements from different designs would
+combine well, propose a hybrid. Give a firm recommendation. The user wants a strong assessment, not a menu.

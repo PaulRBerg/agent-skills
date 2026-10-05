@@ -23,20 +23,20 @@ or tier-spanning slice. _Avoid_: unit, component, service.
 ordering constraints, error modes, required configuration, and performance characteristics. _Avoid_: API, signature (too
 narrow — they refer only to the type-level surface).
 
-**Implementation** — what's inside a module, its body of code. Distinct from **Adapter**: a thing can be a small adapter
-with a large implementation (a Postgres repo) or a large adapter with a small implementation (an in-memory fake). Reach
-for "adapter" when the seam is the topic; "implementation" otherwise.
+**Implementation** — what is inside a module, its body of code. Distinct from **Adapter**: a thing can be a small
+adapter with a large implementation (a Postgres repo) or a large adapter with a small implementation (an in-memory
+fake). When the seam is the topic, use "adapter". Otherwise, use "implementation".
 
 **Depth** — leverage at the interface: the amount of behaviour a caller (or test) can exercise per unit of interface
 they have to learn. A module is **deep** when a large amount of behaviour sits behind a small interface, **shallow**
 when the interface is nearly as complex as the implementation.
 
-**Seam** _(Michael Feathers)_ — a place where you can alter behaviour without editing in that place; the _location_ at
-which a module's interface lives. Where to put the seam is its own design decision, distinct from what goes behind it.
-_Avoid_: boundary (overloaded with DDD's bounded context).
+**Seam** _(Michael Feathers)_ — a place where you can alter behaviour without editing in that place. It is the
+_location_ at which a module's interface lives. Where to put the seam is its own design decision, distinct from what
+goes behind it. _Avoid_: boundary (overloaded with DDD's bounded context).
 
 **Adapter** — a concrete thing that satisfies an interface at a seam. Describes _role_ (what slot it fills), not
-substance (what's inside).
+substance (what is inside).
 
 **Leverage** — what callers get from depth: more capability per unit of interface they learn. One implementation pays
 back across N call sites and M tests.
@@ -58,14 +58,14 @@ When designing an interface, ask:
 
 ## Principles
 
-- **Depth is a property of the interface, not the implementation.** A deep module can be internally composed of small,
-  mockable, swappable parts — they just aren't part of the interface. A module can have **internal seams** (private to
-  its implementation, used by its own tests) as well as the **external seam** at its interface.
+- **Depth is a property of the interface, not the implementation.** A deep module can contain small, mockable, swappable
+  parts internally. These parts are not part of the interface. A module can have **internal seams** (private to its
+  implementation, used by its own tests) as well as the **external seam** at its interface.
 - **The deletion test.** Imagine deleting the module. If complexity vanishes, it was a pass-through. If complexity
-  reappears across N callers, it was earning its keep.
+  reappears across N callers, the module was useful.
 - **The interface is the test surface.** Callers and tests cross the same seam. If you want to test _past_ the
   interface, the module is probably the wrong shape.
-- **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a seam unless something
+- **One adapter means a hypothetical seam. Two adapters means a real one.** Do not introduce a seam unless something
   actually varies across it.
 
 ## Designing for testability
@@ -94,16 +94,16 @@ Good interfaces make testing natural:
 
 ## Output Contract
 
-When applying this vocabulary to a design or review, report the recommended module, interface, and seam; explain how the
-result improves depth, leverage, locality, or testability; and identify material tradeoffs or unresolved evidence. When
-this skill is only supporting another requested artifact, incorporate that analysis into the artifact instead of adding
-a separate report.
+When applying this vocabulary to a design or review, report the recommended module, interface, and seam. In that design
+or review, explain how the result improves depth, leverage, locality, or testability. Identify its material tradeoffs or
+unresolved evidence. When this skill is only supporting another requested artifact, incorporate that analysis into the
+artifact instead of adding a separate report.
 
 ## Going deeper
 
 - **Deepening a cluster given its dependencies** — see [references/DEEPENING.md](references/DEEPENING.md): dependency
   categories, seam discipline, and replace-don't-layer testing.
-- **Exploring alternative interfaces** — see [references/DESIGN-IT-TWICE.md](references/DESIGN-IT-TWICE.md): spin up
+- **Exploring alternative interfaces** — see [references/DESIGN-IT-TWICE.md](references/DESIGN-IT-TWICE.md): start
   parallel sub-agents to design the interface several radically different ways, then compare on depth, locality, and
   seam placement.
 

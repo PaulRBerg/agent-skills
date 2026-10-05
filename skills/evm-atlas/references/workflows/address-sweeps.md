@@ -1,7 +1,7 @@
 # Address Sweeps
 
 Use for address-wide historical activity and bootstrap discovery on target mainnets. The deterministic request/evidence
-rules live in `scripts/sweep-core.py`; this reference defines safety, agent decisions, and coverage interpretation.
+rules live in `scripts/sweep-core.py`. This reference defines safety, agent decisions, and coverage interpretation.
 
 ## Safety Model
 
@@ -24,7 +24,7 @@ Name the profile before planning:
 - `general`: normal transactions, internal transactions, ERC-20, ERC-721, and ERC-1155 transfers, plus checkpointed
   nonce/native balance facts. This is the default historical-activity profile.
 - `bootstrap-discovery`: a narrower activity-discovery profile. It includes checkpointed native state, qualifying
-  normal/internal native activity, ERC-20, and ERC-721; ERC-1155 and nonqualifying native noise are outside it.
+  normal/internal native activity, ERC-20, and ERC-721. ERC-1155 and nonqualifying native noise are outside it.
 
 The helper owns the exact success/noise predicates. Do not silently apply bootstrap exclusions to a general sweep. A
 `bootstrap-discovery` negative means only “no activity qualifying under the `bootstrap-discovery` profile was found.”
@@ -37,34 +37,36 @@ unrecognized, native-account-abstraction, cross-VM, or unknown models. Token his
 
 The agent owns:
 
-- target-chain selection and whether to stop after the first positive;
-- cutoff acquisition and checkpoint proof;
-- provider selection and fallback activation using `provider-routing.md`;
-- declared provider capabilities and independence groups;
-- optional quorum requirement;
+- target-chain selection and whether to stop after the first positive
+- cutoff acquisition and checkpoint proof
+- provider selection and fallback activation using `provider-routing.md`
+- declared provider capabilities and independence groups
+- optional quorum requirement
 - final observed-fact versus inference wording.
 
-Prefer Blockscout on declared overlaps; use Etherscan where it is primary or after a concrete fallback trigger. A valid
-empty authoritative response does not trigger fallback. Run the existing plan-detection helpers before using paid
-Etherscan or Blockscout PRO capabilities. Quorum counts independent indexers, not hosts or state RPCs; provider
+On declared overlaps, prefer Blockscout. Where Etherscan is primary or after a concrete fallback trigger, use Etherscan.
+A valid empty authoritative response does not trigger fallback. Run the existing plan-detection helpers before using
+paid Etherscan or Blockscout PRO capabilities. Quorum counts independent indexers, not hosts or state RPCs. Provider
 disagreement is unknown, never a majority decision.
 
 For Etherscan, apply dated chain-access notes and endpoint gates from `references/explorers/etherscan-api.md`. With a
-Free or unknown plan, request at most 1,000 records per page and exhaust pagination at the fixed cutoff. Shared
-community quota exhaustion leaves coverage incomplete; retain the reset time and activate the indexed fallback or wait
-until reset. Address-filtered internal history remains available without PRO; block-range-only internal history requires
-Standard or higher.
+Free or unknown plan, request at most 1,000 records per page. Under that plan condition, exhaust pagination at the fixed
+cutoff.
+
+Shared community quota exhaustion leaves coverage incomplete. Under that exhaustion, retain the reset time. Under that
+exhaustion, activate the indexed fallback or wait until reset. Address-filtered internal history remains available
+without PRO. Block-range-only internal history requires Standard or higher.
 
 ## Plan Interface
 
 Create an agent-selected input JSON with:
 
-- `address`;
-- `chain`: at least `id`, display name, and `accountActivityModel`;
-- `goal`: `historical-activity` or `bootstrap-discovery`;
-- named `profile`;
-- `checkpoint`: `requestedAt`, `resolutionKind`, `blockNumber`, `blockHash`, `blockTimestamp`, `observedAt`;
-- `providers`: stable ID, provider kind, independent-index group, and supported history-channel names;
+- `address`
+- `chain`: at least `id`, display name, and `accountActivityModel`
+- `goal`: `historical-activity` or `bootstrap-discovery`
+- named `profile`
+- `checkpoint`: `requestedAt`, `resolutionKind`, `blockNumber`, `blockHash`, `blockTimestamp`, `observedAt`
+- `providers`: stable ID, provider kind, independent-index group, and supported history-channel names
 - `quorum`: positive integer, default `1`.
 
 Then run:
@@ -97,7 +99,7 @@ Execute only the emitted requests through the selected provider's documented ada
 ```
 
 `complete: true` means bounded pagination for that channel is exhausted through the checkpoint. Preserve native provider
-row fields; do not preclassify them.
+row fields. Do not preclassify them.
 
 ## Evaluate Interface
 
@@ -109,7 +111,7 @@ uv run scripts/sweep-core.py evaluate \
 The evaluator validates checkpoint binding, quantities, index bounds, response shapes, required channels, profile
 predicates, EOA zero-state eligibility, earliest qualifying evidence, and quorum agreement. It returns
 `positive|negative|unknown`, `checked`, `omitted`, explicit `gaps`, coverage, earliest evidence, and provider/quorum
-facts. Malformed external responses become coverage gaps when they can be isolated; malformed plan input fails.
+facts. When malformed external responses can be isolated, they become coverage gaps. Malformed plan input fails.
 
 For offline conformance checks, use:
 
@@ -122,7 +124,7 @@ The existing shell validator commands remain output-compatible adapters.
 
 ## Coverage and Reporting
 
-A positive needs qualifying checkpoint-bounded evidence; it may still have partial channel coverage. A negative is valid
+A positive needs qualifying checkpoint-bounded evidence. It may still have partial channel coverage. A negative is valid
 only when every profile channel is checkpoint-bound and complete or appears in `omitted` under the named safe invariant.
 Missing channels, lag, malformed responses, provider disagreement, and unsupported actions make the result
 unknown/partial.
@@ -138,6 +140,6 @@ Do not claim inactivity on all EVM chains unless the exact target scope and gene
 
 For current native/token holdings, use `debank-portfolio.md` first (`blockscan-balances.md` for a named chain or DeBank
 gaps) and `provider-routing.md` for NFTs and API gaps. Pin native state to a finalized/verified checkpoint. Treat
-holdings endpoints observed at a provider head as separately timed evidence, and never infer token/NFT emptiness from
-native RPC alone. Indexed token amounts can be stale: confirm any amount that decides an action with RPC `balanceOf`, as
+holdings endpoints observed at a provider head as separately timed evidence. Never infer token/NFT emptiness from native
+RPC alone. Indexed token amounts can be stale. When an amount decides an action, confirm it with RPC `balanceOf`, as
 `address-usd-value.md` does.

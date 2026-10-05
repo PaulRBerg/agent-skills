@@ -1,7 +1,7 @@
 # Data Explorer Template
 
-Use this template when the playground is about data queries, APIs, pipelines, or structured configuration: SQL builders,
-API designers, regex builders, pipeline visuals, cron schedules.
+When the playground covers data queries, APIs, pipelines, or structured configuration, use this template. Examples
+include SQL builders, API designers, regex builders, pipeline visuals, and cron schedules.
 
 ## Layout
 
@@ -53,7 +53,7 @@ connectors.
 
 ## Prompt output for data
 
-Frame it as a specification of what to build, not the raw query itself:
+Make the prompt specify what to build rather than repeat the raw query itself:
 
 > "Write a SQL query that joins orders to users on user_id, filters for orders after 2024-01-01 with total > $50, groups
 > by user, and returns the top 10 users by order count."

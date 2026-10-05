@@ -1,11 +1,11 @@
 # Critical Effect 4 Rules
 
 Read this before changing nontrivial Effect code. These rules protect semantics that ordinary TypeScript intuition and
-v3 habits often get wrong; use the installed package source for exact combinator signatures.
+v3 habits often get wrong. Use the installed package source for exact combinator signatures.
 
 ## Effect Failures Are Not Thrown Exceptions
 
-An Effect failure yielded inside `Effect.gen` is represented in the Effect error channel. An ordinary `try/catch` around
+The Effect error channel represents an Effect failure yielded inside `Effect.gen`. An ordinary `try/catch` around
 `yield*` does not recover it.
 
 ```ts
@@ -27,8 +27,8 @@ where it enters Effect.
 ## Preserve Typed Failures
 
 Model expected failures with tagged domain types rather than the global `Error` class. Use `Schema.TaggedError` when the
-failure crosses an encoding, persistence, API, or documentation boundary; use `Data.TaggedError` for internal-only
-failures.
+failure crosses an encoding, persistence, API, or documentation boundary. For internal-only failures, use
+`Data.TaggedError`.
 
 Do not use `as any`, `as never`, double assertions, or widened `Error` channels to make an Effect typecheck. Fix the
 service, error, or environment type that produced the mismatch. A narrow assertion at a poorly typed external boundary
@@ -36,7 +36,7 @@ needs a documented reason.
 
 ## Keep Defects Out of Expected Error Mapping
 
-`Cause` is a flat `reasons` array of `Fail`, `Die`, and `Interrupt`; there is no `Sequential`/`Parallel` tree to
+`Cause` is a flat `reasons` array of `Fail`, `Die`, and `Interrupt`. There is no `Sequential`/`Parallel` tree to
 traverse. Use `Effect.mapError` or tagged recovery for expected failures. Use `Effect.catchCause` only at a deliberate
 runtime, reporting, or supervision boundary where handling the whole cause is the requirement.
 
@@ -54,7 +54,7 @@ yieldable.
 
 Do not wrap safe array transformations, constants, path manipulation, or other deterministic pure work in `Effect.try`.
 Use `Effect.sync` for synchronous observable effects and `Effect.try` only for code that can throw. `Equal.equals` is
-structural by default for plain objects, arrays, `Map`, `Set`, and `Date`; do not add `Data` wrappers only for equality.
+structural by default for plain objects, arrays, `Map`, `Set`, and `Date`. Do not add `Data` wrappers only for equality.
 
 ## Make Generator Termination Explicit
 

@@ -1,6 +1,6 @@
 ---
 compatibility:
-  Requires a project using current stable Effect 4 packages; verify exact APIs against the target's installed package
+  Requires a project using current stable Effect 4 packages. Verify exact APIs against the target's installed package
   source. The source-cache helper needs git and network access for its daily fetch.
 name: effect-ts
 description:
@@ -19,15 +19,15 @@ target's installed packages.
 Do not activate this workflow merely because a file imports `effect`. For nontrivial Effect work:
 
 1. Resolve the target package or workspace and its exact installed `effect` and relevant `@effect/*` versions. If
-   `effect` is not 4.x, stop because this skill does not apply; for 3.x, point the user to the v3 skill:
+   `effect` is not 4.x, stop because this skill does not apply. For 3.x, point the user to the v3 skill:
    `npx skills add PaulRBerg/agent-skills#shelved --skill effect-ts-v3`.
 2. Confirm lockstep versions: every `@effect/*` package must match the installed `effect` version exactly. Report a
    mismatch instead of coding around it.
 3. Inspect neighboring services, layers, errors, schemas, runtime boundaries, and tests. Local conventions decide
-   organization; installed package evidence decides API facts.
+   organization. Installed package evidence decides API facts.
 4. Read `references/critical-rules.md`, then only the task-specific references below.
 5. Verify every uncertain import, signature, or behavior against the package installation visible to the target
-   workspace before editing. Do not port v3 names from memory; many were renamed or removed.
+   workspace before editing. Do not port v3 names from memory. Many were renamed or removed.
 6. Implement the smallest pattern consistent with the project and run the narrowest test or typecheck covering the
    changed semantics.
 
@@ -35,8 +35,8 @@ Do not activate this workflow merely because a file imports `effect`. For nontri
 
 Use the target workspace's manifest and lockfile to identify versions. Prefer, in order:
 
-1. the installed package's `src/`, README, tests, and changelog;
-2. its emitted declarations when source is not shipped;
+1. the installed package's `src/`, README, tests, and changelog.
+2. its emitted declarations when source is not shipped.
 3. the matching official package artifact or source tag.
 
 For monorepo source, tests, or cross-package search, run `scripts/effect-source.sh`. It keeps a cached clone of
@@ -51,7 +51,7 @@ match the target's installed version. If exact behavior cannot be verified, stop
 Former `@effect/platform`, `@effect/rpc`, `@effect/cli`, `@effect/cluster`, and related modules now ship inside `effect`
 under subpaths such as `effect/http`, `effect/http-api`, `effect/rpc`, `effect/cli`, `effect/ai`, `effect/sql`,
 `effect/schema`, `effect/reactivity`, and `effect/workflow`. Check the installed `package.json` `exports` for the exact
-set. These modules are documented `@stability unstable` and may break in minor releases; there are no
+set. These modules are documented `@stability unstable` and may break in minor releases. There are no
 `effect/unstable/*` compatibility paths. Separate packages remain for platforms, drivers, and providers:
 `@effect/platform-*`, `@effect/sql-*`, `@effect/ai-*`, `@effect/atom-*`, `@effect/opentelemetry`, and `@effect/vitest`.
 
@@ -80,7 +80,7 @@ lookup, inspect the installed package source directly instead of loading a local
 - Keep pure helpers, constants, and path manipulation pure unless an Effect boundary provides a concrete dependency,
   testability, resource-safety, or error-model benefit.
 - Preserve existing domain facades and service/runtime boundaries unless the user requested redesign.
-- Prefer typed failures and scoped resources at IO boundaries; choose Schema-backed errors/models only when encoding or
+- At IO boundaries, prefer typed failures and scoped resources. Choose Schema-backed errors/models only when encoding or
   boundary validation is needed.
 - Do not broaden environment requirements merely to replace a small platform call.
 

@@ -7,11 +7,11 @@ Use this reference for OP Mainnet (`chain_id=10`) queries that target activity b
 
 Current OP Mainnet JSON-RPC cannot return a canonical `eth_getTransactionReceipt` response for an OVM1 transaction
 removed by the final regenesis. A current-RPC `null`, provider archive failure, or explorer omission proves only native
-receipt unavailability; it is not negative evidence that the historical transaction occurred.
+receipt unavailability. It is not negative evidence that the historical transaction occurred.
 
 Dune's `optimism_legacy_ovm1` transaction, log, and trace rows are historical execution evidence. When the required
 components agree, reconstruct a **legacy execution packet**. Never call that packet a receipt: it is neither an
-authenticated JSON-RPC receipt nor a historical state-trie proof. Preserve its Dune provenance and every missing
+authenticated JSON-RPC receipt nor a historical state-trie proof. Preserve its Dune provenance. Preserve every missing
 component.
 
 ## Exact-Transaction Workflow
@@ -38,21 +38,21 @@ component.
    ORDER BY trace_address;
    ```
 
-3. Require exactly one transaction row. Preserve zero rows or duplicate rows as a coverage outcome; do not choose a row
+3. Require exactly one transaction row. Preserve zero rows or duplicate rows as a coverage outcome. Do not choose a row
    heuristically.
 4. Verify the transaction hash, block number, block hash, and block time agree across every returned component. Verify
-   transaction `from`/`to` against each log's `tx_from`/`tx_to`; verify transaction `success` against each trace's
+   transaction `from`/`to` against each log's `tx_from`/`tx_to`. Verify transaction `success` against each trace's
    `tx_success`. A trace's own `from`, `to`, and `success` describe that call, so reconcile them through the call
    hierarchy rather than forcing them to equal the root transaction fields.
 5. Preserve log indices exactly in ascending order. Preserve trace-address arrays in ascending hierarchy order,
-   including the root when present. Record duplicate, missing, or contradictory ordering metadata as a coverage gap;
-   never renumber rows.
+   including the root when present. Record duplicate, missing, or contradictory ordering metadata as a coverage gap.
+   Never renumber rows.
 6. Use the address dashboard only to discover candidate hashes for an address-wide request. An exact-hash request uses
    the table workflow above.
 
 ## Legacy Execution Packet
 
-Return exact values; do not truncate identifiers or normalize away nulls.
+Return exact values. Do not truncate identifiers. Do not remove nulls through normalization.
 
 | Component   | Dune provenance                                | Required packet fields                                                                                                   |
 | ----------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -61,7 +61,7 @@ Return exact values; do not truncate identifiers or normalize away nulls.
 | Traces      | `optimism_legacy_ovm1.traces`, ordered by path | call `from`/`to`, `type`, `call_type`, `input`, `output`, `value`, `success`, `error`, `tx_success`, `trace_address`     |
 
 Attach the namespace and table name to each component, plus an explicit `coverage_gaps` list. A packet is complete only
-for the requested determination; complete execution rows do not independently prove historical contract state,
+for the requested determination. Complete execution rows do not independently prove historical contract state,
 deployment identity, wallet ownership, or an LP principal/fee split.
 
 ## Coverage Outcomes
@@ -80,46 +80,46 @@ Record native-receipt availability separately from packet coverage:
 
 Zero logs can be a legitimate execution result. Promote that outcome beyond partial only when verified calldata, traces,
 and contract semantics show that no relevant event should exist. Likewise, trace rows are not complete merely because at
-least one row returned; reconcile their hierarchy, transaction status, errors, and required internal value movement.
+least one row returned. Reconcile their hierarchy, transaction status, errors, and required internal value movement.
 
 ## Concentrated-Liquidity Reconstruction
 
 When the accounting result depends on a concentrated-liquidity position:
 
-1. Identify the position token and prove the exact position-manager deployment used historically. Do not substitute a
+1. Identify the position token. Prove the exact position-manager deployment used historically. Do not substitute a
    current explorer label or a same-interface deployment.
 2. Retrieve the full prior lifecycle for that position, from creation through the target transaction. Include every
    position transfer, liquidity increase/decrease, collection, and other state-changing action supported by the exact
    deployment's events and calls.
 3. Reconstruct the last pre-transaction liquidity state and whether principal or fees were already owed. Never infer
    historical state from a current position lookup. Treat an unproven zero balance as unknown, not zero.
-4. Decode the target's exact command order and maximum collect bounds. Bounds and calldata express intent; ordered logs,
+4. Decode the target's exact command order and maximum collect bounds. Bounds and calldata express intent. Ordered logs,
    traces, and wallet movements establish execution.
 5. Reconcile decrease, collect, unwrap, sweep, refund, and final transfer evidence using exact integer amounts. Keep
    native and wrapped legs distinct.
-6. Verify a principal/fee split only when the complete lifecycle and target execution support the residual. Otherwise
-   report the combined collection and name the missing pre-state or lifecycle evidence.
+6. Only when the complete lifecycle and target execution support the residual, verify a principal/fee split. If they do
+   not, report the combined collection. Under that condition, name the missing pre-state or lifecycle evidence.
 
 ## Browser and Persistence Boundary
 
 Chrome DevTools may run bounded, read-only Dune queries. Executing a query may consume Dune credits. Leave queries
-unsaved by default; saving, publishing, scheduling, or otherwise externally persisting one requires explicit authority.
+unsaved by default. Saving, publishing, scheduling, or otherwise externally persisting one requires explicit authority.
 Never put a private hash, wallet, position identifier, or financial value into this installable reference.
 
 As of `2026-09-10`, Dune's Free plan is view-only: public dashboards, query source, and data collections remain
 viewable, but exact-hash table lookups and parameterized address-dashboard results require query execution on a paid
 plan. Affected existing accounts received temporary Plus access through `2026-09-24`, with 2,500 trial credits. The
-unsaved browser workflow needs only query execution, so Dune advertises Analyst as sufficient; Plus is not required for
-this route. Never purchase or upgrade without explicit authority.
+unsaved browser workflow needs only query execution. Thus, Dune advertises Analyst as sufficient. Plus is not required
+for this route. Never purchase or upgrade without explicit authority.
 
 Treat a missing execution entitlement or exhausted credit balance as a provider-plan coverage gap, not historical
 absence. Chromium does not bypass server-side plan enforcement, and viewing or copying a public query does not produce
 fresh address-parameterized or exact-hash results. Dune's older pricing FAQ and the OVM1 dashboard copy may still
-mention free executions or free credits; resolve entitlement from the live pricing page and the credentialed account.
+mention free executions or free credits. Resolve entitlement from the live pricing page and the credentialed account.
 
 Separately, Dune's Application Service Addendum directs programmatic interaction to its API service. Chrome DevTools
 automation may be considered programmatic even when it drives the graphical site. Do not represent a paid browser
-workflow as terms-cleared; prefer a supported API or MCP route for repeated automation, or obtain Dune clarification.
+workflow as terms-cleared. For repeated automation, prefer a supported API or MCP route, or obtain Dune clarification.
 
 ## Deeper Fallback
 

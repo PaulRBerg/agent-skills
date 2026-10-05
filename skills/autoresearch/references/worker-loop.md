@@ -1,14 +1,14 @@
 # Autoresearch Worker Loop
 
-The parent reads this reference when constructing an implementation batch through codex-handoff and inlines the
-applicable instructions in the worker brief. Workers execute the approved hypotheses; they do not choose the research
+When the parent constructs an implementation batch through codex-handoff, it reads this reference and includes the
+applicable instructions in the worker brief. Workers execute the approved hypotheses. They do not choose the research
 direction.
 
 ## Brief Contract
 
 Require the brief to provide the approved session contract, ordered hypotheses, exact write scope and commands, current
-session and retained-best state or first-batch status, and batch stopping criteria. Return `blocked` when any of these
-inputs is missing or contradictory rather than inventing a contract.
+session and retained-best state or first-batch status, and batch stopping criteria. If any of these inputs is missing or
+contradictory, return `blocked`. Do not invent a contract.
 
 Execute the supplied hypotheses in order against the current retained best. Make only local implementation adjustments
 needed to test an assigned mechanism. If a result invalidates a remaining hypothesis, stop the batch and report that
@@ -21,14 +21,14 @@ For the first batch, prefer a dedicated branch in a separate Git worktree. Recor
 status, allowed paths, and session files in `autoresearch.md`. If isolation is unavailable, require a clean worktree or
 explicit authorization to share it.
 
-Never run repository-wide clean, checkout, stash, or reset commands. Revert only paths changed by the current experiment
-from its recorded pre-run state, and remove only newly created in-scope paths. Preserve unrelated files and all session
-evidence.
+Never run repository-wide clean, checkout, stash, or reset commands. Restore only paths changed by the current
+experiment to their recorded pre-run state. Remove only newly created in-scope paths. Preserve unrelated files and all
+session evidence.
 
 ## Session Module
 
 Create `autoresearch.md`, deterministic `autoresearch.sh`, optional `autoresearch.checks.sh`, append-only
-`autoresearch.jsonl`, and optional `autoresearch.ideas.md`. Resolve the module from the owning `SKILL.md` and initialize
+`autoresearch.jsonl`, and optional `autoresearch.ideas.md`. Resolve the module from the owning `SKILL.md`. Initialize
 the JSONL before the baseline:
 
 ```sh
@@ -48,10 +48,10 @@ uv run "<skill-dir>/scripts/autoresearch-session.py" record \
   [--elapsed-seconds <n>] [--estimated-cost <amount>]
 ```
 
-Zero and negative metrics are valid. The worker owns mechanical `keep` versus `discard` judgment under the approved
-contract; the module validates records and uses the declared direction. When the primary metric changes under a newly
-approved contract, pass `--metric-name <new>` and `--direction <higher|lower>` on the first new record. The module
-appends a new segment config.
+Zero and negative metrics are valid. The worker decides between `keep` and `discard` under the approved contract. The
+module validates records and uses the declared direction. When the primary metric changes under a newly approved
+contract, pass `--metric-name <new>` and `--direction <higher|lower>` on the first new record. The module appends a new
+segment config.
 
 Use `status --format json` for best/delta/MAD/confidence, counts, convergence, budgets, and exact progress rendering:
 
@@ -60,7 +60,8 @@ uv run "<skill-dir>/scripts/autoresearch-session.py" status --file autoresearch.
 ```
 
 `scripts/confidence.sh [jsonl]` and `scripts/summary.sh [jsonl]` remain compatibility adapters. Malformed records or
-violated invariants fail; noisy, equivalent, or worker-discarded results are reported facts, not helper failures.
+violated invariants cause failure. Noisy, equivalent, or worker-discarded results are reported facts, not helper
+failures.
 
 ## Batch Loop
 
@@ -71,7 +72,8 @@ violated invariants fail; noisy, equivalent, or worker-discarded results are rep
 3. Parse the declared metric. Missing metrics, crashes, timeouts, and failed correctness checks cannot be improvements.
 4. Run correctness checks for every candidate that might be retained.
 5. Use the session status plus repeated measurements to judge noise or equivalence. Keep only a verified improvement
-   within all hard constraints; prefer simpler code when results are equivalent. Otherwise perform the scoped revert.
+   within all hard constraints and prefer simpler code when results are equivalent. Otherwise, perform the scoped
+   revert.
 6. Append the assigned record and update `autoresearch.md` when evidence changes the retained best or rules out an
    approach.
 7. Stop at the first batch criterion, hard session limit, user interruption, satisfied target, helper-reported
@@ -85,9 +87,9 @@ Run the session module's JSON status after the last settled attempt. Preserve fu
 and lessons in the session artifacts. Return codex-handoff's required result fields plus a compact autoresearch receipt:
 
 - each attempted hypothesis in order with its `keep`, `discard`, `crash`, or `checks_failed` status and metric when
-  available;
-- baseline, retained best, delta, confidence, status counts, budget state, and convergence state;
-- the exact batch stop reason and any remaining hypotheses invalidated or not attempted; and
+  available.
+- baseline, retained best, delta, confidence, status counts, budget state, and convergence state.
+- the exact batch stop reason and any remaining hypotheses invalidated or not attempted.
 - suggested next directions, without implementing them.
 
 Do not return raw benchmark logs unless they are necessary evidence for a blocker or integrity failure.

@@ -8,8 +8,8 @@ description: "Squash a feature branch into one commit via soft reset to the merg
 
 # Git Squash
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
 Squash the current feature branch into one commit representing its net change relative to the resolved default branch.
 
@@ -41,11 +41,11 @@ table before mutation.
 
 ## Agent-Owned Commit Message
 
-Inspect the plan's commits and the net diff from `mergeBase..originalHead`. The net diff is authoritative; intermediate
+Inspect the plan's commits and the net diff from `mergeBase..originalHead`. The net diff is authoritative. Intermediate
 commits supply intent and attribution only. Inspect targeted hunks when the summary is ambiguous.
 
-Use `--subject` exactly when supplied. Otherwise read `format` under `[message]` in `<git-root>/.agents/commit.toml`;
-its value is `natural` or `conventional`, and an absent file or key means `conventional`.
+Use `--subject` exactly when supplied. Otherwise, read `format` under `[message]` in `<git-root>/.agents/commit.toml`.
+Its value is `natural` or `conventional`, and an absent file or key means `conventional`.
 
 - `natural`: write a natural-language imperative subject with no type prefix, such as `Add retry to webhook delivery`.
 - `conventional`: choose the type from the surviving outcome: `feat`, `fix`, `refactor`, `docs`, `test`, `build`, `ci`,
@@ -53,7 +53,7 @@ its value is `natural` or `conventional`, and an absent file or key means `conve
   squash. Keep the subject lowercase after the prefix.
 
 Keep the subject imperative, specific, and without a trailing period. Add at most five body bullets for distinct
-surviving outcomes; omit the body when the subject is sufficient. Do not dump paths or statistics. Append one
+surviving outcomes. When the subject is sufficient, omit the body. Do not dump paths or statistics. Append one
 `Co-authored-by: Name <email>` trailer for each plan author other than the current Git user. The agent owns all semantic
 wording and must ensure every statement is supported by the net diff.
 
@@ -67,7 +67,7 @@ uv run "<skill-dir>/scripts/git-squash.py" apply \
 ```
 
 `apply` binds the rewrite to the plan's original HEAD, branch, merge base, base ref, clean state, rollback index, and
-optional subject. It revalidates them immediately before mutation; a stale plan fails without changing history. It
+optional subject. It revalidates them immediately before mutation. A stale plan fails without changing history. It
 soft-resets to the merge base, verifies the staged net diff is non-empty, and commits from the message file.
 
 If any operation fails after mutation but before the replacement commit completes, the helper restores the original HEAD
@@ -77,7 +77,7 @@ continue after a helper failure without inspecting its diagnostic and current Gi
 ## Report
 
 On success, report the plan's replaced count, resolved base ref, new hash, and subject. If the branch exists on origin,
-state the exact next action `git push --force-with-lease`; do not run it unless explicitly requested.
+state the exact next action `git push --force-with-lease`. Do not run it unless explicitly requested.
 
 Lead with `### ✅ Squashed — <old count> commits → 1`. Keep preflight facts, hashes, commands, errors, and rollback
 wording plain and exact.

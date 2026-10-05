@@ -8,8 +8,8 @@ Use this reference for Fantom Opera (`chain_id=250`) account history:
 - Official read-only GraphQL endpoint: `POST https://xapi.fantom.network/`
 
 Chainscout still lists the self-hosted FTMScout instance at <https://ftmscout.com/>, but its frontend can return HTTP
-200 while its `/api/v2/*` data routes return HTTP 500. The atlas overlay therefore marks that Blockscout route unsafe;
-do not use it for evidence or bypass the generated resolver's refusal.
+200 while its `/api/v2/*` data routes return HTTP 500. The atlas overlay therefore marks that Blockscout route unsafe.
+Do not use it for evidence. Do not bypass the generated resolver's refusal.
 
 The GraphQL schema also exposes mutations, including raw transaction submission. Never invoke a mutation. EVM Atlas is
 strictly read-only.
@@ -19,13 +19,13 @@ strictly read-only.
 Treat Opera GraphQL account history as a **partial positive-evidence route**, not a complete historical index.
 Conformance probes have found existing EOA activity missing from all account lists, and the public schema declares
 neither a genesis start nor the MongoDB scanner's last processed block. `block` and `state.blocks` report the connected
-Opera node's chain head; they do not prove that the aggregated account index has processed every block through that
+Opera node's chain head. They do not prove that the aggregated account index has processed every block through that
 head.
 
 Consequences:
 
-- A returned row can establish candidate activity after its transaction, block hash, status, parties, and transfer log
-  are confirmed by checkpoint-bound RPC evidence.
+- After checkpoint-bound RPC evidence confirms its transaction, block hash, status, parties, and transfer log, a
+  returned row can establish candidate activity.
 - An empty list, `totalCount: "0x0"`, or `hasNext: false` proves only that this GraphQL index returned no rows. It is
   not a historical negative.
 - For the `bootstrap-discovery` profile, an exact `ethereum-eoa` zero nonce and zero native balance may still omit
@@ -48,14 +48,16 @@ The live schema exposes these cursor-paginated `Account` fields:
 `txCount` and `balance` are current account state, not historical-list completeness signals. Acquire nonce and native
 balance at the fixed checkpoint through JSON-RPC as specified in `references/workflows/provider-routing.md`.
 
-The account schema has no `txlistinternal` equivalent. Do not relabel `txList` as internal history, and do not infer
-native inbound or trace completeness from it.
+The account schema has no `txlistinternal` equivalent. Do not relabel `txList` as internal history. Do not infer native
+inbound or trace completeness from it.
 
 ## Query and Pagination
 
-Use independent cursors for every list. The endpoint accepts at most 250 edges per request; use a smaller positive count
-when needed. With the cursor omitted, a positive count starts at the most recent edge. Continue from that list's
-`pageInfo.last` while `hasNext` is true, reject repeated cursors, and preserve the provider's hexadecimal scalar values.
+Use independent cursors for every list. The endpoint accepts at most 250 edges per request. When needed, use a smaller
+positive count. With the cursor omitted, a positive count starts at the most recent edge.
+
+Continue from that list's `pageInfo.last` while `hasNext` is true. Reject repeated cursors. Preserve the provider's
+hexadecimal scalar values.
 
 ```graphql
 query AccountHistory(
@@ -183,13 +185,14 @@ query AccountHistory(
 }
 ```
 
-Set `checkpoint` to the fixed decimal block number and compare the returned checkpoint hash and timestamp with the RPC
+Set `checkpoint` to the fixed decimal block number. Compare the returned checkpoint hash and timestamp with the RPC
 checkpoint. Require `providerHead.number >= checkpoint.number`. This verifies chain access and row bounds only. Because
 the schema exposes no account-index head, never convert that comparison into a negative-history claim.
 
-For positive evidence, ignore post-checkpoint rows, apply the selected profile's predicates, and independently confirm
-the earliest qualifying transaction and logs through RPC. For a negative, replace this partial route with independent
-genesis-complete coverage; do not combine two partial empty responses and call them complete.
+For positive evidence, ignore post-checkpoint rows. Apply the selected profile's predicates to the remaining rows. For
+that positive evidence, independently confirm the earliest qualifying transaction and logs through RPC. For a negative,
+replace this partial route with independent genesis-complete coverage. Do not combine two partial empty responses and
+call them complete.
 
 ## Sources
 

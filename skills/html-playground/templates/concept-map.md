@@ -1,7 +1,7 @@
 # Concept Map Template
 
-Use this template when the playground is about learning, exploration, or mapping relationships: concept maps, knowledge
-gap identification, scope mapping, task decomposition with dependencies.
+When the playground supports learning, exploration, or relationship mapping, use this template. It covers concept maps,
+knowledge gap identification, scope mapping, and task decomposition with dependencies.
 
 ## Layout
 
@@ -19,8 +19,8 @@ gap identification, scope mapping, task decomposition with dependencies.
 +-------------------------+------------+
 ```
 
-Canvas-based playgrounds differ from the two-panel split. The interactive visual IS the control — users drag nodes and
-draw connections rather than adjusting sliders. The sidebar supplements with toggles and list controls.
+Canvas-based playgrounds differ from the two-panel split. The interactive visual is the control. Users drag nodes and
+draw connections rather than adjusting sliders. The sidebar supplies additional toggles and list controls.
 
 ## Control types for concept maps
 
@@ -64,7 +64,7 @@ Only include edges the user drew. Only mention concepts they marked as fuzzy or 
 
 ## Pre-populating with real data
 
-For codebases or domains, pre-populate with:
+For codebases or domains, populate the initial state with:
 
 - **Nodes:** 15-20 key concepts with real file paths and short descriptions
 - **Edges:** 20-30 pre-drawn relationships based on actual architecture

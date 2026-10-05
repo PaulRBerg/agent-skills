@@ -4,14 +4,15 @@ Load when the diff touches `*.py` or Python service code.
 
 ## Checks
 
-- `PY-001` Mutable defaults (`HIGH`): shared state across calls from mutable default args.
-- `PY-002` Async blocking (`HIGH`): blocking I/O in coroutine paths.
-- `PY-003` Dangerous execution (`CRITICAL`): `eval`/`exec`/unsafe deserialization on untrusted input.
-- `PY-004` Injection surfaces (`CRITICAL`): SQL string interpolation, `subprocess(..., shell=True)` with user input.
-- `PY-005` Iterator/lifecycle bugs (`MEDIUM`): exhausted iterators reused or context cleanup omitted.
-- `PY-006` Type-blind boundaries (`MEDIUM`): weakly validated external payloads.
+- `PY-001` Mutable defaults (`HIGH`): Mutable default args share state across calls.
+- `PY-002` Async blocking (`HIGH`): Coroutine paths perform blocking I/O.
+- `PY-003` Dangerous execution (`CRITICAL`): Code uses `eval`/`exec`/unsafe deserialization on untrusted input.
+- `PY-004` Injection surfaces (`CRITICAL`): Code uses SQL string interpolation or uses `subprocess(..., shell=True)`
+  with user input.
+- `PY-005` Iterator/lifecycle bugs (`MEDIUM`): Code reuses exhausted iterators or omits context cleanup.
+- `PY-006` Type-blind boundaries (`MEDIUM`): Code weakly validates external payloads.
 
 ## Evidence Expectations
 
-- Show exact call path where untrusted input crosses into dangerous API.
-- Include deterministic repro condition when possible.
+- Show the exact call path where untrusted input enters a dangerous API.
+- When possible, include a deterministic condition that reproduces the issue.

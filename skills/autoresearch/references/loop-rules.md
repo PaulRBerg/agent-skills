@@ -4,25 +4,25 @@ Read only when a keep/discard decision is ambiguous, a benchmark is noisy, or th
 
 ## Agent Judgment
 
-- The declared primary metric supplies direction; secondary metrics enforce explicit budgets and explain tradeoffs.
+- The declared primary metric supplies direction. Secondary metrics enforce explicit budgets and explain tradeoffs.
 - Keep only candidates that pass correctness checks and hard constraints.
 - Re-run gains within the measured noise floor. Module confidence is evidence, not a substitute for measurement.
 - Prefer less code for equivalent results. Do not retain complexity for an unconfirmed marginal gain.
-- Treat crashes, timeouts, missing metrics, and failed checks as failed experiments. Fix one trivial experiment mistake;
-  otherwise record the outcome and revert it.
+- Treat crashes, timeouts, missing metrics, and failed checks as failed experiments. Fix one trivial experiment mistake.
+  Otherwise, record the outcome and revert it.
 
 The session module calculates retained bests, confidence, budget state, and the no-improvement window from validated
 records. Do not reproduce those calculations manually or override a reported segment/budget fact.
 
 ## Thrash and Noise
 
-Treat three variants of the same mechanism or failure as thrashing: record the lesson and choose a structurally
-different hypothesis. When ideas run out, inspect profiles, source, dependencies, or relevant papers before trying
-random parameters.
+Treat three variants of the same mechanism or failure as thrashing. In that case, record the lesson and choose a
+structurally different hypothesis. When no ideas remain, inspect profiles, source, dependencies, or relevant papers
+before trying random parameters.
 
 Establish noise from repeated unchanged or best-known runs. Prefer medians for short noisy workloads and keep the
-sampling method stable. Do not move goalposts after seeing a result; changing the primary metric requires a new module
-segment and baseline.
+sampling method stable. Do not change the evaluation criteria after seeing a result. A primary metric change requires a
+new module segment and baseline.
 
 ## Ideas Backlog
 
