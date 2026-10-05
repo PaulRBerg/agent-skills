@@ -72,10 +72,38 @@ Run `just` to list every recipe with its description; the `justfile` is authorit
 - After editing Markdown, run `just prettier-write <changed files>` then `just prettier-check <changed files>`, in that
   order; if `prettier-check` fails, fix only the files you changed.
 - The root `package.json` exists only for local formatting, type-checking, and hook wiring; there is no build step.
-- Toolkit changes verify with `just toolkit::check` (or narrower toolkit recipes). CLI changes go live only via
-  `just toolkit::install-cli`, under the install-authorization rules in `toolkit/AGENTS.md`.
-- For catalog changes, treat Markdown formatting, invocation metadata checks, and skill-specific helper scripts as the
-  verification surface unless a task introduces a narrower check.
+- CLI changes go live only via `just toolkit::install-cli`, under the install-authorization rules in
+  `toolkit/AGENTS.md`.
+
+## Local Verification
+
+All checks run locally. Do not add CI workflows or rely on remote checks for completion.
+
+- During iteration, run focused checks for the changed behavior. Before committing, run the affected owner's complete
+  local gate below, including dependent consumers when an interface or shared configuration changes.
+- Run the final gate once after completing edits; repeat only after further changes, a failure, or an unresolved
+  concern. Documentation-only changes need formatting and verification of changed commands, paths, and claims, not
+  unrelated runtime suites.
+- Formatting, pre-commit hooks, successful installation, and live smoke checks do not replace required tests,
+  type-checks, linting, or builds. Add regression coverage when changing behavior; keep tests proportional to the
+  change.
+- Keep formatters and fixers scoped to files edited in this session. Attribute failures before debugging; if an
+  aggregate fails only in untouched concurrent work, verify your own scope and report the limitation.
+- Report the exact check commands and outcomes, including failures and skipped checks. Do not claim verification from an
+  unrun command or finish while a required check is still running.
+
+| Change scope                               | Required local verification                                                                                          |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Skill metadata, dependencies, README table | `just skill-check`; verify referenced files and documented commands for changed skills.                              |
+| Shell helpers or tests                     | `just shell-check <changed files>` and the affected shell tests; use `just bats-test tests/<skill>` for Bats suites. |
+| Python helpers or tests                    | Run the affected `tests/<skill>/test*.py` scripts with `uv run`.                                                     |
+| Root Bun TypeScript helpers                | `just typescript-check` and the affected tests (`just publish-skills-test` or `just evm-atlas-test`).                |
+| evm-atlas generated inputs or references   | `just evm-atlas-check`; change canonical inputs and regenerate derivatives rather than editing generated files.      |
+| Shared catalog tooling or test wiring      | `just test` and `just skill-check`, plus shell linting for changed shell files.                                      |
+| Toolkit Rust or Bun applications           | Follow `toolkit/AGENTS.md` and the owning package's validation rules.                                                |
+
+Skill prose changes also require checking affected reference links, helper usage, and examples; run helper tests when
+the instructions change how a helper is used. Markdown changes always follow the formatting sequence under **Commands**.
 
 ## Resource-Safe Search
 

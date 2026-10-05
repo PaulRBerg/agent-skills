@@ -15,9 +15,20 @@ Toolkit commits use the catalog's natural-language commit format.
 
 ## Validation
 
-Use `toolkit/justfile` for workspace changes (`just <recipe>` inside `toolkit/`, or `just toolkit::<recipe>` from the
-catalog root): run the narrowest relevant check first, then `just check` when a change spans the workspace. `just check`
-runs the Rust gate and both Bun application gates; it does not install CLI binaries.
+Use `toolkit/justfile` for local validation (`just <recipe>` inside `toolkit/`, or `just toolkit::<recipe>` from the
+catalog root). Run focused tests while iterating, then the complete affected gate before committing:
+
+| Change scope                                  | Final local gate             |
+| --------------------------------------------- | ---------------------------- |
+| Rust code, Cargo dependencies, Rust toolchain | `just rust-check`            |
+| Coordination dashboard                        | `just coord-dashboard-check` |
+| Handoffs application                          | `just handoffs-check`        |
+| Shared workspace wiring or Rust/app contracts | `just check`                 |
+
+`just rust-check` checks formatting, Clippy with warnings denied, tests, and builds for the locked Rust workspace. Both
+application gates check types, tests, and production builds; UI changes also need the owning package's rendered
+verification. `just check` runs all three gates. None of these checks installs CLI binaries. Documentation-only edits
+follow the root formatting and factual-verification rules.
 
 ## Compatibility and safety
 

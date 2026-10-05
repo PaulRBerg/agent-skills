@@ -2,7 +2,7 @@
 
 `ai-notify` is a macOS Rust CLI that sends `terminal-notifier` alerts for Claude Code hooks, native Codex hooks, and
 Codex's legacy `notify` callback. Keep notification delivery macOS-specific while keeping pure logic and tests
-platform-independent; CI runs on Ubuntu with nightly Rust.
+platform-independent; run validation locally with the workspace's nightly Rust toolchain.
 
 ## Upstream Documentation
 
@@ -45,8 +45,8 @@ platform-independent; CI runs on Ubuntu with nightly Rust.
   `cargo test -p ai-notify --locked <filter>` for targeted verification.
 - Isolate configuration and database paths with temporary directories; tests must not write to the user's actual XDG
   configuration directory.
-- Inject or mock the macOS platform check, `terminal-notifier` discovery, and subprocess calls. Linux CI must not
-  require the real notifier.
+- Inject or mock the macOS platform check, `terminal-notifier` discovery, and subprocess calls. Tests must not require
+  the real notifier or send desktop alerts.
 - For hook or Codex configuration changes, cover idempotence, preservation of unrelated configuration, and conflict
   behavior.
 
