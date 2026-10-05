@@ -76,6 +76,13 @@ Keep AGENTS.md terse, imperative, repository-specific, and scoped to its directo
   deployment, financial, and recipient-scoped data-handling constraints.
 - Preserve speed traps, flaky checks, shell quirks, migration constraints, and external-system notes that prevent
   observed mistakes.
+- Keep AGENTS.md a short map that links to deeper context docs, not an encyclopedia. A long AGENTS.md loads on every
+  task and crowds out the task and the code. It also makes every rule look equally important, goes stale, and resists
+  mechanical checks. Route depth to the linked context docs, so agents start from a small, stable entry point and learn
+  where to look next.
+- When task evidence shows that a decision lives only outside the repository, record it in the applicable context.
+  Examples of such places are a chat thread, an external document, and a person's knowledge. An agent can see only what
+  the repository contains.
 - Remove generic tutorials, historical authoring notes, file inventories, lists of installed skills, and command lists
   with no preference or warning.
 - When requested, establish continuous repo-local skill maintenance using the standing instruction in
@@ -114,6 +121,8 @@ After changing placement or symlinks, rediscover affected targets and confirm no
 Maintain selected context docs — conventions, command catalogs, data-format rules, workflow runbooks, and similar
 reference material — wherever they live and whatever they are named:
 
+- Treat architecture maps of domains and layering, quality or technical-debt registers, and plan or decision logs as
+  context docs when they guide future work.
 - Verify commands, paths, flags, formats, environment variables, versions, and rules against the repository with the
   same rigor as AGENTS.md.
 - When repository instructions assign a document class to a repository-owned lifecycle or workflow, fix only factual

@@ -2,8 +2,8 @@
 name: codebase-design
 description:
   Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find
-  deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or when another skill
-  needs the deep-module vocabulary.
+  deepening opportunities, decide where a seam goes, make code more testable, AI-navigable, or agent-legible, choose
+  which invariants to enforce mechanically, or when another skill needs the deep-module vocabulary.
 ---
 
 # Codebase Design
@@ -76,6 +76,28 @@ Good interfaces make testing natural:
 - Prefer returning results to side effects when that keeps the interface simpler.
 - Keep the surface small: fewer methods and parameters mean fewer, simpler tests.
 
+## Agent legibility
+
+A codebase is **agent-legible** when an agent can reason about the full business domain directly from the repository.
+
+- **The repository is the agent's only context.** For the agent, knowledge in chat threads, external documents, or
+  people's heads effectively does not exist. Record architecture decisions, norms, and plans as versioned artifacts in
+  the repository.
+- **Enforce invariants, not implementations.** Encode layer dependency direction and the single seam for cross-cutting
+  concerns as custom lints and structural tests. Inside those constraints, leave implementation choices free. For
+  example, require parsing where data enters the system. Do not prescribe the parsing library.
+- **Write custom lint errors as remediation instructions.** These error messages land in agent context.
+- **Centralize invariants in shared modules, not in hand-rolled helpers.** This is **locality**. Validate data where it
+  enters the system, or use typed SDKs. Never build on guessed data shapes.
+- **Prefer dependencies that the agent can fully internalize.** Choose stable, composable technologies that are well
+  represented in training data. When a workaround for opaque upstream behavior costs more than a reimplementation,
+  reimplement a small, tested subset.
+- **Agents copy existing patterns, including bad ones.** Write golden principles as opinionated, mechanical rules in the
+  repository. Correct drift against them continuously with small, targeted refactors. When documentation alone does not
+  hold a rule, promote the rule into a lint.
+- **When an agent struggles, find the missing capability.** Make that capability legible and enforceable for the agent.
+  Do not prompt harder.
+
 ## Relationships
 
 - A **Module** has exactly one **Interface** (the surface it presents to callers and tests).
@@ -106,5 +128,7 @@ artifact instead of adding a separate report.
 - **Exploring alternative interfaces** — see [references/DESIGN-IT-TWICE.md](references/DESIGN-IT-TWICE.md): start
   parallel sub-agents to design the interface several radically different ways, then compare on depth, locality, and
   seam placement.
+- **Making a codebase agent-legible** — see [references/AGENT-LEGIBILITY.md](references/AGENT-LEGIBILITY.md): feedback
+  loops, mechanical architecture enforcement, dependency policy, and continuous garbage collection.
 
 Forked from [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/engineering/codebase-design).

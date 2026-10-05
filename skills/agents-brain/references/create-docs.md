@@ -69,6 +69,7 @@ Keep AGENTS.md concise, imperative, and scoped:
   deployment, financial, recipient-scoped data-handling, and review constraints supported by evidence.
 - Exclude generic tool tutorials, long directory trees, and package-script inventories that add no preference or
   warning.
+- Make AGENTS.md a map. Link deeper context docs instead of inlining them. Keep it short enough to load on every task.
 - When the user requests continuous repo-local skill maintenance, include the standing instruction from this skill's
   `references/maintain-skills.md`, adapted to the repository's ownership and lifecycle rules.
 
@@ -90,9 +91,9 @@ untouched. Report the conflict.
 ## Create Context Docs on Request
 
 Create a Markdown context doc outside the default set only when the user explicitly names its path and purpose. Examples
-include a conventions file, command catalog, data-format reference, or workflow runbook. Ground its content in
-repository evidence like any other target. Keep it scoped to that purpose. When that improves discoverability, link it
-from the nearest AGENTS.md or README.md.
+include a conventions file, command catalog, data-format reference, workflow runbook, architecture map, plan log, or
+decision log. Ground its content in repository evidence like any other target. Keep it scoped to that purpose. When that
+improves discoverability, link it from the nearest AGENTS.md or README.md.
 
 Do not scan for missing context docs. At most, report a recommendation without writing it.
 

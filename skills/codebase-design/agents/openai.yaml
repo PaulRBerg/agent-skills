@@ -1,5 +1,5 @@
 interface:
   display_name: "Codebase Design"
-  short_description: "Vocabulary for deep-module design"
+  short_description: "Deep-module and agent-legible design"
 policy:
   allow_implicit_invocation: true

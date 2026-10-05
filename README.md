@@ -37,7 +37,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | cli-coingecko          | CoinGecko CLI for prices and market data                                   |
 | cli-just               | Just command runner guidance                                               |
 | code-polish            | Simplify and/or risk-profiled review with autofix                          |
-| codebase-design        | Shared vocabulary and principles for designing deep modules                |
+| codebase-design        | Deep-module vocabulary and agent-legible codebase design                   |
 | codex-handoff          | Research or implement approved plans with Codex agents                     |
 | commit                 | Semantic commit messages with deterministic ai-commit mechanics            |
 | copy-transcript-path   | Copy the active Claude Code or Codex CLI transcript path                   |
