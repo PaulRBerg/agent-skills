@@ -58,9 +58,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | repo-cross-pollination | Transfer useful guidance, workflows, and dependencies between repositories |
 | repo-harmonization     | Audit and align multiple interdependent repositories                       |
 | repo-rename            | Rename GitHub repo, folder, and agent thread references                    |
-| skill-doctor           | Audit Agent Skills catalogs and installed skill roots                      |
 | skill-harmonization    | Harmonize repository and user-installed skill portfolios                   |
-| skill-map              | Find skill dependencies and references across machine                      |
 | skill-writing          | Bootstrap a project-local agent skill                                      |
 | spreadsheets           | Opinionated CSV/TSV/XLSX wrangling on macOS                                |
 | tailwind-css           | Tailwind CSS v4 styling guidance                                           |

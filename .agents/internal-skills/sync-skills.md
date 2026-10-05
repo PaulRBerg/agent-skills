@@ -130,19 +130,19 @@ Verification is prose comparison of the in-scope blocks; there is no extractable
 
 Files:
 
-- `skills/skill-map/SKILL.md`
-- `skills/skill-doctor/SKILL.md`
 - `skills/skill-harmonization/SKILL.md`
+- `skills/skill-writing/SKILL.md`
+- `skills/skill-writing/references/writing-great-skills.md`
 
-Keep the same ai-skillet minimum version, `1.0.0+`. Each consumer must invoke its appropriate ai-skillet subcommand
-directly (`map` for skill-map and skill-harmonization; `doctor` for skill-doctor), with no retired Python, uv, ripgrep,
-helper-resolution, wrapper, or fallback path. `toolkit/skillet/` and the workspace version in `toolkit/Cargo.toml` are
-the producer whose contract the `1.0.0+` minimum tracks.
+Keep the same ai-skillet minimum version, `1.0.0+`, wherever a consumer declares one. Each consumer must invoke its
+ai-skillet subcommand directly (`map`, plus optional `doctor` evidence, for skill-harmonization; `doctor` for
+skill-writing), with no retired Python, uv, ripgrep, helper-resolution, wrapper, or fallback path. `toolkit/skillet/`
+and the workspace version in `toolkit/Cargo.toml` are the producer whose contract the `1.0.0+` minimum tracks.
 
-Keep `skill-doctor` authoritative for ai-skillet's complete extended-dialect contract: the portable, Claude Code, and
-repository field union; unknown-field, type, value, and cross-field diagnostics; explicit-default fields accepted
-without findings; and the Markdown-aware coordination declaration. Preserve its report-only boundary for those findings
-and its narrow `--fix-safe` policy. Do not turn `doctor` into the primary command for the map consumers.
+`toolkit/skillet/AGENTS.md` is authoritative for the extended-dialect contract; keep the `Frontmatter Dialect` section
+of `writing-great-skills.md` a faithful summary of its field union and cross-field rules. Exit codes, the `--fix-safe`
+boundary, and map's default exclusions live in `ai-skillet <command> --help`; consumers rely on that output instead of
+restating it. No catalog skill wraps ai-skillet by itself.
 
 ## Workflow
 
