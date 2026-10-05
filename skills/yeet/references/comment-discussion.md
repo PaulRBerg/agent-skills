@@ -18,7 +18,7 @@ Accept these forms:
 
 Everything after the target is the comment context. Reject a missing target or empty body with a precise error. A
 discussion number or URL targets a top-level comment. A comment URL or node ID targets a reply by default. Use `--edit`
-only with an existing comment URL or node ID; deletion is not part of this workflow.
+only with an existing comment URL or node ID. Deletion is not part of this workflow.
 
 ## Read Context
 
@@ -53,7 +53,7 @@ gh discussion comment <comment-url-or-id> --repo "<owner>/<repo>" --edit --body-
 ```
 
 Use `posting.md > Error Handling and Idempotency` after any nonzero, timeout, or connection-loss result. Reread the
-discussion or comment thread and treat a matching authored body as a possible partial success; do not post a duplicate.
+discussion or comment thread and treat a matching authored body as a possible partial success. Do not post a duplicate.
 Verify the resulting comment URL or body with `gh discussion view`, then display the `### ✅ Comment posted` or
 `### ✅ Comment updated` receipt from `SKILL.md`.
 

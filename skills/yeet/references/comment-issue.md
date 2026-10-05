@@ -28,8 +28,8 @@ Rules:
   `<skill-dir>/scripts/yeet-context.sh issue`
 - ELSE: ERROR "Couldn't figure out the issue. Pass `owner/repo#123` or a GitHub issue URL."
 
-Everything after the issue identifier is the **comment context** — the user's description of what they want to say. May
-be empty if the user just wants a canned reaction (e.g., "+1", "same here").
+Everything after the issue identifier is the **comment context** — the user's description of what they want to say. If
+the user just wants a canned reaction (e.g., "+1", "same here"), the context may be empty.
 
 ## Fetch Issue Context
 
@@ -45,9 +45,9 @@ Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`
 
 Analyze:
 
-- The issue title and body — what's actually being discussed
-- The latest `comments(last: 5)` nodes — what's the current state of the conversation
-- Who's been participating — don't ping people who are already in the thread
+- The issue title and body — what is actually being discussed
+- The latest `comments(last: 5)` nodes — what is the current state of the conversation
+- Who has been participating — do not ping people who are already in the thread
 - Whether the issue is open or closed — adjust tone accordingly (closed issues may need "reopen?" framing)
 - Any labels hinting at the issue type (bug, feature, question)
 
@@ -58,20 +58,20 @@ entry.
 
 ### Guidelines
 
-- **Lead with the point.** If it's a reproduction, show it. If it's a "+1", say so and explain what specifically bit
-  you. If it's a proposed fix, link or paste it.
-- **Match the thread's register.** If the thread is technical and terse, don't be fluffy. If it's collaborative and
-  exploratory, don't be curt.
+- **Lead with the point.** If it is a reproduction, show it. If it is a "+1", say so and explain what specifically
+  caused trouble for you. If it is a proposed fix, link or paste it.
+- **Match the thread's register.** If the thread is technical and terse, avoid unnecessary wording. If it is
+  collaborative and exploratory, do not be curt.
 - **No AI throat-clearing.** Skip "Great question!", "Thanks for filing this!", "Just chiming in here...". Go straight
   to substance.
-- **No fake enthusiasm.** Don't over-promise ("I'll dig into this right away") unless the user explicitly said so.
+- **No fake enthusiasm.** Do not over-promise ("I'll dig into this right away") unless the user explicitly said so.
 - **Cite specifics.** If you reference code, link to it (see `writing.md > Link Formatting`). If you reference a commit
   or PR, link it.
-- **Use admonitions sparingly.** They are almost never needed in a comment; reserve them for genuine warnings.
+- **Use admonitions sparingly.** They are almost never needed in a comment. Reserve them for genuine warnings.
 
 ### Comment Shapes
 
-Pick the shape that fits the context. Don't force structure onto short comments.
+Pick the shape that fits the context. Do not force structure onto short comments.
 
 **Short reply** (most comments — default to this):
 
@@ -122,7 +122,7 @@ Fixed in {PR or commit link}. {One sentence on the root cause if non-obvious.}
 
 ### Platform / Environment
 
-If the comment includes environment info, follow `context.md > Platform String Normalization`. Don't paste raw `uname`
+If the comment includes environment info, follow `context.md > Platform String Normalization`. Do not paste raw `uname`
 output.
 
 ### File / Code References
@@ -147,7 +147,7 @@ Display the verified anchored URL with the `### ✅ Comment posted` receipt from
 
 The URL with the comment anchor is returned by `gh` on success — parse it from the output.
 
-On failure: follow `posting.md > Error Handling and Idempotency`; reread the issue comments before any retry and do not
+On failure, follow `posting.md > Error Handling and Idempotency`. Before any retry, reread the issue comments and do not
 post a duplicate.
 
 ## Editing a Prior Comment

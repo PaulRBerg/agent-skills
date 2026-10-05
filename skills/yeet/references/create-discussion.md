@@ -4,7 +4,7 @@ Create a GitHub discussion with the native `gh discussion` command. Load [postin
 
 ## Validate Prerequisites
 
-Requires authenticated GitHub CLI >= 2.97.0. See `context.md > Auth Validation`; the repository-context read is the auth
+Requires authenticated GitHub CLI >= 2.97.0. See `context.md > Auth Validation`. The repository-context read is the auth
 check. Handle image options through `context.md > Image Uploads`, then run `posting.md > External-disclosure Review` on
 the final title, body, labels, and attachments.
 
@@ -14,7 +14,7 @@ the final title, body, labels, and attachments.
 - Otherwise infer the repository from the local `origin` remote via `<skill-dir>/scripts/yeet-context.sh repo`.
 - Error if no repository can be inferred and none was supplied.
 
-Parse `--check`; resolve `<skill-dir>` as the absolute directory containing the owning `SKILL.md`.
+Parse `--check`. Resolve `<skill-dir>` as the absolute directory containing the owning `SKILL.md`.
 
 ## Collect Repository Context
 
@@ -37,7 +37,8 @@ gh discussion list --repo "<owner>/<repo>" --state all --search "<key terms>" \
 ```
 
 Display matches under `### 🔎 Similar discussions`, say `Creation is continuing`, and continue. If the create command
-later fails, follow `posting.md > Error Handling and Idempotency` before retrying; never recreate a possible match.
+later fails, follow `posting.md > Error Handling and Idempotency` before retrying. In that case, never recreate a
+possible match.
 
 ## Select Discussion Category
 
@@ -49,7 +50,7 @@ category.
 ## Check for Discussion Templates
 
 Keep live template-tree entries ending in `.yml` or `.yaml`. A discussion form filename normally matches the category
-slug. If multiple templates match, stop and ask the user to choose; if none matches, use the selected category without a
+slug. If multiple templates match, stop and ask the user to choose. If none matches, use the selected category without a
 form.
 
 For a selected form, fetch it from the default branch:
@@ -59,9 +60,10 @@ gh api repos/<owner>/<repo>/contents/.github/DISCUSSION_TEMPLATE/<template-name>
 ```
 
 Parse `title`, `labels`, and `body`. If labels are declared, fetch the live label set with
-`<skill-dir>/scripts/yeet-context.sh labels "<owner>/<repo>"`; preserve declared labels whose exact live names match,
-deduplicate, and pass them with `--label`. Stop for a declared label that is not live rather than inventing it. For
-`textarea`/`input`, render a section header; for `dropdown`, select only a live option; for `checkboxes`, check an
+`<skill-dir>/scripts/yeet-context.sh labels "<owner>/<repo>"`. Preserve declared labels whose exact live names match,
+deduplicate, and pass them with `--label`. Stop for a declared label that is not live rather than inventing it.
+
+For `textarea`/`input`, render a section header. For `dropdown`, select only a live option. For `checkboxes`, check an
 attestation only when repository or user evidence verifies it. Stop for any required checkbox whose attestation cannot
 be verified. Skip `markdown` fields.
 

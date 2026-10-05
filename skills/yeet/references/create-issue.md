@@ -4,7 +4,7 @@ Create a GitHub issue from repository evidence and the selected live template.
 
 ## Context and Selection
 
-Parse an optional leading `owner/repo`; otherwise infer the current repository. Repo-specific workflows supply their
+Parse an optional leading `owner/repo`. Otherwise, infer the current repository. Repo-specific workflows supply their
 fixed target and never infer it. Fetch authenticated context once:
 
 ```sh
@@ -12,7 +12,7 @@ fixed target and never infer it. Fetch authenticated context once:
 ```
 
 Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`. Cache viewer login, permission,
-default branch, and template entries. Parse `--check`; handle image options through `context.md > Image Uploads`. With
+default branch, and template entries. Parse `--check`. Handle image options through `context.md > Image Uploads`. With
 `--check`, search similar issues in all states and show results without adding a confirmation gate.
 
 Select the best template from the user's intent. This is an agent decision. Prefer YAML when a suitable YAML and
@@ -20,7 +20,7 @@ Markdown template coexist. Exclude `config.yml`.
 
 ## YAML Issue Forms
 
-Inspect the selected live form; do not mirror its schema in prose:
+Inspect the selected live form. Do not mirror its schema in prose:
 
 ```sh
 uv run "<skill-dir>/scripts/issue-form.py" inspect \
@@ -30,7 +30,7 @@ uv run "<skill-dir>/scripts/issue-form.py" inspect \
 The form JSON reports title prefix, assignees, labels, projects, issue type, field IDs, descriptions, render modes,
 defaults, dropdown options, upload constraints, multi-select behavior, required flags, and checkbox attestations.
 Compose answers in a separate JSON object keyed by field ID. Choose dropdown values only from the reported options. A
-required checkbox may be set true only when user or repository evidence verifies the attestation; ask for an
+required checkbox may be set true only when user or repository evidence verifies the attestation. Ask for an
 unverifiable required fact.
 
 Render locally:
@@ -41,7 +41,7 @@ uv run "<skill-dir>/scripts/issue-form.py" render \
 ```
 
 The renderer rejects missing required values, invalid dropdowns, unknown IDs, and unverified required checkboxes. Use
-its body exactly; filter its posting metadata through `context.md > Issue Metadata Permissions`. The agent still owns
+its body exactly. Filter its posting metadata through `context.md > Issue Metadata Permissions`. The agent still owns
 answer wording, the external-disclosure review, title text after the live prefix, semantic labels, and the external
 post.
 
@@ -55,12 +55,12 @@ sections, preserving their stated ordering and casing. Never introduce unasked g
 ## Labels, Type, and Title
 
 Apply `context.md > Issue Metadata Permissions` before resolving metadata. Add semantic labels only when the owner is
-the viewer or `sablier-labs`, after matching against the live label set; never invent labels.
+the viewer or `sablier-labs`, after matching against the live label set. Never invent labels.
 
 For YAML, prepend the rendered `posting.titlePrefix` and pass permitted `posting.assignees`, labels, and
-`posting.issueType` when present. Preserve every applicable project entry; merge permitted live template labels with
+`posting.issueType` when present. Preserve every applicable project entry. Merge permitted live template labels with
 agent-selected semantic labels and deduplicate. Write a concise title from the actual issue. For explicit issue
-metadata, accept `--type`, `--parent`, `--blocked-by`, and `--blocking` using current `gh issue create` flags; validate
+metadata, accept `--type`, `--parent`, `--blocked-by`, and `--blocking` using current `gh issue create` flags. Validate
 referenced issue numbers or URLs before posting.
 
 An explicitly requested project title may use `gh issue create --project` when project access allows it. Do not pass

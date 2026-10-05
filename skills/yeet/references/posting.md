@@ -1,6 +1,6 @@
 # Contribution Posting
 
-All external-write workflows load this reference before posting. The workflow owns the payload; this reference owns the
+All external-write workflows load this reference before posting. The workflow owns the payload. This reference owns the
 model co-signature, disclosure review, verification, and retry boundary.
 
 ## Model Co-signature
@@ -14,13 +14,15 @@ user explicitly requests otherwise. After all content and template rendering, ad
 
 Replace `LLM_NAME` with the assisting model's name from trusted session context, such as `Claude Opus 5.5` or
 `GPT-6.1-Sol`. These are examples, not defaults. If the exact model is unavailable, use the known agent name, such as
-`Codex` or `Claude Code`; never guess a model/version or infer it from the repository being discussed.
+`Codex` or `Claude Code`. Never guess a model/version or infer it from the repository being discussed.
 
-Keep exactly one co-signature footer. On edits, reuse it when the model matches; when a different model assists, retain
-the existing attribution and add the current name once in the same line, separated by commas. Insert appended content
-above the footer. Preserve the rest of the body and template structure; add the footer after rendering an issue form,
-outside its fields, code fences, and quoted text. Title-only, metadata-only, and state-only updates leave the body
-untouched; any authored accompanying comment gets its own footer.
+Keep exactly one co-signature footer. On edits, when the model matches, reuse the footer. When a different model
+assists, retain the existing attribution and add the current name once in the same line, separated by commas. Insert
+appended content above the footer. Preserve the rest of the body and template structure. Add the footer after rendering
+an issue form, outside its fields, code fences, and quoted text.
+
+Title-only, metadata-only, and state-only updates leave the body untouched. Any authored accompanying comment gets its
+own footer.
 
 ## External-disclosure Review
 
@@ -38,7 +40,7 @@ Do not retry creation automatically. `gh issue create` is not atomic: it can cre
 a follow-up `UpdateIssueIssueType` mutation fails. A metadata error does not establish that creation failed.
 
 Any timeout, connection loss, or nonzero exit after a write is ambiguous. Inspect GitHub before choosing a receipt or
-retrying. Read a returned URL or known issue number directly; otherwise search all states, not only open items, using
+retrying. Read a returned URL or known issue number directly. Otherwise, search all states, not only open items, using
 the strongest available identity:
 
 ```sh
@@ -54,10 +56,12 @@ gh discussion list --repo "<owner>/<repo>" --state all --search "<distinctive te
 
 Compare title, body, author, branch, and URL—not a partial search hit alone. A verified match is a successful creation:
 report its URL and any omitted or failed metadata. A possible match remains unverified: report the uncertainty and do
-not recreate it. Use the relevant update workflow for remaining permitted changes. For an issue or PR comment, reread
-the target's latest comments; for a discussion comment or reply, reread the discussion or comment thread with
-`gh discussion view` and treat a matching authored body as posted. A failed follow-up label, type, project, or other
-metadata step never authorizes recreating the issue, PR, or discussion. Follow `SKILL.md > Completion` for the receipt.
+not recreate it. Use the relevant update workflow for remaining permitted changes.
+
+For an issue or PR comment, reread the target's latest comments. For a discussion comment or reply, reread the
+discussion or comment thread with `gh discussion view` and treat a matching authored body as posted. A failed follow-up
+label, type, project, or other metadata step never authorizes recreating the issue, PR, or discussion. Follow
+`SKILL.md > Completion` for the receipt.
 
 For duplicate checks requested with `--check`, search all states and show matches under `### 🔎 Similar items`, then
 continue unless the user explicitly requested a review gate.

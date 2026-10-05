@@ -6,7 +6,7 @@
   that remain open. Before raising a timeout, investigate unawaited work, unresolved mocks, unbounded retries, unclosed
   resources, and fake-timer schedulers.
 - For state that passes alone but fails in a suite, use order or `--no-file-parallelism` only to diagnose. Restore state
-  where it is created and make stores, clients, caches, and stateful mocks fresh per test; serialization is not a fix.
+  where it is created and make stores, clients, caches, and stateful mocks fresh per test. Serialization is not a fix.
 - For missing mocks, resolution errors, or hoisting failures, check the identity and factory rules in
   [mocking.md](mocking.md) against the configured aliases.
 - For discovery, check configured include/exclude, config root, selected project, and project ownership before renaming

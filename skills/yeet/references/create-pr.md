@@ -49,10 +49,10 @@ or checklist.
 
 **Identify reviewers:**
 
-- Check for CODEOWNERS file: `git ls-files | rg CODEOWNERS`
-- If exists, extract owners for changed files
-- Otherwise use git blame for frequent contributors
-- Combine with reviewers from arguments
+- Check for a CODEOWNERS file: `git ls-files | rg CODEOWNERS`
+- If it exists, extract owners for changed files.
+- Otherwise, use git blame to find frequent contributors.
+- Combine them with reviewers from the arguments.
 
 Use an admonition only for a material warning that would otherwise be missed.
 

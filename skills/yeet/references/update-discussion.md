@@ -1,13 +1,13 @@
 # Discussion Update Workflow
 
 Update an existing GitHub discussion's title, body, category, labels, or images with `gh discussion edit`. Comment
-editing belongs to `comment-discussion.md`; `gh discussion` has no close or reopen command, so state changes are out of
+editing belongs to `comment-discussion.md`. `gh discussion` has no close or reopen command, so state changes are out of
 scope. Load [posting.md](posting.md) before the write.
 
 ## Validate Prerequisites
 
 The installed GitHub CLI must be authenticated and >= 2.97.0, with `gh discussion view` and `gh discussion edit`
-available. These commands are in preview; if either is unavailable, stop and tell the user to upgrade GitHub CLI rather
+available. These commands are in preview. If either is unavailable, stop and tell the user to upgrade GitHub CLI rather
 than inventing a GraphQL fallback. The discussion read below is the authentication check.
 
 ## Parse Arguments
@@ -24,7 +24,7 @@ For a URL, parse the owner, repository, and number. For `owner/repo#number`, spl
 the first two tokens. For a local number, resolve the repository with `<skill-dir>/scripts/yeet-context.sh repo`.
 Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`. Reject other targets with:
 `Couldn't figure out the discussion. Pass owner/repo#123 or a GitHub discussion URL.` Everything after the target is the
-natural-language update instruction; parse repeated `--image <path>` and optional `--image-release` through
+natural-language update instruction. Parse repeated `--image <path>` and optional `--image-release` through
 `context.md > Image Uploads`.
 
 ## Fetch Discussion Context
@@ -55,9 +55,10 @@ Multiple intents may apply at once:
 If no update instruction remains, stop with: `Tell me what to update — title, body, category, labels, or images.`
 
 For a body rewrite, follow `writing.md > Informal Tone` and preserve recognizable template structure. For an append,
-retain the current body byte-for-byte except for its co-signature footer; add a blank line and the requested content
-before the footer per `posting.md > Model Co-signature`. If images were requested, complete `context.md > Image Uploads`
-and treat its result as the body update; when combined with a rewrite, place the images in the regenerated body.
+retain the current body byte-for-byte except for its co-signature footer. For that append, add a blank line and the
+requested content before the footer per `posting.md > Model Co-signature`. If images were requested, complete
+`context.md > Image Uploads` and treat its result as the body update. When combined with a rewrite, place the images in
+the regenerated body.
 
 For a category change, fetch live categories with:
 
@@ -66,8 +67,8 @@ For a category change, fetch live categories with:
 ```
 
 Match the requested category against the live name or slug and reject an unknown category. For label additions, follow
-`context.md > Fetch Repo Labels`; reject unknown labels and do not create them. Removal may name only labels currently
-present on the discussion.
+`context.md > Fetch Repo Labels`. For those additions, reject unknown labels and do not create them. Removal may name
+only labels currently present on the discussion.
 
 ## Execute and Verify
 
@@ -86,7 +87,7 @@ After the edit, repeat the context read and verify every requested field. Displa
 `### ✅ Discussion updated` receipt from `SKILL.md` and one line naming the changed fields.
 
 On failure, read the discussion again and follow `posting.md > Error Handling and Idempotency` before any retry. Do not
-retry automatically; report the concrete error, observed state, and next action.
+retry automatically. Report the concrete error, observed state, and next action.
 
 ## Examples
 
