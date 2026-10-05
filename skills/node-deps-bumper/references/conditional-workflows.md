@@ -1,6 +1,6 @@
 # Conditional Workflows
 
-Both sections below are gated: read only when the triggering condition in `SKILL.md` is met.
+Read either section below only when its triggering condition in `SKILL.md` is met.
 
 ## Minimum Release Age Mode
 
@@ -8,10 +8,12 @@ Use this mode for projects that configure a package-manager minimum-age policy.
 
 Discover the effective project and user-level package-manager configuration. A configured age gate makes `@latest` a
 valid initial selector and `^x.y.z` a valid retained manifest range: the installer filters out releases inside the
-cooldown. Do not exact-pin solely to impose the same freshness boundary; Bun still age-gates exact requests but they
-bypass its rapid-release stability check. The age gate is not a reproducibility mechanism; commit the lockfile and use
-frozen installs in deployment. If the deployment resolves dependencies without that lockfile, require the same effective
-age policy there or exact-pin for that workflow.
+cooldown. Do not exact-pin solely to impose the same freshness boundary. Bun still age-gates exact requests, but they
+bypass its rapid-release stability check.
+
+The age gate is not a reproducibility mechanism. Commit the lockfile and use frozen installs in deployment. If the
+deployment resolves dependencies without that lockfile, require the same effective age policy there or exact-pin for
+that workflow.
 
 Taze calls this `maturityPeriod`:
 
@@ -33,9 +35,9 @@ projects, pass `--maturity-period` explicitly.
 
 For Bun lockfile projects, `run-taze.sh` uses Python 3.11+ through `uv` to parse the global `.bunfig.toml` under
 `$XDG_CONFIG_HOME` (or `$HOME` when unset), then overlay project `[install]` keys. Multiline exclusion arrays are
-supported; an explicit local `0` or empty array overrides the inherited value. See
+supported. An explicit local `0` or empty array overrides the inherited value. See
 [Bun configuration](https://bun.sh/docs/runtime/bunfig#global-vs-local). Verify the installer actually enforces
-inherited age settings; if it ignores them, preserve the policy in project configuration before installing.
+inherited age settings. If it ignores them, preserve the policy in project configuration before installing.
 
 When the package manager config has an exclude list, pass matching Taze excludes if available:
 
@@ -43,16 +45,16 @@ When the package manager config has an exclude list, pass matching Taze excludes
 taze major -r --maturity-period 7 --maturity-period-exclude react,webpack
 ```
 
-`run-taze.sh` adds these flags itself for Bun lockfile projects and rejects extra options; Taze infers them for pnpm and
+`run-taze.sh` adds these flags itself for Bun lockfile projects and rejects extra options. Taze infers them for pnpm and
 Yarn. Append the same maturity flags only to direct Taze scan and write commands. After Taze writes manifests, run the
-project package manager install as usual; the package manager remains the final enforcement layer for direct and
+project package manager install as usual. The package manager remains the final enforcement layer for direct and
 transitive resolution.
 
 ## Update Bun Catalogs
 
 When the root `package.json` contains `catalog` / `catalogs` at the top level or under `workspaces`, use
 `scripts/update-bun-catalogs.py` with the saved Taze plan and the selected packages present in catalogs. Skip this
-helper if that subset is empty. Preview before manifest writes; after the baseline passes, rerun the same command with
+helper if that subset is empty. Preview before manifest writes. After the baseline passes, rerun the same command with
 `--write`, then perform the selected Taze write and regenerate the lockfile. Taze can update Bun catalogs natively, so
 running it first would invalidate the helper's saved plan.
 

@@ -1,7 +1,7 @@
 # Multi-Repository Alignment
 
 Use when the user names two or more repositories or asks to sync or align dependency versions across repositories. Each
-repository keeps its own package manager, range style, age policy, and validation suite; alignment only chooses shared
+repository keeps its own package manager, range style, age policy, and validation suite. Alignment only chooses shared
 targets. Treat an argument that resolves to a directory containing `package.json` as a repository root.
 
 ## 1. Plan Every Repository
@@ -13,14 +13,14 @@ bash <skill-dir>/scripts/run-taze.sh --plan <repo> > <repo-plan.json>
 ```
 
 The helper applies that repository's own minimum-release-age policy, so each row's `available` is the newest version
-that repository admits. Plans list only packages with updates; also record every direct dependency and catalog entry
+that repository admits. Plans list only packages with updates. Also record every direct dependency and catalog entry
 from each manifest so packages that are already current still count as shared.
 
 ## 2. Respect Holds
 
-Search each repository for documented holds: `overrides`, `resolutions`, or `pnpm.overrides` entries; exact pins; and
+Search each repository for documented holds: `overrides`, `resolutions`, or `pnpm.overrides` entries, exact pins, and
 guidance, changelog, or code comments explaining a pin or version cap. A hold caps that repository's ceiling or excludes
-the package; never override it silently. Report every hold with its source and effect on the shared target.
+the package. Never override it silently. Report every hold with its source and effect on the shared target.
 
 ## 3. Choose One Shared Target
 
@@ -38,8 +38,8 @@ Packages found in only one repository follow that repository's plan exactly as i
 
 Present every shared target that crosses a major version in any repository, plus every `review` or unknown row, in one
 cross-repository decision batch: package, per-repository current → target, package role, and migration notes. Reuse
-explicit approval of those transitions and ask only about unresolved rows; never infer major approval from a package
-name. A declined major leaves that package unchanged everywhere.
+explicit approval of those transitions. Ask only about unresolved rows. Never infer major approval from a package name.
+A declined major leaves that package unchanged everywhere.
 
 ## 5. Apply Per Repository
 

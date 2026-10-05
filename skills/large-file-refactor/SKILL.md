@@ -4,7 +4,7 @@ coordination: exempt
 disable-model-invocation: true
 name: large-file-refactor
 description:
-  Discover large source-file refactor candidates and propose cohesion- and risk-driven split plans using available
+  Discover large source-file refactor candidates and propose split plans based on cohesion and risk, using available
   semantic tooling.
 ---
 
@@ -12,11 +12,11 @@ description:
 
 This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
 Use LOC thresholds to discover candidates, then decide whether a split is justified by cohesion, coupling, ownership,
-and change risk. Source files match above 1000 LOC; test files use a relaxed 2000 LOC discovery threshold.
+and change risk. Source files match above 1000 LOC. Test files use a relaxed 2000 LOC discovery threshold.
 
 ## Arguments
 
@@ -40,13 +40,13 @@ and change risk. Source files match above 1000 LOC; test files use a relaxed 200
 4. Draft a refactor plan for the 3 largest files only, unless the user explicitly requested another count.
 
 5. For each candidate, rank split value by mixed responsibilities, change frequency/risk, coupling, and testability. Use
-   whichever semantic symbol/reference tooling is available; prefer Serena when installed:
+   whichever semantic symbol/reference tooling is available. When Serena is installed, prefer it:
 
    - Inspect symbol overviews, references, imports, and relevant history.
    - Use the evidence to choose extraction boundaries, target module names, migration order, and test coverage.
 
 6. This workflow defaults to a report and plan. Implement only when the user's request already authorizes execution or
-   the user subsequently approves it; do not require a separate request for an unchanged, already authorized outcome.
+   the user subsequently approves it. Do not require a separate request for an unchanged, already authorized outcome.
 
 ## Refactor Plan Format
 
@@ -67,10 +67,10 @@ or upstream source instead of hand-splitting generated output.
 
 ## Guard Rails
 
-- Treat the table as source of truth for size ranking only; rank refactor priority separately.
-- Keep the plan cohesive; do not split solely to reduce line count.
+- Treat the table as the source of truth for size ranking only. Rank refactor priority separately.
+- Keep the plan cohesive. Do not split solely to reduce line count.
 - Prefer existing project module boundaries and naming conventions.
-- Call out when the helper used its portable LOC estimate instead of `tokei`.
+- Report when the helper used its portable LOC estimate instead of `tokei`.
 
 ## Completion
 

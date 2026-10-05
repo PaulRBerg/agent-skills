@@ -7,8 +7,8 @@ description: Refactor naming and repository structure exhaustively while preserv
 
 # Naming Refactor
 
-If these instructions are already present in the conversation from a slash or dollar invocation, follow them directly;
-do not invoke this skill again through a skill tool.
+If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
+case, do not invoke this skill again through a skill tool.
 
 Make every name in the current repository communicate one coherent domain model, regardless of refactor cost.
 
@@ -61,11 +61,11 @@ uv run "<skill-dir>/scripts/naming-ledger.py" mark \
 ```
 
 A subagent reports a planned but unverified rename as `pending`. After the wave is verified, apply its file with
-`--pending-as renamed` (or another final status) instead of rewriting the TSV; reasons carry over, and `excluded` or
-`blocked` still require one.
+`--pending-as renamed` (or another final status) instead of rewriting the TSV. Reasons remain unchanged, and `excluded`
+or `blocked` still require one.
 
 Dispositions paths are relative to the repository root and must match ledger entries exactly. The ledger maps only
-tracked and non-ignored untracked files; gitignored artifacts, cache files, and bare directories are never ledger paths.
+tracked and non-ignored untracked files. Gitignored artifacts, cache files, and bare directories are never ledger paths.
 Unknown paths fail the batch closed. Rerun with `--skip-unknown` only after reviewing the reported paths and confirming
 that every skip is intentional, then verify the result's `skipped` list.
 
@@ -75,7 +75,7 @@ uv run "<skill-dir>/scripts/naming-ledger.py" refresh --ledger <scratch.json>
 uv run "<skill-dir>/scripts/naming-ledger.py" summary --ledger <scratch.json>
 ```
 
-Refresh after path moves and before final validation. New paths become pending; removed paths remain in the ledger and
+Refresh after path moves and before final validation. New paths become pending. Removed paths remain in the ledger and
 must be accounted as renamed, excluded, or blocked. The run is complete only when the helper reports no pending or
 blocked paths.
 
@@ -88,7 +88,7 @@ blocked paths.
 3. Identify external contracts, repository-controlled consumers, reflection and serialization surfaces, dynamic imports,
    case-insensitive filesystem constraints, and language-aware rename tooling.
 4. Derive canonical domain vocabulary from behavior, types, data flow, documentation, tests, and relevant history.
-   History resolves unclear intent; it does not override the current design.
+   History resolves unclear intent. It does not override the current design.
 
 Completion of this phase requires a recorded baseline, explicit contract boundaries, and a ledger covering the entire
 repository.
@@ -101,7 +101,7 @@ booleans, constants, tests, fixtures, documentation, configuration, scripts, and
 
 Apply these rules together:
 
-- Give one concept one canonical term; give distinct concepts distinct terms.
+- Give one concept one canonical term. Give distinct concepts distinct terms.
 - Name by domain role, behavior, ownership, lifecycle, units, and polarity rather than incidental implementation.
 - Replace misleading, overloaded, contextless, or generic names such as `data`, `info`, `item`, `manager`, `process`,
   `handle`, and `utils` when a specific name is supported by evidence.
@@ -124,10 +124,11 @@ groups, dependency waves, contract boundaries, risks, and proving checks. Before
 coordination mechanism to claim the cumulative write set: every path already written plus the wave's definitions,
 consumers found by search, moved paths on both sides, and moved directories recursively. A claim that drops an earlier
 wave's paths is invalid. Claim the complete worktree (`--recursive '.'`) only when a wave's consumers cannot be
-enumerated, such as a rename of a pervasive identifier or a top-level directory move. For `ai-coord`, run
-`ai-coord start 'naming refactor' <paths>... [--recursive <dir>]...` and proceed only after it returns `READY`;
-`BLOCKED`, `UNKNOWN`, and pathless `INTENT` results do not authorize edits and cannot be overridden by user
-confirmation. Hold the claim through final verification.
+enumerated, such as a rename of a pervasive identifier or a top-level directory move.
+
+For `ai-coord`, run `ai-coord start 'naming refactor' <paths>... [--recursive <dir>]...` and proceed only after it
+returns `READY`. `BLOCKED`, `UNKNOWN`, and pathless `INTENT` results do not authorize edits and cannot be overridden by
+user confirmation. Hold the claim through final verification.
 
 After acquiring the claim, re-read the current commit and worktree status, refresh the ledger, and compare the
 repository with the recorded baseline. Reinspect every path whose content or presence changed during analysis, then
@@ -136,8 +137,8 @@ changes, not content changes to existing paths. Because other writers may touch 
 names immediately before each wave and during final verification, and extend the claim to any new consumer.
 
 If the repository has no reliable coordination mechanism, ask the user to confirm that no other coding agent will write
-to the repository through implementation and verification. Stop until the user explicitly confirms that fallback window;
-do not infer it from a stable worktree, absent processes, or the initial invocation.
+to the repository through implementation and verification. Stop until the user explicitly confirms that fallback window.
+Do not infer it from a stable worktree, absent processes, or the initial invocation.
 
 ## Execute in Verified Waves
 
@@ -152,19 +153,19 @@ continuing.
 - Update definitions, consumers, imports, re-exports, tests, fixtures, docs, examples, configuration, CI, selectors,
   reflection, serialization, and generated sources in the same wave.
 - Change generated output through its generator or schema, then regenerate and verify it. Do not edit vendored sources.
-- Run the narrowest proving checks after each wave. Fix attributable failures before continuing; if parity cannot be
-  established, revert only that wave's edits without repository-wide reset, clean, checkout, or stash commands.
+- Run the narrowest proving checks after each wave. Fix attributable failures before continuing. If you cannot establish
+  parity, revert only that wave's edits without repository-wide reset, clean, checkout, or stash commands.
 - Mark ledger paths only after the wave is verified. Refresh the ledger after moves so new paths enter coverage.
 
-Continue until every planned rename is applied or blocked; refactor cost, diff size, and elapsed time are not stopping
+Continue until every planned rename is applied or blocked. Refactor cost, diff size, and elapsed time are not stopping
 criteria.
 
 ## Final Verification and Report
 
 Refresh the ledger, inspect every new path, and repeat the semantic naming pass until it finds no material naming issue.
 Search for stale old names and paths, including case variants and non-code literals. Run aggregate repository checks and
-compare them with baseline; no new unexplained failure is acceptable. Verify stable external contracts through available
-API snapshots, schemas, CLI help, import surfaces, or focused smoke tests.
+compare them with the baseline. No new unexplained failure is acceptable. Verify stable external contracts through
+available API snapshots, schemas, CLI help, import surfaces, or focused smoke tests.
 
 Lead success with `### ✅ Naming refactor complete — <rename groups> groups · <accounted>/<mapped> paths accounted`.
 Report exact file and directory moves, every public or exported rename, compact local-identifier group counts,

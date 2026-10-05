@@ -1,6 +1,6 @@
 # PDF Forms
 
-Choose the branch from the document structure; do not guess from appearance.
+Choose the branch from the document structure. Do not guess from appearance.
 
 ## Inspect
 
@@ -43,7 +43,7 @@ explicitly supplied.
 
 ## Overlay a flat form
 
-Render the page first and calibrate in PDF points from the lower-left corner. Page numbers are one-based. Create a JSON
+Render the page first. Calibrate in PDF points from the lower-left corner. Page numbers are one-based. Create a JSON
 array:
 
 ```json
@@ -60,7 +60,7 @@ uv run "<skill-dir>/scripts/form.py" overlay "input.pdf" "placements.json" "fill
 ```
 
 The default font is `/System/Library/Fonts/Supplemental/Arial.ttf`, which supports Romanian text. `font_size` defaults
-to 10. Placements are single-line text; add separate entries instead of relying on wrapping.
+to 10. Placements are single-line text. Add separate entries instead of relying on wrapping.
 
 Render every affected page after overlaying. Check baseline, clipping, diacritics, rotation, and whether the visual
 position still matches at ordinary and high zoom. The helper preserves page count and dimensions but cannot determine

@@ -45,9 +45,9 @@ and reconcile exact row counts and totals against the PDF.
 Extract each input independently with the same appropriate route. Compare normalized facts while retaining the original
 strings and page provenance. Report:
 
-- facts present in both documents;
-- facts unique to each document;
-- materially different values, dates, identifiers, qualifications, or footnotes;
+- facts present in both documents.
+- facts unique to each document.
+- materially different values, dates, identifiers, qualifications, or footnotes.
 - pages rendered to distinguish source differences from extraction errors.
 
 Do not infer that missing extracted text means missing source content. Inspect the relevant render or OCR coverage
@@ -124,8 +124,8 @@ pdftotext -f 1 -l 1 -layout "output.pdf" -
 
 Build a complete old-to-new map before writing. Derive names from stable content such as issuer, document type, account
 suffix, and covered date range. Detect collisions and ambiguous documents first. Copy to the new names unless the user
-explicitly authorizes renaming originals, then profile both sides and compare hashes when a byte-identical copy is
-expected.
+explicitly authorizes renaming originals. Then profile both sides. When a byte-identical copy is expected, compare
+hashes.
 
 ## Compress
 

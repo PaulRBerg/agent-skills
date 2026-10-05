@@ -18,9 +18,9 @@ For a new package or CLI, use the repository's package manager and existing rang
 with an exact version merely because it can admit future releases.
 
 When an effective package-manager minimum-release-age policy exists, it provides the freshness boundary for candidate
-versions; read [references/conditional-workflows.md](references/conditional-workflows.md). The committed lockfile and
-frozen deployment install provide reproducibility. Exact-pin only when the user or repository requires it, a known
-compatibility constraint justifies it, or the package will run without a committed lockfile and frozen install.
+versions. In that case, read [references/conditional-workflows.md](references/conditional-workflows.md). The committed
+lockfile and frozen deployment install provide reproducibility. Exact-pin only when the user or repository requires it,
+a known compatibility constraint justifies it, or the package will run without a committed lockfile and frozen install.
 
 ## Multiple Repositories
 
@@ -43,14 +43,14 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
 
 2. If `--dry-run` was requested, present the plan and counts, then stop without changing manifests or lockfiles.
 
-3. Select every ranged minor/patch update marked `apply`. Reuse explicit approval of package/version transitions; never
+3. Select every ranged minor/patch update marked `apply`. Reuse explicit approval of package/version transitions. Never
    auto-approve a major merely from its package name. Present unresolved `review-major` and unknown updates in one
    decision batch with current version, target version, package role, and relevant migration/release notes. Apply only
    authorized majors.
 
 4. If nothing is selected, report the no-op and stop. If the root manifest uses Bun catalogs, preview the exact selected
-   catalog transitions from the accepted plan. Pass only selected packages present in a catalog; skip the helper when
-   that subset is empty:
+   catalog transitions from the accepted plan. Pass only selected packages present in a catalog. When that subset is
+   empty, skip the helper:
 
    ```sh
    uv run <skill-dir>/scripts/update-bun-catalogs.py \
@@ -61,16 +61,17 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
    that no longer matches the plan fail before writes. The helper does not select upgrades.
 
 5. Before the first manifest or lockfile write, select and run a baseline that can detect regressions from the chosen
-   updates. Honor repository-required checks; otherwise select dependency-resolution, build, test, typecheck, lint,
+   updates. Honor repository-required checks. Otherwise, select dependency-resolution, build, test, typecheck, lint,
    formatting, codegen, or invariant checks from the updated packages' actual consumers and risk. Use an aggregate suite
    for shared toolchain or runtime changes, not merely because it exists. Use frozen or non-writing modes where
-   available, and record the exact commands and coverage for the post-bump rerun. Attribute every failure before
-   deciding whether it blocks. Proceed when an unrelated pre-existing failure is reproducible, can be compared after the
-   bump, and does not prevent dependency resolution or the checks needed to detect regressions; do not fix it as part of
-   the bump. Dependency or peer-resolution conflicts, actionable unsafe behavior, or a baseline that cannot provide
-   trustworthy before/after signal block the bump. In that case, stop with
-   `### ⛔ Dependency bump blocked — baseline unusable` and report the exact prerequisite and diagnostics without asking
-   for redundant authorization. Informational notices such as unavoidable deprecations do not block.
+   available, and record the exact commands and coverage for the post-bump rerun.
+
+   Attribute every failure before deciding whether it blocks. Proceed when an unrelated pre-existing failure is
+   reproducible, can be compared after the bump, and does not prevent dependency resolution or the checks needed to
+   detect regressions. Do not fix that failure as part of the bump. Dependency or peer-resolution conflicts, actionable
+   unsafe behavior, or a baseline that cannot provide trustworthy before/after signal block the bump. In that case, stop
+   with `### ⛔ Dependency bump blocked — baseline unusable` and report the exact prerequisite and diagnostics without
+   asking for redundant authorization. Informational notices such as unavoidable deprecations do not block.
 
 6. For Bun catalogs, apply the previewed transitions first: rerun `update-bun-catalogs.py` with the same plan and
    catalog include subset plus `--write`. It atomically updates every matching default/named catalog occurrence and
@@ -93,13 +94,14 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
 9. Fix every issue caused by the bump, including required source or configuration migrations, while preserving intended
    behavior. Do not suppress diagnostics, weaken validation, or change expected behavior merely to make checks pass.
    After each fix, rerun checks whose inputs or behavior changed. At completion, require valid results for the entire
-   recorded suite against the final state, with no new failures against the accepted baseline; reuse passing results
+   recorded suite against the final state, with no new failures against the accepted baseline. Reuse passing results
    whose inputs remain unchanged. Only unrelated pre-existing failures meeting step 5's comparison requirements may
-   remain. If no clear safe fix exists within the task's authority, stop with
-   `### ⚠️ Dependency regression decision required`. Present all such issues in one table with the evidence, affected
-   locations, fix and revert options, and likely effects. Do not report completion until the user chooses, the fix is
-   applied or the offending update is reverted, the lockfile is regenerated, and the complete suite meets that same
-   baseline-comparison requirement.
+   remain.
+
+   If no clear safe fix exists within the task's authority, stop with `### ⚠️ Dependency regression decision required`.
+   Present all such issues in one table with the evidence, affected locations, fix and revert options, and likely
+   effects. Do not report completion until the user chooses, the fix is applied or the offending update is reverted, the
+   lockfile is regenerated, and the complete suite meets that same baseline-comparison requirement.
 
 ## User-Facing Output
 
@@ -120,11 +122,11 @@ undecorated.
 ## Invariants
 
 - Fixed versions and non-semver protocols remain unchanged unless the user explicitly asks otherwise.
-- Caret ranges are valid for new dependencies and CLIs; do not describe them as unreproducible when a committed lockfile
+- Caret ranges are valid for new dependencies and CLIs. Do not describe them as unreproducible when a committed lockfile
   and frozen install control resolution.
 - Package arguments constrain both scan and write phases.
 - The same maturity-period policy applies to scan and write.
-- Bun catalog preview and write use the same accepted Taze plan and selected package set; stale plans never write.
+- Bun catalog preview and write use the same accepted Taze plan and selected package set. Stale plans never write.
 - Do not infer compatibility from SemVer alone when repository evidence, peer ranges, or release notes indicate
   otherwise.
 

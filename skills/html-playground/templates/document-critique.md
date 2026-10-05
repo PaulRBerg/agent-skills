@@ -1,7 +1,7 @@
 # Document Critique Template
 
-Use this template when the playground helps review and critique documents: SKILL.md files, READMEs, specs, proposals, or
-any text that needs structured feedback with approve/reject/comment workflow.
+When the playground helps review and critique documents, use this template. It covers SKILL.md files, READMEs, specs,
+proposals, or any text that needs structured feedback with an approve/reject/comment workflow.
 
 ## Layout
 
@@ -160,7 +160,7 @@ function updatePrompt() {
 When building a critique playground for a specific document:
 
 1. Read the document content
-2. Analyze and generate suggestions with:
+2. Analyze the document and generate suggestions with:
    - Specific line references
    - Clear, actionable suggestion text
    - Category tags (clarity, completeness, performance, ux)

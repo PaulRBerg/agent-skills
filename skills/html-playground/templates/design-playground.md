@@ -47,16 +47,16 @@ function renderPreview() {
 }
 ```
 
-Show the preview on both light and dark backgrounds if relevant. Include a context toggle.
+If relevant, show the preview on both light and dark backgrounds. Include a context toggle.
 
 ## Prompt output for design
 
-Frame it as a direction to a developer, not a spec sheet:
+Make the prompt give directions to a developer rather than present a spec sheet:
 
 > "Update the card to feel soft and elevated: 12px border-radius, 24px horizontal padding, a medium box-shadow (0 4px
 > 12px rgba(0,0,0,0.1)). On hover, lift it with translateY(-1px) and deepen the shadow slightly."
 
-If the user is working in Tailwind, suggest Tailwind classes. If raw CSS, use CSS properties.
+If the user is working in Tailwind, suggest Tailwind classes. If the user works in raw CSS, use CSS properties.
 
 ## Example topics
 
