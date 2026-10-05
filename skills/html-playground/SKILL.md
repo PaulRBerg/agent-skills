@@ -1,13 +1,17 @@
 ---
+argument-hint: "[debrief [<slug>] | <topic>]"
 name: html-playground
 description:
   Use to build interactive single-file HTML playgrounds, explorers, or tools with visual controls, live preview, and
-  prompt copy-out.
+  prompt copy-out, or to save the current task's findings as an interactive HTML debrief/report.
 ---
 
 # HTML Playground Builder
 
 Build a self-contained interactive HTML explorer with controls, live preview, and a copyable natural-language prompt.
+
+Use **debrief mode** when the user asks for a debrief or a saved HTML findings/report from the current task, or invokes
+`debrief [<slug>]`; otherwise build a general playground.
 
 ## Workflow
 
@@ -23,6 +27,31 @@ Build a self-contained interactive HTML explorer with controls, live preview, an
 3. Write one HTML file with inline CSS and JavaScript and no external runtime dependencies.
 4. Open it in a desktop browser, interact with every control and preset, and verify live preview, prompt output, copy
    feedback, empty/error states, and keyboard usability. Fix rendered defects before completion.
+
+## Debrief Mode
+
+Persist current-task evidence as an interactive HTML report at `./.ai/debriefs/<slug>/index.html`.
+
+- Derive a short topical kebab-case slug when omitted.
+- Write only inside the selected debrief directory. If an inferred slug already exists, choose a collision-free semantic
+  qualifier, falling back to a timestamp suffix, and continue without overwriting. If the user explicitly supplied the
+  slug, stop and ask whether to overwrite or choose a new slug.
+- Use only evidence present in the current task: real findings, paths, verified locations, metrics, decisions, and
+  unresolved risks. Do not invent filler.
+
+Before step 1, run the bundled preparer from the target repository:
+
+```sh
+bash <skill-dir>/scripts/prepare-debrief.sh <slug>
+```
+
+Use its `DEBRIEFS_DIR`, `DEBRIEF_PATH`, and `EXISTS` output. When `EXISTS` is true for an inferred slug, derive a unique
+slug and rerun the preparer before writing. When it is true for an explicit slug, request the choice defined above.
+Relay slug-validation errors and stop.
+
+Then follow the workflow, writing to `DEBRIEF_PATH`, with a template matched to the evidence and an evidence view
+alongside the controls and presets. Before completion, also verify that every claim traces to the task transcript or
+tool evidence and that the output contains no placeholders, then run `open "$DEBRIEF_PATH"`.
 
 ## Opinionated Defaults
 
@@ -45,6 +74,14 @@ Use these when product context does not indicate otherwise:
 - Presets update controls, preview, and prompt consistently.
 - Do not add controls that do not affect either the preview or the generated prompt.
 
-Completion requires the self-contained file and rendered, interactive inspection evidence. Finish with
-`### ✨ Playground ready`, the linked artifact, and a compact artifact/controls/desktop-browser/copy-fallback table.
-Keep generated prompts free of decorative icons unless the requested content needs them.
+## Completion
+
+Completion requires the self-contained file and rendered, interactive inspection evidence. Keep generated prompts free
+of decorative icons unless the requested content needs them.
+
+- Playground: finish with `### ✨ Playground ready`, the linked artifact, and a compact
+  artifact/controls/desktop-browser/copy-fallback table.
+- Debrief: also require evidence-grounded content at the selected path and collision handling that never silently
+  overwrites. Finish with `### 📊 Debrief ready — <title>`, the clickable absolute path, `Opened in desktop browser`,
+  and one compact line naming the evidence view and presets. Keep preparer `KEY=VALUE` output, paths, and slug errors
+  exact and undecorated.

@@ -48,8 +48,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | frontend-design        | Distinctive, subject-specific frontend design                              |
 | git-squash             | Squash PR branch with semantic commit message                              |
 | grill-me               | Relentlessly stress-test plans and designs                                 |
-| html-debrief           | Interactive HTML task debriefs                                             |
-| html-playground        | Interactive single-file HTML playgrounds                                   |
+| html-playground        | Interactive single-file HTML playgrounds and task debriefs                 |
 | interview-me           | Clarify plans and ideas through a focused, lightweight interview           |
 | large-file-refactor    | Large source-file report and Serena split plans                            |
 | naming-refactor        | Exhaustive behavior-preserving repository naming refactor                  |
