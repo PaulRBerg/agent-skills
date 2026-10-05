@@ -44,6 +44,27 @@ exposures beneath `.agents/skills`, `.claude/skills`, or `.codex/skills` may omi
 provides it, doctor still validates the extended `policy.allow_implicit_invocation` contract and can safely update a
 mismatch.
 
+### Map ignore policy
+
+The `--help` epilogues are the agent-facing summary of defaults and exit codes; keep them aligned with this section and
+`src/exclusions.rs`, which owns the exact lists.
+
+- Dependency and build directories (`.git`, `node_modules`, `vendor`, `.venv`, `target`, `dist`, `build`, `out`,
+  `.next`, `coverage`) are skipped everywhere, including tree hashing.
+- Agent state is skipped only beneath `.claude/` or `.codex/`: Claude transcripts, plans, file history, tasks, caches,
+  logs, and history; Codex sessions, threads, history, logs, caches, SQLite state, and backups. Authored skills under
+  `.claude/skills/` and `.codex/skills/` stay scannable, and project directories named `plans`, `sessions`, or `backups`
+  elsewhere are still scanned.
+- The default `$HOME` scan additionally skips `~/Library` and `~/.Trash` (macOS privacy protections make traversal fail
+  partway), the agent homes `~/.agents`, `~/.claude`, `~/.codex`, and `~/.local/state/skills` (installed copies and
+  state are noise relative to authored sources), package-manager and toolchain caches, and the known catalog source
+  checkouts (`--include-catalog-sources` keeps them). An explicit `--root` is never excluded this way, so pass one of
+  these paths directly to audit it.
+- `--portfolio-root` selects the containing Git repository plus present `~/.agents/skills` and `~/.claude/skills` roots
+  as explicit roots. It follows a symlink only when it is a direct skill-directory entry under a recognized `skills`,
+  `.agents/skills`, `.claude/skills`, or `.codex/skills` root; tree hashing records nested symlink targets without
+  following them.
+
 ### Doctor validation contract
 
 `ai-skillet doctor --root <skill-or-catalog-root>` is the canonical deterministic, offline local validator for the

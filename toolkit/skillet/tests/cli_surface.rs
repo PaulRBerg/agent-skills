@@ -27,7 +27,9 @@ fn map_help_lists_its_supported_options() {
         .stdout(predicate::str::contains("--include-self"))
         .stdout(predicate::str::contains("--include-snippets"))
         .stdout(predicate::str::contains("--show-skipped"))
-        .stdout(predicate::str::contains("--format <FORMAT>"));
+        .stdout(predicate::str::contains("--format <FORMAT>"))
+        .stdout(predicate::str::contains("map scans $HOME but skips"))
+        .stdout(predicate::str::contains("Exit status:"));
 }
 
 #[test]
@@ -40,7 +42,10 @@ fn doctor_help_lists_its_supported_options() {
         .stdout(predicate::str::contains("--skill <NAME>"))
         .stdout(predicate::str::contains("--dependencies-only"))
         .stdout(predicate::str::contains("--fix-safe"))
-        .stdout(predicate::str::contains("--format <FORMAT>"));
+        .stdout(predicate::str::contains("--format <FORMAT>"))
+        .stdout(predicate::str::contains("stay report-only"))
+        .stdout(predicate::str::contains("1  the audit completed and findings remain"))
+        .stdout(predicate::str::contains("3  a requested safe fix failed"));
 }
 
 #[test]
