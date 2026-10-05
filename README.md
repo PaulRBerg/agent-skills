@@ -17,6 +17,7 @@ npx skills add PaulRBerg/agent-skills#shelved
 | ------------------ | --------------------------------------------- |
 | diagnosing-bugs    | Loop-first bug diagnosis and regression tests |
 | diagram-monochrome | Monochrome technical schematic diagrams       |
+| effect-ts-v3       | Effect 3 patterns and source-aligned guidance |
 | loop-skill         | Repeat a skill until stable or an exact count |
 | night-shift        | Autonomous overnight codebase improvement     |
 | oracle-codex       | Codex oracle for planning                     |
