@@ -27,7 +27,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | ---------------------- | -------------------------------------------------------------------------- |
 | agents-brain           | Maintain repo context and repo-local skills                                |
 | agents-docs            | Fetch current official Codex and Claude Code docs, including hooks/trust   |
-| agents-introspection   | Retrospect on Codex/Claude Code transcript history                         |
+| agents-introspection   | Assess recurrence risk from Codex/Claude Code transcript history           |
 | ai-prune               | Archive stale .ai files and trash stale .cache entries on macOS            |
 | autoresearch           | Autonomous experiment loop                                                 |
 | brainstorm-with-me     | Co-create novel ideas and converge on a testable concept                   |
@@ -57,6 +57,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | repo-cross-pollination | Transfer useful guidance, workflows, and dependencies between repositories |
 | repo-harmonization     | Audit and align multiple interdependent repositories                       |
 | repo-rename            | Rename GitHub repo, folder, and agent thread references                    |
+| retro                  | Session retrospectives with transcript-backed environment fixes            |
 | skill-harmonization    | Harmonize repository and user-installed skill portfolios                   |
 | skill-writing          | Bootstrap a project-local agent skill                                      |
 | spreadsheets           | Opinionated CSV/TSV/XLSX wrangling on macOS                                |
