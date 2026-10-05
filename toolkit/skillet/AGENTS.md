@@ -1,17 +1,17 @@
 # ai-skillet contributor guidance
 
-Keep the CLI synchronous and library-owned: `src/main.rs` parses process arguments and maps errors to exit codes, while
+Keep the CLI synchronous and library-owned. `src/main.rs` parses process arguments and maps errors to exit codes, while
 behavior belongs in `src/lib.rs` and focused modules.
 
 The supported public surface is `map`, `doctor`, `doctor --dependencies-only`, and `--version`. Preserve the documented
 exit codes and deterministic text, JSON, and DOT output contracts.
 
 Use the nightly minimal Rust toolchain configured in `toolkit/`. Before proposing a change, run the narrowest relevant
-locked Cargo check. Keep macOS and Linux compatibility; do not add runtime services, plugin systems, config files, shell
+locked Cargo check. Keep macOS and Linux compatibility. Do not add runtime services, plugin systems, config files, shell
 hooks, or completion generation without an explicit product decision.
 
 From `toolkit/`, `cargo test -p ai-skillet --locked` is the focused package gate and `just rust-check` is the aggregate
-Rust gate. `just install-cli` installs every workspace binary under `~/.local`; do not run it for ordinary verification.
+Rust gate. `just install-cli` installs every workspace binary under `~/.local`. Do not run it for ordinary verification.
 
 ## CLI reference
 
@@ -35,9 +35,9 @@ ai-skillet --version
 filters diagnostics and safe fixes by canonical skill directory name.
 
 A catalog root that exposes `skills/` must provide a `README.md` with an exact `## Skills` section and a Markdown table.
-The required first column is `Skill` and lists every active skill name; additional columns are optional and ignored by
-the inventory validator. Conventional installed roots named `.agents`, `.claude`, or `.codex` do not require a catalog
-README inventory.
+The required first column is `Skill` and lists every active skill name. Additional columns are optional, and the
+inventory validator ignores them. Conventional installed roots named `.agents`, `.claude`, or `.codex` do not require a
+catalog README inventory.
 
 Skills in ordinary source-catalog `skills/<name>` paths must provide `agents/openai.yaml`. Conventional installed
 exposures beneath `.agents/skills`, `.claude/skills`, or `.codex/skills` may omit that file. When an installed exposure
@@ -46,15 +46,15 @@ mismatch.
 
 ### Map ignore policy
 
-The `--help` epilogues are the agent-facing summary of defaults and exit codes; keep them aligned with this section and
+The `--help` epilogues summarize defaults and exit codes for agents. Keep them aligned with this section and
 `src/exclusions.rs`, which owns the exact lists.
 
-- Dependency and build directories (`.git`, `node_modules`, `vendor`, `.venv`, `target`, `dist`, `build`, `out`,
-  `.next`, `coverage`) are skipped everywhere, including tree hashing.
+- ai-skillet skips dependency and build directories (`.git`, `node_modules`, `vendor`, `.venv`, `target`, `dist`,
+  `build`, `out`, `.next`, `coverage`) everywhere, including tree hashing.
 - Agent state is skipped only beneath `.claude/` or `.codex/`: Claude transcripts, plans, file history, tasks, caches,
-  logs, and history; Codex sessions, threads, history, logs, caches, SQLite state, and backups. Authored skills under
-  `.claude/skills/` and `.codex/skills/` stay scannable, and project directories named `plans`, `sessions`, or `backups`
-  elsewhere are still scanned.
+  logs, and history, plus Codex sessions, threads, history, logs, caches, SQLite state, and backups. Authored skills
+  under `.claude/skills/` and `.codex/skills/` stay scannable, and project directories named `plans`, `sessions`, or
+  `backups` elsewhere are still scanned.
 - The default `$HOME` scan additionally skips `~/Library` and `~/.Trash` (macOS privacy protections make traversal fail
   partway), the agent homes `~/.agents`, `~/.claude`, `~/.codex`, and `~/.local/state/skills` (installed copies and
   state are noise relative to authored sources), package-manager and toolchain caches, and the known catalog source
@@ -62,7 +62,7 @@ The `--help` epilogues are the agent-facing summary of defaults and exit codes; 
   these paths directly to audit it.
 - `--portfolio-root` selects the containing Git repository plus present `~/.agents/skills` and `~/.claude/skills` roots
   as explicit roots. It follows a symlink only when it is a direct skill-directory entry under a recognized `skills`,
-  `.agents/skills`, `.claude/skills`, or `.codex/skills` root; tree hashing records nested symlink targets without
+  `.agents/skills`, `.claude/skills`, or `.codex/skills` root. Tree hashing records nested symlink targets without
   following them.
 
 ### Doctor validation contract
@@ -77,10 +77,10 @@ ai-skillet doctor --root '.agents/skills' --skill 'land-search'
 A direct `skills/<name>` root is shorthand for auditing only that directory while resolving bare dependencies against
 sibling skills in the owning `skills` directory. This applies equally to source catalogs and `.agents`, `.claude`, or
 `.codex` installed exposures, including directory symlinks. A standalone skill outside a `skills/<name>` layout does not
-infer an owning catalog; bare dependencies must still resolve from explicitly supplied roots. Targeted audits omit
+infer an owning catalog. Bare dependencies must still resolve from explicitly supplied roots. Targeted audits omit
 catalog-wide README inventory diagnostics, and `--fix-safe` modifies only selected skills.
 
-Doctor accepts this one top-level field union:
+Doctor accepts one union of top-level fields:
 
 - Portable [Agent Skills](https://agentskills.io/specification): `name`, `description`, `license`, `compatibility`,
   `metadata`, and `allowed-tools`.
@@ -89,12 +89,14 @@ Doctor accepts this one top-level field union:
   `context`, `agent`, `background`, `hooks`, `paths`, and `shell`.
 - Repository extensions: `coordination` and `skill-dependencies`.
 
-Unknown top-level fields are errors. `metadata` must be a string-to-string mapping; `metadata.install-targets`
-additionally accepts only `claude-code`, `codex`, or `claude-code codex`. Tool, argument, and path fields accept a
-string or a list of strings, while `hooks` must be a mapping. Claude Boolean fields accept `true`/`false`, `yes`/`no`,
-`on`/`off`, or `1`/`0`; other YAML shapes are not coerced. `context` accepts only `fork`, `effort` accepts `low`,
-`medium`, `high`, `xhigh`, or `max`, and `shell` accepts `bash` or `powershell`. `agent` and `background` require
-`context: fork`.
+Unknown top-level fields are errors. `metadata` must be a string-to-string mapping. `metadata.install-targets`
+additionally accepts only `claude-code`, `codex`, or `claude-code codex`.
+
+Tool, argument, and path fields accept a string or a list of strings. `hooks` must be a mapping. Claude Boolean fields
+accept `true`/`false`, `yes`/`no`, `on`/`off`, or `1`/`0`. Doctor does not coerce other YAML shapes.
+
+`context` accepts only `fork`. `effort` accepts `low`, `medium`, `high`, `xhigh`, or `max`. `shell` accepts `bash` or
+`powershell`. `agent` and `background` require `context: fork`.
 
 `coordination: exempt` requires this exact sentence in ordinary Markdown body prose:
 
@@ -123,14 +125,14 @@ existing `--fix-safe` boundary.
 
 ### Conformance contract
 
-| Area         | Required contract                                                                                                                                                     | Intentional version 1 behavior                                                                          |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| CLI          | Usage and operational errors exit 2; doctor findings exit 1; safe-fix failures exit 3                                                                                 | Operational errors are emitted once with no generic duplicate                                           |
-| Map output   | Deterministic text, JSON, and DOT; skills, roots, edges, duplicates, unresolved references, hashes, and portfolio exposures remain available                          | Declared and inferred evidence remain independent; missing filters warn while returning an empty report |
-| Discovery    | Explicit roots, broad-root exclusions, portfolio roots, ignored entries requested directly, symlink exposures, and paths containing newlines are supported            | Local dependencies resolve across every scanned root                                                    |
-| Streaming    | Large files and newline-free lines are scanned with bounded buffers; snippets are bounded match text                                                                  | No ripgrep child process or cancellation lifecycle is required                                          |
-| Doctor       | The complete supported frontmatter union plus every metadata, dependency, coordination, resource, README, prompt-hygiene, and CLI-version finding family is validated | YAML and OpenAI policy diagnostics are structural; safe fixes are isolated and atomic                   |
-| Dependencies | Bare and external identifiers, uniqueness, self-reference, resolution, and target-name ordering are validated                                                         | External owner/repository case is preserved; repository names ending in `.git` are rejected             |
+| Area         | Required contract                                                                                                                                                              | Intentional version 1 behavior                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| CLI          | Usage and operational errors exit 2. Doctor findings exit 1. Safe-fix failures exit 3.                                                                                         | Operational errors appear once, without a generic duplicate.                                                         |
+| Map output   | Text, JSON, and DOT are deterministic. Skills, roots, edges, duplicates, unresolved references, hashes, and portfolio exposures remain available.                              | Declared and inferred evidence remain independent. ai-skillet warns for missing filters and returns an empty report. |
+| Discovery    | ai-skillet supports explicit roots, broad-root exclusions, portfolio roots, ignored entries requested directly, symlink exposures, and paths containing newlines.              | Local dependencies resolve across every scanned root.                                                                |
+| Streaming    | The scanner uses bounded buffers for large files and newline-free lines. Snippets contain bounded match text.                                                                  | No ripgrep child process or cancellation lifecycle is required.                                                      |
+| Doctor       | The validator checks the complete supported frontmatter union plus every metadata, dependency, coordination, resource, README, prompt-hygiene, and CLI-version finding family. | YAML and OpenAI policy diagnostics are structural. Safe fixes are isolated and atomic.                               |
+| Dependencies | The validator checks bare and external identifiers, uniqueness, self-reference, resolution, and target-name ordering.                                                          | External owner/repository case is preserved. Repository names ending in `.git` are rejected.                         |
 
 The integration tests in `tests/conformance.rs`, `tests/map.rs`, `tests/doctor.rs`, and `tests/catalog.rs` are the
 executable contract. Python captures are migration evidence, not golden output fixtures.

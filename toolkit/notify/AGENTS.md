@@ -2,7 +2,7 @@
 
 `ai-notify` is a macOS Rust CLI that sends `terminal-notifier` alerts for Claude Code hooks, native Codex hooks, and
 Codex's legacy `notify` callback. Keep notification delivery macOS-specific while keeping pure logic and tests
-platform-independent; run validation locally with the workspace's nightly Rust toolchain.
+platform-independent. Run validation locally with the workspace's nightly Rust toolchain.
 
 ## Upstream Documentation
 
@@ -15,7 +15,7 @@ platform-independent; run validation locally with the workspace's nightly Rust t
 - Use the rolling nightly toolchain and lockfile declared in `toolkit/` for every Cargo build, test, and install.
 - Run the package from `toolkit/` with `cargo run -p ai-notify --locked -- ...`.
 - Prefer `cargo test -p ai-notify --locked` for focused verification and `just rust-check` for the aggregate Rust gate.
-- Do not run `just install-cli` for ordinary verification; it installs every workspace binary under `~/.local`.
+- Do not run `just install-cli` for ordinary verification. It installs every workspace binary under `~/.local`.
 
 ## Architecture and Invariants
 
@@ -24,26 +24,26 @@ platform-independent; run validation locally with the workspace's nightly Rust t
   `ai-notify codex` callback accepts JSON as its final argument or via `--stdin` without creating a tracked SQLite
   session.
 - Hook event commands (`ai-notify event ...` and the legacy `ai-notify codex` callback) never exit 2 on an invalid
-  payload; parse and validation failures there exit 1, because Claude Code and Codex treat a hook's exit 2 as a blocking
-  decision (e.g. Stop would keep the agent going, PreToolUse would block the tool). Only clap CLI usage errors and
-  non-hook commands (`config`, `link`, `check`, `cleanup`, `test`) still use exit 2.
+  payload. Parse and validation failures there exit 1. Claude Code and Codex treat a hook's exit 2 as a blocking
+  decision. For example, Stop would keep the agent going and PreToolUse would block the tool. Only clap CLI usage errors
+  and non-hook commands (`config`, `link`, `check`, `cleanup`, `test`) still use exit 2.
 - `integrations::CODEX_HOOK_EVENTS` lists the native Codex events `check` requires for `ai-notify event codex`.
 - `integrations::HOOK_SPECS` is the source of truth for installed Claude hooks. The integration inspector derives its
   required event set from that list so `link claude` and `check` stay aligned.
 - Preserve unrelated settings and hooks when changing integration writers. `link codex` must continue to refuse a
-  different root `notify` value unless forced; profile names resolve to sibling `<profile>.config.toml` files.
+  different root `notify` value unless forced. Profile names resolve to sibling `<profile>.config.toml` files.
 - Configuration respects `XDG_CONFIG_HOME` and defaults to `~/.config/ai-notify`. `ConfigLoader` caches the loaded
   configuration for its own lifetime (one load per CLI invocation).
 - Claude `Stop` defers completion while `background_tasks` or `session_crons` are present. `StopFailure` alerts only in
   `all` mode and bypasses duration and prompt filters. Both Codex integrations omit duration filtering, suppress
   internal title-generation prompts, and apply notification mode and prompt-prefix exclusions.
-- SQLite uses WAL mode with `synchronous=NORMAL`; session data is intentionally transient rather than strictly durable.
+- SQLite uses WAL mode with `synchronous=NORMAL`. Session data is intentionally transient rather than strictly durable.
 
 ## Testing
 
-- Keep focused unit tests beside their Rust modules and CLI contract tests in `tests/cli.rs`; use
+- Keep focused unit tests beside their Rust modules and CLI contract tests in `tests/cli.rs`. Use
   `cargo test -p ai-notify --locked <filter>` for targeted verification.
-- Isolate configuration and database paths with temporary directories; tests must not write to the user's actual XDG
+- Isolate configuration and database paths with temporary directories. Tests must not write to the user's actual XDG
   configuration directory.
 - Inject or mock the macOS platform check, `terminal-notifier` discovery, and subprocess calls. Tests must not require
   the real notifier or send desktop alerts.
@@ -52,8 +52,8 @@ platform-independent; run validation locally with the workspace's nightly Rust t
 
 ## CLI reference
 
-Desktop notification system for Claude Code and Codex CLI. It tracks Claude Code session activity and sends macOS
-notifications for key events.
+ai-notify is a desktop notification system for Claude Code and Codex CLI. It tracks Claude Code session activity and
+sends macOS notifications for key events.
 
 ![ai-notify notification demo](demo.png)
 
@@ -68,7 +68,7 @@ notifications for key events.
 - Rust nightly (including `rustfmt` and Clippy)
 - [terminal-notifier](https://github.com/julienXX/terminal-notifier) app: Install with `brew install terminal-notifier`
 - (optional) [it2](https://github.com/mkusaka/it2) CLI with iTerm2's Python API enabled
-  (`iTerm2 > Settings > General > Magic > Enable Python API`): lets clicking a notification focus the exact iTerm2
+  (`iTerm2 > Settings > General > Magic > Enable Python API`): clicking a notification can focus the exact iTerm2
   session that produced it, instead of only activating the app
 
 #### Installation
@@ -79,7 +79,7 @@ Install the CLI directly from the agent-skills repository:
 cargo install --git https://github.com/PaulRBerg/agent-skills ai-notify --locked --root "$HOME/.local"
 ```
 
-Re-run the command to update. Installation targets `~/.local/bin`; configure integrations separately with
+Re-run the command to update. Installation targets `~/.local/bin`. Configure integrations separately with
 `ai-notify link claude` or `ai-notify link codex`.
 
 ### Development
@@ -96,23 +96,25 @@ Run `just rust-check` from `toolkit/` for the complete Rust workspace gate.
 
 ### Features
 
-- **Smart Notifications**: Filters Claude Code completion alerts by a configurable duration threshold (default: 10s)
-- **Prompt Filtering**: Exclude specific prompt patterns (e.g., slash commands like `/commit`) from notifications
-- **Session Tracking**: SQLite database tracks Claude Code prompts, durations, and job numbers
-- **Auto-cleanup**: Automatic data cleanup with optional export before deletion
-- **Event Handlers**: CLI subcommands for Claude Code hooks and Codex CLI notify integration
-- **Configuration**: YAML-based configuration with sensible defaults
-- **Context-rich Notifications**: Project, agent status, task, and result/action excerpts with custom agent icons
+- **Smart Notifications**: ai-notify filters Claude Code completion alerts by a configurable duration threshold
+  (default: 10s).
+- **Prompt Filtering**: Exclude specific prompt patterns, such as slash commands like `/commit`, from notifications.
+- **Session Tracking**: The SQLite database tracks Claude Code prompts, durations, and job numbers.
+- **Auto-cleanup**: ai-notify cleans data automatically, with optional export before deletion.
+- **Event Handlers**: CLI subcommands handle Claude Code hooks and Codex CLI notify integration.
+- **Configuration**: ai-notify uses YAML configuration with defaults.
+- **Context-rich Notifications**: Notifications include project, agent status, task, and result/action excerpts with
+  custom agent icons.
 
 #### Comparison with CCNotify
 
-Inspired by [CCNotify](https://github.com/dazuiba/CCNotify) with key improvements:
+ai-notify was inspired by [CCNotify](https://github.com/dazuiba/CCNotify). It differs in these ways:
 
-- **Independent CLI** — a standalone Rust binary, not a script symlink
-- **Fully configurable** — YAML config with `ai-notify config` commands
-- **More events** — adds `PermissionRequest`, `StopFailure`, and an AskUserQuestion notifier (6 hooks vs 3)
-- **Smart filtering** — configurable duration threshold and prompt exclusion patterns
-- **Notification modes** — all/permission_only/disabled
+- **Independent CLI** — ai-notify runs as a standalone Rust binary instead of a script symlink.
+- **Fully configurable** — ai-notify uses YAML config with `ai-notify config` commands.
+- **More events** — ai-notify adds `PermissionRequest`, `StopFailure`, and an AskUserQuestion notifier (6 hooks vs 3).
+- **Smart filtering** — ai-notify provides a configurable duration threshold and prompt exclusion patterns.
+- **Notification modes** — ai-notify supports all/permission_only/disabled.
 
 ### Configuration
 
@@ -165,13 +167,13 @@ notification:
 
 **Database durability note**
 
-ai-notify uses SQLite WAL mode with `synchronous=NORMAL` for speed. In the event of a sudden power loss or crash, the
-latest session writes can be lost. This is acceptable for transient session tracking data, but be aware if you require
+ai-notify uses SQLite WAL mode with `synchronous=NORMAL` for speed. ai-notify can lose the latest session writes after a
+sudden power loss or crash. This is acceptable for transient session tracking data, but consider it if you require
 strict durability.
 
 **Prompt Pattern Filtering**
 
-The `exclude_patterns` configuration allows you to filter out notifications for specific prompts:
+The `exclude_patterns` configuration lets you exclude notifications for specific prompts:
 
 - **Prefix matching**: Patterns match prompts that _start with_ the pattern (case-sensitive)
 - **Common use case**: Exclude slash commands like `/commit`, `/update-pr`, etc.
@@ -206,7 +208,7 @@ ai-notify cleanup --no-export
 
 #### Event handlers (Claude Code integration)
 
-The following commands are designed to be called from Claude Code hooks:
+The following commands support Claude Code hooks:
 
 ```bash
 # Track user prompt submission
@@ -239,8 +241,8 @@ Claude Code reads hooks from its settings files — `~/.claude/settings.json` (a
 ai-notify link claude
 ```
 
-This merges the hooks into `~/.claude/settings.json` without touching your other settings. Use `--path` to target a
-project or local settings file, `--dry-run` to preview, and `--force` to replace a conflicting entry. For more
+This merges the hooks into `~/.claude/settings.json` without changing your other settings. Use `--path` to target a
+project or local settings file. Use `--dry-run` to preview. Use `--force` to replace a conflicting entry. For more
 information about Claude Code hooks, see the [official documentation](https://code.claude.com/docs/en/hooks).
 
 If a `settings.json` has a sibling `settings/hooks.jsonc`, ai-notify treats it as generated and refuses to overwrite it,
@@ -295,12 +297,12 @@ Review and trust the two exact definitions through Codex's `/hooks` interface. R
 callback to prevent duplicate notifications. If Codex Desktop owns a `SkyComputerUseClient` wrapper, preserve the
 wrapper and remove only its ai-notify `--previous-notify` forwarding arguments.
 
-`UserPromptSubmit` retains task context for `Stop`; a repeated stop for a tracked turn is ignored. If no prompt was
-recorded, such as when hooks are installed during a turn, the completion still reports the available result. Native
+`UserPromptSubmit` retains task context for `Stop`. ai-notify ignores a repeated stop for a tracked turn. If no prompt
+was recorded, such as when hooks are installed during a turn, the completion still reports the available result. Native
 hooks preserve the Codex notification mode and prompt-prefix filters and do not apply `threshold_seconds`.
 
 Codex 0.155.1 disables native hooks in internal title-generation threads, so those threads never invoke these handlers.
-See the [native hook contract](https://learn.chatgpt.com/docs/hooks). Use `/hooks` to review trust for this integration;
+See the [native hook contract](https://learn.chatgpt.com/docs/hooks). Use `/hooks` to review trust for this integration.
 `ai-notify check` reports these handlers from `~/.codex/hooks.json`, and `ai-notify link codex` configures only the
 legacy callback described below.
 
@@ -328,7 +330,7 @@ ai-notify link codex --force
 `ai-notify check` accepts an argv array whose first program has the basename `ai-notify` and whose later arguments
 include the standalone argument `codex`. It also accepts the same argv shape in a whitespace-delimited string, and the
 Codex Desktop `SkyComputerUseClient` wrapper when its `--previous-notify` value is exactly `["ai-notify", "codex"]`.
-`ai-notify link codex` writes the canonical array shown above; without `--force`, other existing representations remain
+`ai-notify link codex` writes the canonical array shown above. Without `--force`, other existing representations remain
 conflicts, except for that exact Codex Desktop wrapper.
 
 Codex profiles are separate files next to the base config, not `[profiles.<name>]` tables. To configure
@@ -350,8 +352,8 @@ ai-notify codex '<json payload>'
 ```
 
 The Codex notify payload does not include job duration, so `notification.threshold_seconds` is not applied for Codex
-notifications. Exclude patterns and notification mode still apply. Internal automatic-title and rename-suggestion
-requests are suppressed by their specific prompt envelopes; ordinary user requests to write titles still notify.
+notifications. Exclude patterns and notification mode still apply. ai-notify uses specific prompt envelopes to suppress
+internal automatic-title and rename-suggestion requests. Ordinary user requests to write titles still notify.
 
 Codex 0.155.1 runs these requests in hidden ephemeral threads that disable `features.hooks` but inherit the legacy
 `notify` command. Its callback carries no ephemeral/thread-source marker, so ai-notify recognizes the two prompts in
@@ -376,21 +378,23 @@ and project `.codex/hooks.json` files are not inspected.
 
 ### How It Works
 
-1. **UserPromptSubmit**: When you submit a prompt to Claude Code, ai-notify tracks it in the database
+1. **UserPromptSubmit**: When you submit a prompt to Claude Code, ai-notify tracks it in the database.
 2. **Stop**: When Claude finishes with no pending background tasks or session crons, ai-notify:
-   - Calculates the duration
-   - Checks if duration >= threshold
-   - Checks if prompt starts with any excluded pattern
+   - Calculates the duration.
+   - Checks if duration >= threshold.
+   - Checks if the prompt starts with any excluded pattern.
    - Sends the task and Claude's final response when both checks pass (by default, when the job took at least 10
-     seconds)
-   - Optionally runs auto-cleanup (every 24 hours)
-3. **StopFailure**: When an API error ends the turn, marks the prompt stopped and sends the task, duration, and
-   documented error text in `all` mode, even for short or excluded prompts. If the prompt was not tracked, sends a
-   generic failure notification.
-4. **Notification**: Detects "waiting for input" notifications (via the `idle_prompt` notification type, with a keyword
-   fallback) and suppresses them — the Stop handler sends the job-completion notification
-5. **PermissionRequest**: Sends the current task and the command, path, URL, query, or description that needs approval
-6. **PreToolUse / AskUserQuestion**: Sends the current task, first question, and count of any remaining questions
+     seconds).
+   - Optionally runs auto-cleanup (every 24 hours).
+3. **StopFailure**: When an API error ends the turn, ai-notify marks the prompt stopped and sends the task, duration,
+   and documented error text in `all` mode, even for short or excluded prompts. If the prompt was not tracked, ai-notify
+   sends a generic failure notification.
+4. **Notification**: ai-notify detects "waiting for input" notifications (via the `idle_prompt` notification type, with
+   a keyword fallback) and suppresses them. The Stop handler sends the job-completion notification.
+5. **PermissionRequest**: ai-notify sends the current task and the command, path, URL, query, or description that needs
+   approval.
+6. **PreToolUse / AskUserQuestion**: ai-notify sends the current task, first question, and count of any remaining
+   questions.
 
 Notifications use the project as the title and the agent state as the subtitle. Prompt sequence numbers remain in the
 transient session database but are not displayed. Task excerpts are capped at 100 characters and result, error, request,
@@ -411,9 +415,9 @@ When `XDG_CONFIG_HOME` is unset, ai-notify uses these default locations:
 └── exports/                # JSON exports before cleanup
 ```
 
-Fresh and version-0 session databases are initialized at schema version 1. Commands that use session state reject a
-newer schema with operational exit code 1 and leave the database unchanged; move or remove the reported database file
-before retrying with this ai-notify version.
+ai-notify initializes fresh and version-0 session databases at schema version 1. Commands that use session state reject
+a newer schema with operational exit code 1 and leave the database unchanged. In that case, move or remove the reported
+database file before retrying with this ai-notify version.
 
 ### Documentation
 
