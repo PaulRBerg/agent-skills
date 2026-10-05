@@ -30,7 +30,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | agents-introspection   | Retrospect on Codex/Claude Code transcript history                         |
 | ai-prune               | Archive stale .ai files and trash stale .cache entries on macOS            |
 | autoresearch           | Autonomous experiment loop                                                 |
-| brainstorm             | Co-create novel ideas and converge on a testable concept                   |
+| brainstorm-with-me     | Co-create novel ideas and converge on a testable concept                   |
 | chromium-browser       | Shared Chromium browsing, DevTools automation, and Wayback research        |
 | claude-handoff         | Research or implement approved plans with Claude subagents                 |
 | cli-cast               | Foundry cast CLI guidance                                                  |

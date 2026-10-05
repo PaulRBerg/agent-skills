@@ -1,12 +1,12 @@
 ---
 coordination: exempt
-name: brainstorm
+name: brainstorm-with-me
 description:
   Brainstorm with the user to generate, combine, and refine non-obvious ideas into a promising concept. Use when the
   user wants to brainstorm, ideate, explore possibilities, escape obvious approaches, or find a creative solution.
 ---
 
-# Brainstorm
+# Brainstorm With Me
 
 This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 
