@@ -41,7 +41,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | codex-handoff          | Research or implement approved plans with Codex agents                     |
 | commit                 | Semantic commit messages with deterministic ai-commit mechanics            |
 | copy-transcript-path   | Copy the active Claude Code or Codex CLI transcript path                   |
-| effect-ts              | Effect 3 patterns and source-aligned guidance                              |
+| effect-ts              | Effect 4 patterns and source-aligned guidance                              |
 | evm-atlas              | EVM lookup + DEX transaction/order interpretation                          |
 | fresh-eyes-sweep       | Whole-repository audit of code, tests, and comments with verified fixes    |
 | frontend-design        | Distinctive, subject-specific frontend design                              |

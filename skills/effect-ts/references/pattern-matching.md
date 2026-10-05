@@ -12,7 +12,9 @@ const renderError = Match.type<AppError>().pipe(
 ```
 
 Use `Match.value` for one local value and `Match.type` when defining a reusable matcher. Prefer `Match.exhaustive` when
-every variant must be handled; use `Match.orElse` only when the fallback is a real domain case.
+every variant must be handled; use `Match.orElse` only when the fallback is a real domain case. For a plain object of
+per-tag handlers, `Match.valueTags` and `Match.typeTags` are exhaustive shorthands. `Match.either` is now
+`Match.result`.
 
 For a `Data.taggedEnum`, prefer its `$match` helper when generic variant payloads or recursive unions would otherwise
 require assertions. Verify constructor and matcher signatures against the installed `Data` source before changing a

@@ -1,7 +1,7 @@
-# Critical Effect 3 Rules
+# Critical Effect 4 Rules
 
-Read this before changing nontrivial Effect code. These rules protect semantics that ordinary TypeScript intuition often
-gets wrong; use the installed package source for exact combinator signatures.
+Read this before changing nontrivial Effect code. These rules protect semantics that ordinary TypeScript intuition and
+v3 habits often get wrong; use the installed package source for exact combinator signatures.
 
 ## Effect Failures Are Not Thrown Exceptions
 
@@ -19,9 +19,10 @@ Effect.gen(function* () {
 });
 ```
 
-Use `Effect.catchTag`, `Effect.catchTags`, `Effect.catchAll`, or `Effect.exit` according to whether the caller should
-recover, map, or inspect the failure. Wrap foreign throwing code with `Effect.try` or `Effect.tryPromise` at the
-boundary where it enters Effect.
+Use `Effect.catchTag`, `Effect.catchTags`, `Effect.catch`, `Effect.result`, or `Effect.exit` according to whether the
+caller should recover, map, or inspect the failure. v3 names such as `catchAll`, `catchAllCause`, `catchSome`, and
+`Effect.either` no longer exist. Wrap foreign throwing code with `Effect.try` or `Effect.tryPromise` at the boundary
+where it enters Effect.
 
 ## Preserve Typed Failures
 
@@ -35,18 +36,25 @@ needs a documented reason.
 
 ## Keep Defects Out of Expected Error Mapping
 
-`Cause` contains expected failures, defects, and interruption. Use `Effect.mapError` or tagged recovery for expected
-failures. Use `catchAllCause` only at a deliberate runtime, reporting, or supervision boundary where handling the whole
-cause is the requirement.
+`Cause` is a flat `reasons` array of `Fail`, `Die`, and `Interrupt`; there is no `Sequential`/`Parallel` tree to
+traverse. Use `Effect.mapError` or tagged recovery for expected failures. Use `Effect.catchCause` only at a deliberate
+runtime, reporting, or supervision boundary where handling the whole cause is the requirement.
 
 Do not silently convert a required audit, billing, persistence, authorization, or notification effect to `Effect.void`.
 Propagate or translate its expected failure. Fallback values are appropriate only when the product semantics make the
 operation optional.
 
+## Yield Only Effects
+
+`Option`, `Result` (v3 `Either`), `Ref`, `Deferred`, and `Fiber` are plain values, not Effects. Convert explicitly:
+`Effect.fromOption`, `Effect.fromResult`, `Ref.get`, `Deferred.await`, `Fiber.join`. Services and `Config` remain
+yieldable.
+
 ## Keep Pure Work Pure
 
 Do not wrap safe array transformations, constants, path manipulation, or other deterministic pure work in `Effect.try`.
-Use `Effect.sync` for synchronous observable effects and `Effect.try` only for code that can throw.
+Use `Effect.sync` for synchronous observable effects and `Effect.try` only for code that can throw. `Equal.equals` is
+structural by default for plain objects, arrays, `Map`, `Set`, and `Date`; do not add `Data` wrappers only for equality.
 
 ## Make Generator Termination Explicit
 

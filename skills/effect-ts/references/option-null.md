@@ -5,11 +5,15 @@ external contract requires it, such as JSON, React state, browser storage, or a 
 
 Normalize once:
 
-- incoming nullable value: `Option.fromNullable` at the boundary;
+- incoming nullable value: `Option.fromNullishOr` (v3 `fromNullable`), or `Option.fromNullOr`/`Option.fromUndefinedOr`
+  when only one empty value is legal;
 - outgoing JSON or React value: `Option.getOrNull` or `Option.getOrUndefined` at the boundary;
-- optional Schema domain field: `Schema.optionalWith(schema, { as: "Option" })`;
-- explicitly nullable encoded field: `Schema.NullOr(schema)`.
+- optional Schema domain field: `Schema.OptionFromOptionalKey(schema)`;
+- explicitly nullable encoded field: `Schema.NullOr(schema)`, or `Schema.OptionFromNullOr(schema)` to decode to
+  `Option`.
 
-Do not repeatedly wrap an `Option` with `Option.fromNullable`; flatten nested options when separate operations each
-introduce meaningful absence. Database repositories may return `Option<A>` when no row is normal, then translate
-`Option.none` to a tagged domain error at the service boundary when the caller requires existence.
+`Option` is not an Effect in v4: lift it with `Effect.fromOption(option)` (fails with `Cause.NoSuchElementError`) or
+pass an `onNone` callback for a domain error. Do not repeatedly wrap an `Option` with `Option.fromNullishOr`; flatten
+nested options when separate operations each introduce meaningful absence. Database repositories may return `Option<A>`
+when no row is normal, then translate `Option.none` to a tagged domain error at the service boundary when the caller
+requires existence.

@@ -1,30 +1,34 @@
-# Testing Effect 3 with Vitest
+# Testing Effect 4 with Vitest
 
-Use `@effect/vitest` for Effect programs. Keep assertions inside the returned Effect and run only the tests covering the
-changed behavior.
+Use `@effect/vitest` 4.x (same version as `effect`; requires Vitest 5) for Effect programs. Keep assertions inside the
+returned Effect and run only the tests covering the changed behavior.
 
 ## Choose the Test Runtime
 
-- `it.effect` provides Effect's test environment, including `TestClock`.
-- `it.live` uses live runtime services.
-- `it.scoped` combines the test environment with a Scope.
-- `it.scopedLive` combines live services with a Scope.
+- `it.effect` provides a `Scope` and the test environment (`TestClock`, `TestConsole`).
+- `it.live` provides a `Scope` and live runtime services.
+- v3 `it.scoped` and `it.scopedLive` are gone; use `it.effect` and `it.live`.
 - `layer(...)` shares one Layer across a test block; use nested `it.layer(...)` when a subgroup needs another Layer.
+  Layer blocks include the test environment unless `excludeTestServices: true`.
 
 Use regular `it` for pure synchronous tests. Do not call `Effect.runPromise`, `runSync`, or another runtime launcher
 inside an Effect test; that escapes the test runtime and can silently replace test services.
 
+`effect/FastCheck` was removed. Use `it.prop` or `it.effect.prop` with Schemas or `effect/Arbitrary` values
+(`Arbitrary.schema(S)`); import `fast-check` directly only when a test needs its own API.
+
 ## Destructure Tuple Cases
 
-`it.effect.each(cases)` passes each case as one argument. For tuple rows, use a callback such as
-`([label, value]) => ...`; regular Vitest `it.each` instead spreads tuple members into separate arguments.
-`@effect/vitest` 0.29 delegates to Vitest `it.for`; verify the installed adapter when versions differ.
+`it.effect.each(cases)` passes each case as one argument, followed by the test context. For tuple rows, use a callback
+such as `([label, value]) => ...`; regular Vitest `it.each` instead spreads tuple members into separate arguments.
+`@effect/vitest` 4.0 delegates to Vitest `it.for`; verify the installed adapter when versions differ.
 
 ## Advance Virtual Time Deliberately
 
-Under `it.effect`, time does not advance until the test calls `TestClock.adjust` or `TestClock.setTime`. Fork the effect
-that sleeps, retries, polls, or repeats, then advance enough time for the whole schedule and join the fiber. Use
-`it.live` only when wall-clock behavior is genuinely under test.
+Import `TestClock` from `effect/testing`. Under `it.effect`, time does not advance until the test calls
+`TestClock.adjust` or `TestClock.setTime`. Fork the effect that sleeps, retries, polls, or repeats with
+`Effect.forkChild`, then advance enough time for the whole schedule and join the fiber. Use `it.live` or
+`TestClock.withLive` only when wall-clock behavior is genuinely under test.
 
 Production Effect code should read time through `Clock` or `DateTime`, not `Date.now`, so tests can control it.
 
@@ -36,5 +40,8 @@ gate. Await `started` before opening the gate.
 
 ## Bound and Release
 
-Bound infinite streams and polling loops. Join or interrupt every fiber. Use scoped tests when code allocates scoped
-resources, and let Layer/test scopes own finalizers instead of launching detached runtimes.
+Bound infinite streams and polling loops. Join or interrupt every fiber. Effect tests are already scoped, so let the
+test or Layer scope own finalizers instead of launching detached runtimes.
+
+In `@effect/vitest/utils`, `assertSuccess`/`assertFailure` now assert `Result` values; use `assertExitSuccess` and
+`assertExitFailure` for `Exit`.
