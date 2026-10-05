@@ -4,7 +4,7 @@ Update an existing pull request with semantic change analysis. Load [posting.md]
 
 ## Validate Prerequisites
 
-Use the same checks as `create-pr.md > Validate Prerequisites`; the `gh pr view` read below is the authentication check.
+Use the same checks as `create-pr.md > Validate Prerequisites`. The `gh pr view` read below is the authentication check.
 Resolve `<skill-dir>` to the absolute directory containing the owning `SKILL.md`. Do not push by default: metadata
 update is the default outcome.
 
@@ -14,7 +14,7 @@ update is the default outcome.
 gh pr view --json number,url,title,body,baseRefName
 ```
 
-If no PR is found, stop with `No PR exists for this branch. Use /yeet create-pr to create one first.` Cache the number,
+If you find no PR, stop with `No PR exists for this branch. Use /yeet create-pr to create one first.` Cache the number,
 URL, title, existing body, and base branch. The existing body is required input: preserve `Closes #X`, `Fixes #X`,
 `Resolves #X`, `Related to #X`, and other issue references when regenerating the description. Never regenerate from the
 user's instruction alone.
@@ -36,7 +36,7 @@ Without an explicit push or code-publication intent, update PR metadata only. Do
 
 Follow `writing.md > Semantic Change Analysis` with these differences:
 
-1. Get the base branch from PR metadata, not args.
+1. Get the base branch from PR metadata, not arguments.
 2. Fetch only that base branch:
 
    ```bash
@@ -68,11 +68,11 @@ Verify the URL and requested fields with `gh pr view` and display the `### ✅ P
 ## Explicit Code Publication
 
 Only when the parsed intent includes push or publish, review the branch diff, commits, PR body, and any generated
-artifacts again under `posting.md > External-disclosure Review`, then run:
+artifacts again under `posting.md > External-disclosure Review`. After that review, run:
 
 ```bash
 git push
 ```
 
-If the push or metadata edit fails ambiguously, follow `posting.md > Error Handling and Idempotency`, inspect the PR in
-all states, and do not rerun a write until the resulting state is known.
+If the push or metadata edit fails ambiguously, follow `posting.md > Error Handling and Idempotency`. For that failure,
+inspect the PR in all states. Do not rerun a write until you know the resulting state.

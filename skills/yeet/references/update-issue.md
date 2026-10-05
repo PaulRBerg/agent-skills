@@ -1,7 +1,7 @@
 # Issue Update Workflow
 
-Update an existing GitHub issue — title, body, labels, assignees, or state. Mirrors `update-pr.md` in spirit: regenerate
-content semantically when asked, otherwise apply targeted edits.
+Update an existing GitHub issue's title, body, labels, assignees, or state. This workflow follows the approach in
+`update-pr.md`. When asked, regenerate content semantically. Otherwise, apply targeted edits.
 
 ## Validate Prerequisites
 
@@ -32,7 +32,7 @@ Everything after the issue identifier is the **update instructions** — natural
 
 ## Fetch Issue Context
 
-Always read the issue before editing — never regenerate based on the user's instructions alone.
+Always read the issue before editing. Never regenerate based on the user's instructions alone.
 
 ```bash
 <skill-dir>/scripts/yeet-context.sh issue "{owner}/{repo}" {number}
@@ -75,31 +75,32 @@ labels, assignees, or state."
 
 ## Regenerate Title or Body
 
-Only when the user explicitly asks for regeneration ("rewrite the body", "fix the title").
+Regenerate only when the user explicitly asks for it ("rewrite the body", "fix the title").
 
-Follow `create-issue.md`'s template and body rules and `writing.md > Informal Tone`. Preserve any existing template
-structure (sections, admonitions, file links). If the issue uses a YAML template's section headers, keep them.
+Follow the template and body rules in `create-issue.md` and the tone rules in `writing.md > Informal Tone`. Preserve any
+existing template structure (sections, admonitions, file links). If the issue uses a YAML template's section headers,
+keep them.
 
-For appends, preserve the existing body verbatim except for its co-signature footer, then add the new content with a
+For appends, preserve the existing body verbatim except for its co-signature footer. Then add the new content with a
 blank line before the footer per `posting.md > Model Co-signature`. Do not rewrite or echo the full existing body to the
 user.
 
 ## Images
 
-If images were requested, follow `context.md > Image Uploads` and combine the attachments or fallback body update with
-any other requested edits in one `gh issue edit` command. If another instruction regenerates the body, place the images
-in that regenerated body rather than the superseded original.
+If images were requested, follow `context.md > Image Uploads`. For those images, combine the attachments or fallback
+body update with any other requested edits in one `gh issue edit` command. If another instruction regenerates the body,
+place the images in that regenerated body rather than the superseded original.
 
 ## Validate Labels Before Adding
 
-If adding labels, fetch the repo's label set per `context.md > Fetch Repo Labels` and confirm the requested labels exist
-(case-sensitive match on `name`). Skip this read for non-label edits.
+If adding labels, fetch the repo's label set per `context.md > Fetch Repo Labels`. For those additions, confirm the
+requested labels exist (case-sensitive match on `name`). Skip this read for non-label edits.
 
-IF a requested label doesn't exist: ERROR with the list of valid label names. Do not auto-create labels.
+If a requested label does not exist, report an error with the list of valid label names. Do not auto-create labels.
 
-For owner-managed repos (owner = `viewer.login` from issue context or `sablier-labs`), when the user asks for a label by
-intent rather than exact name ("tag this as a bug"), match semantically against the fetched `name + description` pairs
-per the rubric in `context.md > Fetch Repo Labels`.
+For owner-managed repos (owner = `viewer.login` from issue context or `sablier-labs`), use semantic matching when the
+user asks for a label by intent rather than exact name ("tag this as a bug"). Match against the fetched
+`name + description` pairs per the rubric in `context.md > Fetch Repo Labels`.
 
 ## Execute Update
 
@@ -151,8 +152,8 @@ See `writing.md > HEREDOC Syntax` for why the quoted `'EOF'` matters.
 
 Display the verified URL with the `### ✅ Issue updated` receipt from `SKILL.md` and a one-line summary of what changed.
 
-On failure: reread the issue, follow `posting.md > Error Handling and Idempotency`, and show the specific error (auth,
-permissions, missing label, locked issue) and next action. Do not retry automatically.
+On failure, reread the issue. For that failure, follow `posting.md > Error Handling and Idempotency`. Show the specific
+error (auth, permissions, missing label, locked issue) and next action. Do not retry automatically.
 
 ## Examples
 

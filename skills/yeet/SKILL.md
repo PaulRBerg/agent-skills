@@ -20,13 +20,15 @@ rules, and Paul's writing voice.
 
 ## Prerequisites
 
-Use the first required read-only `gh` command in each workflow as authentication validation. Resolve `<skill-dir>` once
-to the absolute directory containing this `SKILL.md`. The `yeet-context.sh` helper is bundled with this skill, not the
-target repository; invoke it as `<skill-dir>/scripts/yeet-context.sh` and never search for it in the target repository.
-Prefer the helper when the workflow needs repository, template, discussion, label, or issue/PR thread context.
+Use the first required read-only `gh` command in each workflow to validate authentication. Resolve `<skill-dir>` once to
+the absolute directory containing this `SKILL.md`.
+
+This skill, rather than the target repository, bundles the `yeet-context.sh` helper. Invoke it as
+`<skill-dir>/scripts/yeet-context.sh`. Never search for it in the target repository. Prefer the helper when the workflow
+needs repository, template, discussion, label, or issue/PR thread context.
 
 For YAML issue forms, invoke `<skill-dir>/scripts/issue-form.py`. `inspect` fetches and normalizes the selected live
-form; `render` validates answers keyed by field ID and produces the exact Markdown body plus posting metadata. The
+form. `render` validates answers keyed by field ID and produces the exact Markdown body plus posting metadata. The
 helper never selects a template, writes answers or titles, performs an external-disclosure review, or posts externally.
 All issue creation and update workflows apply `references/context.md > Issue Metadata Permissions` before resolving or
 passing metadata. Rendered template metadata describes requested values, not the viewer's authority to apply them.
@@ -56,25 +58,26 @@ Each workflow is fully documented in its reference file. Load the appropriate re
 | Comment Discussion | "comment on discussion", "reply on discussion", "edit discussion comment" | `references/comment-discussion.md` |
 
 Each workflow reference links only the shared context, writing, or posting guidance it needs. Every authored body or
-comment must follow [posting.md > Model Co-signature](references/posting.md#model-co-signature). Post directly when the
-user requested creation or update; do not add a confirmation gate. After a failed write, run the linked idempotency
+comment must follow [posting.md > Model Co-signature](references/posting.md#model-co-signature). When the user requested
+creation or update, post directly. Do not add a confirmation gate. After a failed write, run the linked idempotency
 check before any retry.
 
 Never check an external template attestation unless repository or user evidence verifies it. If a required attestation
 or field cannot be verified, ask for that missing fact rather than inventing agreement. Agent-status decoration belongs
-outside the authored contribution; add emoji to a PR, issue, discussion, or comment only when the user's content or the
+outside the authored contribution. Add emoji to a PR, issue, discussion, or comment only when the user's content or the
 thread's register calls for it.
 
 ## Completion
 
-Complete when the requested contribution exists in its final authored state and the returned GitHub URL has been
-verified. For updates/comments, report the changed artifact once. Determine the outcome from readback, not the command's
-exit status: creation can succeed before a metadata mutation fails.
+The workflow is complete when the requested contribution exists in its final authored state and the returned GitHub URL
+is verified. For updates/comments, report the changed artifact once. Determine the outcome from readback, not the
+command's exit status: creation can succeed before a metadata mutation fails.
 
 Use `### 🚀 <artifact> created`, `### ✅ <artifact> updated`, `### ✅ Comment posted`, or `### ✅ Comment updated`,
 followed by one Markdown link containing the repository, number, and title or action. Add a compact field list only when
 base, draft state, reviewers, labels, or changed fields matter. For verified partial success, report the created or
-updated artifact and identify omitted or failed metadata. Use `### ⛔ <artifact> not <action>` only for confirmed
-noncompletion; if readback is inconclusive, report the outcome as unverified. Include the concrete error, idempotency
-result, and next action. Keep `gh` output, JSON, diagnostics, template fields, URLs, and authored contribution text
-exact and undecorated.
+updated artifact and identify omitted or failed metadata.
+
+Use `### ⛔ <artifact> not <action>` only for confirmed noncompletion. If readback is inconclusive, report the outcome
+as unverified. Include the concrete error, idempotency result, and next action. Keep `gh` output, JSON, diagnostics,
+template fields, URLs, and authored contribution text exact and undecorated.
