@@ -84,10 +84,10 @@ their content here, the sync run reads both skills directly:
    Attribute failures by first ruling out the handoff's changes and tool side effects, including downstream failures;
    continue only past evidenced unrelated failures while the handoff's own checks pass. Verification is sized to the
    outcome; briefs add no validation machinery the plan does not call for.
-9. Polish-selection rules: `$code-polish` risk-trigger list (file count alone is not a trigger); `$agents-brain polish`
-   targets README.md, AGENTS.md, CLAUDE.md, durable context docs, project-installed skills under `.agents/skills`, and
-   existing git-tracked source-catalog skills under `skills/` for prose-only edits; installed copies under managed
-   agent-config roots remain excluded; either, both, or neither pass may run.
+9. Code-polish and context-maintenance selection rules: `$code-polish` risk-trigger list (file count alone is not a
+   trigger); `$agents-brain maintain` targets README.md, AGENTS.md, CLAUDE.md, durable context docs, project-installed
+   skills under `.agents/skills`, and existing git-tracked source-catalog skills under `skills/` for prose-only edits;
+   installed copies under managed agent-config roots remain excluded; either, both, or neither pass may run.
 10. Before-launch session-claim guidance: the parent owns a claim covering every delegated write scope and requires
     `READY` before implementation launch; a queued or blocked claim runs `ai-coord wait` and re-submits on each wake,
     never ending the turn to pause. Delegates use the parent identity, treat its claim as authorization, and never run
