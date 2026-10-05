@@ -1,7 +1,7 @@
 ---
 compatibility:
   Requires a project using current stable Effect 4 packages; verify exact APIs against the target's installed package
-  source.
+  source. The source-cache helper needs git and network access for its daily fetch.
 name: effect-ts
 description:
   Use for nontrivial Effect 4 work including services/layers, typed errors, Schema/JsonSchema, Config,
@@ -39,9 +39,14 @@ Use the target workspace's manifest and lockfile to identify versions. Prefer, i
 2. its emitted declarations when source is not shipped;
 3. the matching official package artifact or source tag.
 
-Do not install or update dependencies solely to obtain documentation. Do not trust an unrelated checkout, v3 examples,
-or a source branch that does not match the target's installed version. If exact behavior cannot be verified, stop rather
-than guessing.
+For monorepo source, tests, or cross-package search, run `scripts/effect-source.sh`. It keeps a cached clone of
+`Effect-TS/effect` checked out at the newest release, fetching at most once per 24 hours and otherwise reusing the
+cache, and prints `path=` and `release=`. When `release` differs from the installed `effect` version, read the matching
+tag without checking it out: `git -C <path> grep <pattern> effect@<version> -- packages/` or
+`git -C <path> show effect@<version>:<file>`. Never edit the cache.
+
+Do not install or update dependencies solely to obtain documentation. Do not trust v3 examples or source that does not
+match the target's installed version. If exact behavior cannot be verified, stop rather than guessing.
 
 Former `@effect/platform`, `@effect/rpc`, `@effect/cli`, `@effect/cluster`, and related modules now ship inside `effect`
 under subpaths such as `effect/http`, `effect/http-api`, `effect/rpc`, `effect/cli`, `effect/ai`, `effect/sql`,
