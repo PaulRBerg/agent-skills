@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 THRESHOLD = 1000
 TEST_THRESHOLD = 2000
 PLAN_LIMIT = 3
@@ -336,8 +335,7 @@ def run_tokei(path: Path, include_generated: bool) -> list[FileStat] | None:
     result = subprocess.run(
         args,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if result.returncode != 0:
@@ -404,8 +402,7 @@ def rg_files(root: Path, include_generated: bool) -> list[Path] | None:
         args,
         cwd=root,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if result.returncode not in (0, 1):
