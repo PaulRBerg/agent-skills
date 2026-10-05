@@ -73,7 +73,14 @@ This workflow applies to issue and discussion creation and updates. Parse repeat
 optional `--image-release` flag. Resolve every path to a readable local file, preserve argument order, and run an
 external-disclosure review on the files before uploading them.
 
-GitHub has no public attachment upload API. Try these paths in order:
+For issues, use native `gh` attachments when `gh issue create --help` lists `--attach` (gh 2.99.0+). Pass each path in
+input order as `--attach '<path>#<alt>'` on the same `gh issue create` or `gh issue edit` command that writes the issue.
+To place an image, write `![<alt>](<path>)` with the identical path string into the body; `gh` rewrites that reference
+to the uploaded asset and appends unreferenced attachments to the end of the body. A nonzero exit that still prints the
+issue URL means a partial upload: read the issue back, report the missing files, and do not retry.
+
+GitHub has no public attachment upload API for discussions, and older `gh` lacks `--attach`. In those cases, upload
+before writing and try these paths in order:
 
 1. If `gh img` is installed, run `gh img --repo "<owner>/<repo>" <paths...>` and capture its Markdown output.
 2. If `gh img` is unavailable or clearly fails before upload, use `gh attach <paths...> -R "<owner>/<repo>" --markdown`

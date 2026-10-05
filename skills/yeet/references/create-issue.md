@@ -78,7 +78,8 @@ Append metadata flags only when values are present and the permission check perm
 
 ## Images and Posting
 
-If images were requested, complete `context.md > Image Uploads` before creating the issue.
+If images were requested, follow `context.md > Image Uploads`: add native `--attach` flags to the create command, or
+complete the fallback upload before creating the issue.
 
 Run `posting.md > External-disclosure Review` on the title, rendered body, labels, type, project identifiers, metadata,
 and attachments. Then post with `gh issue create --repo`, `--title`, and `--body-file`, adding `--assignee`, `--label`,

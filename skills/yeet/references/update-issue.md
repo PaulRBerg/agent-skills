@@ -50,7 +50,7 @@ Parse the instructions naturally — multiple intents may apply at once:
 | Update title      | "title", "rename", quoted text passed as new title | `--title`                                            |
 | Regenerate body   | "description", "body", "rewrite"                   | `--body`                                             |
 | Append to body    | "add to body", "append"                            | `--body` (preserve existing + append)                |
-| Add images        | `--image <path>`                                   | `--body` after shared image upload                   |
+| Add images        | `--image <path>`                                   | `--attach`, or `--body` after fallback image upload  |
 | Add labels        | "label X", "tag as X", "add label"                 | `--add-label`                                        |
 | Remove labels     | "unlabel", "remove label"                          | `--remove-label`                                     |
 | Set issue type    | "type X", "classify as X"                          | `--type`                                             |
@@ -85,9 +85,9 @@ rewrite or echo the full existing body to the user.
 
 ## Images
 
-If images were requested, complete `context.md > Image Uploads` before editing the issue. Treat the resulting body as
-the body update and combine it with any other requested edits in one `gh issue edit` command. If another instruction
-regenerates the body, place the images in that regenerated body rather than the superseded original.
+If images were requested, follow `context.md > Image Uploads` and combine the attachments or fallback body update with
+any other requested edits in one `gh issue edit` command. If another instruction regenerates the body, place the images
+in that regenerated body rather than the superseded original.
 
 ## Validate Labels Before Adding
 
