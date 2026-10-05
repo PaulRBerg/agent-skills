@@ -1,12 +1,13 @@
 ---
 name: skill-lifecycle
-description: Checklists for creating, renaming, and deleting catalog and internal skills in this repository.
+description: Checklists for creating, renaming, deleting, and shelving catalog and internal skills in this repository.
 ---
 
 # Skill Lifecycle
 
-Checklists for the three lifecycle operations on skills owned by this repository: create, rename, delete. Catalog skills
-(`skills/<name>/`) and internal skills (`.agents/internal-skills/<name>.md`) have different rules — do not mix them.
+Checklists for the lifecycle operations on skills owned by this repository: create, rename, delete, shelve. Catalog
+skills (`skills/<name>/`) and internal skills (`.agents/internal-skills/<name>.md`) have different rules — do not mix
+them.
 
 ## Create (Catalog)
 
@@ -38,6 +39,16 @@ Checklists for the three lifecycle operations on skills owned by this repository
 4. Publish. The remove group cleans up global installs and the CLI lock.
 5. Caveat: a CLI-lock entry whose `source` is not `PaulRBerg/agent-skills` is invisible to the planner. Remove such an
    install manually with `bunx skills remove --global --skill <name> --yes`.
+
+## Shelve (Catalog)
+
+The `shelved` branch is a skills-only catalog (`skills/<name>/` plus a `README.md` table row per skill). Work on it in a
+temporary `git worktree`; never switch the shared checkout.
+
+1. Copy the committed skill verbatim into the worktree's `skills/<name>/`, renaming it only when asked (update `name:`).
+2. Add the `README.md` table row.
+3. Commit and push `shelved`. Do not run Prettier, `just skill-check`, or other checks on shelved skills; they are
+   archived as-is.
 
 ## Internal Skills (Create / Rename / Delete)
 

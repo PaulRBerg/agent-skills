@@ -136,8 +136,8 @@ the instructions change how a helper is used. Markdown changes always follow the
   or wait out that conflict before publishing. Require `READY` for the complete target claim set in `@publish-skills`.
   This source-then-target sequence is the documented exception to the global rule that multi-root writes take one
   `ai-coord bundle start`; the target set itself still uses one bundle when it spans two or more roots.
-- When creating, renaming, or deleting a catalog or internal skill, follow `@skill-lifecycle`. For catalog creation,
-  also follow `@skill-authoring`. `just skill-check` must pass.
+- When creating, renaming, deleting, or shelving a catalog or internal skill, follow `@skill-lifecycle`. For catalog
+  creation, also follow `@skill-authoring`. `just skill-check` must pass.
 - Before creating or editing `SKILL.md` frontmatter, `agents/openai.yaml`, `metadata.install-targets`, or
   `skill-dependencies`, read `@skill-authoring` — it is the authoritative metadata reference; do not guess field
   semantics.
