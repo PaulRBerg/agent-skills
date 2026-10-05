@@ -71,7 +71,10 @@ tag. It does not judge importance, wording, or semantic category.
 1. Run discovery with the user arguments mapped directly. Exit `2` means the target is not a releasable Git/package
    repository; exit `64` means invalid input. Stop on either.
 2. Require `workingTree.clean`. Do not absorb unrelated work.
-3. Resolve unknown or ambiguous package selection. An explicit user version remains single-package only.
+3. Resolve unknown or ambiguous package selection. An explicit user version remains single-package only. If a target's
+   `previousTags` version is below its manifest version, that version shipped untagged and the reported base is stale:
+   create the missing annotated tag on its release commit (for example `docs: release <version>`) using the observed tag
+   convention, include it in the push command, and rerun discovery. Ask only when no release commit is identifiable.
 4. Inspect each target's complete `changedFiles` and the net diff from its previous tag. Decide whether the surviving
    changes warrant a release. Runtime environments, refactors, documentation, tests, and tooling can all be relevant in
    context; filenames never decide this.
