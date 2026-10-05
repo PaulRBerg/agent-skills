@@ -1,7 +1,9 @@
-# Create Docs Workflow
+# Create or Regenerate Context
 
-Create missing README.md and AGENTS.md context from repository evidence. Regenerate existing targets only with `--force`
-or an equally explicit overwrite instruction. Create other context docs only on explicit request. Never create skills.
+Use these placement and generation rules within `maintain` when missing context is warranted or regeneration is
+requested. Create README.md and AGENTS.md from repository evidence. Regenerate existing targets only with `--force` or
+an equally explicit overwrite instruction. Create other context docs only on explicit request. Skill creation follows
+`references/maintain-skills.md` from this skill.
 
 Success means each selected package root has the requested human and agent context, CLAUDE.md handling matches the
 installed Claude Code (see Claude Code Compatibility in SKILL.md), and generated claims pass repository-defined
@@ -29,8 +31,8 @@ review workflow. Otherwise, report the recommendation without writing it. Never 
 directory.
 
 For each selected target, classify README.md, AGENTS.md, and CLAUDE.md as missing, reusable, safely replaceable, or
-blocked. Without overwrite authority, skip existing README.md and AGENTS.md files and report them; do not silently route
-them through `polish`.
+blocked. Maintain existing README.md and AGENTS.md with targeted edits under `references/maintain.md`; regenerate them
+only with overwrite authority. A request restricted to creating missing files leaves existing files untouched.
 
 ## Ground the Content
 
@@ -97,6 +99,5 @@ and advise the user to merge any remaining useful instructions manually before d
 
 ## Finish
 
-Run the completion checks and use the report contract from SKILL.md. In dry-run mode, show selected paths and concise
-section-level previews or diffs. Stop after the requested files are created or regenerated and validated; do not polish
-unrelated existing context.
+Return to the shared completion checks and report contract in SKILL.md. In dry-run mode, show selected paths and concise
+section-level previews or diffs. Keep all creation and regeneration within the selected maintenance scope.

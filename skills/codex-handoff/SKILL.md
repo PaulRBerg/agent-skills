@@ -98,8 +98,8 @@ handoff owns delegation mechanics.
   implementation and the user approved the plan.
 - Agents cannot load skills. Never brief one to "use skill X" by name; inline the specific companion instructions,
   conventions, or excerpts it needs.
-- A companion requirement to run `$code-polish` or `$agents-brain polish` marks that pass required in the Plan Phase; it
-  still runs once, per Completion. Companion commit instructions never add commits.
+- A companion requirement to run `$code-polish` or `$agents-brain maintain` marks that pass required in the Plan Phase;
+  it still runs once, per Completion. Companion commit instructions never add commits.
 - Satisfy both contracts at Completion: produce the companion's required report artifacts (ledgers, tables, verdicts)
   alongside the selected adapter's completion report.
 
@@ -159,7 +159,7 @@ Produce a decision-complete plan with this section and the selected adapter's ex
 <host-adapter manifest table>
 
 - Code polish: `<required|not required>` — `<reason>`
-- Agent-context polish: `<required|not required>` — `<reason>`
+- Agent-context maintenance: `<required|not required>` — `<reason>`
 ```
 
 While finalizing the plan, record the union of every manifest write scope with
@@ -193,10 +193,11 @@ checks that prove its own edits, such as file-scoped formatting, lint, or typech
 Require `$code-polish` for nonlocal invariants, concurrency or state machines, migrations or parsing, auth or security,
 retry or error semantics, and public API or data-contract changes. File count alone is not a trigger.
 
-Require `$agents-brain polish` when approved work changes a target its polish workflow supports: README.md, AGENTS.md or
-CLAUDE.md, a durable context doc, an existing project-installed skill under `.agents/skills`, or an existing git-tracked
-source-catalog skill under `skills/` where polish is prose-only. Installed copies under managed agent-config roots
-remain excluded. Mark both passes required when both trigger rules apply; mark neither when neither applies.
+Require `$agents-brain maintain` when approved work changes a target its maintenance workflow supports: README.md,
+AGENTS.md or CLAUDE.md, a durable context doc, an existing project-installed skill under `.agents/skills`, or an
+existing git-tracked source-catalog skill under `skills/` where factual context corrections are prose-only. Installed
+copies under managed agent-config roots remain excluded. Mark both passes required when both trigger rules apply; mark
+neither when neither applies.
 
 Do not launch implementation agents until the user approves the plan. Read-only research is the only pre-approval
 exception.
@@ -299,7 +300,7 @@ placeholder.
   per Failure Classification; never list them as optional or out-of-scope items.
 - If any required agent failed, or the user explicitly asked to hurry or wrap up, skip every planned polish pass and
   report the skip. Otherwise, invoke each required pass once with only its applicable paths from that union:
-  `$code-polish` first in its default simplify-then-review mode, then `$agents-brain polish` with its eligible context
+  `$code-polish` first in its default simplify-then-review mode, then `$agents-brain maintain` with its eligible context
   targets. Invoke only one when only one is required. Do not seed either pass with paths outside the union or let it
   broaden beyond its declared workflow authority.
 - Reconcile in-scope files actually changed by each polish pass into the final changed-files set and verification. A

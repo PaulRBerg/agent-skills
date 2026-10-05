@@ -61,8 +61,9 @@ authorized workflow.
   to the repository's source-catalog lifecycle, follow that route instead of creating `.agents/skills` there. Capture
   only the reusable procedure, triggers, constraints, and validation; omit session narrative and incidental details.
 
-Keep ordinary context polishing and unrelated source changes out of this pass. Re-read current files before applying
-edits, preserve concurrent work, and complete independently actionable candidates even if another is blocked.
+Use `references/maintain.md` from this skill for ordinary context edits; keep unrelated source changes out of scope.
+Re-read current files before applying edits, preserve concurrent work, and complete independently actionable candidates
+even if another is blocked.
 
 ## Verify and Finish
 
@@ -80,8 +81,8 @@ candidates are settled, without expanding into a fresh audit.
 ## Establish the Standing Instruction
 
 When asked to enable continuous maintenance for future tasks, add or reconcile a concise rule in the applicable
-repository AGENTS.md through `polish` or `create`. Keep it self-contained so future agents can act without loading this
-skill on every task. Adapt this text to local ownership and lifecycle conventions; retain the scope and asymmetric bar:
+repository AGENTS.md through `maintain`. Keep it self-contained so future agents can act without loading this skill on
+every task. Adapt this text to local ownership and lifecycle conventions; retain the scope and asymmetric bar:
 
 > During implementation tasks, review repo-owned skills affected by the work. Keep all review and edits inside the
 > repository where the task was given; exclude global skills, other repositories, externally owned copies, and symlinks

@@ -1,7 +1,9 @@
-# Polish Workflow
+# Maintain Workflow
 
-Update existing context for factual accuracy, useful placement, and lower noise. Do not create README.md, AGENTS.md,
-context docs, or skills, and do not broadly restyle accurate user-authored content.
+Maintain context for factual accuracy, useful placement, and lower noise. Preserve accurate user-authored content and
+structure. Update existing context by default; create missing context when requested or when verified guidance has no
+appropriate existing home, using this skill's `references/create-docs.md`. Apply task-backed skill lifecycle changes
+using `references/maintain-skills.md` under the same `maintain` workflow.
 
 Success means each changed claim is verified against the repository, each instruction lives at the narrowest useful
 scope, and no unrelated content or user work is disturbed.
@@ -10,7 +12,8 @@ scope, and no unrelated content or user work is disturbed.
 
 Select existing README.md and AGENTS.md files, sibling CLAUDE.md entries, in-scope context docs, and any in-scope
 existing skill targets under `.agents/skills/<name>/` or eligible `skills/<name>/` trees. Apply `path`, `--root-only`,
-and `target` filters before reading deeply.
+and `target` filters before reading deeply. Preserve any caller's narrower file scope; missing context or lifecycle work
+outside it requires separate authorization or an applicable standing instruction.
 
 Use the nearest manifests, task runners, lock files, lint and CI configuration, generated-file notices, and relevant
 source files to verify claims. Check paths, commands, scripts, recipes, environment variables, ownership rules, default
@@ -36,8 +39,8 @@ loaded, inherited through a scope chain, conditional or path-scoped, or independ
 - Replace equivalent lists of prohibitions with one positive decision rule. Retain rationale only when it changes how a
   rule is interpreted, and retain one minimal example only for an exact requirement or an evidenced failure.
 - Route specialized guidance to the deepest existing applicable context or an existing on-demand doc or skill. When no
-  suitable target exists, assess task-backed skill candidates through the separate `maintain` creation bar; recommend
-  other context creation through `create` instead of creating or moving files here.
+  suitable target exists, apply the higher creation bar in `references/maintain-skills.md` for skill candidates and the
+  placement rules in `references/create-docs.md` for missing context. Preserve explicit creation and move approvals.
 - Preserve authority, safety, material exceptions, semantic completion criteria, exact commands and machine-consumed
   text, and clarity. Re-read the effective load chain after pruning to ensure no required constraint is orphaned or
   contradicted.
@@ -75,8 +78,8 @@ Keep AGENTS.md terse, imperative, repository-specific, and scoped to its directo
 
 Move subtree-specific rules to the deepest common ancestor where they apply. Promote duplicated child guidance only when
 every affected child shares it. Recommend a missing nested AGENTS.md only for a distinct command, safety rule,
-generated-file boundary, ownership rule, data constraint, or review requirement; route actual creation through the
-`create` workflow.
+generated-file boundary, ownership rule, data constraint, or review requirement; use `references/create-docs.md` for
+authorized creation.
 
 Never delete an empty or obsolete AGENTS.md automatically. Report it as a deletion candidate, together with any sibling
 CLAUDE.md symlink, and require explicit confirmation.
@@ -103,7 +106,7 @@ After changing placement or symlinks, rediscover affected targets and confirm no
 
 ## Context Doc Decisions
 
-Polish selected context docs — conventions, command catalogs, data-format rules, workflow runbooks, and similar
+Maintain selected context docs — conventions, command catalogs, data-format rules, workflow runbooks, and similar
 reference material — wherever they live and whatever they are named:
 
 - Verify commands, paths, flags, formats, environment variables, versions, and rules against the repository with the
@@ -119,7 +122,7 @@ reference material — wherever they live and whatever they are named:
 
 ## Skill Decisions
 
-Polish only these existing skill classes:
+Apply factual corrections to these existing skill classes:
 
 - Project-installed skills under `.agents/skills`. A minimal factual fix may touch SKILL.md or its existing bundled
   files.
@@ -127,9 +130,9 @@ Polish only these existing skill classes:
   symlinked, and the repository root is neither a managed agent-config root nor nested under one, as enforced by the
   Repository Guard Rail. Edit only the SKILL.md body and existing bundled Markdown, such as files under `references/`.
 
-Never create, delete, or rename skill or bundled files, or change a skill's purpose or structure during this pass. Route
-task-backed lifecycle opportunities to a separate `maintain` pass when authorized by the user or standing repository
-instructions; the restrictions below describe `polish`, not that separately authorized workflow.
+For task-backed creation, deletion, merging, or restructuring, follow `references/maintain-skills.md` when authorized by
+the user or standing repository instructions. The factual-correction rules below do not limit separately authorized
+lifecycle changes; both belong to this maintenance workflow.
 
 For a project-installed skill:
 
@@ -154,11 +157,11 @@ For each selected skill:
 - Preserve structure and voice; use the smallest factual edit span.
 - Leave third-party behavior and paths outside the repository unchanged unless current repository evidence
   authoritatively establishes the correction.
-- Record evidence for an obsolete or redundant skill or a useful merge; do not delete or hollow it out during `polish`.
-  Complete authorized lifecycle changes through `maintain` after this pass; otherwise report the candidate.
+- Record evidence for an obsolete or redundant skill or a useful merge. Apply authorized lifecycle changes with
+  `references/maintain-skills.md`; otherwise report the candidate without deleting or hollowing out the skill.
 
 ## Finish
 
-Run the completion checks and use the report contract from SKILL.md. Stop after the selected existing targets are
-accurate and validated. Then complete any separately authorized `maintain` pass before the final report; do not create
-recommended context or perform other adjacent cleanup.
+Run the completion checks and use the report contract from SKILL.md. Finish when selected context is accurate, warranted
+missing context is created, and authorized task-backed skill changes are complete and validated. Do not expand into
+unrelated cleanup.
