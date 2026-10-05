@@ -81,7 +81,9 @@ Confirm every discovered holding on-chain: per chain, batch `eth_call` `balanceO
 each token at the pinned block hash, through the same route as that chain's native reads. Add `decimals()`
 (`0x313ce567`) when discovery did not supply it. Use the RPC amount: USD value = `balanceOf / 10^decimals × price`. An
 RPC zero drops the holding; a failed or malformed confirmation is a coverage gap for that token, never the indexed
-amount.
+amount. ABI-decode each result's first 32-byte word: some legacy Vyper tokens, such as Curve `LUSD3CRV-f` on Ethereum,
+return trailing bytes after it, so neither a length check nor an integer parse of the whole result is valid. Only a
+result shorter than 32 bytes is malformed.
 
 ## Bulk Mode
 
