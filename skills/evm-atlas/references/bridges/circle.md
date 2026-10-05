@@ -2,10 +2,13 @@
 
 ## Overview
 
-Use Circle CCTP references when the user mentions Circle, CCTP, CCTP v2, Circle Gateway, native USDC bridge, burn/mint
-USDC, or when bridge evidence points to Circle CCTP contracts or events. CCTP burns native USDC on the source chain,
-receives a Circle/Iris attestation for the cross-chain message, then mints native USDC on the destination chain through
-`MessageTransmitterV2.receiveMessage`.
+Use Circle CCTP references when either condition applies:
+
+- The user mentions Circle, CCTP, CCTP v2, Circle Gateway, native USDC bridge, or burn/mint USDC.
+- Bridge evidence points to Circle CCTP contracts or events.
+
+CCTP burns native USDC on the source chain. It receives a Circle/Iris attestation for the cross-chain message. Then it
+mints native USDC on the destination chain through `MessageTransmitterV2.receiveMessage`.
 
 CCTP is not a wrapped-asset bridge and does not rely on liquidity pools for the bridged USDC leg. Validate observed
 source burns, Circle attestation/message evidence when supplied, and destination mint or withdraw events with
@@ -13,15 +16,15 @@ explorer/RPC data.
 
 ## Contract Roles
 
-| Role                   | Meaning                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `TokenMessengerV2`     | User-facing CCTP v2 messenger. Initiates deposits and exposes the configured `feeRecipient()`.                |
-| `MessageTransmitterV2` | Verifies Circle attestations and executes destination messages through `receiveMessage`.                      |
-| `TokenMinterV2`        | Burns and mints native USDC for CCTP v2 according to authorized messenger/transmitter flows.                  |
-| `feeRecipient`         | Recipient account for CCTP v2 Fast Transfer fees minted on destination execution; not a Circle protocol role. |
+| Role                   | Meaning                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `TokenMessengerV2`     | User-facing CCTP v2 messenger. Initiates deposits and exposes the configured `feeRecipient()`.                             |
+| `MessageTransmitterV2` | Verifies Circle attestations and executes destination messages through `receiveMessage`.                                   |
+| `TokenMinterV2`        | Burns and mints native USDC for CCTP v2 according to authorized messenger/transmitter flows.                               |
+| `feeRecipient`         | Recipient account for CCTP v2 Fast Transfer fees that CCTP mints during destination execution. Not a Circle protocol role. |
 
-Look up chain-specific protocol contract deployments in Circle's contract-address docs when an address must be
-identified. Do not label a fee-recipient address as `TokenMessengerV2`, `MessageTransmitterV2`, or `TokenMinterV2`
+When you must identify an address, find the chain-specific protocol deployment in Circle's contract-address
+documentation. Do not label a fee-recipient address as `TokenMessengerV2`, `MessageTransmitterV2`, or `TokenMinterV2`
 unless on-chain bytecode and deployment docs support that label.
 
 ## Fee Recipient Finding
@@ -39,8 +42,8 @@ unless an explorer or Circle deployment source separately labels them.
 
 ## Target-Chain Fee Recipients
 
-These are CCTP v2 `TokenMessengerV2.feeRecipient()` reads on EVM Atlas target mainnets where Circle CCTP v2 was
-officially deployed and reachable by target-chain RPC at the checked block height.
+These are CCTP v2 `TokenMessengerV2.feeRecipient()` reads on EVM Atlas target mainnets. At the checked block height,
+Circle had officially deployed CCTP v2 on these chains and target-chain RPC could reach it.
 
 | Chain       | Chain ID | `feeRecipient`                               |
 | ----------- | -------: | -------------------------------------------- |
@@ -62,8 +65,8 @@ officially deployed and reachable by target-chain RPC at the checked block heigh
 
 ## Report Fields
 
-Report these fields when they were already obtained by the active lookup; do not initiate additional reads solely to
-fill the table:
+Report these fields when the active lookup already obtained them. Do not initiate additional reads solely to fill the
+table:
 
 | Field                 | Evidence                                                                                    |
 | --------------------- | ------------------------------------------------------------------------------------------- |
@@ -82,10 +85,10 @@ route classification.
 - If a bridge router such as Bungee, Socket, LI.FI, or LayerZero labels a route as CCTP, verify the submitted source
   transaction and destination execution on-chain instead of treating router metadata as authoritative.
 - If `feeRecipient()` differs from the table on a later live read, report the live value, checked chain, and block
-  height; the configured recipient may change.
+  height. The configured recipient may change.
 - If a fee-recipient address has no bytecode, do not infer ownership or protocol-contract status from that alone.
-- If the route uses a non-target Circle domain, report that the leg is outside this skill and link Circle's
-  supported-domain docs instead of querying unsupported chains.
+- If the route uses a non-target Circle domain, report that the leg is outside this skill. For that leg, link Circle's
+  supported-domain documentation instead of querying unsupported chains.
 
 ## Sources
 

@@ -2,12 +2,15 @@
 
 ## Overview
 
-Use Symbiosis Finance's public explorer API as a read-only source for cross-chain swap status after the known origin and
-destination chains are confirmed against `references/generated/target-mainnets.json`. Symbiosis is a liquidity-network
-aggregator: it does not move tokens directly between arbitrary chains but routes every cross-chain swap through
-synthesized-token liquidity pools ("Octopools") on its own host chain, converting a source token to a synthetic
-representation, moving that synthetic across the host chain, then converting to the requested destination token. A swap
-record therefore has three legs: `from` (origin chain), `join` (host-chain leg), and `to` (destination chain).
+After confirming the known origin and destination chains against `references/generated/target-mainnets.json`, use
+Symbiosis Finance's public explorer API. Use it as a read-only source for cross-chain swap status.
+
+Symbiosis is a liquidity-network aggregator. It does not move tokens directly between arbitrary chains. It routes every
+cross-chain swap through synthesized-token liquidity pools ("Octopools") on its own host chain.
+
+Symbiosis converts a source token to a synthetic representation. It moves that synthetic across the host chain. Then it
+converts it to the requested destination token. A swap record therefore has three legs: `from` (origin chain), `join`
+(host-chain leg), and `to` (destination chain).
 
 Default to the explorer API base URL:
 
@@ -15,22 +18,23 @@ Default to the explorer API base URL:
 https://api-v2.symbiosis.finance/explorer/v1
 ```
 
-This is an unauthenticated public read API; no API key is documented or required.
+This public read API allows unauthenticated requests. The documentation does not specify an API key. The API requires no
+key.
 
 Never execute bridge steps from this skill. Do not sign messages or submit swap transactions. Returned transaction and
 route data are for inspection only.
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against
+Use this router after confirming the known origin and destination chains against
 `references/generated/target-mainnets.json`.
 
 1. **Known source tx hash and its origin chain ID:** call `GET /transactions/<originChainId>/<txHash>` for the single
    matching record.
-2. **Known source tx hash, chain ID unknown:** call `GET /transactions?search=<txHash>`; the search endpoint matches the
+2. **Known source tx hash, chain ID unknown:** call `GET /transactions?search=<txHash>`. The search endpoint matches the
    hash regardless of leg or chain.
-3. **Scoped browsing:** call `GET /transactions?limit=<n>` to page recent swaps; results are not filtered by chain or
-   address in this form — narrow further only with parameters confirmed via a `search` match first.
+3. **Scoped browsing:** call `GET /transactions?limit=<n>` to page recent swaps. In this form, results have no chain or
+   address filter. Narrow further only with parameters you first confirmed via a `search` match.
 
 Example direct chain/hash lookup:
 
@@ -54,8 +58,8 @@ curl -sS "https://api-v2.symbiosis.finance/explorer/v1/transactions?search=0xTX_
 
 ## Report Fields
 
-Extract and report these fields when present, either from a single object (direct lookup) or `records[]` (search /
-list):
+When present, extract these fields from a single object (direct lookup) or `records[]` (search / list). Report the
+extracted fields:
 
 | Field                        | Symbiosis path examples                                                                  |
 | ---------------------------- | ---------------------------------------------------------------------------------------- |
@@ -73,44 +77,44 @@ list):
 | Stuck / retry signal         | `state_stuck_reason`, `retry_active`                                                     |
 | Lost-leg flags               | `from_is_lost`, `join_is_lost`, `to_is_lost`                                             |
 
-Amounts in `amounts[]` and `from_route[]`/`to_route[]` are raw integer units in the token's smallest denomination;
-convert with the accompanying `token.decimals`.
+Amounts in `amounts[]` and `from_route[]`/`to_route[]` are raw integer units in the token's smallest denomination.
+Convert with the accompanying `token.decimals`.
 
-`from_client_id` shows the integrating frontend or aggregator that submitted the swap (observed live values include
-`"symbiosis-app"` and third-party aggregator names such as `"lifi"`) — a Symbiosis-routed leg can appear while
-investigating a different aggregator's transaction; check this field before assuming the immediate frontend is Symbiosis
+`from_client_id` shows the integrating frontend or aggregator that submitted the swap. Observed live values include
+`"symbiosis-app"` and third-party aggregator names such as `"lifi"`. A Symbiosis-routed leg can appear while you
+investigate a different aggregator's transaction. Check this field before assuming the immediate frontend is Symbiosis
 itself.
 
 ## Status Values
 
-The `state` field is an integer whose exact enum is not published in developer docs; live sampling was inconclusive
-enough to assert a firm 1:1 mapping (records with the same `state` value showed a mix of populated and null
-`success_at`, and some `state=2` records still eventually recorded a `success_at`). Prefer these directly observable
-signals over the raw `state` code:
+The `state` field is an integer. Developer documentation does not publish its exact enum. Live sampling did not
+establish a firm 1:1 mapping. Records with the same `state` value showed a mix of populated and null `success_at`. Some
+`state=2` records still eventually recorded a `success_at`. Prefer these directly observable signals over the raw
+`state` code:
 
 | Signal                                    | Meaning                                                                                                         |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `to_tx_hash` present and `success_at` set | Destination leg completed                                                                                       |
 | `to_tx_hash` null and `success_at` null   | Swap has not completed the destination leg yet (in progress or stuck)                                           |
-| `state_stuck_reason` non-empty            | The swap hit an execution error (e.g. gas estimation failure, below-minimum deposit); read the message directly |
+| `state_stuck_reason` non-empty            | The swap hit an execution error (e.g. gas estimation failure, below-minimum deposit). Read the message directly |
 | `retry_active` true                       | Symbiosis is actively retrying a failed step                                                                    |
 
 Symbiosis's own user-facing documentation describes swap lifecycle states as In progress, Success, Success*,
-Interrupted, and Reverted, and states that swaps stuck for too long are automatically reverted (tokens returned to the
-sender) — this vocabulary is unverified against the explorer API's integer `state` field; treat it as background
-context, not a field mapping to implement against.
+Interrupted, and Reverted. It states that swaps stuck for too long automatically revert and return tokens to the sender.
+This vocabulary remains unverified against the explorer API's integer `state` field. Treat it as background context, not
+a field mapping to implement against.
 
 ## Failure Handling
 
 - Empty `records` from `search`, or 404 from the direct chain/hash lookup: report that Symbiosis has no record for that
-  hash and continue normal explorer/RPC analysis.
-- `state_stuck_reason` non-empty: report the raw reason string; do not infer a specific remediation.
-- `to_is_lost` / `join_is_lost` / `from_is_lost` true: report that Symbiosis itself flags that leg as unresolved; treat
-  this as stronger signal than the raw `state` code.
-- Non-target chains in `from_chain_id`/`to_chain_id`: report that the leg is outside this skill and ask for a feature
-  request rather than continuing analysis on that leg.
+  hash. Continue normal explorer/RPC analysis.
+- `state_stuck_reason` non-empty: report the raw reason string. Do not infer a specific remediation.
+- `to_is_lost` / `join_is_lost` / `from_is_lost` true: report that Symbiosis itself flags that leg as unresolved. Treat
+  this as a stronger signal than the raw `state` code.
+- Non-target chains in `from_chain_id`/`to_chain_id`: report that the leg is outside this skill. For that leg, ask for a
+  feature request instead of continuing analysis.
 - `join_chain_id` values reflect Symbiosis's internal host chain, not necessarily a chain tracked in
-  `references/generated/target-mainnets.json`; do not treat it as a target chain requiring its own explorer
+  `references/generated/target-mainnets.json`. Do not treat it as a target chain requiring its own explorer
   verification.
 
 ## Sources

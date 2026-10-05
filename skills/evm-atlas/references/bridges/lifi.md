@@ -24,7 +24,7 @@ transaction data is for inspection only.
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against
+Use this router after confirming the known origin and destination chains against
 `references/generated/target-mainnets.json`.
 
 1. **Simple quote:** call `GET /quote` when the user wants one best route or a specific bridge/swap estimate.
@@ -32,7 +32,7 @@ Use this router after the known origin and destination chains are confirmed agai
    multi-step paths.
 3. **Known source tx hash:** call `GET /status?txHash=<hash>`. Add `fromChain`, `toChain`, and `bridge` when known for
    faster, more precise results.
-4. **Supported chains:** call `GET /chains`; use `chainTypes=EVM` when only EVM chains are relevant.
+4. **Supported chains:** call `GET /chains`. When only EVM chains are relevant, use `chainTypes=EVM`.
 5. **Supported tokens:** call `GET /tokens?chains=<chainIds>` for chain-specific token catalogs.
 6. **Available bridges and exchanges:** call `GET /tools`.
 7. **Possible token connections:** call `GET /connections` when validating whether a pair can be swapped or bridged.
@@ -62,17 +62,17 @@ For quote or route inspection, use explicit chain IDs from `references/generated
 | `fromToken`                    | Source token symbol or token contract address                          |
 | `toToken`                      | Destination token symbol or token contract address                     |
 | `fromAmount`                   | Source amount in smallest units                                        |
-| `toAmount`                     | Destination amount in smallest units; do not combine with `fromAmount` |
-| `fromAddress`                  | Sender address; use only user-provided or placeholder addresses        |
-| `toAddress`                    | Destination receiver; defaults may differ by endpoint                  |
-| `slippage`                     | Optional slippage tolerance; default is API-defined                    |
+| `toAmount`                     | Destination amount in smallest units. Do not combine with `fromAmount` |
+| `fromAddress`                  | Sender address. Use only user-provided or placeholder addresses        |
+| `toAddress`                    | Destination receiver. Defaults may differ by endpoint                  |
+| `slippage`                     | Optional slippage tolerance. The API defines the default               |
 | `allowBridges` / `denyBridges` | Restrict route bridge set when the user requests it                    |
 
-Do not invent wallet addresses. Use placeholders for hypothetical quotes and user-provided addresses for real lookups.
+Do not invent wallet addresses. Use placeholders for hypothetical quotes. Use user-provided addresses for real lookups.
 
 ## Report Fields
 
-Extract and report these fields when present:
+When present, extract these fields. Report the extracted fields:
 
 | Field                   | LI.FI path examples                                                |
 | ----------------------- | ------------------------------------------------------------------ |
@@ -88,8 +88,8 @@ Extract and report these fields when present:
 | Destination tx hash     | `receiving.txHash`                                                 |
 | Explorer links          | `sending.txLink`, `receiving.txLink`                               |
 
-Token amounts are raw integer units. Convert with token decimals when present, and preserve raw values when decimals are
-absent.
+Token amounts are raw integer units. When token decimals are present, convert with them. When decimals are absent,
+preserve raw values.
 
 ## Status Values
 
@@ -107,22 +107,22 @@ Important substatuses:
 | Substatus   | Meaning                                        |
 | ----------- | ---------------------------------------------- |
 | `COMPLETED` | Transfer completed as expected                 |
-| `PARTIAL`   | User received a different token; still success |
-| `REFUNDED`  | Tokens were returned to the sender             |
+| `PARTIAL`   | User received a different token. Still success |
+| `REFUNDED`  | Sender received the tokens back                |
 
 For `DONE`, still verify terminal destination activity with explorer or RPC data when the destination chain is a target
 chain.
 
 ## Failure Handling
 
-- Missing `$LIFI_API_KEY`: use unauthenticated requests and respect lower public rate limits.
-- Rate limit `429`: back off, mention the limit, and continue explorer/RPC analysis.
-- No route found: report the API reason when present; try only user-approved alternative tokens, chains, amounts, or
+- Missing `$LIFI_API_KEY`: use unauthenticated requests. For those requests, respect lower public rate limits.
+- Rate limit `429`: back off. Mention the limit. Continue explorer/RPC analysis.
+- No route found: report the API reason when present. Try only user-approved alternative tokens, chains, amounts, or
   bridge filters.
-- Insufficient balance or gas: report the quoted requirement; do not attempt remediation transactions.
-- Slippage errors: report the issue; do not change slippage unless the user explicitly asks for a new quote.
-- Non-target chains in LI.FI results: report that the leg is outside this skill and ask for a feature request rather
-  than continuing analysis on that leg.
+- Insufficient balance or gas: report the quoted requirement. Do not attempt remediation transactions.
+- Slippage errors: report the issue. Do not change slippage unless the user explicitly asks for a new quote.
+- Non-target chains in LI.FI results: report that the leg is outside this skill. For that leg, ask for a feature request
+  instead of continuing analysis.
 
 ## Sources
 

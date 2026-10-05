@@ -5,18 +5,18 @@
 Query blockchain data using Etherscan's unified API V2. This skill covers:
 
 - Native ETH balance queries
-- ERC-20 token balance queries (single contract on every plan; full holdings on PRO)
+- ERC-20 token balance queries (single contract on every plan, full holdings on PRO)
 - Transaction history queries (normal, internal, ERC-20/ERC-721/ERC-1155 transfers)
 - First-funding lookup for an address (PRO `fundedby` with a 2-call free-tier fallback)
 - Target-chain support via the `chainid` parameter
-- Auto-detection of Free vs Lite vs PRO so paid-only chains and PRO-only endpoints are used when available
+- Automatic Free vs Lite vs PRO detection to use paid-only chains and PRO-only endpoints when available
 - Token reputation availability: Etherscan exposes this only through paid metadata surfaces, not Lite
 - ENS forward resolution for Ethereum mainnet onchain names
 
 **Scope:** Read-only account and ENS queries. For other Etherscan API features, consult the fallback documentation.
 
-Access guidance checked against the [changelog](https://docs.etherscan.io/changelog) on 2026-10-05. Apply scheduled
-changes by their effective date; provider membership alone does not prove plan access.
+This guidance reflects a check against the [changelog](https://docs.etherscan.io/changelog) on 2026-10-05. Apply
+scheduled changes by their effective date. Provider membership alone does not prove plan access.
 
 ## Prerequisites
 
@@ -32,13 +32,13 @@ if [ -z "$ETHERSCAN_API_KEY" ]; then
 fi
 ```
 
-If the environment variable is missing, inform the user and halt execution. Never print the key itself: presence checks
-must stay value-free, so do not echo `$ETHERSCAN_API_KEY` or use `${ETHERSCAN_API_KEY:+...}` /
+If the environment variable is missing, inform the user. Under that condition, halt execution. Never print the key
+itself. Presence checks must stay value-free. Do not echo `$ETHERSCAN_API_KEY` or use `${ETHERSCAN_API_KEY:+...}` /
 `${ETHERSCAN_API_KEY:-...}` expansions in any command whose output reaches the transcript.
 
 ### Plan Detection
 
-Run the detection helper **once per session** and cache the result. It maps `getapilimit` → plan tier and probes a Base
+Run the detection helper **once per session**. Cache the result. It maps `getapilimit` → plan tier and probes a Base
 balance call to disambiguate Free from Lite:
 
 ```bash
@@ -59,12 +59,12 @@ paid_chains=true
 ```
 
 `plan` is one of `free`, `lite`, `standard`, `advanced`, `professional`, `pro_plus`, `enterprise`, `unknown`. Two
-capability fields (`true`, `false`, or `unknown`) gate behavior; only `true` authorizes a gated request:
+capability fields (`true`, `false`, or `unknown`) control gated behavior. Only `true` authorizes a gated request:
 
-- `paid_chains=true` — paid-chain community endpoints are queryable. True for Lite and all higher tiers; use
+- `paid_chains=true` — paid-chain community endpoints are queryable. True for Lite and all higher tiers. Use
   `references/generated/etherscan-chains.md` and its dated notes to determine which targets require it.
 - `pro_endpoints=true` — PRO-only actions (`addresstokenbalance`, `balancehistory`, `tokenholderlist`, `fundedby`,
-  daily-stats endpoints, etc.) are callable. True for Standard and higher; **false on Lite**.
+  daily-stats endpoints, etc.) are callable. True for Standard and higher. **False on Lite**.
 
 **Manual detection** (if the script is unavailable):
 
@@ -82,15 +82,17 @@ curl -s "https://api.etherscan.io/v2/api?chainid=1&module=getapilimit&action=get
 | 1,500,000     | Pro Plus     | Yes              | Yes           |
 | > 1,500,000   | Enterprise   | Yes              | Yes           |
 
-Free and Lite both report `creditLimit: 100000`. Lite raises rate-limit-per-second (5 vs 3) **and unlocks every
-supported chain's community endpoints**, but does **not** add PRO endpoints — those start at Standard. To disambiguate,
-attempt a Base balance call (`chainid=8453`): success → Lite; only the explicit
-`Free API access is not supported for this chain` denial → Free. Transport, rate-limit, quota, or other failures leave
-`plan=unknown` and `paid_chains=unknown`, while `pro_endpoints=false` still follows from the 100,000-credit tier. Do not
-classify generic `status=0` as Free. To probe PRO instead, the failure response is
-`"Sorry, it looks like you are trying to access an API Pro endpoint."`.
+Free and Lite both report `creditLimit: 100000`. Lite raises the rate limit per second (5 vs 3). It **unlocks every
+supported chain's community endpoints**, but does **not** add PRO endpoints. Those start at Standard.
 
-`getapilimit` itself consumes 1 credit (plus 1 more for the paid-chain probe), so do not re-run mid-session.
+To distinguish Free from Lite, attempt a Base balance call (`chainid=8453`). Success indicates Lite. Only the explicit
+`Free API access is not supported for this chain` denial indicates Free. Transport, rate-limit, quota, or other failures
+leave `plan=unknown` and `paid_chains=unknown`. Under those failures, `pro_endpoints=false` still follows from the
+100,000-credit tier. Do not classify generic `status=0` as Free.
+
+For a PRO probe instead, the failure response is `"Sorry, it looks like you are trying to access an API Pro endpoint."`.
+
+`getapilimit` itself consumes 1 credit (plus 1 more for the paid-chain probe). Do not re-run it mid-session.
 
 ## Chain Inference
 
@@ -109,8 +111,8 @@ Do not default to Ethereum Mainnet. Always infer the chain from the user's promp
    - SONIC → Sonic (146)
    - SEI → Sei (1329)
    - MON → Monad (143)
-3. **Contract address patterns** — If the user provides a contract address, consider asking which chain it's deployed on
-   (many contracts exist on multiple chains).
+3. **Contract address patterns** — If the user provides a contract address, consider asking which chain hosts it. Many
+   contracts exist on multiple chains.
 4. **Testnet keywords** — Testnets are outside this skill's target list. Ask the user to file a feature request instead
    of querying them.
 5. **Ambiguous cases** — If the chain cannot be inferred, **ask the user** before proceeding. Do not assume Ethereum
@@ -118,20 +120,21 @@ Do not default to Ethereum Mainnet. Always infer the chain from the user's promp
 
 ### Unsupported Chains
 
-If the user references a chain that is not in `references/generated/target-mainnets.json`, halt and ask them to file a
-feature request in <https://github.com/PaulRBerg/agent-skills>. Do not query Etherscan, Blockscout, Bungee, Chainlist,
-web search, or public RPCs for non-target chains.
+If the user references a chain that is not in `references/generated/target-mainnets.json`, halt. Under that condition,
+ask them to file a feature request in <https://github.com/PaulRBerg/agent-skills>. Do not query Etherscan, Blockscout,
+Bungee, Chainlist, web search, or public RPCs for non-target chains.
 
 If the user references a **target EVM chain** that Etherscan API V2 does not cover, do **not** halt. Prefer Blockscout
-(`references/explorers/blockscout-api.md`) before direct RPC. If Blockscout doesn't index the target chain either, fall
-back to direct RPC calls against the target chain's default public RPC:
+(`references/explorers/blockscout-api.md`) before direct RPC. If Blockscout does not index the target chain either, use
+direct RPC calls against the target chain's default public RPC:
 
 1. Resolve the chain via `references/generated/target-mainnets.json` and `references/generated/chain-aliases.json` to
    get the default public RPC, chain ID, native currency symbol, and explorer URL.
 2. Issue bounded direct HTTP JSON-RPC calls (e.g., `eth_getBalance`, `eth_getLogs`, `eth_getTransactionByHash`) against
    that RPC. Do not hand the read to `cli-cast`.
-3. Note in the response that the data came from the chain's public RPC, not Etherscan, so PRO-style aggregations (full
-   token holdings, first-funding lookup) are unavailable and must be derived manually from logs/transactions if needed.
+3. Note in the response that the data came from the chain's public RPC, not Etherscan. With this source, PRO-style
+   aggregations (full token holdings, first-funding lookup) are unavailable. If needed, derive them manually from
+   logs/transactions.
 
 If the user references a **non-EVM chain**, do not use this skill:
 
@@ -141,9 +144,10 @@ Please file a feature request in https://github.com/PaulRBerg/agent-skills.
 ```
 
 For the target-filtered list of Etherscan-supported chains and their IDs, see
-`references/generated/etherscan-chains.md`. Read its notes as well as its table grouping: scheduled access changes take
-precedence once effective. A provider deprecation does not remove a chain from this skill's target registry; route that
-target to an available indexed fallback or RPC instead. Provider additions do not expand the target list.
+`references/generated/etherscan-chains.md`. Read its notes as well as its table grouping. Once effective, scheduled
+access changes take precedence. A provider deprecation does not remove a chain from this skill's target registry. For a
+deprecated provider, route that target to an available indexed fallback or RPC instead. Provider additions do not expand
+the target list.
 
 ## API Base URL
 
@@ -158,7 +162,7 @@ The `chainid` parameter determines which blockchain to query.
 ## ENS Forward Resolution
 
 Use `chainid=1&module=ens&action=forwardresolve&name=<name>` for an ENS name or onchain subdomain. This endpoint is
-Ethereum-mainnet-only and available on Free and paid plans; throttle Free requests to 1 call/second.
+Ethereum-mainnet-only and available on Free and paid plans. Throttle Free requests to 1 call/second.
 
 ```bash
 curl -sG 'https://api.etherscan.io/v2/api' \
@@ -169,11 +173,12 @@ curl -sG 'https://api.etherscan.io/v2/api' \
   --data-urlencode "apikey=$ETHERSCAN_API_KEY"
 ```
 
-On success, `status="1"` and `result` is the resolved address. Results may be cached for five minutes; this endpoint
-cannot prove resolution at a historical block or an immediately changed record. Offchain CCIP Read (EIP-3668) and
-wildcard resolution (ENSIP-10), such as `jesse.base.eth`, are unsupported. Use a verified resolver-capable read route
-when those semantics are required; otherwise report the resolution gap. The name does not select the chain for
-subsequent balance/history queries.
+On success, `status="1"` and `result` is the resolved address. Results may remain cached for five minutes. This endpoint
+cannot prove resolution at a historical block or an immediately changed record.
+
+Offchain CCIP Read (EIP-3668) and wildcard resolution (ENSIP-10), such as `jesse.base.eth`, are unsupported. When those
+semantics are required, use a verified resolver-capable read route. Otherwise, report the resolution gap. The name does
+not select the chain for subsequent balance/history queries.
 
 Source: [ENS endpoint](https://docs.etherscan.io/api-reference/endpoint/forwardresolve).
 
@@ -189,7 +194,7 @@ Query native ETH (or native token) balance for an address.
 | `module`  | Yes      | -        | Set to `account`                                                                                                                                      |
 | `action`  | Yes      | -        | Set to `balance`                                                                                                                                      |
 | `address` | Yes      | -        | Wallet address (supports up to 20 comma-separated)                                                                                                    |
-| `tag`     | No       | `latest` | `latest` or hex block number. On free/Lite, only the last 128 blocks are queryable; older history needs the `balancehistory` PRO endpoint (Standard+) |
+| `tag`     | No       | `latest` | `latest` or hex block number. On free/Lite, queries cover only the last 128 blocks. Older history needs the `balancehistory` PRO endpoint (Standard+) |
 | `apikey`  | Yes      | -        | API key from `$ETHERSCAN_API_KEY`                                                                                                                     |
 
 ### Single Address Query
@@ -270,8 +275,8 @@ curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokenba
 | `addresstokenbalance`    | All ERC-20 holdings (token, quantity, decimals, USD price) |
 | `addresstokennftbalance` | All ERC-721 collection holdings and counts                 |
 
-**Use only when `pro_endpoints=true`** from plan detection. Both require Standard plan or higher and are throttled to
-**2 calls/second** regardless of tier.
+**Use only when `pro_endpoints=true`** from plan detection. Both require Standard plan or higher. The API throttles both
+to **2 calls/second** regardless of tier.
 
 ```bash
 curl -s "https://api.etherscan.io/v2/api?chainid=1&module=account&action=addresstokenbalance&address=0x...&page=1&offset=100&apikey=$ETHERSCAN_API_KEY"
@@ -292,8 +297,9 @@ Query an address's transaction history. Five actions are available under `module
 | `token1155tx`    | ERC-1155 token transfer events             |
 
 `txlistinternal` **by address** remains a community endpoint. The variant using only `startblock`/`endblock` without an
-address is [PRO-only](https://docs.etherscan.io/api-reference/endpoint/txlistinternal-blockrange) since 2026-07-01:
-require `pro_endpoints=true` (Standard+). Adding block bounds to an address-filtered query does not make it PRO.
+address is [PRO-only](https://docs.etherscan.io/api-reference/endpoint/txlistinternal-blockrange) since 2026-07-01. For
+that variant, require `pro_endpoints=true` (Standard+). Adding block bounds to an address-filtered query does not make
+it PRO.
 
 ### Endpoint Parameters
 
@@ -313,11 +319,11 @@ require `pro_endpoints=true` (Standard+). Adding block bounds to an address-filt
 
 Since 2026-07-01, Free requests return at most 1,000 records for address transaction/transfer history, beacon
 withdrawals, validated blocks, node-size history, event logs, and Plasma deposits. For Free or unknown plans, set
-`offset <= 1000` where supported. Paid plans retain endpoint-specific limits; do not assume every list action allows
+`offset <= 1000` where supported. Paid plans retain endpoint-specific limits. Do not assume every list action allows
 10,000. Source:
 [record-limit change](https://docs.etherscan.io/changelog#upcoming-change-reduced-maximum-records-per-request-on-the-free-api-tier).
 
-Keep block bounds and sorting fixed while advancing `page`; a full page requires another request. Never declare history
+While advancing `page`, keep block bounds and sorting fixed. A full page requires another request. Never declare history
 complete because a capped response contains fewer records than an oversized requested `offset`. If the endpoint times
 out, narrow the block range without dropping boundary records.
 
@@ -360,7 +366,7 @@ from datetime import datetime, timezone
 dt = datetime.fromtimestamp(int(tx["timeStamp"]), tz=timezone.utc)
 ```
 
-Do **not** use `datetime.utcfromtimestamp()` — it returns a naive datetime and is deprecated in Python 3.12+.
+Do **not** use `datetime.utcfromtimestamp()`. It returns a naive datetime. Python 3.12+ deprecates it.
 
 ```bash
 # Shell equivalent (GNU date)
@@ -372,7 +378,7 @@ date -u -r 1693526400 +"%Y-%m-%dT%H:%M:%SZ"
 ## NFT Transfer History
 
 Fetch historical ERC-721 or ERC-1155 transfers for an address. Both actions share the parameter table in the previous
-section; pass `contractaddress` to filter by collection. Apply the pagination guidance above, including the 1,000
+section. To filter by collection, pass `contractaddress`. Apply the pagination guidance above, including the 1,000
 Free-tier cap and fixed `startblock`/`endblock`/`page`/`offset`/`sort` semantics.
 
 ### ERC-721 Transfers (`tokennfttx`)
@@ -414,11 +420,11 @@ NFT-specific fields: `contractAddress` (collection), `tokenID` (per-NFT identifi
 
 ### ERC-1155 Transfers (`token1155tx`)
 
-Same parameter shape — swap `action=token1155tx`. ERC-1155 differs from ERC-721 in two response fields:
+Use the same parameter shape. Change to `action=token1155tx`. ERC-1155 differs from ERC-721 in two response fields:
 
-- **`tokenValue`** (string) — quantity transferred for this `tokenID`. Required because ERC-1155 is semi-fungible; a
-  single transfer can move N copies of one ID. **Not present in ERC-721 responses.**
-- **`tokenDecimal`** is omitted (ERC-1155 has no decimals concept).
+- **`tokenValue`** (string) — quantity transferred for this `tokenID`. ERC-1155 requires it because it is semi-fungible.
+  A single transfer can move N copies of one ID. **Not present in ERC-721 responses.**
+- The API omits **`tokenDecimal`** (ERC-1155 has no decimals concept).
 
 ```json
 {
@@ -441,9 +447,9 @@ Same parameter shape — swap `action=token1155tx`. ERC-1155 differs from ERC-72
 
 ### Filtering by Collection or Token ID
 
-- **By collection** — pass `contractaddress=<collection>`. The API filters server-side; omit to fetch transfers across
-  all collections.
-- **By token ID** — no server-side filter exists. Fetch the collection's transfers and filter `result[].tokenID == <id>`
+- **By collection** — pass `contractaddress=<collection>`. The API filters server-side. To fetch transfers across all
+  collections, omit the parameter.
+- **By token ID** — no server-side filter exists. Fetch the collection's transfers. Filter `result[].tokenID == <id>`
   client-side. For high-volume collections, narrow with `startblock`/`endblock` first.
 - **Mint vs burn vs transfer** — derive from `from`/`to`:
   - `from == 0x0000...0000` → mint
@@ -452,8 +458,9 @@ Same parameter shape — swap `action=token1155tx`. ERC-1155 differs from ERC-72
 
 ### Cost & Limits
 
-Standard list-endpoint pricing — 1 credit per call, same rate-limit tier as `txlist`. Not a PRO endpoint; available on
-Free and Lite for Etherscan-supported target chains, subject to dated chain-access rules and shared Free quotas.
+Standard list-endpoint pricing — 1 credit per call, same rate-limit tier as `txlist`. This is not a PRO endpoint. It is
+available on Free and Lite for Etherscan-supported target chains, subject to dated chain-access rules and shared Free
+quotas.
 
 ## First Funding Transaction
 
@@ -462,8 +469,8 @@ compliance checks. Cost is **1 API call** (PRO) or **2 API calls** (fallback).
 
 ### Preferred: `fundedby` (PRO endpoint)
 
-Returns the address, tx hash, block, timestamp, and value of the transaction that first funded an EOA. Single call,
-structured response.
+The endpoint returns the address, tx hash, block, timestamp, and value of the transaction that first funded an EOA. One
+call returns a structured response.
 
 | Parameter | Required | Default | Description                         |
 | --------- | -------- | ------- | ----------------------------------- |
@@ -497,12 +504,12 @@ Response:
 
 - PRO endpoint — requires Standard plan or higher (`pro_endpoints=true` from plan detection).
 - Throttled to **2 calls/second** regardless of paid tier.
-- **EOA only.** Contract addresses return an error; use the fallback below.
+- **EOA only.** Contract addresses return an error. For those addresses, use the fallback below.
 
 ### Fallback: scan ASC normal + internal transactions
 
-When `pro_endpoints=false` (free/Lite) or the address is a contract, scan both transaction lists ascending and pick the
-earliest qualifying incoming entry. Two API calls per address.
+When `pro_endpoints=false` (free/Lite) or the address is a contract, scan both transaction lists in ascending order.
+Under that condition, pick the earliest qualifying incoming entry. Two API calls per address.
 
 ```bash
 # Earliest normal txs involving the address
@@ -518,15 +525,15 @@ For each response, pick the first entry where **all** of the following hold:
 - `value` (in wei) is greater than `0` — actual funding, not a zero-value call.
 - `isError == "0"` (omit this filter for internal txs, which use `isError` differently or not at all).
 
-The funding tx is whichever match has the lower `blockNumber`; break ties by `transactionIndex` (normal txs) or by list
+The funding tx is whichever match has the lower `blockNumber`. Break ties by `transactionIndex` (normal txs) or by list
 order (internal txs).
 
-**Why both lists:** An address may be funded externally (normal tx) or internally (contract sent ETH — common for CEX
-withdrawals routed through proxy/router contracts, contract deployments with non-zero `msg.value`, or SELFDESTRUCT
-refunds). Checking only `txlist` will miss internally-funded addresses.
+**Why both lists:** An external transaction (normal tx) or a contract (internal tx) may fund an address. Contract-sent
+ETH is common for CEX withdrawals through proxy/router contracts, contract deployments with non-zero `msg.value`, or
+SELFDESTRUCT refunds. Checking only `txlist` will miss internally-funded addresses.
 
 **Why `offset=10`, not `1`:** A `txlist` query returns every tx involving the address, including outgoing ones. The very
-first entry is occasionally outgoing (e.g., the address was internally pre-funded), so fetch a small window and scan for
+first entry is occasionally outgoing (e.g., the address was internally pre-funded). Fetch a small window. Scan it for
 the first incoming match.
 
 **Edge cases:**
@@ -534,9 +541,9 @@ the first incoming match.
 - **No qualifying entry in the first 10** — extend with `offset=100` and `page=1`, or paginate further. In practice, >
   10 outgoing-before-incoming is exceedingly rare.
 - **Genesis allocation** — pre-mined balances do not appear in either list. The address shows a balance with no funding
-  tx; report this explicitly.
-- **Token-only funding** — `fundedby` and this fallback only consider native value. If the address was bootstrapped with
-  ERC-20 transfers alone (rare for EOAs since gas is needed), repeat the fallback against `tokentx`.
+  tx. Report this explicitly.
+- **Token-only funding** — `fundedby` and this fallback only consider native value. If ERC-20 transfers alone
+  bootstrapped the address, repeat the fallback against `tokentx`. This is rare for EOAs because they need gas.
 
 ## Multi-Chain Usage
 
@@ -584,7 +591,7 @@ echo "scale=6; 135499000000 / 1000000" | bc
 
 ## Output Formatting
 
-Use the completion format in `SKILL.md`: preserve full identifiers and use a compact table only when fields repeat.
+Use the completion format in `SKILL.md`. Preserve full identifiers. Use a compact table only when fields repeat.
 
 ## Plan-Gated Capabilities
 
@@ -593,7 +600,7 @@ Decisions in this section depend on the cached output of `scripts/etherscan-dete
 ### Paid-Only Chains
 
 Use `references/generated/etherscan-chains.md` and its dated notes for the paid-plan target set. Lite grants community
-endpoint access on supported chains at the same 100,000 daily-credit limit as Free; PRO endpoints still require
+endpoint access on supported chains at the same 100,000 daily-credit limit as Free. PRO endpoints still require
 Standard+. Gnosis requires Lite+ since 2026-09-01. Robinhood Chain is free through 2026-10-15 and requires Lite+ from
 2026-10-16.
 
@@ -601,8 +608,8 @@ Standard+. Gnosis requires Lite+ since 2026-09-01. Robinhood Chain is free throu
 supported chains for every plan, including Free. This exception does not restore deprecated chain support.
 
 If `paid_chains=false` (i.e., `plan=free`) and the user requests a data query on the chains above, route to Blockscout
-(`references/explorers/blockscout-api.md`) before direct RPC. Only mention upgrading to Lite or higher if the user
-specifically needs Etherscan as the source.
+(`references/explorers/blockscout-api.md`) before direct RPC. Only if the user specifically needs Etherscan as the
+source, mention upgrading to Lite or higher.
 
 ### PRO-Only Endpoints
 
@@ -625,21 +632,21 @@ loops.
 
 Etherscan's token reputation badges are **not available on Lite**. The documented API surfaces are:
 
-| Surface              | Endpoint/action                           | Minimum plan | Notes                                                                                            |
-| -------------------- | ----------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| Address Metadata API | `module=nametag&action=getaddresstag`     | Pro Plus     | Query the token contract address; response includes numeric `reputation` and `other_attributes`. |
-| Metadata CSV export  | `module=nametag&action=exportaddresstags` | Enterprise   | Bulk export; `other_attributes` can include `TR` token reputation values.                        |
-| Token info           | `module=token&action=tokeninfo`           | Standard     | Returns project/social metadata and `blueCheckmark`, but not the token reputation badge.         |
+| Surface              | Endpoint/action                           | Minimum plan | Notes                                                                                                |
+| -------------------- | ----------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| Address Metadata API | `module=nametag&action=getaddresstag`     | Pro Plus     | Query the token contract address. The response includes numeric `reputation` and `other_attributes`. |
+| Metadata CSV export  | `module=nametag&action=exportaddresstags` | Enterprise   | Bulk export. `other_attributes` can include `TR` token reputation values.                            |
+| Token info           | `module=token&action=tokeninfo`           | Standard     | Returns project/social metadata and `blueCheckmark`, but not the token reputation badge.             |
 
 Do not tell Lite users they can fetch token reputation from Etherscan API. Lite only unlocks paid Etherscan target
-chains and higher community rate limits; it does not unlock API Pro endpoints, Pro Plus address metadata, or Enterprise
+chains and higher community rate limits. It does not unlock API Pro endpoints, Pro Plus address metadata, or Enterprise
 metadata CSV exports.
 
 ### All Plans
 
 Free-tier availability is subject to the generated chain table's dated notes and shared community quota. These quotas
 are per chain across all Free users, independent of the key's remaining daily credits. Celo and Linea already use shared
-pools; Arbitrum One starts on 2026-11-01. A successful plan-detection call does not guarantee quota remains for the
+pools. Arbitrum One starts on 2026-11-01. A successful plan-detection call does not guarantee quota remains for the
 target chain.
 
 ## Error Handling
@@ -656,9 +663,9 @@ Inspect `result` as well as `status` and `message`. A documented empty result co
 range. `NOTOK`, quota errors, plan denial, and unsupported-chain responses are coverage gaps, never empty activity.
 
 - `Community Free API limit reached`: preserve the response's UTC reset time. Use the indexed fallback or wait until
-  that time; do not retry briefly or rotate API keys, since all Free keys share the chain's pool.
+  that time. All Free keys share the chain's pool. Do not retry briefly. Do not rotate API keys.
 - `Free API access is not supported for this chain`: use a supported fallback when paid access is unavailable.
-- Missing/unsupported `chainid`: check the current chainlist and dated deprecations, then route the target to a
+- Missing/unsupported `chainid`: check the current chainlist and dated deprecations. Then route the target to a
   supported provider. Do not retry retired explorer API hosts.
 
 Source: [common errors](https://docs.etherscan.io/common-error-messages).
@@ -675,12 +682,12 @@ Source: [common errors](https://docs.etherscan.io/common-error-messages).
 | Pro Plus         | 30           | 1,500,000         |
 | Dedicated/Custom | custom       | contract-specific |
 
-PRO endpoints (`addresstokenbalance`, etc.) are throttled to **2 calls/second** regardless of tier. See
+The API throttles PRO endpoints (`addresstokenbalance`, etc.) to **2 calls/second** regardless of tier. See
 `https://docs.etherscan.io/rate-limits` for the authoritative schedule. Endpoint-specific throttles, including ENS
 Free-tier 1 call/second, override the plan-wide rate.
 
-For a per-key rate throttle, back off within the plan's rate and retry with a bounded budget. For daily-credit or shared
-community quota exhaustion, honor the reset time instead.
+For a per-key rate throttle, back off within the plan's rate. Under that condition, retry with a bounded budget. For
+daily-credit or shared community quota exhaustion, honor the reset time instead.
 
 ## Reference Files
 

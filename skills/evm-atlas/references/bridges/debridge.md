@@ -2,30 +2,33 @@
 
 ## Overview
 
-Use deBridge's DLN (deBridge Liquidity Network) as a read-only source for order-based cross-chain transfer status after
-the known origin and destination chains are confirmed against `references/generated/target-mainnets.json`. DLN is an
-order/intent protocol, not a lock-and-mint bridge: a maker places an order on the source chain (`DlnSource`), a taker
-fills it on the destination chain (`DlnDestination`), and the source-side collateral is later unlocked to the taker.
+After confirming the known origin and destination chains against `references/generated/target-mainnets.json`, use
+deBridge's DLN (deBridge Liquidity Network). Use it as a read-only source for order-based cross-chain transfer status.
 
-Two hosts serve the same order data; either works, use whichever responds:
+DLN is an order/intent protocol, not a lock-and-mint bridge. A maker places an order on the source chain (`DlnSource`).
+A taker fills it on the destination chain (`DlnDestination`). DLN later unlocks the source-side collateral to the taker.
+
+Two hosts serve the same order data. Either works. Use whichever responds:
 
 ```text
 https://dln.debridge.finance/v1.0    # simple, minimal-shape responses
 https://dln-api.debridge.finance     # equivalent to stats-api.dln.trade; verbose typed-value response shape
 ```
 
-Both are unauthenticated for reads; no API key is required or documented for these endpoints.
+Both hosts allow unauthenticated reads. These endpoints require no API key. Their documentation does not specify an API
+key.
 
 Never execute bridge steps from this skill. Do not sign messages, submit order-creation transactions, or broadcast any
 returned calldata. Returned order and status data are for inspection only.
 
-deBridge's internal chain IDs equal the real EVM chain ID for EVM chains (observed live: `1` for Ethereum, `8453` for
-Base, `56` for BNB Chain) but diverge for non-EVM chains — Solana is internal ID `7565164`, not a real EVM chain ID. Do
-not assume a deBridge chain ID is always the target EVM chain ID; cross-check non-EVM legs before reporting them.
+For EVM chains, deBridge's internal chain IDs equal the real EVM chain ID. Live observations showed `1` for Ethereum,
+`8453` for Base, and `56` for BNB Chain. For non-EVM chains, the IDs diverge. Solana has internal ID `7565164`, not a
+real EVM chain ID. Do not assume a deBridge chain ID is always the target EVM chain ID. Cross-check non-EVM legs before
+reporting them.
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against
+Use this router after confirming the known origin and destination chains against
 `references/generated/target-mainnets.json`.
 
 1. **Known source tx hash, order ID unknown:** call `GET /v1.0/dln/tx/<tx-hash>/order-ids` on `dln.debridge.finance` to
@@ -76,13 +79,13 @@ curl -sS -X POST "https://dln-api.debridge.finance/api/Orders/filteredList" \
 | `takeChainIds`           | Filter `filteredList` by destination (take) chain deBridge ID             |
 | `orderStates`            | Filter by order state (see Status Values)                                 |
 | `maker` / `referralCode` | Filter `filteredList` by maker address or referral code                   |
-| `skip` / `take`          | Pagination for `filteredList`; `take` must be greater than zero           |
+| `skip` / `take`          | Pagination for `filteredList`. `take` must be greater than zero           |
 
 ## Report Fields
 
-Extract and report these fields when present. Field paths below are from `dln-api.debridge.finance` /
-`stats-api.dln.trade`'s typed-value shape, where each value is wrapped as `{bigIntegerValue, stringValue, ...}` — prefer
-`stringValue` (or `bigIntegerValue` for chain IDs) for reporting.
+When present, extract these fields. Report the extracted fields. Field paths below use the typed-value shape from
+`dln-api.debridge.finance` / `stats-api.dln.trade`. That shape wraps each value as
+`{bigIntegerValue, stringValue, ...}`. For reporting, prefer `stringValue` (or `bigIntegerValue` for chain IDs).
 
 | Field                          | Path examples                                                                                     |
 | ------------------------------ | ------------------------------------------------------------------------------------------------- |
@@ -101,9 +104,9 @@ Extract and report these fields when present. Field paths below are from `dln-ap
 | Fees                           | `percentFee.stringValue`, `finalPercentFee.stringValue`, `fixFee.stringValue`                     |
 
 The `dln.debridge.finance/v1.0` host returns the same identifiers as plain JSON strings/numbers instead of the typed
-wrapper (e.g. `orderIds: ["0x..."]`); use it when only the order ID is needed.
+wrapper (e.g. `orderIds: ["0x..."]`). When you need only the order ID, use that host.
 
-Give/take amounts are raw integer units in the token's smallest denomination; convert with the accompanying
+Give/take amounts are raw integer units in the token's smallest denomination. Convert with the accompanying
 `metadata.decimals`.
 
 ## Status Values
@@ -112,26 +115,26 @@ Interpret the `state` field as (per the official docs' terminal-state guidance):
 
 | State                                                       | Meaning                                                  |
 | ----------------------------------------------------------- | -------------------------------------------------------- |
-| `Created`                                                   | Order placed on the source chain; not yet fulfilled      |
+| `Created`                                                   | Order placed on the source chain. Not yet fulfilled      |
 | `Fulfilled`                                                 | Taker delivered the take amount on the destination chain |
 | `SentUnlock`                                                | Unlock message sent from destination back to source      |
 | `ClaimedUnlock`                                             | Source-side collateral unlocked to the taker             |
 | `OrderCancelled` / `SentOrderCancel` / `ClaimedOrderCancel` | Order cancelled and collateral returned to the maker     |
 
-`Fulfilled`, `SentUnlock`, and `ClaimedUnlock` are all valid terminal-success states — the recipient already received
-funds at `Fulfilled`; the later states only reflect internal solver settlement, not user-facing outcome. Live samples
-observed `Fulfilled` orders with populated `fulfilledDstEventMetadata`, confirming destination delivery.
+`Fulfilled`, `SentUnlock`, and `ClaimedUnlock` are all valid terminal-success states. The recipient already received
+funds at `Fulfilled`. The later states only reflect internal solver settlement, not the user-facing outcome. Live
+samples observed `Fulfilled` orders with populated `fulfilledDstEventMetadata`, confirming destination delivery.
 
 ## Failure Handling
 
 - Empty `orderIds` from the tx-hash lookup: report that deBridge has no order for that transaction (or it is not a DLN
-  transaction) and continue normal explorer/RPC analysis.
+  transaction). Continue normal explorer/RPC analysis.
 - `take` must be greater than zero on `filteredList`: always pass an explicit positive `take`.
 - Non-EVM chain IDs in results (e.g. `7565164` for Solana): report that the leg is outside this skill's EVM chain ID
-  space and describe it in deBridge's own terms rather than misreporting it as an EVM chain ID.
-- Non-target chains in deBridge results: report that the leg is outside this skill and ask for a feature request rather
-  than continuing analysis on that leg.
-- Order state stuck at `Created` past a normal fill window: report that fulfillment has not occurred yet; do not infer
+  space. Describe that leg in deBridge's own terms instead of misreporting its ID as an EVM chain ID.
+- Non-target chains in deBridge results: report that the leg is outside this skill. For that leg, ask for a feature
+  request instead of continuing analysis.
+- Order state stuck at `Created` past a normal fill window: report that fulfillment has not occurred yet. Do not infer
   cancellation without an `OrderCancelled`/`SentOrderCancel`/`ClaimedOrderCancel` state.
 
 ## Sources

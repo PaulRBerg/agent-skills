@@ -31,7 +31,7 @@ Do not prefer legacy Stargate endpoints for new data unless the user specificall
 
 ## Read-Only Router
 
-Use this router after the known origin and destination chains are confirmed against
+Use this router after confirming the known origin and destination chains against
 `references/generated/target-mainnets.json`.
 
 1. **Supported chains:** call `GET /chains`.
@@ -50,7 +50,7 @@ curl -sS "https://transfer.layerzero-api.com/v1/metadata?chainKey=base"
 
 ## Report Fields
 
-Extract and report these fields when present:
+When present, extract these fields. Report the extracted fields:
 
 | Field          | VTA path examples                                             |
 | -------------- | ------------------------------------------------------------- |
@@ -59,8 +59,8 @@ Extract and report these fields when present:
 | Token routes   | `tokens[].transferableTo[]`, token route metadata             |
 | Deployments    | metadata contract addresses and deployment labels             |
 
-Token amounts, if present in supplied external data, are raw integer units. Convert with token decimals when present,
-and preserve raw values when decimals are absent.
+Token amounts, if present in supplied external data, are raw integer units. When token decimals are present, convert
+with them. When decimals are absent, preserve raw values.
 
 ## Route Types
 
@@ -76,11 +76,11 @@ Common LayerZero route types and integrations to recognize in logs, explorer lab
 
 ## Failure Handling
 
-- Empty discovery results: report the missing chain, token, or deployment metadata; do not infer bridge support from
+- Empty discovery results: report the missing chain, token, or deployment metadata. Do not infer bridge support from
   token symbols alone.
-- Rate limits and 5xx responses: report the API limitation and continue normal explorer/RPC analysis.
-- Non-target chains in VTA results: report that the leg is outside this skill and ask for a feature request rather than
-  continuing analysis on that leg.
+- Rate limits and 5xx responses: report the API limitation. Continue normal explorer/RPC analysis.
+- Non-target chains in VTA results: report that the leg is outside this skill. For that leg, ask for a feature request
+  instead of continuing analysis.
 
 ## Sources
 
