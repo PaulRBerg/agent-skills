@@ -1,8 +1,8 @@
 {
   "metadata": {
     "blockscoutObservedAt": "2026-07-08",
-    "etherscanProviderChainCount": 64,
-    "etherscanVerifiedAt": "2026-07-08",
+    "etherscanProviderChainCount": 63,
+    "etherscanVerifiedAt": "2026-10-05",
     "routeMeshVerifiedAt": "2026-07-15"
   },
   "chains": {
@@ -21,7 +21,10 @@
         "https://rpcfree.com/arbitrum-rpc"
       ],
       "routeMesh": true,
-      "etherscan": { "support": "free" },
+      "etherscan": {
+        "support": "free",
+        "notes": "Shared community Free quota effective 2026-11-01; honor the reset time on quota exhaustion"
+      },
       "blockscout": {
         "status": "observed",
         "hostedBy": "blockscout",
@@ -107,7 +110,10 @@
         "https://42220.rpc.thirdweb.com"
       ],
       "routeMesh": true,
-      "etherscan": { "support": "free" },
+      "etherscan": {
+        "support": "free",
+        "notes": "Shared community Free quota since 2026-07-16; honor the reset time on quota exhaustion"
+      },
       "blockscout": {
         "status": "observed",
         "hostedBy": "blockscout",
@@ -189,7 +195,10 @@
         "https://100.rpc.thirdweb.com"
       ],
       "routeMesh": true,
-      "etherscan": { "support": "free" },
+      "etherscan": {
+        "support": "paid",
+        "notes": "Community endpoints require Lite+ since 2026-09-01; source/ABI remain free. Gnosisscan UI discontinued 2026-08-11; use Blockscout for explorer links"
+      },
       "blockscout": {
         "status": "observed",
         "hostedBy": "blockscout",
@@ -236,7 +245,10 @@
       "primaryPublicRpc": "https://rpc.linea.build",
       "fallbackPublicRpcs": ["https://linea-rpc.publicnode.com", "https://59144.rpc.thirdweb.com"],
       "routeMesh": true,
-      "etherscan": { "support": "free" },
+      "etherscan": {
+        "support": "free",
+        "notes": "Shared community Free quota since 2026-08-04; honor the reset time on quota exhaustion"
+      },
       "blockscout": {
         "status": "observed",
         "hostedBy": "self",
@@ -314,7 +326,10 @@
       "primaryPublicRpc": "https://rpc.mainnet.chain.robinhood.com",
       "fallbackPublicRpcs": ["https://robinhoodchain.blockscout.com/api/eth-rpc"],
       "routeMesh": true,
-      "etherscan": { "support": "unsupported" },
+      "etherscan": {
+        "support": "free",
+        "notes": "Supported since 2026-09-16; community endpoints free through 2026-10-15, then Lite+ from 2026-10-16. Source/ABI remain free"
+      },
       "blockscout": {
         "status": "observed",
         "hostedBy": "blockscout",

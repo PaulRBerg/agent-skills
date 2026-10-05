@@ -22,7 +22,7 @@ globally canonical source. Keep a second provider only as a fallback:
    pagination/rate/PRO limits make the requested sweep less complete, or Blockscout's native holdings/counters avoid
    those limits.
 2. Otherwise use Etherscan V2 when the chain is in `references/generated/etherscan-chains.md`, the detected plan can
-   query it, and the needed actions accept the fixed cutoff.
+   query it after applying dated access notes, and the needed actions accept the fixed cutoff.
 3. Use the other indexed provider as fallback when the authoritative provider is unavailable, malformed, behind the
    cutoff, rate/plan limited, or missing a required action. A valid empty response is a completed negative, not a
    fallback trigger. Move the affected result to the fallback; do not silently splice two negative responses into one
@@ -30,10 +30,14 @@ globally canonical source. Keep a second provider only as a fallback:
 4. If neither indexed provider covers the target, use its listed public RPC only for facts that JSON-RPC can prove.
    Missing indexed history remains unknown, never empty.
 
-On overlaps, Blockscout is not automatically secondary. In particular, prefer it for Base (`8453`), Optimism (`10`),
-Avalanche (`43114`), and BNB Chain (`56`) when `scripts/etherscan-detect-plan.sh` reports `paid_chains=false`, and when
-its unmetered per-instance or full-holdings routes are materially more complete than the available Etherscan plan. Do
-not infer API support from an Etherscan-shaped explorer URL.
+On overlaps, prefer Blockscout when the generated Etherscan table and its dated notes require paid access that the
+detected plan lacks, or its holdings/counters make the requested result more complete. A community Free quota error
+exhausts a chain-wide shared pool: retain its reset time and use the indexed fallback, or wait until that reset. It is
+not a zero result or a per-key throttle; rotating keys or briefly retrying cannot restore the pool.
+
+Do not infer API support or UI availability from an Etherscan-shaped explorer URL. Gnosis (`100`) still has Etherscan
+API access on paid plans after Gnosisscan's UI closure; use its listed Blockscout instance for browser evidence and
+explorer links.
 
 For raw Etherscan V2 endpoint parameters, plan gating, and error handling, see `references/explorers/etherscan-api.md`.
 For raw Blockscout endpoint parameters, plan gating, and error handling, see `references/explorers/blockscout-api.md`.

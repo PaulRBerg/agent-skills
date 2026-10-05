@@ -83,7 +83,8 @@ the target. Do not infer a historical category or maintain a prose roster of tar
    full raw receipt/logs/decoded input, or funding origin, resolve the chain and read
    `references/workflows/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and
    exceptional-chain routing.
-7. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`.
+7. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`. Its
+   ENS forward-resolution route supports Ethereum mainnet onchain names; apply its cache and resolver limits.
 8. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
 9. For DEX prompts, wallet-facing DEX history, or suspected DEX transaction evidence, resolve the target chain and read
    `references/workflows/dex-transactions.md`. Load only the matching protocol-family reference:

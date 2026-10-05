@@ -49,6 +49,12 @@ empty authoritative response does not trigger fallback. Run the existing plan-de
 Etherscan or Blockscout PRO capabilities. Quorum counts independent indexers, not hosts or state RPCs; provider
 disagreement is unknown, never a majority decision.
 
+For Etherscan, apply dated chain-access notes and endpoint gates from `references/explorers/etherscan-api.md`. With a
+Free or unknown plan, request at most 1,000 records per page and exhaust pagination at the fixed cutoff. Shared
+community quota exhaustion leaves coverage incomplete; retain the reset time and activate the indexed fallback or wait
+until reset. Address-filtered internal history remains available without PRO; block-range-only internal history requires
+Standard or higher.
+
 ## Plan Interface
 
 Create an agent-selected input JSON with:

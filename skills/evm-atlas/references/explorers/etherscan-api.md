@@ -11,8 +11,12 @@ Query blockchain data using Etherscan's unified API V2. This skill covers:
 - Target-chain support via the `chainid` parameter
 - Auto-detection of Free vs Lite vs PRO so paid-only chains and PRO-only endpoints are used when available
 - Token reputation availability: Etherscan exposes this only through paid metadata surfaces, not Lite
+- ENS forward resolution for Ethereum mainnet onchain names
 
-**Scope:** Read-only account queries. For other Etherscan API features, consult the fallback documentation.
+**Scope:** Read-only account and ENS queries. For other Etherscan API features, consult the fallback documentation.
+
+Access guidance checked against the [changelog](https://docs.etherscan.io/changelog) on 2026-10-05. Apply scheduled
+changes by their effective date; provider membership alone does not prove plan access.
 
 ## Prerequisites
 
@@ -57,7 +61,8 @@ paid_chains=true
 `plan` is one of `free`, `lite`, `standard`, `advanced`, `professional`, `pro_plus`, `enterprise`, `unknown`. Two
 boolean fields gate behavior:
 
-- `paid_chains=true` — paid-only chains (Base, OP, Avalanche, BNB) are queryable. True for Lite and all higher tiers.
+- `paid_chains=true` — paid-chain community endpoints are queryable. True for Lite and all higher tiers; use
+  `references/generated/etherscan-chains.md` and its dated notes to determine which targets require it.
 - `pro_endpoints=true` — PRO-only actions (`addresstokenbalance`, `balancehistory`, `tokenholderlist`, `fundedby`,
   daily-stats endpoints, etc.) are callable. True for Standard and higher; **false on Lite**.
 
@@ -77,10 +82,10 @@ curl -s "https://api.etherscan.io/v2/api?chainid=1&module=getapilimit&action=get
 | 1,500,000     | Pro Plus     | Yes              | Yes           |
 | > 1,500,000   | Enterprise   | Yes              | Yes           |
 
-Free and Lite both report `creditLimit: 100000`. Lite ($49/mo) raises rate-limit-per-second (5 vs 3) **and unlocks every
-supported chain** (Base, OP, Avalanche, BNB), but does **not** add PRO endpoints — those start at Standard. To
-disambiguate, attempt a paid-chain balance call (e.g., `chainid=8453`): status=1 → Lite, status=0 → Free. To probe PRO
-instead, the failure response is `"Sorry, it looks like you are trying to access an API Pro endpoint."`.
+Free and Lite both report `creditLimit: 100000`. Lite raises rate-limit-per-second (5 vs 3) **and unlocks every
+supported chain's community endpoints**, but does **not** add PRO endpoints — those start at Standard. To disambiguate,
+attempt a paid-chain balance call (e.g., `chainid=8453`): status=1 → Lite, status=0 → Free. To probe PRO instead, the
+failure response is `"Sorry, it looks like you are trying to access an API Pro endpoint."`.
 
 `getapilimit` itself consumes 1 credit (plus 1 more for the paid-chain probe), so do not re-run mid-session.
 
@@ -133,7 +138,9 @@ Please file a feature request in https://github.com/PaulRBerg/agent-skills.
 ```
 
 For the target-filtered list of Etherscan-supported chains and their IDs, see
-`references/generated/etherscan-chains.md`.
+`references/generated/etherscan-chains.md`. Read its notes as well as its table grouping: scheduled access changes take
+precedence once effective. A provider deprecation does not remove a chain from this skill's target registry; route that
+target to an available indexed fallback or RPC instead. Provider additions do not expand the target list.
 
 ## API Base URL
 
@@ -144,6 +151,28 @@ https://api.etherscan.io/v2/api
 ```
 
 The `chainid` parameter determines which blockchain to query.
+
+## ENS Forward Resolution
+
+Use `chainid=1&module=ens&action=forwardresolve&name=<name>` for an ENS name or onchain subdomain. This endpoint is
+Ethereum-mainnet-only and available on Free and paid plans; throttle Free requests to 1 call/second.
+
+```bash
+curl -sG 'https://api.etherscan.io/v2/api' \
+  --data-urlencode 'chainid=1' \
+  --data-urlencode 'module=ens' \
+  --data-urlencode 'action=forwardresolve' \
+  --data-urlencode 'name=etherscan.eth' \
+  --data-urlencode "apikey=$ETHERSCAN_API_KEY"
+```
+
+On success, `status="1"` and `result` is the resolved address. Results may be cached for five minutes; this endpoint
+cannot prove resolution at a historical block or an immediately changed record. Offchain CCIP Read (EIP-3668) and
+wildcard resolution (ENSIP-10), such as `jesse.base.eth`, are unsupported. Use a verified resolver-capable read route
+when those semantics are required; otherwise report the resolution gap. The name does not select the chain for
+subsequent balance/history queries.
+
+Source: [ENS endpoint](https://docs.etherscan.io/api-reference/endpoint/forwardresolve).
 
 ## ETH Balance Query
 
@@ -259,6 +288,10 @@ Query an address's transaction history. Five actions are available under `module
 | `tokennfttx`     | ERC-721 (NFT) token transfer events        |
 | `token1155tx`    | ERC-1155 token transfer events             |
 
+`txlistinternal` **by address** remains a community endpoint. The variant using only `startblock`/`endblock` without an
+address is [PRO-only](https://docs.etherscan.io/api-reference/endpoint/txlistinternal-blockrange) since 2026-07-01:
+require `pro_endpoints=true` (Standard+). Adding block bounds to an address-filtered query does not make it PRO.
+
 ### Endpoint Parameters
 
 | Parameter         | Required | Default     | Description                                                  |
@@ -275,9 +308,15 @@ Query an address's transaction history. Five actions are available under `module
 | `sort`            | No       | `asc`       | `asc` or `desc` by block number                              |
 | `apikey`          | Yes      | -           | API key from `$ETHERSCAN_API_KEY`                            |
 
-> **Pagination cap by plan (effective July 1, 2026):** `offset` maximum is `1000` for free-tier accounts and `10000` for
-> paid tiers (Lite included) on `txlist`, `txlistinternal`, `tokentx`, `tokennfttx`, `token1155tx`, and other list
-> endpoints. When `plan=free`, paginate in batches ≤ 1,000.
+Since 2026-07-01, Free requests return at most 1,000 records for address transaction/transfer history, beacon
+withdrawals, validated blocks, node-size history, event logs, and Plasma deposits. For Free or unknown plans, set
+`offset <= 1000` where supported. Paid plans retain endpoint-specific limits; do not assume every list action allows
+10,000. Source:
+[record-limit change](https://docs.etherscan.io/changelog#upcoming-change-reduced-maximum-records-per-request-on-the-free-api-tier).
+
+Keep block bounds and sorting fixed while advancing `page`; a full page requires another request. Never declare history
+complete because a capped response contains fewer records than an oversized requested `offset`. If the endpoint times
+out, narrow the block range without dropping boundary records.
 
 ### Example Query
 
@@ -330,8 +369,8 @@ date -u -r 1693526400 +"%Y-%m-%dT%H:%M:%SZ"
 ## NFT Transfer History
 
 Fetch historical ERC-721 or ERC-1155 transfers for an address. Both actions share the parameter table in the previous
-section; pass `contractaddress` to filter by collection. Pagination caps (1,000 free / 10,000 paid) and the
-`startblock`/`endblock`/`page`/`offset`/`sort` semantics are identical to `txlist`.
+section; pass `contractaddress` to filter by collection. Apply the pagination guidance above, including the 1,000
+Free-tier cap and fixed `startblock`/`endblock`/`page`/`offset`/`sort` semantics.
 
 ### ERC-721 Transfers (`tokennfttx`)
 
@@ -411,7 +450,7 @@ Same parameter shape — swap `action=token1155tx`. ERC-1155 differs from ERC-72
 ### Cost & Limits
 
 Standard list-endpoint pricing — 1 credit per call, same rate-limit tier as `txlist`. Not a PRO endpoint; available on
-Free and Lite for Etherscan-supported target chains (paid-chain restriction still applies to Base/OP/Avalanche/BNB).
+Free and Lite for Etherscan-supported target chains, subject to dated chain-access rules and shared Free quotas.
 
 ## First Funding Transaction
 
@@ -550,13 +589,13 @@ Decisions in this section depend on the cached output of `scripts/etherscan-dete
 
 ### Paid-Only Chains
 
-Four target mainnets require any paid Etherscan plan. **Lite ($49/mo) is sufficient** — it grants access to every
-Etherscan-supported target chain at the same 100,000 daily-credit limit as Free. Data endpoints (balance, txlist, logs,
-etc.) fail only when `plan=free` (i.e., `paid_chains=false`). See `references/generated/etherscan-chains.md` for the
-paid-plan target chain list with chain IDs.
+Use `references/generated/etherscan-chains.md` and its dated notes for the paid-plan target set. Lite grants community
+endpoint access on supported chains at the same 100,000 daily-credit limit as Free; PRO endpoints still require
+Standard+. Gnosis requires Lite+ since 2026-09-01. Robinhood Chain is free through 2026-10-15 and requires Lite+ from
+2026-10-16.
 
-**Exception:** `module=contract` endpoints (`getsourcecode`, `getabi`, etc.) work on **all** chains for every plan
-including free. The paid-plan requirement applies only to data endpoints.
+**Exception:** Source code (`module=contract&action=getsourcecode`) and ABI (`action=getabi`) remain available on
+supported chains for every plan, including Free. This exception does not restore deprecated chain support.
 
 If `paid_chains=false` (i.e., `plan=free`) and the user requests a data query on the chains above, route to Blockscout
 (`references/explorers/blockscout-api.md`) before direct RPC. Only mention upgrading to Lite or higher if the user
@@ -570,6 +609,7 @@ When `pro_endpoints=true`, the following actions become available (non-exhaustiv
 | Module       | Action(s)                                                                     | Use case                                                 |
 | ------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------- |
 | `account`    | `addresstokenbalance`, `addresstokennftbalance`, `balancehistory`, `fundedby` | Full holdings, historical balances, first-funding lookup |
+| `account`    | `txlistinternal` without `address` (block-range variant)                      | Internal transactions across a block range               |
 | `token`      | `tokenholderlist`, `tokeninfo`, `tokensupplyhistory`, `tokenbalancehistory`   | Token analytics                                          |
 | `block`      | `dailyavgblocksize`, `dailyblkcount`, `dailyblockrewards`, etc.               | Daily block stats                                        |
 | `stats`      | `dailytxnfee`, `dailynewaddress`, `dailynetutilization`, etc.                 | Network-wide daily metrics                               |
@@ -594,9 +634,10 @@ metadata CSV exports.
 
 ### All Plans
 
-All other Etherscan-supported target chains are available on every plan including Free. On Lite and higher, the
-paid-only target chains above also become available. See `references/generated/etherscan-chains.md` for the
-target-filtered list with chain IDs.
+Free-tier availability is subject to the generated chain table's dated notes and shared community quota. These quotas
+are per chain across all Free users, independent of the key's remaining daily credits. Celo and Linea already use shared
+pools; Arbitrum One starts on 2026-11-01. A successful plan-detection call does not guarantee quota remains for the
+target chain.
 
 ## Error Handling
 
@@ -608,22 +649,35 @@ target-filtered list with chain IDs.
 | `0`    | `Invalid address format` | Malformed address               |
 | `0`    | `No transactions found`  | Address has no activity         |
 
+Inspect `result` as well as `status` and `message`. A documented empty result covers only the queried endpoint and
+range. `NOTOK`, quota errors, plan denial, and unsupported-chain responses are coverage gaps, never empty activity.
+
+- `Community Free API limit reached`: preserve the response's UTC reset time. Use the indexed fallback or wait until
+  that time; do not retry briefly or rotate API keys, since all Free keys share the chain's pool.
+- `Free API access is not supported for this chain`: use a supported fallback when paid access is unavailable.
+- Missing/unsupported `chainid`: check the current chainlist and dated deprecations, then route the target to a
+  supported provider. Do not retry retired explorer API hosts.
+
+Source: [common errors](https://docs.etherscan.io/common-error-messages).
+
 ### Rate Limits by Plan
 
-| Plan         | Calls/second | Daily calls |
-| ------------ | ------------ | ----------- |
-| Free         | 3            | 100,000     |
-| Lite         | 5            | 100,000     |
-| Standard     | 10           | 200,000     |
-| Advanced     | 20           | 500,000     |
-| Professional | 30           | 1,000,000   |
-| Pro Plus     | 30           | 1,500,000   |
-| Enterprise   | custom       | unmetered   |
+| Plan             | Calls/second | Daily calls       |
+| ---------------- | ------------ | ----------------- |
+| Free             | 3            | 100,000           |
+| Lite             | 5            | 100,000           |
+| Standard         | 10           | 200,000           |
+| Advanced         | 20           | 500,000           |
+| Professional     | 30           | 1,000,000         |
+| Pro Plus         | 30           | 1,500,000         |
+| Dedicated/Custom | custom       | contract-specific |
 
 PRO endpoints (`addresstokenbalance`, etc.) are throttled to **2 calls/second** regardless of tier. See
-`https://docs.etherscan.io/resources/rate-limits` for the authoritative schedule.
+`https://docs.etherscan.io/rate-limits` for the authoritative schedule. Endpoint-specific throttles, including ENS
+Free-tier 1 call/second, override the plan-wide rate.
 
-If rate limited, wait briefly and retry.
+For a per-key rate throttle, back off within the plan's rate and retry with a bounded budget. For daily-credit or shared
+community quota exhaustion, honor the reset time instead.
 
 ## Reference Files
 
