@@ -53,6 +53,9 @@ ai-commit prepare [--all | --staged] [--natural | --conventional] --diff full \
 - Read the full preparation output; never pipe it through `tail`, `head`, `awk`, `grep`, or similar. It carries both the
   printed transaction ID and the diff step 3 must analyze, and a truncating pipe discards the evidence along with the
   ID.
+- Use `--diff summary` instead only when the full diff is too large to read in one pass (for example, a repository-wide
+  migration across hundreds of files) and this session already reviewed the content; compose the message from the
+  name-status, shortstat, and that review.
 - Before default-mode preparation, run the repository's formatter on this session's edited paths only, so a formatting
   pre-commit hook cannot modify the content after it is pinned.
 - Build the path list from this session's edited paths, never by parsing `git status` or `git status --porcelain`
