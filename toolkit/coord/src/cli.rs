@@ -319,38 +319,6 @@ pub(crate) enum RecommendationDecisionArg {
     Rejected,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_recommend_send_with_exact_and_recursive_scopes() {
-        let cli = Cli::try_parse_from([
-            "ai-coord",
-            "recommend",
-            "send",
-            "peer",
-            "--action",
-            "defer",
-            "--path",
-            "src/legacy.rs",
-            "--recursive",
-            "src/generated",
-            "--reason",
-            "replacement makes this obsolete",
-            "--replacement",
-            "remove the adapter and revalidate callers",
-        ])
-        .expect("recommend send parses");
-        let Command::Recommend(RecommendArgs { command: RecommendCommand::Send(arguments) }) = cli.command else {
-            panic!("expected recommend send");
-        };
-        assert!(matches!(arguments.action, RecommendationActionArg::Defer));
-        assert_eq!(arguments.paths, vec![PathBuf::from("src/legacy.rs")]);
-        assert_eq!(arguments.recursive_paths, vec![PathBuf::from("src/generated")]);
-    }
-}
-
 #[derive(Debug, Args)]
 pub(crate) struct FindingArgs {
     #[command(subcommand)]
@@ -519,4 +487,36 @@ pub(crate) struct CheckArgs {
     /// Emit machine-readable diagnostics.
     #[arg(long = "json")]
     pub(crate) as_json: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_recommend_send_with_exact_and_recursive_scopes() {
+        let cli = Cli::try_parse_from([
+            "ai-coord",
+            "recommend",
+            "send",
+            "peer",
+            "--action",
+            "defer",
+            "--path",
+            "src/legacy.rs",
+            "--recursive",
+            "src/generated",
+            "--reason",
+            "replacement makes this obsolete",
+            "--replacement",
+            "remove the adapter and revalidate callers",
+        ])
+        .expect("recommend send parses");
+        let Command::Recommend(RecommendArgs { command: RecommendCommand::Send(arguments) }) = cli.command else {
+            panic!("expected recommend send");
+        };
+        assert!(matches!(arguments.action, RecommendationActionArg::Defer));
+        assert_eq!(arguments.paths, vec![PathBuf::from("src/legacy.rs")]);
+        assert_eq!(arguments.recursive_paths, vec![PathBuf::from("src/generated")]);
+    }
 }
