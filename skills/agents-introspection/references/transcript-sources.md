@@ -100,9 +100,10 @@ keyword relevance requirement. Additional fields make selection and exclusions a
 - candidate `signal_channels` records eligible user and assistant message counts, ignored context, and structured tool
   failures.
 
-If the first pass is weak, make one pass with broader or OR-grouped keywords. If still weak, retry once with `--since`
-removed. Add `--include-archived` only for the final bounded fallback. Empty output after those passes is a coverage
-gap, not proof that no relevant behavior exists.
+If a specific reported incident is missing, use Exact-Incident Fallback before widening the time window. Otherwise, make
+one pass with broader or OR-grouped keywords. If still weak, retry once with `--since` removed. Add `--include-archived`
+only for the final bounded fallback. Empty output after those passes is a coverage gap, not proof that no relevant
+behavior exists.
 
 ## Inspect Candidates
 
@@ -116,9 +117,9 @@ uv run "$skill_dir/scripts/transcript-inspect.py" <transcript-path>... \
 ```
 
 For each file, the inspector emits a header with source, session id, cwd, timestamp range, per-channel totals, and
-sampled flag. It emits bounded entries with absolute record line numbers. These entries contain every non-context user
-message, keyword-, correction-, or verification-matching assistant messages, and tool failures. Redaction is always on.
-Entry text is capped at 240 characters.
+sampled flag. It emits bounded entries with absolute record line numbers. Within the sampled records and output limit,
+these entries contain non-context user messages, qualifying assistant messages, and tool failures. Redaction is always
+on. Entry text is capped at 240 characters.
 
 Digests are redacted and bounded. Inspect them before reading raw bodies. Read raw bodies only when the digest is
 insufficient. Each entry's line number lets you retrieve the exact underlying record when needed:
@@ -126,6 +127,21 @@ insufficient. Each entry's line number lets you retrieve the exact underlying re
 ```sh
 sed -n '<line+1>p' <transcript-path> | jq
 ```
+
+## Exact-Incident Fallback
+
+When a specific reported incident is absent from ranked candidates or a sampled digest, make one search without body
+sampling. Keep the same project, time, and archive bounds. Search a short, distinctive incident phrase or a small set of
+close variants. Return matching filenames first, for example with `rg -l`, rather than raw JSONL records.
+
+For Claude, search the exact encoded project directory. For Codex, first select files whose source-native metadata
+establishes project ownership. Verify ownership before inspecting each match. Do not search unrelated projects or treat
+the miner's ranked session limit as complete coverage.
+
+Inspect each matching file with the inspector first. If its sampled digest omits the match, decode only the matching
+records and the minimum adjacent context. Redact secrets before emitting text. When a parent identifies a relevant child
+transcript, inspect that exact child file and verify its cwd and parent linkage. Count inspected child bodies against
+the body limit. A parent and its child do not establish independent recurrence.
 
 ## Source Layouts
 

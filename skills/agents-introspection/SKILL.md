@@ -72,8 +72,10 @@ scope in `🗂 Historical coverage`.
    themselves. Inspect up to five highest-relevance transcript bodies through the bundled inspector digest
    (`scripts/transcript-inspect.py`) first. Open raw bodies only when the digest is insufficient. Stop earlier when the
    evidence bar is met. Include a comparable successful session when available.
-4. If evidence is insufficient, retry once with broader or OR-grouped keywords. If still weak, retry once with `--since`
-   removed. If unarchived history still lacks signal, retry once with `--include-archived`.
+4. If a specific reported incident is missing, use the reference's Exact-Incident Fallback before widening the time
+   window. Both helpers can omit the middle of long sessions. Otherwise, retry once with broader or OR-grouped keywords.
+   If evidence remains weak, retry once with `--since` removed. If unarchived history still lacks signal, retry once
+   with `--include-archived`.
 5. Exceed these bounds only to resolve contradictory evidence or satisfy an explicitly exhaustive request. If the helper
    fails, use one project-scoped manual fallback from the reference.
 
