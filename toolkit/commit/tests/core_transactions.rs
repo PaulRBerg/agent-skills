@@ -328,6 +328,23 @@ fn inherited_index_and_invalid_repository_states_are_invocation_errors() {
 }
 
 #[test]
+fn stale_rebase_head_does_not_block_but_rebase_state_does() {
+    let harness = Harness::new("stale-rebase-head");
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.write("intended.txt", "changed\n");
+    fs::write(harness.repo.join(".git/REBASE_HEAD"), harness.git(["rev-parse", "HEAD"])).unwrap();
+
+    let stale = harness.command(["prepare", "--", "intended.txt"]);
+    assert!(stale.status.success(), "{}", stderr(&stale));
+
+    fs::create_dir(harness.repo.join(".git/rebase-merge")).unwrap();
+    let rebasing = harness.command(["prepare", "--", "intended.txt"]);
+    assert_eq!(exit_code(&rebasing), 2);
+    assert!(stderr(&rebasing).contains("rebase-merge"));
+}
+
+#[test]
 fn inherited_object_environment_cannot_redirect_prepared_objects() {
     let harness = Harness::new("isolated-object-environment");
     harness.write("intended.txt", "base\n");

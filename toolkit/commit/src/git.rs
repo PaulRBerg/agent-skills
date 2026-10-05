@@ -92,7 +92,9 @@ impl Repository {
     }
 
     pub fn ensure_idle(&self) -> Result<()> {
-        let markers = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD"];
+        // Like `git status`, detect rebases by their state directories: Git can leave a stale
+        // REBASE_HEAD behind after a rebase finishes or is aborted.
+        let markers = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"];
         for marker in markers {
             if self.git_path(marker)?.exists() {
                 return Err(AppError::usage(format!("repository operation in progress: {marker}")));
