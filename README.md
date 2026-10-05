@@ -35,7 +35,6 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | claude-handoff         | Research or implement approved plans with Claude subagents                 |
 | cli-cast               | Foundry cast CLI guidance                                                  |
 | cli-coingecko          | CoinGecko CLI for prices and market data                                   |
-| cli-gh                 | GitHub CLI operations                                                      |
 | cli-just               | Just command runner guidance                                               |
 | code-polish            | Simplify and/or risk-profiled review with autofix                          |
 | codebase-design        | Shared vocabulary and principles for designing deep modules                |
