@@ -1,8 +1,8 @@
-# Codex to Claude Adapter
+# Claude CLI Adapter
 
-Use this route only when Codex orchestrates and the user explicitly selects Claude workers or a Claude model. Run
-authenticated Claude CLI workers through the host's shell execution tool. Do not send Claude model names to Codex's
-`spawn_agent` or substitute Codex workers.
+Use this route when Codex or another harness orchestrates and the user explicitly selects Claude workers or a Claude
+model. Run authenticated Claude CLI workers through the host's shell execution tool. Do not send Claude model names to
+Codex's `spawn_agent` or substitute Codex workers.
 
 The [Claude headless CLI documentation](https://code.claude.com/docs/en/headless) defines print mode, structured output,
 permission controls, and session continuation. Check `claude --version`, `claude --help`, and `jq --version` before
@@ -32,8 +32,10 @@ subject to configured deny rules. The shared prompt limits those permissions to 
 commits, external writes, deployment, and further delegation. Do not add a permission bypass to recover a denied action.
 
 Acquire the full manifest scope in the parent and require `READY` before implementation. Pass the verified parent
-identity through `AI_COORD_CLIENT=codex` and `AI_COORD_SESSION_ID=<parent-session-id>`. Obtain that identity from
-`ai-coord status --json`, not the new Claude session ID. Preserve it on continuation. Research needs no write claim.
+identity through `AI_COORD_CLIENT=<parent-client>` and `AI_COORD_SESSION_ID=<parent-session-id>`. Obtain that identity
+from `ai-coord status --json`, not the new Claude session ID. Preserve it on continuation. Research needs no write
+claim. If required coordination cannot identify the parent, report that prerequisite. Do not fabricate a Claude or Codex
+identity.
 
 Every worker prompt must prohibit coordination lifecycle commands. The parent's claim authorizes the assigned writes. On
 a scope warning, the worker stops writes and reports to the parent. It never repairs or replaces the parent's claim. For
@@ -49,7 +51,7 @@ Use this implementation template in a dedicated shell execution call. Substitute
 
 ```sh
 printf '%s\n' "$$" > '<agent-dir>/pid'
-exec env AI_COORD_CLIENT=codex AI_COORD_SESSION_ID='<parent-session-id>' \
+exec env AI_COORD_CLIENT='<parent-client>' AI_COORD_SESSION_ID='<parent-session-id>' \
   claude --print --model '<agent-model>' \
   --permission-mode acceptEdits --permission-prompts none \
   --tools 'Read,Glob,Grep,Edit,Write,Bash' --allowedTools 'Read,Glob,Grep,Edit,Write,Bash' \

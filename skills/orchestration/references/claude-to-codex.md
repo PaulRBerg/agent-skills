@@ -1,7 +1,11 @@
-# Claude to Codex Adapter
+# Codex CLI Adapter
 
-Use this route only when Claude Code orchestrates and the user explicitly selects Codex workers or a GPT model. Default
-Claude workers use the native Claude adapter. Apply the shared contract in `SKILL.md` throughout this route.
+Use this route when Claude Code explicitly selects Codex workers, or another harness selects Codex workers by default or
+user choice. Default Claude Code workers use the native Claude adapter. Apply the shared contract in `SKILL.md`
+throughout this route.
+
+On other harnesses, map Bash background tasks to the host's shell execution and task-continuation tools. Use the
+foreground watcher path when Monitor is unavailable. Preserve runner arguments, artifact handling, and settlement rules.
 
 This adapter requires Git, `/bin/bash`, Python 3, and an authenticated Codex CLI with dangerous bypass support. Claude
 Code 2.1.98+ is recommended for live progress through the Monitor tool. Stop with a compatibility error when a required
@@ -78,11 +82,15 @@ separate acceptance step, subject to host restrictions and existing confirmation
 its assigned scope. The runner pins every Codex process to the `default` service tier, overriding inherited fast or
 priority selection without changing persisted Codex configuration.
 
-Before implementation wave 1, the Claude parent promotes the named draft recorded over the full manifest write-scope
-union during the shared Plan Phase: `ai-coord start --draft <plan-slug>` (or `ai-coord bundle start --draft <plan-slug>`
-for two or more Git roots). Only when promotion reports `no draft named ...`, use the plan's explicit
+Before implementation wave 1, the parent promotes the named draft recorded over the full manifest write-scope union
+during the shared Plan Phase: `ai-coord start --draft <plan-slug>` (or `ai-coord bundle start --draft <plan-slug>` for
+two or more Git roots). Only when promotion reports `no draft named ...`, use the plan's explicit
 `ai-coord start '<label>' '<path>'...` fallback (or `ai-coord bundle start '<label>' '<absolute-path>'...`) over that
 union. Name exact files individually and use `--recursive` only for true subtrees. Require `READY` before launch.
+
+Obtain the parent's verified client and session ID from `ai-coord status --json`. Use that identity in
+`--coord-identity`, including in another harness. If required coordination cannot identify the parent, report that
+prerequisite. Do not fabricate a Claude or Codex identity.
 
 When the claim queues or blocks, run `ai-coord wait` as a background Bash task (`run_in_background: true`) so its return
 wakes the session. In that case, apply the shared wake handling and never end the turn to pause. Hold that claim through
@@ -104,7 +112,7 @@ bash <skill-dir>/scripts/run-codex-agent.sh \
   --model <agent-model> \
   --effort <agent-effort> \
   --timeout-seconds <agent-minutes-times-60> \
-  --coord-identity claude/<parent-session-id> \
+  --coord-identity <parent-client>/<parent-session-id> \
   --progress-file <agent-progress-file> \
   --result-file <agent-result-file> \
   2> <agent-stderr-file> <<'CODEX_PROMPT'

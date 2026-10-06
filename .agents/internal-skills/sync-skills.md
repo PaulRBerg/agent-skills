@@ -66,8 +66,9 @@ contract instead of maintaining duplicate entrypoints.
 
 Keep these decisions aligned:
 
-1. Claude defaults to Claude workers. Codex defaults to Codex workers. An explicit agent or model choice overrides that
-   default within the user's stated scope. Host detection does not change the requested worker family.
+1. Claude Code defaults to Claude workers. Codex and every other harness default to Codex workers. An explicit agent or
+   model choice overrides that default within the user's stated scope. Host detection does not change the requested
+   worker family.
 2. The parent owns decisions and planning. Research returns evidence without edits or plans. Implementation follows the
    finalized plan. Requests authorize launch without another routine plan approval, subject to host restrictions.
 3. The smallest effective team has at most three research agents and eight implementation agents. IDs, dependencies,
@@ -80,12 +81,12 @@ Keep these decisions aligned:
    Runtime differences cannot weaken them.
 
 Model tiers, permissions, research toolsets, progress transport, session identity, and continuation mechanics differ by
-route. Preserve those differences. Native Claude Explore is one-shot. Native Codex uses native thread tools. The two
-cross-agent routes use their selected CLI. Never copy CLI fallback or permission settings into a native route.
+route. Preserve those differences. Native Claude Explore is one-shot. Native Codex uses native thread tools. The two CLI
+routes also serve other harnesses. Never copy CLI fallback or permission settings into a native route.
 
-Verify all four host/worker combinations against the routing table. Also review an explicit model, a scoped preference,
-an unavailable requested agent, research-only work, Plan Mode, and infrastructure failure. There is no generated helper
-data for this group.
+Verify all six host/worker combinations against the routing table. Also review an explicit model, a scoped preference,
+an unavailable requested agent, a harness without shell execution, research-only work, Plan Mode, and infrastructure
+failure. An unknown harness selects Codex before prerequisite checks. There is no generated helper data for this group.
 
 ### Ai-skillet CLI consumers
 

@@ -1,8 +1,8 @@
 ---
 argument-hint: "[task] [agent or model preference]"
 compatibility:
-  Requires Claude Code or Codex with native subagents. Explicit cross-agent delegation also requires the selected
-  authenticated CLI. The Codex runner requires Git, /bin/bash, and Python 3. The Claude CLI route requires jq.
+  Requires native subagents in Claude Code or Codex, or shell execution with the selected authenticated CLI. The Codex
+  runner requires Git, /bin/bash, and Python 3. The Claude CLI route requires jq.
 metadata:
   install-targets: claude-code codex
 name: orchestration
@@ -11,8 +11,9 @@ skill-dependencies:
   - code-polish
   - commit
 description:
-  Orchestrate delegated research or implementation with Claude or Codex agents. Default to the invoking agent's family.
-  Follow an explicit user choice of agent or model. Plan and launch without a separate plan approval step.
+  Orchestrate delegated research or implementation with Claude or Codex agents. Default to Claude in Claude Code and
+  Codex in every other harness. Follow an explicit user choice of agent or model. Plan and launch without a separate
+  plan approval step.
 ---
 
 # Orchestration
@@ -30,21 +31,27 @@ Follow the shared contract below. Select the worker family separately from the h
 
 Identify the host from its callable tools. Codex exposes `spawn_agent`, `wait_agent`, `send_message`, and
 `followup_task`. Claude Code exposes Agent and Bash. Do not infer the host from environment variables, process ancestry,
-or a requested worker name. If neither surface exists, report a compatibility blocker.
+or a requested worker name. If neither surface identifies the host, classify it as another harness and use a CLI route.
 
-Default to Claude workers when Claude orchestrates, and Codex workers when Codex orchestrates. An explicit user choice
-overrides this default. Apply that choice to research and implementation unless the user limits its scope. A named model
-also selects its family: Sonnet or Opus selects Claude, and a GPT model selects Codex. Preserve an exact requested model
-or custom agent name instead of replacing it with a default tier.
+Default to Claude workers in Claude Code. Default to Codex workers in Codex and every other harness. An explicit user
+choice overrides this default. Apply that choice to research and implementation unless the user limits its scope. A
+named model also selects its family: Sonnet or Opus selects Claude, and a GPT model selects Codex. Preserve an exact
+requested model or custom agent name instead of replacing it with a default tier.
 
 Select the route from the actual host and requested worker family. Read the selected reference completely before launch:
 
-| Host        | Worker family            | Route                                            |
-| ----------- | ------------------------ | ------------------------------------------------ |
-| Claude Code | Claude (default)         | [Native Claude](references/native-claude.md)     |
-| Codex       | Codex (default)          | [Native Codex](references/native-codex.md)       |
-| Claude Code | Codex (explicit choice)  | [Claude to Codex](references/claude-to-codex.md) |
-| Codex       | Claude (explicit choice) | [Codex to Claude](references/codex-to-claude.md) |
+| Host          | Worker family            | Route                                            |
+| ------------- | ------------------------ | ------------------------------------------------ |
+| Claude Code   | Claude (default)         | [Native Claude](references/native-claude.md)     |
+| Codex         | Codex (default)          | [Native Codex](references/native-codex.md)       |
+| Claude Code   | Codex (explicit choice)  | [Claude to Codex](references/claude-to-codex.md) |
+| Codex         | Claude (explicit choice) | [Codex to Claude](references/codex-to-claude.md) |
+| Other harness | Codex (default)          | [Codex CLI](references/claude-to-codex.md)       |
+| Other harness | Claude (explicit choice) | [Claude CLI](references/codex-to-claude.md)      |
+
+For CLI routes, require shell execution and the selected authenticated CLI. Report missing execution or coordination
+prerequisites separately from worker selection. An unrecognized harness alone is not a blocker. Never invent a supported
+host identity to satisfy a coordination requirement.
 
 Use one adapter per worker for launch, permissions, progress, results, and continuation. Load another only when the user
 explicitly requests different worker families for different scopes. Record each route in that worker's manifest brief.
