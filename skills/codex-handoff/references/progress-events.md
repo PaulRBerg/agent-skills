@@ -43,7 +43,7 @@ the forwarded event set as version-dependent, not guaranteed. Do not invent equi
 check from silence. A quiet period may be ordinary work or transient buffering, and an independent server-side policy
 reroute may leave the responding model unknowable.
 
-In status digests, say `no recent activity` and keep watching until the wrapper sentinel or approved timeout. Do not
+In status digests, say `no recent activity` and keep watching until the wrapper sentinel or configured timeout. Do not
 cancel, retry, extend, downgrade to a suggested faster model, or relaunch because the stream is quiet. Preserve normal
 timeout and failure handling.
 

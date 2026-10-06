@@ -6,7 +6,7 @@ usage() {
   cat <<'EOF'
 Usage: run-codex-handoff.sh --model MODEL --effort EFFORT --timeout-seconds SECONDS [--resume SESSION_ID] [--coord-identity CLIENT/SESSION_ID] [--read-only] [--progress-file PATH] [--result-file PATH]
 
-Read an approved implementation prompt from stdin and run one Codex
+Read a finalized implementation prompt from stdin and run one Codex
 implementation turn in the current Git worktree. Sessions persist; use
 --resume SESSION_ID to continue an existing session.
 
@@ -299,7 +299,7 @@ trap 'forward_signal TERM' TERM
 
 cat >"$prompt_file"
 if [[ ! -s "$prompt_file" ]]; then
-  echo "ERROR: empty prompt; provide the approved implementation brief on stdin" >&2
+  echo "ERROR: empty prompt; provide the finalized implementation brief on stdin" >&2
   exit 64
 fi
 

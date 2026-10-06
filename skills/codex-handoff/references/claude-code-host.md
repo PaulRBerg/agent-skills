@@ -72,10 +72,11 @@ Keep the highest-tier agent's scope minimal and move deferrable validation to th
 Resolve `../scripts/run-codex-handoff.sh` to an absolute path relative to this file. Never search for it in the target
 repository. Each invocation is one Codex agent.
 
-Without `--read-only`, the runner deliberately disables Codex approvals and sandboxing. Use that mode only after the
-user approves the plan and accepts that agents can read, modify, or delete any files accessible to the host account. The
-runner pins every Codex process to the `default` service tier, overriding inherited fast or priority selection without
-changing persisted Codex configuration.
+Without `--read-only`, the runner deliberately disables Codex approvals and sandboxing. Agents can read, modify, or
+delete any files accessible to the host account. An implementation request authorizes this runner mode without a
+separate acceptance step, subject to host restrictions and existing confirmation requirements. Keep each agent within
+its assigned scope. The runner pins every Codex process to the `default` service tier, overriding inherited fast or
+priority selection without changing persisted Codex configuration.
 
 Before implementation wave 1, the Claude parent promotes the named draft recorded over the full manifest write-scope
 union during the shared Plan Phase: `ai-coord start --draft <plan-slug>` (or `ai-coord bundle start --draft <plan-slug>`
@@ -93,8 +94,8 @@ a wave boundary. At that boundary, run `ai-coord done`, then start a fresh item 
 the next wave.
 
 For every agent, create separate per-agent artifact paths ending in `<agent-id>.progress.jsonl`,
-`<agent-id>.result.json`, and `<agent-id>.stderr.log` under `${TMPDIR:-/tmp}`. Convert its approved whole-minute timeout
-to seconds only at the wrapper boundary. Then start the runner from anywhere inside the target Git worktree as a
+`<agent-id>.result.json`, and `<agent-id>.stderr.log` under `${TMPDIR:-/tmp}`. Convert its configured whole-minute
+timeout to seconds only at the wrapper boundary. Then start the runner from anywhere inside the target Git worktree as a
 background Bash task (`run_in_background: true`) with a description like
 `Codex A1/3: <scope> (<model>, <effort>, ≤<minutes>m)`:
 
@@ -166,8 +167,8 @@ files, or add any second wait loop. Inspect artifacts only after settlement.
 
 The watcher settles an agent as failed with reason `no-sentinel` once elapsed exceeds its budget plus 120 seconds of
 grace. Silence is never evidence of safety buffering or model rerouting. Keep watching until the wrapper sentinel or
-approved timeout. Never cancel, retry, extend, or downgrade because of silence. Report `no recent activity` during quiet
-periods.
+configured timeout. Never cancel, retry, extend, or downgrade because of silence. Report `no recent activity` during
+quiet periods.
 
 ### Collect and Reconcile
 

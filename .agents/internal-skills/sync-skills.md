@@ -65,15 +65,16 @@ adapters specialize runtime mechanics. `claude-handoff` remains Claude Code only
 semantically identical between the two entrypoints, adjusted only for the parent/agent noun and runtime. Do not restate
 their content here. The sync run reads both skills directly:
 
-1. Every handoff supports any host mode. It requires explicit plan approval before implementation launch. Research-only
-   work stops before planning.
+1. Every handoff supports any host mode subject to host restrictions. An implementation request authorizes planning and
+   launch without a separate user approval step. Present the plan as progress, then continue. Plan-only requests and
+   host read-only restrictions stop implementation. Research-only work stops before planning.
 2. The parent owns decisions, the plan, and orchestration. Implementation agents must not redesign the plan.
 3. Use the smallest effective team, with at most eight implementation agents. Split any brief likely to exceed roughly
    25-30 minutes.
 4. The user's model preference overrides normal task-complexity selection for every research and implementation agent,
    unless the user narrows its scope. If the preferred model is unavailable, obtain user approval before using a
    fallback.
-5. The approved outcome authorizes follow-on work. The initial manifest and worker write scopes do not define that
+5. The requested outcome authorizes follow-on work. The initial manifest and worker write scopes do not define that
    authorization boundary. Workers report new out-of-scope prerequisites. The parent extends scope and delegates without
    asking again.
 6. Pre-plan research uses zero agents by default. Only the parent decides whether to delegate research. Research agents
@@ -126,9 +127,11 @@ their content here. The sync run reads both skills directly:
     exception is audit-heavy discovery, which is mapped and divided for implementation agents. If a companion is absent
     from the skill list, read it directly from the host skill root.
 
-    The handoff contract takes precedence over overlapping companion mechanics. Companion user-decision gates remain
-    binding. Agents never load skills by name. Briefs include the needed companion excerpts inline. Companion-required
-    polish maps onto the Plan Phase passes and runs once. Completion satisfies both report contracts.
+    The handoff contract takes precedence over overlapping companion mechanics, including routine plan approval.
+    Substantive companion user-decision gates remain binding when existing instructions do not settle them. A plan-only
+    companion implements when the combined request authorizes implementation and the host permits writes. Agents never
+    load skills by name. Briefs include the needed companion excerpts inline. Companion-required polish maps onto the
+    Plan Phase passes and runs once. Completion satisfies both report contracts.
 
     The `Companion skills:` plan line is optional. Place it after `Research:`.
 

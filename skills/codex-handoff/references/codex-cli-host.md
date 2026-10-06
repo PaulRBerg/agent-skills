@@ -31,7 +31,7 @@ eight-agent limit counts total implementation agents, not concurrent width. With
 worker at a time.
 
 Codex subagents inherit the parent sandbox and approval policy. Research stays under the parent's read-only controls.
-Implementation cannot bypass the permissions selected for the approved parent turn. For every research-only handoff, the
+Implementation cannot bypass the permissions selected for the current parent turn. For every research-only handoff, the
 shared prompt's strict no-edit boundary is mandatory. Treat any reported research edit as a contract violation.
 
 ## Research Mechanics
@@ -83,10 +83,11 @@ When the claim queues or blocks, run `ai-coord wait` as a foreground command wit
 (300 seconds by default). In that case, apply the shared wake handling and repeat until `READY`. Never end the turn
 between waits.
 
-After plan approval, call `spawn_agent` for each implementation worker with:
+After finalizing the plan and receiving `READY` from coordination, call `spawn_agent` for each implementation worker
+with:
 
 - `fork_turns: "none"`.
-- the model and `reasoning_effort` from its approved manifest row.
+- the model and `reasoning_effort` from its manifest row.
 - a stable task name and a self-contained prompt satisfying the shared implementation prompt contract.
 
 Start all independent workers that fit the concurrency allowance without waiting between calls. Reconcile the entire
