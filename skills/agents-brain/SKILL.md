@@ -190,7 +190,7 @@ Claude Code v2.1.277 and later read `AGENTS.md` directly whenever no `CLAUDE.md`
 installed version once per run before a workflow touches CLAUDE.md:
 
 ```sh
-claude_version=$(claude --version 2>/dev/null | awk '{ print $1; exit }')
+claude_version=$(claude --version 2>/dev/null | head -n 1 | cut -d ' ' -f 1)
 agents_md_native=false
 if [ -n "$claude_version" ] &&
   [ "$(printf '%s\n' 2.1.277 "$claude_version" | sort -V | head -n 1)" = 2.1.277 ]; then
