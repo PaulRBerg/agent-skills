@@ -591,6 +591,16 @@ fn maybe_push(repository: &Repository, transaction: &mut Transaction, store: &St
     if !requested && !transaction.push_requested {
         return Ok(());
     }
+    if let Some(oid) = transaction.commit_oid.clone() {
+        match branch_integration(repository, transaction, &oid)? {
+            Integration::Reachable => {}
+            Integration::Integrated { head } => println!("INTEGRATED {} {}", transaction.id, short_oid(&head)),
+            Integration::Superseded => {
+                println!("SUPERSEDED {} {}", transaction.id, short_oid(&oid));
+                return Err(AppError::retry(""));
+            }
+        }
+    }
     transaction.push_requested = true;
     transaction.terminal_at = None;
     store.save(transaction)?;
@@ -617,6 +627,35 @@ fn maybe_push(repository: &Repository, transaction: &mut Transaction, store: &St
             outcome.print();
             Ok(())
         }
+    }
+}
+
+enum Integration {
+    Reachable,
+    Integrated { head: String },
+    Superseded,
+}
+
+// A replayed push may follow a rebase that rewrote or dropped the transaction's
+// commit. When the commit is no longer reachable, content equality at HEAD for
+// every committed path decides whether the branch still carries the change.
+fn branch_integration(repository: &Repository, transaction: &Transaction, commit_oid: &str) -> Result<Integration> {
+    let ancestry = repository.raw(["merge-base", "--is-ancestor", commit_oid, "HEAD"], None)?;
+    match ancestry.status.code() {
+        Some(0) => return Ok(Integration::Reachable),
+        Some(1) => {}
+        _ => return Err(git_error(ancestry)),
+    }
+    let head = repository.head()?;
+    let mut paths: Vec<String> = transaction.paths.iter().chain(&transaction.hook_added).cloned().collect();
+    paths.sort_unstable();
+    paths.dedup();
+    let committed = repository.tree_file_entries(commit_oid, &paths)?;
+    let current = repository.tree_file_entries(&head, &paths)?;
+    if paths.iter().all(|path| committed.get(path) == current.get(path)) {
+        Ok(Integration::Integrated { head })
+    } else {
+        Ok(Integration::Superseded)
     }
 }
 

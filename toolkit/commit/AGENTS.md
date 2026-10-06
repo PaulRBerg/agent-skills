@@ -226,16 +226,22 @@ Pending state must be recovered by retrying `commit` with the same transaction I
 discard it.
 
 `prepare --porcelain` emits stable TSV records. Tabs, newlines, carriage returns, and backslashes inside fields are
-backslash-escaped. Outcome records use `PREPARED`, `VALIDATED`, `VALIDATION_SKIPPED`, `COMMITTED`, `PUSHED`,
-`PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and `DISCARDED`. Each automatically applied exclusion is disclosed as
-`AUTO_BASELINE<tab>path<tab>oid`. The ordinary output lists the same pairs under `auto-applied baselines`. Each skipped
-automatic baseline is disclosed as `AUTO_BASELINE_SKIPPED<tab>path<tab>oid`.
+backslash-escaped. Outcome records use `PREPARED`, `VALIDATED`, `VALIDATION_SKIPPED`, `COMMITTED`, `INTEGRATED`,
+`SUPERSEDED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and `DISCARDED`. Each automatically applied exclusion is
+disclosed as `AUTO_BASELINE<tab>path<tab>oid`. The ordinary output lists the same pairs under `auto-applied baselines`.
+Each skipped automatic baseline is disclosed as `AUTO_BASELINE_SKIPPED<tab>path<tab>oid`.
 
 Receipts and retryable diagnostics print a fixed 12-character commit OID abbreviation. `show` and the transaction
 journal retain full OIDs. The `--diff full` display diff omits binary patch payloads and caps each file's section at 400
 lines, disclosing every cut as `DIFF_TRUNCATED<tab>path<tab>omitted-line-count` (ordinary output:
 `DIFF_TRUNCATED path (N more lines)` after the diff). Truncation is display-only: the prepared tree, name-status,
 shortstat, and path records stay complete.
+
+Before any push, `commit` checks that the transaction's commit is still reachable from HEAD. When a rebase rewrote it,
+or another commit carried the same change, and HEAD holds the committed content of every transaction path, `commit`
+prints `INTEGRATED <transaction-id> <head-oid>` and then pushes. When HEAD lacks that content, it prints
+`SUPERSEDED <transaction-id> <commit-oid>`, pushes nothing, and exits `3`. The caller then inspects the branch and
+discards or re-prepares the transaction.
 
 Exit status `0` means success or an idempotent replay, `2` means invalid invocation or configuration, and `3` means the
 repository was left safe but needs a retry or reconciliation. Other Git, hook, signing, and push failures return `1`.

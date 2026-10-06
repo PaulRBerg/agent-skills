@@ -148,6 +148,12 @@ Keep the receipt compact and forward its outcome lines without decoration:
 - `HOOK_ADDED <path>` identifies content introduced by a hook outside the prepared path set. Disclose every such line.
 - `PUSHED <branch>` or `PUSHED_NEW <branch>` proves propagation and completes push-authorized or push-only work.
 - `PUSHED <transaction-id> <commit-oid>` is the retained proof returned when an already-pushed transaction is replayed.
+- `INTEGRATED <transaction-id> <head-oid>` discloses that the branch no longer contains the transaction's original
+  commit, but HEAD holds its content, for example after a rebase or an identical upstream commit. The `PUSHED` line that
+  follows still completes the work. Cite the head OID as the pushed evidence, not the `COMMITTED` OID.
+- `SUPERSEDED <transaction-id> <commit-oid>` is safe noncompletion: the branch contains neither the commit nor its
+  content, and nothing was pushed. Inspect the branch. If the change is still needed, discard the transaction and
+  prepare it again.
 - `BEHIND <branch> <count>` is safe noncompletion, never completion: `ai-commit` fetched and refused to integrate or
   push. A preceding `COMMITTED` still proves the local commit.
 
