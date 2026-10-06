@@ -263,9 +263,10 @@ helpers also sign and broadcast:
 
 Apply the same Prepare, Simulate, and Review phases to those helpers. A Safe proposal or confirmation is a signature
 artifact that needs its own payload review. Treat any other subcommand whose installed help shows it signs or submits,
-such as `cast safe create`, `add-delegate`, or `remove-delegate`, the same way. Signing a message or typed data,
-including `cast erc20-token permit` without `--broadcast`, also requires a review of the exact payload, domain, chain
-binding, and intended use before approval.
+such as `cast safe create`, `add-delegate`, or `remove-delegate`, the same way. This includes the Tempo commands
+`cast tip20-token grant-role|revoke-role` and `cast tempo zone deposit|withdraw` in Cast 1.8.4+. Signing a message or
+typed data, including `cast erc20-token permit` without `--broadcast`, also requires a review of the exact payload,
+domain, chain binding, and intended use before approval.
 
 Pass the selected fees explicitly. EIP-1559 uses `--gas-price` and `--priority-gas-price`. A fixed legacy policy uses
 `--legacy --gas-price` without `--priority-gas-price`. Under the default Ethereum policy, use the reviewed Rabby Slow
