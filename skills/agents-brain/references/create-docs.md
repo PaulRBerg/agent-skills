@@ -70,6 +70,12 @@ Keep AGENTS.md concise, imperative, and scoped:
 - Exclude generic tool tutorials, long directory trees, and package-script inventories that add no preference or
   warning.
 - Make AGENTS.md a map. Link deeper context docs instead of inlining them. Keep it short enough to load on every task.
+- State each obligation as a rule the agent can find. Keep schemas, procedures, and catalogs in linked context docs.
+- Make every skill, command, or document that a rule names reachable from where the rule loads. When the harness does
+  not list a named skill there, state how to find it.
+- Use the same section name for the same role in sibling files.
+- Keep in-band metadata only when it changes reader behavior. Omit maintainer-only identifiers and annotations, or state
+  their meaning for the reader once at the root.
 - When the user requests continuous repo-local skill maintenance, include the standing instruction from this skill's
   `references/maintain-skills.md`, adapted to the repository's ownership and lifecycle rules.
 

@@ -49,6 +49,8 @@ loaded, inherited through a scope chain, conditional or path-scoped, or independ
 - Preserve authority, safety, material exceptions, semantic completion criteria, exact commands and machine-consumed
   text, and clarity. Re-read the effective load chain after pruning to ensure no required constraint is orphaned or
   contradicted.
+- In always-loaded or inherited files, keep in-band metadata only when it changes reader behavior. Remove
+  maintainer-only identifiers and annotations, or state their meaning for the reader once at the root.
 
 ## README.md Decisions
 
@@ -80,6 +82,10 @@ Keep AGENTS.md terse, imperative, repository-specific, and scoped to its directo
   task and crowds out the task and the code. It also makes every rule look equally important, goes stale, and resists
   mechanical checks. Route depth to the linked context docs, so agents start from a small, stable entry point and learn
   where to look next.
+- State each obligation as a rule the agent can find. Keep schemas, procedures, and catalogs in linked context docs.
+- Make every skill, command, or document that a rule names reachable from where the rule loads. When the harness does
+  not list a named skill there, state how to find it.
+- Use the same section name for the same role in sibling files.
 - When task evidence shows that a decision lives only outside the repository, record it in the applicable context.
   Examples of such places are a chat thread, an external document, and a person's knowledge. An agent can see only what
   the repository contains.
@@ -123,6 +129,8 @@ reference material — wherever they live and whatever they are named:
 
 - Treat architecture maps of domains and layering, quality or technical-debt registers, and plan or decision logs as
   context docs when they guide future work.
+- Also treat state-surface indexes and knowledge-home maps as context docs. A state-surface index maps each question to
+  its cheapest authoritative source. A knowledge-home map maps each kind of learned knowledge to where to record it.
 - Verify commands, paths, flags, formats, environment variables, versions, and rules against the repository with the
   same rigor as AGENTS.md.
 - When repository instructions assign a document class to a repository-owned lifecycle or workflow, fix only factual

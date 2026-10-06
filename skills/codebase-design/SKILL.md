@@ -97,6 +97,12 @@ A codebase is **agent-legible** when an agent can reason about the full business
   hold a rule, promote the rule into a lint.
 - **When an agent struggles, find the missing capability.** Make that capability legible and enforceable for the agent.
   Do not prompt harder.
+- **Make current state queryable.** Provide one cheap read-only command that reports current state, so the agent does
+  not infer state from raw data.
+- **Make every name in an instruction resolve in one step.** A skill, command, or document that an instruction names
+  must be reachable from where the instruction loads.
+- **Give one command family one default mode.** Do not let some commands write by default while others only check. State
+  the default mode, the paths written, and the side effects in help text.
 
 ## Relationships
 
