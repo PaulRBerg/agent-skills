@@ -1,6 +1,6 @@
 # Progress Stream Reference
 
-When `run-codex-handoff.sh` is invoked with `--progress-file PATH`, the file is a live JSONL stream. It contains every
+When `run-codex-agent.sh` is invoked with `--progress-file PATH`, the file is a live JSONL stream. It contains every
 line Codex emits under `codex exec --json`, followed by one wrapper-authored sentinel. Pre-launch validation failures
 exit nonzero before the stream exists. Those failures write no sentinel. After the run starts, the wrapper writes
 exactly one sentinel.

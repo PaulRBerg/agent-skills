@@ -1,50 +1,64 @@
 ---
-argument-hint: "[task]"
+argument-hint: "[task] [agent or model preference]"
 compatibility:
-  The Claude Code host requires Git, /bin/bash, Python 3, and an authenticated Codex CLI with dangerous bypass support.
-  The Codex CLI host requires native subagents.
+  Requires Claude Code or Codex with native subagents. Explicit cross-agent delegation also requires the selected
+  authenticated CLI. The Codex runner requires Git, /bin/bash, and Python 3. The Claude CLI route requires jq.
 metadata:
   install-targets: claude-code codex
-name: codex-handoff
+name: orchestration
 skill-dependencies:
   - agents-brain
   - code-polish
   - commit
 description:
-  Orchestrate read-only Codex research or one to eight Codex agents to plan and implement requested work from Claude
-  Code or Codex CLI, without a separate plan approval step.
+  Orchestrate delegated research or implementation with Claude or Codex agents. Default to the invoking agent's family.
+  Follow an explicit user choice of agent or model. Plan and launch without a separate plan approval step.
 ---
 
-# Codex Handoff
+# Orchestration
 
-Codex-handoff orchestrates read-only investigation or plans and implements requested work within the current session.
+This skill delegates read-only investigation or plans and implements requested work within the current session.
 Task-handoff writes a decision-complete file for a fresh, separate session. Use it when work continues later or
 elsewhere. Use an in-session handoff skill to implement requested work now.
 
 If a slash or dollar invocation already supplied these instructions in the conversation, follow them directly. In that
 case, do not invoke this skill again through a skill tool.
 
-Follow the shared contract below, select exactly one host adapter, and use it for every host-specific action.
+Follow the shared contract below. Select the worker family separately from the host that runs this conversation.
 
-## Host Selection
+## Host and Worker Selection
 
-Inspect the callable orchestration tools, not environment variables, process ancestry, or a user-supplied host name:
+Identify the host from its callable tools. Codex exposes `spawn_agent`, `wait_agent`, `send_message`, and
+`followup_task`. Claude Code exposes Agent and Bash. Do not infer the host from environment variables, process ancestry,
+or a requested worker name. If neither surface exists, report a compatibility blocker.
 
-- `spawn_agent`, `wait_agent`, `send_message`, `followup_task` available: read `references/codex-cli-host.md`
-  completely.
-- Otherwise, Claude Code's Agent and Bash tools available: read `references/claude-code-host.md` completely.
-- Neither: stop with a compatibility error. Native Codex multi-agent support is mandatory on the Codex host. Never fall
-  back to a nested Codex CLI process.
+Default to Claude workers when Claude orchestrates, and Codex workers when Codex orchestrates. An explicit user choice
+overrides this default. Apply that choice to research and implementation unless the user limits its scope. A named model
+also selects its family: Sonnet or Opus selects Claude, and a GPT model selects Codex. Preserve an exact requested model
+or custom agent name instead of replacing it with a default tier.
 
-Use exactly one adapter for every host-specific action. Never load both or combine their launch, progress, retry,
-permission, or result-transport mechanics. The adapter may specialize host mechanics and manifest configuration but
-cannot weaken this shared contract.
+Select the route from the actual host and requested worker family. Read the selected reference completely before launch:
+
+| Host        | Worker family            | Route                                            |
+| ----------- | ------------------------ | ------------------------------------------------ |
+| Claude Code | Claude (default)         | [Native Claude](references/native-claude.md)     |
+| Codex       | Codex (default)          | [Native Codex](references/native-codex.md)       |
+| Claude Code | Codex (explicit choice)  | [Claude to Codex](references/claude-to-codex.md) |
+| Codex       | Claude (explicit choice) | [Codex to Claude](references/codex-to-claude.md) |
+
+Use one adapter per worker for launch, permissions, progress, results, and continuation. Load another only when the user
+explicitly requests different worker families for different scopes. Record each route in that worker's manifest brief.
+Adapters specialize runtime mechanics. They cannot weaken the shared contract or host restrictions.
+
+If a requested agent or model cannot run through the available route, report the exact incompatibility. Ask before using
+a different agent or model. Do not change the worker family because a preferred tool is unavailable.
 
 ## Contract
 
-- Run only after explicit invocation. Classify a task research-only when its requested outcome is findings, evidence, or
-  an assessment, with no repository changes or plan requested. All handoffs may run in any host mode. Implementation
-  handoffs must pass through the Plan Phase, then launch without a separate user approval step.
+- Run when the user requests delegation or a selected companion skill requires it. Classify a task research-only when
+  its requested outcome is findings, evidence, or an assessment, with no repository changes or plan requested. All
+  handoffs may run in any host mode. Implementation handoffs must pass through the Plan Phase, then launch without a
+  separate user approval step.
 - Treat the implementation request as authorization to plan, delegate, and complete that outcome. Reuse an existing plan
   when the outcome and material constraints are unchanged. Explicit user instructions take precedence over skill
   defaults. Preserve host Plan Mode restrictions and confirmation requirements imposed outside this skill. Ask only when
@@ -63,9 +77,9 @@ cannot weaken this shared contract.
 - Use at most three research agents, stable IDs `R1`-`R3`, counted separately from the eight implementation agents.
 - Keep the parent's own implementation work to orchestration, integrity checks, failure handling, and conditional polish
   passes.
-- Treat an explicit user model preference (e.g. GPT-6 Luna) as an orchestration constraint on every research and
-  implementation agent unless scoped narrower. Within that scope, do not substitute the adapter's usual Luna/Sol/Astra
-  selection. If the host cannot launch that model, report the incompatibility and ask before falling back.
+- Treat an explicit user model preference as an orchestration constraint on every research and implementation agent
+  unless scoped narrower. Within that scope, do not substitute the adapter's usual model selection. If the host cannot
+  launch that model, report the incompatibility and ask before falling back.
 - Treat the requested outcome as the authorization boundary, rather than the initial manifest or its write scopes. When
   implementation reveals a related in-repository fix or evidence change required for that outcome, the parent may extend
   the handoff. For that newly discovered scope, the parent may launch follow-on agents without asking again. The worker
@@ -129,8 +143,9 @@ adapter's read-only mechanism. Give each agent a self-contained prompt containin
 
 A research agent has not settled its scope if it returns `blocked` citing only time while most of its budget is unused
 and no concrete obstacle is named. Nor has it settled if it returns `completed` while its evidence still lists
-uninspected scope paths. For either case, continue the same agent once through the adapter's same-agent mechanism with
-the uncovered files and remaining budget. This continuation is not a new research agent.
+uninspected scope paths. For either case, use the adapter's same-agent mechanism once when it supports continuation.
+Name the uncovered files and remaining budget. This continuation is not a new research agent. For one-shot research
+agents, carry missing evidence into the consolidated open questions or blockers.
 
 When every required research agent settles, incorporate its findings and evidence into the implementation plan or the
 research-only response. Surface open questions or blockers through the host's user-question mechanism only when they
@@ -153,8 +168,9 @@ plan's default scope to fit the research.
 Produce a decision-complete plan with this section and the selected adapter's exact manifest table:
 
 ```markdown
-## Codex Handoff
+## Orchestration
 
+- Workers: `<Claude|Codex|explicitly mixed>` — `<host default or user preference>`
 - Research: `<none | R1..Rn — key findings used>`
 - Companion skills: `<none | $x — phases the parent runs / what is folded into briefs>`
 - Strategy: `<sequential|parallel|hybrid>`
@@ -227,7 +243,7 @@ Build a self-contained, outcome-first prompt for every implementation agent. Inc
    parent commits after reconciliation.
 6. The selected adapter's delegation and coordination context, including why the parent session and disjoint siblings
    are not conflicting work and what unrelated exact-scope claim would justify returning `blocked`. Delegates must not
-   run coordination lifecycle commands: these are rejected with exit 64. Permit only `ai-coord status`,
+   run coordination lifecycle commands. Guard enforcement depends on the adapter. Permit only `ai-coord status`,
    `ai-coord touched`, `ai-coord inbox`, `ai-coord msg`, and `ai-coord finding`.
 7. This stopping rule: implement the finalized plan exactly. If infeasible or requiring redesign, return `blocked` with
    evidence instead of proposing a replacement plan. Continue after progress updates while authorized work remains. A

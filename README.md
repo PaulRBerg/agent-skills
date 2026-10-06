@@ -33,13 +33,11 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | autoresearch           | Autonomous experiment loop                                                 |
 | brainstorm-with-me     | Co-create novel ideas and converge on a testable concept                   |
 | chromium-browser       | Shared Chromium browsing, DevTools automation, and Wayback research        |
-| claude-handoff         | Research, plan, and implement work with Claude subagents                   |
 | cli-cast               | Foundry cast CLI guidance                                                  |
 | cli-coingecko          | CoinGecko CLI for prices and market data                                   |
 | cli-just               | Just command runner guidance                                               |
 | code-polish            | Simplify and/or risk-profiled review with autofix                          |
 | codebase-design        | Deep-module vocabulary and agent-legible codebase design                   |
-| codex-handoff          | Research, plan, and implement work with Codex agents                       |
 | commit                 | Semantic commit messages with deterministic ai-commit mechanics            |
 | copy-transcript-path   | Copy the active Claude Code or Codex CLI transcript path                   |
 | effect-ts              | Effect 4 patterns and source-aligned guidance                              |
@@ -53,6 +51,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | large-file-refactor    | Large source-file report and Serena split plans                            |
 | naming-refactor        | Exhaustive behavior-preserving repository naming refactor                  |
 | node-deps-bumper       | Node.js dependency updates via taze                                        |
+| orchestration          | Research, plan, and implement work with Claude or Codex agents             |
 | pdf                    | Exact local PDF reading and manipulation on macOS                          |
 | release-bumper         | Release workflow with changelog, tagging                                   |
 | repo-cross-pollination | Transfer useful guidance, workflows, and dependencies between repositories |

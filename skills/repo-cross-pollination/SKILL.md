@@ -6,8 +6,8 @@ metadata:
   install-targets: claude-code codex
 name: repo-cross-pollination
 skill-dependencies:
-  - codex-handoff
   - commit
+  - orchestration
 description:
   Compare agent guidance, workflows, and dependencies across repositories, then adopt the practices each recipient would
   benefit from.
@@ -160,7 +160,7 @@ Save the JSON under the host's scratch or temporary directory and query it with 
 - Order each recipient's edits so dependencies precede the configs and tasks that use them, and guidance lands last so
   it documents what exists.
 - In Claude Code, prefer plan mode.
-- When `$codex-handoff` is available, delegate implementation through it. Otherwise, use host subagents. If those are
+- When `$orchestration` is available, delegate implementation through it. Otherwise, use host subagents. If those are
   also unavailable, implement directly. Use disjoint per-repository write scopes, and reserve cross-repository checks
   for one owner.
 - Keep the plan limited to approved transfers. Extend it autonomously for technical prerequisites. Ask only when a new

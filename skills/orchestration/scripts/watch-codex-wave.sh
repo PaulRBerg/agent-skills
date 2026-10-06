@@ -1,5 +1,5 @@
 #!/bin/bash
-# Watch one Codex handoff wave and emit machine-readable JSONL records.
+# Watch one Orchestration wave and emit machine-readable JSONL records.
 
 set -euo pipefail
 

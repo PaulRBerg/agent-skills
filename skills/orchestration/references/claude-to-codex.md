@@ -1,7 +1,7 @@
-# Claude Code Host Adapter
+# Claude to Codex Adapter
 
-Load this adapter only when `SKILL.md` selects the Claude Code orchestration surface. Do not read or apply the Codex CLI
-adapter in the same handoff.
+Use this route only when Claude Code orchestrates and the user explicitly selects Codex workers or a GPT model. Default
+Claude workers use the native Claude adapter. Apply the shared contract in `SKILL.md` throughout this route.
 
 This adapter requires Git, `/bin/bash`, Python 3, and an authenticated Codex CLI with dangerous bypass support. Claude
 Code 2.1.98+ is recommended for live progress through the Monitor tool. Stop with a compatibility error when a required
@@ -9,7 +9,7 @@ runner prerequisite is unavailable.
 
 ## Research Mechanics
 
-For each research agent selected by the shared contract, resolve `../scripts/run-codex-handoff.sh` relative to this file
+For each research agent selected by the shared contract, resolve `../scripts/run-codex-agent.sh` relative to this file
 and use the implementation launch template with `--read-only`. Give every agent separate `<agent-id>.progress.jsonl`,
 `<agent-id>.result.json`, and `<agent-id>.stderr.log` artifacts. Start all selected agents as background Bash tasks
 (`run_in_background: true`) in the same turn. Then watch the wave through the implementation watcher and Monitor flow
@@ -39,7 +39,7 @@ or research-only response. Do not reconcile the working tree.
 
 ## Plan Manifest and Configuration
 
-Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
+Use this exact host-specific table inside the shared `## Orchestration` plan section:
 
 ```markdown
 | Agent | Wave | Depends on | Scope              | Model                                    | Effort                  | Timeout             | Implementation brief                                   | Completion evidence                 |
@@ -69,7 +69,7 @@ Keep the highest-tier agent's scope minimal and move deferrable validation to th
 
 ### Launch
 
-Resolve `../scripts/run-codex-handoff.sh` to an absolute path relative to this file. Never search for it in the target
+Resolve `../scripts/run-codex-agent.sh` to an absolute path relative to this file. Never search for it in the target
 repository. Each invocation is one Codex agent.
 
 Without `--read-only`, the runner deliberately disables Codex approvals and sandboxing. Agents can read, modify, or
@@ -100,7 +100,7 @@ background Bash task (`run_in_background: true`) with a description like
 `Codex A1/3: <scope> (<model>, <effort>, ≤<minutes>m)`:
 
 ```bash
-bash <skill-dir>/scripts/run-codex-handoff.sh \
+bash <skill-dir>/scripts/run-codex-agent.sh \
   --model <agent-model> \
   --effort <agent-effort> \
   --timeout-seconds <agent-minutes-times-60> \
@@ -172,7 +172,7 @@ quiet periods.
 
 ### Collect and Reconcile
 
-When a sentinel arrives, read the result artifact and the stderr artifact for the `codex-handoff: elapsed=<seconds>s`
+When a sentinel arrives, read the result artifact and the stderr artifact for the `orchestration: elapsed=<seconds>s`
 line or failure forensics. Do not read or print background-task output. Artifact-mode stdout is intentionally empty.
 Parse implementation results against `result.schema.json` before applying the shared reconciliation rules.
 
@@ -243,7 +243,7 @@ rows must expose those failures.
 
 ## Completion Report
 
-Render `### 🏁 Codex handoff [██████████] 100% (<settled>/<total> settled) — <completed|blocked>`. Include strategy,
+Render `### 🏁 Orchestration [██████████] 100% (<settled>/<total> settled) — <completed|blocked>`. Include strategy,
 agent count, and wave count, then one row per agent with result, requested model and effort, timeout budget versus
 actual elapsed, output tokens when available, and summary. For a resumed retry, report its sentinel's output-token total
 minus the prior run's total as that attempt's usage.

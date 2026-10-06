@@ -591,9 +591,9 @@ fn create_appends_a_validated_before_work_skill_to_the_command() {
     let repository = harness.repo("repo", true);
     let draft = harness.root.join("draft.md");
     fs::write(&draft, "# Delegated task\n").unwrap();
-    let skill = harness.root.join("skills/codex-handoff");
+    let skill = harness.root.join("skills/orchestration");
     fs::create_dir_all(&skill).unwrap();
-    fs::write(skill.join("SKILL.md"), "# Codex handoff\n").unwrap();
+    fs::write(skill.join("SKILL.md"), "# Orchestration\n").unwrap();
 
     let output = harness.command([
         "create",

@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: run-codex-handoff.sh --model MODEL --effort EFFORT --timeout-seconds SECONDS [--resume SESSION_ID] [--coord-identity CLIENT/SESSION_ID] [--read-only] [--progress-file PATH] [--result-file PATH]
+Usage: run-codex-agent.sh --model MODEL --effort EFFORT --timeout-seconds SECONDS [--resume SESSION_ID] [--coord-identity CLIENT/SESSION_ID] [--read-only] [--progress-file PATH] [--result-file PATH]
 
 Read a finalized implementation prompt from stdin and run one Codex
 implementation turn in the current Git worktree. Sessions persist; use
@@ -223,11 +223,11 @@ if [[ -n "$result_output_file" ]]; then
   fi
 fi
 
-prompt_file="$(mktemp "${TMPDIR:-/tmp}/codex-handoff.prompt.XXXXXX")"
-stdout_file="$(mktemp "${TMPDIR:-/tmp}/codex-handoff.stdout.XXXXXX")"
-stderr_file="$(mktemp "${TMPDIR:-/tmp}/codex-handoff.stderr.XXXXXX")"
-result_file="$(mktemp "${TMPDIR:-/tmp}/codex-handoff.result.XXXXXX")"
-timeout_marker="$(mktemp "${TMPDIR:-/tmp}/codex-handoff.timeout.XXXXXX")"
+prompt_file="$(mktemp "${TMPDIR:-/tmp}/orchestration.prompt.XXXXXX")"
+stdout_file="$(mktemp "${TMPDIR:-/tmp}/orchestration.stdout.XXXXXX")"
+stderr_file="$(mktemp "${TMPDIR:-/tmp}/orchestration.stderr.XXXXXX")"
+result_file="$(mktemp "${TMPDIR:-/tmp}/orchestration.result.XXXXXX")"
+timeout_marker="$(mktemp "${TMPDIR:-/tmp}/orchestration.timeout.XXXXXX")"
 rm -f "$timeout_marker"
 
 codex_pid=""
@@ -253,7 +253,7 @@ elapsed_now() {
 }
 
 report_elapsed() {
-  echo "codex-handoff: elapsed=$(elapsed_now)s" >&2
+  echo "orchestration: elapsed=$(elapsed_now)s" >&2
 }
 
 # Surface what Codex was doing when it died: final messages and failures from

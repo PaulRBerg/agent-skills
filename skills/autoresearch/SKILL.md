@@ -1,19 +1,19 @@
 ---
 argument-hint: <goal> [--max-runs N] [--max-runtime DURATION]
 compatibility:
-  Requires Plan mode to establish or materially change a session contract and a codex-handoff-compatible host for
+  Requires Plan mode to establish or materially change a session contract and a host supported by orchestration for
   implementation.
 name: autoresearch
 skill-dependencies:
-  - codex-handoff
+  - orchestration
 description:
   Use for autoresearch or "optimize X overnight/in a loop". Plan bounded, measurable experiment batches, then delegate
-  execution through codex-handoff.
+  execution through orchestration.
 ---
 
 # Autoresearch
 
-Use the parent for research decisions and Codex handoff workers for experiment execution. Measure consistently. Retain
+Use the parent for research decisions and orchestration workers for experiment execution. Measure consistently. Retain
 only verified improvements. Stop on explicit resource or convergence limits.
 
 ## Orchestration Contract
@@ -23,7 +23,7 @@ objective, primary metric or direction, benchmark or correctness commands, write
 regression, or convergence limits. If Plan mode is required but inactive, ask the user to switch and stop. An unchanged
 approved contract may resume and receive new hypothesis batches outside Plan mode.
 
-Always invoke `$codex-handoff` for implementation. Never fall back to direct parent implementation or another handoff
+Always invoke `$orchestration` for implementation. Never fall back to direct parent implementation or another handoff
 mechanism. Follow its host selection, plan manifest, team sizing, validation ownership, reconciliation, failure, and
 completion contracts.
 
@@ -33,7 +33,7 @@ plans. Keep the parent's execution work to orchestration, integrity checks, comp
 next batch.
 
 Implementation workers execute parent-supplied ordered hypothesis batches. For a sequential search, default to one
-worker. Pack multiple related hypotheses into one brief up to codex-handoff's sizing limit. Never assign one worker to
+worker. Pack multiple related hypotheses into one brief up to orchestration's sizing limit. Never assign one worker to
 each idea by default. Split only when hypotheses are independent, dependency waves require it, or one brief would exceed
 the size limit.
 
@@ -51,14 +51,14 @@ spend, and convergence after five consecutive valid runs without a new retained 
 `--max-runtime` values are hard limits.
 
 The Plan-mode response must include the resolved contract, an evidence-backed ordered initial hypothesis batch with its
-completion or early-stop criteria, and codex-handoff's required plan section and manifest. Adding, removing, or
+completion or early-stop criteria, and orchestration's required plan section and manifest. Adding, removing, or
 reordering hypotheses inside the approved contract is follow-on planning, not a material contract change.
 
 ## Delegated Execution
 
 Read `references/worker-loop.md` before constructing an implementation brief. Include its applicable instructions with
 the approved contract, ordered batch, exact paths and commands, current session and best-result state or first-batch
-status, and batch stopping criteria. Codex-handoff owns the remaining prompt and result fields.
+status, and batch stopping criteria. Orchestration owns the remaining prompt and result fields.
 
 The first implementation worker creates the isolation and session artifacts and records the unchanged baseline. Each
 worker leaves detailed measurements and logs in those artifacts and returns only the compact batch receipt required by
@@ -68,7 +68,7 @@ under the unchanged contract remain follow-on work within the approved outcome.
 
 ## Progress and Completion
 
-Use codex-handoff's host-native progress surface. Send parent-authored updates only from settled evidence at the
+Use orchestration's host-native progress surface. Send parent-authored updates only from settled evidence at the
 baseline, completed batch, material best change, blocker, or final stop. Do not relay per-run narration. Render the
 session module's exact bar, counts, metrics, budgets, and convergence facts, and name the next parent-selected batch
 without recording it as settled work.

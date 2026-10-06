@@ -6,7 +6,7 @@ compatibility:
 coordination: exempt
 name: task-handoff
 skill-dependencies:
-  - codex-handoff
+  - orchestration
 description:
   Create one decision-complete task handoff in its repository or on the Desktop for cross-repository work, return a
   command for a fresh interactive Codex session, and recommend Codex subagent delegation for complex tasks.
@@ -23,10 +23,10 @@ Turn one continuation task into one self-contained task handoff for a fresh agen
 implement, edit tracked files, commit, push, launch Codex, or change ignore configuration.
 
 Task-handoff writes one decision-complete file for a fresh, separate session. For a simple task, that isolated file is
-enough for direct execution in the receiving session. For a complex task, resolve `~/.agents/skills/codex-handoff` to
+enough for direct execution in the receiving session. For a complex task, resolve `~/.agents/skills/orchestration` to
 its expanded absolute directory, require a readable `SKILL.md` there, and embed that absolute skill path in the handoff.
 Direct the receiving session to load it from Plan mode and use the handoff as its task specification so Codex subagents
-can implement it. Do not rely on bare `$codex-handoff` discovery.
+can implement it. Do not rely on bare `$orchestration` discovery.
 
 Task-handoff still creates exactly one file and never launches orchestration itself. Use task-handoff when work
 continues later or elsewhere, and an in-session handoff skill when implementing an approved plan now.
@@ -107,10 +107,10 @@ questions. A handoff does not itself grant approval or override the receiving ho
 
 Add a `## Execution approach` section. For a simple task, direct the receiving session to execute this one isolated
 handoff without invoking an in-session handoff skill. For a complex task, expand and canonicalize
-`~/.agents/skills/codex-handoff`, verify that `<resolved-directory>/SKILL.md` is readable, and write that resolved
+`~/.agents/skills/orchestration`, verify that `<resolved-directory>/SKILL.md` is readable, and write that resolved
 absolute directory path into the execution approach. Explicitly direct the receiving session to enter Plan mode, load
 the skill from that path, and use this file as the decision-complete task specification. Do not name only
-`$codex-handoff`. Let codex-handoff choose the smallest effective subagent team instead of prescribing its manifest
+`$orchestration`. Let orchestration choose the smallest effective subagent team instead of prescribing its manifest
 here.
 
 For that complex task, retain the resolved directory for `--before-work-skill` when validating and publishing so the
@@ -144,7 +144,7 @@ ai-handoff create --check \
   --repo '<candidate-repository>' \
   [--repo '<additional-repository>' ...] \
   [--launch-repo '<first-repository-to-tackle>'] \
-  [--before-work-skill '<resolved-codex-handoff-directory>'] \
+  [--before-work-skill '<resolved-orchestration-directory>'] \
   --category '<task-category>' \
   --task '<concise-task>' \
   '<HANDOFF_NAME.md>'
@@ -152,7 +152,7 @@ ai-handoff create --check \
 
 This validates the repository roots, optional launch repository, category, filename, target placement, and required
 ignore rule without reading a draft or writing anything. For a complex handoff, include `--before-work-skill` with the
-resolved absolute `codex-handoff` directory. For a simple handoff, omit it. The option validates that the directory is
+resolved absolute `orchestration` directory. For a simple handoff, omit it. The option validates that the directory is
 absolute and contains a readable `SKILL.md`. The command prints tab-separated `target`, `launch_repo`, and `category`
 rows.
 
@@ -163,7 +163,7 @@ ai-handoff create \
   --repo '<candidate-repository>' \
   [--repo '<additional-repository>' ...] \
   [--launch-repo '<first-repository-to-tackle>'] \
-  [--before-work-skill '<resolved-codex-handoff-directory>'] \
+  [--before-work-skill '<resolved-orchestration-directory>'] \
   --category '<task-category>' \
   --task '<concise-task>' \
   --draft '<scratch-draft-path>' \
@@ -173,7 +173,7 @@ ai-handoff create \
 `ai-handoff` canonicalizes each repository to its physical Git toplevel and deduplicates them. The optional launch
 repository must be involved. With exactly one repository, it defaults to that repository. For a complex handoff, pass
 the same `--before-work-skill` value used during validation. This appends a final prompt sentence that directly names
-`<resolved-codex-handoff-directory>/SKILL.md` and requires loading it before any task work.
+`<resolved-orchestration-directory>/SKILL.md` and requires loading it before any task work.
 
 The CLI validates the draft, appends YAML frontmatter recording `category`, `created`, `launch_repo`, `repos`, `origin`,
 and `task`, plus the fixed category, execution-status, and cleanup contracts, then atomically publishes a new target

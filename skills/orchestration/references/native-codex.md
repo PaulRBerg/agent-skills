@@ -1,10 +1,11 @@
-# Codex CLI Host Adapter
+# Native Codex Adapter
 
-Load this adapter only when `SKILL.md` selects Codex's native orchestration tools. Do not read or apply the Claude Code
-adapter in the same handoff.
+Use this route when Codex orchestrates Codex workers. Use the shared contract in `SKILL.md` for planning, authority,
+prompts, reconciliation, and completion.
 
 Native multi-agent support is required. Stop with a compatibility blocker if the orchestration tools become unavailable.
-Never invoke `codex exec` or fall back to any nested CLI process.
+Never invoke `codex exec` or replace this native route with a nested Codex process. Explicit Claude workers use their
+own adapter.
 
 ## Native Agent Configuration
 
@@ -46,7 +47,7 @@ any reported edit as a contract violation.
 
 ## Plan Manifest
 
-Use this exact host-specific table inside the shared `## Codex Handoff` plan section:
+Use this exact host-specific table inside the shared `## Orchestration` plan section:
 
 ```markdown
 | Agent | Wave | Depends on | Scope              | Model                                    | Effort                  | Implementation brief                                   | Completion evidence                 |
@@ -121,8 +122,9 @@ second infrastructure failure blocks that agent and its dependents.
 
 ## Completion Report
 
-Rely on native thread rendering while work runs. At settlement, render `### 🏁 Codex handoff — <completed|blocked>` with
-the strategy, total agent count, and wave count. Include a compact per-agent table with model, effort, result, and
-summary, then `### 📦 Changed`, `### 🧪 Verification`, `### 🧹 Polish` when applicable, automatic cross-repository
-commit hashes when any, and `### Issues and caveats` with the shared contract's `Resolved` and `Open` groups. Omit empty
-issue groups and the whole section when empty. Write `none` for other applicable empty values.
+Rely on native thread rendering while work runs. At settlement, render `### ✅ Orchestration completed` or
+`### ⛔ Orchestration blocked` with the strategy, total agent count, and wave count. Include a compact per-agent table
+with model, effort, result, and summary, then `### 📦 Changed`, `### 🧪 Verification`, `### 🧹 Polish` when applicable,
+automatic cross-repository commit hashes when any, and `### Issues and caveats` with the shared contract's `Resolved`
+and `Open` groups. Omit empty issue groups and the whole section when empty. Write `none` for other applicable empty
+values.

@@ -228,7 +228,7 @@ fn rule_b_unconfirmed_without_active_delegate_row_stays_ready() {
 /// The guard sits only on `lifecycle_identity()`, which the eight
 /// lifecycle-claim commands use; every other `required_identity()` caller —
 /// including `touched` (explicitly permitted for delegates by the
-/// codex-handoff skill) and `inbox` (subagents legitimately read the
+/// orchestration skill) and `inbox` (subagents legitimately read the
 /// parent's inbox) — stays unguarded even under a rule (a) delegate
 /// environment, while `start` is still rejected in the same environment.
 #[test]

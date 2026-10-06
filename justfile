@@ -18,8 +18,8 @@ evm_atlas_generator_test := "scripts/generate-evm-atlas.test.ts"
 debank_collect_test := "tests/evm-atlas/debank-collect.test.ts"
 publish_skills_script := "scripts/publish-skills.ts"
 publish_skills_test := "scripts/publish-skills.test.ts"
-codex_handoff_runner_test := "tests/codex-handoff/test-run-codex-handoff.sh"
-codex_handoff_wave_test := "tests/codex-handoff/test-watch-codex-wave.py"
+orchestration_runner_test := "tests/orchestration/test-run-codex-agent.sh"
+orchestration_wave_test := "tests/orchestration/test-watch-codex-wave.py"
 
 # ---------------------------------------------------------------------------- #
 #                                 ENTRYPOINTS                                  #
@@ -105,11 +105,11 @@ alias pw := prettier-write
 [group("checks")]
 @test: python-test shell-test bats-test publish-skills-test evm-atlas-test typescript-check evm-atlas-check
 
-# Exercise the Codex handoff runner and wave watcher
+# Exercise the orchestration Codex runner and wave watcher
 [group("checks")]
-@codex-handoff-test:
-    bash {{ codex_handoff_runner_test }}
-    uv run python {{ codex_handoff_wave_test }}
+@orchestration-test:
+    bash {{ orchestration_runner_test }}
+    uv run python {{ orchestration_wave_test }}
 
 # Regenerate evm-atlas references from crypto-registry's canonical chain JSON + atlas overlays
 [group("checks")]

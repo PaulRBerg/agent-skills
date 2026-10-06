@@ -3,11 +3,11 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-script_dir="$repo_root/skills/codex-handoff/scripts"
-runner="$script_dir/run-codex-handoff.sh"
+script_dir="$repo_root/skills/orchestration/scripts"
+runner="$script_dir/run-codex-agent.sh"
 schema="$script_dir/../references/result.schema.json"
 research_schema="$script_dir/../references/research-result.schema.json"
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/codex-handoff-test.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/orchestration-test.XXXXXX")"
 fake_bin="$tmp_dir/bin"
 repo="$tmp_dir/repo with spaces"
 repo_root=""
@@ -251,7 +251,7 @@ rg -Fx --quiet -- '--dangerously-bypass-approvals-and-sandbox' "$args_file" &&
 ) >"$stdout_file" 2>"$stderr_file"
 [[ ! -s "$stdout_file" ]] || fail "artifact mode must keep stdout empty"
 [[ "$(cat "$result_artifact")" == "$expected_result" ]] || fail "artifact mode wrote an unexpected result"
-assert_file_contains 'codex-handoff: elapsed=' "$stderr_file"
+assert_file_contains 'orchestration: elapsed=' "$stderr_file"
 
 bypass_line="$(grep -nFx -- '--dangerously-bypass-approvals-and-sandbox' "$args_file" | cut -d: -f1)"
 exec_line="$(grep -nFx -- 'exec' "$args_file" | cut -d: -f1)"
@@ -338,7 +338,7 @@ success_progress="$tmp_dir/success.progress.jsonl"
 assert_arg --json
 assert_file_contains '"type":"thread.started"' "$success_progress"
 assert_file_contains '"type":"turn.completed"' "$success_progress"
-assert_file_contains 'codex-handoff: elapsed=' "$stderr_file"
+assert_file_contains 'orchestration: elapsed=' "$stderr_file"
 sentinel_line="$(grep '"type":"handoff.completed"' "$success_progress")"
 # The last turn.completed value wins: usage totals are thread-cumulative.
 case "$sentinel_line" in
@@ -358,7 +358,7 @@ noresult_progress="$tmp_dir/noresult.progress.jsonl"
     "$runner" --model gpt-6.1-sol --effort high --timeout-seconds 5 --progress-file "$error_progress"
   assert_file_contains '--- Codex last activity' "$stderr_file"
   assert_file_contains 'implementation done' "$stderr_file"
-  assert_file_contains 'codex-handoff: elapsed=' "$stderr_file"
+  assert_file_contains 'orchestration: elapsed=' "$stderr_file"
   grep -Fq -- '--- Codex stdout' "$stderr_file" && fail "progress mode should not tail codex stdout"
   expect_failure 124 'timed out after 1s' env PATH="$fake_path" FAKE_SLEEP=3 \
     "$runner" --model gpt-6.1-sol --effort high --timeout-seconds 1 --progress-file "$timeout_progress"
@@ -410,4 +410,4 @@ assert_file_contains '"type":"handoff.failed","reason":"cancelled"' "$cancel_pro
 sentinel_count="$(grep -c '"type":"handoff\.' "$cancel_progress")"
 [[ "$sentinel_count" == "1" ]] || fail "expected exactly one sentinel after cancel, got $sentinel_count"
 
-echo "codex-handoff runner tests passed"
+echo "orchestration runner tests passed"

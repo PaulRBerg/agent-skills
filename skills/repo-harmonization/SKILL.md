@@ -5,8 +5,8 @@ metadata:
   install-targets: claude-code codex
 name: repo-harmonization
 skill-dependencies:
-  - codex-handoff
   - commit
+  - orchestration
 description:
   Audit multiple interdependent repositories for alignment, then plan and apply surgical fixes for drift and
   duplication.
@@ -141,7 +141,7 @@ surgically implemented fixes.
 - Specify per-repository verification, commit sequencing, publish sequencing, and any dependency between repositories.
 - Identify the point at which a downstream repository can safely consume an upstream generated or installed artifact.
 - In Claude Code, prefer plan mode.
-- When `$codex-handoff` is available, delegate implementation through it. Otherwise, use host subagents. If those are
+- When `$orchestration` is available, delegate implementation through it. Otherwise, use host subagents. If those are
   also unavailable, implement directly.
 - Use disjoint per-repository write scopes for delegated work in every implementation shape.
 - Reserve aggregate cross-repository validation for one owner so it runs once after dependent edits settle.

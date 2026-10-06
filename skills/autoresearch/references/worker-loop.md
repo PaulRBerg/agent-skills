@@ -1,6 +1,6 @@
 # Autoresearch Worker Loop
 
-When the parent constructs an implementation batch through codex-handoff, it reads this reference and includes the
+When the parent constructs an implementation batch through orchestration, it reads this reference and includes the
 applicable instructions in the worker brief. Workers execute the approved hypotheses. They do not choose the research
 direction.
 
@@ -84,7 +84,7 @@ failures.
 ## Batch Result
 
 Run the session module's JSON status after the last settled attempt. Preserve full commands, measurements, diagnostics,
-and lessons in the session artifacts. Return codex-handoff's required result fields plus a compact autoresearch receipt:
+and lessons in the session artifacts. Return orchestration's required result fields plus a compact autoresearch receipt:
 
 - each attempted hypothesis in order with its `keep`, `discard`, `crash`, or `checks_failed` status and metric when
   available.
