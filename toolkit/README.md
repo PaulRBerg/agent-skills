@@ -11,6 +11,6 @@ for shared-working-tree coordination, notifications, commits, skill catalogs, an
 - [Coordination dashboard](apps/coord-dashboard/): local live view of ai-coord state, running at
   [https://coord.localhost](https://coord.localhost).
 - [AI Handoffs](apps/handoffs/): local, read-only task-handoff viewer, running at
-  [http://localhost:7777](http://localhost:7777).
+  [https://handoffs.localhost](https://handoffs.localhost).
 
 For contribution guidance and validation, see [AGENTS.md](AGENTS.md).

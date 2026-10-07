@@ -15,6 +15,8 @@ Local-only, read-only viewer for agent task handoffs.
 
 ## Workflow
 
+- Open the viewer at `https://handoffs.localhost`. Circadian's Caddy configuration proxies this URL to `127.0.0.1:7777`
+  and rewrites the upstream Host header to preserve the loopback guard.
 - Use Bun 1.4.2 and the exact dependency pins in `package.json`.
 - Prefer the `just` recipes for development, targeted tests, type-checking, builds, and cold-start serving.
 - Keep server behavior behind testable parser, scanner, freshness, and request-handler seams.
