@@ -45,7 +45,7 @@ function FindingDetails({ finding, now }: { finding: Finding; now: number }) {
           </span>
           <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs/5 text-muted">
             <span
-              className="border border-line bg-surface-muted px-2 py-0.5 font-medium text-ink-secondary data-[state=fixed]:border-active-line data-[state=fixed]:bg-active-subtle data-[state=fixed]:text-active-ink data-[state=handed-off]:border-draft-line data-[state=handed-off]:bg-draft-subtle data-[state=handed-off]:text-draft-ink data-[state=pending]:border-warning data-[state=pending]:bg-warning-subtle data-[state=pending]:text-warning-ink"
+              className="rounded-md border border-line bg-surface-muted px-2 py-0.5 font-medium text-ink-secondary data-[state=fixed]:border-active-line data-[state=fixed]:bg-active-subtle data-[state=fixed]:text-active-ink data-[state=handed-off]:border-draft-line data-[state=handed-off]:bg-draft-subtle data-[state=handed-off]:text-draft-ink data-[state=pending]:border-warning data-[state=pending]:bg-warning-subtle data-[state=pending]:text-warning-ink"
               data-state={finding.state}
             >
               {stateLabels[finding.state]}
@@ -119,7 +119,7 @@ function FindingGroup({ group, now }: { group: FindingGroupModel; now: number })
   return (
     <motion.section
       animate={{ opacity: 1, y: 0 }}
-      className="min-w-0 border border-line bg-surface"
+      className="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface shadow-panel"
       data-motion-item
       exit={{ opacity: 0, y: -6 }}
       initial={{ opacity: 0, y: 6 }}
@@ -131,7 +131,7 @@ function FindingGroup({ group, now }: { group: FindingGroupModel; now: number })
       }}
     >
       <div className="flex flex-col gap-2 border-b border-line bg-surface-muted px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 sm:px-5">
-        <h3 className="min-w-0 font-mono text-xs/5 font-semibold break-all text-ink">
+        <h3 className="min-w-0 font-mono text-xs/5 font-medium break-all text-ink-secondary">
           {displayPath(group.repoRoot)}
         </h3>
         <p className="shrink-0 text-xs/5 text-muted tabular-nums">
@@ -180,7 +180,7 @@ export function FindingsPanel({ findings, now }: FindingsPanelProps) {
           {filters.map(({ id, label }) => (
             <button
               aria-pressed={filter === id}
-              className="flex min-h-9 items-center gap-2 border border-transparent px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:border-accent aria-pressed:bg-accent-wash aria-pressed:text-ink motion-reduce:transition-none"
+              className="flex min-h-9 items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:border-accent aria-pressed:bg-accent-wash aria-pressed:text-ink motion-reduce:transition-none"
               key={id}
               onClick={() => setFilter(id)}
               type="button"
@@ -202,7 +202,7 @@ export function FindingsPanel({ findings, now }: FindingsPanelProps) {
         {groups.length} {groups.length === 1 ? "repository" : "repositories"}
       </p>
       {groups.length === 0 ? (
-        <div className="mt-3 border-y border-line bg-surface px-4 py-12 text-center">
+        <div className="mt-3 rounded-2xl border border-line bg-surface px-4 py-12 text-center">
           <p className="text-sm font-medium">
             {counts.total === 0 ? emptyMessages.all : emptyMessages[filter]}
           </p>

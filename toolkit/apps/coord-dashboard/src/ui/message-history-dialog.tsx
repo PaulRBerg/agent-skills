@@ -11,7 +11,7 @@ import type { Message } from "@/lib/types.js";
 import { MessageRow } from "@/ui/message-row.js";
 
 const statusButton = tv({
-  base: "h-8 shrink-0 px-2.5 font-mono text-[11px]/4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
+  base: "h-8 shrink-0 rounded-md px-2.5 text-[11px]/4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
   variants: {
     selected: {
       true: "bg-accent text-surface",
@@ -71,7 +71,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
         }
       }}
     >
-      <Dialog.Trigger className="group flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-medium text-accent transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+      <Dialog.Trigger className="group flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-xs font-medium text-accent transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
         <span>View all {messages.length} messages</span>
         <ChevronRight
           aria-hidden="true"
@@ -82,7 +82,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-(--z-modal) min-h-dvh bg-black/35 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-[-webkit-touch-callout:none]:absolute motion-reduce:transition-none dark:bg-black/60" />
         <Dialog.Viewport className="fixed inset-0 z-(--z-modal) flex min-h-dvh items-end justify-center sm:items-center sm:p-4">
-          <Dialog.Popup className="flex h-dvh w-full flex-col border-line-strong bg-surface text-ink shadow-2xl transition-[transform,opacity] duration-200 ease-out data-ending-style:translate-y-2 data-ending-style:opacity-0 data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transform-none motion-reduce:transition-none sm:h-[min(48rem,calc(100dvh-2rem))] sm:max-w-5xl sm:border sm:data-ending-style:translate-y-0 sm:data-ending-style:scale-[0.985] sm:data-starting-style:translate-y-0 sm:data-starting-style:scale-[0.985]">
+          <Dialog.Popup className="flex h-dvh w-full flex-col border-line-strong bg-surface text-ink shadow-2xl transition-[transform,opacity] duration-200 ease-out data-ending-style:translate-y-2 data-ending-style:opacity-0 data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transform-none motion-reduce:transition-none sm:h-[min(48rem,calc(100dvh-2rem))] sm:max-w-5xl sm:overflow-hidden sm:rounded-2xl sm:border sm:data-ending-style:translate-y-0 sm:data-ending-style:scale-[0.985] sm:data-starting-style:translate-y-0 sm:data-starting-style:scale-[0.985]">
             <div className="shrink-0 border-b border-line-strong bg-surface">
               <div className="flex items-start justify-between gap-4 p-4 sm:px-5">
                 <div className="min-w-0">
@@ -93,7 +93,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
                 </div>
                 <Dialog.Close
                   aria-label="Close message history"
-                  className="inline-flex size-9 shrink-0 items-center justify-center border border-line text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-line text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   title="Close"
                 >
                   <X aria-hidden="true" className="size-4" />
@@ -108,7 +108,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
                     className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted"
                   />
                   <input
-                    className="h-9 w-full border border-line bg-canvas pr-3 pl-9 text-xs text-ink outline-hidden placeholder:text-muted focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
+                    className="h-9 w-full rounded-lg border border-line bg-canvas pr-3 pl-9 text-xs text-ink outline-hidden placeholder:text-muted focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
                     onChange={(event) => {
                       setQuery(event.target.value);
                       showPage(1);
@@ -121,7 +121,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
 
                 <div
                   aria-label="Message status"
-                  className="flex min-w-0 overflow-x-auto border border-line p-0.5"
+                  className="flex min-w-0 overflow-x-auto rounded-lg border border-line p-0.5"
                   role="group"
                 >
                   {statusFilters.map((filter) => {
@@ -147,7 +147,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
                   <ListFilter aria-hidden="true" className="size-3.5 shrink-0 text-muted" />
                   <span className="sr-only">Repository</span>
                   <select
-                    className="h-9 min-w-0 flex-1 border border-line bg-canvas px-2 font-mono text-[11px]/4 text-ink outline-hidden focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
+                    className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-canvas px-2 font-mono text-[11px]/4 text-ink outline-hidden focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
                     onChange={(event) => {
                       setRepoRoot(event.target.value || null);
                       showPage(1);
@@ -200,7 +200,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  className="inline-flex h-8 items-center gap-1 border border-line bg-surface px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-surface px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={messagePage.page === 1}
                   onClick={() => showPage(messagePage.page - 1)}
                   type="button"
@@ -212,7 +212,7 @@ export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProp
                   {messagePage.page}/{messagePage.pageCount}
                 </span>
                 <button
-                  className="inline-flex h-8 items-center gap-1 border border-line bg-surface px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-surface px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={messagePage.page === messagePage.pageCount}
                   onClick={() => showPage(messagePage.page + 1)}
                   type="button"

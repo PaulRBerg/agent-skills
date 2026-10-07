@@ -2,7 +2,7 @@ import { RadioTower, SquareTerminal } from "lucide-react";
 import { tv } from "tailwind-variants";
 
 const errorPanel = tv({
-  base: "border-l-2 border-danger bg-danger-subtle px-4",
+  base: "rounded-xl border border-danger/30 bg-danger-subtle px-4",
   variants: { compact: { true: "py-3", false: "py-8" } },
 });
 const errorContent = tv({
@@ -12,8 +12,10 @@ const errorContent = tv({
 
 export function EmptySessions() {
   return (
-    <div className="border-y border-line-strong bg-surface px-4 py-12 text-center">
-      <RadioTower aria-hidden="true" className="mx-auto size-6 text-muted" strokeWidth={1.5} />
+    <div className="rounded-2xl border border-line bg-surface px-4 py-12 text-center shadow-panel">
+      <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-accent-wash text-accent">
+        <RadioTower aria-hidden="true" className="size-6" strokeWidth={1.5} />
+      </span>
       <h2 className="mt-3 text-sm font-semibold">No live agent sessions</h2>
       <p className="mx-auto mt-1 max-w-md text-xs/5 text-muted">
         New Codex and Claude Code sessions will appear here after their first coordination
@@ -39,7 +41,7 @@ export function ApiErrorState({ detail, compact = false }: { detail: string; com
             <code className="font-mono text-danger">ai-coord serve</code>, then leave this page
             open.
           </p>
-          <p className="mt-2 font-mono text-[10px]/4 text-muted">{detail}</p>
+          <p className="mt-2 font-mono text-[10px]/4 wrap-anywhere text-muted">{detail}</p>
         </div>
       </div>
     </div>

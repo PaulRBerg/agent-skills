@@ -8,11 +8,11 @@ import type { Message } from "@/lib/types.js";
 import { AnimatedValue } from "@/ui/animated-value.js";
 
 const messageDot = tv({
-  base: "absolute top-4 -left-1 size-2 rounded-full transition-colors",
+  base: "absolute top-4 -left-0.5 size-1.5 rounded-full transition-colors",
   variants: { acknowledged: { true: "bg-muted", false: "bg-accent" } },
 });
 const messageText = tv({
-  base: "mt-1.5 text-xs/5 text-ink-secondary",
+  base: "mt-2 text-[13px]/5 wrap-anywhere text-ink-secondary",
   variants: { compact: { true: "line-clamp-3", false: "wrap-break-word whitespace-pre-wrap" } },
 });
 
@@ -39,7 +39,7 @@ export function MessageRow({
   return (
     <motion.li
       animate={{ opacity: 1, y: 0 }}
-      className="relative border-t border-line-muted p-3 first:border-t-0"
+      className="relative border-t border-line-muted py-3 pl-3 first:border-t-0"
       data-motion-item
       exit={{ opacity: 0, y: -6 }}
       initial={{ opacity: 0, y: 8 }}
@@ -51,7 +51,7 @@ export function MessageRow({
       }}
     >
       <span className={messageDot({ acknowledged })} aria-hidden="true" />
-      <div className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px]/4">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]/4">
         <AnimatedValue className="min-w-0" value={senderLabel}>
           <span className="block truncate font-semibold">{senderLabel}</span>
         </AnimatedValue>
@@ -71,7 +71,7 @@ export function MessageRow({
       <p className={messageText({ compact })} title={compact ? message.text : undefined}>
         {message.text}
       </p>
-      <div className="mt-2 flex items-center justify-between gap-3 font-mono text-[10px]/4 text-muted">
+      <div className="mt-2 flex items-center justify-between gap-3 text-[10px]/4 text-muted">
         <span>{formatRelativeTime(message.created_at, now)}</span>
         <AnimatedValue value={acknowledged}>
           <span className="inline-flex items-center gap-1">

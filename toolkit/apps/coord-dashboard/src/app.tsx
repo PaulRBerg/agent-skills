@@ -3,6 +3,7 @@ import { ClipboardCheck, FileText, PanelsTopLeft } from "lucide-react";
 import { AnimatePresence, LayoutGroup, MotionConfig } from "motion/react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { tv } from "tailwind-variants";
 
 import { subscribeToSnapshots } from "@/lib/api.js";
 import type { ConnectionState } from "@/lib/api.js";
@@ -23,6 +24,9 @@ const HandoffsPanel = lazy(async () => {
 
 const tabs = ["coordination", "findings", "handoffs"] as const;
 type Tab = (typeof tabs)[number];
+const navigationTab = tv({
+  base: "flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-2 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-line data-active:bg-surface data-active:text-ink data-active:shadow-sm motion-reduce:transition-none sm:gap-2 sm:px-4",
+});
 
 function tabFromPath(pathname: string): Tab {
   const segment = pathname.split("/")[1];
@@ -76,7 +80,7 @@ export function App() {
             snapshot={snapshot}
           />
 
-          <main className="px-3 py-5 sm:px-6 lg:px-8">
+          <main className="mx-auto max-w-[1520px] px-4 py-6 sm:px-6 lg:px-8">
             {connection === "disconnected" && error ? (
               <div className="pb-5">
                 <ApiErrorState compact={snapshot !== null} detail={error.message} />
@@ -90,39 +94,30 @@ export function App() {
               <Tabs.List
                 activateOnFocus
                 aria-label="Dashboard views"
-                className="mb-6 flex gap-1 overflow-x-auto border-b border-line-strong"
+                className="mb-7 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-surface-muted p-1"
               >
-                <Tabs.Tab
-                  className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
-                  value="coordination"
-                >
-                  <PanelsTopLeft aria-hidden="true" className="size-4" />
+                <Tabs.Tab className={navigationTab()} value="coordination">
+                  <PanelsTopLeft aria-hidden="true" className="hidden size-4 sm:block" />
                   Coordination
                 </Tabs.Tab>
-                <Tabs.Tab
-                  className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
-                  value="findings"
-                >
-                  <ClipboardCheck aria-hidden="true" className="size-4" />
+                <Tabs.Tab className={navigationTab()} value="findings">
+                  <ClipboardCheck aria-hidden="true" className="hidden size-4 sm:block" />
                   Findings
                   <span
                     aria-label={`${unresolvedCount} unresolved findings`}
-                    className="min-w-5 border border-line bg-surface px-1.5 py-0.5 text-center font-mono text-[11px]/4 tabular-nums"
+                    className="min-w-5 rounded-md bg-accent-wash px-1.5 py-0.5 text-center text-[11px]/4 text-accent tabular-nums"
                     title={`${unresolvedCount} unresolved findings (pending or handed off)`}
                   >
                     {unresolvedCount}
                   </span>
                 </Tabs.Tab>
-                <Tabs.Tab
-                  className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
-                  value="handoffs"
-                >
-                  <FileText aria-hidden="true" className="size-4" />
+                <Tabs.Tab className={navigationTab()} value="handoffs">
+                  <FileText aria-hidden="true" className="hidden size-4 sm:block" />
                   Handoffs
                 </Tabs.Tab>
               </Tabs.List>
               {snapshot === null && connection !== "disconnected" && activeTab !== "handoffs" ? (
-                <div className="border-y border-line-strong bg-surface px-4 py-12 text-center text-sm text-muted">
+                <div className="rounded-2xl border border-line bg-surface px-4 py-12 text-center text-sm text-muted">
                   Loading coordination snapshot…
                 </div>
               ) : null}
@@ -133,7 +128,7 @@ export function App() {
                     value="coordination"
                     className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
                   >
-                    <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
+                    <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
                       <div className="min-w-0">
                         {snapshot.sessions.length === 0 || lanes.length === 0 ? (
                           <EmptySessions />
@@ -149,7 +144,7 @@ export function App() {
                         ) : null}
                       </div>
 
-                      <aside className="flex min-w-0 flex-col gap-8">
+                      <aside className="flex min-w-0 flex-col gap-6 xl:sticky xl:top-6">
                         <MessagesFeed messages={snapshot.messages} now={now} />
                       </aside>
                     </div>

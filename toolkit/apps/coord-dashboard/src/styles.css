@@ -2,18 +2,18 @@
 
 :root {
   color-scheme: light dark;
-  --color-canvas-base: oklch(0.965 0.004 95);
-  --color-surface-base: oklch(0.99 0.002 95);
-  --color-surface-muted-base: oklch(0.945 0.006 95);
-  --color-ink-base: oklch(0.22 0.012 255);
-  --color-ink-secondary-base: oklch(0.38 0.012 255);
-  --color-muted-base: oklch(0.52 0.01 255);
-  --color-line-base: oklch(0.82 0.008 255);
-  --color-line-muted-base: oklch(0.89 0.006 255);
-  --color-line-strong-base: oklch(0.68 0.012 255);
-  --color-accent-base: oklch(0.48 0.12 230);
-  --color-accent-wash-base: oklch(0.91 0.035 230);
-  --color-positive-base: oklch(0.55 0.13 155);
+  --color-canvas-base: oklch(0.965 0.009 250);
+  --color-surface-base: oklch(0.995 0.002 250);
+  --color-surface-muted-base: oklch(0.972 0.008 250);
+  --color-ink-base: oklch(0.25 0.035 255);
+  --color-ink-secondary-base: oklch(0.4 0.028 255);
+  --color-muted-base: oklch(0.5 0.025 255);
+  --color-line-base: oklch(0.875 0.017 250);
+  --color-line-muted-base: oklch(0.925 0.012 250);
+  --color-line-strong-base: oklch(0.79 0.025 250);
+  --color-accent-base: oklch(0.43 0.085 190);
+  --color-accent-wash-base: oklch(0.94 0.026 185);
+  --color-positive-base: oklch(0.5 0.11 175);
   --color-warning-base: oklch(0.65 0.13 75);
   --color-warning-ink-base: oklch(0.38 0.09 65);
   --color-warning-subtle-base: oklch(0.95 0.035 85);
@@ -25,9 +25,9 @@
   --color-claude-base: oklch(0.5 0.14 48);
   --color-claude-line-base: oklch(0.76 0.09 55);
   --color-claude-subtle-base: oklch(0.95 0.03 60);
-  --color-active-ink-base: oklch(0.4 0.12 155);
-  --color-active-line-base: oklch(0.72 0.09 155);
-  --color-active-subtle-base: oklch(0.94 0.025 155);
+  --color-active-ink-base: oklch(0.42 0.09 180);
+  --color-active-line-base: oklch(0.82 0.055 180);
+  --color-active-subtle-base: oklch(0.955 0.025 180);
   --color-queued-ink-base: oklch(0.42 0.11 75);
   --color-queued-line-base: oklch(0.75 0.09 80);
   --color-queued-subtle-base: oklch(0.95 0.03 85);
@@ -38,22 +38,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-canvas-base: oklch(0.16 0.008 255);
-    --color-surface-base: oklch(0.2 0.009 255);
-    --color-surface-muted-base: oklch(0.235 0.011 255);
-    --color-ink-base: oklch(0.91 0.008 255);
-    --color-ink-secondary-base: oklch(0.78 0.01 255);
-    --color-muted-base: oklch(0.64 0.012 255);
-    --color-line-base: oklch(0.36 0.012 255);
-    --color-line-muted-base: oklch(0.29 0.01 255);
-    --color-line-strong-base: oklch(0.48 0.014 255);
-    --color-accent-base: oklch(0.72 0.12 225);
-    --color-accent-wash-base: oklch(0.27 0.035 225);
-    --color-positive-base: oklch(0.7 0.14 155);
+    --color-canvas-base: oklch(0.185 0.033 258);
+    --color-surface-base: oklch(0.225 0.034 258);
+    --color-surface-muted-base: oklch(0.25 0.035 258);
+    --color-ink-base: oklch(0.94 0.012 250);
+    --color-ink-secondary-base: oklch(0.8 0.025 250);
+    --color-muted-base: oklch(0.68 0.03 250);
+    --color-line-base: oklch(0.34 0.035 255);
+    --color-line-muted-base: oklch(0.29 0.033 255);
+    --color-line-strong-base: oklch(0.44 0.04 255);
+    --color-accent-base: oklch(0.8 0.115 180);
+    --color-accent-wash-base: oklch(0.3 0.05 190);
+    --color-positive-base: oklch(0.78 0.13 175);
     --color-warning-base: oklch(0.76 0.13 80);
     --color-warning-ink-base: oklch(0.86 0.1 82);
     --color-warning-subtle-base: oklch(0.27 0.04 75);
-    --color-danger-base: oklch(0.72 0.16 25);
+    --color-danger-base: oklch(0.77 0.14 25);
     --color-danger-subtle-base: oklch(0.27 0.04 25);
     --color-codex-base: oklch(0.74 0.11 225);
     --color-codex-line-base: oklch(0.48 0.08 225);
@@ -61,9 +61,9 @@
     --color-claude-base: oklch(0.75 0.13 55);
     --color-claude-line-base: oklch(0.5 0.09 55);
     --color-claude-subtle-base: oklch(0.28 0.045 55);
-    --color-active-ink-base: oklch(0.76 0.12 155);
-    --color-active-line-base: oklch(0.46 0.08 155);
-    --color-active-subtle-base: oklch(0.27 0.035 155);
+    --color-active-ink-base: oklch(0.81 0.1 180);
+    --color-active-line-base: oklch(0.41 0.065 180);
+    --color-active-subtle-base: oklch(0.28 0.043 180);
     --color-queued-ink-base: oklch(0.8 0.12 80);
     --color-queued-line-base: oklch(0.5 0.08 80);
     --color-queued-subtle-base: oklch(0.28 0.04 80);
@@ -110,6 +110,7 @@
   --font-mono:
     ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --z-modal: 50;
+  --shadow-panel: 0 3px 16px -8px oklch(0.1 0.03 255 / 0.18), 0 1px 0 oklch(1 0 0 / 0.025) inset;
 }
 
 html {

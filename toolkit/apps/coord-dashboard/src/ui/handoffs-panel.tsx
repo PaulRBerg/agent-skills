@@ -179,7 +179,7 @@ function HandoffArticle({ handoff }: { handoff: HandoffRecord }) {
 
 function StatusMessage({ children, title }: { children: ReactNode; title: string }) {
   return (
-    <div className="border-y border-line-strong bg-surface px-4 py-12 text-center">
+    <div className="rounded-2xl border border-line bg-surface px-4 py-12 text-center">
       <FileText aria-hidden="true" className="mx-auto size-6 text-muted" strokeWidth={1.5} />
       <h3 className="mt-3 text-sm font-semibold">{title}</h3>
       <div className="mx-auto mt-1 max-w-md text-xs/5 text-muted">{children}</div>
@@ -252,7 +252,7 @@ export function HandoffsPanel() {
             {filters.map(({ id, label }) => (
               <button
                 aria-pressed={activeFilter === id}
-                className="flex min-h-9 items-center gap-2 border border-transparent px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:border-accent aria-pressed:bg-accent-wash aria-pressed:text-ink motion-reduce:transition-none"
+                className="flex min-h-9 items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:border-accent aria-pressed:bg-accent-wash aria-pressed:text-ink motion-reduce:transition-none"
                 key={id}
                 onClick={() => setFilter(id)}
                 type="button"
@@ -264,7 +264,7 @@ export function HandoffsPanel() {
           </div>
           <button
             aria-label="Rescan handoffs"
-            className="flex size-9 items-center justify-center text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+            className="flex size-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
             onClick={() => setReloadSequence((sequence) => sequence + 1)}
             title="Rescan handoffs"
             type="button"
@@ -299,12 +299,12 @@ export function HandoffsPanel() {
           <div className="grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
             <nav
               aria-label="Handoff index"
-              className="max-h-80 overflow-y-auto overscroll-contain border border-line bg-surface lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)]"
+              className="max-h-80 overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface shadow-panel lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)]"
             >
               <HandoffIndex groups={groups} onSelect={selectHandoff} selectedPath={selectedPath} />
             </nav>
             <div
-              className="min-w-0 scroll-mt-4 border border-line bg-surface p-4 sm:p-8"
+              className="min-w-0 scroll-mt-4 rounded-2xl border border-line bg-surface p-5 shadow-panel sm:p-8"
               id="handoff-reader"
             >
               {selected ? (

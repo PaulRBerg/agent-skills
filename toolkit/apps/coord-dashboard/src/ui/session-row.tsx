@@ -15,12 +15,24 @@ import { AnimatedValue } from "@/ui/animated-value.js";
 import { WorkChips } from "@/ui/work-chips.js";
 
 const clientBadge = tv({
-  base: "inline-flex border px-1.5 py-0.5 font-mono text-[11px]/4 font-semibold tracking-wide uppercase",
+  base: "inline-flex shrink-0 rounded-md border px-1.5 py-0.5 text-[10px]/3 font-semibold tracking-wide uppercase",
   variants: {
     client: {
       codex: "border-codex-line bg-codex-subtle text-codex",
       claude: "border-claude-line bg-claude-subtle text-claude",
       other: "border-line bg-surface-muted text-muted",
+    },
+  },
+});
+const sessionState = tv({
+  base: "inline-flex w-fit items-center rounded-md px-2 py-1 text-[11px]/4 font-medium",
+  variants: {
+    state: {
+      working: "bg-active-subtle text-active-ink",
+      in_flight: "bg-active-subtle text-active-ink",
+      waiting: "bg-queued-subtle text-queued-ink",
+      idle: "bg-surface-muted text-muted",
+      unknown: "bg-surface-muted text-muted",
     },
   },
 });
@@ -52,7 +64,7 @@ function DelegateRow({ delegate, now }: { delegate: Delegate; now: number }) {
   return (
     <motion.div
       animate={{ opacity: 1, x: 0 }}
-      className="grid gap-2 border-t border-line-muted py-2 pl-8 sm:grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] sm:items-center sm:gap-4"
+      className="grid gap-2 border-t border-line-muted py-2.5 pl-4 md:grid-cols-[minmax(0,1.1fr)_7rem_minmax(0,1.6fr)] md:items-center md:gap-4"
       data-motion-item
       exit={{ opacity: 0, x: -6 }}
       initial={{ opacity: 0, x: -6 }}
@@ -70,7 +82,7 @@ function DelegateRow({ delegate, now }: { delegate: Delegate; now: number }) {
           {delegate.agent_id}
         </span>
       </div>
-      <AnimatedValue className="font-mono text-xs text-muted" value={delegate.state}>
+      <AnimatedValue className="text-xs text-muted" value={delegate.state}>
         {delegate.state}
       </AnimatedValue>
       <span className="text-xs text-muted">
@@ -112,53 +124,56 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
         layout: { duration: MOTION_DURATION.layout, ease: MOTION_EASE },
       }}
     >
-      <div className="grid gap-3 py-3 sm:grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] sm:items-center sm:gap-4">
+      <div className="grid gap-3 py-4 md:grid-cols-[minmax(0,1.1fr)_7rem_minmax(0,1.6fr)] md:items-start md:gap-4">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <LivenessDot lastSeen={session.last_seen} now={now} />
+            <AnimatedValue className="min-w-0 flex-1 text-[13px]/5 font-semibold" value={label}>
+              <span className="block wrap-anywhere" title={label}>
+                {label}
+              </span>
+            </AnimatedValue>
             <span className={clientBadge({ client })}>{session.client}</span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-4">
             {session.permission_mode === "plan" ? (
-              <span className="inline-flex border border-warning bg-warning-subtle px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold tracking-wide text-warning-ink uppercase">
+              <span className="inline-flex rounded-md border border-warning/40 bg-warning-subtle px-1.5 py-0.5 text-[10px]/3 font-semibold text-warning-ink">
                 planning
               </span>
             ) : null}
             {session.coordination_waived ? (
-              <span className="inline-flex border border-accent bg-accent-wash px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold tracking-wide text-accent uppercase">
+              <span className="inline-flex rounded-md border border-accent/40 bg-accent-wash px-1.5 py-0.5 text-[10px]/3 font-semibold text-accent">
                 waived
               </span>
             ) : null}
-            <AnimatedValue
-              className="min-w-0 flex-1 overflow-hidden text-sm font-semibold"
-              value={label}
-            >
-              <span className="block truncate" title={label}>
-                {label}
-              </span>
-            </AnimatedValue>
+            <span className="font-mono text-[10px]/4 text-muted">
+              {shortSessionId(session.session_id)}
+            </span>
           </div>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-4 font-mono text-[11px]/4 text-muted">
-            <span>{shortSessionId(session.session_id)}</span>
+          <div className="mt-1 flex min-w-0 flex-col gap-y-1 pl-4 text-xs/5 text-muted">
             {secondaryNames.map((name) => (
-              <span className="truncate" key={name} title={name}>
+              <span className="wrap-anywhere" key={name} title={name}>
                 {name}
               </span>
             ))}
             {showCwd ? (
-              <span className="truncate" title={displayPath(session.cwd)}>
+              <span className="truncate font-mono text-[10px]/4" title={displayPath(session.cwd)}>
                 cwd {displayPath(session.cwd)}
               </span>
             ) : null}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pl-4 sm:pl-0">
-          <AnimatedValue className="font-mono text-xs font-medium" value={session.state}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-4 md:flex-col md:items-start md:pl-0">
+          <AnimatedValue className={sessionState({ state: session.state })} value={session.state}>
             {session.state}
           </AnimatedValue>
-          <span className="text-xs text-muted">{formatRelativeTime(session.last_seen, now)}</span>
+          <span className="text-[10px]/4 text-muted">
+            seen {formatRelativeTime(session.last_seen, now)}
+          </span>
         </div>
 
-        <div className="min-w-0 pl-4 sm:pl-0">
+        <div className="min-w-0 md:pl-0">
           <AnimatePresence initial={false} mode="wait">
             {work ? (
               <motion.div
@@ -192,7 +207,7 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
       </div>
 
       {delegates.length > 0 ? (
-        <div className="border-l border-line-strong">
+        <div className="mb-2 ml-4 border-l border-line">
           <AnimatePresence initial={false} mode="popLayout">
             {delegates.map((delegate) => (
               <DelegateRow delegate={delegate} key={delegate.agent_id} now={now} />
