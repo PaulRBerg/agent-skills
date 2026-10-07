@@ -9,7 +9,7 @@ for shared-working-tree coordination, notifications, commits, skill catalogs, an
 - [ai-notify](notify/): deliver desktop notifications for Claude Code and Codex CLI.
 - [ai-skillet](skillet/): inspect and maintain agent-skill catalogs.
 - [Coordination dashboard](apps/coord-dashboard/): local live view of ai-coord state, running at
-  [http://localhost:4173](http://localhost:4173).
+  [https://coord.localhost](https://coord.localhost).
 - [AI Handoffs](apps/handoffs/): local, read-only task-handoff viewer, running at
   [http://localhost:7777](http://localhost:7777).
 
