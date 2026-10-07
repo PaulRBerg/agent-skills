@@ -18,7 +18,9 @@ from transcript_common import (
     CORRECTION_PATTERNS,
     MAX_FULL_SESSION_BYTES,
     VERIFICATION_PATTERNS,
+    SessionKind,
     extract_record_channels,
+    extract_session_lineage,
     extract_tool_failures,
     first_string_shallow,
     keyword_alternatives,
@@ -38,6 +40,8 @@ class Header:
     path: str
     source: str
     session_id: str
+    session_kind: SessionKind
+    parent_session_id: str | None
     cwd: str | None
     first_timestamp: str | None
     last_timestamp: str | None
@@ -123,6 +127,7 @@ def inspect_file(raw_path: str, keywords: list[str], max_entries: int) -> FileDi
     items = [item for _, item in records]
     source = guess_source(items)
     session_id = extract_session_id(items, path)
+    lineage = extract_session_lineage(items, source)
     cwd = extract_cwd(items)
 
     timestamps: list[str] = []
@@ -177,6 +182,8 @@ def inspect_file(raw_path: str, keywords: list[str], max_entries: int) -> FileDi
         path=str(path),
         source=source,
         session_id=session_id,
+        session_kind=lineage.session_kind,
+        parent_session_id=lineage.parent_session_id,
         cwd=cwd,
         first_timestamp=timestamps[0] if timestamps else None,
         last_timestamp=timestamps[-1] if timestamps else None,
@@ -256,6 +263,7 @@ def print_text_report(digests: list[FileDigest]) -> None:
             continue
         header = digest.header
         print(f"source={header.source} session={header.session_id} cwd={header.cwd or '-'} sampled={header.sampled}")
+        print(f"kind={header.session_kind} parent={header.parent_session_id or '-'}")
         print(
             f"first={header.first_timestamp or '-'} last={header.last_timestamp or '-'} "
             f"user={header.user_messages} assistant={header.assistant_messages} "

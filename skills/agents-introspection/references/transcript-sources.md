@@ -82,6 +82,25 @@ Source ownership is structural and precedes relevance scoring:
 By default, the helper excludes the live `CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID` transcript. Use
 `--include-current` only when diagnosing the miner or intentionally inspecting the active session.
 
+Each candidate exposes `session_kind` (`primary`, `subagent`, `guardian`, or `unknown`) and `parent_session_id` (string
+or `null`). The helpers derive these fields from native metadata, independently of project ownership:
+
+- Codex `session_meta.payload.source.subagent.other: guardian` identifies a guardian approval session. The miner
+  excludes these sessions after ownership checks and before relevance sampling or ranking, including with
+  `--include-current`.
+- A Codex subagent source, `thread_source: subagent`, or explicit `parent_thread_id` identifies a subagent. The helpers
+  expose `parent_thread_id` as `parent_session_id` when present.
+- Codex `thread_source: user` identifies a primary session. Sources `cli` and `vscode` also identify primary sessions
+  when `thread_source` is absent and no child metadata is present.
+- Claude `isSidechain: true` identifies a subagent. An explicit `false` identifies a primary session when no sampled
+  record has `true`. Claude message `parentUuid` never establishes a parent session, so the parent ID remains `null`.
+- Missing or unrecognized metadata yields `unknown`. The miner retains these sessions and ordinary subagents. Neither an
+  unknown kind nor a missing parent ID proves independence. Verify independence before counting separate occurrences.
+
+These rules reflect observed native transcript metadata. They do not establish a version-independent format guarantee. A
+parent and its children provide one source of recurrence evidence. Guardian sessions can repeat parent history and must
+not add independent occurrences.
+
 Candidate signals use separate channels. `user` is actual task text, preferring Claude history `display`. `assistant` is
 plain assistant message text. Injected AGENTS, skill, environment, permission, collaboration, abort, and command
 envelopes are ignored `context`. `tool` contributes names plus structured error status or nonzero exit codes only.
@@ -91,11 +110,13 @@ identical eligible messages within each channel.
 
 Each project coverage record retains `codex_candidates`, `claude_candidates`, and `selected_sessions`.
 `codex_candidates` and `claude_candidates` mean structurally owned sessions, including sessions that did not meet the
-keyword relevance requirement. Additional fields make selection and exclusions auditable:
+keyword relevance requirement, after current-session and guardian exclusions. Additional fields make selection and
+exclusions auditable:
 
 - `codex_scanned`, `claude_scanned`, `structurally_matched`, and `relevance_matched` describe source coverage.
-- `current_sessions_excluded`, `content_only_project_mentions_ignored`, and `ambiguous_ownership_excluded` count
-  distinct session files, not occurrences.
+- `current_sessions_excluded`, `guardian_sessions_excluded`, `content_only_project_mentions_ignored`, and
+  `ambiguous_ownership_excluded` count distinct session files, not occurrences. Guardian exclusion takes precedence when
+  a session also matches the live session ID.
 - candidate `ownership` records `matched_via`, canonical `cwd`, and assigned `project`.
 - candidate `signal_channels` records eligible user and assistant message counts, ignored context, and structured tool
   failures.
@@ -116,10 +137,11 @@ uv run "$skill_dir/scripts/transcript-inspect.py" <transcript-path>... \
   --format text
 ```
 
-For each file, the inspector emits a header with source, session id, cwd, timestamp range, per-channel totals, and
-sampled flag. It emits bounded entries with absolute record line numbers. Within the sampled records and output limit,
-these entries contain non-context user messages, qualifying assistant messages, and tool failures. Redaction is always
-on. Entry text is capped at 240 characters.
+For each file, the inspector emits a header with source, session ID, `session_kind`, `parent_session_id`, cwd, timestamp
+range, per-channel totals, and sampled flag. Explicit guardian paths remain inspectable. The inspector emits bounded
+entries with absolute record line numbers. Within the sampled records and output limit, these entries contain
+non-context user messages, qualifying assistant messages, and tool failures. Redaction is always on. Entry text is
+capped at 240 characters.
 
 Digests are redacted and bounded. Inspect them before reading raw bodies. Read raw bodies only when the digest is
 insufficient. Each entry's line number lets you retrieve the exact underlying record when needed:

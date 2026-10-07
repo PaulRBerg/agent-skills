@@ -21,11 +21,13 @@ from transcript_common import (
     CORRECTION_PATTERNS,
     THEME_PATTERNS,
     VERIFICATION_PATTERNS,
+    SessionKind,
     count_keywords,
     count_patterns,
     count_privacy_gaps,
     deduplicate_messages,
     extract_record_channels,
+    extract_session_lineage,
     extract_strings,
     first_string_shallow,
     is_within,
@@ -66,6 +68,8 @@ class SessionSummary:
     source: str
     project: str
     path: str
+    session_kind: SessionKind = "unknown"
+    parent_session_id: str | None = None
     timestamp: str | None = None
     title: str | None = None
     score: int = 0
@@ -259,6 +263,7 @@ def new_coverage(codex_index_records: int) -> dict[str, Any]:
         "structurally_matched": 0,
         "relevance_matched": 0,
         "current_sessions_excluded": 0,
+        "guardian_sessions_excluded": 0,
         "content_only_project_mentions_ignored": 0,
         "ambiguous_ownership_excluded": 0,
     }
@@ -292,6 +297,9 @@ def mine_codex_sessions(
         if ownership is None:
             continue
         owner = Path(ownership.project)
+        if extract_session_lineage(metadata, "codex").session_kind == "guardian":
+            coverage[owner]["guardian_sessions_excluded"] += 1
+            continue
         if current_id and current_id in codex_session_ids(metadata, path) and not include_current:
             coverage[owner]["current_sessions_excluded"] += 1
             continue
@@ -692,10 +700,13 @@ def summarize_records(
         + bonus
     )
     excerpts = build_excerpts(user_messages, assistant_messages, keywords, include_excerpts)
+    lineage = extract_session_lineage(records, source)
     return SessionSummary(
         source=source,
         project=ownership.project,
         path=str(path),
+        session_kind=lineage.session_kind,
+        parent_session_id=lineage.parent_session_id,
         timestamp=timestamp,
         title=title,
         score=score,
@@ -895,6 +906,7 @@ def print_text_report(report: dict[str, Any]) -> None:
         print(
             "  exclusions: "
             f"current={coverage['current_sessions_excluded']}, "
+            f"guardian={coverage['guardian_sessions_excluded']}, "
             f"content-only={coverage['content_only_project_mentions_ignored']}, "
             f"ambiguous={coverage['ambiguous_ownership_excluded']}"
         )
@@ -908,6 +920,7 @@ def print_text_report(report: dict[str, Any]) -> None:
     for session in report["candidate_sessions"]:
         title = f" — {session['title']}" if session.get("title") else ""
         print(f"- {session['source']} score={session['score']} {session['path']}{title}")
+        print(f"  kind={session['session_kind']} parent={session['parent_session_id'] or '-'}")
         ownership = session["ownership"]
         channels = session["signal_channels"]
         print(

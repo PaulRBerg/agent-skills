@@ -46,6 +46,7 @@ class MinerFixture:
         context: str | None = None,
         extra: list[dict[str, Any]] | None = None,
         session_meta: bool = True,
+        native_metadata: dict[str, Any] | None = None,
         turn_cwds: list[Path] | None = None,
         session_dir: Path | None = None,
     ) -> Path:
@@ -55,7 +56,7 @@ class MinerFixture:
                 {
                     "timestamp": FIXTURE_TIMESTAMP,
                     "type": "session_meta",
-                    "payload": {"id": session_id, "cwd": str(cwd)},
+                    "payload": {"id": session_id, "cwd": str(cwd), **(native_metadata or {})},
                 }
             )
         for turn_cwd in turn_cwds or []:
@@ -142,6 +143,71 @@ class TranscriptMinerTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_guardians_are_excluded_before_copied_history_can_rank(self) -> None:
+        project = self.fixture.project("alpha")
+        guardian = self.fixture.codex_session(
+            "guardian", project,
+            native_metadata={
+                "source": {"subagent": {"other": "guardian"}},
+                "thread_source": "subagent", "parent_thread_id": "primary",
+                "subagent_history_start_ordinal": 40,
+            },
+            extra=[message_record("user", f"needle correction {index}") for index in range(100)],
+        )
+        primary = self.fixture.codex_session("primary", project, user="needle", native_metadata={"source": "cli"})
+
+        report = self.fixture.run([project], ["needle"], include_current=True)
+
+        self.assertEqual([session["path"] for session in report["candidate_sessions"]], [str(primary.resolve())])
+        self.assertNotIn(str(guardian.resolve()), json.dumps(report["candidate_sessions"]))
+        coverage = coverage_by_project(report)[project]
+        self.assertEqual(coverage["guardian_sessions_excluded"], 1)
+        self.assertEqual(coverage["codex_candidates"], 1)
+        self.assertEqual(coverage["relevance_matched"], 1)
+        text = self.fixture.run([project], ["needle"], output_format="text")
+        self.assertIn("guardian=1", text)
+
+    def test_primary_child_and_unknown_lineage_preserve_ownership(self) -> None:
+        project = self.fixture.project("alpha")
+        metadata = {
+            "cli": {"source": "cli", "thread_source": "user"},
+            "vscode": {"source": "vscode"},
+            "child": {"source": {"subagent": {"other": "worker"}}, "parent_thread_id": "cli"},
+            "thread-child": {"thread_source": "subagent"},
+            "parent-child": {"parent_thread_id": "cli"},
+            "unknown": {"source": "unrecognized"},
+            "missing": {},
+        }
+        paths = {
+            name: self.fixture.codex_session(name, project, user="needle", native_metadata=fields).resolve()
+            for name, fields in metadata.items()
+        }
+        report = self.fixture.run([project], ["needle"])
+        sessions = {Path(session["path"]): session for session in report["candidate_sessions"]}
+        self.assertEqual(set(sessions), set(paths.values()))
+        for name, path in paths.items():
+            expected = "primary" if name in {"cli", "vscode"} else "subagent" if "child" in name else "unknown"
+            self.assertEqual(sessions[path]["session_kind"], expected)
+            self.assertEqual(sessions[path]["parent_session_id"], "cli" if name in {"child", "parent-child"} else None)
+            self.assertEqual(sessions[path]["ownership"]["matched_via"], "session_meta.payload.cwd")
+            self.assertEqual(sessions[path]["ownership"]["project"], str(project))
+
+    def test_claude_sidechain_is_not_message_parent_lineage(self) -> None:
+        project = self.fixture.project("alpha")
+        for name, marker in (("primary", False), ("child", True), ("unknown", None)):
+            path = self.fixture.claude_session(project, name, project, user="needle")
+            record = claude_message("user", name, project, "needle")
+            record["parentUuid"] = "previous-message-uuid"
+            if marker is not None:
+                record["isSidechain"] = marker
+            write_jsonl(path, [record])
+
+        report = self.fixture.run([project], ["needle"])
+        sessions = {Path(session["path"]).stem: session for session in report["candidate_sessions"]}
+        self.assertEqual({name: session["session_kind"] for name, session in sessions.items()},
+                         {"primary": "primary", "child": "subagent", "unknown": "unknown"})
+        self.assertTrue(all(session["parent_session_id"] is None for session in sessions.values()))
 
     def test_content_mentions_never_assign_foreign_projects(self) -> None:
         project_a = self.fixture.project("alpha")

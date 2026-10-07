@@ -6,8 +6,9 @@ import json
 import os
 import re
 from collections import Counter, deque
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
@@ -52,6 +53,46 @@ MAX_FULL_SESSION_BYTES = 2_000_000
 SESSION_HEAD_RECORDS = 250
 SESSION_TAIL_RECORDS = 750
 METADATA_HEAD_RECORDS = 100
+
+
+SessionKind = Literal["primary", "subagent", "guardian", "unknown"]
+
+
+@dataclass(frozen=True)
+class SessionLineage:
+    session_kind: SessionKind = "unknown"
+    parent_session_id: str | None = None
+
+
+def extract_session_lineage(records: Iterable[Any], source: str) -> SessionLineage:
+    """Read native session metadata only; message parentUuid is not session lineage."""
+    if source == "codex":
+        for item in records:
+            if not isinstance(item, dict) or item.get("type") != "session_meta":
+                continue
+            payload = item.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            parent = first_string_shallow(payload, ("parent_thread_id",))
+            native_source = payload.get("source")
+            thread_source = payload.get("thread_source")
+            subagent = native_source.get("subagent") if isinstance(native_source, dict) else None
+            if isinstance(subagent, dict) and subagent.get("other") == "guardian":
+                return SessionLineage("guardian", parent)
+            if (isinstance(native_source, dict) and "subagent" in native_source) or thread_source == "subagent" or parent:
+                return SessionLineage("subagent", parent)
+            if thread_source == "user" or (
+                isinstance(native_source, str) and native_source in {"cli", "vscode"} and thread_source is None
+            ):
+                return SessionLineage("primary")
+            return SessionLineage()
+    elif source == "claude":
+        markers = [item.get("isSidechain") for item in records if isinstance(item, dict)]
+        if any(marker is True for marker in markers):
+            return SessionLineage("subagent")
+        if any(marker is False for marker in markers):
+            return SessionLineage("primary")
+    return SessionLineage()
 
 
 def redact_text(value: str | None) -> str:

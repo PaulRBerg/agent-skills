@@ -66,7 +66,9 @@ scope in `🗂 Historical coverage`.
 2. Treat source ownership as a miner invariant. The miner assigns every candidate once from source-native cwd,
    directory, and history metadata, never from transcript content. Review `ownership`. Reject a candidate only when
    fallback ownership such as `turn_context.cwd` remains materially ambiguous for the task. The miner excludes
-   conflicting ownership evidence and the live session by default.
+   conflicting ownership evidence and the live session by default. The miner also excludes known guardian approval
+   sessions before relevance ranking. Review `session_kind` and `parent_session_id` before treating candidates as
+   independent sessions. Explicit guardian paths remain available through the inspector.
 3. Treat miner scores, themes, correction, failure, verification, tool, or `privacy_gaps` counts, redacted `excerpts`,
    and `modified` timestamps only as candidate-ranking and triage signals. They are heuristic and are never evidence by
    themselves. Inspect up to five highest-relevance transcript bodies through the bundled inspector digest
@@ -117,6 +119,11 @@ Use these confidence levels:
 
 A durable change requires either the same failure in at least two independent sessions or one unambiguous high-impact
 failure that exposes a missing stable invariant. Treat lower-impact one-offs as manual guardrails.
+
+Count a parent session and its children as one source of recurrence evidence. Guardian approval sessions can contain
+copied parent history. Do not count that copied history as a separate occurrence. Missing lineage metadata yields
+`session_kind: unknown`. An unknown kind or absent parent ID does not establish independence. Verify independence from
+other evidence before counting those sessions separately.
 
 ## Choose the Smallest Intervention
 

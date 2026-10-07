@@ -86,6 +86,58 @@ class TranscriptInspectTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
+    def test_explicit_guardian_inspection_surfaces_lineage_and_redacts_body(self) -> None:
+        path = self.root / "guardian.jsonl"
+        metadata = session_meta("guardian", "/repo")
+        metadata["payload"].update({
+            "source": {"subagent": {"other": "guardian"}},
+            "thread_source": "subagent", "parent_thread_id": "parent-session",
+        })
+        write_jsonl(path, [metadata, message_record("user", "copied history user@example.com")])
+
+        digest = run_inspector([path])["files"][0]
+        self.assertIsNone(digest["error"])
+        self.assertEqual(digest["header"]["session_kind"], "guardian")
+        self.assertEqual(digest["header"]["parent_session_id"], "parent-session")
+        self.assertEqual(digest["header"]["cwd"], "/repo")
+        self.assertEqual(digest["entries"][0]["text"], "copied history <email>")
+        text = run_inspector([path], output_format="text")
+        self.assertIn("kind=guardian parent=parent-session", text)
+        self.assertNotIn("user@example.com", text)
+
+    def test_codex_primary_subagent_and_unknown_headers(self) -> None:
+        cases = [
+            ({"source": "cli", "thread_source": "user"}, "primary", None),
+            ({"source": "vscode"}, "primary", None),
+            ({"thread_source": "subagent", "parent_thread_id": "parent"}, "subagent", "parent"),
+            ({"source": "future-source"}, "unknown", None),
+            ({}, "unknown", None),
+        ]
+        for fields, kind, parent in cases:
+            with self.subTest(fields=fields):
+                path = self.root / "session.jsonl"
+                metadata = session_meta("session", "/repo")
+                metadata["payload"].update(fields)
+                write_jsonl(path, [metadata, message_record("user", "hello")])
+                header = run_inspector([path])["files"][0]["header"]
+                self.assertEqual(header["session_kind"], kind)
+                self.assertEqual(header["parent_session_id"], parent)
+        write_jsonl(path, [message_record("user", "no metadata")])
+        self.assertEqual(run_inspector([path])["files"][0]["header"]["session_kind"], "unknown")
+
+    def test_claude_sidechain_does_not_invent_parent_session(self) -> None:
+        for marker, kind in ((True, "subagent"), (False, "primary"), (None, "unknown")):
+            with self.subTest(marker=marker):
+                path = self.root / "claude.jsonl"
+                record = {"type": "user", "sessionId": "claude", "cwd": "/repo",
+                          "parentUuid": "message-id", "message": {"role": "user", "content": "hello"}}
+                if marker is not None:
+                    record["isSidechain"] = marker
+                write_jsonl(path, [record])
+                header = run_inspector([path])["files"][0]["header"]
+                self.assertEqual(header["session_kind"], kind)
+                self.assertIsNone(header["parent_session_id"])
+
     def test_user_messages_have_correct_line_numbers_and_context_is_excluded(self) -> None:
         path = self.root / "session.jsonl"
         records = [
