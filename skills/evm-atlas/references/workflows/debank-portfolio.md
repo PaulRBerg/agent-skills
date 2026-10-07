@@ -15,7 +15,7 @@ reads. The gate grants leases one at a time in FIFO order. State lives under
 
 <!-- prettier-ignore -->
 ```sh
-python3 scripts/debank-gate.py acquire --label '<skill>: <purpose>' --profiles <n>
+uv run --no-project scripts/debank-gate.py acquire --label '<skill>: <purpose>' --profiles <n>
 ```
 
 - Each command prints one JSON line. On exit 0 with `"status": "granted"`, proceed. Under that granted status, keep the
