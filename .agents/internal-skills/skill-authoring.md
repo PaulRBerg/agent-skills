@@ -203,5 +203,5 @@ skill-dependencies:
   changed skill before publishing it.
 - Every `skills/cli-*` skill must maintain `references/version.txt` with exactly one normalized semver for the CLI
   version the docs were last refreshed against. The file must contain no leading `v`, prose, comments, ranges,
-  prerelease labels, or extra lines. The wakeup automation maps `skills/cli-<name>` to binary `<name>`. When the
+  prerelease labels, or extra lines. The weekly automation maps `skills/cli-<name>` to binary `<name>`. When the
   installed binary is newer than the version in this file, the automation refreshes the skill.
