@@ -2,6 +2,7 @@ mod findings;
 mod inventory;
 mod recommendations;
 mod triage;
+mod triage_admission;
 mod triage_command;
 mod triage_config;
 mod triage_paths;

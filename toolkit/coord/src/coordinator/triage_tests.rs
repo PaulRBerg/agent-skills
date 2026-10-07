@@ -1,5 +1,10 @@
 use std::{
-    os::unix::{fs::PermissionsExt, process::ExitStatusExt},
+    io::Read,
+    os::unix::{
+        fs::PermissionsExt,
+        net::{UnixListener, UnixStream},
+        process::ExitStatusExt,
+    },
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -713,6 +718,7 @@ fn worktree_document_commit_is_admitted_and_resolved() {
         Some("completed")
     );
     assert_worktree_removed(repo.path(), &run_id);
+    assert_no_admission_reservations(&coordinator);
 }
 
 #[test]
@@ -803,7 +809,299 @@ fn admission_failure_preserves_main_and_pending_finding_without_handoff() {
             fs::read_to_string(repo.path().join("state/triage-runs").join(&run_id).join(RECONCILE_LOG_FILE)).unwrap();
         assert!(log.contains("admission-failed"), "{obstruction}: {log}");
         assert_worktree_removed(repo.path(), &run_id);
+        assert_no_admission_reservations(&coordinator);
     }
+}
+
+fn assert_no_admission_reservations(coordinator: &Coordinator) {
+    let store = coordinator.store().unwrap();
+    assert!(store.sessions().unwrap().iter().all(|session| session.source != "triage-admission"));
+    assert!(store.works().unwrap().iter().all(|work| !work.identity.session_id.starts_with("triage-admission:")));
+}
+
+#[test]
+#[ignore = "run only as the Git reference-transaction hook in the admission concurrency test"]
+fn admission_reference_hook() {
+    let socket = std::env::var_os("AI_COORD_TEST_ADMISSION_SOCKET").expect("hook socket");
+    let database = std::env::var_os("AI_COORD_TEST_ADMISSION_DATABASE").expect("isolated hook database");
+    let mut stream = UnixStream::connect(socket).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    // A synchronous Git hook must be able to write the ledger while admission owns its paths.
+    Store::open(database).unwrap().prune(100.0).unwrap();
+    let git_pid: u32 = std::env::var("AI_COORD_TEST_ADMISSION_GIT_PID").unwrap().parse().unwrap();
+    stream.write_all(&git_pid.to_be_bytes()).unwrap();
+    let mut release = [0];
+    stream.read_exact(&mut release).unwrap();
+    assert_eq!(release, [1]);
+}
+
+#[test]
+fn lost_worker_admission_blocks_a_racing_claim_and_allows_ledger_writing_hooks() {
+    admission_concurrency(false);
+}
+
+#[test]
+fn admission_reservation_survives_reconciler_death() {
+    admission_concurrency(true);
+}
+
+#[test]
+#[ignore = "run only as the isolated reconciler in admission concurrency tests"]
+fn admission_reconciler_fixture() {
+    let root = PathBuf::from(std::env::var_os("AI_COORD_TEST_ADMISSION_ROOT").expect("isolated repository"));
+    let (coordinator, _) = fixture(&root, 100.0);
+    coordinator
+        .reconcile_inactive_runs(&root, &root.join("state/triage-runs"), 100.0 + HEARTBEAT_GRACE_SECONDS + 1.0)
+        .unwrap();
+}
+
+fn admission_process_exited(fingerprint: &ProcessFingerprint) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while NativeProcessProbe::new().liveness(fingerprint) != ProcessLiveness::Dead {
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    true
+}
+
+struct ReconcilerProcess {
+    child: Child,
+    state: PathBuf,
+    merge: Option<ProcessFingerprint>,
+}
+
+impl Drop for ReconcilerProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        if let Some(fingerprint) = &self.merge &&
+            NativeProcessProbe::new().liveness(fingerprint) != ProcessLiveness::Dead
+        {
+            let group = i32::try_from(fingerprint.pid).unwrap();
+            let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(-group), nix::sys::signal::Signal::SIGKILL);
+            assert!(admission_process_exited(fingerprint));
+        }
+        let store = Store::open(&self.state).unwrap();
+        for session in store.sessions().unwrap().iter().filter(|session| session.source == "triage-admission") {
+            if let Some(fingerprint) = &session.fingerprint {
+                if let Ok(group) = i32::try_from(fingerprint.pid) {
+                    let _ =
+                        nix::sys::signal::kill(nix::unistd::Pid::from_raw(-group), nix::sys::signal::Signal::SIGKILL);
+                }
+                assert!(admission_process_exited(fingerprint));
+            }
+        }
+    }
+}
+
+fn admission_concurrency(kill_reconciler: bool) {
+    let repo = repository(true);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let (coordinator, origin, clock) = clocked_fixture(repo.path(), 100.0, true);
+    let id = add_finding(&coordinator, repo.path(), "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, repo.path());
+    let run_dir = root.join("state/triage-runs").join(&run_id);
+    let mut metadata = read_metadata(&run_dir).unwrap();
+    let worktree = TriageWorktree::new(&root, &run_dir, &run_id, 100.0);
+    worktree.create(&metadata.start_head).unwrap();
+    metadata.worktree_path = Some(worktree.path.clone());
+    metadata.worktree_branch = Some(worktree.branch.clone());
+    metadata.authorized_paths = vec!["README.md".to_owned()];
+    write_metadata(&run_dir, &metadata).unwrap();
+    let oid = commit_file(&worktree.path, "README.md", "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+    let peer = Identity { client: Client::Codex, session_id: "peer".to_owned() };
+    register_peer(&coordinator, &peer, &root);
+    let socket_dir = tempfile::tempdir().unwrap();
+    let socket = socket_dir.path().join("hook.sock");
+    let listener = UnixListener::bind(&socket).unwrap();
+    let hook_path = root.join(".git/hooks/reference-transaction");
+    // The first prepared ref transaction pauses Git before it changes main's HEAD.
+    fs::write(
+        &hook_path,
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = prepared ] && mkdir '{}' 2>/dev/null; then\n\
+             AI_COORD_TEST_ADMISSION_SOCKET='{}' AI_COORD_TEST_ADMISSION_DATABASE='{}' \
+             AI_COORD_TEST_ADMISSION_GIT_PID=\"$PPID\" \
+             '{}' --exact coordinator::triage::tests::admission_reference_hook --ignored --nocapture\nfi\n",
+            run_dir.join("hook-once").display(),
+            socket.display(),
+            coordinator.store().unwrap().path().display(),
+            std::env::current_exe().unwrap().display(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&hook_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let (blocked, admission, reconciler_pid, git_fingerprint) = thread::scope(|scope| {
+        let (connected, wait) = mpsc::channel();
+        let accepting = scope.spawn(move || connected.send(listener.accept()).unwrap());
+        let mut recovery = ReconcilerProcess {
+            child: Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "coordinator::triage::tests::admission_reconciler_fixture",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .env("AI_COORD_TEST_ADMISSION_ROOT", &root)
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap(),
+            state: coordinator.store().unwrap().path().to_owned(),
+            merge: None,
+        };
+        let connection = wait.recv_timeout(Duration::from_secs(10));
+        if connection.is_err() {
+            // Unblock and join the listener even if Git never reaches the hook.
+            let _ = UnixStream::connect(&socket);
+        }
+        accepting.join().unwrap();
+        let (mut hook, _) = connection.expect("Git reached its reference hook").unwrap();
+        hook.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let mut git_pid = [0; 4];
+        hook.read_exact(&mut git_pid).unwrap();
+        let git_fingerprint = NativeProcessProbe::new().fingerprint(u32::from_be_bytes(git_pid)).unwrap();
+        recovery.merge = Some(git_fingerprint.clone());
+        assert_eq!(git_head_oid(&root).as_deref(), Some(metadata.start_head.as_str()));
+        let sessions = coordinator.store().unwrap().sessions().unwrap();
+        let admission = sessions.iter().find(|session| session.source == "triage-admission").cloned().unwrap();
+        let fingerprint = admission.fingerprint.as_ref().unwrap();
+        let reconciler_pid = recovery.child.id();
+        assert_eq!(NativeProcessProbe::new().liveness(fingerprint), ProcessLiveness::Alive);
+        if kill_reconciler {
+            recovery.child.kill().unwrap();
+            assert!(!recovery.child.wait().unwrap().success());
+        }
+
+        // A slow Git hook must not make the working reservation eligible for idle yielding.
+        clock.set(1_000.0);
+        let outcome = coordinator.start_for(peer.clone(), "edit readme", &[PathBuf::from("README.md")], &[], &root);
+        hook.write_all(&[1]).unwrap();
+        if kill_reconciler {
+            assert!(
+                admission_process_exited(&git_fingerprint),
+                "orphaned Git merge must exit after its hook is released"
+            );
+        } else {
+            assert!(recovery.child.wait().unwrap().success());
+        }
+
+        (outcome.unwrap(), admission, reconciler_pid, git_fingerprint)
+    });
+    assert_eq!(blocked.kind, OutcomeKind::Blocked);
+    assert_eq!(admission.state, SessionState::Working);
+    assert_ne!(admission.fingerprint.as_ref().unwrap().pid, std::process::id());
+    assert_ne!(admission.fingerprint.as_ref().unwrap().pid, reconciler_pid);
+    assert_eq!(admission.fingerprint.as_ref(), Some(&git_fingerprint));
+    assert_ne!(admission.identity, triager_identity(&run_id));
+    assert_eq!(git_head_oid(&root).as_deref(), Some(oid.as_str()));
+    let expected_state = if kill_reconciler { FindingState::Pending } else { FindingState::Fixed };
+    assert_eq!(finding_state(&coordinator, &root, &id).state, expected_state);
+    assert_eq!(
+        coordinator.start_for(peer, "edit readme", &[PathBuf::from("README.md")], &[], &root).unwrap().kind,
+        OutcomeKind::Ready,
+    );
+    assert_no_admission_reservations(&coordinator);
+    if !kill_reconciler {
+        assert_worktree_removed(&root, &run_id);
+    }
+}
+
+#[test]
+fn admission_fingerprint_failure_reaps_the_gated_child_before_releasing_paths() {
+    use super::super::triage_admission::AdmissionReservation;
+
+    #[derive(Default)]
+    struct RejectChildFingerprint(Mutex<Option<ProcessFingerprint>>);
+
+    impl ProcessProbe for RejectChildFingerprint {
+        fn fingerprint(&self, pid: u32) -> Result<ProcessFingerprint> {
+            let fingerprint = NativeProcessProbe::new().fingerprint(pid)?;
+            if pid != std::process::id() {
+                *self.0.lock().unwrap() = Some(fingerprint);
+                return Err(AppError::operational("simulated admission fingerprint failure"));
+            }
+            Ok(fingerprint)
+        }
+
+        fn liveness(&self, fingerprint: &ProcessFingerprint) -> ProcessLiveness {
+            NativeProcessProbe::new().liveness(fingerprint)
+        }
+    }
+
+    let repo = repository(true);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let probe = Arc::new(RejectChildFingerprint::default());
+    let coordinator = Coordinator::with_components(
+        Store::open(root.join("state/state.db")).unwrap(),
+        Box::new(StaticInventory { complete: true, refreshes: Default::default() }),
+        probe.clone(),
+        FakeClock::at(100.0),
+    );
+    let origin = Identity { client: Client::Codex, session_id: "origin".to_owned() };
+    let id = add_finding(&coordinator, &root, "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, &root);
+    let run = coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap();
+    let run_dir = root.join("state/triage-runs").join(&run_id);
+    let metadata = read_metadata(&run_dir).unwrap();
+    let worktree = TriageWorktree::new(&root, &run_dir, &run_id, 100.0);
+    worktree.create(&metadata.start_head).unwrap();
+    let oid = commit_file(&worktree.path, "README.md", "correct prose\n", &format!("docs: fix\n\nFinding-ID: {id}"));
+    let reservation = AdmissionReservation::acquire(
+        &coordinator,
+        &run,
+        &HashSet::from(["README.md".to_owned()]),
+        &worktree.path,
+        100.0,
+    )
+    .unwrap();
+    let error = reservation.merge(&coordinator, &root, &oid).unwrap_err();
+    assert!(error.to_string().contains("simulated admission fingerprint failure"));
+    let child = probe.0.lock().unwrap().clone().unwrap();
+    assert_eq!(NativeProcessProbe::new().liveness(&child), ProcessLiveness::Dead);
+    assert_eq!(git_head_oid(&root).as_deref(), Some(metadata.start_head.as_str()));
+    assert_eq!(fs::read_to_string(root.join("README.md")).unwrap(), "old prose\n");
+    assert_no_admission_reservations(&coordinator);
+}
+
+#[test]
+fn admission_reservations_preserve_worker_priority_and_queued_peer_fairness() {
+    use super::super::triage_admission::AdmissionReservation;
+
+    let repo = repository(true);
+    let root = crate::host::git_root(repo.path()).unwrap();
+    let (coordinator, origin) = fixture(repo.path(), 100.0);
+    add_finding(&coordinator, &root, "stale prose", 1.0);
+    let run_id = schedule_run(&coordinator, &origin, &root);
+    let run = coordinator.store().unwrap().triage_run(&run_id).unwrap().unwrap();
+    let actor = triager_identity(&run_id);
+    register_peer(&coordinator, &actor, &root);
+    assert_eq!(
+        coordinator.start_for(actor.clone(), "triage", &[PathBuf::from("README.md")], &[], &root).unwrap().kind,
+        OutcomeKind::Ready,
+    );
+    let peer = Identity { client: Client::Codex, session_id: "peer".to_owned() };
+    register_peer(&coordinator, &peer, &root);
+    assert_eq!(
+        coordinator.start_for(peer, "edit readme", &[PathBuf::from("README.md")], &[], &root).unwrap().kind,
+        OutcomeKind::Blocked,
+    );
+    let worker = coordinator.store().unwrap().work(&actor).unwrap().unwrap();
+    let paths = HashSet::from(["README.md".to_owned()]);
+    let worktree = root.join("state/triage-runs").join(&run_id).join("worktree");
+    let reservation = AdmissionReservation::acquire(&coordinator, &run, &paths, &worktree, 100.0).unwrap();
+    // A second recoverer must not replace the first recoverer's reservation.
+    assert!(AdmissionReservation::acquire(&coordinator, &run, &paths, &worktree, 100.0).is_err());
+    drop(reservation);
+    assert_eq!(coordinator.store().unwrap().work(&actor).unwrap(), Some(worker));
+    assert_no_admission_reservations(&coordinator);
+
+    coordinator.store().unwrap().end_session(&actor).unwrap();
+    let error = AdmissionReservation::acquire(&coordinator, &run, &paths, &worktree, 100.0).err().unwrap();
+    assert!(error.to_string().contains("queued by another session"));
+    assert_no_admission_reservations(&coordinator);
 }
 
 #[test]

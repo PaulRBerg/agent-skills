@@ -532,7 +532,8 @@ claims at most 20 findings and expires stale/dead leases. It runs an ephemeral o
 process for at most 30 minutes in an isolated worktree under the run directory on branch `triage/<run-id>`. The state
 directory remains available to the worker. It never pushes.
 
-The worktree isolates its edits, and only the admission step below changes the original checkout.
+The worktree isolates its edits, and only the admission step below changes the original checkout. Before expanding
+opt-in, review recent run artifacts for validated repairs and handoffs that led to completed work.
 
 The safe tier may make only unambiguous documentation fixes. It records a local `Finding-ID` commit in the worktree.
 Admission fast-forwards only validated documentation commits into `main` while it is checked out and clean for those
@@ -540,6 +541,13 @@ paths. A commit qualifies only when every changed entry adds a 100644 regular fi
 changing its mode. Admission rejects deletions, renames, type changes, symlinks, gitlinks, and mode changes. Admission
 also refuses a commit when another session's active claim covers a changed path, including after the worker's own claim
 was reaped.
+
+Admission atomically checks competing claims and reserves each commit's paths under a temporary owner. Before allowing
+Git to merge, admission binds this owner to Git's process fingerprint. The reservation stays live if the coordinator
+exits while Git runs. Without the worker's existing claim, admission also yields to queued work on those paths.
+
+Git runs outside the database transaction so hooks can use the ledger. Cleanup releases the reservation after Git exits
+or after a setup failure stops the child.
 
 Failed admission leaves the finding pending. Cleanup removes the worktree and its branch after the run, including
 failures and a worktree directory that already disappeared.

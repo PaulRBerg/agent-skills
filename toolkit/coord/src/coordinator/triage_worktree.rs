@@ -7,14 +7,16 @@ use std::{
 };
 
 use super::{
+    Coordinator,
+    triage_admission::AdmissionReservation,
     triage_config::main_branch,
     triage_paths::{deterministic_handoff, safe_document_path},
-    triage_run::record_reconcile_detail,
+    triage_run::{RunMetadata, record_reconcile_detail},
 };
 use crate::{
-    domain::{Scope, ScopeKind},
     error::{AppError, Result},
-    host::{git_head_oid, scope_covers},
+    host::git_head_oid,
+    state::TriageRun,
 };
 
 pub(super) struct TriageWorktree {
@@ -86,20 +88,21 @@ impl Drop for TriageWorktree {
 }
 
 pub(super) fn admit_commits(
+    coordinator: &Coordinator,
+    run: &TriageRun,
     root: &Path,
     worktree: &Path,
-    start: &str,
-    finding_ids: &[String],
-    authorized_paths: &[String],
-    peer_claims: &[Scope],
+    metadata: &RunMetadata,
     current: f64,
 ) -> Result<HashSet<String>> {
     let mut failed = HashSet::new();
     if !worktree.exists() {
         return Ok(failed);
     }
-    let authorized = authorized_paths.iter().map(String::as_str).collect::<HashSet<_>>();
-    let candidates = finding_ids
+    let start = &metadata.start_head;
+    let authorized = metadata.authorized_paths.iter().map(String::as_str).collect::<HashSet<_>>();
+    let candidates = metadata
+        .finding_ids
         .iter()
         .filter_map(|id| commit_for_finding(worktree, start, id).ok().flatten().map(|oid| (oid, id)))
         .collect::<HashMap<_, _>>();
@@ -121,11 +124,9 @@ pub(super) fn admit_commits(
             if git_success(root, &["merge-base", "--is-ancestor", oid, "HEAD"])? {
                 return Ok(());
             }
-            if changed.iter().any(|path| {
-                let changed = Scope { path: path.clone(), kind: ScopeKind::Exact };
-                peer_claims.iter().any(|claim| scope_covers(claim, &changed))
-            }) {
-                return Err(AppError::operational("triage commit changes a path claimed by another session's work"));
+            let reservation = AdmissionReservation::acquire(coordinator, run, &changed, worktree, current)?;
+            if !main_branch(root) {
+                return Err(AppError::operational("triage commits can be admitted only while main is checked out"));
             }
             let head = git_head_oid(root).ok_or_else(|| AppError::operational("main has no HEAD"))?;
             if git_text(worktree, &["rev-list", "--parents", "-n", "1", oid])?.split_whitespace().collect::<Vec<_>>() !=
@@ -133,7 +134,7 @@ pub(super) fn admit_commits(
             {
                 return Err(AppError::operational("main moved or triage commit has unadmitted ancestors"));
             }
-            git_text(root, &["merge", "--ff-only", oid])?;
+            reservation.merge(coordinator, root, oid)?;
             Ok(())
         })();
         if let Err(error) = admission {

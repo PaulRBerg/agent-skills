@@ -13,7 +13,7 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
-    domain::{FindingState, FindingSummary, Identity, OutcomeKind, Scope, SessionState, WorkState},
+    domain::{FindingState, FindingSummary, Identity, OutcomeKind, SessionState},
     error::{AppError, Result},
     host::{DetachedProcessRunner, DetachedProcessSpec, NativeDetachedProcessRunner, git_head_oid},
     state::{FindingResolution, SessionUpdate, Store, TriageRun},
@@ -759,15 +759,8 @@ fn reconcile_artifacts(
 ) -> Result<Reconciliation> {
     let mut reconciled = Reconciliation::default();
     if let Some(worktree) = metadata.worktree_path.as_deref() {
-        reconciled.admission_failed = admit_commits(
-            root,
-            worktree,
-            &metadata.start_head,
-            &metadata.finding_ids,
-            &metadata.authorized_paths,
-            &peer_claimed_scopes(coordinator, run)?,
-            coordinator.clock.wall(),
-        )?;
+        reconciled.admission_failed =
+            admit_commits(coordinator, run, root, worktree, metadata, coordinator.clock.wall())?;
     }
     if !main_branch(root) {
         return Ok(reconciled);
@@ -817,21 +810,6 @@ fn reconcile_artifacts(
         }
     }
     Ok(reconciled)
-}
-
-/// Scopes of every other session's active work in the run's repository. A
-/// dead worker's own claim may already be gone, so admission must not
-/// fast-forward over a path a peer has since been granted.
-fn peer_claimed_scopes(coordinator: &Coordinator, run: &TriageRun) -> Result<Vec<Scope>> {
-    let actor = triager_identity(&run.id);
-    Ok(coordinator
-        .store()?
-        .works_in_repo(&run.repo_root)?
-        .into_iter()
-        .filter(|work| work.state == WorkState::Active && work.identity != actor)
-        .filter_map(|work| work.claim(&run.repo_root).map(|claim| claim.scopes.clone()))
-        .flatten()
-        .collect())
 }
 
 fn validate_handoff(root: &Path, finding_id: &str, path: &str) -> Result<()> {
