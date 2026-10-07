@@ -42,9 +42,9 @@ Read snapshots from `GET /api/snapshot` and live updates from `GET /api/events`,
 cross-field claim and draft invariants. `src/lib/sample-snapshot.ts` mirrors the contract. Use SSE when available and
 polling as its fallback.
 
-The URL path selects the tab: `/`, `/findings`, or `/handoffs`. Keep the snapshot subscription above the Coordination
-and Findings tabs. The Findings badge and default Unresolved filter include pending and handed-off findings. Triaging is
-an independent overlay, not another finding state.
+The URL path selects the tab: `/`, `/findings`, `/messages`, or `/handoffs`. Keep the snapshot subscription above the
+Coordination, Findings, and Messages tabs. The Findings badge and default Unresolved filter include pending and
+handed-off findings. Triaging is an independent overlay, not another finding state.
 
 ## Handoffs
 

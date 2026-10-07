@@ -1,5 +1,5 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { ClipboardCheck, FileText, PanelsTopLeft } from "lucide-react";
+import { ClipboardCheck, FileText, MessageSquareText, PanelsTopLeft } from "lucide-react";
 import { AnimatePresence, LayoutGroup, MotionConfig } from "motion/react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -22,10 +22,10 @@ const HandoffsPanel = lazy(async () => {
   return { default: module.HandoffsPanel };
 });
 
-const tabs = ["coordination", "findings", "handoffs"] as const;
+const tabs = ["coordination", "findings", "messages", "handoffs"] as const;
 type Tab = (typeof tabs)[number];
 const navigationTab = tv({
-  base: "flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-2 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-line data-active:bg-surface data-active:text-ink data-active:shadow-sm motion-reduce:transition-none sm:gap-2 sm:px-4",
+  base: "flex min-h-10 shrink-0 items-center gap-1 rounded-lg border border-transparent px-1 py-2 text-[12px] font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-line data-active:bg-surface data-active:text-ink data-active:shadow-sm motion-reduce:transition-none sm:gap-2 sm:px-4 sm:text-[13px]",
 });
 
 function tabFromPath(pathname: string): Tab {
@@ -111,6 +111,10 @@ export function App() {
                     {unresolvedCount}
                   </span>
                 </Tabs.Tab>
+                <Tabs.Tab className={navigationTab()} value="messages">
+                  <MessageSquareText aria-hidden="true" className="hidden size-4 sm:block" />
+                  Messages
+                </Tabs.Tab>
                 <Tabs.Tab className={navigationTab()} value="handoffs">
                   <FileText aria-hidden="true" className="hidden size-4 sm:block" />
                   Handoffs
@@ -128,25 +132,19 @@ export function App() {
                     value="coordination"
                     className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
                   >
-                    <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-                      <div className="min-w-0">
-                        {snapshot.sessions.length === 0 || lanes.length === 0 ? (
-                          <EmptySessions />
-                        ) : null}
-                        {lanes.length > 0 ? (
-                          <div className="flex flex-col gap-5">
-                            <AnimatePresence initial={false} mode="popLayout">
-                              {lanes.map((lane) => (
-                                <RepoLane key={lane.repoRoot} lane={lane} now={now} />
-                              ))}
-                            </AnimatePresence>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <aside className="flex min-w-0 flex-col gap-6 xl:sticky xl:top-6">
-                        <MessagesFeed messages={snapshot.messages} now={now} />
-                      </aside>
+                    <div className="min-w-0">
+                      {snapshot.sessions.length === 0 || lanes.length === 0 ? (
+                        <EmptySessions />
+                      ) : null}
+                      {lanes.length > 0 ? (
+                        <div className="flex flex-col gap-5">
+                          <AnimatePresence initial={false} mode="popLayout">
+                            {lanes.map((lane) => (
+                              <RepoLane key={lane.repoRoot} lane={lane} now={now} />
+                            ))}
+                          </AnimatePresence>
+                        </div>
+                      ) : null}
                     </div>
                   </Tabs.Panel>
                   <Tabs.Panel
@@ -155,6 +153,13 @@ export function App() {
                     className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
                   >
                     <FindingsPanel findings={snapshot.findings} now={now} />
+                  </Tabs.Panel>
+                  <Tabs.Panel
+                    keepMounted
+                    value="messages"
+                    className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+                  >
+                    <MessagesFeed messages={snapshot.messages} now={now} />
                   </Tabs.Panel>
                 </>
               ) : null}
