@@ -1,6 +1,7 @@
 import { Radio } from "lucide-react";
 import { tv } from "tailwind-variants";
-import type { ConnectionState } from "@/lib/api";
+
+import type { ConnectionState } from "@/lib/api.js";
 
 const indicator = tv({
   slots: {
@@ -36,9 +37,9 @@ const labels: Record<ConnectionState, string> = {
   disconnected: "Disconnected",
 };
 
-interface ConnectionIndicatorProps {
+type ConnectionIndicatorProps = {
   state: ConnectionState;
-}
+};
 
 export function ConnectionIndicator({ state }: ConnectionIndicatorProps) {
   const styles = indicator({ state });

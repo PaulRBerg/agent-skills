@@ -1,20 +1,21 @@
 import { TriangleAlert } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import type { ConnectionState } from "@/lib/api";
-import { formatUpdatedTime } from "@/lib/format";
-import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
-import type { RepoLaneModel, Snapshot } from "@/lib/types";
-import { AnimatedValue } from "@/ui/animated-value";
-import { ConnectionIndicator } from "@/ui/connection-indicator";
 
-interface HeaderProps {
+import type { ConnectionState } from "@/lib/api.js";
+import { formatUpdatedTime } from "@/lib/format.js";
+import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion.js";
+import type { RepoLaneModel, Snapshot } from "@/lib/types.js";
+import { AnimatedValue } from "@/ui/animated-value.js";
+import { ConnectionIndicator } from "@/ui/connection-indicator.js";
+
+type HeaderProps = {
   snapshot: Snapshot | null;
   lanes: RepoLaneModel[];
   connection: ConnectionState;
   lastUpdated: number | null;
   now: number;
   refreshSequence: number;
-}
+};
 
 export function Header({
   snapshot,
@@ -26,23 +27,33 @@ export function Header({
 }: HeaderProps) {
   const blockedCount =
     snapshot?.work.filter(
-      (work) => work.state === "queued" || work.blocked_reason != null,
+      (work) => work.state === "queued" || typeof work.blocked_reason === "string"
     ).length ?? 0;
   const partialProviders =
     snapshot?.providers.filter(
-      (provider) => !provider.enabled || !provider.ok || provider.dropped > 0,
+      (provider) => !provider.enabled || !provider.ok || provider.dropped > 0
     ) ?? [];
+  const providerSummary = partialProviders
+    .map((provider) => {
+      if (!provider.enabled) {
+        return `${provider.client} disabled`;
+      }
+      if (provider.dropped > 0) {
+        return `${provider.client} dropped ${provider.dropped}`;
+      }
+      return `${provider.client} unavailable`;
+    })
+    .join(", ");
+  const hasUpdate = lastUpdated !== null;
   const showCoverageWarning =
     snapshot !== null && (!snapshot.complete || partialProviders.length > 0);
 
   return (
     <header className="border-b border-line-strong bg-surface">
-      <div className="px-4 py-4 sm:px-6 lg:px-8">
+      <div className="p-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-baseline gap-3">
-            <h1 className="font-mono text-lg font-semibold tracking-tight">
-              ai-coord
-            </h1>
+            <h1 className="font-mono text-lg font-semibold tracking-tight">ai-coord</h1>
             <p className="text-xs text-muted">Machine control tower</p>
           </div>
 
@@ -58,38 +69,27 @@ export function Header({
               </div>
               <div className="flex items-baseline gap-1.5">
                 <dd className="font-mono text-sm font-semibold tabular-nums">
-                  <AnimatedValue value={lanes.length}>
-                    {lanes.length}
-                  </AnimatedValue>
+                  <AnimatedValue value={lanes.length}>{lanes.length}</AnimatedValue>
                 </dd>
                 <dt className="text-muted">repositories</dt>
               </div>
               <div className="flex items-baseline gap-1.5">
                 <dd className="font-mono text-sm font-semibold tabular-nums">
-                  <AnimatedValue value={blockedCount}>
-                    {blockedCount}
-                  </AnimatedValue>
+                  <AnimatedValue value={blockedCount}>{blockedCount}</AnimatedValue>
                 </dd>
                 <dt className="text-muted">queued / blocked</dt>
               </div>
             </dl>
 
             <div className="relative flex items-center gap-3 border-l border-line pl-4">
-              {lastUpdated !== null ? (
-                <span
-                  aria-hidden="true"
-                  className="refresh-sweep"
-                  key={refreshSequence}
-                />
+              {hasUpdate ? (
+                <span aria-hidden="true" className="refresh-sweep" key={refreshSequence} />
               ) : null}
               <AnimatedValue value={connection}>
                 <ConnectionIndicator state={connection} />
               </AnimatedValue>
               <span className="font-mono text-xs text-muted tabular-nums">
-                updated{" "}
-                {lastUpdated === null
-                  ? "never"
-                  : formatUpdatedTime(lastUpdated, now)}
+                updated {lastUpdated === null ? "never" : formatUpdatedTime(lastUpdated, now)}
               </span>
             </div>
           </div>
@@ -109,24 +109,10 @@ export function Header({
                 ease: MOTION_EASE,
               }}
             >
-              <TriangleAlert
-                aria-hidden="true"
-                className="mt-0.5 size-3.5 shrink-0"
-              />
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
               <p>
-                Provider coverage is partial. Session ownership may be
-                incomplete
-                {partialProviders.length > 0
-                  ? `: ${partialProviders
-                      .map((provider) =>
-                        !provider.enabled
-                          ? `${provider.client} disabled`
-                          : provider.dropped > 0
-                          ? `${provider.client} dropped ${provider.dropped}`
-                          : `${provider.client} unavailable`,
-                      )
-                      .join(", ")}.`
-                  : "."}
+                Provider coverage is partial. Session ownership may be incomplete
+                {providerSummary ? `: ${providerSummary}.` : "."}
               </p>
             </motion.div>
           ) : null}

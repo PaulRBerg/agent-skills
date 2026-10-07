@@ -9,3 +9,17 @@ toolkit/apps/*/dist/
 toolkit/commit/src/rules/
 toolkit/apps/handoffs/src/server/fixtures/
 toolkit/skillet/tests/fixtures/
+
+# Dashboard code is formatted by Oxfmt; keep Markdown and YAML under Prettier.
+toolkit/apps/coord-dashboard/**/*.css
+toolkit/apps/coord-dashboard/**/*.js
+toolkit/apps/coord-dashboard/**/*.jsx
+toolkit/apps/coord-dashboard/**/*.mjs
+toolkit/apps/coord-dashboard/**/*.cjs
+toolkit/apps/coord-dashboard/**/*.json
+toolkit/apps/coord-dashboard/**/*.jsonc
+toolkit/apps/coord-dashboard/**/*.html
+toolkit/apps/coord-dashboard/**/*.ts
+toolkit/apps/coord-dashboard/**/*.tsx
+toolkit/apps/coord-dashboard/**/*.mts
+toolkit/apps/coord-dashboard/**/*.cts

@@ -1,17 +1,14 @@
 import { describe, expect, test } from "vitest";
+
 import {
   filterMessages,
   messageRepositories,
   paginateMessages,
   previewMessages,
-} from "@/lib/messages";
-import type { Message } from "@/lib/types";
+} from "@/lib/messages.js";
+import type { Message } from "@/lib/types.js";
 
-function message(
-  id: string,
-  createdAt: number,
-  overrides: Partial<Message> = {},
-): Message {
+function message(id: string, createdAt: number, overrides: Partial<Message> = {}): Message {
   return {
     id,
     sender_client: "codex",
@@ -28,26 +25,10 @@ function message(
 
 describe("previewMessages", () => {
   test("returns the five newest messages without mutating the snapshot order", () => {
-    const messages = Array.from({ length: 7 }, (_, index) =>
-      message(String(index), index),
-    );
+    const messages = Array.from({ length: 7 }, (_, index) => message(String(index), index));
 
-    expect(previewMessages(messages).map(({ id }) => id)).toEqual([
-      "6",
-      "5",
-      "4",
-      "3",
-      "2",
-    ]);
-    expect(messages.map(({ id }) => id)).toEqual([
-      "0",
-      "1",
-      "2",
-      "3",
-      "4",
-      "5",
-      "6",
-    ]);
+    expect(previewMessages(messages).map(({ id }) => id)).toEqual(["6", "5", "4", "3", "2"]);
+    expect(messages.map(({ id }) => id)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
   });
 });
 
@@ -70,28 +51,26 @@ describe("filterMessages", () => {
         query: "deploy",
         repoRoot: "/repo/alpha",
         status: "unread",
-      }).map(({ id }) => id),
+      }).map(({ id }) => id)
     ).toEqual(["unread-alpha"]);
   });
 
   test("matches immutable callsign snapshots and full session identifiers", () => {
-    const messages = [
-      message("target", 1, { sender_callsign: "🦊 Historical Fox" }),
-    ];
+    const messages = [message("target", 1, { sender_callsign: "🦊 Historical Fox" })];
 
     expect(
       filterMessages(messages, {
         query: "historical fox",
         repoRoot: null,
         status: "all",
-      }),
+      })
     ).toHaveLength(1);
     expect(
       filterMessages(messages, {
         query: "recipient-session",
         repoRoot: null,
         status: "all",
-      }),
+      })
     ).toHaveLength(1);
   });
 });
@@ -104,16 +83,14 @@ describe("messageRepositories", () => {
         message("global", 2, { repo_root: null }),
         message("alpha", 3),
         message("alpha-again", 4),
-      ]),
+      ])
     ).toEqual(["/repo/alpha", "/repo/beta"]);
   });
 });
 
 describe("paginateMessages", () => {
   test("uses 20-item pages and clamps a page invalidated by live updates", () => {
-    const messages = Array.from({ length: 45 }, (_, index) =>
-      message(String(index), index),
-    );
+    const messages = Array.from({ length: 45 }, (_, index) => message(String(index), index));
 
     expect(paginateMessages(messages, 2)).toMatchObject({
       page: 2,

@@ -1,49 +1,48 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { ChevronLeft, ChevronRight, ListFilter, Search, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import { shortenPath } from "@/lib/format";
-import {
-  filterMessages,
-  messageRepositories,
-  paginateMessages,
-  type MessageStatusFilter,
-} from "@/lib/messages";
-import type { Message } from "@/lib/types";
-import { MessageRow } from "@/ui/message-row";
+import { useEffect, useRef, useState } from "react";
+import { tv } from "tailwind-variants";
 
-const statusFilters: Array<{
+import { shortenPath } from "@/lib/format.js";
+import { filterMessages, messageRepositories, paginateMessages } from "@/lib/messages.js";
+import type { MessageStatusFilter } from "@/lib/messages.js";
+import type { Message } from "@/lib/types.js";
+import { MessageRow } from "@/ui/message-row.js";
+
+const statusButton = tv({
+  base: "h-8 shrink-0 px-2.5 font-mono text-[11px]/4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
+  variants: {
+    selected: {
+      true: "bg-accent text-surface",
+      false: "text-muted hover:bg-surface-muted hover:text-ink",
+    },
+  },
+});
+
+const statusFilters: {
   label: string;
   value: MessageStatusFilter;
-}> = [
+}[] = [
   { label: "All", value: "all" },
   { label: "Unread", value: "unread" },
   { label: "Acknowledged", value: "acknowledged" },
 ];
 
-interface MessageHistoryDialogProps {
+type MessageHistoryDialogProps = {
   messages: Message[];
   now: number;
-}
+};
 
-export function MessageHistoryDialog({
-  messages,
-  now,
-}: MessageHistoryDialogProps) {
+export function MessageHistoryDialog({ messages, now }: MessageHistoryDialogProps) {
   const [query, setQuery] = useState("");
   const [repoRoot, setRepoRoot] = useState<string | null>(null);
   const [status, setStatus] = useState<MessageStatusFilter>("all");
   const [page, setPage] = useState(1);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const repositories = useMemo(() => messageRepositories(messages), [messages]);
-  const filteredMessages = useMemo(
-    () => filterMessages(messages, { query, repoRoot, status }),
-    [messages, query, repoRoot, status],
-  );
-  const messagePage = useMemo(
-    () => paginateMessages(filteredMessages, page),
-    [filteredMessages, page],
-  );
+  const repositories = messageRepositories(messages);
+  const filteredMessages = filterMessages(messages, { query, repoRoot, status });
+  const messagePage = paginateMessages(filteredMessages, page);
 
   useEffect(() => {
     if (messagePage.page !== page) {
@@ -67,7 +66,9 @@ export function MessageHistoryDialog({
   return (
     <Dialog.Root
       onOpenChange={(open) => {
-        if (!open) resetFilters();
+        if (!open) {
+          resetFilters();
+        }
       }}
     >
       <Dialog.Trigger className="group flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-medium text-accent transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
@@ -79,18 +80,15 @@ export function MessageHistoryDialog({
       </Dialog.Trigger>
 
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-(--z-modal) min-h-dvh bg-black/35 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none dark:bg-black/60 supports-[-webkit-touch-callout:none]:absolute" />
+        <Dialog.Backdrop className="fixed inset-0 z-(--z-modal) min-h-dvh bg-black/35 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-[-webkit-touch-callout:none]:absolute motion-reduce:transition-none dark:bg-black/60" />
         <Dialog.Viewport className="fixed inset-0 z-(--z-modal) flex min-h-dvh items-end justify-center sm:items-center sm:p-4">
           <Dialog.Popup className="flex h-dvh w-full flex-col border-line-strong bg-surface text-ink shadow-2xl transition-[transform,opacity] duration-200 ease-out data-ending-style:translate-y-2 data-ending-style:opacity-0 data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transform-none motion-reduce:transition-none sm:h-[min(48rem,calc(100dvh-2rem))] sm:max-w-5xl sm:border sm:data-ending-style:translate-y-0 sm:data-ending-style:scale-[0.985] sm:data-starting-style:translate-y-0 sm:data-starting-style:scale-[0.985]">
             <div className="shrink-0 border-b border-line-strong bg-surface">
-              <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-5">
+              <div className="flex items-start justify-between gap-4 p-4 sm:px-5">
                 <div className="min-w-0">
-                  <Dialog.Title className="text-base font-semibold">
-                    Message history
-                  </Dialog.Title>
+                  <Dialog.Title className="text-base font-semibold">Message history</Dialog.Title>
                   <Dialog.Description className="mt-1 text-xs/5 text-muted">
-                    Search the messages currently retained by the local
-                    coordination ledger.
+                    Search the messages currently retained by the local coordination ledger.
                   </Dialog.Description>
                 </div>
                 <Dialog.Close
@@ -107,10 +105,10 @@ export function MessageHistoryDialog({
                   <span className="sr-only">Search messages</span>
                   <Search
                     aria-hidden="true"
-                    className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted"
+                    className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted"
                   />
                   <input
-                    className="h-9 w-full border border-line bg-canvas pl-9 pr-3 text-xs text-ink outline-hidden placeholder:text-muted focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
+                    className="h-9 w-full border border-line bg-canvas pr-3 pl-9 text-xs text-ink outline-hidden placeholder:text-muted focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
                     onChange={(event) => {
                       setQuery(event.target.value);
                       showPage(1);
@@ -131,7 +129,7 @@ export function MessageHistoryDialog({
                     return (
                       <button
                         aria-pressed={selected}
-                        className={`h-8 shrink-0 px-2.5 font-mono text-[11px]/4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${selected ? "bg-accent text-surface" : "text-muted hover:bg-surface-muted hover:text-ink"}`}
+                        className={statusButton({ selected })}
                         key={filter.value}
                         onClick={() => {
                           setStatus(filter.value);
@@ -146,10 +144,7 @@ export function MessageHistoryDialog({
                 </div>
 
                 <label className="flex min-w-0 items-center gap-2">
-                  <ListFilter
-                    aria-hidden="true"
-                    className="size-3.5 shrink-0 text-muted"
-                  />
+                  <ListFilter aria-hidden="true" className="size-3.5 shrink-0 text-muted" />
                   <span className="sr-only">Repository</span>
                   <select
                     className="h-9 min-w-0 flex-1 border border-line bg-canvas px-2 font-mono text-[11px]/4 text-ink outline-hidden focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
@@ -177,13 +172,8 @@ export function MessageHistoryDialog({
               {messagePage.items.length === 0 ? (
                 <div className="flex min-h-56 items-center justify-center border-y border-line-muted px-4 text-center">
                   <div>
-                    <Search
-                      aria-hidden="true"
-                      className="mx-auto size-5 text-muted"
-                    />
-                    <p className="mt-3 text-sm font-medium">
-                      No messages match these filters
-                    </p>
+                    <Search aria-hidden="true" className="mx-auto size-5 text-muted" />
+                    <p className="mt-3 text-sm font-medium">No messages match these filters</p>
                     <button
                       className="mt-2 text-xs font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       onClick={resetFilters}
@@ -197,12 +187,7 @@ export function MessageHistoryDialog({
                 <ol className="border-l border-line">
                   <AnimatePresence initial={false} mode="popLayout">
                     {messagePage.items.map((message) => (
-                      <MessageRow
-                        key={message.id}
-                        message={message}
-                        now={now}
-                        showRepository
-                      />
+                      <MessageRow key={message.id} message={message} now={now} showRepository />
                     ))}
                   </AnimatePresence>
                 </ol>
@@ -210,15 +195,12 @@ export function MessageHistoryDialog({
             </div>
 
             <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line-strong bg-surface-muted px-4 py-3 sm:px-5">
-              <p
-                aria-live="polite"
-                className="font-mono text-[11px]/4 text-muted tabular-nums"
-              >
+              <p aria-live="polite" className="font-mono text-[11px]/4 text-muted tabular-nums">
                 {messagePage.start}–{messagePage.end} of {messagePage.total}
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  className="inline-flex h-8 items-center gap-1 border border-line bg-surface px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className="inline-flex h-8 items-center gap-1 border border-line bg-surface px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={messagePage.page === 1}
                   onClick={() => showPage(messagePage.page - 1)}
                   type="button"
@@ -230,7 +212,7 @@ export function MessageHistoryDialog({
                   {messagePage.page}/{messagePage.pageCount}
                 </span>
                 <button
-                  className="inline-flex h-8 items-center gap-1 border border-line bg-surface px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className="inline-flex h-8 items-center gap-1 border border-line bg-surface px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={messagePage.page === messagePage.pageCount}
                   onClick={() => showPage(messagePage.page + 1)}
                   type="button"

@@ -1,64 +1,72 @@
-import type { Finding, FindingState } from "@/lib/types";
+import type { Finding, FindingState } from "@/lib/types.js";
 
-export const FINDING_PREVIEW_LIMIT = 3;
+export type FindingFilter = "all" | "unresolved" | "open" | "handoff" | "resolved";
 
-export type FindingFilter = "open" | "handoff" | "resolved";
-
-export interface FindingCounts {
+export type FindingCounts = {
+  total: number;
+  unresolved: number;
   pending: number;
   triaging: number;
   handedOff: number;
   terminal: number;
-}
+};
 
-export interface FindingGroup {
+export type FindingGroup = {
   repoRoot: string;
   counts: FindingCounts;
   findings: Finding[];
-}
+};
 
-const terminalStates: readonly FindingState[] = [
-  "fixed",
-  "stale",
-  "rejected",
-  "duplicate",
-];
+const terminalStates = new Set<FindingState>(["fixed", "stale", "rejected", "duplicate"]);
 
 export function isTerminalFinding(finding: Finding): boolean {
-  return terminalStates.includes(finding.state);
+  return terminalStates.has(finding.state);
 }
 
 export function countFindings(findings: Finding[]): FindingCounts {
-  return findings.reduce<FindingCounts>(
-    (counts, finding) => ({
-      pending: counts.pending + Number(finding.state === "pending"),
-      triaging: counts.triaging + Number(finding.triaging),
-      handedOff: counts.handedOff + Number(finding.state === "handed-off"),
-      terminal: counts.terminal + Number(isTerminalFinding(finding)),
-    }),
-    { pending: 0, triaging: 0, handedOff: 0, terminal: 0 },
-  );
+  const counts: FindingCounts = {
+    total: findings.length,
+    unresolved: 0,
+    pending: 0,
+    triaging: 0,
+    handedOff: 0,
+    terminal: 0,
+  };
+  for (const finding of findings) {
+    counts.pending += Number(finding.state === "pending");
+    counts.triaging += Number(finding.triaging);
+    counts.handedOff += Number(finding.state === "handed-off");
+    counts.terminal += Number(isTerminalFinding(finding));
+  }
+  counts.unresolved = counts.pending + counts.handedOff;
+  return counts;
 }
 
 export function orderFindings(findings: Finding[]): Finding[] {
-  return [...findings].sort(
-    (left, right) =>
-      right.updated_at - left.updated_at || left.id.localeCompare(right.id),
+  return findings.toSorted(
+    (left, right) => right.updated_at - left.updated_at || left.id.localeCompare(right.id)
   );
 }
 
-export function filterFindings(
-  findings: Finding[],
-  filter: FindingFilter,
-): Finding[] {
+export function filterFindings(findings: Finding[], filter: FindingFilter): Finding[] {
   return orderFindings(findings).filter((finding) => {
-    if (filter === "open") return finding.state === "pending";
-    if (filter === "handoff") return finding.state === "handed-off";
+    if (filter === "all") {
+      return true;
+    }
+    if (filter === "unresolved") {
+      return !isTerminalFinding(finding);
+    }
+    if (filter === "open") {
+      return finding.state === "pending";
+    }
+    if (filter === "handoff") {
+      return finding.state === "handed-off";
+    }
     return isTerminalFinding(finding);
   });
 }
 
-export function groupFindings(findings: Finding[]): FindingGroup[] {
+export function groupFindings(findings: Finding[], filter: FindingFilter = "all"): FindingGroup[] {
   const groups = new Map<string, Finding[]>();
   for (const finding of findings) {
     const rows = groups.get(finding.repo_root) ?? [];
@@ -70,12 +78,13 @@ export function groupFindings(findings: Finding[]): FindingGroup[] {
     .map(([repoRoot, rows]) => ({
       repoRoot,
       counts: countFindings(rows),
-      findings: orderFindings(rows),
+      findings: filterFindings(rows, filter),
     }))
-    .sort(
+    .filter((group) => group.findings.length > 0)
+    .toSorted(
       (left, right) =>
-        right.counts.pending - left.counts.pending ||
+        right.counts.unresolved - left.counts.unresolved ||
         right.counts.triaging - left.counts.triaging ||
-        left.repoRoot.localeCompare(right.repoRoot),
+        left.repoRoot.localeCompare(right.repoRoot)
     );
 }

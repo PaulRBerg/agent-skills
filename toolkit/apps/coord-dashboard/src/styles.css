@@ -106,12 +106,9 @@
   --color-draft-ink: var(--color-draft-ink-base);
   --color-draft-line: var(--color-draft-line-base);
   --color-draft-subtle: var(--color-draft-subtle-base);
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono",
-    monospace;
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --z-modal: 50;
 }
 
@@ -141,8 +138,7 @@ button,
 @keyframes liveness-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0
-      color-mix(in oklab, var(--color-positive-base) 45%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-positive-base) 45%, transparent);
   }
   50% {
     box-shadow: 0 0 0 4px transparent;
@@ -172,15 +168,15 @@ button,
   }
 }
 
-.liveness-fresh {
+@utility liveness-fresh {
   animation: liveness-pulse 2.2s ease-out infinite;
 }
 
-.change-wash {
+@utility change-wash {
   animation: change-wash 560ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.refresh-sweep {
+@utility refresh-sweep {
   position: absolute;
   right: 0;
   bottom: -0.45rem;

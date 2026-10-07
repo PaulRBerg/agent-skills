@@ -1,11 +1,11 @@
 import { readdir, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import nodePath from "node:path";
 
-export interface BuildFreshness {
+export type BuildFreshness = {
   indexMtimeMs: number | null;
   stampMtimeMs: number | null;
   latestInputMtimeMs: number | null;
-}
+};
 
 export const BUILD_INPUTS = [
   "src",
@@ -33,9 +33,12 @@ export function isBuildFresh(freshness: BuildFreshness): boolean {
 
 async function mtime(path: string): Promise<number | null> {
   try {
-    return (await stat(path)).mtimeMs;
+    const metadata = await stat(path);
+    return metadata.mtimeMs;
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
     throw error;
   }
 }
@@ -45,28 +48,37 @@ async function latestTreeMtime(path: string): Promise<number | null> {
   try {
     metadata = await stat(path);
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
     throw error;
   }
 
   let latest = metadata.mtimeMs;
-  if (!metadata.isDirectory()) return latest;
+  if (!metadata.isDirectory()) {
+    return latest;
+  }
 
   const entries = await readdir(path);
   for (const entry of entries) {
-    const childMtime = await latestTreeMtime(resolve(path, entry));
-    if (childMtime !== null) latest = Math.max(latest, childMtime);
+    // oxlint-disable-next-line no-await-in-loop -- Bound filesystem traversal to one child at a time.
+    const childMtime = await latestTreeMtime(nodePath.resolve(path, entry));
+    if (childMtime !== null) {
+      latest = Math.max(latest, childMtime);
+    }
   }
   return latest;
 }
 
 export async function inspectBuildFreshness(projectRoot: string): Promise<BuildFreshness> {
-  const inputMtimes = await Promise.all(BUILD_INPUTS.map((path) => latestTreeMtime(resolve(projectRoot, path))));
+  const inputMtimes = await Promise.all(
+    BUILD_INPUTS.map((path) => latestTreeMtime(nodePath.resolve(projectRoot, path)))
+  );
   const allInputsPresent = inputMtimes.every((value): value is number => value !== null);
 
   return {
-    indexMtimeMs: await mtime(resolve(projectRoot, "dist", "index.html")),
-    stampMtimeMs: await mtime(resolve(projectRoot, "dist", ".build-stamp")),
+    indexMtimeMs: await mtime(nodePath.resolve(projectRoot, "dist", "index.html")),
+    stampMtimeMs: await mtime(nodePath.resolve(projectRoot, "dist", ".build-stamp")),
     latestInputMtimeMs: allInputsPresent ? Math.max(...inputMtimes) : null,
   };
 }

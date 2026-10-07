@@ -1,2 +1,16 @@
-node_modules/
+# directories
+.serena/
+.vite/
+.cache/
+coverage/
 dist/
+node_modules/
+
+# files
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+settings.local.json

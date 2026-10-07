@@ -1,25 +1,21 @@
 import { FolderGit2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  displayPath,
-  formatRelativeTime,
-  shortSessionId,
-} from "@/lib/format";
-import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
-import type { RepoLaneModel } from "@/lib/types";
-import { AnimatedValue } from "@/ui/animated-value";
-import { DraftChip, WorkChips } from "@/ui/work-chips";
-import { SessionRow } from "@/ui/session-row";
 
-interface RepoLaneProps {
+import { displayPath, formatRelativeTime, shortSessionId } from "@/lib/format.js";
+import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion.js";
+import type { RepoLaneModel } from "@/lib/types.js";
+import { AnimatedValue } from "@/ui/animated-value.js";
+import { SessionRow } from "@/ui/session-row.js";
+import { DraftChip, WorkChips } from "@/ui/work-chips.js";
+
+type RepoLaneProps = {
   lane: RepoLaneModel;
   now: number;
-}
+};
 
 export function RepoLane({ lane, now }: RepoLaneProps) {
   const workCount =
-    lane.sessions.filter((row) => row.work !== undefined).length +
-    lane.unmatchedWork.length;
+    lane.sessions.filter((row) => row.work !== undefined).length + lane.unmatchedWork.length;
 
   return (
     <motion.section
@@ -44,7 +40,7 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
             strokeWidth={1.8}
           />
           <h2
-            className="min-w-0 break-all font-mono text-xs font-semibold sm:truncate"
+            className="min-w-0 font-mono text-xs font-semibold break-all sm:truncate"
             title={displayPath(lane.repoRoot)}
           >
             {displayPath(lane.repoRoot)}
@@ -52,9 +48,7 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
         </div>
         <div className="flex shrink-0 items-center gap-3 font-mono text-[11px]/4 text-muted tabular-nums">
           <span>
-            <AnimatedValue value={lane.sessions.length}>
-              {lane.sessions.length}
-            </AnimatedValue>{" "}
+            <AnimatedValue value={lane.sessions.length}>{lane.sessions.length}</AnimatedValue>{" "}
             session
             {lane.sessions.length === 1 ? "" : "s"}
           </span>
@@ -69,14 +63,12 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
           </span>
           <span>
             activity{" "}
-            {lane.lastActivity === null
-              ? "unknown"
-              : formatRelativeTime(lane.lastActivity, now)}
+            {lane.lastActivity === null ? "unknown" : formatRelativeTime(lane.lastActivity, now)}
           </span>
         </div>
       </div>
 
-      <div className="hidden grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] gap-4 border-b border-line-muted px-3 py-1.5 font-mono text-[10px]/4 uppercase tracking-wider text-muted sm:grid">
+      <div className="hidden grid-cols-[minmax(13rem,1.2fr)_6rem_minmax(16rem,2fr)] gap-4 border-b border-line-muted px-3 py-1.5 font-mono text-[10px]/4 tracking-wider text-muted uppercase sm:grid">
         <span>Agent</span>
         <span>State</span>
         <span>Work scopes</span>
@@ -119,10 +111,7 @@ export function RepoLane({ lane, now }: RepoLaneProps) {
                   Unreported session · {work.client}:{shortSessionId(work.session_id)}
                 </p>
               </div>
-              <AnimatedValue
-                className="pl-4 font-mono text-xs sm:pl-0"
-                value={work.state}
-              >
+              <AnimatedValue className="pl-4 font-mono text-xs sm:pl-0" value={work.state}>
                 {work.state}
               </AnimatedValue>
               <div className="min-w-0 pl-4 sm:pl-0">

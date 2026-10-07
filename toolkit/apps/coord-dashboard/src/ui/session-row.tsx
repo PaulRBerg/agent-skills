@@ -1,20 +1,21 @@
 import { GitBranch } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { tv } from "tailwind-variants";
+
 import {
   displayPath,
   formatRelativeTime,
   getLivenessTier,
   sessionDisplayName,
   shortSessionId,
-} from "@/lib/format";
-import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
-import type { Delegate, LaneSession } from "@/lib/types";
-import { AnimatedValue } from "@/ui/animated-value";
-import { WorkChips } from "@/ui/work-chips";
+} from "@/lib/format.js";
+import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion.js";
+import type { Delegate, LaneSession } from "@/lib/types.js";
+import { AnimatedValue } from "@/ui/animated-value.js";
+import { WorkChips } from "@/ui/work-chips.js";
 
 const clientBadge = tv({
-  base: "inline-flex border px-1.5 py-0.5 font-mono text-[11px]/4 font-semibold uppercase tracking-wide",
+  base: "inline-flex border px-1.5 py-0.5 font-mono text-[11px]/4 font-semibold tracking-wide uppercase",
   variants: {
     client: {
       codex: "border-codex-line bg-codex-subtle text-codex",
@@ -24,17 +25,22 @@ const clientBadge = tv({
   },
 });
 
-const livenessClasses = {
-  fresh: "liveness-fresh bg-positive",
-  aging: "bg-warning opacity-70",
-  stale: "bg-muted opacity-35",
-} as const;
+const livenessDot = tv({
+  base: "size-2 shrink-0 rounded-full transition-colors",
+  variants: {
+    tier: {
+      fresh: "liveness-fresh bg-positive",
+      aging: "bg-warning opacity-70",
+      stale: "bg-muted opacity-35",
+    },
+  },
+});
 
 function LivenessDot({ lastSeen, now }: { lastSeen: number; now: number }) {
   const tier = getLivenessTier(lastSeen, now);
   return (
     <span
-      className={`size-2 shrink-0 rounded-full transition-colors ${livenessClasses[tier]}`}
+      className={livenessDot({ tier })}
       role="img"
       title={`${tier}; seen ${formatRelativeTime(lastSeen, now)}`}
       aria-label={`${tier} liveness; seen ${formatRelativeTime(lastSeen, now)}`}
@@ -64,10 +70,7 @@ function DelegateRow({ delegate, now }: { delegate: Delegate; now: number }) {
           {delegate.agent_id}
         </span>
       </div>
-      <AnimatedValue
-        className="font-mono text-xs text-muted"
-        value={delegate.state}
-      >
+      <AnimatedValue className="font-mono text-xs text-muted" value={delegate.state}>
         {delegate.state}
       </AnimatedValue>
       <span className="text-xs text-muted">
@@ -78,26 +81,22 @@ function DelegateRow({ delegate, now }: { delegate: Delegate; now: number }) {
   );
 }
 
-interface SessionRowProps {
+type SessionRowProps = {
   row: LaneSession;
   repoRoot: string;
   now: number;
-}
+};
 
 export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
   const { session, work, delegates } = row;
+  const showCwd = session.cwd !== repoRoot;
   const label = sessionDisplayName(session, work?.label);
   const secondaryNames = [work?.label, session.name].filter(
     (value, index, values): value is string =>
-      value !== null &&
-      value !== undefined &&
-      value !== label &&
-      values.indexOf(value) === index,
+      value !== null && value !== undefined && value !== label && values.indexOf(value) === index
   );
   const client =
-    session.client === "codex" || session.client === "claude"
-      ? session.client
-      : "other";
+    session.client === "codex" || session.client === "claude" ? session.client : "other";
 
   return (
     <motion.div
@@ -119,12 +118,12 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
             <LivenessDot lastSeen={session.last_seen} now={now} />
             <span className={clientBadge({ client })}>{session.client}</span>
             {session.permission_mode === "plan" ? (
-              <span className="inline-flex border border-warning bg-warning-subtle px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold uppercase tracking-wide text-warning-ink">
+              <span className="inline-flex border border-warning bg-warning-subtle px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold tracking-wide text-warning-ink uppercase">
                 planning
               </span>
             ) : null}
             {session.coordination_waived ? (
-              <span className="inline-flex border border-accent bg-accent-wash px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold uppercase tracking-wide text-accent">
+              <span className="inline-flex border border-accent bg-accent-wash px-1.5 py-0.5 font-mono text-[10px]/3 font-semibold tracking-wide text-accent uppercase">
                 waived
               </span>
             ) : null}
@@ -144,7 +143,7 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
                 {name}
               </span>
             ))}
-            {session.cwd !== repoRoot ? (
+            {showCwd ? (
               <span className="truncate" title={displayPath(session.cwd)}>
                 cwd {displayPath(session.cwd)}
               </span>
@@ -153,15 +152,10 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
         </div>
 
         <div className="flex items-center gap-2 pl-4 sm:pl-0">
-          <AnimatedValue
-            className="font-mono text-xs font-medium"
-            value={session.state}
-          >
+          <AnimatedValue className="font-mono text-xs font-medium" value={session.state}>
             {session.state}
           </AnimatedValue>
-          <span className="text-xs text-muted">
-            {formatRelativeTime(session.last_seen, now)}
-          </span>
+          <span className="text-xs text-muted">{formatRelativeTime(session.last_seen, now)}</span>
         </div>
 
         <div className="min-w-0 pl-4 sm:pl-0">
@@ -201,11 +195,7 @@ export function SessionRow({ row, repoRoot, now }: SessionRowProps) {
         <div className="border-l border-line-strong">
           <AnimatePresence initial={false} mode="popLayout">
             {delegates.map((delegate) => (
-              <DelegateRow
-                delegate={delegate}
-                key={delegate.agent_id}
-                now={now}
-              />
+              <DelegateRow delegate={delegate} key={delegate.agent_id} now={now} />
             ))}
           </AnimatePresence>
         </div>

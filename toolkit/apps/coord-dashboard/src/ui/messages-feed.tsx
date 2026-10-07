@@ -1,34 +1,25 @@
 import { MessageSquareText } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import { previewMessages } from "@/lib/messages";
-import type { Message } from "@/lib/types";
-import { AnimatedValue } from "@/ui/animated-value";
-import { MessageHistoryDialog } from "@/ui/message-history-dialog";
-import { MessageRow } from "@/ui/message-row";
 
-interface MessagesFeedProps {
+import { previewMessages } from "@/lib/messages.js";
+import type { Message } from "@/lib/types.js";
+import { AnimatedValue } from "@/ui/animated-value.js";
+import { MessageHistoryDialog } from "@/ui/message-history-dialog.js";
+import { MessageRow } from "@/ui/message-row.js";
+
+type MessagesFeedProps = {
   messages: Message[];
   now: number;
-}
+};
 
 export function MessagesFeed({ messages, now }: MessagesFeedProps) {
   const preview = previewMessages(messages);
 
   return (
-    <section
-      className="border-t border-line-strong pt-3"
-      aria-labelledby="messages-heading"
-    >
+    <section className="border-t border-line-strong pt-3" aria-labelledby="messages-heading">
       <div className="flex items-center justify-between gap-3">
-        <h2
-          id="messages-heading"
-          className="flex items-center gap-2 text-sm font-semibold"
-        >
-          <MessageSquareText
-            aria-hidden="true"
-            className="size-4 text-accent"
-            strokeWidth={1.8}
-          />
+        <h2 id="messages-heading" className="flex items-center gap-2 text-sm font-semibold">
+          <MessageSquareText aria-hidden="true" className="size-4 text-accent" strokeWidth={1.8} />
           Messages
         </h2>
         <AnimatedValue
@@ -48,16 +39,11 @@ export function MessagesFeed({ messages, now }: MessagesFeedProps) {
           <ol className="border-l border-line">
             <AnimatePresence initial={false} mode="popLayout">
               {preview.map((message) => (
-                <MessageRow
-                  compact
-                  key={message.id}
-                  message={message}
-                  now={now}
-                />
+                <MessageRow compact key={message.id} message={message} now={now} />
               ))}
             </AnimatePresence>
           </ol>
-          <div className="border-l border-t border-line-muted">
+          <div className="border-t border-l border-line-muted">
             <MessageHistoryDialog messages={messages} now={now} />
           </div>
         </div>

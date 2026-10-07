@@ -1,14 +1,15 @@
 import { Clock3, LockKeyhole } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { tv } from "tailwind-variants";
-import { shortenPath } from "@/lib/format";
-import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion";
+
+import { shortenPath } from "@/lib/format.js";
+import { MOTION_DURATION, MOTION_EASE } from "@/lib/motion.js";
 import type {
   RepoLaneDraft,
   WorkClaimWithQueuePosition,
   WorkWithQueuePosition,
-} from "@/lib/types";
-import { AnimatedValue } from "@/ui/animated-value";
+} from "@/lib/types.js";
+import { AnimatedValue } from "@/ui/animated-value.js";
 
 const chip = tv({
   base: "inline-flex max-w-full items-center border px-1.5 py-0.5 font-mono text-xs/4",
@@ -39,7 +40,7 @@ function ClaimDetail({
       transition={{ duration: MOTION_DURATION.field, ease: MOTION_EASE }}
     >
       <span
-        className="max-w-full truncate font-mono text-[10px]/4 font-semibold uppercase tracking-wide text-muted"
+        className="max-w-full truncate font-mono text-[10px]/4 font-semibold tracking-wide text-muted uppercase"
         title={claim.repo_root}
       >
         {shortenPath(claim.repo_root)}
@@ -56,10 +57,7 @@ function ClaimDetail({
       {state === "queued" && claim.queuePosition !== undefined ? (
         <span className="inline-flex items-center gap-1 font-mono text-xs text-queued-ink">
           <Clock3 aria-hidden="true" className="size-3" />#
-          <AnimatedValue value={claim.queuePosition}>
-            {claim.queuePosition}
-          </AnimatedValue>{" "}
-          in queue
+          <AnimatedValue value={claim.queuePosition}>{claim.queuePosition}</AnimatedValue> in queue
         </span>
       ) : null}
       {claim.blocked_reason ? (
@@ -74,9 +72,9 @@ function ClaimDetail({
   );
 }
 
-interface WorkChipsProps {
+type WorkChipsProps = {
   work: WorkWithQueuePosition;
-}
+};
 
 export function WorkChips({ work }: WorkChipsProps) {
   const parentBlocker = work.blocked_reason ?? undefined;
@@ -92,7 +90,7 @@ export function WorkChips({ work }: WorkChipsProps) {
       transition={{ duration: MOTION_DURATION.layout, ease: MOTION_EASE }}
     >
       <AnimatedValue
-        className="font-mono text-[10px]/4 font-semibold uppercase tracking-wide text-muted"
+        className="font-mono text-[10px]/4 font-semibold tracking-wide text-muted uppercase"
         value={work.state}
       >
         {work.state}
@@ -114,17 +112,14 @@ export function WorkChips({ work }: WorkChipsProps) {
   );
 }
 
-interface DraftChipProps {
+type DraftChipProps = {
   laneDraft: RepoLaneDraft;
-}
+};
 
 export function DraftChip({ laneDraft }: DraftChipProps) {
   const { who, scopeCount } = laneDraft;
   return (
-    <span
-      className={chip({ state: "draft" })}
-      title={laneDraft.draft.label}
-    >
+    <span className={chip({ state: "draft" })} title={laneDraft.draft.label}>
       draft {who} · {scopeCount} scope{scopeCount === 1 ? "" : "s"}
     </span>
   );

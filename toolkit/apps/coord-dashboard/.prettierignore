@@ -1,0 +1,7 @@
+# directories
+.husky/
+.serena/
+.ai/
+.cache/
+dist/
+node_modules/

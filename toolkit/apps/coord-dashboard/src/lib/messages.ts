@@ -1,68 +1,64 @@
-import { messageEndpointName } from "@/lib/format";
-import type { Message } from "@/lib/types";
+import { messageEndpointName } from "@/lib/format.js";
+import type { Message } from "@/lib/types.js";
 
 export const MESSAGE_PREVIEW_LIMIT = 5;
 export const MESSAGE_PAGE_SIZE = 20;
 
 export type MessageStatusFilter = "all" | "unread" | "acknowledged";
 
-export interface MessageFilters {
+export type MessageFilters = {
   query: string;
   repoRoot: string | null;
   status: MessageStatusFilter;
-}
+};
 
-export interface MessagePage {
+export type MessagePage = {
   items: Message[];
   page: number;
   pageCount: number;
   start: number;
   end: number;
   total: number;
-}
+};
 
 export function orderMessages(messages: Message[]): Message[] {
-  return [...messages].sort(
-    (left, right) =>
-      right.created_at - left.created_at || left.id.localeCompare(right.id),
+  return messages.toSorted(
+    (left, right) => right.created_at - left.created_at || left.id.localeCompare(right.id)
   );
 }
 
-export function previewMessages(
-  messages: Message[],
-  limit = MESSAGE_PREVIEW_LIMIT,
-): Message[] {
+export function previewMessages(messages: Message[], limit = MESSAGE_PREVIEW_LIMIT): Message[] {
   return orderMessages(messages).slice(0, limit);
 }
 
 export function messageRepositories(messages: Message[]): string[] {
   return [...new Set(messages.flatMap((message) => message.repo_root ?? []))]
     .filter((repoRoot) => repoRoot.length > 0)
-    .sort((left, right) => left.localeCompare(right));
+    .toSorted((left, right) => left.localeCompare(right));
 }
 
-export function filterMessages(
-  messages: Message[],
-  filters: MessageFilters,
-): Message[] {
+export function filterMessages(messages: Message[], filters: MessageFilters): Message[] {
   const query = filters.query.trim().toLowerCase();
 
   return orderMessages(messages).filter((message) => {
     const acknowledged = message.acknowledged_at !== null;
-    if (filters.status === "unread" && acknowledged) return false;
-    if (filters.status === "acknowledged" && !acknowledged) return false;
+    if (filters.status === "unread" && acknowledged) {
+      return false;
+    }
+    if (filters.status === "acknowledged" && !acknowledged) {
+      return false;
+    }
     if (filters.repoRoot !== null && message.repo_root !== filters.repoRoot) {
       return false;
     }
-    if (query.length === 0) return true;
+    if (query.length === 0) {
+      return true;
+    }
 
-    const senderLabel = messageEndpointName(
-      message.sender_callsign,
-      message.sender_session_id,
-    );
+    const senderLabel = messageEndpointName(message.sender_callsign, message.sender_session_id);
     const recipientLabel = messageEndpointName(
       message.recipient_callsign,
-      message.recipient_session_id,
+      message.recipient_session_id
     );
     const searchable = [
       message.text,
@@ -84,7 +80,7 @@ export function filterMessages(
 export function paginateMessages(
   messages: Message[],
   requestedPage: number,
-  pageSize = MESSAGE_PAGE_SIZE,
+  pageSize = MESSAGE_PAGE_SIZE
 ): MessagePage {
   const pageCount = Math.max(1, Math.ceil(messages.length / pageSize));
   const page = Math.min(Math.max(1, requestedPage), pageCount);

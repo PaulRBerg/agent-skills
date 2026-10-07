@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+
 import {
   displayPath,
   formatRelativeTime,
@@ -7,14 +8,14 @@ import {
   messageEndpointName,
   sessionDisplayName,
   shortenPath,
-} from "@/lib/format";
+} from "@/lib/format.js";
 
 describe("formatRelativeTime", () => {
   test.each([
     [100, 102, "just now"],
     [100, 117, "17s ago"],
     [100, 220, "2m ago"],
-    [100, 7_300, "2h ago"],
+    [100, 7300, "2h ago"],
     [100, 172_900, "2d ago"],
   ])("formats %s relative to %s as %s", (timestamp, now, expected) => {
     expect(formatRelativeTime(timestamp, now)).toBe(expected);
@@ -33,7 +34,7 @@ describe("getLivenessTier", () => {
     [299, "aging"],
     [300, "stale"],
   ] as const)("classifies an age of %s seconds as %s", (age, expected) => {
-    expect(getLivenessTier(1_000 - age, 1_000)).toBe(expected);
+    expect(getLivenessTier(1000 - age, 1000)).toBe(expected);
   });
 });
 
@@ -50,19 +51,13 @@ describe("path display", () => {
   });
 
   test("only abbreviates at a path boundary, never a plain substring", () => {
-    expect(displayPath("/Users/testuser-old", HOME)).toBe(
-      "/Users/testuser-old",
-    );
-    expect(displayPath("/Users/testuserx/project", HOME)).toBe(
-      "/Users/testuserx/project",
-    );
+    expect(displayPath("/Users/testuser-old", HOME)).toBe("/Users/testuser-old");
+    expect(displayPath("/Users/testuserx/project", HOME)).toBe("/Users/testuserx/project");
   });
 
   test("handles a trailing slash on the home directory", () => {
     expect(displayPath("/Users/testuser", `${HOME}/`)).toBe("~");
-    expect(displayPath("/Users/testuser/projects", `${HOME}/`)).toBe(
-      "~/projects",
-    );
+    expect(displayPath("/Users/testuser/projects", `${HOME}/`)).toBe("~/projects");
   });
 
   test("leaves paths untouched when no home directory is configured", () => {
@@ -72,7 +67,7 @@ describe("path display", () => {
   test("shortens display paths after replacing the home directory", () => {
     expect(shortenPath("/Users/testuser", HOME)).toBe("~");
     expect(shortenPath("/Users/testuser/projects/agent-toolkit", HOME)).toBe(
-      "~/projects/agent-toolkit",
+      "~/projects/agent-toolkit"
     );
   });
 });
@@ -86,25 +81,21 @@ describe("identity display", () => {
 
   test("prefers callsign, task label, provider name, then short ID", () => {
     expect(sessionDisplayName(session)).toBe("👩‍💻 Baroness Byte");
-    expect(
-      sessionDisplayName({ ...session, callsign: null }, "dashboard work"),
-    ).toBe("dashboard work");
-    expect(sessionDisplayName({ ...session, callsign: null })).toBe(
-      "provider-name",
+    expect(sessionDisplayName({ ...session, callsign: null }, "dashboard work")).toBe(
+      "dashboard work"
     );
+    expect(sessionDisplayName({ ...session, callsign: null })).toBe("provider-name");
     expect(
       sessionDisplayName({
         ...session,
         callsign: undefined,
         name: null,
-      }),
+      })
     ).toBe("019fcbf9");
   });
 
   test("uses immutable message callsigns with a short-ID fallback", () => {
-    expect(messageEndpointName("🦊 Historical Fox", "sender-session")).toBe(
-      "🦊 Historical Fox",
-    );
+    expect(messageEndpointName("🦊 Historical Fox", "sender-session")).toBe("🦊 Historical Fox");
     expect(messageEndpointName(undefined, "sender-session")).toBe("sender-s");
   });
 });

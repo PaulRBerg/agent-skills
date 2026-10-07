@@ -1,17 +1,19 @@
 export const DEFAULT_PORT = 4173;
 
 export function parsePort(rawPort: string | undefined): number {
-  if (rawPort === undefined) return DEFAULT_PORT;
-  if (!/^\d+$/.test(rawPort)) {
+  if (rawPort === undefined) {
+    return DEFAULT_PORT;
+  }
+  if (!/^\d+$/u.test(rawPort)) {
     throw new Error(
-      `AI_COORD_DASHBOARD_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`,
+      `AI_COORD_DASHBOARD_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`
     );
   }
 
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(
-      `AI_COORD_DASHBOARD_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`,
+      `AI_COORD_DASHBOARD_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`
     );
   }
   return port;
@@ -19,7 +21,7 @@ export function parsePort(rawPort: string | undefined): number {
 
 export function startServer(
   port: number,
-  fetch: (request: Request) => Promise<Response>,
+  fetch: (request: Request) => Promise<Response>
 ): Bun.Server<undefined> {
   const server = Bun.serve({
     hostname: "127.0.0.1",

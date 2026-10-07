@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { extname, resolve, sep } from "node:path";
+import nodePath from "node:path";
 
 const API_ORIGIN = "http://127.0.0.1:4477";
 
@@ -19,12 +19,12 @@ const CONTENT_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-export interface RequestHandlerOptions {
+export type RequestHandlerOptions = {
   distDirectory: string;
   apiOrigin?: string;
   proxyRequest?: (request: Request) => Promise<Response>;
   homeDirectory?: string;
-}
+};
 
 // Loopback hostnames accepted to block DNS-rebinding attacks against this 127.0.0.1-bound server.
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -40,16 +40,20 @@ function responseBody(method: string, bytes: Uint8Array): BodyInit | null {
 async function fileResponse(path: string, method: string): Promise<Response | null> {
   try {
     const metadata = await stat(path);
-    if (!metadata.isFile()) return null;
+    if (!metadata.isFile()) {
+      return null;
+    }
     const bytes = new Uint8Array(await readFile(path));
     return new Response(responseBody(method, bytes), {
       headers: {
         "Content-Length": String(bytes.byteLength),
-        "Content-Type": CONTENT_TYPES[extname(path)] ?? "application/octet-stream",
+        "Content-Type": CONTENT_TYPES[nodePath.extname(path)] ?? "application/octet-stream",
       },
     });
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
     console.error(`[ai-coord-dashboard] unable to serve ${path}`, error);
     return new Response("Internal Server Error", { status: 500 });
   }
@@ -57,10 +61,10 @@ async function fileResponse(path: string, method: string): Promise<Response | nu
 
 function escapeHtmlAttribute(value: string): string {
   return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 // Delivers the server's home directory to the client so it can abbreviate
@@ -70,28 +74,38 @@ function injectHomeDirectory(html: string, home: string): string {
   return html.includes("</head>") ? html.replace("</head>", `${meta}</head>`) : `${meta}${html}`;
 }
 
-async function indexResponse(indexPath: string, method: string, home: string): Promise<Response | null> {
+async function indexResponse(
+  indexPath: string,
+  method: string,
+  home: string
+): Promise<Response | null> {
   try {
     const metadata = await stat(indexPath);
-    if (!metadata.isFile()) return null;
-    const html = injectHomeDirectory(await readFile(indexPath, "utf8"), home);
+    if (!metadata.isFile()) {
+      return null;
+    }
+    const html = injectHomeDirectory(await readFile(indexPath, "utf-8"), home);
     const bytes = new TextEncoder().encode(html);
     return new Response(responseBody(method, bytes), {
       headers: {
         "Content-Length": String(bytes.byteLength),
-        "Content-Type": CONTENT_TYPES[".html"],
+        "Content-Type": "text/html; charset=utf-8",
       },
     });
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
     console.error(`[ai-coord-dashboard] unable to serve ${indexPath}`, error);
     return new Response("Internal Server Error", { status: 500 });
   }
 }
 
-export function createRequestHandler(options: RequestHandlerOptions): (request: Request) => Promise<Response> {
-  const distDirectory = resolve(options.distDirectory);
-  const indexPath = resolve(distDirectory, "index.html");
+export function createRequestHandler(
+  options: RequestHandlerOptions
+): (request: Request) => Promise<Response> {
+  const distDirectory = nodePath.resolve(options.distDirectory);
+  const indexPath = nodePath.resolve(distDirectory, "index.html");
   const apiOrigin = options.apiOrigin ?? API_ORIGIN;
   const proxyRequest = options.proxyRequest ?? ((request: Request) => fetch(request));
   const homeDirectory = options.homeDirectory ?? homedir();
@@ -132,13 +146,15 @@ export function createRequestHandler(options: RequestHandlerOptions): (request: 
       return new Response("Bad Request", { status: 400 });
     }
 
-    const assetPath = resolve(distDirectory, `.${decodedPath}`);
-    if (assetPath === distDirectory || assetPath.startsWith(`${distDirectory}${sep}`)) {
+    const assetPath = nodePath.resolve(distDirectory, `.${decodedPath}`);
+    if (assetPath === distDirectory || assetPath.startsWith(`${distDirectory}${nodePath.sep}`)) {
       const asset =
         assetPath === indexPath
           ? await indexResponse(indexPath, request.method, homeDirectory)
           : await fileResponse(assetPath, request.method);
-      if (asset) return asset;
+      if (asset) {
+        return asset;
+      }
     }
 
     return (

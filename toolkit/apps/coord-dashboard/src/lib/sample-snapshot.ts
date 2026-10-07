@@ -1,4 +1,4 @@
-import type { Snapshot } from "@/lib/types";
+import type { Snapshot } from "@/lib/types.js";
 
 export const SAMPLE_NOW = 1_785_833_730;
 
@@ -40,7 +40,7 @@ export const sampleSnapshot = {
       waiting_for: null,
       permission_mode: "plan",
       coordination_waived: true,
-      pid: 32548,
+      pid: 32_548,
       source: "observer",
       started_at: 1_785_832_480,
       last_seen: 1_785_833_725,
@@ -55,7 +55,7 @@ export const sampleSnapshot = {
       name: null,
       waiting_for: null,
       coordination_waived: false,
-      pid: 64058,
+      pid: 64_058,
       source: "hook",
       started_at: 1_785_833_578,
       last_seen: 1_785_833_718,
@@ -70,7 +70,7 @@ export const sampleSnapshot = {
       name: null,
       waiting_for: null,
       coordination_waived: false,
-      pid: 62706,
+      pid: 62_706,
       source: "hook",
       started_at: 1_785_833_535,
       last_seen: 1_785_833_400,
@@ -85,7 +85,7 @@ export const sampleSnapshot = {
       name: null,
       waiting_for: null,
       coordination_waived: false,
-      pid: 49938,
+      pid: 49_938,
       source: "hook",
       started_at: 1_785_833_052,
       last_seen: 1_785_833_060,
@@ -100,7 +100,7 @@ export const sampleSnapshot = {
       name: null,
       waiting_for: null,
       coordination_waived: false,
-      pid: 99440,
+      pid: 99_440,
       source: "hook",
       started_at: 1_785_832_320,
       last_seen: 1_785_833_360,
@@ -209,9 +209,7 @@ export const sampleSnapshot = {
       label: "Follow-up serve-api coverage scopes",
       created_at: 1_785_833_500,
       updated_at: 1_785_833_690,
-      claims: [
-        { repo_root: "/Users/prb/projects/agent-toolkit", scope_count: 1 },
-      ],
+      claims: [{ repo_root: "/Users/prb/projects/agent-toolkit", scope_count: 1 }],
     },
   ],
   handoffs: [],
@@ -219,8 +217,7 @@ export const sampleSnapshot = {
     {
       id: "5defa09e",
       repo_root: "/Users/prb/projects/agent-toolkit",
-      summary:
-        "Provider coverage may be partial while the calling Claude session is mid-turn.",
+      summary: "Provider coverage may be partial while the calling Claude session is mid-turn.",
       kind: "bug",
       state: "pending",
       paths: ["src/providers"],
@@ -236,14 +233,10 @@ export const sampleSnapshot = {
     {
       id: "4f7d2b11",
       repo_root: "/Users/prb/projects/agent-toolkit",
-      summary:
-        "Dashboard API contract is ready for the implementation handoff.",
+      summary: "Dashboard API contract is ready for the implementation handoff.",
       kind: "docs",
       state: "handed-off",
-      paths: [
-        "apps/coord-dashboard/src/lib/types.ts",
-        "apps/coord-dashboard/src/lib/api.ts",
-      ],
+      paths: ["apps/coord-dashboard/src/lib/types.ts", "apps/coord-dashboard/src/lib/api.ts"],
       created_at: 1_785_832_600,
       updated_at: 1_785_833_000,
       terminal_at: null,
@@ -256,8 +249,7 @@ export const sampleSnapshot = {
     {
       id: "5d8caf48",
       repo_root: "/Users/prb/projects/agent-skills",
-      summary:
-        "A terminated agent may remain visible until its provider inventory refreshes.",
+      summary: "A terminated agent may remain visible until its provider inventory refreshes.",
       kind: "improvement",
       state: "stale",
       paths: ["skills/evm-atlas"],

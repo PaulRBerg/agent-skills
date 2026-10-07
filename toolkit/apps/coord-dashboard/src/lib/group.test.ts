@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { groupSnapshotByRepo } from "@/lib/group";
-import { sampleSnapshot } from "@/lib/sample-snapshot";
+
+import { groupSnapshotByRepo } from "@/lib/group.js";
+import { sampleSnapshot } from "@/lib/sample-snapshot.js";
 
 const toolkitRoot = "/Users/prb/projects/agent-toolkit";
 const skillsRoot = "/Users/prb/projects/agent-skills";
@@ -9,22 +10,15 @@ describe("groupSnapshotByRepo", () => {
   test("creates lanes for session and claim roots and sorts them by recent activity", () => {
     const lanes = groupSnapshotByRepo(sampleSnapshot);
 
-    expect(lanes.map((lane) => lane.repoRoot)).toEqual([
-      toolkitRoot,
-      skillsRoot,
-    ]);
+    expect(lanes.map((lane) => lane.repoRoot)).toEqual([toolkitRoot, skillsRoot]);
     expect(lanes[0]?.sessions).toHaveLength(4);
     expect(lanes[1]?.sessions).toHaveLength(1);
   });
 
   test("assigns queue positions separately for every queued claim repository", () => {
     const lanes = groupSnapshotByRepo(sampleSnapshot);
-    const docs = lanes[0]?.sessions.find(
-      ({ work }) => work?.label === "docs-followup",
-    )?.work;
-    const serveApi = lanes[0]?.sessions.find(
-      ({ work }) => work?.label === "serve-api",
-    )?.work;
+    const docs = lanes[0]?.sessions.find(({ work }) => work?.label === "docs-followup")?.work;
+    const serveApi = lanes[0]?.sessions.find(({ work }) => work?.label === "serve-api")?.work;
 
     expect(serveApi?.claims.map((claim) => claim.queuePosition)).toEqual([1]);
     expect(docs?.claims.map((claim) => [claim.repo_root, claim.queuePosition])).toEqual([
@@ -40,7 +34,7 @@ describe("groupSnapshotByRepo", () => {
       ...lane.unmatchedWork,
     ]);
 
-    expect(cards.map((work) => work.id).sort((left, right) => left - right)).toEqual([
+    expect(cards.map((work) => work.id).toSorted((left, right) => left - right)).toEqual([
       644, 645, 646, 647,
     ]);
   });
@@ -50,21 +44,16 @@ describe("groupSnapshotByRepo", () => {
     const toolkitLane = lanes.find((lane) => lane.repoRoot === toolkitRoot);
     const skillsLane = lanes.find((lane) => lane.repoRoot === skillsRoot);
 
-    expect(toolkitLane?.drafts.map((laneDraft) => laneDraft.draft.id)).toEqual(
-      ["draft-4a91"],
-    );
+    expect(toolkitLane?.drafts.map((laneDraft) => laneDraft.draft.id)).toEqual(["draft-4a91"]);
     expect(toolkitLane?.drafts[0]?.who).toBe("🐢 Queue Kid");
-    expect(skillsLane?.drafts.map((laneDraft) => laneDraft.draft.id)).toEqual(
-      ["draft-b7f2"],
-    );
+    expect(skillsLane?.drafts.map((laneDraft) => laneDraft.draft.id)).toEqual(["draft-b7f2"]);
     expect(skillsLane?.drafts[0]?.who).toBe("monorepo-dashboard-orchestrator");
   });
 
   test("keeps delegates only beside their live parent session", () => {
     const lane = groupSnapshotByRepo(sampleSnapshot)[0];
     const parent = lane?.sessions.find(
-      ({ session }) =>
-        session.session_id === "7ca88f40-3aed-4f2d-be71-a80e544dd332",
+      ({ session }) => session.session_id === "7ca88f40-3aed-4f2d-be71-a80e544dd332"
     );
 
     expect(parent?.delegates.map((delegate) => delegate.agent_id)).toEqual([
@@ -77,20 +66,15 @@ describe("groupSnapshotByRepo", () => {
     const orphanedSnapshot = {
       ...sampleSnapshot,
       sessions: sampleSnapshot.sessions.filter(
-        (session) =>
-          session.session_id !== "019fcbf1-1a53-7e20-a682-520d66c5b87f",
+        (session) => session.session_id !== "019fcbf1-1a53-7e20-a682-520d66c5b87f"
       ),
     };
     const lanes = groupSnapshotByRepo(orphanedSnapshot);
 
     expect(
-      lanes.find((lane) => lane.repoRoot === skillsRoot)?.unmatchedWork.map(
-        (work) => work.label,
-      ),
+      lanes.find((lane) => lane.repoRoot === skillsRoot)?.unmatchedWork.map((work) => work.label)
     ).toContain("docs-followup");
-    expect(
-      lanes.find((lane) => lane.repoRoot === toolkitRoot)?.unmatchedWork,
-    ).toEqual([]);
+    expect(lanes.find((lane) => lane.repoRoot === toolkitRoot)?.unmatchedWork).toEqual([]);
   });
 
   test("keeps handoff-only repositories without inventing an activity time", () => {
