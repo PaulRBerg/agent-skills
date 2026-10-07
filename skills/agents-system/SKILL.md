@@ -2,6 +2,8 @@
 argument-hint: "[repo-path ...] [--dry-run]"
 disable-model-invocation: true
 name: agents-system
+skill-dependencies:
+  - codebase-design
 description:
   Redesign the assigned repository or repositories for agent understanding, control, and cumulative learning. Use when
   asked to make a system agent-intuitive, agent-ergonomic, or agent-accretive, then revise its design documents and
@@ -97,12 +99,18 @@ Resolve findings into one design before editing individual documents. Favor the 
 the complete task loop. For a material structural choice, compare the current approach with a simpler alternative.
 Record the selected approach, its evidence, and its tradeoff.
 
+For interface, seam, and abstraction decisions, apply the vocabulary and Output Contract of `$codebase-design`. Use its
+terms: module, interface, seam, adapter, depth, leverage, and locality. Use its agent-legibility reference,
+`references/AGENT-LEGIBILITY.md` in that skill, for feedback loops, mechanical architecture enforcement, dependency
+policy, and continuous drift correction.
+
 Apply these design tests where the evidence makes them relevant:
 
 - **Legibility:** Use stable domain names and a short entry point with links to deeper context. Make authority,
   ownership, and dependency direction explicit.
-- **Modularity:** Put each invariant with its responsible implementation. Prefer a small interface that hides useful
-  complexity. Add an abstraction only when it reduces what callers must know or change.
+- **Modularity:** Put each invariant with its responsible implementation. Prefer deep modules as `$codebase-design`
+  defines them. Add an abstraction only when it reduces what callers must know or change. Introduce a seam only where
+  behavior actually varies.
 - **Control:** Make current state cheap to query. Give operations explicit inputs, outputs, side effects, completion
   signals, and failure behavior. Specify preview, retry, interruption, and recovery semantics where needed.
 - **Feedback:** Put checks near the contracts they enforce. Make errors identify the failed condition and the next
