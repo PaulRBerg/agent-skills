@@ -110,6 +110,16 @@ tag. It does not judge importance, wording, or semantic category.
     Never create a GitHub release without the user's approval. If release history cannot be verified, report it as
     unknown and do not offer the write.
 
+14. Before the final report, also inspect `.github/workflows/` for an active workflow that runs on pushed tags, sets
+    `id-token: write`, and runs `npm stage publish` (staged) or `npm publish` (direct). A filename is a hint, not proof.
+    If such a workflow exists:
+    - Report that pushing the recommended tags triggers npm publication.
+    - For staged publishing, report that each version stays unpublished until the maintainer approves it with 2FA. The
+      maintainer can run `npm stage approve <stage-id>` or use the Staged Packages tab on npmjs.com.
+    - Recommend push commands with at most three tags each, because GitHub creates no tag push events above that
+      threshold. See the push-event limits link in step 13.
+    - Never run `npm publish`, `npm stage approve`, or `npm stage reject`.
+
 ## Safety and Completion
 
 Helper failures mean malformed input, violated invariants, or failed validation. An unresolved agent decision is data in
@@ -118,8 +128,8 @@ package set is known, and do not infer a tag convention when discovery reports o
 
 Dry-run completion requires a discovery-backed, agent-reviewed action preview with zero writes. Release completion
 requires validated manifests and stable changelogs, formatting, one commit and annotated tag per package in dependency
-order, and a report of created commits/tags, agent-decided skips, the exact tag-push command, and any applicable GitHub
-release proposal.
+order, and a report of created commits/tags, agent-decided skips, the exact tag-push command or commands, any applicable
+GitHub release proposal, and any CI npm publication notice.
 
 Use `### ⛔ Release stopped — working tree is not clean`, `### ⚠️ Release decision required`,
 `### 🔎 Release preview — no files, commits, or tags written`, or `### 🏁 Release complete` as applicable. Keep helper
