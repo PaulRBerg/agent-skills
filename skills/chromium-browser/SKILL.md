@@ -21,13 +21,18 @@ If the user selects another available browser integration, follow its tool contr
 ## Environment Contract
 
 - Treat `~/.local/libexec/mcp/chrome-devtools.sh` and the tools exposed in the current session as authoritative. The
-  wrapper owns server versioning, flags, logging, and browser attachment. Do not run the MCP package directly.
+  wrapper runs the globally installed `chrome-devtools-mcp` executable and sets flags, logging, and browser attachment.
+  Do not run the MCP package directly.
 - The MCP attaches to an existing remote-debugging browser. Never launch a fallback browser or create another profile
   when attachment fails.
 - Treat the browser as shared, authenticated, and concurrently used by the user and other agents. Inspect only pages
   relevant to the task and do not surface unrelated tab titles or content.
 - Trust the live tool inventory. An absent tool is unavailable in this session. Do not advise editing client MCP
   configuration as a troubleshooting shortcut.
+
+For released tool behavior, consult the
+[upstream tool reference](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/chrome-devtools-mcp-v1.10.1/docs/tool-reference.md).
+The current session's schemas determine which tools and parameters are available.
 
 ## Reference Routing
 
@@ -55,16 +60,40 @@ selected replay when rendered inspection adds evidence.
 - On one page, navigate first. Wait for a useful known signal. Take a fresh snapshot. Then interact with identifiers
   from that snapshot. Refresh the snapshot after navigation or meaningful DOM changes.
 - Prefer `take_snapshot` for structure and automation, `take_screenshot` for visual evidence, and `evaluate_script` for
-  information absent from the accessibility tree. Accept wrapper screenshot defaults unless the task requires lossless
-  or full-resolution output.
+  information absent from the accessibility tree. If exposed, use `waitForStableDom: false` only for scripts that read
+  data without changing page state.
+- Prefer `fill_form` for batches of inputs, selects, checkboxes, and radio buttons. For `upload_file`, use the current
+  `filePaths` array schema with task-authorized files on the browser host.
+- For CSS cascade questions, use `get_css_styles` with a UID from a fresh snapshot. Paginate with `pageIdx` and
+  `pageSize` to inspect additional matched and inherited rules.
+- Accept wrapper screenshot defaults. Request `format: "png"` when lossless output is required. PNG, `fullPage`, and
+  `filePath` cannot bypass the wrapper's 1600-pixel width and height caps. Full-resolution output requires an authorized
+  wrapper configuration change.
 - Keep action responses small with `includeSnapshot: false` unless the updated state is immediately needed. Paginate and
   filter console, network, memory, and other high-volume results.
 - When a cookie consent popup appears, select only necessary or essential cookies by default, including through its
   settings when needed. If no such option is available, accept all cookies and continue.
 - Use `filePath` for large screenshots, snapshots, traces, recordings, or response bodies. Write only to a
-  task-authorized path inside the server's workspace roots, such as a git-ignored `.ai/` directory. The server rejects
-  paths outside those roots, including agent scratchpads. Unrestricted path capability is not write authorization.
-- Parallelize independent pages when useful, but preserve causal order for calls targeting the same page.
+  task-authorized path, preferably absolute, such as a git-ignored `.ai/` directory. When the client negotiates roots,
+  the server permits those roots and the OS temporary directory. The wrapper's existing unrestricted-path opt-in
+  bypasses that restriction only when the client has not negotiated roots. Path capability is not write authorization.
+- Calls within one MCP server are serialized, even with explicit page routing. Separate agent servers still share
+  browser state. Preserve causal order and page ownership across concurrent work.
+
+## Audits and Profiling
+
+Use these workflows only when the tools are exposed in the current session.
+
+- For Lighthouse audits, choose `mode: "snapshot"` to analyze current page state. `mode: "navigation"` reloads the page.
+  Lighthouse excludes performance audits. Use performance traces for performance questions.
+- Navigate before `performance_start_trace`. Set `reload: false` to profile an interaction without reloading. When
+  `autoStop: false`, stop the trace with `performance_stop_trace` after the measured interaction, including during
+  cleanup after a failed task. Stop only traces this task started.
+- For heap analysis, capture with `take_heapsnapshot`, then start with `get_heapsnapshot_summary`. Use targeted,
+  paginated queries for objects or retainers. Call `close_heapsnapshot` for each snapshot this task loaded to release
+  server memory, including during cleanup after a failed task.
+- Each server permits one active screencast. Record whether this task started it, then call `screencast_stop` during
+  cleanup. Never stop another task's recording to make room.
 
 ## Authority and Privacy
 
