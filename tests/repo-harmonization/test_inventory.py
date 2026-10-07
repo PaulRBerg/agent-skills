@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-INVENTORY = REPO_ROOT / "skills" / "repo-cross-pollination" / "scripts" / "inventory.ts"
+INVENTORY = REPO_ROOT / "skills" / "repo-harmonization" / "scripts" / "inventory.ts"
 
 
 def make_repo(path: Path, files: dict[str, str]) -> Path:
