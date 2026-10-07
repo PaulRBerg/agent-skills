@@ -21,12 +21,19 @@ export function parsePort(rawPort: string | undefined): number {
 
 export function startServer(
   port: number,
-  fetch: (request: Request) => Promise<Response>
+  handleRequest: (request: Request) => Promise<Response>
 ): Bun.Server<undefined> {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port,
-    fetch,
+    async fetch(request, requestServer) {
+      const response = await handleRequest(request);
+      if (response.headers.get("Content-Type")?.startsWith("text/event-stream")) {
+        // The API heartbeat interval exceeds Bun's default idle timeout.
+        requestServer.timeout(request, 0);
+      }
+      return response;
+    },
   });
   console.log(`[ai-coord-dashboard] listening on http://127.0.0.1:${port}`);
   return server;
