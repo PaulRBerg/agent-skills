@@ -21,8 +21,10 @@ Create a working frontend with a clear, subject-specific point of view. Then pro
 - For a build or redesign, make the requested in-scope changes and run local, non-destructive validation.
 - Treat explicit user direction, supplied references, repository instructions, existing product behavior, and the local
   design system as authoritative. Fidelity requests override this skill's defaults.
-- Preserve the stack and working behavior. Do not replace the framework or design system, add dependencies, invent
-  features, or fetch or generate media unless the request requires it.
+- Preserve the stack and working behavior. Do not replace the framework or design system, add dependencies, or invent
+  features unless the request requires it.
+- Use original SVG authored in code when it supports the art direction. Fetch or generate other media only when the
+  request requires it.
 - Make the smallest defensible assumption when the subject, audience, or page job is missing. State it before building.
   Ask only when the answer would materially change scope or identity.
 
@@ -54,6 +56,10 @@ Before coding, define a compact direction:
 
 Adapt this direction to existing brand constraints instead of creating a parallel design language. Keep options and
 process narration internal unless the user asked to choose among directions.
+
+For builds and substantial redesigns, consider an original SVG motif for the background, layout, or a focal detail. Read
+[SVG design](references/svg-design.md) when choosing or building one. Use it to express the subject and guide the eye.
+Keep undecorated space where the content needs it.
 
 ### 3. Run the anti-default critique
 
