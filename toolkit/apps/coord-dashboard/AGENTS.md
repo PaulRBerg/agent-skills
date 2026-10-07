@@ -46,6 +46,8 @@ The URL path selects the tab: `/`, `/findings`, `/messages`, or `/handoffs`. Kee
 Coordination, Findings, and Messages tabs. The Findings badge and default Unresolved filter include pending and
 handed-off findings. Triaging is an independent overlay, not another finding state.
 
+Render full message history directly in the Messages tab with 25 messages per page. Keep search and filters in the tab.
+
 ## Handoffs
 
 The Bun server answers `GET /api/handoffs` from `src/server/handoffs/` and proxies all other `/api` routes to

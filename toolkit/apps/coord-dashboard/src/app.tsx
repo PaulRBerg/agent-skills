@@ -25,7 +25,7 @@ const HandoffsPanel = lazy(async () => {
 const tabs = ["coordination", "findings", "messages", "handoffs"] as const;
 type Tab = (typeof tabs)[number];
 const navigationTab = tv({
-  base: "flex min-h-10 shrink-0 items-center gap-1 rounded-lg border border-transparent px-1 py-2 text-[12px] font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-line data-active:bg-surface data-active:text-ink data-active:shadow-sm motion-reduce:transition-none sm:gap-2 sm:px-4 sm:text-[13px]",
+  base: "flex min-h-10 shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-transparent px-1 py-2 text-[12px] font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-line data-active:bg-surface data-active:text-ink data-active:shadow-sm motion-reduce:transition-none sm:gap-2 sm:px-4 sm:text-[13px]",
 });
 
 function tabFromPath(pathname: string): Tab {

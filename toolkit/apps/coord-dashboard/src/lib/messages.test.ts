@@ -4,7 +4,7 @@ import {
   filterMessages,
   messageRepositories,
   paginateMessages,
-  previewMessages,
+  orderMessages,
 } from "@/lib/messages.js";
 import type { Message } from "@/lib/types.js";
 
@@ -23,11 +23,19 @@ function message(id: string, createdAt: number, overrides: Partial<Message> = {}
   };
 }
 
-describe("previewMessages", () => {
-  test("returns the five newest messages without mutating the snapshot order", () => {
+describe("orderMessages", () => {
+  test("sorts newest first without mutating the snapshot order", () => {
     const messages = Array.from({ length: 7 }, (_, index) => message(String(index), index));
 
-    expect(previewMessages(messages).map(({ id }) => id)).toEqual(["6", "5", "4", "3", "2"]);
+    expect(orderMessages(messages).map(({ id }) => id)).toEqual([
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1",
+      "0",
+    ]);
     expect(messages.map(({ id }) => id)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
   });
 });
@@ -89,17 +97,31 @@ describe("messageRepositories", () => {
 });
 
 describe("paginateMessages", () => {
-  test("uses 20-item pages and clamps a page invalidated by live updates", () => {
-    const messages = Array.from({ length: 45 }, (_, index) => message(String(index), index));
+  test("uses 25-item pages with a partial final page", () => {
+    const messages = Array.from({ length: 56 }, (_, index) => message(String(index), index));
 
-    expect(paginateMessages(messages, 2)).toMatchObject({
+    expect(paginateMessages(messages, 2)).toEqual({
+      items: messages.slice(25, 50),
       page: 2,
       pageCount: 3,
-      start: 21,
-      end: 40,
-      total: 45,
+      start: 26,
+      end: 50,
+      total: 56,
     });
-    expect(paginateMessages(messages.slice(0, 3), 3)).toMatchObject({
+    expect(paginateMessages(messages, 3)).toEqual({
+      items: messages.slice(50),
+      page: 3,
+      pageCount: 3,
+      start: 51,
+      end: 56,
+      total: 56,
+    });
+  });
+
+  test("clamps a page invalidated by live updates and handles an empty ledger", () => {
+    const messages = Array.from({ length: 3 }, (_, index) => message(String(index), index));
+
+    expect(paginateMessages(messages, 3)).toMatchObject({
       page: 1,
       pageCount: 1,
       start: 1,

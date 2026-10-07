@@ -1,8 +1,7 @@
 import { messageEndpointName } from "@/lib/format.js";
 import type { Message } from "@/lib/types.js";
 
-export const MESSAGE_PREVIEW_LIMIT = 5;
-export const MESSAGE_PAGE_SIZE = 20;
+export const MESSAGE_PAGE_SIZE = 25;
 
 export type MessageStatusFilter = "all" | "unread" | "acknowledged";
 
@@ -25,10 +24,6 @@ export function orderMessages(messages: Message[]): Message[] {
   return messages.toSorted(
     (left, right) => right.created_at - left.created_at || left.id.localeCompare(right.id)
   );
-}
-
-export function previewMessages(messages: Message[], limit = MESSAGE_PREVIEW_LIMIT): Message[] {
-  return orderMessages(messages).slice(0, limit);
 }
 
 export function messageRepositories(messages: Message[]): string[] {
