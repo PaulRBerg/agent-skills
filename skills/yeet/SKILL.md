@@ -6,6 +6,8 @@ compatibility: Authenticated GitHub CLI >= 2.97.0
 coordination: exempt
 effort: high
 name: yeet
+skill-dependencies:
+  - cli-gh
 description:
   "Use for GitHub PR/issue/discussion workflows: create/update PRs, issues, or discussions and post issue or discussion
   comments; triggers include yeet."
@@ -38,6 +40,9 @@ For pull request workflows, also verify:
 - Working tree is clean or changes are committed
 - Current branch has commits ahead of the base branch
 - Remote tracking is configured
+
+Use `cli-gh` for GitHub reads, workflow automation, or command syntax that is not part of authoring and posting a
+contribution.
 
 ## Workflows
 

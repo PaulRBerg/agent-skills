@@ -35,6 +35,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | chromium-browser     | Shared Chromium browsing, DevTools automation, and Wayback research       |
 | cli-cast             | Foundry cast CLI guidance                                                 |
 | cli-coingecko        | CoinGecko CLI for prices and market data                                  |
+| cli-gh               | GitHub CLI operations                                                     |
 | cli-just             | Just command runner guidance                                              |
 | code-polish          | Simplify and/or risk-profiled review with autofix                         |
 | codebase-design      | Deep-module vocabulary and agent-legible codebase design                  |

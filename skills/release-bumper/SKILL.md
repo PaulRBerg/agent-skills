@@ -5,6 +5,8 @@ disable-model-invocation: true
 effort: high
 model: sonnet
 name: release-bumper
+skill-dependencies:
+  - cli-gh
 description: "Cut a release: bump versions, write changelogs, commit, tag."
 ---
 
@@ -97,14 +99,16 @@ tag. It does not judge importance, wording, or semantic category.
 12. Do not push. After success, recommend an exact `git push origin <tag>...` command containing only the tags created
     by this execution. Do not use `--tags`.
 13. Before the final report, inspect `.github/workflows/` for an active workflow that creates or publishes GitHub
-    releases from pushed tags. A filename such as `release.yml` is a hint, not proof. Use `gh release list` to check
-    whether the repository has an established history of maintained GitHub releases. If it does, offer to create a
-    GitHub release for each new tag, pending the user's approval, according to these rules:
+    releases from pushed tags. A filename such as `release.yml` is a hint, not proof. Use `$cli-gh` to run
+    `gh release list` read-only and check whether the repository has an established history of maintained GitHub
+    releases. If it does, offer to create a GitHub release for each new tag, pending the user's approval, according to
+    these rules:
     - One to three tags and applicable release CI exists: do not offer manual release creation. In that case, the tag
       push should trigger CI.
-    - No applicable release CI exists: offer to create one release per new tag with `gh release create`.
-    - More than three tags will be pushed together: offer to create one release per tag with `gh release create` even
-      when release CI exists, because GitHub does not create tag push events above that threshold. See
+    - No applicable release CI exists: offer to create one release per new tag with `gh release create` through
+      `$cli-gh`.
+    - More than three tags will be pushed together: offer to create one release per tag with `gh release create` through
+      `$cli-gh` even when release CI exists, because GitHub does not create tag push events above that threshold. See
       [GitHub's push-event limits](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push).
 
     Never create a GitHub release without the user's approval. If release history cannot be verified, report it as
