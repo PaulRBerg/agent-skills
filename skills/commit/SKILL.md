@@ -1,12 +1,15 @@
 ---
 argument-hint:
-  "[--all] [--staged] [--natural] [--conventional] [--push] [--close <issue_numbers>] [--finding <finding_ids>]"
-compatibility: Requires Git and ai-commit with automatic ai-coord stale-dirt baseline discovery on PATH.
+  "[--all] [--staged] [--natural] [--conventional] [--push] [--close <issue_numbers>] [--finding <finding_ids>]
+  [--squash [--base <branch>]]"
+compatibility:
+  Requires Git and ai-commit with automatic ai-coord stale-dirt baseline discovery on PATH. Squash mode also requires
+  uv.
 effort: medium
 name: commit
 description:
   "Commit staged or intended changes: compose a Conventional Prefix or Natural Language message, then use ai-commit —
-  with --all, --staged, --close, --finding, or --push."
+  with --all, --staged, --close, --finding, or --push. Also squash a branch into one commit with --squash."
 ---
 
 # Git Commit
@@ -34,12 +37,22 @@ Arguments: `$ARGUMENTS`
 - `--finding <finding_ids>`: append one `Finding-ID: <id>` trailer per ledger finding this commit fixes. Accept comma-
   or space-separated input. Also infer a finding from context when this session's commit fixes a specific ledger
   finding. Never include or resolve findings the commit does not actually fix.
+- `--squash`: replace every branch commit after the merge base with one commit that carries the net branch diff. The
+  helper finds the merge base with the resolved default branch. Squash mode requires a clean tree and index and an
+  attached non-default branch. It conflicts with `--all`, `--staged`, and `--push`.
+- `--base <branch>`: override default-branch detection. Use it only with `--squash`.
 - In Conventional Prefix Format, a positional type keyword overrides the inferred type. In Natural Language Format, a
   positional verb or category keyword overrides the inferred verb. Quoted positional text overrides the inferred
   description or subject.
 
 If the requested operation is only to push a clean branch that is already ahead, skip preparation and run
 `ai-commit push`.
+
+## Squash Mode
+
+When `--squash` is present, follow [references/squash.md](references/squash.md) for the plan and reset steps. Then
+continue with steps 2 to 5 in `--staged` mode. Never pass `--push` in squash mode, even when standing instructions
+authorize a push. The squash reference adds the co-author trailers, the rollback on failure, and the squash report.
 
 ## 2. Prepare Once
 
