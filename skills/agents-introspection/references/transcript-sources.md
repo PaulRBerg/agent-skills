@@ -51,6 +51,12 @@ uv run "$transcript_miner" \
 `--keyword` accepts `|`-separated OR-groups (e.g. `--keyword 'miner|mining|transcript-miner'`) to encode synonyms as one
 group instead of separate flags.
 
+For an explicitly relevant former project root, add `--historical-project '<former-path>'`. This repeatable argument
+permits absent directories. Existing paths must be directories. The helper canonicalizes these roots and applies the
+same native ownership and lineage checks. It does not infer aliases or change historical ownership to a current root.
+`--project` still requires an existing directory and defaults to the current directory when omitted, even with
+`--historical-project`. Repeated canonical roots appear once. Other retrieval bounds remain unchanged.
+
 Include another project without requesting permission when task context, an explicit project or path reference, a shared
 change or workflow, or session metadata establishes relevance. Never infer relevance from a shared basename or keyword
 alone.

@@ -107,10 +107,13 @@ class MinerFixture:
         output_format: str = "json",
         since: str | None = None,
         excerpts: bool = False,
+        historical_projects: list[Path] | None = None,
     ) -> Any:
         command = [sys.executable, str(MINER)]
         for project in projects:
             command.extend(["--project", str(project)])
+        for project in historical_projects or []:
+            command.extend(["--historical-project", str(project)])
         for keyword in keywords:
             command.extend(["--keyword", keyword])
         command.extend(["--max-sessions", "100", "--format", output_format])
@@ -143,6 +146,40 @@ class TranscriptMinerTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_absent_historical_root_matches_native_codex_and_claude_ownership(self) -> None:
+        current = self.fixture.project("agent-skills")
+        former = self.fixture.project("agent-toolkit")
+        self.fixture.codex_session("historical-codex", former / "src", user="needle")
+        self.fixture.claude_session(former, "historical-claude", former, user="needle")
+        self.fixture.history([{"sessionId": "historical-claude", "project": str(former), "display": "needle"}])
+        self.fixture.codex_session(
+            "historical-guardian", former, user="needle",
+            native_metadata={"source": {"subagent": {"other": "guardian"}}, "parent_thread_id": "historical-codex"},
+        )
+        former.rmdir()
+
+        report = self.fixture.run([current], ["needle"], historical_projects=[former, former])
+
+        self.assertEqual([project["path"] for project in report["projects"]], [str(current), str(former)])
+        sessions = report["candidate_sessions"]
+        self.assertEqual({session["source"] for session in sessions}, {"codex", "claude"})
+        self.assertEqual(len(sessions), 2)
+        self.assertTrue(all(session["project"] == str(former) for session in sessions))
+        self.assertTrue(all(session["ownership"]["project"] == str(former) for session in sessions))
+        self.assertEqual(coverage_by_project(report)[former]["guardian_sessions_excluded"], 1)
+
+    def test_historical_roots_preserve_current_validation_and_default(self) -> None:
+        former = self.fixture.projects / "missing-former"
+        missing_current = self.fixture.projects / "missing-current"
+        with self.assertRaisesRegex(AssertionError, r"miner failed \(2\):\ntranscript-miner: project does not exist:"):
+            self.fixture.run([missing_current], [], historical_projects=[former])
+        report = self.fixture.run([], [], historical_projects=[former])
+        self.assertEqual([project["path"] for project in report["projects"]], [str(Path.cwd().resolve()), str(former.resolve())])
+        not_directory = self.fixture.projects / "former-file"
+        not_directory.write_text("not a directory", encoding="utf-8")
+        with self.assertRaisesRegex(AssertionError, "historical project is not a directory"):
+            self.fixture.run([], [], historical_projects=[not_directory])
 
     def test_guardians_are_excluded_before_copied_history_can_rank(self) -> None:
         project = self.fixture.project("alpha")
