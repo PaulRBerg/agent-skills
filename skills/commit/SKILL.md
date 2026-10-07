@@ -50,9 +50,11 @@ If the requested operation is only to push a clean branch that is already ahead,
 
 ## Squash Mode
 
-When `--squash` is present, follow [references/squash.md](references/squash.md) for the plan and reset steps. Then
-continue with steps 2 to 5 in `--staged` mode. Never pass `--push` in squash mode, even when standing instructions
-authorize a push. The squash reference adds the co-author trailers, the rollback on failure, and the squash report.
+Enter squash mode only when the user explicitly requests a squash. Never infer it from branch state, a merge request, or
+standing instructions. When `--squash` is present, follow [references/squash.md](references/squash.md) for the plan and
+reset steps. Then continue with steps 2 to 5 in `--staged` mode. Never pass `--push` in squash mode, even when standing
+instructions authorize a push. The squash reference adds the co-author trailers, the rollback on failure, and the squash
+report.
 
 ## 2. Prepare Once
 
