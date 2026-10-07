@@ -2,6 +2,9 @@ import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import nodePath from "node:path";
 
+import type { HandoffRecord, HandoffsResponse } from "../lib/handoff-types.js";
+import { scanHandoffs } from "./handoffs/scanner.js";
+
 const API_ORIGIN = "http://127.0.0.1:4477";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -24,6 +27,7 @@ export type RequestHandlerOptions = {
   apiOrigin?: string;
   proxyRequest?: (request: Request) => Promise<Response>;
   homeDirectory?: string;
+  loadHandoffs?: () => Promise<HandoffRecord[]>;
 };
 
 // Loopback hostnames accepted to block DNS-rebinding attacks against this 127.0.0.1-bound server.
@@ -109,6 +113,7 @@ export function createRequestHandler(
   const apiOrigin = options.apiOrigin ?? API_ORIGIN;
   const proxyRequest = options.proxyRequest ?? ((request: Request) => fetch(request));
   const homeDirectory = options.homeDirectory ?? homedir();
+  const loadHandoffs = options.loadHandoffs ?? (() => scanHandoffs());
 
   return async (request: Request): Promise<Response> => {
     let url: URL;
@@ -120,6 +125,20 @@ export function createRequestHandler(
 
     if (!isLoopbackHost(url.hostname)) {
       return new Response("Forbidden", { status: 403 });
+    }
+
+    // Served here rather than by `ai-coord serve`: handoffs are read from disk, never from the ledger.
+    if (url.pathname === "/api/handoffs") {
+      if (request.method !== "GET") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
+      }
+      try {
+        const payload: HandoffsResponse = { handoffs: await loadHandoffs() };
+        return Response.json(payload, { headers: { "Cache-Control": "no-store" } });
+      } catch (error) {
+        console.error("[ai-coord-dashboard] unable to load handoffs", error);
+        return new Response("Internal Server Error", { status: 500 });
+      }
     }
 
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {

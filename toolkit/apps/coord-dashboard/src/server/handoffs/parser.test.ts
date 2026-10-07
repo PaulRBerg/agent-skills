@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { parseHandoff } from "./parser";
+import { parseHandoff } from "./parser.js";
 
 const VALID_FRONTMATTER = `---
 category: implementation
@@ -19,12 +19,12 @@ Body text.
 `;
 
 const TASK_HANDOFF_V1 = readFileSync(
-  new URL("./fixtures/task-handoff-v1.md", import.meta.url),
-  "utf8",
+  new URL("fixtures/task-handoff-v1.md", import.meta.url),
+  "utf-8"
 );
 const TASK_HANDOFF_V2 = readFileSync(
-  new URL("./fixtures/task-handoff-v2.md", import.meta.url),
-  "utf8",
+  new URL("fixtures/task-handoff-v2.md", import.meta.url),
+  "utf-8"
 );
 
 describe("parseHandoff", () => {
@@ -50,7 +50,7 @@ describe("parseHandoff", () => {
     expect(parsed.markdown).toContain("## Execution status");
     expect(parsed.markdown).toContain("## Handoff cleanup");
     expect(parsed.markdown).toContain(
-      "handoff='/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY.md'",
+      "handoff='/Users/example/projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY.md'"
     );
   });
 
@@ -76,7 +76,7 @@ describe("parseHandoff", () => {
     expect(parsed.markdown).toContain("## Execution status");
     expect(parsed.markdown).toContain("## Handoff cleanup");
     expect(parsed.markdown).toContain(
-      "ai-handoff archive ~/'projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'",
+      "ai-handoff archive ~/'projects/app/.ai/task-handoffs/TASK_HANDOFF_COMPATIBILITY_V2.md'"
     );
   });
 
@@ -99,9 +99,12 @@ describe("parseHandoff", () => {
   });
 
   it("degrades a closed invalid block to legacy while rendering only its body", () => {
-    const source = VALID_FRONTMATTER.replace("category: implementation", "category: unknown").replace(
+    const source = VALID_FRONTMATTER.replace(
+      "category: implementation",
+      "category: unknown"
+    ).replace(
       "# Body heading\n\nBody text.",
-      "# Legacy title\n\nBody text.\n\n## Handoff category\n\nCategory: `investigation`",
+      "# Legacy title\n\nBody text.\n\n## Handoff category\n\nCategory: `investigation`"
     );
 
     expect(parseHandoff(source, "VIEWER.md")).toMatchObject({
@@ -110,14 +113,15 @@ describe("parseHandoff", () => {
       category: "investigation",
       created: null,
       frontmatter: null,
-      markdown: "# Legacy title\n\nBody text.\n\n## Handoff category\n\nCategory: `investigation`\n",
+      markdown:
+        "# Legacy title\n\nBody text.\n\n## Handoff category\n\nCategory: `investigation`\n",
     });
   });
 
   it("rejects unknown frontmatter fields", () => {
     const source = VALID_FRONTMATTER.replace(
       "origin: /Users/example/projects/app/.ai/task-handoffs/VIEWER.md",
-      "origin: /Users/example/projects/app/.ai/task-handoffs/VIEWER.md\nextra: rejected",
+      "origin: /Users/example/projects/app/.ai/task-handoffs/VIEWER.md\nextra: rejected"
     );
     expect(parseHandoff(source, "VIEWER.md").format).toBe("legacy");
   });
@@ -125,7 +129,7 @@ describe("parseHandoff", () => {
   it("rejects relative repository and origin paths", () => {
     const source = VALID_FRONTMATTER.replace(
       "launch_repo: /Users/example/projects/app",
-      "launch_repo: projects/app",
+      "launch_repo: projects/app"
     );
     expect(parseHandoff(source, "VIEWER.md").format).toBe("legacy");
   });
@@ -133,17 +137,14 @@ describe("parseHandoff", () => {
   it("rejects normalized but nonexistent calendar dates", () => {
     const source = VALID_FRONTMATTER.replace(
       "created: 2026-08-10T08:00:00Z",
-      "created: 2026-02-30T08:00:00Z",
+      "created: 2026-02-30T08:00:00Z"
     );
 
     expect(parseHandoff(source, "VIEWER.md").format).toBe("legacy");
   });
 
   it("accepts home-abbreviated producer paths without accepting other relative paths", () => {
-    const source = VALID_FRONTMATTER.replaceAll(
-      "/Users/example/projects/app",
-      "~/projects/app",
-    );
+    const source = VALID_FRONTMATTER.replaceAll("/Users/example/projects/app", "~/projects/app");
 
     expect(parseHandoff(source, "VIEWER.md")).toMatchObject({
       format: "frontmatter",

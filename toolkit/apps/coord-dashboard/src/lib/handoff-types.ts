@@ -8,16 +8,16 @@ export const HANDOFF_CATEGORIES = [
 
 export type HandoffCategory = (typeof HANDOFF_CATEGORIES)[number];
 
-export interface HandoffFrontmatter {
+export type HandoffFrontmatter = {
   category: HandoffCategory;
   created: string;
   launch_repo: string;
   repos: string[];
   origin: string;
   task: string;
-}
+};
 
-export interface HandoffRecord {
+export type HandoffRecord = {
   id: string;
   state: "live" | "archived";
   root: string;
@@ -31,9 +31,8 @@ export interface HandoffRecord {
   modifiedAt: string;
   frontmatter: HandoffFrontmatter | null;
   markdown: string;
-}
+};
 
-export interface HandoffsResponse {
+export type HandoffsResponse = {
   handoffs: HandoffRecord[];
-}
-
+};

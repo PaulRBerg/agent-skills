@@ -8,8 +8,8 @@ Toolkit commits use the catalog's natural-language commit format.
 
 - The nightly Rust workspace contains the `ai-commit`, `ai-coord`, `ai-handoff`, `ai-notify`, and `ai-skillet` crates.
   Keep shared Rust configuration at the workspace root (`toolkit/`) and crate behavior within its crate.
-- `apps/coord-dashboard` and `apps/handoffs` are independent Bun packages with separate locks and package-local
-  validation. Do not combine their dependencies, scripts, or build outputs with the Rust workspace or each other.
+- `apps/coord-dashboard` is an independent Bun package with its own lock and package-local validation. Do not combine
+  its dependencies, scripts, or build outputs with the Rust workspace.
 - Context is source-owned. This file describes workspace-wide behavior. Package-local AGENTS.md files own product and
   workflow guidance. Update the owning package rather than duplicating its guidance here.
 
@@ -22,13 +22,12 @@ catalog root). Run focused tests while iterating, then the complete affected gat
 | --------------------------------------------- | ---------------------------- |
 | Rust code, Cargo dependencies, Rust toolchain | `just rust-check`            |
 | Coordination dashboard                        | `just coord-dashboard-check` |
-| Handoffs application                          | `just handoffs-check`        |
 | Shared workspace wiring or Rust/app contracts | `just check`                 |
 
-`just rust-check` checks formatting, Clippy with warnings denied, tests, and builds for the locked Rust workspace. Both
-application gates check types, tests, and production builds. UI changes also need the owning package's rendered
-verification. `just check` runs all three gates. None of these checks installs CLI binaries. Documentation-only edits
-follow the root formatting and factual-verification rules.
+`just rust-check` checks formatting, Clippy with warnings denied, tests, and builds for the locked Rust workspace. The
+dashboard gate checks lint, formatting, types, tests, and the production build. UI changes also need the owning
+package's rendered verification. `just check` runs both gates. None of these checks installs CLI binaries.
+Documentation-only edits follow the root formatting and factual-verification rules.
 
 ## Compatibility and safety
 
@@ -42,5 +41,5 @@ follow the root formatting and factual-verification rules.
   pre-authorized when the committed changes preserve the documented command, output, and persisted-data contracts. It is
   also pre-authorized when `ai-coord` shows no other live agent sessions on this machine. Otherwise ask the user to
   close the other agents before installing.
-- Keep both Bun applications local-only. Handoffs must remain read-only and bound to loopback. The coordination
-  dashboard must not make external requests.
+- Keep the dashboard local-only and bound to loopback, with no external requests. Its handoffs view must remain
+  read-only.

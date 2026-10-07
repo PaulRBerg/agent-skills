@@ -7,7 +7,7 @@
 toolkit/target/
 toolkit/apps/*/dist/
 toolkit/commit/src/rules/
-toolkit/apps/handoffs/src/server/fixtures/
+toolkit/apps/coord-dashboard/src/server/handoffs/fixtures/
 toolkit/skillet/tests/fixtures/
 
 # Dashboard code is formatted by Oxfmt; keep Markdown and YAML under Prettier.

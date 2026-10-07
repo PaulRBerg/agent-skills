@@ -36,6 +36,10 @@ export default defineConfig({
   server: {
     ...localServer,
     proxy: {
+      // The Bun server, not `ai-coord serve`, owns handoffs; reuse the always-on LaunchAgent instance.
+      "/api/handoffs": {
+        target: "http://127.0.0.1:4173",
+      },
       "/api": {
         target: "http://127.0.0.1:4477",
       },

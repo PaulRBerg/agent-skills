@@ -1,49 +1,44 @@
+import nodePath from "node:path";
+
 import { parseDocument } from "yaml";
-import { isAbsolute } from "node:path";
 
-import {
-  HANDOFF_CATEGORIES,
-  type HandoffCategory,
-  type HandoffFrontmatter,
-} from "../shared/handoff";
+import { HANDOFF_CATEGORIES } from "../../lib/handoff-types.js";
+import type { HandoffCategory, HandoffFrontmatter } from "../../lib/handoff-types.js";
 
-export interface ParsedHandoff {
+export type ParsedHandoff = {
   format: "frontmatter" | "legacy";
   title: string;
   category: HandoffCategory | null;
   created: string | null;
   frontmatter: HandoffFrontmatter | null;
   markdown: string;
-}
+};
 
-const FRONTMATTER_KEYS = [
-  "category",
-  "created",
-  "launch_repo",
-  "repos",
-  "origin",
-  "task",
-] as const;
+const FRONTMATTER_KEYS = ["category", "created", "launch_repo", "repos", "origin", "task"] as const;
 
 const CATEGORY_SET = new Set<string>(HANDOFF_CATEGORIES);
-const H1_PATTERN = /^#\s+(.+?)\s*$/m;
+const H1_PATTERN = /^#\s+(?<title>.+?)\s*$/mu;
 const CATEGORY_FOOTER_PATTERN =
-  /^##[ \t]+Handoff category[ \t]*\r?\n(?:[ \t]*\r?\n)*[ \t]*(?:Category:[ \t]*)?`?(implementation|investigation|research|audit|operations)`?[ \t]*$/m;
+  /^##[ \t]+Handoff category[ \t]*\r?\n(?:[ \t]*\r?\n)*[ \t]*(?:Category:[ \t]*)?`?(?<category>implementation|investigation|research|audit|operations)`?[ \t]*$/mu;
 
 function isNonemptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
 function isIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value)) {
+    return false;
+  }
   const parsed = new Date(value);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 19) === value.slice(0, 19);
+  return (
+    !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 19) === value.slice(0, 19)
+  );
 }
 
 function isHandoffPath(value: unknown): value is string {
   return (
     isNonemptyString(value) &&
-    (isAbsolute(value) || value === "~" || value.startsWith("~/"))
+    (nodePath.isAbsolute(value) || value === "~" || value.startsWith("~/"))
   );
 }
 
@@ -53,9 +48,12 @@ function validateFrontmatter(value: unknown): HandoffFrontmatter | null {
   }
 
   const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  const expectedKeys = [...FRONTMATTER_KEYS].sort();
-  if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index])) {
+  const keys = Object.keys(record).toSorted();
+  const expectedKeys = [...FRONTMATTER_KEYS].toSorted();
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key, index) => key !== expectedKeys[index])
+  ) {
     return null;
   }
 
@@ -85,11 +83,14 @@ function validateFrontmatter(value: unknown): HandoffFrontmatter | null {
 }
 
 function legacyTitle(markdown: string, filename: string): string {
-  return H1_PATTERN.exec(markdown)?.[1]?.trim() || filename.replace(/\.md$/i, "");
+  return H1_PATTERN.exec(markdown)?.groups?.title?.trim() || filename.replace(/\.md$/iu, "");
 }
 
 function legacyCategory(markdown: string): HandoffCategory | null {
-  return (CATEGORY_FOOTER_PATTERN.exec(markdown)?.[1] as HandoffCategory | undefined) ?? null;
+  return (
+    (CATEGORY_FOOTER_PATTERN.exec(markdown)?.groups?.category as HandoffCategory | undefined) ??
+    null
+  );
 }
 
 function parseLegacy(markdown: string, filename: string): ParsedHandoff {
@@ -103,13 +104,19 @@ function parseLegacy(markdown: string, filename: string): ParsedHandoff {
   };
 }
 
-function splitLeadingFrontmatter(source: string): { yaml: string; body: string } | null | undefined {
-  const opening = /^---[ \t]*\r?\n/.exec(source);
-  if (!opening) return undefined;
+function splitLeadingFrontmatter(
+  source: string
+): { yaml: string; body: string } | null | undefined {
+  const opening = /^---[ \t]*\r?\n/u.exec(source);
+  if (!opening) {
+    return undefined;
+  }
 
   const rest = source.slice(opening[0].length);
-  const closing = /^---[ \t]*(?:\r?\n|$)/m.exec(rest);
-  if (!closing || closing.index === undefined) return null;
+  const closing = /^---[ \t]*(?:\r?\n|$)/mu.exec(rest);
+  if (!closing || closing.index === undefined) {
+    return null;
+  }
 
   return {
     yaml: rest.slice(0, closing.index),

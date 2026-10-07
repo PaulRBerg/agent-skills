@@ -87,8 +87,7 @@ where deterministic tooling already carries the workflow.
 | [ai-handoff](toolkit/handoff/)                          | Create and archive agent task handoffs                                    |
 | [ai-notify](toolkit/notify/)                            | Deliver desktop notifications for Claude Code and Codex CLI               |
 | [ai-skillet](toolkit/skillet/)                          | Inspect and maintain agent-skill catalogs                                 |
-| [Coordination dashboard](toolkit/apps/coord-dashboard/) | Local live view of ai-coord state                                         |
-| [AI Handoffs](toolkit/apps/handoffs/)                   | Local, read-only task-handoff viewer                                      |
+| [Coordination dashboard](toolkit/apps/coord-dashboard/) | Local live view of ai-coord state and read-only task handoffs             |
 
 ## References
 

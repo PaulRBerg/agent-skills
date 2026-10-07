@@ -2,8 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { HandoffRecord } from "../lib/handoff-types.js";
 import { createRequestHandler } from "./api.js";
 import { parsePort } from "./server.js";
 
@@ -13,6 +14,7 @@ type FixtureOptions = {
   proxyRequest?: (request: Request) => Promise<Response>;
   homeDirectory?: string;
   indexHtml?: string;
+  loadHandoffs?: () => Promise<HandoffRecord[]>;
 };
 
 const FIXTURE_HOME = "/Users/fixture-home";
@@ -75,12 +77,59 @@ describe("request handler", () => {
     expect(await response.text()).toBe("Bad Gateway");
   });
 
+  it("serves handoffs locally without caching, proxying, or accepting a client path", async () => {
+    const record = {
+      id: "/tmp/VIEW.md",
+      state: "live",
+      root: "/tmp",
+      repository: "tmp",
+      filename: "VIEW.md",
+      path: "/tmp/VIEW.md",
+      format: "legacy",
+      title: "View",
+      category: null,
+      created: null,
+      modifiedAt: "2026-08-10T08:00:00.000Z",
+      frontmatter: null,
+      markdown: "# View\n",
+    } satisfies HandoffRecord;
+    const handler = await fixtureHandler({
+      loadHandoffs: () => Promise.resolve([record]),
+      proxyRequest: () => Promise.reject(new Error("handoffs must not be proxied")),
+    });
+
+    const response = await handler(new Request("http://localhost/api/handoffs?path=/etc/passwd"));
+    const method = await handler(new Request("http://localhost/api/handoffs", { method: "POST" }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual({ handoffs: [record] });
+    expect(method.status).toBe(405);
+    expect(method.headers.get("Allow")).toBe("GET");
+  });
+
+  it("returns a controlled error when handoff discovery fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handler = await fixtureHandler({
+      loadHandoffs: () => Promise.reject(new Error("scan failed")),
+    });
+
+    const response = await handler(new Request("http://localhost/api/handoffs"));
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("Internal Server Error");
+    expect(logged).toHaveBeenCalledOnce();
+    logged.mockRestore();
+  });
+
   it("rejects forged Host headers on API and static routes (DNS-rebinding guard)", async () => {
     const handler = await fixtureHandler();
     const api = await handler(new Request("http://evil.example:1234/api/snapshot"));
+    const handoffs = await handler(new Request("http://evil.example:1234/api/handoffs"));
     const asset = await handler(new Request("http://evil.example:1234/assets/app.js"));
 
     expect(api.status).toBe(403);
+    expect(handoffs.status).toBe(403);
     expect(asset.status).toBe(403);
   });
 

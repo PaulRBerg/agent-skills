@@ -135,6 +135,133 @@ button,
   color: var(--color-ink-base);
 }
 
+/* Rendered handoff Markdown: generated elements cannot carry utility classes. */
+@layer components {
+  .markdown-body {
+    min-width: 0;
+    max-width: 76ch;
+    font-size: 15px;
+    line-height: 1.6;
+    overflow-wrap: break-word;
+
+    & > :first-child {
+      margin-top: 0;
+    }
+    & :is(h1, h2, h3, h4, h5, h6) {
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.3;
+    }
+    & h1 {
+      margin: 2rem 0 0.75rem;
+      font-size: 20px;
+    }
+    & h2 {
+      margin: 2rem 0 0.75rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--color-line-muted-base);
+      font-size: 17px;
+    }
+    & h3 {
+      margin: 1.5rem 0 0.5rem;
+      font-size: 15px;
+    }
+    & :is(h4, h5, h6) {
+      margin: 1.25rem 0 0.5rem;
+      font-size: 14px;
+    }
+    & :is(p, ul, ol, blockquote, pre, table, hr) {
+      margin-block: 0.85rem;
+    }
+    & ul {
+      padding-left: 1.4rem;
+      list-style: disc;
+    }
+    & ol {
+      padding-left: 1.4rem;
+      list-style: decimal;
+    }
+    & li + li {
+      margin-top: 0.25rem;
+    }
+    & li > :is(ul, ol) {
+      margin-block: 0.25rem;
+    }
+    & .contains-task-list {
+      padding-left: 0;
+      list-style: none;
+    }
+    & input[type="checkbox"] {
+      margin-right: 0.4rem;
+      accent-color: var(--color-accent-base);
+      vertical-align: -0.1rem;
+    }
+    & a {
+      color: var(--color-accent-base);
+      text-decoration: underline;
+      text-underline-offset: 0.16em;
+    }
+    & blockquote {
+      padding-left: 1rem;
+      border-left: 3px solid var(--color-line-strong-base);
+      color: var(--color-ink-secondary-base);
+    }
+    & hr {
+      border-top: 1px solid var(--color-line-muted-base);
+    }
+    & :not(pre) > code {
+      padding: 0.1em 0.35em;
+      border: 1px solid var(--color-line-muted-base);
+      background: var(--color-surface-muted-base);
+      font-family: var(--font-mono);
+      font-size: 0.875em;
+      overflow-wrap: anywhere;
+    }
+    & pre {
+      overflow: auto;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--color-line-muted-base);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    & pre code {
+      font-family: var(--font-mono);
+    }
+    & table {
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      overflow-x: auto;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      line-height: 1.45;
+    }
+    & :is(th, td) {
+      padding: 0.45rem 0.65rem;
+      border: 1px solid var(--color-line-muted-base);
+      text-align: left;
+      vertical-align: top;
+    }
+    & th {
+      background: var(--color-surface-muted-base);
+      font-weight: 600;
+    }
+    & img {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+}
+
+/* Shiki emits light colors inline and dark colors as CSS variables. */
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+  }
+}
+
 @keyframes liveness-pulse {
   0%,
   100% {

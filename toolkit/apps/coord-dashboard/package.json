@@ -16,14 +16,18 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@shikijs/rehype": "^4.4.3",
     "effect": "^4.0.1",
     "lucide-react": "^1.47.0",
+    "motion": "^12.43.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
     "react-router": "^8.3.1",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.7.0",
     "tailwind-variants": "^3.3.1",
-    "motion": "^12.43.0"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@prb/devkit": "^1.0.2",

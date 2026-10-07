@@ -5,3 +5,6 @@
 .cache/
 dist/
 node_modules/
+
+# parser fixtures
+src/server/handoffs/fixtures/

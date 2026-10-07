@@ -32,16 +32,8 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 @coord-dashboard-dev:
     just --justfile apps/coord-dashboard/justfile --working-directory apps/coord-dashboard dev
 
-# Run the handoffs validation gate.
-@handoffs-check:
-    just --justfile apps/handoffs/justfile --working-directory apps/handoffs check
-
-# Start the handoffs development server.
-@handoffs-dev:
-    just --justfile apps/handoffs/justfile --working-directory apps/handoffs dev
-
 # Run all workspace and application checks.
-@check: rust-check coord-dashboard-check handoffs-check
+@check: rust-check coord-dashboard-check
 
 # Delete the ai-coord ledger (state.db plus its -wal/-shm files) after a [y/N] confirmation.
 [script("bash")]

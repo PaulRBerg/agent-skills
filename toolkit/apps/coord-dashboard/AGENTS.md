@@ -1,6 +1,7 @@
 # Dashboard package
 
-`apps/coord-dashboard/` is the local live view of ai-coord coordination state.
+`apps/coord-dashboard/` is the local live view of ai-coord coordination state. It also contains the read-only task
+handoff viewer.
 
 ## Stack
 
@@ -25,8 +26,9 @@ Keep `src/start.ts`, `src/freshness.ts`, and `src/server/` out of the browser mo
 to `127.0.0.1:5173` with `strictPort`. The Bun production server defaults to port 4173. Reject requests whose Host is
 not a loopback name (`localhost`, `127.0.0.1`, `[::1]`) as a DNS-rebinding guard.
 
-Open the dashboard at `https://coord.localhost`. Circadian's Caddy configuration proxies this URL to `127.0.0.1:4173`
-and rewrites the upstream Host header to preserve the loopback guard.
+Open the dashboard at `https://coord.localhost` and the handoffs view at `https://coord.localhost/handoffs`. Circadian's
+Caddy configuration proxies this URL to `127.0.0.1:4173` and rewrites the upstream Host header to preserve the loopback
+guard.
 
 Oxlint/Oxfmt owns code. ESLint owns Tailwind classes and React hooks. Prettier owns Markdown and YAML. The package-local
 lint-staged configuration uses the repository's existing Husky hook. Do not install a separate package hook.
@@ -40,8 +42,22 @@ Read snapshots from `GET /api/snapshot` and live updates from `GET /api/events`,
 cross-field claim and draft invariants. `src/lib/sample-snapshot.ts` mirrors the contract. Use SSE when available and
 polling as its fallback.
 
-Keep the snapshot subscription above the Coordination and Findings tabs. The Findings badge and default Unresolved
-filter include pending and handed-off findings. Triaging is an independent overlay, not another finding state.
+The URL path selects the tab: `/`, `/findings`, or `/handoffs`. Keep the snapshot subscription above the Coordination
+and Findings tabs. The Findings badge and default Unresolved filter include pending and handed-off findings. Triaging is
+an independent overlay, not another finding state.
+
+## Handoffs
+
+The Bun server answers `GET /api/handoffs` from `src/server/handoffs/` and proxies all other `/api` routes to
+`ai-coord serve`. In development, Vite proxies `/api/handoffs` to the always-on server on port 4173.
+
+- Never accept filesystem paths from HTTP clients.
+- Keep discovery depth-bounded to the locations in `src/server/handoffs/scanner.ts`. Do not replace it with recursive
+  home-directory traversal.
+- Scan the Desktop in an isolated worker process with a timeout.
+- Treat missing roots and individual unreadable files as recoverable scan conditions.
+- Do not mutate, move, archive, or delete discovered handoff files.
+- Preserve the parser's legacy degradation behavior when evolving frontmatter.
 
 ## Verification
 

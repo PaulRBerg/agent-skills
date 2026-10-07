@@ -1,7 +1,8 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { ClipboardCheck, PanelsTopLeft } from "lucide-react";
+import { ClipboardCheck, FileText, PanelsTopLeft } from "lucide-react";
 import { AnimatePresence, LayoutGroup, MotionConfig } from "motion/react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 
 import { subscribeToSnapshots } from "@/lib/api.js";
 import type { ConnectionState } from "@/lib/api.js";
@@ -14,7 +15,24 @@ import { Header } from "@/ui/header.js";
 import { MessagesFeed } from "@/ui/messages-feed.js";
 import { RepoLane } from "@/ui/repo-lane.js";
 
+// Loaded on demand: Markdown rendering and syntax highlighting dominate the bundle.
+const HandoffsPanel = lazy(async () => {
+  const module = await import("@/ui/handoffs-panel.js");
+  return { default: module.HandoffsPanel };
+});
+
+const tabs = ["coordination", "findings", "handoffs"] as const;
+type Tab = (typeof tabs)[number];
+
+function tabFromPath(pathname: string): Tab {
+  const segment = pathname.split("/")[1];
+  return tabs.find((tab) => tab !== "coordination" && tab === segment) ?? "coordination";
+}
+
 export function App() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const activeTab = tabFromPath(pathname);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [error, setError] = useState<Error | null>(null);
@@ -65,21 +83,24 @@ export function App() {
               </div>
             ) : null}
 
-            <Tabs.Root defaultValue="coordination">
+            <Tabs.Root
+              onValueChange={(tab: Tab) => navigate(tab === "coordination" ? "/" : `/${tab}`)}
+              value={activeTab}
+            >
               <Tabs.List
                 activateOnFocus
                 aria-label="Dashboard views"
-                className="mb-6 flex gap-1 border-b border-line-strong"
+                className="mb-6 flex gap-1 overflow-x-auto border-b border-line-strong"
               >
                 <Tabs.Tab
-                  className="flex min-h-11 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
+                  className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
                   value="coordination"
                 >
                   <PanelsTopLeft aria-hidden="true" className="size-4" />
                   Coordination
                 </Tabs.Tab>
                 <Tabs.Tab
-                  className="flex min-h-11 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
+                  className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
                   value="findings"
                 >
                   <ClipboardCheck aria-hidden="true" className="size-4" />
@@ -92,8 +113,15 @@ export function App() {
                     {unresolvedCount}
                   </span>
                 </Tabs.Tab>
+                <Tabs.Tab
+                  className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent data-active:border-accent data-active:bg-accent-wash data-active:text-ink motion-reduce:transition-none sm:px-4"
+                  value="handoffs"
+                >
+                  <FileText aria-hidden="true" className="size-4" />
+                  Handoffs
+                </Tabs.Tab>
               </Tabs.List>
-              {snapshot === null && connection !== "disconnected" ? (
+              {snapshot === null && connection !== "disconnected" && activeTab !== "handoffs" ? (
                 <div className="border-y border-line-strong bg-surface px-4 py-12 text-center text-sm text-muted">
                   Loading coordination snapshot…
                 </div>
@@ -135,6 +163,14 @@ export function App() {
                   </Tabs.Panel>
                 </>
               ) : null}
+              <Tabs.Panel
+                value="handoffs"
+                className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+              >
+                <Suspense fallback={null}>
+                  <HandoffsPanel />
+                </Suspense>
+              </Tabs.Panel>
             </Tabs.Root>
           </main>
         </div>
