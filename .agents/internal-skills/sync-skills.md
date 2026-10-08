@@ -60,6 +60,7 @@ Files:
 - `skills/orchestration/references/native-codex.md`
 - `skills/orchestration/references/claude-to-codex.md`
 - `skills/orchestration/references/codex-to-claude.md`
+- `skills/orchestration/references/jev-routing.md`
 
 `SKILL.md` owns the shared contract. Adapters contain only runtime-specific mechanics. Review them against the shared
 contract instead of maintaining duplicate entrypoints.
@@ -79,6 +80,8 @@ Keep these decisions aligned:
    prove completion. Attribute failures before gating dependents. Apply only the selected route's retry mechanism.
 6. Preserve the shared companion-skill, proportional-verification, hurry, skill-maintenance, and completion contracts.
    Runtime differences cannot weaken them.
+7. Keep Jev candidates consistent with each adapter's supported model and effort pairs. Preserve explicit user choices,
+   native Claude effort limits, and local selection on routing failure, uncertainty, or parent rejection.
 
 Model tiers, permissions, research toolsets, progress transport, session identity, and continuation mechanics differ by
 route. Preserve those differences. Native Claude Explore is one-shot. Native Codex uses native thread tools. The two CLI
