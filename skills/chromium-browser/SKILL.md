@@ -94,12 +94,16 @@ external approval page is an npm trusted-publisher prompt. Ending the turn at a 
 
 1. Stop all writes on the gated page. Never try to bypass the gate.
 2. Tell the user the exact page and the action the gate requires.
-3. Call `wait_for` on the gated `pageId`. Pass one or more texts that appear only after the gate clears. Examples are
-   the post-login heading or the next form label. Set `timeout` to 600000 unless the user states another value. If no
-   distinctive post-gate text exists, call `take_snapshot` on the same `pageId` at intervals until the timeout.
-4. When the gate clears, resume from the same page state. Re-verify the form fields first, because sites clear them.
-5. End the turn only after the timeout. Then report the exact step the user must complete and the step that resumes the
-   task.
+3. Allow ten minutes in total unless the user states another response window. Use sequential `wait_for` calls on the
+   gated `pageId`, with each `timeout` at most 10000. Match text that appears only after the gate clears. Examples are
+   the post-login heading or the next form label. If no distinctive text exists, use snapshots separated by short,
+   interruptible host waits. Do not queue another browser call behind an outstanding `wait_for`. Canceling a host wait
+   does not prove that its MCP call stopped.
+4. After a user reply, take a fresh snapshot before waiting again. A cleared gate can leave the form awaiting another
+   action. When the gate clears, resume from the same page state. Re-verify the form fields first, because sites clear
+   them.
+5. End the turn only after the total response window expires. Then report the exact step the user must complete and the
+   step that resumes the task.
 
 ## Audits and Profiling
 
