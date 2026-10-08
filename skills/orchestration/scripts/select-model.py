@@ -19,18 +19,29 @@ ENDPOINT = "https://ai-gateway.vercel.sh/v1/evaluate"
 TIMEOUT_SECONDS = 8
 MAX_BYTES = 65536
 CONFIDENCE_FLOOR = 0.6
+ROUNDING_BOUND = 0.005
+FLOAT_EPSILON = 1e-12
+RESPONSE_VALIDATION_CODES = frozenset({
+    "answers", "choice_type", "unknown_choice", "distribution_keys", "probability_range",
+    "distribution_sum", "confidence_consistency",
+})
 
 
 class InvalidData(ValueError):
-    pass
+    def __init__(self, detail):
+        super().__init__()
+        self.detail = detail
 
 
 class DeadlineExpired(TimeoutError):
     pass
 
 
-def fallback(reason):
-    return {"status": "fallback", "reason": reason}
+def fallback(reason, detail=None):
+    result = {"status": "fallback", "reason": reason}
+    if detail in RESPONSE_VALIDATION_CODES:
+        result["detail"] = detail
+    return result
 
 
 def unique_object(pairs):
@@ -142,25 +153,35 @@ def validate_answer(response, allowed):
         raise InvalidData("answers")
     answer = response["answers"].get("configuration")
     if not isinstance(answer, dict) or answer.get("type") != "choice":
-        raise InvalidData("choice type")
+        raise InvalidData("choice_type")
     choice = answer.get("choice")
     if not isinstance(choice, str) or choice not in allowed:
-        raise InvalidData("unknown choice")
+        raise InvalidData("unknown_choice")
     probabilities = answer.get("probabilities")
     confidence = answer.get("confidence")
     if not isinstance(probabilities, dict) or set(probabilities) != set(allowed):
-        raise InvalidData("distribution keys")
+        raise InvalidData("distribution_keys")
     if not unit_number(confidence) or not all(unit_number(value) for value in probabilities.values()):
-        raise InvalidData("probability range")
-    if not math.isclose(sum(probabilities.values()), 1.0, rel_tol=0, abs_tol=0.001):
-        raise InvalidData("distribution sum")
-    expected_confidence = (len(allowed) * max(probabilities.values()) - 1) / (len(allowed) - 1)
-    if not math.isclose(confidence, expected_confidence, rel_tol=0, abs_tol=0.001):
-        raise InvalidData("confidence consistency")
+        raise InvalidData("probability_range")
+    count = len(allowed)
+    # Each independently rounded probability can differ by half a hundredth.
+    if not math.isclose(math.fsum(probabilities.values()), 1.0, rel_tol=0,
+                        abs_tol=count * ROUNDING_BOUND + FLOAT_EPSILON):
+        raise InvalidData("distribution_sum")
+    expected_confidence = (count * max(probabilities.values()) - 1) / (count - 1)
+    # The formula scales probability error by n/(n-1), plus confidence rounding.
+    confidence_bound = ROUNDING_BOUND * (1 + count / (count - 1))
+    if not math.isclose(confidence, expected_confidence, rel_tol=0,
+                        abs_tol=confidence_bound + FLOAT_EPSILON):
+        raise InvalidData("confidence_consistency")
     if any(probabilities[choice] <= value for candidate_id, value in probabilities.items() if candidate_id != choice):
         return fallback("ambiguous_choice")
-    if confidence < CONFIDENCE_FLOOR:
-        return fallback("low_confidence")
+    effective_confidence = min(confidence, expected_confidence)
+    if effective_confidence < CONFIDENCE_FLOOR:
+        result = {**fallback("low_confidence"), "confidence": confidence, "threshold": CONFIDENCE_FLOOR}
+        if confidence >= CONFIDENCE_FLOOR:
+            result["recomputed_confidence"] = expected_confidence
+        return result
     candidate = allowed[choice]
     return {"status": "selected", "id": choice, "model": candidate["model"],
             "effort": candidate["effort"], "confidence": confidence}
@@ -183,6 +204,8 @@ def select_configuration(payload, key):
         return fallback("timeout" if isinstance(error.reason, TimeoutError) else "api_unavailable")
     except (NotImplementedError, RuntimeError):
         return fallback("request_unavailable")
+    except InvalidData as error:
+        return fallback("invalid_response", detail=error.detail)
     except (ValueError, TypeError, UnicodeError, OverflowError, RecursionError):
         return fallback("invalid_response")
     except OSError:

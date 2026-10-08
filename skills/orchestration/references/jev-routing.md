@@ -80,16 +80,35 @@ sending the request.
 
 Accept only `status: selected` with an exact allowed candidate ID and its unchanged model and effort. The helper
 requires a complete finite probability distribution, approximately summing to one, and a unique maximum matching that
-ID. It also requires confidence of at least `0.6`. This initial local policy is not a calibrated accuracy guarantee. It
-checks [Jev's choice confidence formula](https://docs.typesafe.ai/confidence#choice),
-`(n * max(probabilities) - 1) / (n - 1)`, against the returned distribution. The parent must still reject a selection
-that conflicts with the task, constraints, or verified runtime support.
+ID. It checks [Jev's choice confidence formula](https://docs.typesafe.ai/confidence#choice),
+`(n * max(probabilities) - 1) / (n - 1)`, against the returned distribution.
+
+Observed live responses and [Jev's published examples](https://docs.typesafe.ai/api#choice-answer) are consistent with
+independent rounding to hundredths. The local tolerance permits this rounding without assuming guaranteed wire
+precision. Under this rounding, each field can differ by `0.005` from its unrounded value. For `n` candidates, the
+helper permits a distribution sum error of `n * 0.005`.
+
+The formula scales probability error by `n / (n - 1)`. Including confidence rounding, the permitted confidence error is
+`0.005 * (1 + n / (n - 1))`. A small floating-point allowance covers numerical representation error. The helper does not
+normalize probabilities or raise confidence.
+
+Both provider confidence and recomputed confidence must reach `0.6`. This confidence threshold is not a winning
+probability threshold. With two candidates, confidence `0.6` means winning probability `0.8`. This initial local policy
+is not a calibrated accuracy guarantee. A `low_confidence` result is an expected abstention, not an API malfunction. The
+parent must still reject a selection that conflicts with the task, constraints, or verified runtime support.
 
 On any failure, uncertainty, dubious selection, unavailable Python or shell, missing key, malformed output, or nonzero
 helper exit, use the local fallback. Do not retry, ask for approval, stop the handoff, or substitute a worker family
-because Jev is unavailable. The helper returns only a safe reason code on failure. Never expose raw API errors, response
-bodies, or credentials.
+because Jev is unavailable.
+
+The helper returns a safe reason code on failure. An `invalid_response` result can include a fixed validation `detail`
+code. A `low_confidence` result includes provider `confidence` and the `threshold`. It also includes
+`recomputed_confidence` when only that value falls below the threshold. Never expose raw API errors, response bodies, or
+credentials.
 
 Record `selection: jev; confidence: <value>` or `selection: fallback; reason: <safe code>` in the manifest brief. For a
-parent rejection, use `parent_rejected`. Keep this record concise. Continue through the selected adapter's normal launch
-mechanics. Reuse the selected configuration for same-agent continuation. Route each genuinely new brief again.
+parent rejection, use `parent_rejected`. Include optional safe `detail` codes and numeric confidence diagnostics when
+present. Keep this record concise.
+
+Continue through the selected adapter's normal launch mechanics. Reuse the selected configuration for same-agent
+continuation. Route each genuinely new brief again.

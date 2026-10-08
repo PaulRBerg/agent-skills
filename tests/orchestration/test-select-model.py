@@ -34,7 +34,7 @@ ANSWER = {"answers": {"configuration": {
 
 
 class SelectModelTests(unittest.TestCase):
-    def call(self, answer=ANSWER, status=200, error=None):
+    def call(self, answer=ANSWER, status=200, error=None, payload=PAYLOAD):
         response = Mock()
         response.status = status
         response.read.return_value = answer if isinstance(answer, bytes) else json.dumps(answer).encode()
@@ -44,7 +44,7 @@ class SelectModelTests(unittest.TestCase):
         opener.open.side_effect = error
         opener.open.return_value = response
         with patch.object(ROUTER.urllib.request, "build_opener", return_value=opener):
-            result = ROUTER.select_configuration(PAYLOAD, "test-placeholder")
+            result = ROUTER.select_configuration(payload, "test-placeholder")
         return result, opener, response
 
     def test_success_uses_exact_atomic_candidate_and_evaluate_wire(self):
@@ -133,6 +133,90 @@ class SelectModelTests(unittest.TestCase):
         answer["answers"]["configuration"].update(
             confidence=1, probabilities={"routine": 0.49, "involved": 0.51})
         self.assertEqual(self.call(answer)[0]["reason"], "invalid_response")
+
+    def test_independently_rounded_distributions_and_confidence(self):
+        cases = [
+            ([0.88, 0.12], 0.75, "selected"),
+            ([0.9, 0.1], 0.785, "selected"),
+            ([0.9, 0.09], 0.8, "selected"),
+            ([0.91, 0.1], 0.82, "selected"),
+            ([0.88, 0.12, 0], 0.81, "selected"),
+            ([0.61, 0.35, 0.04], 0.42, "low_confidence"),
+            ([0.7, 0.1, 0.1, 0.1], 0.6, "selected"),
+            ([0.74, 0.26, 0, 0, 0], 0.67, "selected"),
+            ([0.85, 0.07, 0.07], 0.77, "selected"),
+            ([0.85, 0.08, 0.08], 0.77, "selected"),
+        ]
+        for probabilities, confidence, expected in cases:
+            with self.subTest(probabilities=probabilities, confidence=confidence):
+                payload = copy.deepcopy(PAYLOAD)
+                payload["candidates"] = [
+                    {**PAYLOAD["candidates"][0], "id": f"candidate_{index}"}
+                    for index in range(len(probabilities))
+                ]
+                answer = {"answers": {"configuration": {
+                    "type": "choice", "choice": "candidate_0", "confidence": confidence,
+                    "probabilities": {f"candidate_{index}": value for index, value in enumerate(probabilities)},
+                }}}
+                result = self.call(answer, payload=payload)[0]
+                self.assertEqual(result["status"] if expected == "selected" else result["reason"], expected)
+                if expected == "selected":
+                    self.assertEqual(result["confidence"], confidence)
+
+    def test_recorded_binary_response_is_expected_abstention(self):
+        answer = copy.deepcopy(ANSWER)
+        answer["answers"]["configuration"].update(
+            choice="routine", confidence=0.11, probabilities={"routine": 0.56, "involved": 0.44})
+        self.assertEqual(self.call(answer)[0], {
+            "status": "fallback", "reason": "low_confidence", "confidence": 0.11, "threshold": 0.6,
+        })
+
+    def test_rounding_tolerance_does_not_promote_below_floor(self):
+        for probabilities, confidence in (([0.8, 0.2], 0.59), ([0.795, 0.205], 0.6)):
+            with self.subTest(probabilities=probabilities, confidence=confidence):
+                answer = copy.deepcopy(ANSWER)
+                answer["answers"]["configuration"].update(
+                    confidence=confidence,
+                    probabilities={"routine": probabilities[1], "involved": probabilities[0]})
+                result = self.call(answer)[0]
+                self.assertEqual(result["reason"], "low_confidence")
+                self.assertEqual(result["confidence"], confidence)
+                self.assertEqual(result["threshold"], 0.6)
+                if confidence == 0.6:
+                    self.assertAlmostEqual(result["recomputed_confidence"], 0.59)
+                else:
+                    self.assertNotIn("recomputed_confidence", result)
+
+    def test_excessive_rounding_errors_return_fixed_details(self):
+        for probabilities, confidence, detail in (
+            ({"routine": 0.11, "involved": 0.91}, 0.82, "distribution_sum"),
+            ({"routine": 0.1, "involved": 0.9}, 0.78, "confidence_consistency"),
+            ({"routine": 0.1}, 0.8, "distribution_keys"),
+        ):
+            with self.subTest(detail=detail):
+                answer = copy.deepcopy(ANSWER)
+                answer["answers"]["configuration"].update(probabilities=probabilities, confidence=confidence)
+                self.assertEqual(self.call(answer)[0], {
+                    "status": "fallback", "reason": "invalid_response", "detail": detail,
+                })
+
+    def test_validation_diagnostics_never_echo_response_or_credential(self):
+        private = "malicious-response-and-test-placeholder"
+        for answer, detail in (
+            ({"answers": {"configuration": {"type": private}}}, "choice_type"),
+            ({"answers": {"configuration": {"type": "choice", "choice": private}}}, "unknown_choice"),
+            (private.encode(), None),
+        ):
+            with self.subTest(detail=detail):
+                result = self.call(answer)[0]
+                self.assertEqual(result["reason"], "invalid_response")
+                self.assertEqual(result.get("detail"), detail)
+                self.assertNotIn(private, json.dumps(result))
+                self.assertNotIn("test-placeholder", json.dumps(result))
+        with patch.object(ROUTER, "evaluate", side_effect=ROUTER.InvalidData(private)):
+            self.assertEqual(ROUTER.select_configuration(PAYLOAD, "test-placeholder"), {
+                "status": "fallback", "reason": "invalid_response",
+            })
 
     def test_api_failure_timeout_and_redirects_use_safe_codes(self):
         for error, expected in (
