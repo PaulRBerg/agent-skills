@@ -14,12 +14,17 @@ and as the local fallback when Jev cannot provide a sound selection:
 | Involved research across unfamiliar subsystems                       | `opus`   |
 | Semantic or cross-cutting implementation with interacting invariants | `opus`   |
 
-Use the Agent tool's supported model aliases or the user's exact supported model. The Agent tool has no per-call effort
-control. Subagents inherit session effort. If the user names a custom agent, verify its availability and use that type.
-Its tools and instructions must support the assigned authority boundary. Report an incompatibility before substituting.
-Keep effort fixed to `inherited` during Jev selection. Never pass an effort argument to Agent or create a custom agent
-to set it. Preserve a custom agent's host-controlled settings unless the user explicitly overrides them. Record the
-selection source in each brief.
+Use the Agent tool's supported model aliases or the user's exact supported model. If the user names a custom agent,
+verify its availability and use that type. Its tools and instructions must support the assigned authority boundary.
+Report an incompatibility before substituting.
+
+[Claude Code v2.1.292](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md#21292) added per-call `effort`.
+Inspect the callable Agent schema before selecting effort. For supported non-fork calls, this skill explicitly requests
+passing the accepted Jev effort through that parameter. Use only levels supported by the tool and selected model. On
+local fallback, omit `effort` unless the user specified one. If the tool lacks that parameter, fix candidate effort to
+`inherited`. The parameter is ignored for `subagent_type: "fork"`, which inherits the parent's effort. Preserve a custom
+agent's configured effort unless the user overrides it. Do not create agent files to expose effort. Record the selected
+effort and selection source in each brief.
 
 Let Claude Code select foreground or background delivery. Only a terminal result, error, or completion notification
 settles an agent. A launch acknowledgement, task row, quiet period, or permission prompt does not settle it. Reconcile a
@@ -28,8 +33,9 @@ wave only after every required terminal outcome arrives.
 ## Research
 
 Launch research through Agent with `subagent_type: "Explore"` and the selected explicit model. Use stable IDs `R1` to
-`R3`. Start independent agents together, within any host concurrency limit. When Plan Mode prescribes exploration, these
-agents provide it. The parent writes the plan and launches no planning agents.
+`R3`. Pass effort according to Configuration above. Start independent agents together, within any host concurrency
+limit. When Plan Mode prescribes exploration, these agents provide it. The parent writes the plan and launches no
+planning agents.
 
 Include all task-relevant repository constraints in each prompt. Explore does not load project `CLAUDE.md`. Add a
 thoroughness hint: `medium` for bounded surveys or `very thorough` for multi-subsystem investigations. Require the
@@ -43,9 +49,9 @@ evidence remains an open question or blocker in the consolidated result.
 Use this table in the shared `## Orchestration` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                             | Implementation brief                        | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | --------------------------------- | ------------------------------------------- | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<sonnet\|opus\|user preference>` | `<outcome, constraints, stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                             | Effort                                   | Implementation brief                        | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | --------------------------------- | ---------------------------------------- | ------------------------------------------- | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<sonnet\|opus\|user preference>` | `<selected\|inherited\|user preference>` | `<outcome, constraints, stopping criteria>` | `<commands and observable results>` |
 ```
 
 Keep table cells to one line. Put longer briefs under per-agent headings. Do not invent native runtime limits.
@@ -62,8 +68,8 @@ session and explain that disjoint siblings are not conflicts. An unrelated claim
 writes. On a scope warning, workers must stop writes and notify the parent instead of repairing claims themselves.
 
 Launch implementation through Agent with `subagent_type: "general-purpose"`, the selected model, and a description such
-as `A1 — <scope>`. An explicit compatible custom agent choice replaces `general-purpose`. Start independent workers
-together. Start dependents only after reconciling their prerequisites.
+as `A1 — <scope>`. Pass effort according to Configuration above. An explicit compatible custom agent choice replaces
+`general-purpose`. Start independent workers together. Start dependents only after reconciling their prerequisites.
 
 Agents receive none of the planning conversation. Supply the complete shared implementation prompt contract. Require the
 exact shared result keys, including `changed_files` and `residual_risks`. Retain each returned agent ID for
