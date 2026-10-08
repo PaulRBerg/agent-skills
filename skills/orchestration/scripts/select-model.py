@@ -201,6 +201,8 @@ def select_configuration(payload, key):
     except (DeadlineExpired, TimeoutError):
         return fallback("timeout")
     except urllib.error.URLError as error:
+        if isinstance(error, urllib.error.HTTPError):
+            error.close()
         return fallback("timeout" if isinstance(error.reason, TimeoutError) else "api_unavailable")
     except (NotImplementedError, RuntimeError):
         return fallback("request_unavailable")

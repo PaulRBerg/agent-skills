@@ -230,6 +230,8 @@ class SelectModelTests(unittest.TestCase):
         ):
             with self.subTest(error=type(error).__name__):
                 self.assertEqual(self.call(error=error)[0], {"status": "fallback", "reason": expected})
+                if isinstance(error, urllib.error.HTTPError):
+                    self.assertTrue(error.fp.closed)
         self.assertEqual(self.call(status=503)[0]["reason"], "api_unavailable")
         self.assertIsNone(ROUTER.NoRedirect().redirect_request(None, None, 302, "", {}, "https://example.com"))
 
