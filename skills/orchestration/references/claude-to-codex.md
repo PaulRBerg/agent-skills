@@ -23,16 +23,17 @@ Give each research agent a self-contained prompt containing the open questions, 
 boundary, relevant repository constraints, and stopping rule from the shared prompt contract. Require every field in
 `research-result.schema.json`. Prohibit plans, design decisions, and edits.
 
-When the user has not explicitly included research agents in a model preference, select research configuration from
-these tiers:
+Before each new research brief launches, follow [Jev configuration routing](jev-routing.md). Use these research tiers as
+candidates and as the local fallback when Jev cannot provide a sound selection:
 
 | Investigation                          | Model         | Effort   | Baseline timeout |
 | -------------------------------------- | ------------- | -------- | ---------------- |
 | Bounded, routine survey                | `gpt-6-luna`  | `high`   | 10 minutes       |
 | Involved survey across unfamiliar code | `gpt-6.1-sol` | `medium` | 15 minutes       |
 
-Under this default selection, use Luna for bounded surveys and Sol for involved ones. Under that selection, Astra is
-implementation-only. Research gathers evidence. The parent synthesizes it. Never select `low`, `ultra`, or `max`.
+For local fallback, use Luna for bounded surveys and Sol for involved ones. Under unconstrained routing, Astra is
+implementation-only. Research gathers evidence. The parent synthesizes it. Without an explicit user override, never
+select `low`, `ultra`, or `max`.
 
 Research should normally use shorter budgets than implementation. Keep the baseline between 10 and 15 minutes unless
 repository evidence says otherwise.
@@ -51,7 +52,8 @@ Use this exact host-specific table inside the shared `## Orchestration` plan sec
 | `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6.1-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
-When the user has not specified a model preference, select implementation configuration from these tiers:
+Before each new implementation brief launches, follow [Jev configuration routing](jev-routing.md). Use these
+implementation tiers as candidates and as the local fallback:
 
 | Work                                                                              | Model         | Effort             | Baseline timeout |
 | --------------------------------------------------------------------------------- | ------------- | ------------------ | ---------------- |
@@ -60,8 +62,10 @@ When the user has not specified a model preference, select implementation config
 | Semantic or cross-cutting implementation                                          | `gpt-6.1-sol` | `xhigh`            | 40 minutes       |
 | Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra` | `xhigh`            | 40 minutes       |
 
-An explicit user model preference replaces this task-complexity model selection. Effort and timeout still follow the
-applicable work tier. Never select `low`, `ultra`, or `max`.
+Preserve explicit model and effort preferences. Jev selects only unconstrained dimensions from supported pairs. On
+routing failure or uncertainty, use the applicable local work tier. Record the selection source in each manifest brief.
+Timeout still follows the applicable work tier. Without an explicit user override, never select `low`, `ultra`, or
+`max`.
 
 Adjust a timeout when repository evidence shows that required validation needs materially more or less time. The timeout
 is a kill-switch. It does not set the pace. Codex never sees it, and an early finish costs nothing. Size the timeout

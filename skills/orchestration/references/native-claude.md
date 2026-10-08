@@ -5,7 +5,8 @@ authority, prompts, reconciliation, and completion.
 
 ## Configuration
 
-Unless the user names a model, select from these tiers:
+Before each new brief launches, follow [Jev configuration routing](jev-routing.md). Use these model tiers as candidates
+and as the local fallback when Jev cannot provide a sound selection:
 
 | Work                                                                 | Model    |
 | -------------------------------------------------------------------- | -------- |
@@ -16,6 +17,9 @@ Unless the user names a model, select from these tiers:
 Use the Agent tool's supported model aliases or the user's exact supported model. The Agent tool has no per-call effort
 control. Subagents inherit session effort. If the user names a custom agent, verify its availability and use that type.
 Its tools and instructions must support the assigned authority boundary. Report an incompatibility before substituting.
+Keep effort fixed to `inherited` during Jev selection. Never pass an effort argument to Agent or create a custom agent
+to set it. Preserve a custom agent's host-controlled settings unless the user explicitly overrides them. Record the
+selection source in each brief.
 
 Let Claude Code select foreground or background delivery. Only a terminal result, error, or completion notification
 settles an agent. A launch acknowledgement, task row, quiet period, or permission prompt does not settle it. Reconcile a

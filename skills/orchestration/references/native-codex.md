@@ -9,7 +9,8 @@ own adapter.
 
 ## Native Agent Configuration
 
-When the user has not specified a model preference, use these tiers for research and implementation:
+Before each new brief launches, follow [Jev configuration routing](jev-routing.md). Use these tiers as allowed
+configurations and as the local fallback when Jev cannot provide a sound selection:
 
 | Work                                                                              | Model         | Effort             |
 | --------------------------------------------------------------------------------- | ------------- | ------------------ |
@@ -19,8 +20,9 @@ When the user has not specified a model preference, use these tiers for research
 | Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra` | `xhigh`            |
 
 Under this default selection, Astra at `xhigh` is the ceiling and Astra is implementation-only. Under that selection,
-research agents use Luna or Sol. Research gathers evidence. The parent synthesizes it. Never select `low`, `ultra`, or
-`max`. Keep the highest-tier agent's scope minimal and move deferrable validation to the validation owner.
+research agents use Luna or Sol. Research gathers evidence. The parent synthesizes it. Without an explicit user
+override, never select `low`, `ultra`, or `max`. Keep the highest-tier agent's scope minimal and move deferrable
+validation to the validation owner.
 
 Spawn every research or implementation worker with a self-contained prompt and `fork_turns: "none"`. This avoids copying
 the parent conversation and permits explicit `model` and `reasoning_effort` selection. Use a stable lowercase task name
@@ -55,8 +57,9 @@ Use this exact host-specific table inside the shared `## Orchestration` plan sec
 | `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6.1-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
-Use the native configuration table above for every manifest row unless the user's explicit preference overrides its
-model selection. Do not add artificial timeout budgets. The harness owns native agent lifetime and waiting.
+Use the accepted Jev configuration or the local tier fallback for every manifest row. Preserve explicit model and effort
+constraints. Record the selection source in its brief. Do not add artificial timeout budgets. The harness owns native
+agent lifetime and waiting.
 
 ## Execution Mechanics
 

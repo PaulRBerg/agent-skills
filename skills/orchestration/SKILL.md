@@ -36,7 +36,7 @@ or a requested worker name. If neither surface identifies the host, classify it 
 Default to Claude workers in Claude Code. Default to Codex workers in Codex and every other harness. An explicit user
 choice overrides this default. Apply that choice to research and implementation unless the user limits its scope. A
 named model also selects its family: Sonnet or Opus selects Claude, and a GPT model selects Codex. Preserve an exact
-requested model or custom agent name instead of replacing it with a default tier.
+requested model, custom agent name, or effort instead of replacing it with a default tier.
 
 Select the route from the actual host and requested worker family. Read the selected reference completely before launch:
 
@@ -56,6 +56,13 @@ host identity to satisfy a coordination requirement.
 Use one adapter per worker for launch, permissions, progress, results, and continuation. Load another only when the user
 explicitly requests different worker families for different scopes. Record each route in that worker's manifest brief.
 Adapters specialize runtime mechanics. They cannot weaken the shared contract or host restrictions.
+
+Before launching each new research or implementation brief, follow
+[Jev configuration routing](references/jev-routing.md). Use Jev through Vercel to choose only unconstrained model and
+effort dimensions from the selected adapter's allowed candidates. Keep the adapter's existing task tiers as the local
+fallback. If all dimensions are fixed, skip the network request. Any routing failure, uncertainty, or dubious selection
+uses that fallback without retry, approval, or interruption. Record the selection source and a concise confidence or
+fallback reason in the worker's manifest brief.
 
 If a requested agent or model cannot run through the available route, report the exact incompatibility. Ask before using
 a different agent or model. Do not change the worker family because a preferred tool is unavailable.
