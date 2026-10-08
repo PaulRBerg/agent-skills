@@ -29,16 +29,23 @@ from transcript_common import (
     extract_record_channels,
     extract_session_lineage,
     extract_strings,
+    file_modified_time,
     first_string_shallow,
+    format_utc_iso,
     is_within,
     keyword_alternatives,
+    keywords_present_in_lines,
     normalize_path,
+    parse_utc_timestamp,
+    raw_prescan_eligible,
     read_jsonl,
     read_jsonl_head,
     read_jsonl_sampled,
+    read_last_timestamp,
     read_raw_lines_sampled,
     redact_text,
     source_title,
+    title_already_matches,
     truncate,
 )
 
@@ -82,6 +89,7 @@ class SessionSummary:
     privacy_gaps: dict[str, int] = field(default_factory=dict)
     ownership: Ownership | None = None
     signal_channels: SignalChannels = field(default_factory=SignalChannels)
+    started: str | None = None
     modified: str | None = None
     excerpts: list[dict[str, str]] = field(default_factory=list)
 
@@ -93,6 +101,8 @@ class SinceFilter:
     codex_dirs_pruned: int = 0
     codex_files_pruned: int = 0
     claude_files_pruned: int = 0
+    codex_files_pruned_by_timestamp: int = 0
+    claude_files_pruned_by_timestamp: int = 0
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -101,6 +111,8 @@ class SinceFilter:
             "codex_dirs_pruned": self.codex_dirs_pruned,
             "codex_files_pruned": self.codex_files_pruned,
             "claude_files_pruned": self.claude_files_pruned,
+            "codex_files_pruned_by_timestamp": self.codex_files_pruned_by_timestamp,
+            "claude_files_pruned_by_timestamp": self.claude_files_pruned_by_timestamp,
         }
 
 
@@ -125,14 +137,19 @@ def main() -> int:
         action="store_true",
         help="Include the live CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID transcript (diagnostics only)",
     )
-    parser.add_argument("--since", default=None, help="Only mine sessions modified since YYYY-MM-DD or Nd (days back)")
+    parser.add_argument(
+        "--since", default=None, help="Only mine sessions with activity since YYYY-MM-DD or Nd (days back)"
+    )
     parser.add_argument(
         "--excerpts", action="store_true", help="Include up to 3 redacted message excerpts per candidate session"
     )
+    parser.add_argument(
+        "--max-excerpt-bytes", type=int, default=8192, help="Total excerpt budget across candidates (default 8192)"
+    )
     args = parser.parse_args()
 
-    if args.max_sessions < 1:
-        print("transcript-miner: --max-sessions must be positive", file=sys.stderr)
+    if args.max_sessions < 1 or args.max_excerpt_bytes < 1:
+        print("transcript-miner: --max-sessions and --max-excerpt-bytes must be positive", file=sys.stderr)
         return 2
     try:
         projects = normalize_projects(args.project, args.historical_project)
@@ -156,6 +173,7 @@ def main() -> int:
         include_current=args.include_current,
         since=since_filter,
         include_excerpts=args.excerpts,
+        max_excerpt_bytes=args.max_excerpt_bytes,
     )
     if args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -204,6 +222,7 @@ def mine_transcripts(
     include_current: bool = False,
     since: SinceFilter | None = None,
     include_excerpts: bool = False,
+    max_excerpt_bytes: int = 8192,
 ) -> dict[str, Any]:
     codex_home = Path(os.path.expanduser(os.environ.get("CODEX_HOME", "~/.codex"))).resolve(strict=False)
     claude_home = claude_config_dir()
@@ -246,11 +265,13 @@ def mine_transcripts(
         for project in projects
     ]
     totals = aggregate_sessions(selected_sessions)
+    excerpts_truncated = apply_excerpt_budget(selected_sessions, max_excerpt_bytes)
     return {
         "projects": project_reports,
         "keywords": [redact_text(keyword) for keyword in keywords],
         "since": since.to_json() if since else None,
         "candidate_sessions": [session_to_json(session) for session in selected_sessions],
+        "excerpts_truncated": excerpts_truncated,
         "task_themes": dict(totals["task_themes"]),
         "correction_signals": dict(totals["correction_signals"]),
         "failure_signals": dict(totals["failure_signals"]),
@@ -350,7 +371,11 @@ def collect_codex_paths(roots: list[Path], since: SinceFilter | None) -> list[Pa
     for root in roots:
         if root.is_dir():
             paths.extend(walk_codex_root(root, slack_date, since))
-    kept = [path for path in paths if not prune_if_stale(path, since, "codex_files_pruned")]
+    kept = [
+        path
+        for path in paths
+        if not prune_if_stale(path, since, "codex_files_pruned", "codex_files_pruned_by_timestamp")
+    ]
     return sorted(kept, key=str)
 
 
@@ -379,7 +404,8 @@ def walk_codex_root(root: Path, slack_date: dt.date, since: SinceFilter) -> Iter
                     yield from day_dir.rglob("*.jsonl")
                     continue
                 if dir_date < slack_date:
-                    # An old date directory can still hold sessions resumed recently; mtime decides.
+                    # An old date directory can still hold sessions resumed recently. Use mtime here;
+                    # collect_codex_paths confirms survivors with the last record timestamp.
                     survivors = [
                         path
                         for path in day_dir.rglob("*.jsonl")
@@ -393,7 +419,8 @@ def walk_codex_root(root: Path, slack_date: dt.date, since: SinceFilter) -> Iter
                 yield from day_dir.rglob("*.jsonl")
 
 
-def prune_if_stale(path: Path, since: SinceFilter, counter: str) -> bool:
+def prune_if_stale(path: Path, since: SinceFilter, counter: str, timestamp_counter: str | None = None) -> bool:
+    """Prune by mtime (cheap upper bound), then confirm with the last record timestamp when requested."""
     try:
         mtime = path.stat().st_mtime
     except OSError:
@@ -401,36 +428,12 @@ def prune_if_stale(path: Path, since: SinceFilter, counter: str) -> bool:
     if mtime < since.cutoff.timestamp():
         setattr(since, counter, getattr(since, counter) + 1)
         return True
-    return False
-
-
-def raw_prescan_eligible(keywords: list[str]) -> bool:
-    if not keywords:
+    if timestamp_counter is None:
         return False
-    for keyword in keywords:
-        alternatives = keyword_alternatives(keyword)
-        if not alternatives:
-            return False
-        for alternative in alternatives:
-            if not alternative.isascii() or '"' in alternative or "\\" in alternative:
-                return False
-    return True
-
-
-def title_already_matches(title: str | None, keywords: list[str]) -> bool:
-    if not title or not keywords:
-        return False
-    return bool(count_keywords([title], keywords))
-
-
-def keywords_present_in_lines(lines: list[str], keywords: list[str]) -> bool:
-    alternatives = [alternative.lower() for keyword in keywords for alternative in keyword_alternatives(keyword)]
-    if not alternatives:
-        return False
-    for line in lines:
-        lowered = line.lower()
-        if any(alternative in lowered for alternative in alternatives):
-            return True
+    last_activity = parse_utc_timestamp(read_last_timestamp(path))
+    if last_activity is not None and last_activity < since.cutoff:
+        setattr(since, timestamp_counter, getattr(since, timestamp_counter) + 1)
+        return True
     return False
 
 
@@ -534,7 +537,11 @@ def mine_claude_sessions(
     for project_dir, possible_projects in directory_projects.items():
         paths = list(project_dir.glob("*.jsonl"))
         if since is not None:
-            paths = [path for path in paths if not prune_if_stale(path, since, "claude_files_pruned")]
+            paths = [
+                path
+                for path in paths
+                if not prune_if_stale(path, since, "claude_files_pruned", "claude_files_pruned_by_timestamp")
+            ]
         for project in possible_projects:
             coverage[project]["claude_scanned"] += len(paths)
             tool_results_dir = project_dir / "tool-results"
@@ -696,7 +703,8 @@ def summarize_records(
     failures = Counter({"command-failure": structured_failures}) if structured_failures else Counter()
 
     modified_dt = file_modified_time(path)
-    age_source = parse_candidate_timestamp(timestamp) or modified_dt
+    started_dt = parse_utc_timestamp(timestamp)
+    age_source = started_dt or modified_dt
     bonus = recency_bonus(now, age_source) if age_source is not None else 0
 
     score = (
@@ -734,32 +742,10 @@ def summarize_records(
             ignored_context_messages=len(context_messages),
             structured_tool_failures=structured_failures,
         ),
+        started=format_utc_iso(started_dt) if started_dt is not None else None,
         modified=format_utc_iso(modified_dt) if modified_dt is not None else None,
         excerpts=excerpts,
     )
-
-
-def file_modified_time(path: Path) -> dt.datetime | None:
-    try:
-        mtime = path.stat().st_mtime
-    except OSError:
-        return None
-    return dt.datetime.fromtimestamp(mtime, tz=dt.timezone.utc)
-
-
-def parse_candidate_timestamp(value: str | None) -> dt.datetime | None:
-    if not value:
-        return None
-    text = value.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        parsed = dt.datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt.timezone.utc)
-    return parsed.astimezone(dt.timezone.utc)
 
 
 def recency_bonus(now: dt.datetime, candidate: dt.datetime) -> int:
@@ -769,10 +755,6 @@ def recency_bonus(now: dt.datetime, candidate: dt.datetime) -> int:
     if age_days <= 30:
         return 3
     return 0
-
-
-def format_utc_iso(value: dt.datetime) -> str:
-    return value.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def build_excerpts(
@@ -799,6 +781,23 @@ def build_excerpts(
                     excerpts.append({"channel": channel, "text": truncate(redact_text(message), 240)})
                     seen.add(normalized)
     return excerpts
+
+
+def apply_excerpt_budget(sessions: list[SessionSummary], max_bytes: int) -> bool:
+    """Keep excerpts in selection order until the total serialized size reaches max_bytes."""
+    used = 0
+    truncated = False
+    for session in sessions:
+        kept: list[dict[str, str]] = []
+        for excerpt in session.excerpts:
+            size = len(json.dumps(excerpt).encode("utf-8"))
+            if truncated or used + size > max_bytes:
+                truncated = True
+                break
+            used += size
+            kept.append(excerpt)
+        session.excerpts = kept
+    return truncated
 
 
 def mark_content_only_mentions(
@@ -903,7 +902,9 @@ def print_text_report(report: dict[str, Any]) -> None:
         print(
             f"\nSince: {since['value']} (cutoff {since['cutoff']}) — "
             f"codex_dirs_pruned={since['codex_dirs_pruned']}, codex_files_pruned={since['codex_files_pruned']}, "
-            f"claude_files_pruned={since['claude_files_pruned']}"
+            f"claude_files_pruned={since['claude_files_pruned']}, "
+            f"codex_files_pruned_by_timestamp={since['codex_files_pruned_by_timestamp']}, "
+            f"claude_files_pruned_by_timestamp={since['claude_files_pruned_by_timestamp']}"
         )
     print("\nProjects:")
     for project in report["projects"]:
@@ -945,6 +946,8 @@ def print_text_report(report: dict[str, Any]) -> None:
             print(f"  {compact}")
         for excerpt in session.get("excerpts") or []:
             print(f"  excerpt[{excerpt['channel']}]: {excerpt['text']}")
+    if report.get("excerpts_truncated"):
+        print("\nExcerpts truncated: --max-excerpt-bytes budget reached")
     print_counter_block("Correction signals", report["correction_signals"])
     print_counter_block("Failure signals", report["failure_signals"])
     print_counter_block("Verification signals", report["verification_signals"])

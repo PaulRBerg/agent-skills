@@ -176,8 +176,8 @@ At applicable external and persisted-data seams, inspect these concerns:
 
 Confirm each issue before editing. Fix the smallest root cause when intent is clear and verification is available. Add a
 regression test when it protects a meaningful failure mode absent from existing coverage. Do not add tautological tests
-or tests that merely mirror reversible prose or configuration edits. Fix verifiable in-scope residual risks rather than
-reporting them.
+or tests that merely mirror reversible prose or configuration edits. Fix each verifiable in-scope risk before the
+report. Do not report it as a residual risk.
 
 Mark `reported` only for real decisions: intent is ambiguous, a safe fix would change a public contract for consumers
 outside the repository, or no verification is available. Give every `reported` finding a recommended fix and its blast
@@ -267,6 +267,12 @@ Lead with
 when helper `complete` is true. Otherwise, use `### ⛔ Sweep incomplete`. Summarize fixed, reported, excluded, and check
 counts, plus deleted and merged tests with the test-count delta and fixed comments when non-zero. Include a compact
 `Check | Baseline | Final` table, changed artifacts and verified fixes, and subagent results.
+
+Treat each `reported` finding as an `Open` item. An `Open` item may cite only user-owned input, an action outside the
+repository, or a confirmation boundary (destructive action, purchase, deployment, or external write). When the task
+permits writes and an in-repository change resolves an item, make that change before the report under the standing
+maintenance authorization. Do not write `needs owner decision`, `report-only`, or `residual risk` for a routine
+engineering choice. Decide, make the change, and state the decision in the report.
 
 When non-empty, also include reverted experiments with the failed evidence, each `reported` finding with its evidence,
 recommended fix, and blast radius, and the overnight backlog when applicable. On `### ⛔ Sweep incomplete`, name the

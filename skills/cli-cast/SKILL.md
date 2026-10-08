@@ -250,6 +250,9 @@ Open a signing request only after review and within the authority established ab
 or hardware wallet in that order unless the user or consuming skill restricts the signer. If browser signing is
 unavailable, a browser-only workflow must stop. Never substitute another signer in that workflow.
 
+When the repository or the consuming skill provides a signing or broadcast helper, use that helper before browser
+signing. A user restriction on the signer still applies. State the selected signer before simulation.
+
 Use an environment-backed private key only when the user explicitly opts in or no safer method is available. Never ask
 for a key in chat or print it.
 

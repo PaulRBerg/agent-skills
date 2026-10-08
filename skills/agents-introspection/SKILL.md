@@ -62,7 +62,8 @@ scope in `🗂 Historical coverage`.
 
 1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
    the chosen keywords, `--since 60d`, `--excerpts`, and `--max-sessions 8`. Encode synonyms as one OR-group keyword
-   (`--keyword 'a|b'`) rather than separate `--keyword` flags.
+   (`--keyword 'a|b'`) rather than separate `--keyword` flags. `--max-excerpt-bytes` (default 8192) limits the total
+   excerpt size. When `excerpts_truncated` is `true`, use the inspector for candidates without excerpts.
 2. Treat source ownership as a miner invariant. The miner assigns every candidate once from source-native cwd,
    directory, and history metadata, never from transcript content. Review `ownership`. Reject a candidate only when
    fallback ownership such as `turn_context.cwd` remains materially ambiguous for the task. The miner excludes
@@ -70,8 +71,8 @@ scope in `🗂 Historical coverage`.
    sessions before relevance ranking. Review `session_kind` and `parent_session_id` before treating candidates as
    independent sessions. Explicit guardian paths remain available through the inspector.
 3. Treat miner scores, themes, correction, failure, verification, tool, or `privacy_gaps` counts, redacted `excerpts`,
-   and `modified` timestamps only as candidate-ranking and triage signals. They are heuristic and are never evidence by
-   themselves. Inspect up to five highest-relevance transcript bodies through the bundled inspector digest
+   and `started` or `modified` timestamps only as candidate-ranking and triage signals. They are heuristic and are never
+   evidence by themselves. Inspect up to five highest-relevance transcript bodies through the bundled inspector digest
    (`scripts/transcript-inspect.py`) first. Open raw bodies only when the digest is insufficient. Stop earlier when the
    evidence bar is met. Include a comparable successful session when available.
 4. If a specific reported incident is missing, use the reference's Exact-Incident Fallback before widening the time

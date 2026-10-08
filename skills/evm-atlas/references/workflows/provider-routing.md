@@ -96,6 +96,19 @@ exact chain ID in `routemesh chains --transport rpc`. The `routeMesh` flag descr
 coverage separately with `routemesh chains --transport ws`. Never construct a RouteMesh URL or inspect, request, or
 print an API key.
 
+`routemesh chains` prints the full catalog as one JSON array of `{"chain_id":"<decimal string>","name":"..."}` objects.
+Never print the full list. Check one chain on both transports with a bounded selector:
+
+```sh
+for transport in rpc ws; do
+  routemesh chains --transport "$transport" \
+    | jq -c --arg id CHAIN_ID --arg t "$transport" '{transport: $t, listed: any(.[]; .chain_id == $id)}'
+done
+```
+
+Each line reports one transport, such as `{"transport":"rpc","listed":true}`. Compare `chain_id` as a string. Do not
+`grep` the single-line JSON.
+
 Assume the user has already run `routemesh init`. On `insufficient_credits`, stop the route. Report that the RouteMesh
 account needs credits.
 

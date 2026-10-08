@@ -40,6 +40,34 @@ repository templates, Paul's writing voice, idempotency, and direct posting. Rou
 3. Preview broad writes with the repository, exact targets, commands, and issue/PR impact. An already requested ordinary
    write does not require a second approval.
 
+## CI Failure Triage
+
+Use this workflow when the user asks why CI fails or asks to fix a failing run. Keep each command output bounded.
+
+1. Find the failing runs for the branch or the commit:
+
+   ```sh
+   gh run list --branch <branch> --status failure --limit 5
+   gh run list --commit <sha> --status failure --limit 5
+   ```
+
+2. Extract only the failed-step lines. Never print the raw log.
+
+   ```sh
+   gh run view <run-id> --log-failed | rg --no-config -n 'error|FAIL|panic|✗' | head -80
+   ```
+
+3. Check toolchain drift before you change code. Compare the versions pinned in `.github/workflows/*.yml` with the local
+   `--version` output. Common cases are Foundry (`forge`), Bun (`bun`), Node.js (`node`), and Rust (`rustc`).
+4. If the user requested a fix, fix the cause and push the commit.
+5. Get the new run ID with `gh run list --commit <new-sha> --limit 5`. Then watch that run:
+
+   ```sh
+   gh run watch <run-id> --exit-status --compact
+   ```
+
+6. Report the run URL from `gh run view <run-id> --json url --jq .url` and the final run status.
+
 ## Notable Flags (gh 2.98+)
 
 - `gh pr checkout --worktree <path>` and `gh issue develop --checkout --worktree <path>` check out into a linked git

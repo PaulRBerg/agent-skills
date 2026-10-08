@@ -8,6 +8,7 @@ setup() {
   ETHERSCAN="$REPO_ROOT/skills/evm-atlas/scripts/etherscan-detect-plan.sh"
   BLOCKSCOUT="$REPO_ROOT/skills/evm-atlas/scripts/blockscout-detect-plan.sh"
   RESOLVE_CHAIN="$REPO_ROOT/skills/evm-atlas/scripts/resolve-chain.sh"
+  CHAIN_LOOKUP="$REPO_ROOT/skills/evm-atlas/scripts/chain-lookup.sh"
 
   export HOME="$BATS_TEST_TMPDIR/home"
   export MOCK_BIN="$BATS_TEST_TMPDIR/bin"
@@ -225,4 +226,58 @@ setup() {
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"chain_id=1 not found in Chainscout"* ]]
+}
+
+@test "chain-lookup resolves an alias to key=value lines" {
+  run "$CHAIN_LOOKUP" bnb
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == $'chainId=56\nchainName=BNB Chain\nslug=bsc\n'* ]]
+  [[ "$output" == *$'\nrouteMesh='* ]]
+}
+
+@test "chain-lookup resolves a case-insensitive alias name and a chain ID to the same row" {
+  run "$CHAIN_LOOKUP" 'arbitrum one'
+  [ "$status" -eq 0 ]
+  local by_name="$output"
+
+  run "$CHAIN_LOOKUP" 42161
+  [ "$status" -eq 0 ]
+  [ "$output" = "$by_name" ]
+  [[ "$output" == $'chainId=42161\nchainName=Arbitrum\n'* ]]
+  [[ "$output" == *"explorerTxUrl="* ]]
+}
+
+@test "chain-lookup flattens a scalar-only object field" {
+  run "$CHAIN_LOOKUP" superseed
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\ndefunct.since='* ]]
+}
+
+@test "chain-lookup --json prints one compact row" {
+  run "$CHAIN_LOOKUP" 42161 --json
+
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "$(printf '%s' "$output" | jq -r '.chainId')" = "42161" ]
+}
+
+@test "chain-lookup reports a missing chain with near matches" {
+  run "$CHAIN_LOOKUP" nosuchchain
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'nosuchchain' is not an evm-atlas target chain"* ]]
+
+  run "$CHAIN_LOOKUP" 'Arbitrum Mainnet'
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Arbitrum (42161)"* ]]
+}
+
+@test "chain-lookup rejects missing arguments" {
+  run "$CHAIN_LOOKUP"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage: chain-lookup.sh"* ]]
 }

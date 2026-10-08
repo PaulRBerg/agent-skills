@@ -33,7 +33,8 @@ The audit covers two kinds of work:
 - Require at least two paths, each an existing Git repository root, resolving to distinct repositories. The inventory
   helper enforces these rules and exits 2 with the offending inputs. In that case, stop and relay its message.
 - The user's request, not `$ARGUMENTS`, may narrow the focus to alignment or to transfers. Without such a request, do
-  both. Pass only repository paths to the inventory helper.
+  both. Pass only repository paths to the inventory helper. The one exception is the `--drift` flag in
+  [Template Drift](#template-drift).
 - Do not infer additional repositories from links, remotes, or installed copies. The supplied list defines the audit
   boundary.
 
@@ -125,6 +126,31 @@ should share one source. Record unknown origins as unknown. Path similarity does
 - Search AI-context files for references to the other listed repositories, including `AGENTS.md`, `CLAUDE.md`, README
   guidance, skills, and local instructions. Capture the concrete path, command, or repository identifier rather than
   only its surrounding prose.
+
+### Template Drift
+
+When one repository is the template of the other, run the drift table before the inventory helper:
+
+```bash
+bun run "<skill-dir>/scripts/inventory.ts" --drift <template-root> <project-root>
+```
+
+The helper prints one Markdown table with the columns `surface`, `template`, `project`, and `status`. It exits 2 on
+invalid input and has no other side effects.
+
+- The table compares these surfaces in both directions: `package.json` scripts and devDependencies, lint and format
+  configs, `tsconfig*.json` files and their `compilerOptions` keys, `justfile` recipe names, git hooks, and CI workflow
+  files.
+- For a config, hook, or workflow file, the value is a short content hash. A value longer than 60 characters ends with
+  the count of omitted characters.
+- `status` is `same`, `missing-in-project`, `missing-in-template`, or `differs`.
+
+Use the table as the drift inventory for these surfaces:
+
+- Treat each row that is not `same` as a drift candidate. Verify it with a diff before you classify it.
+- For each surface, let the user pick the direction: template to project, project to template, or no change.
+- Apply each approved direction as a surgical transfer under [Implement and Finalize](#implement-and-finalize).
+- Never apply a row automatically, even when the direction looks obvious.
 
 ## Research
 

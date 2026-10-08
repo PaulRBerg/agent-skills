@@ -69,16 +69,37 @@ selected replay when rendered inspection adds evidence.
 - Accept wrapper screenshot defaults. Request `format: "png"` when lossless output is required. PNG, `fullPage`, and
   `filePath` cannot bypass the wrapper's 1600-pixel width and height caps. Full-resolution output requires an authorized
   wrapper configuration change.
-- Keep action responses small with `includeSnapshot: false` unless the updated state is immediately needed. Paginate and
-  filter console, network, memory, and other high-volume results.
+- Keep action responses small. Set `includeSnapshot: false` on `click`, `fill`, and `navigate_page` unless the updated
+  state is immediately needed. A snapshot in an action response can add about 10 KB to the context.
+- Bound every `evaluate_script` return value to a summary, a count, or at most about 50 items. Never return a whole DOM,
+  HTML document, or large array.
+- Paginate and filter console, network, memory, and other high-volume results.
+- Before `resize_page`, confirm the window is in the normal state. A maximized or full-screen window returns
+  `Restore window to normal state before setting content size`. On that error, use a viewport emulation tool if the
+  session exposes one. Otherwise, skip the resize and tell the user.
 - When a cookie consent popup appears, select only necessary or essential cookies by default, including through its
   settings when needed. If no such option is available, accept all cookies and continue.
-- Use `filePath` for large screenshots, snapshots, traces, recordings, or response bodies. Write only to a
-  task-authorized path, preferably absolute, such as a git-ignored `.ai/` directory. When the client negotiates roots,
-  the server permits those roots and the OS temporary directory. The wrapper's existing unrestricted-path opt-in
-  bypasses that restriction only when the client has not negotiated roots. Path capability is not write authorization.
+- Use `filePath` for screenshots, snapshots, traces, recordings, and response bodies. Write only to a task-authorized
+  absolute path. Prefer a git-ignored `.ai/` directory under the current repository, or another root the client
+  negotiated. The Claude Code scratchpad under `/private/tmp` and the `/tmp` directory are not permitted roots. A write
+  there returns `Access denied`. On that error, retry once under `<cwd>/.ai/`. Path capability is not write
+  authorization.
 - Calls within one MCP server are serialized, even with explicit page routing. Separate agent servers still share
   browser state. Preserve causal order and page ownership across concurrent work.
+
+## Human Gates
+
+A human gate is a captcha, a login, a 2FA prompt, a phone verification, or an external approval page. An example of an
+external approval page is an npm trusted-publisher prompt. Ending the turn at a human gate is a premature stop.
+
+1. Stop all writes on the gated page. Never try to bypass the gate.
+2. Tell the user the exact page and the action the gate requires.
+3. Call `wait_for` on the gated `pageId`. Pass one or more texts that appear only after the gate clears. Examples are
+   the post-login heading or the next form label. Set `timeout` to 600000 unless the user states another value. If no
+   distinctive post-gate text exists, call `take_snapshot` on the same `pageId` at intervals until the timeout.
+4. When the gate clears, resume from the same page state. Re-verify the form fields first, because sites clear them.
+5. End the turn only after the timeout. Then report the exact step the user must complete and the step that resumes the
+   task.
 
 ## Audits and Profiling
 

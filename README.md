@@ -54,6 +54,7 @@ From a clone, `just toolkit::install-cli` installs them into `~/.local/bin`.
 | orchestration        | Research, plan, and implement work with Claude or Codex agents            |
 | pdf                  | Exact local PDF reading and manipulation on macOS                         |
 | release-bumper       | Release workflow with changelog, tagging                                  |
+| repo-fanout          | Run one task or skill across many repositories with per-repo agents       |
 | repo-harmonization   | Align interdependent repositories and transfer practices between them     |
 | repo-rename          | Rename GitHub repo, folder, and agent thread references                   |
 | retro                | Session retrospectives with transcript-backed environment fixes           |

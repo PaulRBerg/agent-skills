@@ -34,6 +34,9 @@ target chains.
 
 - Match displayed names, numeric chain IDs, and aliases from `references/generated/chain-aliases.json` to the
   authoritative target-mainnet rows.
+- Resolve a chain with `scripts/chain-lookup.sh <name|alias|slug|chain_id>` first. It prints `key=value` lines, or one
+  compact row with `--json`. Never `cat` a generated JSON file or print the full `routemesh chains` list. For other
+  queries, use a `jq -c` selector with named fields, such as `jq -c '.chains[] | {chainId, category}'`.
 - If a chain is absent, do not route through another provider, web search, Chainlist, or an unlisted RPC to work around
   scope. Ask for a feature request at <https://github.com/PaulRBerg/agent-skills>.
 - A target row with `defunct` identifies a chain its operator shut down. Its history is final through
@@ -64,17 +67,18 @@ target chains.
 ## Routing
 
 1. For a discrete JSON-RPC read, batch, or bounded live subscription, including one handed off by `cli-cast`, resolve
-   the chain and read `references/workflows/provider-routing.md`. Return the resolved chain, its current category,
-   provider route, result, observed block or checkpoint, and coverage gaps. Do not route the read back to `cli-cast`.
+   the chain with `scripts/chain-lookup.sh`. Then read `references/workflows/provider-routing.md`. Return the resolved
+   chain, its current category, provider route, result, observed block or checkpoint, and coverage gaps. Do not route
+   the read back to `cli-cast`.
 2. For the current native or fungible-token balances or DeFi positions of a public wallet address across chains, read
    `references/workflows/debank-portfolio.md` first. For one named chain, read
    `references/workflows/blockscan-balances.md` first.
 3. For the current USD value of one or more addresses across target chains (portfolio value, net worth, drained or dust
    checks), read `references/workflows/address-usd-value.md`.
-4. For a specific transaction hash on a named chain, resolve the chain against
-   `references/generated/target-mainnets.json`. Then read `references/workflows/provider-routing.md` directly for the
-   transaction facts. Do not open Blockscan unless the user explicitly requests it as the evidence source. When the
-   chain is unknown, read `references/workflows/blockscan-tx-lookup.md` once to resolve it.
+4. For a specific transaction hash on a named chain, resolve the chain with `scripts/chain-lookup.sh`. Then read
+   `references/workflows/provider-routing.md` directly for the transaction facts. Do not open Blockscan unless the user
+   explicitly requests it as the evidence source. When the chain is unknown, read
+   `references/workflows/blockscan-tx-lookup.md` once to resolve it.
 
    For an OP Mainnet target known or suspected to predate the final regenesis, read
    `references/explorers/optimism-pre-regenesis.md`. In that case, return its legacy execution packet or
@@ -85,7 +89,7 @@ target chains.
    `references/workflows/address-sweeps.md`. Use its deterministic plan/evaluate helper. For current holdings, use
    `references/workflows/debank-portfolio.md` first and provider routing for gaps.
 6. For a specific chain's historical balance, NFT holdings, token/NFT transfers, transaction history, a transaction's
-   full raw receipt/logs/decoded input, or funding origin, resolve the chain and read
+   full raw receipt/logs/decoded input, or funding origin, resolve the chain with `scripts/chain-lookup.sh`. Then read
    `references/workflows/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and
    exceptional-chain routing.
 7. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`. Its

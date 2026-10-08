@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import re
@@ -53,6 +54,8 @@ MAX_FULL_SESSION_BYTES = 2_000_000
 SESSION_HEAD_RECORDS = 250
 SESSION_TAIL_RECORDS = 750
 METADATA_HEAD_RECORDS = 100
+TAIL_TIMESTAMP_BYTES = 262_144
+TIMESTAMP_KEYS = ("timestamp", "created_at", "updated_at")
 
 
 SessionKind = Literal["primary", "subagent", "guardian", "unknown"]
@@ -152,6 +155,36 @@ def count_keywords(strings: list[str], keywords: list[str]) -> Counter[str]:
     return counter
 
 
+def raw_prescan_eligible(keywords: list[str]) -> bool:
+    if not keywords:
+        return False
+    for keyword in keywords:
+        alternatives = keyword_alternatives(keyword)
+        if not alternatives:
+            return False
+        for alternative in alternatives:
+            if not alternative.isascii() or '"' in alternative or "\\" in alternative:
+                return False
+    return True
+
+
+def title_already_matches(title: str | None, keywords: list[str]) -> bool:
+    if not title or not keywords:
+        return False
+    return bool(count_keywords([title], keywords))
+
+
+def keywords_present_in_lines(lines: list[str], keywords: list[str]) -> bool:
+    alternatives = [alternative.lower() for keyword in keywords for alternative in keyword_alternatives(keyword)]
+    if not alternatives:
+        return False
+    for line in lines:
+        lowered = line.lower()
+        if any(alternative in lowered for alternative in alternatives):
+            return True
+    return False
+
+
 def read_jsonl(path: Path) -> Iterable[Any]:
     try:
         with path.open("r", encoding="utf-8", errors="replace") as handle:
@@ -247,6 +280,51 @@ def read_raw_lines_sampled(path: Path) -> Iterable[str]:
     except OSError:
         return
     yield from tail
+
+
+def read_last_timestamp(path: Path) -> str | None:
+    """Return the last record timestamp string in a bounded tail window of the file."""
+    try:
+        with path.open("rb") as handle:
+            size = handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, size - TAIL_TIMESTAMP_BYTES))
+            lines = handle.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    if size > TAIL_TIMESTAMP_BYTES:
+        lines = lines[1:]
+    for line in reversed(lines):
+        value = first_string_shallow(parse_jsonl_line(line), TIMESTAMP_KEYS)
+        if value:
+            return value
+    return None
+
+
+def parse_utc_timestamp(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def file_modified_time(path: Path) -> dt.datetime | None:
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    return dt.datetime.fromtimestamp(mtime, tz=dt.timezone.utc)
+
+
+def format_utc_iso(value: dt.datetime) -> str:
+    return value.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def parse_jsonl_line(line: str) -> Any | None:

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,10 +27,18 @@ type Repo = {
   tasks: Task[];
 };
 
+type DriftStatus = "differs" | "missing-in-project" | "missing-in-template" | "same";
+type DriftValue = { rank: number; surface: string; value: string };
+
 const usage = `Usage: bun run scripts/inventory.ts <repo-path> <repo-path> [more-repos...]
+       bun run scripts/inventory.ts --drift <template-root> <project-root>
 
 Print a JSON inventory of agent guidance, workflow, and manifest files per repository,
-plus dependency and task gaps across the repositories.`;
+plus dependency and task gaps across the repositories.
+
+With --drift, print a Markdown table of config drift between a template and a project
+built from it: package.json scripts and devDependencies, lint and format configs,
+tsconfig files and compilerOptions, justfile recipes, git hooks, and CI workflows.`;
 
 const ecosystemManifests: Record<string, Ecosystem> = {
   "Cargo.toml": "cargo",
@@ -133,6 +142,11 @@ const manifestFile = basenamePattern([
   "\\.gitmodules",
 ]);
 const excludedSegments = new Set(["node_modules", "vendor"]);
+// Drift surfaces in table order. Each rank groups one surface kind.
+const driftLintFormat = /^(\.?(eslint|biome|oxlint|oxfmt|prettier).*|\.editorconfig)$/;
+const driftTsconfig = /^tsconfig.*\.json$/;
+const driftHookPrefixes = [".husky/", ".githooks/"];
+const driftValueLimit = 60;
 const localNpmSpec = /^(file|link|portal|workspace):/;
 
 main();
@@ -141,6 +155,11 @@ function main(): void {
   const args = process.argv.slice(2);
   if (args.includes("-h") || args.includes("--help")) {
     console.log(usage);
+    return;
+  }
+
+  if (args[0] === "--drift") {
+    driftMain(args.slice(1));
     return;
   }
 
@@ -207,10 +226,7 @@ function inventory(input: string, root: string, id: string): Repo {
     tasks: [],
   };
   const packageManagers = new Set<string>();
-  const tracked = git(root, ["ls-files", "-z"])
-    .split("\0")
-    .filter((file) => file && !file.split("/").some((segment) => excludedSegments.has(segment)))
-    .sort();
+  const tracked = trackedFiles(root);
 
   for (const file of tracked) {
     const base = path.posix.basename(file);
@@ -239,6 +255,133 @@ function inventory(input: string, root: string, id: string): Repo {
   }
   repo.packageManagers = [...packageManagers].sort();
   return repo;
+}
+
+function trackedFiles(root: string): string[] {
+  return git(root, ["ls-files", "-z"])
+    .split("\0")
+    .filter((file) => file && !file.split("/").some((segment) => excludedSegments.has(segment)))
+    .sort();
+}
+
+function driftMain(args: string[]): void {
+  const errors: string[] = [];
+  if (args.length !== 2) errors.push("--drift requires exactly two paths: <template-root> <project-root>");
+  const [template, project] = args.slice(0, 2).map((input) => resolveRoot(input, errors));
+  if (template && template === project) errors.push(`${args[1]}: same repository as ${args[0]} (${template})`);
+  if (errors.length > 0 || !template || !project) {
+    for (const error of errors) console.error(`error: ${error}`);
+    console.error(usage);
+    process.exit(2);
+  }
+
+  const notes: string[] = [];
+  const templateValues = driftSurfaces(template, "template", notes);
+  const projectValues = driftSurfaces(project, "project", notes);
+  const rows = [...new Set([...templateValues.keys(), ...projectValues.keys()])].map((surface) => {
+    const left = templateValues.get(surface);
+    const right = projectValues.get(surface);
+    const status: DriftStatus = !right
+      ? "missing-in-project"
+      : !left
+        ? "missing-in-template"
+        : left.value === right.value
+          ? "same"
+          : "differs";
+    return { rank: (left ?? right)?.rank ?? 0, status, surface, template: left?.value, project: right?.value };
+  });
+  rows.sort((a, b) => a.rank - b.rank || a.surface.localeCompare(b.surface));
+
+  const counts = new Map<DriftStatus, number>();
+  for (const row of rows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+  const lines = [
+    `Drift: template ${template} vs project ${project}`,
+    "",
+    "| surface | template | project | status |",
+    "| --- | --- | --- | --- |",
+    ...rows.map((row) => `| ${[row.surface, row.template, row.project, row.status].map(driftCell).join(" | ")} |`),
+    "",
+    `rows: ${rows.length} (${[...counts].map(([status, count]) => `${status}: ${count}`).join(", ") || "none"})`,
+    ...notes.map((note) => `note: ${note}`),
+  ];
+  console.log(lines.join("\n"));
+}
+
+function driftSurfaces(root: string, label: string, notes: string[]): Map<string, DriftValue> {
+  const values = new Map<string, DriftValue>();
+  const add = (rank: number, surface: string, value: string) => values.set(surface, { rank, surface, value });
+  const read = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
+  const tracked = trackedFiles(root);
+  for (const file of tracked) {
+    const base = path.posix.basename(file);
+    try {
+      if (file === "package.json") {
+        const manifest = JSON.parse(read(file)) as Record<string, unknown>;
+        for (const [name, command] of Object.entries(asRecord(manifest.scripts))) {
+          add(0, `package.json scripts.${name}`, String(command));
+        }
+        for (const [name, spec] of Object.entries(asRecord(manifest.devDependencies))) {
+          add(1, `package.json devDependencies.${name}`, String(spec));
+        }
+      } else if (driftLintFormat.test(base)) {
+        add(2, file, digest(read(file)));
+      } else if (driftTsconfig.test(base)) {
+        const text = read(file);
+        add(3, file, digest(text));
+        const options = asRecord(asRecord(JSON.parse(stripJsonc(text))).compilerOptions);
+        for (const [key, value] of Object.entries(options)) {
+          add(4, `${file} compilerOptions.${key}`, JSON.stringify(value));
+        }
+      } else if (driftHookPrefixes.some((prefix) => file.startsWith(prefix)) || /^\.?lefthook/.test(base)) {
+        add(6, file, digest(read(file)));
+      } else if (file.startsWith(".github/workflows/")) {
+        add(7, file, digest(read(file)));
+      }
+    } catch (error) {
+      notes.push(`${label} ${file}: not parsed (${(error as Error).message.split("\n")[0]})`);
+    }
+  }
+  for (const file of tracked.filter((candidate) => /^\.?[Jj]ustfile$/.test(candidate))) {
+    for (const name of justSummary(root, file, notes)) add(5, `${file} recipe ${name}`, "present");
+  }
+  return values;
+}
+
+function digest(text: string): string {
+  return `sha256:${createHash("sha256").update(text).digest("hex").slice(0, 12)}`;
+}
+
+function driftCell(value: string | undefined): string {
+  if (value === undefined) return "-";
+  const flat = value.replace(/\s+/g, " ").trim();
+  const extra = flat.length - driftValueLimit;
+  const shown = extra > 0 ? `${flat.slice(0, driftValueLimit)}... (+${extra} chars)` : flat;
+  return shown.replaceAll("|", "\\|");
+}
+
+// Remove JSONC comments and trailing commas outside strings.
+function stripJsonc(text: string): string {
+  let output = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"') {
+      const end = /"(?:[^"\\]|\\.)*"/y;
+      end.lastIndex = index;
+      const match = end.exec(text);
+      const literal = match ? match[0] : text.slice(index);
+      output += literal;
+      index += literal.length - 1;
+    } else if (char === "/" && text[index + 1] === "/") {
+      while (index < text.length && text[index] !== "\n") index += 1;
+      output += "\n";
+    } else if (char === "/" && text[index + 1] === "*") {
+      const close = text.indexOf("*/", index + 2);
+      index = close < 0 ? text.length : close + 1;
+    } else {
+      output += char;
+    }
+  }
+  return output.replace(/,(\s*[}\]])/g, "$1");
 }
 
 function categorize(file: string, base: string): Category | null {

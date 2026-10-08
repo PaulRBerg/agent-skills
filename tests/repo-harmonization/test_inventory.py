@@ -100,6 +100,55 @@ RECIPIENT = {
 }
 
 
+LONG_COMMAND = "echo " + "x" * 100
+
+TEMPLATE = {
+    "package.json": json.dumps(
+        {
+            "scripts": {"lint": "oxlint .", "test": "vitest run", "long": LONG_COMMAND},
+            "devDependencies": {"oxlint": "^1.0.0", "vitest": "^3.0.0"},
+        }
+    ),
+    ".editorconfig": "root = true\n",
+    ".oxlintrc.json": '{ "rules": {} }\n',
+    "tsconfig.json": """
+        {
+          // Template compiler options.
+          "$schema": "https://json.schemastore.org/tsconfig",
+          "compilerOptions": { "strict": true, "target": "ES2022", },
+        }
+    """,
+    "justfile": "check:\n    echo check\n\nlint:\n    echo lint\n",
+    ".husky/pre-commit": "just check\n",
+    ".github/workflows/ci.yml": "on: push\n",
+}
+
+PROJECT = {
+    "package.json": json.dumps(
+        {
+            "scripts": {"lint": "oxlint .", "build": "tsc", "long": LONG_COMMAND},
+            "devDependencies": {"oxlint": "^1.2.0", "typescript": "^5.0.0"},
+        }
+    ),
+    ".editorconfig": "root = true\n",
+    "tsconfig.json": '{ "compilerOptions": { "strict": true, "target": "ES2023", "noEmit": true } }\n',
+    "justfile": "check:\n    echo check\n",
+    "lefthook.yml": "pre-commit: {}\n",
+    ".github/workflows/ci.yml": "on: [push, pull_request]\n",
+    ".github/workflows/release.yml": "on: release\n",
+}
+
+
+def drift_rows(stdout: str) -> dict[str, tuple[str, str, str]]:
+    rows: dict[str, tuple[str, str, str]] = {}
+    for line in stdout.splitlines():
+        if not line.startswith("| ") or line.startswith(("| surface", "| ---")):
+            continue
+        surface, template, project, status = [cell.strip() for cell in line.strip("|").split(" | ")]
+        rows[surface] = (template, project, status)
+    return rows
+
+
 class InventoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -175,6 +224,71 @@ class InventoryTests(unittest.TestCase):
                 self.assertIn(message, result.stderr)
                 self.assertEqual(result.stdout, "")
 
+
+
+class DriftTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.template = make_repo(base / "template", TEMPLATE)
+        self.project = make_repo(base / "project", PROJECT)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_drift_table_compares_surfaces_in_both_directions(self) -> None:
+        result = run_inventory("--drift", self.template, self.project)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = drift_rows(result.stdout)
+        statuses = {surface: row[2] for surface, row in rows.items()}
+
+        expected = {
+            "package.json scripts.lint": "same",
+            "package.json scripts.test": "missing-in-project",
+            "package.json scripts.build": "missing-in-template",
+            "package.json devDependencies.oxlint": "differs",
+            "package.json devDependencies.vitest": "missing-in-project",
+            "package.json devDependencies.typescript": "missing-in-template",
+            ".editorconfig": "same",
+            ".oxlintrc.json": "missing-in-project",
+            "tsconfig.json": "differs",
+            "tsconfig.json compilerOptions.strict": "same",
+            "tsconfig.json compilerOptions.target": "differs",
+            "tsconfig.json compilerOptions.noEmit": "missing-in-template",
+            ".husky/pre-commit": "missing-in-project",
+            "lefthook.yml": "missing-in-template",
+            ".github/workflows/ci.yml": "differs",
+            ".github/workflows/release.yml": "missing-in-template",
+        }
+        for surface, status in expected.items():
+            with self.subTest(surface=surface):
+                self.assertEqual(statuses.get(surface), status)
+        self.assertEqual(rows["package.json devDependencies.oxlint"][:2], ("^1.0.0", "^1.2.0"))
+        self.assertEqual(rows["tsconfig.json compilerOptions.target"][:2], ('"ES2022"', '"ES2023"'))
+        self.assertEqual(rows["package.json scripts.test"][1], "-")
+        long_value = rows["package.json scripts.long"][0]
+        self.assertTrue(long_value.endswith("... (+45 chars)"), long_value)
+        self.assertEqual(rows["package.json scripts.long"][2], "same")
+        if shutil.which("just"):
+            self.assertEqual(statuses["justfile recipe check"], "same")
+            self.assertEqual(statuses["justfile recipe lint"], "missing-in-project")
+        surfaces = list(rows)
+        self.assertLess(surfaces.index("package.json scripts.lint"), surfaces.index(".editorconfig"))
+        self.assertLess(surfaces.index("tsconfig.json"), surfaces.index(".github/workflows/ci.yml"))
+        self.assertIn("rows: ", result.stdout)
+
+    def test_drift_rejects_invalid_arguments(self) -> None:
+        cases = [
+            (("--drift", self.template), "exactly two paths"),
+            (("--drift", self.template, self.template), "same repository"),
+            (("--drift", self.template, Path(self.tmp.name) / "missing"), "directory not found"),
+        ]
+        for paths, message in cases:
+            with self.subTest(message=message):
+                result = run_inventory(*paths)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(message, result.stderr)
+                self.assertEqual(result.stdout, "")
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,8 +19,10 @@ case.
 ## Source detection
 
 Tailwind scans plain text. Map state or props to complete class strings. Interpolation such as `bg-${color}-600` is not
-discoverable. Register ignored/external paths with `@source`, set an unambiguous monorepo base with import `source()`,
-and use `@source inline()` only when no scanned static mapping can express a required utility.
+discoverable. Do not assemble class lists with template literals or string concatenation. Map each state or prop to a
+complete class string, or use `tailwind-variants` for variants. Register ignored/external paths with `@source`, set an
+unambiguous monorepo base with import `source()`, and use `@source inline()` only when no scanned static mapping can
+express a required utility.
 
 ## Current documentation
 

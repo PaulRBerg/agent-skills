@@ -113,6 +113,33 @@ of `writing-great-skills.md` a faithful summary of its field union and cross-fie
 boundary, and map's default exclusions live in `ai-skillet <command> --help`. Consumers rely on that output instead of
 restating it. No catalog skill wraps ai-skillet by itself.
 
+### Model Identifiers
+
+Files:
+
+- `skills/agents-brain/SKILL.md`
+- `skills/agents-brain/scripts/fetch-guidance.sh`
+- `skills/agents-docs/SKILL.md`
+- `skills/node-deps-bumper/SKILL.md`
+- `skills/orchestration/SKILL.md`
+- `skills/orchestration/references/claude-to-codex.md`
+- `skills/orchestration/references/codex-to-claude.md`
+- `skills/orchestration/references/jev-routing.md`
+- `skills/orchestration/references/native-claude.md`
+- `skills/orchestration/references/native-codex.md`
+- `skills/orchestration/scripts/run-codex-agent.sh`
+- `skills/orchestration/scripts/select-model.py`
+- `skills/release-bumper/SKILL.md`
+- `skills/skill-writing/SKILL.md`
+- `skills/todo-archive/SKILL.md`
+- `skills/yeet/references/posting.md`
+
+When a model is released, renamed, or retired, run `just model-refs` and update every listed file in one change. Keep a
+mention unchanged when the change does not affect its model. The script output is authoritative for current mentions.
+When the script reports a file that this list omits, add the file to this list in the same change. When a listed file no
+longer has a mention, remove it from this list. Model aliases in skill frontmatter, such as `model: sonnet`, are in
+scope.
+
 ## Workflow
 
 1. Verify repository context: `git rev-parse --git-dir`. If this fails, stop. In that case, tell the user to run from a

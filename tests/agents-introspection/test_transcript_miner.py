@@ -49,16 +49,17 @@ class MinerFixture:
         native_metadata: dict[str, Any] | None = None,
         turn_cwds: list[Path] | None = None,
         session_dir: Path | None = None,
+        timestamp: str | None = FIXTURE_TIMESTAMP,
     ) -> Path:
         records: list[dict[str, Any]] = []
         if session_meta:
-            records.append(
-                {
-                    "timestamp": FIXTURE_TIMESTAMP,
-                    "type": "session_meta",
-                    "payload": {"id": session_id, "cwd": str(cwd), **(native_metadata or {})},
-                }
-            )
+            meta: dict[str, Any] = {
+                "type": "session_meta",
+                "payload": {"id": session_id, "cwd": str(cwd), **(native_metadata or {})},
+            }
+            if timestamp is not None:
+                meta["timestamp"] = timestamp
+            records.append(meta)
         for turn_cwd in turn_cwds or []:
             records.append({"type": "turn_context", "payload": {"cwd": str(turn_cwd)}})
         if context is not None:
@@ -80,16 +81,17 @@ class MinerFixture:
         *,
         user: str | None = None,
         assistant: str | None = None,
+        timestamp: str = FIXTURE_TIMESTAMP,
     ) -> Path:
         project_dir = self.claude_home / "projects" / encode_claude_project(directory_project)
         project_dir.mkdir(parents=True, exist_ok=True)
         records: list[dict[str, Any]] = []
         if user is not None:
-            records.append(claude_message("user", session_id, cwd, user))
+            records.append(claude_message("user", session_id, cwd, user, timestamp))
         if assistant is not None:
-            records.append(claude_message("assistant", session_id, cwd, assistant))
+            records.append(claude_message("assistant", session_id, cwd, assistant, timestamp))
         if not records:
-            records.append(claude_message("user", session_id, cwd, "placeholder"))
+            records.append(claude_message("user", session_id, cwd, "placeholder", timestamp))
         path = project_dir / f"{session_id}.jsonl"
         write_jsonl(path, records)
         return path
@@ -107,6 +109,7 @@ class MinerFixture:
         output_format: str = "json",
         since: str | None = None,
         excerpts: bool = False,
+        max_excerpt_bytes: int | None = None,
         historical_projects: list[Path] | None = None,
     ) -> Any:
         command = [sys.executable, str(MINER)]
@@ -123,6 +126,8 @@ class MinerFixture:
             command.extend(["--since", since])
         if excerpts:
             command.append("--excerpts")
+        if max_excerpt_bytes is not None:
+            command.extend(["--max-excerpt-bytes", str(max_excerpt_bytes)])
         env = os.environ.copy()
         env.update(
             {
@@ -517,6 +522,56 @@ class TranscriptMinerTests(unittest.TestCase):
         self.assertIn("recent-claude", stems)
         self.assertNotIn("old-claude", stems)
 
+    def test_since_confirms_fresh_mtime_with_last_record_timestamp(self) -> None:
+        project = self.fixture.project("since-content")
+        stale = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=400)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.fixture.codex_session("stale-content", project, user="needle stale", timestamp=stale)
+        self.fixture.codex_session("fresh-content", project, user="needle fresh")
+        self.fixture.codex_session("no-timestamp", project, user="needle missing", timestamp=None)
+        self.fixture.codex_session("bad-timestamp", project, user="needle bad", timestamp="not-a-date")
+        self.fixture.claude_session(project, "stale-claude", project, user="needle stale", timestamp=stale)
+        self.fixture.claude_session(project, "fresh-claude", project, user="needle fresh")
+
+        report = self.fixture.run([project], ["needle"], since="60d")
+
+        self.assertEqual(report["since"]["codex_files_pruned_by_timestamp"], 1)
+        self.assertEqual(report["since"]["claude_files_pruned_by_timestamp"], 1)
+        self.assertEqual(report["since"]["codex_files_pruned"], 0)
+        self.assertEqual(report["since"]["claude_files_pruned"], 0)
+        sessions = {Path(session["path"]).stem: session for session in report["candidate_sessions"]}
+        self.assertEqual(
+            set(sessions),
+            {"rollout-fresh-content", "rollout-no-timestamp", "rollout-bad-timestamp", "fresh-claude"},
+        )
+        self.assertEqual(sessions["rollout-fresh-content"]["started"], FIXTURE_TIMESTAMP)
+        self.assertIsNone(sessions["rollout-no-timestamp"]["started"])
+        self.assertIsNone(sessions["rollout-bad-timestamp"]["started"])
+
+    def test_excerpt_budget_truncates_and_sets_flag(self) -> None:
+        project = self.fixture.project("excerpt-budget")
+        for index in range(5):
+            self.fixture.codex_session(
+                f"budget-{index}",
+                project,
+                user=f"needle request {index} " + "detail " * 60,
+                assistant=f"needle answer {index} " + "result " * 60,
+            )
+
+        unbounded = self.fixture.run([project], ["needle"], excerpts=True)
+        bounded = self.fixture.run([project], ["needle"], excerpts=True, max_excerpt_bytes=1000)
+        text = self.fixture.run([project], ["needle"], excerpts=True, max_excerpt_bytes=1000, output_format="text")
+
+        self.assertFalse(unbounded["excerpts_truncated"])
+        self.assertEqual(sum(len(session["excerpts"]) for session in unbounded["candidate_sessions"]), 10)
+        self.assertTrue(bounded["excerpts_truncated"])
+        kept = [excerpt for session in bounded["candidate_sessions"] for excerpt in session["excerpts"]]
+        self.assertTrue(kept)
+        self.assertLess(len(kept), 10)
+        self.assertLessEqual(sum(len(json.dumps(excerpt).encode("utf-8")) for excerpt in kept), 1000)
+        self.assertIn("Excerpts truncated", text)
+        with self.assertRaisesRegex(AssertionError, r"miner failed \(2\)"):
+            self.fixture.run([project], ["needle"], excerpts=True, max_excerpt_bytes=0)
+
     def test_or_group_keyword_counts_one_hit_per_message(self) -> None:
         project = self.fixture.project("or-group")
         self.fixture.codex_session(
@@ -583,12 +638,14 @@ def message_record(role: str, text: str) -> dict[str, Any]:
     }
 
 
-def claude_message(role: str, session_id: str, cwd: Path, text: str) -> dict[str, Any]:
+def claude_message(
+    role: str, session_id: str, cwd: Path, text: str, timestamp: str = FIXTURE_TIMESTAMP
+) -> dict[str, Any]:
     return {
         "type": role,
         "sessionId": session_id,
         "cwd": str(cwd),
-        "timestamp": FIXTURE_TIMESTAMP,
+        "timestamp": timestamp,
         "message": {"role": role, "content": [{"type": "text", "text": text}]},
     }
 

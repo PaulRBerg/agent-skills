@@ -147,6 +147,11 @@ alias sc := skill-check
     ai-skillet doctor --root . --fix-safe
 alias sf := skill-fix
 
+# List model identifier mentions in skills as file:line:text rows to update after a model release, rename, or retirement
+[group("checks")]
+@model-refs:
+    scripts/model-refs.sh
+
 # Check source-owned global skill installations and CLI metadata for drift
 [group("checks")]
 @publish-skills-check *args:

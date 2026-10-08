@@ -373,3 +373,9 @@ placeholder.
   required work and `risk` for a specific potential adverse outcome.
 
   A workaround leaves an item open when the underlying issue still affects the result.
+
+  An `Open` item may cite only user-owned input, an action outside the repository, or a confirmation boundary
+  (destructive action, purchase, deployment, or external write). When the task permits writes and an in-repository
+  change resolves an item, make that change before the report under the standing maintenance authorization. Do not write
+  `needs owner decision`, `report-only`, or `residual risk` for a routine engineering choice. Decide, make the change,
+  and state the decision in the report.

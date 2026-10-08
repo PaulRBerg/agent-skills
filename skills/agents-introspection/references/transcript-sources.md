@@ -65,16 +65,27 @@ The helper returns project coverage, ranked candidate sessions, task themes, cor
 verification signals, tool-call counts, and `privacy_gaps` categories. It always redacts common secret-like values. The
 helper emits transcript excerpts only with `--excerpts`. With that flag, each candidate has up to 3 redacted
 `{channel, text}` entries, each truncated to 240 characters. These entries come from the first user message plus up to 2
-keyword-matching messages, preferring user over assistant.
+keyword-matching messages, preferring user over assistant. `--max-excerpt-bytes` (default 8192) sets a total budget for
+the serialized excerpts across all candidates. The helper attaches excerpts in candidate order until the next entry
+would make the total exceed the budget. Then the helper attaches no more excerpts and sets the top-level
+`excerpts_truncated` to `true`.
 
 Scores and counts select candidates only. Validate every reported finding against the relevant transcript body.
 `keyword_hits` counts eligible `(message, keyword)` pairs keyed by the full OR-group keyword string, not repeated
 substring occurrences.
 
-With `--since <YYYY-MM-DD|Nd>`, the report gains a top-level `since` object (`value`, `cutoff`, `codex_dirs_pruned`,
-`codex_files_pruned`, `claude_files_pruned`). Without the flag, the object is `null`. Each candidate has a `modified`
-ISO mtime. Sessions modified within 7 days score higher than those within 30 days, which score higher than older
-sessions. This score is another ranking signal, not evidence.
+With `--since <YYYY-MM-DD|Nd>`, the helper keeps sessions with activity at or after the cutoff. First, it prunes files
+with an mtime older than the cutoff. A later mtime does not prove recent activity, because other tools can touch a file.
+For each remaining file, the helper reads the last record timestamp from a bounded tail of the file. When that timestamp
+is older than the cutoff, the helper prunes the file. When the timestamp is missing or unparsable, the helper keeps the
+file.
+
+With `--since`, the report gains a top-level `since` object (`value`, `cutoff`, `codex_dirs_pruned`,
+`codex_files_pruned`, `claude_files_pruned`, `codex_files_pruned_by_timestamp`, `claude_files_pruned_by_timestamp`).
+Without the flag, the object is `null`. Each candidate has a `started` ISO UTC timestamp from its first record (or
+`null`) and a `modified` ISO mtime. Sessions that started within 7 days score higher than those within 30 days, which
+score higher than older sessions. When `started` is `null`, the recency score uses `modified`. This score is another
+ranking signal, not evidence.
 
 Source ownership is structural and precedes relevance scoring:
 

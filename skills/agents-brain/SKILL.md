@@ -43,7 +43,9 @@ Stop after reporting completed or planned changes, validation, and any blockers.
 Optimize skills and other agent-facing context for GPT-6.1 Sol and Claude Opus 5.5. Preserve README.md as clear
 human-facing documentation. Before complex, long-running, multi-tool, or orchestration-heavy context work, resolve
 `scripts/fetch-guidance.sh` relative to this skill directory. For that work, run it once for `gpt-6.1-sol` and once for
-`claude-opus-5-5`. Read both returned files completely.
+`claude-opus-5-5`. Read both returned files completely. Run the helper and read the guides only when the task writes or
+changes prompts, skills, or other agent-facing prose. For other edits, do not run the helper or read either guide. In
+that case, report `guides: skipped (no agent-facing prose)`.
 
 The helper retrieves the official
 [GPT-6.1 Sol prompting guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices)
@@ -83,6 +85,11 @@ dictionary compliance.
 
 Use `$agents-brain maintain` for every supported operation. Read `references/maintain.md`. Within the requested scope,
 update existing context, create warranted missing context, and apply task-backed skill lifecycle changes.
+
+In every `maintain` run, capture corrections. Scan the session for user corrections, such as a restated instruction, "do
+not do X", "always do Y", or a reverted choice. Record each durable correction as a rule in the nearest in-scope
+steering file, such as AGENTS.md, or in the owning skill. When a correction is not durable, state the reason in the
+report: one-off, already stated, or a project-specific exception.
 
 Read `references/create-docs.md` only when creating or regenerating context. Read `references/maintain-skills.md` only
 for skill lifecycle decisions or establishing continuous maintenance. These references support the workflow. They are
@@ -255,6 +262,12 @@ a tree only when directory ownership matters. Follow the user's requested report
 When issues need a separate section, group verified fixes with evidence as `Resolved` and remaining problems as `Open`,
 with impact and next action. Omit empty groups. Report each item once. Reserve `blocker` for something preventing
 required work and `risk` for a specific potential adverse outcome. A workaround leaves the underlying issue open.
+
+An `Open` item may cite only user-owned input, an action outside the repository, or a confirmation boundary (destructive
+action, purchase, deployment, or external write). When the task permits writes and an in-repository change resolves an
+item, make that change before the report under the standing maintenance authorization. Do not write
+`needs owner decision`, `report-only`, or `residual risk` for a routine engineering choice. Decide, make the change, and
+state the decision in the report.
 
 Keep paths, commands, guard-rail errors, symlink targets, and user-authored content exact and undecorated. Omit empty
 detail. Stop once the selected targets meet the completion bar.
