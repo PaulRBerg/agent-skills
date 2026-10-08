@@ -398,6 +398,112 @@ fn commit_push_replay_after_dropped_commit_reports_superseded_and_pushes_nothing
     assert_eq!(receipt["push_requested"], true);
 }
 
+/// Repository with `main` pushed to a bare remote, plus an `updater` clone that has pushed
+/// `remote.txt` so the local branch is one commit behind.
+fn behind_fixture(name: &str) -> (Harness, std::path::PathBuf) {
+    let harness = Harness::new(name);
+    let remote = harness.root.join("remote.git");
+    let updater = harness.root.join("updater");
+    init_bare(&remote, &harness.home);
+    harness.write("intended.txt", "base\n");
+    harness.commit_all("base");
+    harness.git(["branch", "-M", "main"]);
+    harness.git(["remote", "add", "origin", &format!("file://{}", remote.display())]);
+    harness.git(["push", "--quiet", "-u", "origin", "HEAD"]);
+    clone_repository(&remote, &updater, &harness.home);
+    fs::write(updater.join("remote.txt"), "remote\n").unwrap();
+    git_at(&updater, &harness.home, ["add", "remote.txt"]);
+    git_at(&updater, &harness.home, ["commit", "--quiet", "-m", "remote"]);
+    git_at(&updater, &harness.home, ["push", "--quiet"]);
+    (harness, remote)
+}
+
+#[test]
+fn push_rebase_integrates_a_clean_behind_branch_and_pushes() {
+    let (harness, remote) = behind_fixture("push-rebase-clean");
+    harness.write("intended.txt", "local\n");
+    harness.commit_all("local");
+    harness.write("notes.txt", "untracked work from another agent\n");
+    let local_before = harness.git(["rev-parse", "HEAD"]);
+
+    let pushed = harness.success(["push", "--rebase"]);
+
+    assert_eq!(stdout(&pushed), "REBASED main 1\nPUSHED main\n");
+    let head = harness.git(["rev-parse", "HEAD"]);
+    assert_ne!(head, local_before);
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), head);
+    assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "3");
+    assert_eq!(harness.read("remote.txt"), "remote\n");
+    assert_eq!(harness.read("intended.txt"), "local\n");
+    assert_eq!(harness.read("notes.txt"), "untracked work from another agent\n");
+    assert!(harness.git(["status", "--porcelain", "--untracked-files=no"]).is_empty());
+}
+
+#[test]
+fn push_rebase_refuses_tracked_changes_and_leaves_the_branch_alone() {
+    let (harness, remote) = behind_fixture("push-rebase-dirty");
+    harness.write("intended.txt", "local\n");
+    harness.commit_all("local");
+    harness.write("intended.txt", "another agent's unstaged edit\n");
+    let local_before = harness.git(["rev-parse", "HEAD"]);
+    let remote_before = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+
+    let behind = harness.command(["push", "--rebase"]);
+
+    assert_eq!(exit_code(&behind), 3);
+    assert_eq!(stdout(&behind), "BEHIND main 1\n");
+    assert!(stderr(&behind).contains("tracked changes"), "{}", stderr(&behind));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), local_before);
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), remote_before);
+    assert_eq!(harness.read("intended.txt"), "another agent's unstaged edit\n");
+}
+
+#[test]
+fn push_rebase_aborts_a_conflicting_rebase_and_reports_behind() {
+    let (harness, remote) = behind_fixture("push-rebase-conflict");
+    harness.write("remote.txt", "conflicting local\n");
+    harness.git(["add", "remote.txt"]);
+    harness.git(["commit", "--quiet", "-m", "conflicting local"]);
+    let local_before = harness.git(["rev-parse", "HEAD"]);
+    let remote_before = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+
+    let behind = harness.command(["push", "--rebase"]);
+
+    assert_eq!(exit_code(&behind), 3);
+    assert_eq!(stdout(&behind), "BEHIND main 1\n");
+    assert!(stderr(&behind).contains("aborted"), "{}", stderr(&behind));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), local_before);
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), remote_before);
+    assert!(harness.git(["status", "--porcelain"]).is_empty());
+    assert!(!harness.root.join("repo/.git/rebase-merge").exists());
+    assert!(!harness.root.join("repo/.git/rebase-apply").exists());
+}
+
+#[test]
+fn commit_push_rebase_reports_rebased_integrated_and_pushed() {
+    let (harness, remote) = behind_fixture("commit-push-rebase-flag");
+    harness.write("intended.txt", "local\n");
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+
+    let output = harness.success(["commit", &transaction, "-m", "test: local", "--push", "--rebase"]);
+
+    let head = harness.git(["rev-parse", "HEAD"]);
+    let receipt_text = stdout(&output);
+    let lines: Vec<&str> = receipt_text.lines().collect();
+    assert_eq!(lines.len(), 4, "{receipt_text}");
+    assert!(lines[0].starts_with(&format!("COMMITTED {transaction} ")), "{}", lines[0]);
+    assert_eq!(lines[1], "REBASED main 1");
+    assert_eq!(lines[2], format!("INTEGRATED {transaction} {}", &head[..12]));
+    assert_eq!(lines[3], "PUSHED main");
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), head);
+    assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "3");
+    let receipt: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(harness.transaction_json(&transaction)).unwrap()).unwrap();
+    assert_eq!(receipt["status"], "pushed");
+    let replay = harness.success(["commit", &transaction, "-m", "ignored", "--push"]);
+    assert!(stdout(&replay).starts_with(&format!("PUSHED {transaction} ")), "{}", stdout(&replay));
+}
+
 fn init_bare(path: &std::path::Path, home: &std::path::Path) {
     let output = Command::new("git")
         .args(["init", "--bare", "--quiet"])

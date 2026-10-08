@@ -26,6 +26,23 @@ fn commit_messages_accept_hyphen_leading_paragraphs() {
 }
 
 #[test]
+fn rebase_requires_push_on_commit_and_stands_alone_on_push() {
+    let transaction = "a9a4f5c260c251a8";
+    assert!(Cli::try_parse_from(["ai-commit", "commit", transaction, "-m", "subject", "--rebase"]).is_err());
+    let cli = Cli::try_parse_from(["ai-commit", "commit", transaction, "-m", "subject", "--push", "--rebase"]).unwrap();
+    let Command::Commit(args) = cli.command else {
+        panic!("expected commit command");
+    };
+    assert!(args.push && args.rebase);
+    let cli = Cli::try_parse_from(["ai-commit", "push", "--rebase"]).unwrap();
+    let Command::Push(args) = cli.command else {
+        panic!("expected push command");
+    };
+    assert!(args.rebase);
+    assert!(Cli::try_parse_from(["ai-commit", "push", "--all"]).is_err());
+}
+
+#[test]
 fn validate_accepts_only_a_transaction_id_and_show_appends_pending_commit() {
     let transaction = "a9a4f5c260c251a8";
     let cli = Cli::try_parse_from(["ai-commit", "validate", transaction]).unwrap();

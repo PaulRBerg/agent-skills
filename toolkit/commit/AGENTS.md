@@ -99,9 +99,9 @@ ai-commit prepare [--all|--staged] [--natural|--conventional]
                   [--no-auto-baseline]
                   [--porcelain] -- [paths...]
 ai-commit validate <transaction-id>
-ai-commit commit <transaction-id> -m <message>... [--push]
+ai-commit commit <transaction-id> -m <message>... [--push] [--rebase]
                   [--no-verify] [--no-gpg-sign]
-ai-commit push
+ai-commit push [--rebase]
 ai-commit show <transaction-id>
 ai-commit discard <transaction-id>
 ```
@@ -227,9 +227,9 @@ discard it.
 
 `prepare --porcelain` emits stable TSV records. Tabs, newlines, carriage returns, and backslashes inside fields are
 backslash-escaped. Outcome records use `PREPARED`, `VALIDATED`, `VALIDATION_SKIPPED`, `COMMITTED`, `INTEGRATED`,
-`SUPERSEDED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and `DISCARDED`. Each automatically applied exclusion is
-disclosed as `AUTO_BASELINE<tab>path<tab>oid`. The ordinary output lists the same pairs under `auto-applied baselines`.
-Each skipped automatic baseline is disclosed as `AUTO_BASELINE_SKIPPED<tab>path<tab>oid`.
+`SUPERSEDED`, `REBASED`, `PUSHED`, `PUSHED_NEW`, `BEHIND`, `HOOK_ADDED`, and `DISCARDED`. Each automatically applied
+exclusion is disclosed as `AUTO_BASELINE<tab>path<tab>oid`. The ordinary output lists the same pairs under
+`auto-applied baselines`. Each skipped automatic baseline is disclosed as `AUTO_BASELINE_SKIPPED<tab>path<tab>oid`.
 
 Receipts and retryable diagnostics print a fixed 12-character commit OID abbreviation. `show` and the transaction
 journal retain full OIDs. The `--diff full` display diff omits binary patch payloads and caps each file's section at 400
@@ -245,7 +245,18 @@ discards or re-prepares the transaction.
 
 Exit status `0` means success or an idempotent replay, `2` means invalid invocation or configuration, and `3` means the
 repository was left safe but needs a retry or reconciliation. Other Git, hook, signing, and push failures return `1`.
-Pushes always fetch and compare first. They never pull, merge, or rebase.
+Pushes always fetch and compare first. Without `--rebase`, they never pull, merge, or rebase. A behind branch prints
+`BEHIND <branch> <count>` and exits `3`.
+
+With `--rebase` (`push --rebase`, or `commit --push --rebase`), a behind branch is rebased onto its fetched upstream
+before the push attempt, under two conditions: no Git operation is in progress, and `git status --untracked-files=no`
+reports no tracked change in the index or worktree. Untracked files do not fail that precondition. The rebase runs with
+`--no-autostash`. When it stops, for example on a conflict or on an untracked file that an upstream commit would
+overwrite, ai-commit runs `git rebase --abort` and the branch returns to its pre-rebase state. In every refused case,
+the output is the same `BEHIND` record and exit `3`, and stderr names the reason. A successful rebase prints
+`REBASED <branch> <count>` before `PUSHED`. In the commit workflow, the rebase rewrites the receipt's commit, so
+`INTEGRATED <transaction-id> <head-oid>` follows `REBASED`. When the remote moves again between the rebase and the push,
+the result is `BEHIND` and the rebase stays in place.
 
 ### Development
 

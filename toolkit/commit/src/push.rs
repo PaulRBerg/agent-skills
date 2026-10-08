@@ -5,17 +5,31 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PushOutcome {
-    Pushed { branch: String },
+    Pushed { branch: String, rebased: Option<u64> },
     PushedNew { branch: String },
-    Behind { branch: String, count: u64 },
+    Behind { branch: String, count: u64, refusal: Option<String> },
 }
 
 impl PushOutcome {
     pub fn print(&self) {
         match self {
-            Self::Pushed { branch } => println!("PUSHED {branch}"),
+            Self::Pushed { branch, rebased } => {
+                if let Some(count) = rebased {
+                    println!("REBASED {branch} {count}");
+                }
+                println!("PUSHED {branch}");
+            }
             Self::PushedNew { branch } => println!("PUSHED_NEW {branch}"),
-            Self::Behind { branch, count } => println!("BEHIND {branch} {count}"),
+            Self::Behind { branch, count, .. } => println!("BEHIND {branch} {count}"),
+        }
+    }
+
+    /// The exit-3 error for a `Behind` outcome. Its message names why `--rebase` did not
+    /// integrate the upstream, or is empty when no rebase was requested.
+    pub fn retry_error(&self) -> AppError {
+        match self {
+            Self::Behind { refusal, .. } => AppError::retry(refusal.clone().unwrap_or_default()),
+            Self::Pushed { .. } | Self::PushedNew { .. } => AppError::retry(""),
         }
     }
 }
@@ -30,7 +44,7 @@ struct Destination {
     set_upstream: bool,
 }
 
-pub fn execute(repository: &Repository) -> Result<PushOutcome> {
+pub fn execute(repository: &Repository, rebase: bool) -> Result<PushOutcome> {
     let branch = repository.branch()?;
     repository.head()?;
     let mut destination = destination(repository, &branch)?;
@@ -39,13 +53,21 @@ pub fn execute(repository: &Repository) -> Result<PushOutcome> {
     if destination.set_upstream {
         destination.new_branch = destination.compare_ref.is_none();
     }
+    let mut rebased = None;
     if let Some(count) = behind_count(repository, destination.compare_ref.as_deref())? {
-        return Ok(PushOutcome::Behind { branch, count });
+        if !rebase {
+            return Ok(PushOutcome::Behind { branch, count, refusal: None });
+        }
+        let compare_ref = destination.compare_ref.as_deref().expect("behind implies a compare ref");
+        if let Err(refusal) = rebase_onto_upstream(repository, compare_ref)? {
+            return Ok(PushOutcome::Behind { branch, count, refusal: Some(refusal) });
+        }
+        rebased = Some(count);
     }
 
     let first = attempt(repository, &destination)?;
     if first.status.success() {
-        return Ok(success_outcome(destination));
+        return Ok(success_outcome(destination, rebased));
     }
     if !is_retryable_rejection(&first.stdout, &destination.remote_branch) {
         return Err(git_error(first));
@@ -57,13 +79,16 @@ pub fn execute(repository: &Repository) -> Result<PushOutcome> {
         destination.new_branch = destination.compare_ref.is_none();
     }
     if let Some(count) = behind_count(repository, destination.compare_ref.as_deref())? {
-        return Ok(PushOutcome::Behind { branch, count });
+        let refusal = rebased.map(|integrated| {
+            format!("rebased {branch} onto {integrated} upstream commits, but the remote moved again; rerun to retry")
+        });
+        return Ok(PushOutcome::Behind { branch, count, refusal });
     }
     let second = attempt(repository, &destination)?;
     if !second.status.success() {
         return Err(git_error(second));
     }
-    Ok(success_outcome(destination))
+    Ok(success_outcome(destination, rebased))
 }
 
 fn destination(repository: &Repository, branch: &str) -> Result<Destination> {
@@ -146,6 +171,36 @@ fn behind_count(repository: &Repository, compare_ref: Option<&str>) -> Result<Op
     Ok((behind > 0).then_some(behind))
 }
 
+/// Rebases the current branch onto the fetched upstream under the same conditions an operator
+/// must check by hand: no Git operation in progress and no tracked changes in the index or
+/// worktree. Untracked files never move during a rebase, so they do not block it. A rebase that
+/// stops (conflicts, or an untracked file in the way) is aborted so the branch returns to its
+/// pre-rebase state. The inner `Err` names the reason the upstream was not integrated.
+fn rebase_onto_upstream(repository: &Repository, compare_ref: &str) -> Result<std::result::Result<(), String>> {
+    if let Err(error) = repository.ensure_idle() {
+        return Ok(Err(format!("rebase skipped: {}", error.message)));
+    }
+    let tracked = repository.bytes(["status", "--porcelain=v1", "-z", "--untracked-files=no"], None)?;
+    if !tracked.is_empty() {
+        return Ok(Err("rebase skipped: tracked changes are present in the index or worktree".to_owned()));
+    }
+    let output = repository.raw(["rebase", "--no-autostash", "--quiet", compare_ref], None)?;
+    if output.status.success() {
+        return Ok(Ok(()));
+    }
+    let detail = git_error(output).message;
+    if repository.ensure_idle().is_err() {
+        let abort = repository.raw(["rebase", "--abort"], None)?;
+        if !abort.status.success() {
+            return Err(AppError::operational(format!(
+                "rebase onto {compare_ref} failed ({detail}) and `git rebase --abort` also failed: {}",
+                git_error(abort).message
+            )));
+        }
+    }
+    Ok(Err(format!("rebase onto {compare_ref} was aborted: {detail}")))
+}
+
 fn attempt(repository: &Repository, destination: &Destination) -> Result<std::process::Output> {
     let refspec = format!("HEAD:refs/heads/{}", destination.remote_branch);
     if destination.set_upstream {
@@ -168,10 +223,10 @@ fn is_retryable_rejection(stdout: &[u8], remote_branch: &str) -> bool {
     })
 }
 
-fn success_outcome(destination: Destination) -> PushOutcome {
+fn success_outcome(destination: Destination, rebased: Option<u64>) -> PushOutcome {
     if destination.new_branch {
         PushOutcome::PushedNew { branch: destination.branch }
     } else {
-        PushOutcome::Pushed { branch: destination.branch }
+        PushOutcome::Pushed { branch: destination.branch, rebased }
     }
 }

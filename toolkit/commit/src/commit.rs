@@ -60,7 +60,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     ensure_branch(&repository, &transaction.branch)?;
     if transaction.status == TransactionStatus::Committed && transaction.reconciled {
         print_commit_receipt(&transaction);
-        return maybe_push(&repository, &mut transaction, store, args.push);
+        return maybe_push(&repository, &mut transaction, store, &args);
     }
 
     repository.ensure_idle()?;
@@ -81,7 +81,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
         recover_after_ref_update(&repository, &mut transaction, store, &mut index_lock, temporary.path())?
     {
         print_commit_receipt(&transaction);
-        return maybe_push(&repository, &mut transaction, store, args.push);
+        return maybe_push(&repository, &mut transaction, store, &args);
     }
 
     let commit_index = temporary.path().join("commit-index");
@@ -248,7 +248,7 @@ pub fn run(args: CommitArgs, store: &Store) -> Result<()> {
     let _ = run_hook(&repository, &shared_index, "post-commit", &[]);
     drop(index_lock);
     print_commit_receipt(&transaction);
-    maybe_push(&repository, &mut transaction, store, args.push)
+    maybe_push(&repository, &mut transaction, store, &args)
 }
 
 const VALIDATION_ATTEMPTS: usize = 3;
@@ -587,8 +587,8 @@ fn print_commit_receipt(transaction: &Transaction) {
     }
 }
 
-fn maybe_push(repository: &Repository, transaction: &mut Transaction, store: &Store, requested: bool) -> Result<()> {
-    if !requested && !transaction.push_requested {
+fn maybe_push(repository: &Repository, transaction: &mut Transaction, store: &Store, args: &CommitArgs) -> Result<()> {
+    if !args.push && !transaction.push_requested {
         return Ok(());
     }
     if let Some(oid) = transaction.commit_oid.clone() {
@@ -604,14 +604,20 @@ fn maybe_push(repository: &Repository, transaction: &mut Transaction, store: &St
     transaction.push_requested = true;
     transaction.terminal_at = None;
     store.save(transaction)?;
-    match push::execute(repository)? {
-        PushOutcome::Behind { branch, count } => {
-            println!("BEHIND {branch} {count}");
-            Err(AppError::retry(""))
+    match push::execute(repository, args.rebase)? {
+        outcome @ PushOutcome::Behind { .. } => {
+            outcome.print();
+            Err(outcome.retry_error())
         }
         outcome => {
             let outcome_name = match &outcome {
-                PushOutcome::Pushed { branch } => format!("PUSHED {branch}"),
+                PushOutcome::Pushed { branch, rebased } => {
+                    if let Some(count) = rebased {
+                        println!("REBASED {branch} {count}");
+                        disclose_rebased_commit(repository, transaction)?;
+                    }
+                    format!("PUSHED {branch}")
+                }
                 PushOutcome::PushedNew { branch } => format!("PUSHED_NEW {branch}"),
                 PushOutcome::Behind { .. } => unreachable!(),
             };
@@ -624,7 +630,7 @@ fn maybe_push(repository: &Repository, transaction: &mut Transaction, store: &St
                     transaction.id
                 ))
             })?;
-            outcome.print();
+            println!("{outcome_name}");
             Ok(())
         }
     }
@@ -634,6 +640,25 @@ enum Integration {
     Reachable,
     Integrated { head: String },
     Superseded,
+}
+
+// A `--rebase` push rewrote the branch after the receipt printed `COMMITTED`, so disclose the
+// head that now carries the transaction, as a replay after a manual rebase would.
+fn disclose_rebased_commit(repository: &Repository, transaction: &Transaction) -> Result<()> {
+    let Some(oid) = transaction.commit_oid.clone() else {
+        return Ok(());
+    };
+    match branch_integration(repository, transaction, &oid)? {
+        Integration::Reachable => Ok(()),
+        Integration::Integrated { head } => {
+            println!("INTEGRATED {} {}", transaction.id, short_oid(&head));
+            Ok(())
+        }
+        Integration::Superseded => Err(AppError::operational(format!(
+            "branch was pushed after the rebase, but HEAD no longer carries the content of transaction {}; inspect              the branch",
+            transaction.id
+        ))),
+    }
 }
 
 // A replayed push may follow a rebase that rewrote or dropped the transaction's

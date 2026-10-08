@@ -15,8 +15,8 @@ pub enum Command {
     Validate(TransactionArgs),
     /// Commit a previously prepared transaction.
     Commit(CommitArgs),
-    /// Push the current named branch without integrating remote changes.
-    Push,
+    /// Push the current named branch, optionally rebasing a behind branch first.
+    Push(PushArgs),
     /// Show a transaction or retained receipt.
     Show(TransactionArgs),
     /// Discard a prepared transaction.
@@ -81,6 +81,11 @@ pub struct CommitArgs {
     #[arg(long)]
     pub push: bool,
 
+    /// Before pushing, rebase a behind branch onto its fetched upstream when the repository is idle and tracked
+    /// content is clean.
+    #[arg(long, requires = "push")]
+    pub rebase: bool,
+
     /// Bypass pre-commit and commit-msg hooks.
     #[arg(long)]
     pub no_verify: bool,
@@ -88,6 +93,13 @@ pub struct CommitArgs {
     /// Disable commit signing for this transaction attempt.
     #[arg(long)]
     pub no_gpg_sign: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct PushArgs {
+    /// Rebase a behind branch onto its fetched upstream when the repository is idle and tracked content is clean.
+    #[arg(long)]
+    pub rebase: bool,
 }
 
 #[derive(Debug, Args)]

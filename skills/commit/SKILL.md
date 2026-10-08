@@ -32,6 +32,8 @@ Arguments: `$ARGUMENTS`
 - `--natural`: force Natural Language Format for this commit.
 - `--conventional`: force Conventional Prefix Format for this commit.
 - `--push`: request a push after commit. Otherwise push only when standing instructions authorize it.
+- `--rebase`: with `--push`, let `ai-commit` rebase a behind branch onto its fetched upstream before the push. Pass it
+  with every authorized push unless the user excludes it.
 - `--close <issue_numbers>`: append one `Closes #N` trailer per positive decimal issue number. Accept comma- or
   space-separated input.
 - `--finding <finding_ids>`: append one `Finding-ID: <id>` trailer per ledger finding this commit fixes. Accept comma-
@@ -46,7 +48,7 @@ Arguments: `$ARGUMENTS`
   description or subject.
 
 If the requested operation is only to push a clean branch that is already ahead, skip preparation and run
-`ai-commit push`.
+`ai-commit push --rebase`.
 
 ## Squash Mode
 
@@ -126,18 +128,20 @@ argument, as in the step 4 example.
 Run:
 
 ```bash
-ai-commit commit <transaction-id> -m '<subject>' [-m '<body>'] [-m '<trailers>'] [--push]
+ai-commit commit <transaction-id> -m '<subject>' [-m '<body>'] [-m '<trailers>'] [--push --rebase]
 ```
 
 For example, a two-item body is one `-m` argument containing a physical newline:
 
 ```bash
 ai-commit commit <transaction-id> -m '<subject>' -m '- first material change
-- second material change' [-m '<trailers>'] [--push]
+- second material change' [-m '<trailers>'] [--push --rebase]
 ```
 
-Append `--push` when explicitly requested or authorized by standing instructions. The same command handles default,
-`--all`, and `--staged` transactions. Never stage or commit them with direct Git commands.
+Append `--push --rebase` when a push is explicitly requested or authorized by standing instructions. `ai-commit` then
+rebases a behind branch onto its fetched upstream only when no Git operation is in progress and the index and worktree
+hold no tracked change. It aborts a rebase that stops. The same command handles default, `--all`, and `--staged`
+transactions. Never stage or commit them with direct Git commands.
 
 Transactions are idempotent. After an interruption, lock race, or retryable exit, retry the same transaction ID and
 message arguments. For those retryable failures, do not prepare a replacement from newer mutable state. A replay
@@ -161,6 +165,8 @@ Keep the receipt compact and forward its outcome lines without decoration:
 - `COMMITTED <transaction-id> <commit-oid>` proves commit creation or idempotent recovery. Without push authorization,
   it is completion.
 - `HOOK_ADDED <path>` identifies content introduced by a hook outside the prepared path set. Disclose every such line.
+- `REBASED <branch> <count>` discloses that `ai-commit` rebased the branch onto `<count>` upstream commits before the
+  push. In the commit workflow, an `INTEGRATED` line follows it.
 - `PUSHED <branch>` or `PUSHED_NEW <branch>` proves propagation and completes push-authorized or push-only work.
 - `PUSHED <transaction-id> <commit-oid>` is the retained proof returned when an already-pushed transaction is replayed.
 - `INTEGRATED <transaction-id> <head-oid>` discloses that the branch no longer contains the transaction's original
@@ -172,11 +178,11 @@ Keep the receipt compact and forward its outcome lines without decoration:
 - `BEHIND <branch> <count>` is safe noncompletion, never completion: `ai-commit` fetched and refused to integrate or
   push. A preceding `COMMITTED` still proves the local commit.
 
-  Run `git fetch`, then verify the branch is still behind its upstream, the working tree and index are clean, and no
-  other Git operation (rebase, merge, cherry-pick, revert, bisect) is in progress. If all hold, run
-  `git pull --rebase --no-autostash` and replay the same transaction command (or rerun `ai-commit push` for push-only
-  work). On rebase conflicts, run `git rebase --abort` for only that rebase and ask the user before resolving. If the
-  tree is dirty or another Git operation is in progress, stop and report. Never autostash.
+  Without `--rebase`, replay the same transaction command with `--push --rebase` (or run `ai-commit push --rebase` for
+  push-only work). With `--rebase`, the stderr line names why the upstream was not integrated. When another Git
+  operation is in progress or tracked changes are present, stop and report that branch reconciliation is required. When
+  the rebase stopped and was aborted, report the conflicting paths and ask the user before resolving them. Never
+  autostash, and never rebase by hand.
 
 Do not report unrelated tree state, ahead/behind counts not emitted by the command, staging narration, or successful
 hook activity. Add only a required one-line bypass disclosure from the recovery reference.

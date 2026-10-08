@@ -31,17 +31,17 @@ ambiguous, stop. An empty scoped selection is a no-op. Never replace it with ful
 ### 1. Commit and Push Source
 
 If attributable source changes are uncommitted, run `$commit --push` from the source repository without `--all`. Pass
-only those paths. If selected source changes are already committed, run `ai-commit push` to verify propagation, even
-when unrelated paths are dirty.
+only those paths. If selected source changes are already committed, run `ai-commit push --rebase` to verify propagation,
+even when unrelated paths are dirty.
 
-On a `BEHIND` receipt, resolve the branch state before touching global installations:
+A `BEHIND` receipt means `ai-commit` did not integrate the upstream, and its stderr line names the reason. Resolve the
+branch state before touching global installations:
 
-- If the working tree and index are clean and no other Git operation is in progress, fetch. Verify those conditions.
-  Then run a conflict-free `git pull --rebase --no-autostash`. Rerun `ai-commit push`.
-- If that rebase encounters conflicts, abort only that rebase. Ask before resolving the conflicts.
-- If the tree or index is dirty, stop. Report that branch reconciliation is required.
+- If the rebase stopped and was aborted, report the conflicting paths. Ask before resolving them.
+- If tracked changes are present or another Git operation is in progress, stop. Report that branch reconciliation is
+  required.
 
-Never autostash.
+Never autostash or rebase by hand.
 
 Keep this work under the source-repository claim through its commit and push. Then run `ai-coord done` for that claim
 before step 2 acquires the target claims.

@@ -31,12 +31,12 @@ pub fn execute(cli: Cli) -> Result<()> {
             let store = state_store()?;
             commit::run(args, &store)
         }
-        Command::Push => {
+        Command::Push(args) => {
             let repository = git::Repository::discover()?;
-            match push::execute(&repository)? {
+            match push::execute(&repository, args.rebase)? {
                 outcome @ PushOutcome::Behind { .. } => {
                     outcome.print();
-                    Err(AppError::retry(""))
+                    Err(outcome.retry_error())
                 }
                 outcome => {
                     outcome.print();
