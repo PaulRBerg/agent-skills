@@ -79,10 +79,16 @@ pub fn execute(repository: &Repository, rebase: bool) -> Result<PushOutcome> {
         destination.new_branch = destination.compare_ref.is_none();
     }
     if let Some(count) = behind_count(repository, destination.compare_ref.as_deref())? {
-        let refusal = rebased.map(|integrated| {
-            format!("rebased {branch} onto {integrated} upstream commits, but the remote moved again; rerun to retry")
-        });
-        return Ok(PushOutcome::Behind { branch, count, refusal });
+        if !rebase {
+            return Ok(PushOutcome::Behind { branch, count, refusal: None });
+        }
+        // The remote moved between the rebase and the push: integrate once more before the
+        // final attempt, so the caller sees either a push or an explained refusal.
+        let compare_ref = destination.compare_ref.as_deref().expect("behind implies a compare ref");
+        if let Err(refusal) = rebase_onto_upstream(repository, compare_ref)? {
+            return Ok(PushOutcome::Behind { branch, count, refusal: Some(refusal) });
+        }
+        rebased = Some(rebased.unwrap_or(0) + count);
     }
     let second = attempt(repository, &destination)?;
     if !second.status.success() {
@@ -172,17 +178,17 @@ fn behind_count(repository: &Repository, compare_ref: Option<&str>) -> Result<Op
 }
 
 /// Rebases the current branch onto the fetched upstream under the same conditions an operator
-/// must check by hand: no Git operation in progress and no tracked changes in the index or
-/// worktree. Untracked files never move during a rebase, so they do not block it. A rebase that
-/// stops (conflicts, or an untracked file in the way) is aborted so the branch returns to its
-/// pre-rebase state. The inner `Err` names the reason the upstream was not integrated.
+/// must check by hand: no Git operation in progress, and a clean working tree and index, where
+/// untracked files count as dirt and ignored files do not. A rebase that stops (conflicts) is
+/// aborted so the branch returns to its pre-rebase state. The inner `Err` names the reason the
+/// upstream was not integrated.
 fn rebase_onto_upstream(repository: &Repository, compare_ref: &str) -> Result<std::result::Result<(), String>> {
     if let Err(error) = repository.ensure_idle() {
         return Ok(Err(format!("rebase skipped: {}", error.message)));
     }
-    let tracked = repository.bytes(["status", "--porcelain=v1", "-z", "--untracked-files=no"], None)?;
-    if !tracked.is_empty() {
-        return Ok(Err("rebase skipped: tracked changes are present in the index or worktree".to_owned()));
+    let dirt = repository.bytes(["status", "--porcelain=v1", "-z", "--untracked-files=all"], None)?;
+    if !dirt.is_empty() {
+        return Ok(Err("rebase skipped: the working tree or index is not clean".to_owned()));
     }
     let output = repository.raw(["rebase", "--no-autostash", "--quiet", compare_ref], None)?;
     if output.status.success() {

@@ -139,9 +139,9 @@ ai-commit commit <transaction-id> -m '<subject>' -m '- first material change
 ```
 
 Append `--push --rebase` when a push is explicitly requested or authorized by standing instructions. `ai-commit` then
-rebases a behind branch onto its fetched upstream only when no Git operation is in progress and the index and worktree
-hold no tracked change. It aborts a rebase that stops. The same command handles default, `--all`, and `--staged`
-transactions. Never stage or commit them with direct Git commands.
+rebases a behind branch onto its fetched upstream only when no Git operation is in progress and the working tree and
+index are clean. It aborts a rebase that stops. The same command handles default, `--all`, and `--staged` transactions.
+Never stage or commit them with direct Git commands.
 
 Transactions are idempotent. After an interruption, lock race, or retryable exit, retry the same transaction ID and
 message arguments. For those retryable failures, do not prepare a replacement from newer mutable state. A replay
@@ -180,9 +180,9 @@ Keep the receipt compact and forward its outcome lines without decoration:
 
   Without `--rebase`, replay the same transaction command with `--push --rebase` (or run `ai-commit push --rebase` for
   push-only work). With `--rebase`, the stderr line names why the upstream was not integrated. When another Git
-  operation is in progress or tracked changes are present, stop and report that branch reconciliation is required. When
-  the rebase stopped and was aborted, report the conflicting paths and ask the user before resolving them. Never
-  autostash, and never rebase by hand.
+  operation is in progress or the working tree or index is not clean, stop and report that branch reconciliation is
+  required. When the rebase stopped and was aborted, report the conflicting paths and ask the user before resolving
+  them. Never autostash, and never rebase by hand.
 
 Do not report unrelated tree state, ahead/behind counts not emitted by the command, staging narration, or successful
 hook activity. Add only a required one-line bypass disclosure from the recovery reference.

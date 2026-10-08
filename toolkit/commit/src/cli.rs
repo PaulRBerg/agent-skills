@@ -81,8 +81,8 @@ pub struct CommitArgs {
     #[arg(long)]
     pub push: bool,
 
-    /// Before pushing, rebase a behind branch onto its fetched upstream when the repository is idle and tracked
-    /// content is clean.
+    /// Before pushing, rebase a behind branch onto its fetched upstream when the repository is idle and the working
+    /// tree and index are clean.
     #[arg(long, requires = "push")]
     pub rebase: bool,
 
@@ -97,7 +97,8 @@ pub struct CommitArgs {
 
 #[derive(Debug, Args)]
 pub struct PushArgs {
-    /// Rebase a behind branch onto its fetched upstream when the repository is idle and tracked content is clean.
+    /// Rebase a behind branch onto its fetched upstream when the repository is idle and the working tree and index are
+    /// clean.
     #[arg(long)]
     pub rebase: bool,
 }

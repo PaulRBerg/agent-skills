@@ -38,8 +38,8 @@ A `BEHIND` receipt means `ai-commit` did not integrate the upstream, and its std
 branch state before touching global installations:
 
 - If the rebase stopped and was aborted, report the conflicting paths. Ask before resolving them.
-- If tracked changes are present or another Git operation is in progress, stop. Report that branch reconciliation is
-  required.
+- If the working tree or index is not clean, or another Git operation is in progress, stop. Report that branch
+  reconciliation is required.
 
 Never autostash or rebase by hand.
 

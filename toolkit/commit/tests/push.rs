@@ -423,7 +423,9 @@ fn push_rebase_integrates_a_clean_behind_branch_and_pushes() {
     let (harness, remote) = behind_fixture("push-rebase-clean");
     harness.write("intended.txt", "local\n");
     harness.commit_all("local");
-    harness.write("notes.txt", "untracked work from another agent\n");
+    harness.write(".gitignore", "ignored.txt\n");
+    harness.commit_all("ignore");
+    harness.write("ignored.txt", "ignored files are not dirt\n");
     let local_before = harness.git(["rev-parse", "HEAD"]);
 
     let pushed = harness.success(["push", "--rebase"]);
@@ -432,11 +434,62 @@ fn push_rebase_integrates_a_clean_behind_branch_and_pushes() {
     let head = harness.git(["rev-parse", "HEAD"]);
     assert_ne!(head, local_before);
     assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), head);
-    assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "3");
+    assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "4");
     assert_eq!(harness.read("remote.txt"), "remote\n");
     assert_eq!(harness.read("intended.txt"), "local\n");
+    assert_eq!(harness.read("ignored.txt"), "ignored files are not dirt\n");
+    assert!(harness.git(["status", "--porcelain"]).is_empty());
+}
+
+#[test]
+fn push_rebase_refuses_an_untracked_file_and_leaves_the_branch_alone() {
+    let (harness, remote) = behind_fixture("push-rebase-untracked");
+    harness.write("intended.txt", "local\n");
+    harness.commit_all("local");
+    harness.write("notes.txt", "untracked work from another agent\n");
+    let local_before = harness.git(["rev-parse", "HEAD"]);
+    let remote_before = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+
+    let behind = harness.command(["push", "--rebase"]);
+
+    assert_eq!(exit_code(&behind), 3);
+    assert_eq!(stdout(&behind), "BEHIND main 1\n");
+    assert!(stderr(&behind).contains("not clean"), "{}", stderr(&behind));
+    assert_eq!(harness.git(["rev-parse", "HEAD"]), local_before);
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), remote_before);
     assert_eq!(harness.read("notes.txt"), "untracked work from another agent\n");
-    assert!(harness.git(["status", "--porcelain", "--untracked-files=no"]).is_empty());
+}
+
+#[test]
+fn push_rebase_integrates_again_when_the_remote_moves_before_the_push() {
+    let (harness, remote) = behind_fixture("push-rebase-moving-remote");
+    let updater = harness.root.join("updater");
+    harness.write("intended.txt", "local\n");
+    harness.commit_all("local");
+
+    // The first push attempt lets the updater land another commit first, so the real push is
+    // rejected as non-fast-forward after the first rebase already integrated the earlier one.
+    let marker = harness.root.join("moved-once");
+    let real_git = git_binary();
+    write_executable(
+        &harness.shim.join("git"),
+        "#!/bin/sh\ncase \" $* \" in *' push '*)\n  if [ ! -e \"$PUSH_MARKER\" ]; then\n    : > \"$PUSH_MARKER\"\n    \"$REAL_GIT\" -C \"$UPDATER\" commit --quiet --allow-empty -m 'remote again' >/dev/null 2>&1\n    \"$REAL_GIT\" -C \"$UPDATER\" push --quiet >/dev/null 2>&1\n  fi\n;; esac\nexec \"$REAL_GIT\" \"$@\"\n",
+    );
+    let pushed = harness.command_with_env(
+        ["push", "--rebase"],
+        [
+            ("REAL_GIT", real_git.to_string_lossy().into_owned()),
+            ("PUSH_MARKER", marker.to_string_lossy().into_owned()),
+            ("UPDATER", updater.to_string_lossy().into_owned()),
+        ],
+    );
+
+    assert!(pushed.status.success(), "{}", stderr(&pushed));
+    assert_eq!(stdout(&pushed), "REBASED main 2\nPUSHED main\n");
+    let head = harness.git(["rev-parse", "HEAD"]);
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), head);
+    assert_eq!(harness.git(["rev-list", "--count", "HEAD"]), "4");
+    assert_eq!(harness.git(["log", "--format=%s", "-n", "2"]), "local\nremote again");
 }
 
 #[test]
@@ -452,7 +505,7 @@ fn push_rebase_refuses_tracked_changes_and_leaves_the_branch_alone() {
 
     assert_eq!(exit_code(&behind), 3);
     assert_eq!(stdout(&behind), "BEHIND main 1\n");
-    assert!(stderr(&behind).contains("tracked changes"), "{}", stderr(&behind));
+    assert!(stderr(&behind).contains("not clean"), "{}", stderr(&behind));
     assert_eq!(harness.git(["rev-parse", "HEAD"]), local_before);
     assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), remote_before);
     assert_eq!(harness.read("intended.txt"), "another agent's unstaged edit\n");

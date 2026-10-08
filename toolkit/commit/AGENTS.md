@@ -249,14 +249,14 @@ Pushes always fetch and compare first. Without `--rebase`, they never pull, merg
 `BEHIND <branch> <count>` and exits `3`.
 
 With `--rebase` (`push --rebase`, or `commit --push --rebase`), a behind branch is rebased onto its fetched upstream
-before the push attempt, under two conditions: no Git operation is in progress, and `git status --untracked-files=no`
-reports no tracked change in the index or worktree. Untracked files do not fail that precondition. The rebase runs with
-`--no-autostash`. When it stops, for example on a conflict or on an untracked file that an upstream commit would
-overwrite, ai-commit runs `git rebase --abort` and the branch returns to its pre-rebase state. In every refused case,
-the output is the same `BEHIND` record and exit `3`, and stderr names the reason. A successful rebase prints
-`REBASED <branch> <count>` before `PUSHED`. In the commit workflow, the rebase rewrites the receipt's commit, so
-`INTEGRATED <transaction-id> <head-oid>` follows `REBASED`. When the remote moves again between the rebase and the push,
-the result is `BEHIND` and the rebase stays in place.
+before the push attempt, under two conditions: no Git operation is in progress, and `git status` reports a clean working
+tree and index. Untracked files count as dirt. Ignored files do not. The rebase runs with `--no-autostash`. When it
+stops, for example on a conflict, ai-commit runs `git rebase --abort` and the branch returns to its pre-rebase state. In
+every refused case, the output is the same `BEHIND` record and exit `3`, and stderr names the reason. A successful
+rebase prints `REBASED <branch> <count>` before `PUSHED`. In the commit workflow, the rebase rewrites the receipt's
+commit, so `INTEGRATED <transaction-id> <head-oid>` follows `REBASED`. When the remote moves again between the rebase
+and the push, ai-commit fetches and rebases a second time under the same conditions before its final push attempt.
+`<count>` then sums both rebases.
 
 ### Development
 
