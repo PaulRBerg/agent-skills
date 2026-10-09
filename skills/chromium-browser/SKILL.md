@@ -69,8 +69,9 @@ selected replay when rendered inspection adds evidence.
 - Accept wrapper screenshot defaults. Request `format: "png"` when lossless output is required. PNG, `fullPage`, and
   `filePath` cannot bypass the wrapper's 1600-pixel width and height caps. Full-resolution output requires an authorized
   wrapper configuration change.
-- Keep action responses small. Set `includeSnapshot: false` on `click`, `fill`, and `navigate_page` unless the updated
-  state is immediately needed. A snapshot in an action response can add about 10 KB to the context.
+- Keep action responses small. Set `includeSnapshot: false` on `click` and `fill` unless the updated state is
+  immediately needed. Do not pass `includeSnapshot` to `navigate_page`, which does not accept it. A snapshot in an
+  action response can add about 10 KB to the context.
 - Bound every `evaluate_script` return value to a summary, a count, or at most about 50 items. Never return a whole DOM,
   HTML document, or large array.
 - Paginate and filter console, network, memory, and other high-volume results.
