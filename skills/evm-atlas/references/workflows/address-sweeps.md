@@ -51,7 +51,9 @@ disagreement is unknown, never a majority decision.
 
 For Etherscan, apply dated chain-access notes and endpoint gates from `references/explorers/etherscan-api.md`. With a
 Free or unknown plan, request at most 1,000 records per page. Under that plan condition, exhaust pagination at the fixed
-cutoff.
+cutoff. Use CLI 1.1.1 with an explicit numeric `--chain` and `--output json`. Prefer manual `--page` and `--offset`
+requests with fixed bounds and sorting. CLI `--all` can stop at its page bound with exit 0. It does not prove complete
+coverage. Retain exit codes and credential-safe stderr.
 
 Shared community quota exhaustion leaves coverage incomplete. Under that exhaustion, retain the reset time. Under that
 exhaustion, activate the indexed fallback or wait until reset. Address-filtered internal history remains available
@@ -100,6 +102,16 @@ Execute only the emitted requests through the selected provider's documented ada
 
 `complete: true` means bounded pagination for that channel is exhausted through the checkpoint. Preserve native provider
 row fields. Do not preclassify them.
+
+For the Etherscan CLI adapter, map each emitted account action to
+`etherscan --chain CHAIN_ID --output json account ACTION`. Use `--address ADDRESS` for `txlistinternal` and a positional
+address for the other history actions. Map `startblock`, `endblock`, `page`, `offset`, and `sort` to their matching
+flags. Keep the emitted values fixed except the advancing page. CLI history stdout is the row array directly, not
+`.result`. A validated manual `[]` can exhaust the bounded channel. Blank stdout, nonzero exit, malformed rows, or
+truncated pagination leave a gap.
+
+Checkpointed state still follows `provider-routing.md`. Never claim an API-envelope validator passed on unwrapped CLI
+output. When conformance requires the original envelope, record that direct API exception and retain the raw response.
 
 ## Evaluate Interface
 

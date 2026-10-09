@@ -1,5 +1,5 @@
 #!/bin/bash
-# etherscan-detect-plan.sh — Detect Etherscan API plan tier from $ETHERSCAN_API_KEY.
+# etherscan-detect-plan.sh — Detect the API plan through the official Etherscan CLI.
 #
 # Outputs key=value lines on stdout:
 #   plan=<free|lite|standard|advanced|professional|pro_plus|enterprise|unknown>
@@ -11,43 +11,38 @@
 #   pro_endpoints=<true|false|unknown>
 #   paid_chains=<true|false|unknown>
 #
-# Cache the result for the session — getapilimit itself consumes 1 credit, and
-# the paid-chain probe (when needed) consumes another.
+# Cache the result for the session. apilimit consumes 1 credit.
+# The paid-chain probe, when needed, consumes another credit.
 
 set -eu
 
-if [ -z "${ETHERSCAN_API_KEY:-}" ]; then
-  echo "Error: ETHERSCAN_API_KEY is not set" >&2
+if ! command -v etherscan >/dev/null 2>&1; then
+  echo "Error: etherscan CLI is not installed" >&2
   exit 1
 fi
 
-base="https://api.etherscan.io/v2/api"
-response=$(curl -fsS "$base?chainid=1&module=getapilimit&action=getapilimit&apikey=$ETHERSCAN_API_KEY")
-
-extract_num() {
-  printf '%s' "$1" | grep -o "\"$2\":[0-9]*" | head -1 | grep -o '[0-9]*'
-}
-extract_str() {
-  printf '%s' "$1" | grep -o "\"$2\":\"[^\"]*\"" | head -1 | sed 's/.*:"\([^"]*\)"/\1/'
-}
-
-status=$(extract_str "$response" "status")
-if [ "$status" != "1" ]; then
-  msg=$(extract_str "$response" "message")
-  res=$(extract_str "$response" "result")
-  echo "Error: getapilimit failed — message=$msg result=$res" >&2
+if ! response=$(etherscan apilimit --chain 1 --output json 2>/dev/null); then
+  echo "Error: etherscan apilimit failed. Check CLI credentials, quota, and network access" >&2
   exit 1
 fi
 
-credit_limit=$(extract_num "$response" "creditLimit")
-credits_used=$(extract_num "$response" "creditsUsed")
-credits_avail=$(extract_num "$response" "creditsAvailable")
-interval=$(extract_str "$response" "limitInterval")
-expiry=$(extract_str "$response" "intervalExpiryTimespan")
+if ! fields=$(printf '%s' "$response" | jq -ser '
+  def credit: type == "number" and . >= 0 and floor == .;
+  def interval: type == "string" and length > 0 and (test("[\u0000-\u001f\u007f]") | not);
+  select(length == 1) | .[0] | select(type == "object") |
+  select([.creditLimit, .creditsUsed, .creditsAvailable] | all(credit)) |
+  select([.limitInterval, .intervalExpiryTimespan] | all(interval)) |
+  [.creditLimit, .creditsUsed, .creditsAvailable, .limitInterval, .intervalExpiryTimespan] | @tsv
+' 2>/dev/null); then
+  echo "Error: etherscan apilimit returned invalid credit data" >&2
+  exit 1
+fi
+IFS=$'\t' read -r credit_limit credits_used credits_avail interval expiry <<EOF
+$fields
+EOF
 
-# Map creditLimit → plan. Free and Lite share the 100k daily credit; the
-# difference is paid-only-chain access. Standard+ implies PRO endpoints and
-# paid-chain access; no probe needed.
+# Free and Lite share the 100k daily credit limit.
+# Paid-chain access distinguishes them. Standard+ needs no probe.
 case "$credit_limit" in
   100000)  plan="free_or_lite";  pro_endpoints="false"; paid_chains="probe" ;;
   200000)  plan="standard";      pro_endpoints="true";  paid_chains="true"  ;;
@@ -63,19 +58,22 @@ case "$credit_limit" in
     ;;
 esac
 
-# Probe Base community access: success proves Lite; only an explicit Free-tier
-# access denial proves Free. Transport, quota, and other errors leave it unknown.
-# PRO endpoints stay false for either possible plan (Standard plan and up).
+# Probe Base access. Success proves Lite. An explicit Free-tier denial proves Free.
+# Other failures leave access unknown. Both possible plans lack PRO endpoints.
 if [ "$plan" = "free_or_lite" ]; then
   plan="unknown"
   paid_chains="unknown"
-  if probe=$(curl -fsS "$base?chainid=8453&module=account&action=balance&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&tag=latest&apikey=$ETHERSCAN_API_KEY" 2>/dev/null); then
-    probe_status=$(extract_str "$probe" "status")
-    probe_result=$(extract_str "$probe" "result")
-    case "$probe_status:$probe_result" in
-      1:*) plan="lite"; paid_chains="true" ;;
-      '0:Free API access is not supported for this chain.'*) plan="free"; paid_chains="false" ;;
-    esac
+  probe_error=$(mktemp)
+  trap 'rm -f "$probe_error"' EXIT
+  if probe=$(etherscan account balance --chain 8453 --output json \
+    --address 0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe --tag latest 2>"$probe_error"); then
+    if printf '%s' "$probe" | jq -se 'length == 1 and (.[0] | type == "string" and test("^[0-9]+$"))' >/dev/null 2>&1; then
+      plan="lite"
+      paid_chains="true"
+    fi
+  elif grep -qF 'Free API access is not supported for this chain.' "$probe_error"; then
+    plan="free"
+    paid_chains="false"
   fi
   if [ "$plan" = "unknown" ]; then
     echo "Warning: paid-chain probe inconclusive; plan and paid-chain access remain unknown" >&2

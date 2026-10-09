@@ -56,6 +56,10 @@ target chains.
 - Never echo, interpolate, or log API-key values (`ETHERSCAN_API_KEY`, `BLOCKSCOUT_API_KEY`, RPC keys). Check presence
   without printing values: `[ -n "$ETHERSCAN_API_KEY" ] && echo set || echo unset`. Never put `${VAR:-...}` or
   `${VAR:+...}` expansions in printed output.
+- For Etherscan reads, use the official `etherscan` CLI with the resolved numeric `--chain` and `--output json`.
+  Existing CLI authentication can use an environment key or saved login. Do not inspect credentials, pass `--api-key`,
+  or run `whoami`, `config`, or `login`. CLI availability does not change provider priority or plan gates. Never call
+  `proxy eth_sendRawTransaction` or submit contract verification through this read-only skill.
 - Keyless Blockscout is sunset (July 2026). Hosted `*.blockscout.com` instance subdomains also rate-limit keyless
   traffic. Route every Blockscout-hosted chain through the keyed `https://api.blockscout.com/{chain_id}` gateway. See
   `references/explorers/blockscout-endpoints.md`.
@@ -92,8 +96,9 @@ target chains.
    full raw receipt/logs/decoded input, or funding origin, resolve the chain with `scripts/chain-lookup.sh`. Then read
    `references/workflows/provider-routing.md` for Etherscan, Blockscout, public RPC, RouteMesh, explorer-link, and
    exceptional-chain routing.
-7. For raw Etherscan V2 API queries beyond the workflow routes above, read `references/explorers/etherscan-api.md`. Its
-   ENS forward-resolution route supports Ethereum mainnet onchain names. Apply its cache and resolver limits.
+7. For Etherscan CLI reads beyond the workflow routes above, read `references/explorers/etherscan-api.md`. It defines
+   CLI 1.1.1 output, manual paging, plan gates, and direct API exceptions. ENS forward resolution remains a direct API
+   exception for Ethereum mainnet onchain names. Apply its cache and resolver limits.
 8. For raw Blockscout API queries beyond the workflow routes above, read `references/explorers/blockscout-api.md`.
 9. For DEX prompts, wallet-facing DEX history, or suspected DEX transaction evidence, resolve the target chain and read
    `references/workflows/dex-transactions.md`. Load only the matching protocol-family reference:

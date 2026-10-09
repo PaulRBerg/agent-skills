@@ -14,10 +14,10 @@ Query target-mainnet data that Blockscout indexes. Blockscout exposes three comp
 This skill covers read-only account/address queries: native balance, ERC-20/721/1155 holdings and transfers, transaction
 history, and first-funding tracing.
 
-**Relationship to Etherscan (`references/explorers/etherscan-api.md`):** Same problem space, different explorer. Prefer
-Blockscout when the target chain is **not** on Etherscan, when a paid Etherscan target chain needs free-tier data, when
-you want full token holdings on the free tier, or when the user names Blockscout/Chainscout. The two surfaces are
-interchangeable for native-balance and transfer queries.
+**Relationship to Etherscan (`references/explorers/etherscan-api.md`):** Prefer Blockscout on covered overlaps,
+especially when Etherscan access gates or holdings/pagination limits reduce completeness. Use Etherscan's official CLI
+when it is primary or a concrete fallback trigger applies. The Etherscan CLI does not target Blockscout. Keep the
+Blockscout API routes below. Preserve each provider's response shape, coverage, and checkpoint rules.
 
 ## Prerequisites
 
@@ -233,8 +233,8 @@ newest-first.
 
 ## Etherscan-Compatible Layer
 
-For porting existing Etherscan V2 code (`references/explorers/etherscan-api.md`) with minimal changes, use the
-**Etherscan-V2 alias**. It returns the familiar `{status,message,result}` shape:
+For existing direct Etherscan API integrations, use the **Etherscan-V2 alias**. It returns `{status,message,result}`.
+This is a Blockscout API route, not an Etherscan CLI command. Do not apply the CLI's unwrapped-output rules here:
 
 ```bash
 curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=balance&address=0xADDR&apikey=$BLOCKSCOUT_API_KEY"
@@ -271,14 +271,30 @@ Full endpoint catalog: `references/explorers/blockscout-endpoints.md`.
 Blockscout has **no `fundedby` equivalent**. Use the compat `txlist`/`txlistinternal` with ascending sort (the native v2
 surface only sorts newest-first, which is awkward for "earliest"):
 
+Set `checkpoint_number` to the verified cutoff block before these first-page requests:
+
 ```bash
-curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=txlist&address=0xADDR&sort=asc&page=1&offset=10&apikey=$BLOCKSCOUT_API_KEY"
-curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=txlistinternal&address=0xADDR&sort=asc&page=1&offset=10&apikey=$BLOCKSCOUT_API_KEY"
+curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=txlist&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&startblock=0&endblock=$checkpoint_number&sort=asc&page=1&offset=10&apikey=$BLOCKSCOUT_API_KEY"
+curl -s "https://api.blockscout.com/v2/api?chain_id=1&module=account&action=txlistinternal&address=0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe&startblock=0&endblock=$checkpoint_number&sort=asc&page=1&offset=10&apikey=$BLOCKSCOUT_API_KEY"
 ```
 
-Pick the earliest entry where `to == address` (lowercased), `value > 0`, and (normal txs) `isError == "0"`. The funding
-tx is the lower `blockNumber` across both lists. Check both because addresses are often funded internally (CEX
-router/proxy withdrawals). Genesis-allocated balances appear in neither list. Report this explicitly.
+These are first-page probes. Fix `startblock=0` and `endblock` to the verified checkpoint on every request. Advance
+`page` with the same bounds, offset, and ascending sort. Two channels do not imply two calls.
+
+For each channel, stop at its first qualifying row only after covering every preceding row and proving same-block
+transaction/trace order. If that order is unproven, cover the entire candidate block and select its earliest qualifying
+row. If no candidate appears, exhaust that channel through the cutoff. Both complete ranges are required only to prove
+no funding.
+
+Require an incoming recipient matching the address, positive native `value`, and successful execution for both normal
+and internal rows. Inspect `contractAddress` for creation rows with empty `to`. Require `isError == "0"` where the
+compat row supplies it. For missing or ambiguous fields, prove normal success from the receipt and internal success from
+trace evidence. Parent receipt success alone does not prove an internal call succeeded.
+
+Compare qualifying rows by block and transaction index. Resolve an internal row's parent transaction index from its
+receipt when absent. Preserve `traceId` within the transaction. Report unresolved ties instead of sorting by hash. Check
+both channels because contract calls can fund an address. Genesis allocations appear in neither list. A balance without
+funding rows alone does not prove a genesis allocation.
 
 ## Per-Instance Exception
 

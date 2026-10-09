@@ -13,6 +13,7 @@ setup() {
   export HOME="$BATS_TEST_TMPDIR/home"
   export MOCK_BIN="$BATS_TEST_TMPDIR/bin"
   export MOCK_CURL_LOG="$BATS_TEST_TMPDIR/curl.log"
+  export MOCK_ETHERSCAN_LOG="$BATS_TEST_TMPDIR/etherscan.log"
   mkdir -p "$HOME" "$MOCK_BIN"
   export PATH="$MOCK_BIN:/usr/bin:/bin"
 
@@ -25,80 +26,166 @@ setup() {
     'fi' \
     'args="$*"' \
     'case "$args" in' \
-    '  *getapilimit*) printf "%s" "${MOCK_API_LIMIT_RESPONSE:-}" ;;' \
-    '  *chainid=8453*) printf "%s" "${MOCK_PAID_CHAIN_RESPONSE:-}"; exit "${MOCK_PAID_CHAIN_EXIT:-0}" ;;' \
     '  *chains.blockscout.com/api/chains/*) printf "%s" "${MOCK_CHAIN_RESPONSE:-}" ;;' \
     '  *api.blockscout.com/1/api/v2/addresses/*) printf "%b" "${MOCK_BLOCKSCOUT_HEADERS:-}" ;;' \
     '  *) exit 99 ;;' \
     'esac' > "$MOCK_BIN/curl"
   chmod +x "$MOCK_BIN/curl"
+
+  cat > "$MOCK_BIN/etherscan" <<'EOF'
+#!/bin/bash
+set -eu
+printf '%s\n' "$*" >> "$MOCK_ETHERSCAN_LOG"
+case "$*" in
+  'apilimit --chain 1 --output json')
+    printf '%s' "${MOCK_API_LIMIT_RESPONSE:-}"
+    printf '%s' "${MOCK_API_LIMIT_ERROR:-}" >&2
+    exit "${MOCK_API_LIMIT_EXIT:-0}"
+    ;;
+  'account balance --chain 8453 --output json --address 0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe --tag latest')
+    printf '%s' "${MOCK_PAID_CHAIN_RESPONSE:-}"
+    printf '%s' "${MOCK_PAID_CHAIN_ERROR:-}" >&2
+    exit "${MOCK_PAID_CHAIN_EXIT:-0}"
+    ;;
+  *) exit 99 ;;
+esac
+EOF
+  chmod +x "$MOCK_BIN/etherscan"
+  export MOCK_API_LIMIT_RESPONSE='{"creditLimit":100000,"creditsUsed":3,"creditsAvailable":99997,"limitInterval":"daily","intervalExpiryTimespan":"23:59:59"}'
 }
 
-@test "Etherscan rejects a missing API key" {
-  run env -u ETHERSCAN_API_KEY "$ETHERSCAN"
+@test "Etherscan rejects an absent CLI without calling curl" {
+  rm "$MOCK_BIN/etherscan"
+  run "$ETHERSCAN"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"ETHERSCAN_API_KEY is not set"* ]]
+  [ "$output" = "Error: etherscan CLI is not installed" ]
+  [ ! -e "$MOCK_CURL_LOG" ]
 }
 
-@test "Etherscan maps Standard credits without a paid-chain probe" {
-  export ETHERSCAN_API_KEY="test-key"
-  export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":200000,"creditsUsed":12,"creditsAvailable":199988,"limitInterval":"daily","intervalExpiryTimespan":"12:00:00"}'
+@test "Etherscan maps unwrapped pretty Standard credits without an environment key or probe" {
+  export MOCK_API_LIMIT_RESPONSE='{
+    "creditLimit": 200000,
+    "creditsUsed": 12,
+    "creditsAvailable": 199988,
+    "limitInterval": "daily",
+    "intervalExpiryTimespan": "12:00:00"
+  }'
 
-  run "$ETHERSCAN"
+  run env -u ETHERSCAN_API_KEY "$ETHERSCAN"
 
   [ "$status" -eq 0 ]
   [ "$output" = $'plan=standard\ncredit_limit=200000\ncredits_used=12\ncredits_available=199988\nlimit_interval=daily\ninterval_expiry=12:00:00\npro_endpoints=true\npaid_chains=true' ]
-  [ "$(wc -l < "$MOCK_CURL_LOG" | tr -d ' ')" -eq 1 ]
+  [ "$(<"$MOCK_ETHERSCAN_LOG")" = 'apilimit --chain 1 --output json' ]
+  [ ! -e "$MOCK_CURL_LOG" ]
 }
 
-@test "Etherscan distinguishes Free from Lite with the paid-chain probe" {
-  export ETHERSCAN_API_KEY="test-key"
-  export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":100000,"creditsUsed":3,"creditsAvailable":99997,"limitInterval":"daily","intervalExpiryTimespan":"23:59:59"}'
-  export MOCK_PAID_CHAIN_RESPONSE='{"status":"0","message":"NOTOK","result":"Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage."}'
+@test "Etherscan preserves the credit plan mapping without paid-chain probes" {
+  local limit expected
+  for mapping in '500000 advanced' '1000000 professional' '1500000 pro_plus' '2000000 enterprise' '123456 unknown'; do
+    read -r limit expected <<< "$mapping"
+    export MOCK_API_LIMIT_RESPONSE="{\"creditLimit\":$limit,\"creditsUsed\":1,\"creditsAvailable\":1,\"limitInterval\":\"daily\",\"intervalExpiryTimespan\":\"00:00:00\"}"
+    run "$ETHERSCAN"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == "plan=$expected"$'\n'* ]]
+    if [ "$expected" = unknown ]; then
+      [[ "$output" == *"pro_endpoints=unknown"* ]]
+      [[ "$output" == *"paid_chains=unknown"* ]]
+    else
+      [[ "$output" == *"pro_endpoints=true"* ]]
+      [[ "$output" == *"paid_chains=true"* ]]
+    fi
+  done
+  [ "$(wc -l < "$MOCK_ETHERSCAN_LOG" | tr -d ' ')" -eq 5 ]
+}
+
+@test "Etherscan distinguishes Free from Lite through an explicit CLI denial" {
+  export MOCK_PAID_CHAIN_EXIT=1
+  export MOCK_PAID_CHAIN_ERROR='Error: API error: Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage.'
 
   run "$ETHERSCAN"
 
   [ "$status" -eq 0 ]
   [[ "$output" == *$'plan=free\n'* ]]
   [[ "$output" == *"paid_chains=false"* ]]
-  [ "$(wc -l < "$MOCK_CURL_LOG" | tr -d ' ')" -eq 2 ]
+  [ "$(wc -l < "$MOCK_ETHERSCAN_LOG" | tr -d ' ')" -eq 2 ]
 
-  export MOCK_PAID_CHAIN_RESPONSE='{"status":"1","message":"OK","result":"0"}'
+  export MOCK_PAID_CHAIN_EXIT=0
+  export MOCK_PAID_CHAIN_ERROR=''
+  export MOCK_PAID_CHAIN_RESPONSE='"0"'
   run "$ETHERSCAN"
 
   [ "$status" -eq 0 ]
   [[ "$output" == *$'plan=lite\n'* ]]
   [[ "$output" == *"pro_endpoints=false"* ]]
   [[ "$output" == *"paid_chains=true"* ]]
+  [ ! -e "$MOCK_CURL_LOG" ]
 }
 
-@test "Etherscan reports unknown and failed API-limit responses" {
-  export ETHERSCAN_API_KEY="test-key"
-  export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":123456,"creditsUsed":1,"creditsAvailable":123455,"limitInterval":"daily","intervalExpiryTimespan":"00:00:00"}'
+@test "Etherscan rejects malformed, missing, and invalid API-limit fields" {
+  for response in \
+    'not-json' \
+    '{}' \
+    '{"creditLimit":200000,"creditsUsed":12,"creditsAvailable":199988,"limitInterval":"daily"}' \
+    '{"creditLimit":"200000","creditsUsed":12,"creditsAvailable":199988,"limitInterval":"daily","intervalExpiryTimespan":"12:00:00"}' \
+    '{"creditLimit":200000,"creditsUsed":-1,"creditsAvailable":199988,"limitInterval":"daily","intervalExpiryTimespan":"12:00:00"}' \
+    '{"creditLimit":200000,"creditsUsed":1.5,"creditsAvailable":199988,"limitInterval":"daily","intervalExpiryTimespan":"12:00:00"}' \
+    '{"creditLimit":200000,"creditsUsed":12,"creditsAvailable":199988,"limitInterval":"daily\nplan=free","intervalExpiryTimespan":"12:00:00"}' \
+    "$MOCK_API_LIMIT_RESPONSE $MOCK_API_LIMIT_RESPONSE"; do
+    export MOCK_API_LIMIT_RESPONSE="$response"
+    run "$ETHERSCAN"
 
-  run "$ETHERSCAN"
+    [ "$status" -eq 1 ]
+    [ "$output" = "Error: etherscan apilimit returned invalid credit data" ]
+  done
+}
 
-  [ "$status" -eq 0 ]
-  [[ "$output" == *$'plan=unknown\n'* ]]
-  [[ "$output" == *"pro_endpoints=unknown"* ]]
+@test "Etherscan reports CLI authentication and request failures without leaking credentials" {
+  export ETHERSCAN_API_KEY='test-secret-key'
+  export MOCK_API_LIMIT_EXIT=1
+  export MOCK_API_LIMIT_ERROR='Error: Get "https://api.etherscan.io/v2/api?apikey=test-secret-key": network failure'
 
-  export MOCK_API_LIMIT_RESPONSE='{"status":"0","message":"NOTOK","result":"invalid key"}'
   run "$ETHERSCAN"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"getapilimit failed — message=NOTOK result=invalid key"* ]]
+  [ "$output" = "Error: etherscan apilimit failed. Check CLI credentials, quota, and network access" ]
+  [[ "$(<"$MOCK_ETHERSCAN_LOG")" != *"test-secret-key"* ]]
+  [[ "$(<"$MOCK_ETHERSCAN_LOG")" != *"--api-key"* ]]
+  [ "$(wc -l < "$MOCK_ETHERSCAN_LOG" | tr -d ' ')" -eq 1 ]
+
+  export MOCK_API_LIMIT_RESPONSE='{"creditLimit":200000,"creditsUsed":12,"creditsAvailable":199988,"limitInterval":"daily","intervalExpiryTimespan":"12:00:00"}'
+  run env -u ETHERSCAN_API_KEY "$ETHERSCAN"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Check CLI credentials"* ]]
+  [[ "$output" != *"plan="* ]]
 }
 
-@test "Etherscan does not infer Free from quota, rate, or malformed probe responses" {
-  export ETHERSCAN_API_KEY="test-key"
-  export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":100000,"creditsUsed":3,"creditsAvailable":99997,"limitInterval":"daily","intervalExpiryTimespan":"23:59:59"}'
+@test "Etherscan does not infer Free from quota, rate, credential, or transport failures" {
+  export ETHERSCAN_API_KEY='test-secret-key'
+  export MOCK_PAID_CHAIN_EXIT=1
+  for error in \
+    'Error: Community Free API limit reached. Resets 2026-10-06 00:00:00 UTC.' \
+    'Error: Max rate limit reached, please use API Key for higher rate limit' \
+    'Error: Invalid API Key' \
+    'Error: Get "https://api.etherscan.io/v2/api?apikey=test-secret-key": network failure'; do
+    export MOCK_PAID_CHAIN_ERROR="$error"
+    run "$ETHERSCAN"
 
-  for response in \
-    '{"status":"0","message":"NOTOK","result":"Community Free API limit reached. Resets 2026-10-06 00:00:00 UTC."}' \
-    '{"status":"0","message":"NOTOK","result":"Max rate limit reached, please use API Key for higher rate limit"}' \
-    '{"status":"0","message":"NOTOK","result":"Invalid API Key"}' \
-    'not-json'; do
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'plan=unknown\n'* ]]
+    [[ "$output" == *"paid_chains=unknown"* ]]
+    [[ "$output" == *"pro_endpoints=false"* ]]
+    [[ "$output" == *"probe inconclusive"* ]]
+    [[ "$output" != *"test-secret-key"* ]]
+  done
+  [[ "$(<"$MOCK_ETHERSCAN_LOG")" != *"test-secret-key"* ]]
+  [[ "$(<"$MOCK_ETHERSCAN_LOG")" != *"--api-key"* ]]
+}
+
+@test "Etherscan keeps malformed and non-quantity successful probes unknown" {
+  for response in 'not-json' '0' '{}' '""' '"NOTOK"' '"0" "1"' '"Free API access is not supported for this chain."'; do
     export MOCK_PAID_CHAIN_RESPONSE="$response"
     run "$ETHERSCAN"
 
@@ -110,19 +197,17 @@ setup() {
   done
 }
 
-@test "Etherscan preserves unknown after a failed probe transport even with a partial success body" {
-  export ETHERSCAN_API_KEY="test-key"
-  export MOCK_API_LIMIT_RESPONSE='{"status":"1","creditLimit":100000,"creditsUsed":3,"creditsAvailable":99997,"limitInterval":"daily","intervalExpiryTimespan":"23:59:59"}'
-  export MOCK_PAID_CHAIN_RESPONSE='{"status":"1","message":"OK","result":"0"}'
-  export MOCK_PAID_CHAIN_EXIT=22
+@test "Etherscan discards partial success and stdout denial after a failed probe" {
+  export MOCK_PAID_CHAIN_EXIT=1
+  for response in '"0"' 'Free API access is not supported for this chain.'; do
+    export MOCK_PAID_CHAIN_RESPONSE="$response"
+    run "$ETHERSCAN"
 
-  run "$ETHERSCAN"
-
-  [ "$status" -eq 0 ]
-  [[ "$output" == *$'plan=unknown\n'* ]]
-  [[ "$output" == *"paid_chains=unknown"* ]]
-  [[ "$output" == *"pro_endpoints=false"* ]]
-  [[ "$output" != *"test-key"* ]]
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'plan=unknown\n'* ]]
+    [[ "$output" == *"paid_chains=unknown"* ]]
+    [[ "$output" == *"pro_endpoints=false"* ]]
+  done
 }
 
 @test "Blockscout rejects a missing API key" {

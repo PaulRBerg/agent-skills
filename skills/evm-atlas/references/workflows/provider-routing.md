@@ -21,8 +21,9 @@ It is not a globally canonical source. Keep a second provider only as a fallback
 1. On covered overlaps, use Blockscout. Prefer it especially when the detected Etherscan plan cannot serve the chain or
    its pagination/rate/PRO limits reduce sweep completeness. Also prefer it when Blockscout's native holdings/counters
    avoid those limits.
-2. Otherwise, use Etherscan V2 when the chain is in `references/generated/etherscan-chains.md`, the detected plan can
-   query it after applying dated access notes, and the needed actions accept the fixed cutoff.
+2. Otherwise, use Etherscan through the official `etherscan` CLI when the chain is in
+   `references/generated/etherscan-chains.md`, the detected plan can query it after dated access notes, and the needed
+   actions accept the fixed cutoff.
 3. Use the other indexed provider as fallback when the authoritative provider is unavailable, malformed, behind the
    cutoff, rate/plan limited, or missing a required action. A valid empty response is a completed negative, not a
    fallback trigger. Move the affected result to the fallback. Do not silently combine two negative responses into one
@@ -41,7 +42,15 @@ Do not infer API support or UI availability from an Etherscan-shaped explorer UR
 API access on paid plans after Gnosisscan's UI closure. Use its listed Blockscout instance for browser evidence and
 explorer links.
 
-For raw Etherscan V2 endpoint parameters, plan gating, and error handling, see `references/explorers/etherscan-api.md`.
+For Etherscan CLI 1.1.1 commands, plan gating, manual pagination, output validation, and direct API exceptions, see
+`references/explorers/etherscan-api.md`. Pass the resolved numeric `--chain` and `--output json`. CLI stdout is the
+unwrapped result, not an API envelope. Capture exit code and stderr. Blank stdout or a failed command does not prove
+empty history. A bounded `--all` result can exit 0 while truncated. Prefer explicit pages for complete evidence.
+
+Use existing CLI authentication without inspecting its saved key. Do not require an environment key for CLI reads. Never
+pass `--api-key`, call `whoami`, or change login/configuration. The CLI's static chain metadata does not override the
+target registry or dated access gates.
+
 For raw Blockscout endpoint parameters, plan gating, and error handling, see `references/explorers/blockscout-api.md`.
 
 ## Checkpoints and State
@@ -60,6 +69,12 @@ into the same result. If no route can establish the checkpoint, mark the result 
 Batch `eth_getTransactionCount` and `eth_getBalance` with the EIP-1898 `{ blockHash, requireCanonical: true }` selector
 before indexed history. If a provider rejects that selector, a numeric fallback requires matching block-number/hash
 headers from the same endpoint immediately before and after the batch. Otherwise, try the next RPC or report unknown.
+
+Etherscan CLI 1.1.1 `--tag` accepts a hex height, not an EIP-1898 object. Its numeric state reads still require the
+same-route header checks. Use `proxy eth_getBlockByNumber --tag CHECKPOINT_HEX --boolean false` for those headers. CLI
+output alone does not establish hash binding or finality. Holdings endpoints without a block selector are separately
+timed evidence, not checkpointed history.
+
 The target row's `accountActivityModel` controls whether zero nonce plus zero balance may satisfy a profile's
 native-history shortcut:
 
@@ -289,10 +304,16 @@ history or exact historical account state.
 ## Exceptional History
 
 For HyperEVM (`999`) exact historical native-balance and nonce reads, do not use public JSON-RPC or RouteMesh. Those
-routes can silently serve latest state for historical selectors. At the verified checkpoint, use the Etherscan V2
-`account` module's `balancehistory` action for the native balance. For the nonce, use the `proxy` module's
-`eth_getTransactionCount` action with the checkpoint's hex block tag. If an Etherscan route is unavailable or
-plan-limited, report that fact as unknown. Do not fall back to RPC.
+routes can silently serve latest state for historical selectors. At the verified checkpoint, use:
+
+```sh
+etherscan --chain 999 --output json account balancehistory ADDRESS --blockno CHECKPOINT_NUMBER
+etherscan --chain 999 --output json proxy eth_getTransactionCount ADDRESS --tag CHECKPOINT_HEX
+```
+
+Require `pro_endpoints=true` for `balancehistory`. Preserve the exact checkpoint and same-route header checks. If the
+CLI cannot serve a required field, use only the documented Etherscan direct API exception. If the Etherscan route is
+unavailable or plan-limited, report unknown. Do not fall back to RPC for these historical state facts.
 
 For Fantom Opera (`250`) account history, do not use the unsafe FTMScout route returned by Chainscout. Read
 `references/explorers/fantom-opera.md`. Preserve its partial-index boundary. GraphQL rows can provide positive evidence,
