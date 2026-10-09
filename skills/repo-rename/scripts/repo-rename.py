@@ -1,5 +1,5 @@
 #!/usr/bin/env -S uv run --script
-"""Preview and apply a constrained GitHub repository rename."""
+"""Preview and apply a constrained GitHub or local-only repository rename."""
 
 from __future__ import annotations
 
@@ -120,24 +120,32 @@ def preflight(new_name: str, *, include_local_state: bool = False) -> dict[str, 
     if status:
         raise RenameError(f"working tree is not clean:\n{status}")
 
-    repo = json.loads(run("gh", "repo", "view", "--json", "nameWithOwner,sshUrl,url", cwd=old_root))
-    old_repo = repo["nameWithOwner"]
-    owner, repo_name = old_repo.split("/", 1)
     old_name = old_root.name
-    if repo_name != old_name:
-        raise RenameError(f"repo/folder mismatch: {repo_name} vs {old_name}")
-
     new_root = old_root.parent / new_name
     if new_root.exists():
         raise RenameError(f"target folder already exists: {new_root}")
 
-    remote = run("git", "remote", "get-url", "origin", cwd=old_root)
-    if remote.startswith("git@github.com:"):
-        new_remote = f"git@github.com:{owner}/{new_name}.git"
-    elif remote.startswith("https://github.com/"):
-        new_remote = f"https://github.com/{owner}/{new_name}.git"
+    # A repository without any remote has no GitHub identity; rename only local state.
+    local_only = not run("git", "remote", cwd=old_root)
+    if local_only:
+        owner = old_repo = new_repo = remote = new_remote = None
+        token = f"local:{old_name}->{new_name}"
     else:
-        new_remote = f"git@github.com:{owner}/{new_name}.git"
+        repo = json.loads(run("gh", "repo", "view", "--json", "nameWithOwner,sshUrl,url", cwd=old_root))
+        old_repo = repo["nameWithOwner"]
+        owner, repo_name = old_repo.split("/", 1)
+        if repo_name != old_name:
+            raise RenameError(f"repo/folder mismatch: {repo_name} vs {old_name}")
+        new_repo = f"{owner}/{new_name}"
+        token = f"{old_repo}->{new_repo}"
+
+        remote = run("git", "remote", "get-url", "origin", cwd=old_root)
+        if remote.startswith("git@github.com:"):
+            new_remote = f"git@github.com:{owner}/{new_name}.git"
+        elif remote.startswith("https://github.com/"):
+            new_remote = f"https://github.com/{owner}/{new_name}.git"
+        else:
+            new_remote = f"git@github.com:{owner}/{new_name}.git"
 
     claude_projects, _ = continuity_paths()
     old_claude = claude_projects / claude_project_name(old_root)
@@ -146,7 +154,6 @@ def preflight(new_name: str, *, include_local_state: bool = False) -> dict[str, 
         raise RenameError(f"target Claude project directory exists: {new_claude}")
 
     replacements = collect_replacements(old_root, new_root, old_name, new_name, include_local_state=include_local_state)
-    token = f"{old_repo}->{owner}/{new_name}"
     return {
         "old_root": old_root,
         "new_root": new_root,
@@ -154,7 +161,8 @@ def preflight(new_name: str, *, include_local_state: bool = False) -> dict[str, 
         "new_name": new_name,
         "owner": owner,
         "old_repo": old_repo,
-        "new_repo": f"{owner}/{new_name}",
+        "new_repo": new_repo,
+        "local_only": local_only,
         "old_remote": remote,
         "new_remote": new_remote,
         "old_claude": old_claude,
@@ -169,8 +177,13 @@ def preflight(new_name: str, *, include_local_state: bool = False) -> dict[str, 
 def preview(plan: dict[str, object]) -> dict[str, object]:
     replacements = plan["replacements"]
     assert isinstance(replacements, list)
+    remote_mutations = [] if plan["local_only"] else [
+        {"kind": "github-rename", "command": f"gh repo rename {plan['new_name']} --yes"},
+        {"kind": "origin", "from": plan["old_remote"], "to": plan["new_remote"]},
+    ]
     return {
         "mode": "dry-run",
+        "local_only": plan["local_only"],
         "old_repo": plan["old_repo"],
         "new_repo": plan["new_repo"],
         "old_root": str(plan["old_root"]),
@@ -178,8 +191,7 @@ def preview(plan: dict[str, object]) -> dict[str, object]:
         "confirmation_token": plan["confirm"],
         "include_local_state": plan["include_local_state"],
         "mutations": [
-            {"kind": "github-rename", "command": f"gh repo rename {plan['new_name']} --yes"},
-            {"kind": "origin", "from": plan["old_remote"], "to": plan["new_remote"]},
+            *remote_mutations,
             {"kind": "folder", "from": str(plan["old_root"]), "to": str(plan["new_root"])},
             {
                 "kind": "claude-project-folder",
@@ -236,10 +248,11 @@ def apply(plan: dict[str, object]) -> dict[str, object]:
             shutil.copy2(item.path, backup)
             backups[item.path] = backup
 
-        run("gh", "repo", "rename", str(plan["new_name"]), "--yes", cwd=old_root)
-        github_done = True
-        run("git", "remote", "set-url", "origin", str(plan["new_remote"]), cwd=old_root)
-        remote_done = True
+        if not plan["local_only"]:
+            run("gh", "repo", "rename", str(plan["new_name"]), "--yes", cwd=old_root)
+            github_done = True
+            run("git", "remote", "set-url", "origin", str(plan["new_remote"]), cwd=old_root)
+            remote_done = True
         old_root.rename(new_root)
         repo_moved = True
         if plan["move_claude"]:

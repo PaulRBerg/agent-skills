@@ -17,6 +17,9 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 ## Scope
 
 - Rename the current GitHub repository, matching local folder, and `origin` URL.
+- If the repository has no Git remotes, rename only local state: the folder, continuity references, and repository
+  content. The helper then skips the GitHub rename and the `origin` update. A repository with any remote still requires
+  a valid GitHub context.
 - Only when the repository has an active Claude Code or Codex transcript, update literal old paths in
   `~/.claude/projects`, `~/claude/projects` when present, `~/.codex/sessions`, and `~/.codex/config.toml`. This
   continuity update does not apply to repos with no active transcripts.
@@ -47,18 +50,20 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
    ```
 
    The helper requires a clean worktree, matching GitHub repo/folder names, a free target path, and valid GitHub
-   context. It prints the old/new repo and paths, exact confirmation token, external commands, directory moves, every
-   replacement file, occurrence counts, and rollback coverage.
+   context. For a repository with no remotes, it requires only a clean worktree and a free target path. It reports
+   `"local_only": true` and a `local:<old>-><new>` confirmation token. It prints the old/new repo and paths, exact
+   confirmation token, external commands, directory moves, every replacement file, occurrence counts, and rollback
+   coverage.
 
 3. If `--dry-run` was requested, return the preview and stop. A successful dry run must not change the GitHub repo,
    remote, folder, config, transcripts, or repository files.
 
 4. Otherwise present the complete preview and require explicit confirmation in a subsequent user message. Explain that
    the confirmation authorizes the GitHub rename, local folder move, Claude project-folder move when enabled, origin
-   update, and every listed continuity/repository replacement. Lead with `### ⚠️ Rename preview — no changes made`. Show
-   GitHub, folder, origin, replacement counts, and rollback coverage in compact tables, then the exhaustive file/count
-   list. Put the exact confirmation token alone in code formatting. If any preview fact changes, regenerate it and ask
-   again.
+   update, and every listed continuity/repository replacement. For a local-only preview, state that no GitHub or
+   `origin` change occurs. Lead with `### ⚠️ Rename preview — no changes made`. Show GitHub, folder, origin, replacement
+   counts, and rollback coverage in compact tables, then the exhaustive file/count list. Put the exact confirmation
+   token alone in code formatting. If any preview fact changes, regenerate it and ask again.
 
 5. After confirmation, pass the preview's exact token:
 

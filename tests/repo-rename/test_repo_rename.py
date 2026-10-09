@@ -121,6 +121,21 @@ class RepoRenameTests(unittest.TestCase):
         for directory in (".venv", ".cache"):
             self.assertEqual((renamed / directory / "generated.txt").read_text(), "old-repo\n")
 
+    def test_local_only_repo_skips_github_and_origin(self) -> None:
+        subprocess.run(["git", "remote", "remove", "origin"], cwd=self.repo, check=True)
+        result = self.run_script("new-repo", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertTrue(report["local_only"])
+        self.assertEqual(report["confirmation_token"], "local:old-repo->new-repo")
+        kinds = [mutation["kind"] for mutation in report["mutations"]]
+        self.assertNotIn("github-rename", kinds)
+        self.assertNotIn("origin", kinds)
+        result = self.run_script("new-repo", "--apply", "--confirm", "local:old-repo->new-repo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / "new-repo" / "README.md").read_text(), "new-repo\n")
+        self.assertFalse((Path(self.env["HOME"]) / "gh-writes").exists())
+
     def test_continuity_requires_active_transcript_and_only_replaces_paths(self) -> None:
         codex = self.root / "custom-codex"
         codex.mkdir()
