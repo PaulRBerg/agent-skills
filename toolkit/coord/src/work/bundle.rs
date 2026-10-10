@@ -6,8 +6,8 @@ use std::{
 };
 
 use super::{
-    RepoEvidence, WorkCoordinator, blockers, evidence_for, existing_claim_scopes, expansion_blockers,
-    foreign_residuals, gather_evidence, merge_baselines,
+    DIRT_HOLD_SECONDS, RepoEvidence, WorkCoordinator, blockers, evidence_for, existing_claim_scopes,
+    expansion_blockers, foreign_residuals, gather_evidence, merge_baselines,
     messages::{MAX_MESSAGE_CHARS, conflict_detail, notify_contenders},
     output_path, partition_dirty, path_text, request_paths, request_work_overlap, require_ordinary_item,
     same_claim_vector, same_work_vectors, soft, unattributed_dirty, validate_claim_vector, work_in_repo, work_paths,
@@ -44,6 +44,8 @@ pub(crate) struct ClaimEvaluation {
     pub(crate) reason: Option<String>,
     fresh: Vec<String>,
     advisory: Vec<String>,
+    /// Seconds until the slowest `fresh` path settles.
+    settles_in: f64,
     pub(crate) contenders: Vec<WorkRow>,
     pub(crate) residuals: Vec<ResidualOwnerRow>,
 }
@@ -477,6 +479,7 @@ fn evaluate_claims(
             if !fresh.is_empty() {
                 return ClaimEvaluation {
                     reason: Some("dirty".to_owned()),
+                    settles_in: settle_seconds(&fresh, repo_observations, current),
                     fresh,
                     advisory,
                     ..ClaimEvaluation::default()
@@ -526,6 +529,19 @@ fn evaluate_claims(
             ClaimEvaluation { advisory, ..ClaimEvaluation::default() }
         })
         .collect()
+}
+
+/// The hold runs from ai-coord's first observation of each blob, not from when the file was written.
+fn settle_seconds(fresh: &[String], observations: &[DirtObservationRow], current: f64) -> f64 {
+    fresh
+        .iter()
+        .map(|path| {
+            observations
+                .iter()
+                .find(|row| row.path == *path)
+                .map_or(DIRT_HOLD_SECONDS, |row| row.first_seen + DIRT_HOLD_SECONDS - current)
+        })
+        .fold(0.0, f64::max)
 }
 
 fn advisory_evaluations(
@@ -623,6 +639,8 @@ fn blocked_outcome(
             let kind = if active.is_some() { OutcomeKind::Active } else { OutcomeKind::Unknown };
             let code = if active.is_some() { 3 } else { 2 };
             let mut outcome = Outcome::new(kind, code, format!("{prefix}dirty-settling:{}", paths.join(",")));
+            let settles_in = evaluations.iter().map(|evaluation| evaluation.settles_in).fold(0.0, f64::max);
+            outcome.settles_in = Some(settles_in.ceil().max(1.0) as u64);
             if let Some((old, _)) = active {
                 outcome.paths = work_paths(old, qualified);
             }
@@ -641,6 +659,7 @@ fn blocked_outcome(
                     paths: work_paths(old, qualified),
                     holders,
                     broad_paths,
+                    settles_in: None,
                 })
             } else {
                 Ok(Outcome {
@@ -650,6 +669,7 @@ fn blocked_outcome(
                     paths,
                     holders,
                     broad_paths,
+                    settles_in: None,
                 })
             }
         }

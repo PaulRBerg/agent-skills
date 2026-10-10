@@ -169,8 +169,9 @@ ai-coord start --draft
 ```
 
 The coordinator is cooperative rather than an OS lock. It uses a user-owned local SQLite ledger and fails closed when it
-cannot establish complete provider coverage. Unattributed relevant dirt settles for at most ~90 seconds, then work may
-proceed with a stale-dirt advisory and a captured baseline.
+cannot establish complete provider coverage. Unattributed relevant dirt settles ~90 seconds after ai-coord first
+observes its current content, then work may proceed with a stale-dirt advisory and a captured baseline. The first
+observation is the first `start`, `wait`, `done`, or `status` that inspects the path, not the time of the write.
 
 Each `(client, session_id)` owns at most one logical work item, with one or more repository claims. Ordinary `draft` and
 `start` accept current-worktree paths and can update only a one-claim item. They never silently append or move a claim.
@@ -302,7 +303,9 @@ capability remains governed by its configured permissions and sandbox according 
 Re-running direct `start` atomically replaces the session's full desired scope. Narrowing active work takes effect
 immediately and wakes queued sessions that no longer overlap. Expanding or moving active work succeeds only when
 coverage is complete, relevant dirt is safe, and no active or queued work intersects the newly requested area. Otherwise
-`ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged.
+`ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged. Because `wait` only
+rechecks the recorded work, it never re-arbitrates a pending expansion. For `ACTIVE update-unknown:dirty-settling:…`,
+the stderr guidance names the seconds left before the slowest path settles. Re-run the same `start` after that.
 
 Blocked work retains its paths. Narrowing queued work preserves its original submission age. Expanding or moving it
 receives a new age so stale broad requests cannot reserve unrelated work. This applies to the full bundle claim vector

@@ -1577,3 +1577,50 @@ fn indeterminate_liveness_holders_block_overlap_without_degrading_coverage() {
     assert_eq!((outcome.kind, outcome.detail.as_str()), (OutcomeKind::Unknown, "coverage"));
     assert!(coordinator.store().unwrap().session(&unprobed).unwrap().is_some());
 }
+
+#[test]
+fn expanding_active_work_over_unchanged_unattributed_dirt_settles_within_the_hold() {
+    let holder = identity("holder");
+    let (temp, roots) = repos(1);
+    let root = &roots[0];
+    for name in ["held.txt", "generated/out.tsv"] {
+        fs::create_dir_all(root.join(name).parent().unwrap()).unwrap();
+        fs::write(root.join(name), "clean\n").unwrap();
+    }
+    let git = |args: &[&str]| assert!(Command::new("git").args(args).current_dir(root).status().unwrap().success());
+    git(&["add", "."]);
+    git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    add_session(&mut store, &holder, root, 250, 1.0);
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(250, ProcessLiveness::Alive);
+    let clock = Arc::new(FakeClock::new(100.0));
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(StaticInventory { complete: true, refreshes: Arc::new(AtomicUsize::new(0)) }),
+        probe as Arc<dyn ProcessProbe>,
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    );
+    let held = [root.join("held.txt")];
+    let expand = || coordinator.start_for(holder.clone(), "work", &held, &[root.join("generated")], root).unwrap();
+    assert_eq!(coordinator.start_for(holder.clone(), "work", &held, &[], root).unwrap().kind, OutcomeKind::Ready);
+    // An unobserved generator (a Bash write) dirties a path outside the claim.
+    fs::write(root.join("generated/out.tsv"), "generated\n").unwrap();
+
+    // The hold starts when ai-coord first observes the blob, here the first expansion attempt.
+    let settling = expand();
+    assert_eq!(
+        (settling.kind, settling.detail.as_str(), settling.settles_in),
+        (OutcomeKind::Active, "update-unknown:dirty-settling:generated/out.tsv", Some(90))
+    );
+    for remaining in [60, 30] {
+        *clock.value.lock().unwrap() += 30.0;
+        // Interleaved observers never restart the hold for an unchanged blob.
+        coordinator.snapshot(false, root, false).unwrap();
+        assert_eq!(coordinator.wait_for_repo(&holder, root, 1, 0.1, false).unwrap().kind, OutcomeKind::Ready);
+        assert_eq!(expand().settles_in, Some(remaining));
+    }
+    *clock.value.lock().unwrap() += DIRT_HOLD_SECONDS - 60.0;
+    let ready = expand();
+    assert_eq!((ready.kind, ready.detail.as_str()), (OutcomeKind::Ready, "stale-dirt:generated/out.tsv"));
+}

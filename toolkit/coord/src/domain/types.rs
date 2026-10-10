@@ -83,11 +83,21 @@ pub(crate) struct Outcome {
     pub(crate) paths: Vec<String>,
     pub(crate) holders: Vec<String>,
     pub(crate) broad_paths: Vec<String>,
+    /// Whole seconds until relevant unattributed dirt settles; guidance only, never printed to stdout.
+    pub(crate) settles_in: Option<u64>,
 }
 
 impl Outcome {
     pub(crate) fn new(kind: OutcomeKind, code: u8, detail: impl Into<String>) -> Self {
-        Self { kind, code, detail: detail.into(), paths: Vec::new(), holders: Vec::new(), broad_paths: Vec::new() }
+        Self {
+            kind,
+            code,
+            detail: detail.into(),
+            paths: Vec::new(),
+            holders: Vec::new(),
+            broad_paths: Vec::new(),
+            settles_in: None,
+        }
     }
 
     pub(crate) fn with_paths(mut self, paths: Vec<String>) -> Self {
