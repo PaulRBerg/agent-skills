@@ -10,9 +10,10 @@ description:
   "Use for targeted EVM chain, account, transaction, RPC, explorer, bridge, and DEX evidence: chain name/ID, native
   symbol, RouteMesh, wallet balances and DeFi positions via DeBank/Blockscan in Chromium, cross-chain USD portfolio
   value or net worth, token/NFT holdings/transfers, tx history, funding origin via Etherscan/Blockscout/Chainscout.
-  Covers Across, Bungee, deBridge, Gas.zip, Hop, Layerswap, LayerZero, LI.FI, Relay, Socket, Symbiosis. Covers Uniswap
-  v1-v4, Universal Router, Permit2, 1inch Classic/Fusion/Fusion+, and CoW Swap, CoWSwap, CoW Protocol, or GPv2 swaps,
-  orders, liquidity, approvals, permits, rewards, migrations, wrapping, cancellations, and refunds."
+  Covers Arbitrum canonical withdrawals, Across, Bungee, deBridge, Gas.zip, Hop, Layerswap, LayerZero, LI.FI, Relay,
+  Socket, Symbiosis. Covers Uniswap v1-v4, Universal Router, Permit2, 1inch Classic/Fusion/Fusion+, and CoW Swap,
+  CoWSwap, CoW Protocol, or GPv2 swaps, orders, liquidity, approvals, permits, rewards, migrations, wrapping,
+  cancellations, and refunds."
 ---
 
 # EVM Atlas
@@ -110,6 +111,7 @@ target chains.
 11. For bridge-related prompts or transaction evidence, confirm that known origin/destination chains are targets. Then
     load only the matching reference:
 
+    - Arbitrum One/Nova canonical bridge withdrawals: `references/bridges/arbitrum.md`
     - Across: `references/bridges/across.md`
     - Bungee / Socket: `references/bridges/bungee.md`
     - Circle / CCTP / Gateway: `references/bridges/circle.md`
