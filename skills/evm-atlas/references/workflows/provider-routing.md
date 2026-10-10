@@ -301,6 +301,13 @@ Ronin's [2026 migration announcement](https://blog.roninchain.com/p/ronin-is-hom
 separately from current-chain availability. OKLink can supply a legacy block boundary without supplying pre-2023 account
 history or exact historical account state.
 
+For post-migration Ronin history (after legacy block 55,577,490), use that Blockscout deployment: REST v2
+`/api/v2/addresses/<address>/{transactions,token-transfers,internal-transactions}` or the Etherscan-compatible
+`https://explorer.roninchain.com/api`, preferably through the keyed `https://api.blockscout.com/2020/api` gateway
+because the keyless instance rate-limits after about ten requests. Post-migration receipts carry OP Stack `l1Fee`.
+Archive state for legacy blocks is readable through RouteMesh; `api.roninchain.com/rpc` does not serve it, and Ronin
+RPCs return no `trace_transaction` or `debug_traceTransaction` results. Verified 2026-10-10.
+
 ## Exceptional History
 
 For HyperEVM (`999`) exact historical native-balance and nonce reads, do not use public JSON-RPC or RouteMesh. Those
