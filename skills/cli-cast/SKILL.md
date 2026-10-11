@@ -38,6 +38,12 @@ explicit Foundry alias is configured, use it:
 ROUTEMESH_CHAIN_ID="$CHAIN_ID" cast COMMAND --rpc-url routemesh
 ```
 
+The alias can interpolate an environment variable, such as `ROUTEMESH_API_KEY`. The `routemesh` CLI keeps its own key.
+Thus, successful atlas reads do not prove that the alias resolves. Before you sign a transaction for alias broadcast, or
+use the alias in another way, run `ROUTEMESH_CHAIN_ID="$CHAIN_ID" cast chain-id --rpc-url routemesh 2>/dev/null`.
+Require the expected chain ID. If the check fails, load the missing variable from the user's environment setup without
+printing it. If you cannot load it, treat the alias as not configured.
+
 Otherwise, use the nonsecret public RPC that `evm-atlas` verified. Never construct, inspect, or print a RouteMesh URL.
 Treat Cast stderr as secret-bearing because Foundry may reveal a resolved alias URL on transport failure. Never repeat
 that output in chat, logs, or external reports.
