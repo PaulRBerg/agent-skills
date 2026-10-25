@@ -1,0 +1,6 @@
+interface:
+  display_name: "agent-qa"
+  short_description: "Run regression tests and inspect agent-qa evidence"
+  default_prompt: "Use $agent-qa to review the selected run or execute the requested tests and report the evidence."
+policy:
+  allow_implicit_invocation: true
