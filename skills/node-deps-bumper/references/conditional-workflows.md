@@ -50,6 +50,18 @@ Yarn. Append the same maturity flags only to direct Taze scan and write commands
 project package manager install as usual. The package manager remains the final enforcement layer for direct and
 transitive resolution.
 
+### Approved Release-Age Exceptions
+
+Preserve the configured age floor and existing effective exclusions. Limit an approved exception to the selected version
+when supported. For pnpm, use `package@version` in the project's `minimumReleaseAgeExclude` list in
+`pnpm-workspace.yaml`. Preserve inherited exclusions when the project setting replaces them. See the
+[pnpm exclusion settings](https://pnpm.io/settings/dependency-resolution#minimumreleaseageexclude).
+
+After regenerating the lockfile, run the project's ordinary frozen install without temporary age overrides. An update
+command, printed configuration, or lockfile does not prove that this install succeeds. Require its final successful exit
+status. If it rejects the approved release, correct the narrow exception and rerun the install. Do not lower the age
+floor.
+
 ## Update Bun Catalogs
 
 When the root `package.json` contains `catalog` / `catalogs`, use `scripts/update-bun-catalogs.py` with the saved Taze
