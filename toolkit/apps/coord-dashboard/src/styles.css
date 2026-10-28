@@ -115,6 +115,7 @@
 
 html {
   background: var(--color-canvas-base);
+  scrollbar-gutter: stable;
 }
 
 body {
