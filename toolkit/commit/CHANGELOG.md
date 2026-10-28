@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] - 2026-10-28
+
+### Fixed
+
+- Fix false superseded receipts after clean rebases with unrelated edits in the same file ([`f191cf0`](https://github.com/PaulRBerg/agent-skills/commit/f191cf0239767c532674ef48e9f7783df4c5fb96))
+
 ## [1.1.0] - 2026-10-24
 
 ### Added
@@ -29,6 +35,7 @@
 
 _First release._
 
+[1.1.1]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-commit-v1.1.1
 [1.1.0]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-commit-v1.1.0
 [1.0.3]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-commit-v1.0.3
 [1.0.2]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-commit-v1.0.2
