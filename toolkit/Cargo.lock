@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "ai-coord"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "assert_cmd",
  "async-stream",
