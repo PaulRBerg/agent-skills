@@ -91,6 +91,10 @@ A PRO denial includes `Sorry, it looks like you are trying to access an API Pro 
 
 `apilimit` consumes one credit. The Base probe consumes another. Do not repeat detection mid-session.
 
+Cached credit fields are a snapshot, not a reservation against other clients' usage. Detection does not establish
+overage settings or spending authorization. Apply [daily quota and paid overage](#daily-quota-and-paid-overage) before
+reads and pagination.
+
 ## Chain Inference
 
 Do not default to Ethereum. Resolve the target with `scripts/chain-lookup.sh <name|alias|slug|chain_id>` before
@@ -539,8 +543,10 @@ other channels or checkpoint completeness. If raw API evidence is needed, inspec
 - `Community Free API limit reached`: preserve the UTC reset time. Use the indexed fallback or wait until reset. Do not
   rotate keys or retry briefly.
 - `Free API access is not supported for this chain`: use the supported fallback when paid access is unavailable.
-- Invalid credentials, PRO denial, exhausted credits, unsupported chains, malformed output, and indexing gaps: retain
-  the diagnostic and report incomplete coverage.
+- Daily quota or monthly overage-cap denial: use the supported fallback and retain the diagnostic. Apply the reset rules
+  below. Brief retries cannot restore either allowance.
+- Invalid credentials, PRO denial, unsupported chains, malformed output, and indexing gaps: retain the diagnostic and
+  report incomplete coverage.
 - Missing/unsupported chain: check the dated registry notes. Do not retry retired explorer API hosts.
 
 Source: [common errors](https://docs.etherscan.io/common-error-messages).
@@ -564,6 +570,22 @@ plan-wide rates. See the [rate schedule](https://docs.etherscan.io/rate-limits).
 
 For per-key throttling, use bounded backoff within the permitted rate. For daily credits or shared-quota exhaustion,
 honor the reset time instead.
+
+### Daily Quota and Paid Overage
+
+Effective 2026-11-03, Etherscan blocks requests at the plan's daily limit unless paid overage is enabled. Overage is off
+by default. Free plans have no overage. Lite and higher plans can enable it with a monthly spend cap. Enabled overage
+costs $0.00003 per call ($3 per 100,000 calls), billed monthly. Per-second and endpoint limits still apply.
+
+When the monthly cap is reached, additional overage calls stay blocked until the next billing cycle or a cap increase.
+The included daily allowance still resets each day. A daily reset does not restore an exhausted monthly overage cap.
+
+Keep reads within available daily credits unless existing user authorization covers paid overage. Count detection,
+probes, retries, and pagination when estimating calls. Successful calls alone do not prove that usage is unbilled. Use
+the supported fallback when quota is exhausted and paid usage is not authorized. Report any resulting coverage gap. Do
+not change billing settings, increase a cap, or upgrade a plan through this read-only skill.
+
+Source: [usage and overage](https://docs.etherscan.io/rate-limits#usage-and-overage), checked 2026-10-28.
 
 ## Reference Files
 
