@@ -726,6 +726,142 @@ fn commit_push_rebase_reports_rebased_integrated_and_pushed() {
     assert!(stdout(&replay).starts_with(&format!("PUSHED {transaction} ")), "{}", stdout(&replay));
 }
 
+#[test]
+fn commit_push_rebase_retains_unrelated_upstream_changes_in_the_same_file() {
+    for automatic in [false, true] {
+        let (harness, remote, transaction) = same_file_rebase_fixture("commit-push-same-file");
+        let created = if automatic {
+            None
+        } else {
+            let behind = harness.command(["commit", &transaction, "-m", "test: local", "--push"]);
+            assert_eq!(exit_code(&behind), 3);
+            let created = harness.git(["rev-parse", "HEAD"]);
+            harness.git(["pull", "--quiet", "--rebase", "--no-autostash"]);
+            Some(created)
+        };
+
+        let output = harness.success(["commit", &transaction, "-m", "test: local", "--push", "--rebase"]);
+        let head = harness.git(["rev-parse", "HEAD"]);
+        let lines: Vec<_> = stdout(&output).lines().map(str::to_owned).collect();
+        assert_eq!(lines.len(), if automatic { 4 } else { 3 });
+        assert!(lines[0].starts_with(&format!("COMMITTED {transaction} ")));
+        if let Some(created) = created {
+            assert_eq!(lines[0], format!("COMMITTED {transaction} {}", &created[..12]));
+            assert_ne!(created, head);
+        } else {
+            assert_eq!(lines[1], "REBASED main 1");
+        }
+        assert_eq!(lines[lines.len() - 2], format!("INTEGRATED {transaction} {}", &head[..12]));
+        assert_eq!(lines.last().unwrap(), "PUSHED main");
+        assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), head);
+        assert_eq!(
+            harness.read("intended.txt"),
+            same_file_content()
+                .replace("line 03", "local 03")
+                .replace("line 10", "remote 10")
+                .replace("line 17", "local 17")
+        );
+        assert!(harness.git(["status", "--porcelain"]).is_empty());
+    }
+}
+
+#[test]
+fn commit_push_replay_rejects_reverted_changed_and_whitespace_changed_hunks() {
+    for (name, replacement) in [("reverted", "line 03"), ("changed", "different 03"), ("whitespace", "local 03 ")] {
+        let (harness, remote, transaction) = same_file_rebase_fixture(name);
+        let behind = harness.command(["commit", &transaction, "-m", "test: local", "--push"]);
+        assert_eq!(exit_code(&behind), 3);
+        let created = harness.git(["rev-parse", "HEAD"]);
+        harness.git(["pull", "--quiet", "--rebase", "--no-autostash"]);
+        harness.write("intended.txt", &harness.read("intended.txt").replace("local 03", replacement));
+        harness.commit_all("change one intended hunk");
+        let head = harness.git(["rev-parse", "HEAD"]);
+        let upstream = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+
+        let replay = harness.command(["commit", &transaction, "-m", "ignored", "--push"]);
+
+        assert_eq!(exit_code(&replay), 3, "{}", stderr(&replay));
+        assert_eq!(
+            stdout(&replay),
+            format!("COMMITTED {transaction} {}\nSUPERSEDED {transaction} {}\n", &created[..12], &created[..12])
+        );
+        assert_eq!(harness.git(["rev-parse", "HEAD"]), head);
+        assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), upstream);
+        assert!(harness.git(["status", "--porcelain"]).is_empty());
+    }
+}
+
+#[test]
+fn commit_push_integration_bypasses_custom_and_union_merge_drivers() {
+    for driver in ["ours", "union"] {
+        let (harness, remote, transaction) = same_file_rebase_fixture(driver);
+        let behind = harness.command(["commit", &transaction, "-m", "test: local", "--push"]);
+        assert_eq!(exit_code(&behind), 3);
+        harness.git(["pull", "--quiet", "--rebase", "--no-autostash"]);
+        harness.write("intended.txt", &harness.read("intended.txt").replace("local 03", "changed 03"));
+        harness.commit_all("change intended content");
+        harness.write(".git/info/attributes", &format!("intended.txt merge={driver}\n"));
+        harness.git(["config", "merge.ours.driver", "touch \"$DRIVER_MARKER\""]);
+        let marker = harness.root.join("driver-ran");
+        let upstream = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+
+        let replay = harness.command_with_env(
+            ["commit", &transaction, "-m", "ignored", "--push"],
+            [("DRIVER_MARKER", marker.as_os_str())],
+        );
+
+        assert_eq!(exit_code(&replay), 3, "{}", stderr(&replay));
+        assert!(stdout(&replay).contains("SUPERSEDED"));
+        assert!(!marker.exists());
+        assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), upstream);
+    }
+}
+
+#[test]
+fn commit_push_integration_git_failure_does_not_push_or_report_superseded() {
+    let (harness, remote, transaction) = same_file_rebase_fixture("integration-git-failure");
+    let behind = harness.command(["commit", &transaction, "-m", "test: local", "--push"]);
+    assert_eq!(exit_code(&behind), 3);
+    harness.git(["pull", "--quiet", "--rebase", "--no-autostash"]);
+    let upstream = git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]);
+    let real_git = git_binary();
+    write_executable(
+        &harness.shim.join("git"),
+        "#!/bin/sh\ncase \" $* \" in *' merge-file '*) exit 128;; esac\nexec \"$REAL_GIT\" \"$@\"\n",
+    );
+
+    let replay = harness
+        .command_with_env(["commit", &transaction, "-m", "ignored", "--push"], [("REAL_GIT", real_git.as_os_str())]);
+
+    assert_eq!(exit_code(&replay), 1);
+    assert!(!stdout(&replay).contains("SUPERSEDED"));
+    assert!(!stdout(&replay).contains("PUSHED"));
+    assert_eq!(git_at(&remote, &harness.home, ["rev-parse", "refs/heads/main"]), upstream);
+}
+
+fn same_file_content() -> String {
+    (1..=20).map(|line| format!("line {line:02}\n")).collect()
+}
+
+fn same_file_rebase_fixture(name: &str) -> (Harness, std::path::PathBuf, String) {
+    let harness = Harness::new(name);
+    let remote = harness.root.join("remote.git");
+    let updater = harness.root.join("updater");
+    init_bare(&remote, &harness.home);
+    harness.write("intended.txt", &same_file_content());
+    harness.commit_all("base");
+    harness.git(["branch", "-M", "main"]);
+    harness.git(["remote", "add", "origin", &format!("file://{}", remote.display())]);
+    harness.git(["push", "--quiet", "-u", "origin", "HEAD"]);
+    harness.write("intended.txt", &same_file_content().replace("line 03", "local 03").replace("line 17", "local 17"));
+    let (transaction, _) = harness.prepare(&["intended.txt"]);
+    clone_repository(&remote, &updater, &harness.home);
+    fs::write(updater.join("intended.txt"), same_file_content().replace("line 10", "remote 10")).unwrap();
+    git_at(&updater, &harness.home, ["commit", "--quiet", "-a", "-m", "upstream edit in same file"]);
+    git_at(&updater, &harness.home, ["push", "--quiet"]);
+    (harness, remote, transaction)
+}
+
 fn clone_repository(remote: &std::path::Path, destination: &std::path::Path, home: &std::path::Path) {
     let output = Command::new("git")
         .args(["clone", "--quiet", "--branch", "main"])

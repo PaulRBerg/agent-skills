@@ -16,7 +16,7 @@ use crate::{
     cli::CommitArgs,
     coord,
     error::{AppError, Result},
-    git::{RefUpdate, Repository, copy_file, git_error},
+    git::{RefUpdate, Repository, copy_file, git_error, output_text},
     push::{self, PushOutcome},
     state::{PendingCommit, Store, Transaction, TransactionStatus, now_seconds},
     validation::{
@@ -766,8 +766,8 @@ fn disclose_rebased_commit(repository: &Repository, transaction: &Transaction) -
 }
 
 // A replayed push may follow a rebase that rewrote or dropped the transaction's
-// commit. When the commit is no longer reachable, content equality at HEAD for
-// every committed path decides whether the branch still carries the change.
+// commit. Exact entries or a no-op three-way blob merge prove that captured HEAD
+// still carries every committed path's delta, including unrelated same-file edits.
 fn branch_integration(repository: &Repository, transaction: &Transaction, commit_oid: &str) -> Result<Integration> {
     let ancestry = repository.raw(["merge-base", "--is-ancestor", commit_oid, "HEAD"], None)?;
     match ancestry.status.code() {
@@ -781,11 +781,44 @@ fn branch_integration(repository: &Repository, transaction: &Transaction, commit
     paths.dedup();
     let committed = repository.tree_file_entries(commit_oid, &paths)?;
     let current = repository.tree_file_entries(&head, &paths)?;
-    if paths.iter().all(|path| committed.get(path) == current.get(path)) {
-        Ok(Integration::Integrated { head })
-    } else {
-        Ok(Integration::Superseded)
+    let differing: Vec<_> = paths.iter().filter(|path| committed.get(*path) != current.get(*path)).collect();
+    if !differing.is_empty() {
+        let lineage = repository.text(["rev-list", "--parents", "-n", "1", commit_oid], None)?;
+        let parents: Vec<_> = lineage.split_ascii_whitespace().skip(1).collect();
+        let [parent] = parents.as_slice() else {
+            return Ok(Integration::Superseded);
+        };
+        let previous = repository.tree_file_entries(parent, &paths)?;
+        for path in differing {
+            let (Some(base), Some(intended), Some(present)) =
+                (previous.get(path), committed.get(path), current.get(path))
+            else {
+                return Ok(Integration::Superseded);
+            };
+            if base.kind != "blob" ||
+                intended.kind != "blob" ||
+                present.kind != "blob" ||
+                !matches!(intended.mode.as_str(), "100644" | "100755") ||
+                base.mode != intended.mode ||
+                present.mode != intended.mode ||
+                base.oid == intended.oid
+            {
+                return Ok(Integration::Superseded);
+            }
+            // Direct blob merging bypasses attributes and custom/conflict-resolving merge drivers.
+            let merged = repository.raw(["merge-file", "--object-id", &present.oid, &base.oid, &intended.oid], None)?;
+            match merged.status.code() {
+                Some(0) => {
+                    if output_text(merged)? != present.oid {
+                        return Ok(Integration::Superseded);
+                    }
+                }
+                Some(1..=127) => return Ok(Integration::Superseded),
+                _ => return Err(git_error(merged)),
+            }
+        }
     }
+    Ok(Integration::Integrated { head })
 }
 
 struct IndexLock {

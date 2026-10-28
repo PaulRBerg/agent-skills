@@ -263,9 +263,11 @@ lines, disclosing every cut as `DIFF_TRUNCATED<tab>path<tab>omitted-line-count` 
 `DIFF_TRUNCATED path (N more lines)` after the diff). Truncation is display-only: the prepared tree, name-status,
 shortstat, and path records stay complete.
 
-Before any push, `commit` checks that the transaction's commit is still reachable from HEAD. When a rebase rewrote it,
-or another commit carried the same change, and HEAD holds the committed content of every transaction path, `commit`
-prints `INTEGRATED <transaction-id> <head-oid>` and then pushes. When HEAD lacks that content, it prints
+Before any push, `commit` checks that the transaction's commit is still reachable from HEAD. If a rebase rewrote it, or
+another commit carried the same change, `commit` checks every transaction path against captured HEAD. Exact file entries
+pass. Regular files with unchanged modes also pass when a direct three-way blob merge retains HEAD unchanged. This proof
+permits unrelated same-file edits and bypasses custom or conflict-resolving merge drivers. When every path passes,
+`commit` prints `INTEGRATED <transaction-id> <head-oid>` and then pushes. When a path fails, it prints
 `SUPERSEDED <transaction-id> <commit-oid>`, pushes nothing, and exits `3`. The caller then inspects the branch and
 discards or re-prepares the transaction.
 
