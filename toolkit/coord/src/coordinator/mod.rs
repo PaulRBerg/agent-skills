@@ -24,14 +24,15 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::{
     domain::{
-        Identity, InventoryResult, OutsideScopeV2, ProcessProbe, ProviderReport, SessionState, SnapshotDelegateV2,
-        SnapshotDraftClaimV2, SnapshotDraftV2, SnapshotHandoffV4, SnapshotScopeKindV2, SnapshotScopeV2,
-        SnapshotSessionV2, SnapshotV2, SnapshotWorkClaimV2, SnapshotWorkV2, WorkState, sanitize,
+        Client, Identity, InventoryResult, OutsideScopeV2, ProcessLiveness, ProcessProbe, ProviderReport, SessionState,
+        SnapshotDelegateV2, SnapshotDraftClaimV2, SnapshotDraftV2, SnapshotHandoffV4, SnapshotScopeKindV2,
+        SnapshotScopeV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkClaimV2, SnapshotWorkV2, WorkState, sanitize,
     },
     error::{AppError, Result},
     host::{
         DelegateSignal, INVENTORY_CACHE_SECONDS, NativeProcessProbe, delegate_signal, from_environment,
         git_blob_hashes, git_dirty_paths, git_root, host_process_reference, identity_key, process_ancestors,
+        process_sweep,
     },
     server::{SnapshotMessageV1, SnapshotSource},
     state::{DraftRow, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow, callsign_key},
@@ -287,6 +288,26 @@ impl Coordinator {
         Ok(())
     }
 
+    /// Claude rows that an authoritative listing may not remove by omission.
+    /// Claude Code keeps an interactive session out of its registry when the
+    /// session inherited a stale child-session marker, so an omission alone
+    /// does not prove an end. A row with a fingerprint lives and dies by the
+    /// process probe. The listing reaps only rows that nothing can verify.
+    fn probe_backed_claude_sessions(&self, store: &Store) -> Result<HashSet<String>> {
+        let claude = store
+            .sessions()?
+            .into_iter()
+            .filter(|row| row.identity.client == Client::Claude)
+            .map(|row| (row.identity, row.fingerprint));
+        Ok(process_sweep(self.probe.as_ref(), claude)
+            .into_iter()
+            .filter(|observation| {
+                observation.expected_fingerprint.is_some() && observation.liveness != ProcessLiveness::Dead
+            })
+            .map(|observation| observation.identity.session_id)
+            .collect())
+    }
+
     fn refresh_inventory(&self, store: &mut Store, allow_cached: bool) -> Result<InventoryResult> {
         store.prune(self.clock.wall())?;
         let mut unknown_clients = self.reconcile_processes(store)?;
@@ -316,7 +337,8 @@ impl Coordinator {
                         current: self.clock.wall(),
                     })
                     .collect::<Vec<_>>();
-                store.replace_claude_sessions(&updates)?;
+                let retained = self.probe_backed_claude_sessions(store)?;
+                store.replace_claude_sessions(&updates, &retained)?;
                 unknown_clients = self.reconcile_processes(store)?;
             }
             if observation.result.complete {

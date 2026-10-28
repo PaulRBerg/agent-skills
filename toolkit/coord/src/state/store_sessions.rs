@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rusqlite::{OptionalExtension, Row, Transaction, params};
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
@@ -92,18 +94,32 @@ impl Store {
     }
 
     /// Replace Claude rows only after a complete, authoritative provider
-    /// inventory. Missing rows are terminal; a failed or malformed inventory
-    /// must never call this method.
-    pub(crate) fn replace_claude_sessions(&mut self, updates: &[SessionUpdate]) -> Result<()> {
+    /// inventory. Listed rows are upserted. An omitted row is removed unless
+    /// `retained` names it, because the listing omits a live interactive
+    /// session that inherited a stale child-session marker. A retained row is
+    /// still removed when a listed row reports its exact process under another
+    /// session ID. A failed or malformed inventory must never call this method.
+    pub(crate) fn replace_claude_sessions(
+        &mut self,
+        updates: &[SessionUpdate],
+        retained: &HashSet<String>,
+    ) -> Result<()> {
         self.immediate(|transaction| {
             let existing = {
-                let mut statement = transaction.prepare("SELECT session_id FROM sessions WHERE client = 'claude'")?;
-                statement.query_map([], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?
+                let mut statement = transaction
+                    .prepare("SELECT session_id, pid, process_start_token FROM sessions WHERE client = 'claude'")?;
+                statement
+                    .query_map([], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, Option<u32>>(1)?, row.get::<_, Option<String>>(2)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
             };
-            let live = updates
+            let listed = updates.iter().map(|update| update.identity.session_id.as_str()).collect::<HashSet<_>>();
+            let listed_processes = updates
                 .iter()
-                .map(|update| update.identity.session_id.as_str())
-                .collect::<std::collections::HashSet<_>>();
+                .filter_map(|update| update.fingerprint.as_ref())
+                .filter_map(|fingerprint| fingerprint.start_token.as_deref().map(|token| (fingerprint.pid, token)))
+                .collect::<HashSet<_>>();
             for update in updates {
                 if update.identity.client != crate::domain::Client::Claude {
                     return Err(AppError::usage("authoritative Claude replacement contains a non-Claude row"));
@@ -111,11 +127,19 @@ impl Store {
                 upsert_session(transaction, update)?;
             }
             let mut removed = false;
-            for session_id in existing {
-                if !live.contains(session_id.as_str()) {
-                    remove_session(transaction, &Identity { client: crate::domain::Client::Claude, session_id })?;
-                    removed = true;
+            for (session_id, pid, start_token) in existing {
+                if listed.contains(session_id.as_str()) {
+                    continue;
                 }
+                let superseded = match (pid, start_token.as_deref()) {
+                    (Some(pid), Some(token)) => listed_processes.contains(&(pid, token)),
+                    _ => false,
+                };
+                if retained.contains(&session_id) && !superseded {
+                    continue;
+                }
+                remove_session(transaction, &Identity { client: crate::domain::Client::Claude, session_id })?;
+                removed = true;
             }
             if removed {
                 bump_generation(transaction)?;

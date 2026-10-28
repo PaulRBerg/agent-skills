@@ -655,6 +655,34 @@ fn new_claude_identity_on_the_same_strong_process_supersedes_stale_top_level_sta
 }
 
 #[test]
+fn authoritative_claude_replacement_keeps_retained_rows_unless_a_listed_row_reports_their_process() {
+    let temporary = tempdir().unwrap();
+    let mut store = Store::open(temporary.path().join("state.db")).unwrap();
+    let stale = identity(Client::Claude, "stale");
+    let retained = identity(Client::Claude, "retained");
+    let unverifiable = identity(Client::Claude, "unverifiable");
+    let fresh = identity(Client::Claude, "fresh");
+    store.upsert_session(&session_update(&stale, 1.0)).unwrap();
+    save_work(&mut store, &work_update(&stale)).unwrap();
+    let mut other_process = session_update(&retained, 1.0);
+    other_process.fingerprint = Some(ProcessFingerprint { pid: 43, start_token: Some("boot:43".to_owned()) });
+    store.upsert_session(&other_process).unwrap();
+    let mut no_process = session_update(&unverifiable, 1.0);
+    no_process.fingerprint = None;
+    store.upsert_session(&no_process).unwrap();
+
+    // The listing reports the stale row's exact process under a new session ID.
+    let keep = HashSet::from([stale.session_id.clone(), retained.session_id.clone()]);
+    store.replace_claude_sessions(&[session_update(&fresh, 2.0)], &keep).unwrap();
+
+    assert!(store.session(&stale).unwrap().is_none());
+    assert!(store.work(&stale).unwrap().is_none());
+    assert!(store.session(&retained).unwrap().is_some());
+    assert!(store.session(&unverifiable).unwrap().is_none());
+    assert!(store.session(&fresh).unwrap().is_some());
+}
+
+#[test]
 fn codex_roots_sharing_an_app_server_preserve_existing_work_and_delegates() {
     let temporary = tempdir().unwrap();
     let mut store = Store::open(temporary.path().join("state.db")).unwrap();

@@ -1547,6 +1547,54 @@ impl ProviderInventory for ClaudeInventory {
     }
 }
 
+/// `claude agents --json` prints `[]` while interactive sessions that inherited a stale child-session marker run, so an
+/// omission removes only rows the process probe cannot vouch for.
+#[test]
+fn authoritative_listing_omission_keeps_probe_backed_claude_rows_and_drops_unverifiable_ones() {
+    let (temp, roots) = repos(1);
+    let mut store = Store::open(temp.path().join("state.db")).unwrap();
+    let caller = Identity { client: Client::Claude, session_id: "caller".to_owned() };
+    let ambiguous = Identity { client: Client::Claude, session_id: "ambiguous".to_owned() };
+    let unverifiable = Identity { client: Client::Claude, session_id: "unverifiable".to_owned() };
+    add_session(&mut store, &caller, &roots[0], 50, 1.0);
+    add_session(&mut store, &ambiguous, &roots[0], 51, 1.0);
+    store
+        .upsert_session(&SessionUpdate {
+            identity: unverifiable.clone(),
+            cwd: roots[0].to_string_lossy().into_owned(),
+            repo_root: Some(roots[0].to_string_lossy().into_owned()),
+            state: SessionState::Working,
+            source: "test".to_owned(),
+            name: None,
+            waiting_for: None,
+            permission_mode: None,
+            update_permission_mode: false,
+            coordination_waived: None,
+            fingerprint: None,
+            transcript_path: None,
+            started_at: Some(1.0),
+            current: 1.0,
+        })
+        .unwrap();
+    let probe = Arc::new(FakeProbe::default());
+    probe.set(50, ProcessLiveness::Alive);
+    // Process 51 has no probe state, so its liveness is ambiguous.
+    let coordinator = Coordinator::with_components(
+        store,
+        Box::new(ClaudeInventory(Vec::new())),
+        probe,
+        Arc::new(FakeClock::new(100.0)),
+    );
+
+    let outcome =
+        coordinator.start_for(caller.clone(), "work", &[PathBuf::from("src/lib.rs")], &[], &roots[0]).unwrap();
+    assert_eq!(outcome.kind, OutcomeKind::Ready);
+    let store = coordinator.store().unwrap();
+    assert!(store.session(&caller).unwrap().is_some());
+    assert!(store.session(&ambiguous).unwrap().is_some());
+    assert!(store.session(&unverifiable).unwrap().is_none());
+}
+
 #[test]
 fn authoritative_inventory_does_not_reset_an_idle_claude_holders_yield_clock() {
     let holder = Identity { client: Client::Claude, session_id: "claude-holder".to_owned() };

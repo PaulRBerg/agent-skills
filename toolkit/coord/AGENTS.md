@@ -49,6 +49,12 @@ indeterminate (no fingerprint, no start token, or an inspection error) as live. 
 and residual ownership. It is never reaped on that basis and does not make coverage incomplete. Coverage fails closed
 only on provider inventory failures or when the process probe cannot confirm the ai-coord process itself.
 
+A complete `claude agents --json` listing adds and refreshes Claude rows, but it is not proof of an end. Claude Code
+keeps an interactive session out of that registry when the session inherited a stale `CLAUDE_CODE_CHILD_SESSION` marker,
+so the listing can be empty while sessions run. An omitted row with a fingerprint therefore lives and dies by the
+process probe alone. The listing removes only omitted rows without a fingerprint, and a listed row supersedes an omitted
+row that reports the same exact process under another session ID.
+
 Codex identity uses `CODEX_SESSION_ID` with legacy `CODEX_THREAD_ID` fallback. Independent Codex roots can share one
 app-server process fingerprint. A new root must not supersede another root or release its claims. Child and
 persistent-fork transcript observations share their root owner. Never replace that owner's session or release work
@@ -680,9 +686,9 @@ JSON. The ledger never stores cached provider errors, hook hashes, plan bodies, 
 payloads. Opt-in triage prompts and model output exist only in the 30-day run artifacts described above.
 
 Composite session foreign keys cascade draft and submitted work cleanup on authoritative session end, dead-process
-reconciliation, session supersession, and an authoritative Claude inventory observation removing a Claude session row
-absent from it, but only for a session-owned (unnamed) draft. A named draft has no owning session, and that cascade
-never touches it. Named drafts instead expire and are deleted after seven days without an update.
+reconciliation, session supersession, and an authoritative Claude inventory observation removing a fingerprint-less
+Claude session row absent from it, but only for a session-owned (unnamed) draft. A named draft has no owning session,
+and that cascade never touches it. Named drafts instead expire and are deleted after seven days without an update.
 
 Messages expire after 48 hours and are capped at 50 per inbox. Pending and accepted recommendations expire 48 hours
 after creation. Rejected, withdrawn, and stale history is retained for 48 hours after that transition. Each endpoint is
