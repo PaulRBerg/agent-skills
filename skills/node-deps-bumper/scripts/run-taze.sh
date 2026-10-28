@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-taze.sh - Run taze in non-interactive mode
 #
-# Usage: run-taze.sh [--include pkg1,pkg2] [--concurrency n] [--plan|--write] [path]
+# Usage: run-taze.sh [--include pkg1,pkg2] [--concurrency n] [--plan|--write [--direct-only]] [path]
 #
 # Automatically detects monorepo projects (workspaces in package.json
 # or pnpm-workspace.yaml) and enables recursive mode.
@@ -22,6 +22,7 @@ include=""
 concurrency=""
 write=false
 plan=false
+direct_only=false
 target_dir="."
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
@@ -45,6 +46,10 @@ while [[ $# -gt 0 ]]; do
     ;;
   --write)
     write=true
+    shift
+    ;;
+  --direct-only)
+    direct_only=true
     shift
     ;;
   --plan)
@@ -118,6 +123,11 @@ if [[ "$write" == true && "$plan" == true ]]; then
   exit 64
 fi
 
+if [[ "$direct_only" == true && "$write" != true ]]; then
+  echo "ERROR: --direct-only requires --write" >&2
+  exit 64
+fi
+
 # Mirror Bun's delayed-resolution policy for direct dependency candidates.
 # bunfig.toml stores seconds; Taze expects whole days.
 if [[ -f bun.lock || -f bun.lockb ]]; then
@@ -141,7 +151,9 @@ else
   taze_args+=("--include-locked")
 fi
 
-if [[ "$plan" == true ]]; then
+if [[ "$direct_only" == true ]]; then
+  node "$script_dir/write-taze-direct.mjs" "$(command -v taze)" "${taze_args[@]}"
+elif [[ "$plan" == true ]]; then
   plan_output="$(mktemp "${TMPDIR:-/tmp}/taze-plan.XXXXXX")"
   trap 'rm -f "$plan_output"' EXIT
   NO_COLOR=1 taze "${taze_args[@]}" --no-group --no-timediff --no-nodecompat --sort name-asc >"$plan_output" 2>&1 || {

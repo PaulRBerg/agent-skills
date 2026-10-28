@@ -130,6 +130,64 @@ class UpdateBunCatalogsTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(package.read_bytes(), before)
 
+    def test_selected_catalogs_match_each_current_and_preserve_peer_ranges_and_fixed_holds(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package.json"
+            peers = {"react": ">=18.2.0", "jest": "29"}
+            original = {
+                "catalog": {"react": "^18.2.0", "jest": "29.0.0"},
+                "catalogs": {"dev": {"react": "~19.0.0"}, "peers": peers},
+            }
+            package.write_text(json.dumps(original))
+            plan = root / "plan.json"
+            plan.write_text(
+                json.dumps(
+                    {
+                        "updates": [
+                            {"package": "react", "current": "^18.2.0", "available": "^19.0.0"},
+                            {"package": "react", "current": "~19.0.0", "available": "~19.2.0"},
+                            {"package": "react", "current": ">=18.2.0", "available": ">=19.0.0"},
+                            {"package": "jest", "current": "29.0.0", "available": "30.0.0", "action": "skip-fixed"},
+                        ]
+                    }
+                )
+            )
+            preview = self.run_helper(root, plan, "--catalog", "default", "--catalog", "dev")
+            self.assertEqual(len(json.loads(preview.stdout)["changes"]), 2)
+            self.assertEqual(json.loads(package.read_text()), original)
+            self.run_helper(root, plan, "--catalog", "default", "--catalog", "dev", "--write")
+            updated = json.loads(package.read_text())
+            self.assertEqual(updated["catalog"], {"react": "^19.0.0", "jest": "29.0.0"})
+            self.assertEqual(updated["catalogs"]["dev"]["react"], "~19.2.0")
+            self.assertEqual(updated["catalogs"]["peers"], peers)
+
+    def test_unknown_catalog_and_ambiguous_target_fail_atomically(self) -> None:
+        for catalog in ["missing", "default"]:
+            with self.subTest(catalog=catalog), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                package = root / "package.json"
+                package.write_text(json.dumps({"catalog": {"react": "^18.2.0", "jest": "~29.0.0"}}))
+                before = package.read_bytes()
+                plan = root / "plan.json"
+                plan.write_text(
+                    json.dumps(
+                        {
+                            "updates": [
+                                {"package": "react", "current": "^18.2.0", "available": "^19.0.0"},
+                                {"package": "jest", "current": "~29.0.0", "available": "~30.0.0"},
+                                {"package": "jest", "current": "~29.0.0", "available": "~31.0.0"},
+                            ]
+                        }
+                    )
+                )
+                result = self.run_helper(root, plan, "--catalog", catalog, "--write", check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "unknown Bun catalogs" if catalog == "missing" else "ambiguous plan targets", result.stderr
+                )
+                self.assertEqual(package.read_bytes(), before)
+
     def test_top_level_catalogs_are_updated(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -49,16 +49,19 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
    authorized majors.
 
 4. If nothing is selected, report the no-op and stop. If the root manifest uses Bun catalogs, preview the exact selected
-   catalog transitions from the accepted plan. Pass only selected packages present in a catalog. When that subset is
-   empty, skip the helper:
+   catalog transitions from the accepted plan. Select catalogs used for installed dependencies with repeatable
+   `--catalog` arguments. Use `default` for the unnamed catalog. Preserve catalogs used for public peer ranges. Pass
+   only selected packages present in those catalogs. When that subset is empty, skip the helper:
 
    ```sh
    uv run <skill-dir>/scripts/update-bun-catalogs.py \
-     --root <repo> --plan <taze-plan.json> --include package-a,package-b
+     --root <repo> --plan <taze-plan.json> --include package-a,package-b \
+     --catalog default --catalog dev
    ```
 
-   The preview is read-only. Missing catalog entries, conflicting plan rows, unsupported versions, or a catalog value
-   that no longer matches the plan fail before writes. The helper does not select upgrades.
+   The preview is read-only. Unknown catalogs, missing entries, ambiguous targets, or stale current values fail before
+   writes. The helper matches each selected occurrence against the plan and preserves fixed holds. It does not select
+   upgrades.
 
 5. Before the first manifest or lockfile write, select and run a baseline that can detect regressions from the chosen
    updates. Honor repository-required checks. Otherwise, select dependency-resolution, build, test, typecheck, lint,
@@ -74,14 +77,15 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
    asking for redundant authorization. Informational notices such as unavoidable deprecations do not block.
 
 6. For Bun catalogs, apply the previewed transitions first: rerun `update-bun-catalogs.py` with the same plan and
-   catalog include subset plus `--write`. It atomically updates every matching default/named catalog occurrence and
-   preserves each existing `^`, `~`, or empty prefix. Apply before Taze, whose native catalog writes would make this
-   plan stale.
+   catalog and package selections plus `--write`. It atomically updates only selected catalog occurrences and preserves
+   their prefixes. Then use `--direct-only` for the Taze write to protect all Bun catalogs and ordinary peer
+   declarations. This mode requires Taze `>=21.3.0 <22` and rejects unsupported project or ancestor configuration before
+   writes.
 
-   Then write all selected Taze updates in one command:
+   For repositories without Bun catalogs, omit `--direct-only`:
 
    ```sh
-   bash <skill-dir>/scripts/run-taze.sh --write --include package-a,package-b
+   bash <skill-dir>/scripts/run-taze.sh --write --direct-only --include package-a,package-b
    ```
 
 7. Run `ni` so the repository's package manager updates its lockfile.
@@ -126,7 +130,9 @@ undecorated.
   and frozen install control resolution.
 - Package arguments constrain both scan and write phases.
 - The same maturity-period policy applies to scan and write.
-- Bun catalog preview and write use the same accepted Taze plan and selected package set. Stale plans never write.
+- Bun catalog preview and write use the same accepted plan, catalog selection, and package set. Stale plans never write.
+- Peer declarations describe supported consumer versions. They are not installed versions. Preserve public peer ranges
+  unless the user authorizes a contract change.
 - Do not infer compatibility from SemVer alone when repository evidence, peer ranges, or release notes indicate
   otherwise.
 

@@ -286,3 +286,21 @@ EOF
   [[ "$output" == *'fixture registry failure'* ]]
   [ ! -e "$uv_log" ]
 }
+
+@test "direct-only requires write and forwards protected write arguments to the API helper" {
+  write_package_json '{"name":"fixture","workspaces":["packages/*"]}'
+  run "$helper" --direct-only --include react "$project"
+  [ "$status" -eq 64 ]
+  [[ "$output" == *'--direct-only requires --write'* ]]
+
+  : >"$project/bun.lock"
+  printf '%s\n' '[install]' 'minimumReleaseAge = 604800' >"$project/bunfig.toml"
+  cat >"$mock_bin/node" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"$TAZE_LOG"
+MOCK
+  chmod 755 "$mock_bin/node"
+  run "$helper" --direct-only --write --include react --concurrency 3 "$project"
+  [ "$status" -eq 0 ]
+  assert_taze_args "$repo_root/skills/node-deps-bumper/scripts/write-taze-direct.mjs"$'\n'"$mock_bin/taze"$'\nmajor\n--force\n--no-github-actions\n--no-node-version\n-r\n--include\nreact\n--concurrency\n3\n--maturity-period\n7\n--write'
+}
