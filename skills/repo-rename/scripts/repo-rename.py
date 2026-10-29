@@ -36,7 +36,7 @@ class RenameError(RuntimeError):
 @dataclass(frozen=True)
 class Replacement:
     path: Path
-    pairs: tuple[tuple[bytes, bytes], ...]
+    pairs: tuple[tuple[bytes | re.Pattern[bytes], bytes], ...]
     occurrences: int
 
 
@@ -79,14 +79,31 @@ def readable_files(root: Path, *, repo: bool = False, include_local_state: bool 
     return files
 
 
-def count_pairs(path: Path, pairs: tuple[tuple[bytes, bytes], ...]) -> int:
+def replace_pairs(data: bytes, pairs: tuple[tuple[bytes | re.Pattern[bytes], bytes], ...]) -> tuple[bytes, int]:
+    occurrences = 0
+    for old, new in pairs:
+        if isinstance(old, bytes):
+            occurrences += data.count(old)
+            data = data.replace(old, new)
+        else:
+
+            def replace_name(match: re.Match[bytes], replacement: bytes = new) -> bytes:
+                start, end = match.span(1)
+                return match[0][: start - match.start()] + replacement + match[0][end - match.start() :]
+
+            data, count = old.subn(replace_name, data)
+            occurrences += count
+    return data, occurrences
+
+
+def count_pairs(path: Path, pairs: tuple[tuple[bytes | re.Pattern[bytes], bytes], ...]) -> int:
     try:
         data = path.read_bytes()
     except OSError:
         return 0
     if b"\0" in data:
         return 0
-    return sum(data.count(old) for old, _ in pairs)
+    return replace_pairs(data, pairs)[1]
 
 
 def prefilter(files: list[Path], roots: list[Path], pairs: tuple[tuple[bytes, bytes], ...]) -> list[Path]:
@@ -121,7 +138,13 @@ def continuity_paths() -> tuple[Path, Path]:
 
 
 def collect_replacements(
-    old_root: Path, new_root: Path, old_name: str, new_name: str, *, include_local_state: bool = False
+    old_root: Path,
+    new_root: Path,
+    old_name: str,
+    new_name: str,
+    *,
+    old_repo: str | None = None,
+    include_local_state: bool = False,
 ) -> list[Replacement]:
     claude_projects, codex_home = continuity_paths()
     path_pair = ((str(old_root).encode(), str(new_root).encode()),)
@@ -144,7 +167,23 @@ def collect_replacements(
             if occurrences:
                 replacements.append(Replacement(path, path_pair, occurrences))
 
-    repo_pairs = path_pair if old_name == new_name else ((old_name.encode(), new_name.encode()),)
+    repo_pairs: tuple[tuple[bytes | re.Pattern[bytes], bytes], ...] = path_pair
+    if old_name != new_name:
+        name = re.escape(old_name.encode())
+        patterns = [
+            rb"(?m)^[ \t]*(?:#{1,6}[ \t]+)?(" + name + rb")[ \t]*\r?$",
+            rb"(?m)(?:[\"']name[\"']|^[ \t]*name)[ \t]*[:=][ \t]*[\"'](" + name + rb")[\"']",
+        ]
+        if old_repo is not None:
+            owner = re.escape(old_repo.split("/", 1)[0].encode())
+            patterns.append(
+                rb"(?:https?://github\.com/|git@github\.com:)"
+                + owner
+                + rb"/("
+                + name
+                + rb")(?=\.git(?:$|[^A-Za-z0-9_.-])|$|[/\s\"'`<>)#?])"
+            )
+        repo_pairs += tuple((re.compile(pattern), new_name.encode()) for pattern in patterns)
     for path in readable_files(old_root, repo=True, include_local_state=include_local_state):
         occurrences = count_pairs(path, repo_pairs)
         if occurrences:
@@ -217,7 +256,9 @@ def preflight(new_name: str, destination: str | None = None, *, include_local_st
     if old_claude.exists() and new_claude.exists():
         raise RenameError(f"target Claude project directory exists: {new_claude}")
 
-    replacements = collect_replacements(old_root, new_root, old_name, new_name, include_local_state=include_local_state)
+    replacements = collect_replacements(
+        old_root, new_root, old_name, new_name, old_repo=old_repo, include_local_state=include_local_state
+    )
     return {
         "old_root": old_root,
         "new_root": new_root,
@@ -337,9 +378,7 @@ def apply(plan: dict[str, object]) -> dict[str, object]:
 
         for item in replacements:
             target = moved_path(item.path, plan)
-            data = target.read_bytes()
-            for old, new in item.pairs:
-                data = data.replace(old, new)
+            data, _ = replace_pairs(target.read_bytes(), item.pairs)
             temp = target.with_name(f".{target.name}.repo-rename.tmp")
             try:
                 temp.write_bytes(data)

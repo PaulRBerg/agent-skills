@@ -25,8 +25,9 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 - Only when the repository has an active Claude Code or Codex transcript, update literal old paths in
   `~/.claude/projects`, `~/claude/projects` when present, `~/.codex/sessions`, and `~/.codex/config.toml`. This
   continuity update does not apply to repos with no active transcripts.
-- Update constrained literal old-name references inside the repository, excluding VCS, dependencies (including Python
-  virtual environments), caches, and generated build directories.
+- Update absolute repository paths, exact name fields, whole-line repository names or headings, and GitHub URLs for the
+  repository. Preserve other old-name occurrences, including imports, prose, and command selectors. Exclude VCS,
+  dependencies (including Python virtual environments), caches, and generated build directories.
 - For a same-name move, replace only the old absolute repository path inside repository files.
 - By default, use tracked repository files and skip `PROMPT.md`, `TODO.md`, and symlinks before reading replacement
   candidates. Prune excluded directories during discovery. When the user explicitly authorizes updating notes,

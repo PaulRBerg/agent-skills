@@ -281,6 +281,65 @@ class RepoRenameTests(unittest.TestCase):
         self.assertEqual((self.root / "new-repo" / "README.md").read_text(), "new-repo\n")
         self.assertFalse((Path(self.env["HOME"]) / "gh-writes").exists())
 
+    def test_rename_preserves_imports_prose_and_command_selectors(self) -> None:
+        subprocess.run(["git", "remote", "remove", "origin"], cwd=self.repo, check=True)
+        self.repo = self.repo.rename(self.root / "quantum")
+        old_path = str(self.repo.resolve())
+        readme = self.repo / "README.md"
+        readme.write_text(f"# quantum\nA quantum system.\n`just run 1 quantum_algorithm`\n{old_path}/src\n")
+        source = self.repo / "example.py"
+        source.write_text('from qiskit.quantum_info import Statevector\nprint("quantum")\n')
+        manifest = self.repo / "pyproject.toml"
+        manifest.write_text('[project]\nname = "quantum"\ndescription = "quantum mechanics"\n')
+        subprocess.run(["git", "add", "README.md", "example.py", "pyproject.toml"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "quantum fixture"], cwd=self.repo, check=True)
+
+        result = self.run_script("emergent-qiskit", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(
+            report["mutations"][-1]["files"],
+            [{"path": str(readme.resolve()), "occurrences": 2}, {"path": str(manifest.resolve()), "occurrences": 1}],
+        )
+        result = self.run_script("emergent-qiskit", "--apply", "--confirm", report["confirmation_token"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        renamed = self.root / "emergent-qiskit"
+        self.assertEqual(
+            (renamed / "README.md").read_text(),
+            f"# emergent-qiskit\nA quantum system.\n`just run 1 quantum_algorithm`\n{renamed.resolve()}/src\n",
+        )
+        self.assertEqual(
+            (renamed / "example.py").read_text(), 'from qiskit.quantum_info import Statevector\nprint("quantum")\n'
+        )
+        self.assertEqual(
+            (renamed / "pyproject.toml").read_text(),
+            '[project]\nname = "emergent-qiskit"\ndescription = "quantum mechanics"\n',
+        )
+
+    def test_rename_updates_only_matching_github_identity(self) -> None:
+        readme = self.repo / "README.md"
+        before = (
+            "https://github.com/owner/old-repo/issues\n"
+            "git@github.com:owner/old-repo.git\n"
+            "https://github.com/owner/old-repo-other\n"
+            "https://github.com/other/old-repo\n"
+        )
+        readme.write_text(before)
+        subprocess.run(["git", "commit", "-qam", "URL fixture"], cwd=self.repo, check=True)
+        result = self.run_script("new-repo", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout)["mutations"][-1]["files"], [{"path": str(readme.resolve()), "occurrences": 2}]
+        )
+        result = self.run_script("new-repo", "--apply", "--confirm", "owner/old-repo->owner/new-repo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (self.root / "new-repo" / "README.md").read_text(),
+            before.replace("owner/old-repo/issues", "owner/new-repo/issues").replace(
+                "owner/old-repo.git", "owner/new-repo.git"
+            ),
+        )
+
     def test_continuity_requires_active_transcript_and_only_replaces_paths(self) -> None:
         codex = self.root / "custom-codex"
         codex.mkdir()
