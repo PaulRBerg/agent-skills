@@ -92,6 +92,9 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 6. Verify the helper's result with `gh repo view`, `git remote get-url origin`, `pwd -P`, and a search for remaining old
    absolute-path/name references in the listed scope. Report intentional remaining matches separately.
 
+   If a moved Python environment retains old paths, reinstall its locked packages with the project's existing package
+   manager. Then rerun the repository's test command.
+
 ## Completion
 
 Dry-run completion is a full mutation preview with zero writes. Apply completion requires the new GitHub identity,
