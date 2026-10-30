@@ -27,6 +27,34 @@ class ParseTazePlanTests(unittest.TestCase):
     def test_ignores_non_update_output(self) -> None:
         self.assertEqual(MODULE.parse("dependencies are already up-to-date\n"), [])
 
+    def test_classifies_partial_numeric_ranges_and_preserves_them(self) -> None:
+        entries = MODULE.parse(
+            """alpha dependencies ^3.5 → ^3.9.10
+beta dependencies ^5.1 → ^6.2.5
+fixed dependencies 4.17.20 → 4.17.21
+"""
+        )
+        by_package = {item["package"]: item for item in entries}
+        self.assertEqual(
+            (by_package["alpha"]["current"], by_package["alpha"]["type"], by_package["alpha"]["action"]),
+            ("^3.5", "minor", "apply"),
+        )
+        self.assertEqual(
+            (
+                by_package["beta"]["current"],
+                by_package["beta"]["available"],
+                by_package["beta"]["type"],
+                by_package["beta"]["action"],
+            ),
+            ("^5.1", "^6.2.5", "major", "review-major"),
+        )
+        self.assertEqual(by_package["fixed"]["action"], "skip-fixed")
+
+    def test_wildcard_range_with_unknown_transition_requires_review(self) -> None:
+        entries = MODULE.parse("pkg dependencies ^5.x → ^5.2.0\n")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual((entries[0]["type"], entries[0]["action"]), ("unknown", "review"))
+
 
 if __name__ == "__main__":
     unittest.main()

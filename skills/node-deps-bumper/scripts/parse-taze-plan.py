@@ -9,12 +9,22 @@ import re
 from pathlib import Path
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-VERSION_RE = re.compile(r"^(?:workspace:)?[~^<>=v]*([0-9]+)\.([0-9]+)\.([0-9]+)(?:[-+][0-9A-Za-z.-]+)?$")
+VERSION_RE = re.compile(
+    r"^(?:workspace:)?[~^<>=v]*([0-9]+)(?:\.(x|[0-9]+))?(?:\.(x|[0-9]+))?(?:[-+][0-9A-Za-z.-]+)?$",
+    re.IGNORECASE,
+)
 
 
-def version_parts(value: str) -> tuple[int, int, int] | None:
+def version_parts(value: str) -> tuple[int, int | None, int | None] | None:
     match = VERSION_RE.match(value)
-    return tuple(map(int, match.groups())) if match else None
+    if not match:
+        return None
+    major, minor, patch = match.groups()
+    return (
+        int(major),
+        int(minor) if minor and minor.isdigit() else None,
+        int(patch) if patch and patch.isdigit() else None,
+    )
 
 
 def classify(current: str, available: str) -> str:
@@ -24,8 +34,12 @@ def classify(current: str, available: str) -> str:
         return "unknown"
     if old[0] != new[0]:
         return "major"
+    if old[1] is None or new[1] is None:
+        return "unknown"
     if old[1] != new[1]:
         return "minor"
+    if old[2] is None or new[2] is None:
+        return "unknown"
     return "patch"
 
 
@@ -44,7 +58,8 @@ def parse(text: str) -> list[dict[str, str]]:
             (index for index in range(len(left_tokens) - 1, -1, -1) if version_parts(left_tokens[index]) is not None),
             None,
         )
-        if current_index is None or version_parts(available) is None:
+        available_parts = version_parts(available)
+        if current_index is None or available_parts is None or None in available_parts:
             continue
         current = left_tokens[current_index]
         package = left_tokens[0]
