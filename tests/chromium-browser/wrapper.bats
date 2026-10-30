@@ -33,11 +33,10 @@ EOF
 --page-id-routing
 --memory-debugging
 --experimental-vision
---experimental-structured-content
 --redact-network-headers
 --no-performance-crux
 --no-usage-statistics
---allow-unrestricted-paths
+--workspace=/
 --screenshot-format=jpeg
 --screenshot-quality=80
 --screenshot-max-width=1600

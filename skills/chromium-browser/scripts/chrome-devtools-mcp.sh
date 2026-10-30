@@ -33,8 +33,12 @@ log_dir="${XDG_CACHE_HOME:-$HOME/.cache}/chrome-devtools-mcp/logs"
 mkdir -p "$log_dir"
 find "$log_dir" -name 'server-*.log' -mtime +7 -delete 2>/dev/null || true
 
-# Keep the deprecated unrestricted-path opt-in: it bypasses restrictions only
-# without client-negotiated roots. --workspace=/ would also broaden client roots.
+# Text responses only. The structured-content option makes hosts that prefer
+# structuredContent render JSON snapshots about twice the size of the text form
+# and doubles every response on the wire.
+# --workspace=/ replaces the deprecated unrestricted-paths opt-in. It also admits
+# paths outside client-negotiated roots, such as host scratch directories. The
+# skill, not this flag, governs where an agent may write.
 # Screenshot format and quality are defaults; tools can still request PNG.
 # Maximum dimensions cap both file and inline output, with no per-call override.
 exec "$server" \
@@ -42,11 +46,10 @@ exec "$server" \
   --page-id-routing \
   --memory-debugging \
   --experimental-vision \
-  --experimental-structured-content \
   --redact-network-headers \
   --no-performance-crux \
   --no-usage-statistics \
-  --allow-unrestricted-paths \
+  --workspace=/ \
   --screenshot-format=jpeg \
   --screenshot-quality=80 \
   --screenshot-max-width=1600 \

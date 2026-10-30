@@ -36,6 +36,8 @@ selects another available browser integration, follow its tool contract.
   relevant to the task and do not surface unrelated tab titles or content.
 - Trust the live tool inventory. An absent tool is unavailable in this session. Do not advise editing client MCP
   configuration as a troubleshooting shortcut.
+- The wrapper returns plain-text responses and permits file tools on every absolute path. Path capability is not write
+  authorization.
 
 For released tool behavior, consult the
 [upstream tool reference](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/chrome-devtools-mcp-v1.12.0/docs/tool-reference.md).
@@ -47,61 +49,84 @@ For Wayback Machine capture discovery or replay research, read `references/wayba
 request. Otherwise do not load it. Discover captures through serial API requests outside Chromium. Then open only the
 selected replay when rendered inspection adds evidence.
 
+## Call Budget
+
+Every browser call costs a round trip, and every response costs context. Spend both deliberately.
+
+- When the host loads tool schemas on demand, request the core set in one call: `list_pages`, `new_page`,
+  `navigate_page`, `take_snapshot`, `evaluate_script`, `click`, `fill`, `type_text`, `press_key`, `wait_for`,
+  `take_screenshot`, and `close_page`. Request other tools only when a step needs them.
+- Every response from `list_pages`, `new_page`, `select_page`, `close_page`, and `navigate_page` lists all open pages.
+  Do not call `list_pages` to confirm what one of those responses already shows.
+- Choose the cheapest evidence that answers the question. `evaluate_script` returns only the values you select.
+  `take_snapshot` returns the whole accessibility tree. `take_screenshot` returns an image, which costs more context and
+  more model time than either.
+- An inline snapshot is typically about 8 KB, and one in ten exceeds 20 KB. A long article, repository page, or feed can
+  produce hundreds of kilobytes, which exceeds the host's result limit and returns an error instead of the snapshot. For
+  such a page, extract the needed data with `evaluate_script`, or save the snapshot with `filePath` and search the file
+  with `rg`.
+- `evaluate_script` is exclusive. While it runs, every other call on this server waits, including calls on other pages.
+  Keep scripts short and batch several reads into one script.
+
 ## Page Ownership
 
 The numbered steps below apply to MCP pages. With native controls, track task-created tabs through the native UI. Verify
 the requested result, then close only those tabs unless the user asked to leave them open.
 
-1. Call `list_pages` before interacting and preserve the initial pages as pre-existing state.
-2. Prefer `new_page` with `background: true` when a fresh page satisfies the task. Record the exact `pageId` returned by
-   every page this task creates. When an input action response lists `## Opened pages`, record those page IDs as created
-   by this task. Never infer ownership from a later page-list difference.
+1. When a fresh page satisfies the task, start with `new_page` and `background: true`. Its response lists every open
+   page and marks the created page `[selected]`. Record that page ID as owned by this task. Treat every other listed
+   page as pre-existing. Call `list_pages` first only when the task must act on a pre-existing page.
+2. When an input action response lists `## Opened pages`, record those page IDs as created by this task. Never infer
+   ownership from a later page-list difference.
 3. Pass an explicit `pageId` to every page-scoped tool. Do not rely on selected-page state. Use `select_page` only when
-   deliberately bringing a page to the foreground or recovering the closed-page context described below.
+   deliberately bringing a page to the foreground.
 4. Navigate or mutate a pre-existing page only when the task explicitly depends on that page's current state. Never
    close a pre-existing page.
-5. Before closing a selected owned page, use `select_page` with `bringToFront: false` on a previously observed surviving
-   page. For example, use the page selected before this task opened its own. Then use `close_page` on the owned page by
-   its ID. If the close still returns the closed-page error described in Troubleshooting, treat it as a likely success
-   and confirm once using that recovery rather than retrying the close.
-6. At completion, close only the recorded pages created by this task unless the user asked to leave one open.
+5. At completion, close only the recorded pages created by this task unless the user asked to leave one open. Call
+   `close_page` with each owned ID directly. The server selects another page itself, and the response lists the
+   remaining pages. Use that list as closure evidence. Do not call `select_page` before the close or `list_pages` after
+   it.
 
 ## Interaction and Evidence
 
-- On one page, navigate first. Wait for a useful known signal. Take a fresh snapshot. Then interact with identifiers
-  from that snapshot. Refresh the snapshot after navigation or meaningful DOM changes.
+- On one page, navigate first. Wait for a useful known signal only when the page renders content after load. Take a
+  fresh snapshot. Then interact with identifiers from that snapshot. Refresh the snapshot after navigation or meaningful
+  DOM changes.
 - Prefer `take_snapshot` for structure and automation, `take_screenshot` for visual evidence, and `evaluate_script` for
-  information absent from the accessibility tree. If exposed, use `waitForStableDom: false` only for scripts that read
-  data without changing page state.
+  information absent from the accessibility tree. Keep the default non-verbose snapshot. `verbose: true` roughly doubles
+  its size.
+- Set `waitForStableDom: false` on every `evaluate_script` call that only reads. The default waits up to three seconds
+  for DOM mutations to stop, which a read does not need. Return a compact JSON object. Bound every array to about 50
+  items. Never return a whole DOM, HTML document, or large array.
+- `wait_for` returns the full snapshot when the text appears and a short error on timeout. Do not call `take_snapshot`
+  after a successful `wait_for` on the same page. On a large page, check for the signal with a read-only
+  `evaluate_script` instead.
+- Input actions omit the snapshot by default. Pass `includeSnapshot: true` to `click`, `fill`, or another input tool
+  only when the next step needs the updated structure immediately. That replaces a separate `take_snapshot`. Do not pass
+  `includeSnapshot` to `navigate_page`, which does not accept it.
 - When a call returns `A dialog is open`, the open dialog blocks `evaluate_script` and other dialog-sensitive tools on
   that page. Use `handle_dialog` only on a page that this task owns or depends on, within the task's authority.
 - Prefer `fill_form` for batches of inputs, selects, checkboxes, and radio buttons. For `upload_file`, use the current
   `filePaths` array schema with task-authorized files on the browser host.
 - For CSS cascade questions, use `get_css_styles` with a UID from a fresh snapshot. Paginate with `pageIdx` and
   `pageSize` to inspect additional matched and inherited rules.
-- Accept wrapper screenshot defaults. Request `format: "png"` when lossless output is required. PNG, `fullPage`, and
-  `filePath` cannot bypass the wrapper's 1600-pixel width and height caps. Full-resolution output requires an authorized
-  wrapper configuration change.
-- Keep action responses small. Set `includeSnapshot: false` on `click` and `fill` unless the updated state is
-  immediately needed. Do not pass `includeSnapshot` to `navigate_page`, which does not accept it. A snapshot in an
-  action response can add about 10 KB to the context.
-- Bound every `evaluate_script` return value to a summary, a count, or at most about 50 items. Never return a whole DOM,
-  HTML document, or large array.
+- For a screenshot, pass `uid` to capture one element when only that element matters. Pass `filePath` when the image is
+  evidence for the user rather than input for your next decision. Accept wrapper screenshot defaults. Request
+  `format: "png"` when lossless output is required. PNG, `fullPage`, and `filePath` cannot bypass the wrapper's
+  1600-pixel width and height caps. Full-resolution output requires an authorized wrapper configuration change.
 - Paginate and filter console, network, memory, and other high-volume results.
-- Before `resize_page`, confirm the window is in the normal state. A maximized or full-screen window returns
-  `Restore window to normal state before setting content size`. On that error, use `emulate` with `viewport` when the
-  session exposes it. Otherwise, skip the resize and tell the user.
+- To change the rendered size, use `emulate` with `viewport`. Use `resize_page` only when the OS window size itself
+  matters. It fails with `Restore window to normal state before setting content size` on a maximized or full-screen
+  window. On that error, use `emulate`. If `emulate` is absent, skip the resize and tell the user.
 - When a cookie consent popup appears, select only necessary or essential cookies by default, including through its
   settings when needed. If no such option is available, accept all cookies and continue.
 - Use `filePath` for screenshots, snapshots, traces, recordings, response bodies, and large script results. Write only
-  to a task-authorized absolute path. Prefer a git-ignored `.ai/` directory under the current repository, or another
-  root the client negotiated. The Claude Code scratchpad under `/private/tmp` and the `/tmp` directory are not permitted
-  roots. A write there returns `Access denied`. On that error, retry once under `<cwd>/.ai/`. Path capability is not
-  write authorization.
+  to a task-authorized absolute path, such as the host's scratch directory or a git-ignored `.ai/` directory under the
+  current repository.
 - Within one MCP server, page-scoped calls on different pages can run in parallel. Calls on the same page run in order.
-  Exclusive tools, such as `list_pages`, `new_page`, `select_page`, and `close_page`, wait for running calls and block
-  later calls. Separate agent servers still share browser state. Preserve causal order and page ownership across
-  concurrent work.
+  Exclusive tools, such as `list_pages`, `new_page`, `select_page`, `close_page`, `resize_page`, and `evaluate_script`,
+  wait for running calls and block later calls. Separate agent servers still share browser state. Preserve causal order
+  and page ownership across concurrent work.
 
 ## Human Gates
 
@@ -111,11 +136,11 @@ external approval page is an npm trusted-publisher prompt. Ending the turn at a 
 1. Stop all writes on the gated page. Never try to bypass the gate.
 2. Tell the user the exact page and the action the gate requires.
 3. Allow ten minutes in total unless the user states another response window. Use sequential `wait_for` calls on the
-   gated `pageId`, with each `timeout` at most 10000. Match text that appears only after the gate clears. Examples are
-   the post-login heading or the next form label. Set `visible: true` when the text can exist hidden before the gate
-   clears. If no distinctive text exists, use snapshots separated by short, interruptible host waits. Do not queue
-   another browser call behind an outstanding `wait_for`. Canceling a host wait does not prove that its MCP call
-   stopped.
+   gated `pageId`, with each `timeout` at most 10000. Each timed-out call returns a short error, and the successful call
+   returns the snapshot you need next. Match text that appears only after the gate clears. Examples are the post-login
+   heading or the next form label. Set `visible: true` when the text can exist hidden before the gate clears. If no
+   distinctive text exists, use snapshots separated by short, interruptible host waits. Do not queue another browser
+   call behind an outstanding `wait_for`. Canceling a host wait does not prove that its MCP call stopped.
 4. After a user reply, take a fresh snapshot before waiting again. A cleared gate can leave the form awaiting another
    action. When the gate clears, resume from the same page state. Re-verify the form fields first, because sites clear
    them.
@@ -149,23 +174,9 @@ Use these workflows only when the tools are exposed in the current session.
 
 ## Troubleshooting
 
-- If closing an owned page returns `The selected page has been closed` and `list_pages` repeats it, the close may have
-  succeeded while MCP retained a stale selection. Select a previously observed surviving page with
-  `bringToFront: false`, then call `list_pages` and confirm the owned page ID is absent. This recovery attempts only to
-  repair MCP context.
-
-  Do not navigate, inspect, or close the surviving page. Suppress unrelated titles and content from results. Do not
-  repeat the close or create another tab to recover selection.
-
-- If `select_page` also returns the same closed-page error, stop MCP recovery attempts and report the stale session
-  context. A read-only `/json/list` request at the configured debugging endpoint can confirm that a task page's known,
-  unique, unchanged URL is absent. Filter locally and return only that result. Never return unrelated targets. This is
-  closure evidence, not MCP recovery or authorization to control the browser through another route. MCP `pageId` values
-  are not CDP target IDs.
-
-  If you cannot identify the owned page reliably, report cleanup as unverified. Do not infer ownership from the endpoint
-  list or use it to close tabs.
-
+- If a page-scoped call returns `No page found`, or a response notes that the browser was restarted or reconnected, the
+  page ID is stale. Take IDs from the latest page-listing response. Do not infer ownership from that list or close
+  unidentified pages. If you cannot identify an owned page reliably, report cleanup as unverified.
 - On attachment or transport failure, distinguish the browser endpoint from the MCP process. First, check the debugging
   endpoint at `http://127.0.0.1:${PRB_AGENT_CHROMIUM_PORT:-9222}/json/version`. `scripts/ensure-chromium.sh` performs
   this check. Then inspect the newest per-process log under `$XDG_CACHE_HOME/chrome-devtools-mcp/logs/` or, when unset,
