@@ -381,6 +381,55 @@ class RepoRenameTests(unittest.TestCase):
         (codex / "config.toml").write_text(f'project = "{needle}"\n', encoding="utf-8")
         return codex, old_root
 
+    def test_path_replacements_preserve_sibling_repositories(self) -> None:
+        old_path = str(self.repo.resolve())
+        paths = [
+            old_path,
+            old_path + "/src",
+            *(old_path + suffix for suffix in ("-qiskit", "_extra", ".git", ".other")),
+        ]
+        before = json.dumps(paths) + "\n"
+        (self.repo / "README.md").write_text(before)
+        subprocess.run(["git", "commit", "-qam", "path boundary fixture"], cwd=self.repo, check=True)
+        codex = Path(self.env["HOME"]) / ".codex"
+        sessions = codex / "sessions"
+        sessions.mkdir(parents=True)
+        session = sessions / "session.jsonl"
+        session.write_text(before)
+        config = codex / "config.toml"
+        config.write_text("paths = " + before)
+        claude = Path(self.env["HOME"]) / ".claude" / "projects" / "another-project"
+        claude.mkdir(parents=True)
+        claude_session = claude / "session.jsonl"
+        claude_session.write_text(before)
+
+        result = self.run_script("new-repo", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(len(report["mutations"][-1]["files"]), 4)
+        self.assertEqual({item["occurrences"] for item in report["mutations"][-1]["files"]}, {2})
+        result = self.run_script("new-repo", "--apply", "--confirm", report["confirmation_token"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        renamed = self.root / "new-repo"
+        after = json.dumps([str(renamed.resolve()), str(renamed.resolve()) + "/src", *paths[2:]]) + "\n"
+        self.assertEqual((renamed / "README.md").read_text(), after)
+        self.assertEqual(session.read_text(), after)
+        self.assertEqual(config.read_text(), "paths = " + after)
+        self.assertEqual(claude_session.read_text(), after)
+
+    def test_sibling_transcript_does_not_activate_continuity(self) -> None:
+        codex = Path(self.env["HOME"]) / ".codex"
+        sessions = codex / "sessions"
+        sessions.mkdir(parents=True)
+        (sessions / "session.jsonl").write_text(json.dumps({"cwd": str(self.repo.resolve()) + "-qiskit"}))
+        (codex / "config.toml").write_text(f'project = "{self.repo.resolve()}"\n')
+        result = self.run_script("new-repo", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout)["mutations"][-1]["files"],
+            [{"path": str((self.repo / "README.md").resolve()), "occurrences": 1}],
+        )
+
     def collect(self, codex: Path, old_root: Path) -> list[tuple[str, int]]:
         env = {"HOME": self.env["HOME"], "CODEX_HOME": str(codex), "CLAUDE_CONFIG_DIR": str(self.root / "no-claude")}
         with patch.dict(os.environ, env):

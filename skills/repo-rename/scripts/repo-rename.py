@@ -147,10 +147,13 @@ def collect_replacements(
     include_local_state: bool = False,
 ) -> list[Replacement]:
     claude_projects, codex_home = continuity_paths()
-    path_pair = ((str(old_root).encode(), str(new_root).encode()),)
+    literal_path_pair = ((str(old_root).encode(), str(new_root).encode()),)
+    # Match the repository path or its descendants, never a sibling with the same name prefix.
+    path_pattern = re.compile(rb"(" + re.escape(str(old_root).encode()) + rb")(?=$|[/\\\s\"'`<>(){}\[\],;:]|->)")
+    path_pair = ((path_pattern, str(new_root).encode()),)
     replacements = []
     sessions = codex_home / "sessions"
-    for path in prefilter(readable_files(sessions), [sessions], path_pair):
+    for path in prefilter(readable_files(sessions), [sessions], literal_path_pair):
         occurrences = count_pairs(path, path_pair)
         if occurrences:
             replacements.append(Replacement(path, path_pair, occurrences))
@@ -162,7 +165,7 @@ def collect_replacements(
         roots = [claude_projects, Path.home() / "claude/projects", codex_home / "config.toml"]
         for root in roots:
             candidates.update(readable_files(root))
-        for path in prefilter(list(candidates), roots, path_pair):
+        for path in prefilter(list(candidates), roots, literal_path_pair):
             occurrences = count_pairs(path, path_pair)
             if occurrences:
                 replacements.append(Replacement(path, path_pair, occurrences))
