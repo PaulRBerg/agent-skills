@@ -21,9 +21,9 @@ understanding. User instructions take precedence over this skill.
    supplied evidence instead of asking the user. Put decisions to the user and wait for their answers.
 2. Maintain a running decision record with: decision, chosen option, rationale, dependencies, and consequences. Update
    it after every answer. Reopen a recorded decision only when new evidence conflicts with it or the user corrects it.
-3. When fact-finding benefits from delegation and subagents are available, delegate the investigation. Otherwise,
-   investigate directly. Treat pending fact-finding as an unsettled prerequisite. Defer only dependent questions while
-   asking the rest of the currently answerable questions.
+3. When fact-finding benefits from delegation and subagents are available, delegate the investigation to a subagent that
+   starts with a fresh context window. Otherwise, investigate directly. Treat pending fact-finding as an unsettled
+   prerequisite. Defer only dependent questions while asking the rest of the currently answerable questions.
 4. Work in rounds. The frontier contains every unresolved decision whose prerequisites are settled. Ask the entire
    frontier in each round. A question that depends on another open question belongs in a later round. Number each
    question as `### 🔥 Decision <N> — <topic>`, then give `Recommended`, `Why`, `Tradeoff`, and `Question`. Separate

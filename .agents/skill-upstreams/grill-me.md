@@ -7,9 +7,11 @@
   another repository does not override the confirmed source.
 - **Recovered content base:** `694fa30311e02c2639942308513555e61ee84a6f`, upstream
   `skills/productivity/grill-me/SKILL.md`, blob `bd04394c675ee54173a093c50eb74da01a2940fa`.
-- **Last reconciled upstream target:** `5beb35b040e3de97e54fa9e386d7e42d15c295c2`, reviewed on 2026-10-24.
-  Implementation: `skills/productivity/grilling/SKILL.md`, blob `df69d9936880cd3314c28858c6c52f48db23b856`. Alias:
+- **Last reconciled upstream target:** `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d`, reviewed on 2026-11-02.
+  Implementation: `skills/productivity/grilling/SKILL.md`, blob `d2f09a18e6a6c65c55f1271ba08dfeaf06f0bed3`. Alias:
   `skills/productivity/grill-me/SKILL.md`, blob `3947ff9c4ad980d14fc07fccbf659d47c114e81d`.
+- **Previous reconciled target:** `5beb35b040e3de97e54fa9e386d7e42d15c295c2`, reviewed on 2026-10-24. Implementation
+  blob `df69d9936880cd3314c28858c6c52f48db23b856`.
 
 ## Base Recovery Evidence
 
@@ -29,7 +31,7 @@ successor implementation is upstream
 [skills/productivity/grilling/SKILL.md](https://github.com/mattpocock/skills/blob/5beb35b040e3de97e54fa9e386d7e42d15c295c2/skills/productivity/grilling/SKILL.md).
 Compare both upstream paths when assessing later changes. Preserve the local standalone `grill-me` entrypoint instead of
 copying the alias or requiring a separate `grilling` installation. `skills/grill-me/agents/openai.yaml` is local catalog
-metadata.
+metadata. Do not merge the upstream `agents/openai.yaml` files under either path.
 
 Preserve the running decision record, structured question and report formats, explicit accepted unknowns, coordination
 exemption, local name and description, and catalog metadata. Preserve user instruction precedence.
@@ -52,6 +54,16 @@ from the recovered content base to the pinned target, including the successor im
 | Empty frontier as completion                      | Adapted. Require no material open branches or required investigations, then explicit user confirmation. Preserve explicitly accepted unknowns with an owner and resolution point.                                               |
 | Em-dash removal                                   | Excluded from local report templates. Preserve the existing card headings and acknowledgement format.                                                                                                                           |
 | Alias, renamed skill, and upstream metadata       | Excluded. Keep the standalone local `grill-me` name, description, coordination exemption, and catalog metadata. Do not copy `disable-model-invocation` or the Skill-tool alias call.                                            |
+
+## Reconciliation on 2026-11-02
+
+The review compared both upstream paths from `5beb35b040e3de97e54fa9e386d7e42d15c295c2` to the pinned target. Only
+upstream commit `7739eaed7f8f3915437a8def198a6d0d7206dbc7` changed the successor implementation. The alias and both
+upstream `agents/openai.yaml` files did not change.
+
+| Incoming change                                  | Decision and local result                                                                                                                       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fact-finding subagents start with fresh contexts | Adapted. Delegated fact-finding goes to a subagent that starts with a fresh context window. Keep the local availability condition and fallback. |
 
 ## Safe Update Boundary
 
