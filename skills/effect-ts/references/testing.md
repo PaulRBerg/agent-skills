@@ -9,7 +9,8 @@ returned Effect and run only the tests covering the changed behavior.
 - `it.live` provides a `Scope` and live runtime services.
 - v3 `it.scoped` and `it.scopedLive` are gone. Use `it.effect` and `it.live`.
 - `layer(...)` shares one Layer across a test block. When a subgroup needs another Layer, use nested `it.layer(...)`.
-  Layer blocks include the test environment unless `excludeTestServices: true`.
+  Layer blocks include the test environment unless `excludeTestServices: true`. From 4.0.7, pass `buildPerTest: true` to
+  build a block's Layer once per test. Layers from enclosing blocks stay shared.
 
 Use regular `it` for pure synchronous tests. Do not call `Effect.runPromise`, `runSync`, or another runtime launcher
 inside an Effect test. That escapes the test runtime and can silently replace test services.

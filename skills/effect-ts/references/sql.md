@@ -4,7 +4,9 @@ Core SQL modules ship inside `effect` under `effect/sql` (`SqlClient`, `SqlSchem
 `Statement`, `Migrator`). They are `@stability unstable`. Drivers live in `@effect/sql-*` packages (`@effect/sql-pg`,
 `@effect/sql-sqlite-node`, ...) at the same version as `effect`. Variant models moved to `effect/schema/Model`. Use the
 installed declarations for exact driver and helper signatures. Keep SQL at repository boundaries and return domain
-values rather than unchecked row shapes.
+values rather than unchecked row shapes. From 4.1.0, import `fromFileSystem` from `effect/sql/MigratorFileSystem`. The
+`effect/sql` barrel no longer exports it. Driver migrators other than `@effect/sql-sqlite-react-native` still re-export
+it.
 
 ```ts
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -34,6 +36,10 @@ causes for diagnostics. Map expected SQL or decode failures with `Effect.mapErro
 
 Use `sql.withTransaction` for writes that must commit atomically. Include audit, outbox, or ledger writes in the same
 transaction only when the product invariant requires one commit boundary.
+
+To retry deadlocks or serialization failures, wrap the outermost `withTransaction` in `Effect.retry`. Match
+`DeadlockError` and `SerializationError` explicitly. Do not retry on `isRetryable` alone, because it includes
+`ConnectionError`. A `COMMIT` that lost its connection may have committed. A retry would then apply its writes twice.
 
 From 4.0.6, use `sql.afterCommit(effect)` to signal committed changes, such as waking workers or invalidating caches. It
 runs after the outermost commit, or immediately outside a transaction. A rollback or a failed `COMMIT` discards it. If

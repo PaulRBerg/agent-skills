@@ -30,7 +30,6 @@ EOF
   [ "$status" -eq 0 ]
   expected_args="$(cat <<'EOF'
 --browser-url=http://127.0.0.1:9222
---page-id-routing
 --memory-debugging
 --experimental-vision
 --redact-network-headers

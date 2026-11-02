@@ -2,7 +2,7 @@
   "metadata": {
     "blockscoutObservedAt": "2026-07-08",
     "etherscanProviderChainCount": 57,
-    "etherscanVerifiedAt": "2026-10-26",
+    "etherscanVerifiedAt": "2026-11-02",
     "routeMeshVerifiedAt": "2026-07-15"
   },
   "chains": {
@@ -92,8 +92,8 @@
       ],
       "routeMesh": true,
       "etherscan": {
-        "support": "free",
-        "notes": "API support is scheduled to end on 2026-10-31. From that date, route it as a chain not on Etherscan V2. The live chainlist omitted it on 2026-10-26, but the API still served it. After support ends, Etherscan provides archived address transaction history only on request to its support team, not through the API"
+        "support": "unsupported",
+        "notes": "API support ended on 2026-10-31; the API rejected its chainid on 2026-11-02. Etherscan provides archived address transaction history only on request to its support team, not through the API"
       },
       "blockscout": { "status": "absent", "notes": "Not returned by Chainscout" }
     },

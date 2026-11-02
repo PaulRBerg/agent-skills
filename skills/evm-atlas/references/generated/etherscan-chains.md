@@ -5,7 +5,7 @@
 Source: <https://docs.etherscan.io/supported-chains> Access changes: <https://docs.etherscan.io/changelog> Live list:
 <https://api.etherscan.io/v2/chainlist> (returns the provider's authoritative `chainid` set)
 
-Verified against the live `chainlist` endpoint on 2026-10-26 (57 provider chains). This file intentionally lists only
+Verified against the live `chainlist` endpoint on 2026-11-02 (57 provider chains). This file intentionally lists only
 chains from `references/generated/target-mainnets.json`; provider-supported chains outside that list are out of scope
 for this skill. Apply dated notes using the request date: a scheduled paid-plan requirement overrides the table grouping
 once effective. Chainlist membership does not establish plan access or an active explorer UI. Free availability may
@@ -13,26 +13,25 @@ depend on a shared community quota; see `references/explorers/etherscan-api.md` 
 
 ## Target Mainnets (Free Tier Available)
 
-| Chain           | Chain ID | Notes                                                                                                                                                                                                                                                                                                                  |
-| --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Abstract        | `2741`   |                                                                                                                                                                                                                                                                                                                        |
-| Arbitrum        | `42161`  | Shared community Free quota effective 2026-11-01; honor the reset time on quota exhaustion                                                                                                                                                                                                                             |
-| Berachain       | `80094`  |                                                                                                                                                                                                                                                                                                                        |
-| Blast           | `81457`  | API support is scheduled to end on 2026-10-31. From that date, route it as a chain not on Etherscan V2. The live chainlist omitted it on 2026-10-26, but the API still served it. After support ends, Etherscan provides archived address transaction history only on request to its support team, not through the API |
-| Celo            | `42220`  | Shared community Free quota since 2026-07-16; honor the reset time on quota exhaustion                                                                                                                                                                                                                                 |
-| Ethereum        | `1`      | Default chain                                                                                                                                                                                                                                                                                                          |
-| Fraxtal         | `252`    |                                                                                                                                                                                                                                                                                                                        |
-| HyperEVM        | `999`    |                                                                                                                                                                                                                                                                                                                        |
-| Linea           | `59144`  | Shared community Free quota since 2026-08-04; honor the reset time on quota exhaustion                                                                                                                                                                                                                                 |
-| Monad           | `143`    |                                                                                                                                                                                                                                                                                                                        |
-| Polygon         | `137`    |                                                                                                                                                                                                                                                                                                                        |
-| Robinhood Chain | `4663`   | Supported since 2026-09-16; community endpoints free through 2026-10-15, then Lite+ from 2026-10-16. Source/ABI remain free                                                                                                                                                                                            |
-| Sei             | `1329`   |                                                                                                                                                                                                                                                                                                                        |
-| Sonic           | `146`    |                                                                                                                                                                                                                                                                                                                        |
-| Taiko           | `167000` |                                                                                                                                                                                                                                                                                                                        |
-| Unichain        | `130`    |                                                                                                                                                                                                                                                                                                                        |
-| World Chain     | `480`    |                                                                                                                                                                                                                                                                                                                        |
-| XDC             | `50`     |                                                                                                                                                                                                                                                                                                                        |
+| Chain           | Chain ID | Notes                                                                                                                       |
+| --------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Abstract        | `2741`   |                                                                                                                             |
+| Arbitrum        | `42161`  | Shared community Free quota effective 2026-11-01; honor the reset time on quota exhaustion                                  |
+| Berachain       | `80094`  |                                                                                                                             |
+| Celo            | `42220`  | Shared community Free quota since 2026-07-16; honor the reset time on quota exhaustion                                      |
+| Ethereum        | `1`      | Default chain                                                                                                               |
+| Fraxtal         | `252`    |                                                                                                                             |
+| HyperEVM        | `999`    |                                                                                                                             |
+| Linea           | `59144`  | Shared community Free quota since 2026-08-04; honor the reset time on quota exhaustion                                      |
+| Monad           | `143`    |                                                                                                                             |
+| Polygon         | `137`    |                                                                                                                             |
+| Robinhood Chain | `4663`   | Supported since 2026-09-16; community endpoints free through 2026-10-15, then Lite+ from 2026-10-16. Source/ABI remain free |
+| Sei             | `1329`   |                                                                                                                             |
+| Sonic           | `146`    |                                                                                                                             |
+| Taiko           | `167000` |                                                                                                                             |
+| Unichain        | `130`    |                                                                                                                             |
+| World Chain     | `480`    |                                                                                                                             |
+| XDC             | `50`     |                                                                                                                             |
 
 ## Target Mainnets (Paid Plan Required)
 
@@ -53,23 +52,24 @@ every plan for supported chains.
 Route these target chains to Blockscout when available, then to the `primaryPublicRpc` from
 `references/generated/target-mainnets.json` if needed. Do not query Etherscan V2 for them.
 
-| Chain         | Chain ID  | Notes                                                                          |
-| ------------- | --------- | ------------------------------------------------------------------------------ |
-| Arbitrum Nova | `42170`   | Not returned by the live chainlist; `nova.arbiscan.io` redirects to Blockscout |
-| Chiliz        | `88888`   | Not returned by the live chainlist                                             |
-| Core Dao      | `1116`    | Not returned by the live chainlist                                             |
-| Fantom        | `250`     | Not returned by the live chainlist                                             |
-| Filecoin      | `314`     | Not returned by the live chainlist                                             |
-| IoTeX         | `4689`    | Not returned by the live chainlist                                             |
-| Lightlink     | `1890`    | Not returned by the live chainlist                                             |
-| Mode          | `34443`   | Not returned by the live chainlist                                             |
-| Morph         | `2818`    | Not returned by the live chainlist                                             |
-| Ronin         | `2020`    | Not returned by the live chainlist                                             |
-| Scroll        | `534352`  | Removed from Etherscan V2 on 2026-04-16; api.scrollscan.com no longer resolves |
-| Sophon        | `50104`   | Not returned by the live chainlist                                             |
-| Superseed     | `5330`    | Not returned by the live chainlist                                             |
-| ZKsync Era    | `324`     | Not currently supported by Etherscan V2                                        |
-| Zora          | `7777777` | Not returned by the live chainlist                                             |
+| Chain         | Chain ID  | Notes                                                                                                                                                                                         |
+| ------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Arbitrum Nova | `42170`   | Not returned by the live chainlist; `nova.arbiscan.io` redirects to Blockscout                                                                                                                |
+| Blast         | `81457`   | API support ended on 2026-10-31; the API rejected its chainid on 2026-11-02. Etherscan provides archived address transaction history only on request to its support team, not through the API |
+| Chiliz        | `88888`   | Not returned by the live chainlist                                                                                                                                                            |
+| Core Dao      | `1116`    | Not returned by the live chainlist                                                                                                                                                            |
+| Fantom        | `250`     | Not returned by the live chainlist                                                                                                                                                            |
+| Filecoin      | `314`     | Not returned by the live chainlist                                                                                                                                                            |
+| IoTeX         | `4689`    | Not returned by the live chainlist                                                                                                                                                            |
+| Lightlink     | `1890`    | Not returned by the live chainlist                                                                                                                                                            |
+| Mode          | `34443`   | Not returned by the live chainlist                                                                                                                                                            |
+| Morph         | `2818`    | Not returned by the live chainlist                                                                                                                                                            |
+| Ronin         | `2020`    | Not returned by the live chainlist                                                                                                                                                            |
+| Scroll        | `534352`  | Removed from Etherscan V2 on 2026-04-16; api.scrollscan.com no longer resolves                                                                                                                |
+| Sophon        | `50104`   | Not returned by the live chainlist                                                                                                                                                            |
+| Superseed     | `5330`    | Not returned by the live chainlist                                                                                                                                                            |
+| ZKsync Era    | `324`     | Not currently supported by Etherscan V2                                                                                                                                                       |
+| Zora          | `7777777` | Not returned by the live chainlist                                                                                                                                                            |
 
 Testnets are outside this skill's target list. If the user asks about any non-target chain, ask them to file a feature
 request in <https://github.com/PaulRBerg/agent-skills>.

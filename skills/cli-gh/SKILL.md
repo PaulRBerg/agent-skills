@@ -81,6 +81,9 @@ Use this workflow when the user asks why CI fails or asks to fix a failing run. 
 - `gh auth login --expiring` (2.103+) prefers expiring OAuth tokens that `gh` refreshes. To prefer them on every
   sign-in, run `gh config set expiring_credentials enabled`. Run `gh auth token` each time you need a token. Never cache
   its output. `GH_TOKEN` and `GITHUB_TOKEN` values never refresh.
+- `gh auth status` refreshes an expired or near-expiry refreshable token unless you pass `--no-refresh`. With that flag,
+  2.103.3+ reports the token as expired, not invalid. To renew it, run the command without the flag. Do not run
+  `gh auth refresh` for this case.
 - `--attach '<file>#<alt>'` on issue/PR create, edit, and comment uploads images or videos. Route those writes through
   `yeet`. Since 2.103.2, GitHub App installation tokens can attach, and the upload endpoint decides permission.
 

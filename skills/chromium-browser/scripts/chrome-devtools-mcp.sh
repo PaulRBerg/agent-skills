@@ -41,9 +41,10 @@ find "$log_dir" -name 'server-*.log' -mtime +7 -delete 2>/dev/null || true
 # skill, not this flag, governs where an agent may write.
 # Screenshot format and quality are defaults; tools can still request PNG.
 # Maximum dimensions cap both file and inline output, with no per-call override.
+# Page-ID routing is on by default in 1.12.0+. Concurrent agents share this
+# browser, so never pass --no-page-id-routing.
 exec "$server" \
   "--browser-url=http://127.0.0.1:$port" \
-  --page-id-routing \
   --memory-debugging \
   --experimental-vision \
   --redact-network-headers \

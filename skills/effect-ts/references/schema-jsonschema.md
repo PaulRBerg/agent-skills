@@ -43,7 +43,8 @@ const decodeUser = Schema.decodeUnknownEffect(User);
 - `Schema.OptionFromOptionalKey(schema)` is appropriate when absence belongs to the decoded domain model.
 - `Schema.NullOr(schema)` is appropriate when the encoded contract uses `null`. `Schema.OptionFromNullOr(schema)`
   decodes it to `Option`.
-- `Schema.optionalKey` is an exact optional key. `Schema.optional` also accepts `undefined`.
+- `Schema.optionalKey` is an exact optional key. `Schema.optional` also accepts `undefined`. From 4.0.7, dynamic
+  `Schema.Record` values reject both wrappers. Use `Schema.UndefinedOr(value)` when entries may hold `undefined`.
 
 See [option-null.md](option-null.md) for the project boundary rule.
 
