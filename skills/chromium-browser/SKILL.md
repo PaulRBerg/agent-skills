@@ -113,7 +113,10 @@ the requested result, then close only those tabs unless the user asked to leave 
 - For a screenshot, pass `uid` to capture one element when only that element matters. Pass `filePath` when the image is
   evidence for the user rather than input for your next decision. Accept wrapper screenshot defaults. Request
   `format: "png"` when lossless output is required. PNG, `fullPage`, and `filePath` cannot bypass the wrapper's
-  1600-pixel width and height caps. Full-resolution output requires an authorized wrapper configuration change.
+  1600-pixel width and height caps. Full-resolution output requires an authorized wrapper configuration change. A
+  `fullPage` capture of a page with CSS animations can show blank or stale regions, especially in a background tab,
+  while computed styles report the finished state. To verify an animated end state, scroll the region into view and take
+  a viewport screenshot, or emulate `prefersReducedMotion: "reduce"` before the capture.
 - Paginate and filter console, network, memory, and other high-volume results.
 - To change the rendered size, use `emulate` with `viewport`. Use `resize_page` only when the OS window size itself
   matters. It fails with `Restore window to normal state before setting content size` on a maximized or full-screen
