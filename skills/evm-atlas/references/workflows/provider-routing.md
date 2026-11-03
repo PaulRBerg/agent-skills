@@ -319,8 +319,24 @@ etherscan --chain 999 --output json proxy eth_getTransactionCount ADDRESS --tag 
 ```
 
 Require `pro_endpoints=true` for `balancehistory`. Preserve the exact checkpoint and same-route header checks. If the
-CLI cannot serve a required field, use only the documented Etherscan direct API exception. If the Etherscan route is
-unavailable or plan-limited, report unknown. Do not fall back to RPC for these historical state facts.
+CLI cannot serve a required field, use the documented Etherscan direct API exception. For an unavailable or plan-limited
+native-balance read, use the browser fallback below. Keep a missing nonce unknown. Do not fall back to RPC for these
+historical state facts.
+
+For bounded HyperEVM (`999`) and Sei (`1329`) balance reads, use `$chromium-browser` with the public Account Balance
+Checker: [HyperEVMScan](https://hyperevmscan.io/balancecheck-tool) or [SeiScan](https://seiscan.io/balancecheck-tool).
+Select the native asset, enter the address, select **Block Number**, and submit the exact checkpoint number.
+
+Verified on 2026-11-03: signed-out lookups on both explorers returned nonzero 2025 year-end balances with 18 decimal
+places. Both matched saved Etherscan `balancehistory` responses exactly. No login or API key was required. This proves
+those sampled balances, not every block or sustained browser availability.
+
+Verify the returned block against the requested checkpoint. Preserve the address, block number, hash, timestamp, exact
+balance text, source URL, and observation time. Convert amounts with fixed-precision arithmetic. This page supplies
+native balances, not historical nonces or arbitrary contract state. Follow browser human gates when they appear.
+
+Keep browser evidence distinct from API responses. A consuming exporter must explicitly support the captured evidence
+before this workflow can replace its API dependency. Do not insert browser results into an API cache.
 
 For Fantom Opera (`250`) account history, do not use the unsafe FTMScout route returned by Chainscout. Read
 `references/explorers/fantom-opera.md`. Preserve its partial-index boundary. GraphQL rows can provide positive evidence,
