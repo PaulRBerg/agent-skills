@@ -131,22 +131,60 @@ the requested result, then close only those tabs unless the user asked to leave 
   wait for running calls and block later calls. Separate agent servers still share browser state. Preserve causal order
   and page ownership across concurrent work.
 
+## Website Sign-In with 1Password
+
+When the requested task needs website authentication, try the existing 1Password extension before treating login as a
+human gate. Task authorization covers signing in to the intended account with its saved login. Follow explicit user
+restrictions. Do not ask for separate permission for this prerequisite.
+
+1. Open the site's sign-in flow. Verify the destination origin, including any expected identity provider, before using a
+   saved login. Never override a domain-mismatch or browser security warning.
+2. Check for a 1Password sign-in prompt or field suggestion. If absent, open 1Password from Chromium's toolbar or
+   Extensions menu. Confirm the extension is signed in and unlocked. Installation alone does not establish readiness.
+3. Use page tools for exposed page controls. Use host computer-use/CUA for the toolbar, extension popup, or suggestions
+   that DevTools cannot reach. Finish outstanding browser calls before switching controllers. Keep the same profile and
+   task tab. An absent DevTools control does not prove that 1Password is unavailable.
+4. Select the saved login that matches the site and intended account. Use task context and visible account labels to
+   distinguish multiple matches. If the intended account remains ambiguous, ask the user to choose before filling.
+5. Activate the matching 1Password sign-in or autofill action. The extension can submit automatically, so inspect the
+   result before clicking the site's sign-in button. For a multi-step form, continue with the same account and verify
+   each destination before filling. Use an existing saved passkey or saved one-time code when 1Password offers it.
+6. Verify success from a non-secret page signal and the expected account identity. Resume the requested task. After
+   returning from native controls, identify the task page and refresh its state before further MCP actions.
+
+Keep credentials inside the normal extension-to-site flow. Do not reveal or copy passwords, read clipboard secrets, or
+extract credentials from page fields, extension storage, network traffic, or processes. Avoid captures of filled secret
+fields. Check field presence or completion without returning their values.
+
+If the extension is missing, signed out, or locked, use Human Gates for the required user action. Do the same when no
+matching login exists, credentials are rejected, or the required native controls are unavailable. Ask the user to unlock
+or sign in directly, never to send a password, Secret Key, or verification code in chat. After an unlock, retry this
+workflow before waiting for a website login. Do not install the extension, change its security settings, create
+accounts, or save or update credentials as a login workaround.
+
+For current UI details, consult 1Password's [browser guide](https://support.1password.com/getting-started-browser/),
+[password sign-in guide](https://support.1password.com/save-fill-passwords/), and
+[passkey guide](https://support.1password.com/save-use-passkeys/).
+
 ## Human Gates
 
-A human gate is a captcha, a login, a 2FA prompt, a phone verification, or an external approval page. An example of an
-external approval page is an npm trusted-publisher prompt. Ending the turn at a human gate is a premature stop.
+A human gate requires user action that the authorized sign-in workflow cannot complete. Examples include a 1Password
+unlock, captcha, biometric or security-key touch, phone verification, or external approval. Treat login and 2FA as human
+gates only after checking Website Sign-In with 1Password. New consent or permission grants still require their own task
+authority. Ending the turn immediately at a human gate is a premature stop.
 
 1. Stop all writes on the gated page. Never try to bypass the gate.
 2. Tell the user the exact page and the action the gate requires.
-3. Allow ten minutes in total unless the user states another response window. Use sequential `wait_for` calls on the
-   gated `pageId`, with each `timeout` at most 10000. Each timed-out call returns a short error, and the successful call
-   returns the snapshot you need next. Match text that appears only after the gate clears. Examples are the post-login
-   heading or the next form label. Set `visible: true` when the text can exist hidden before the gate clears. If no
-   distinctive text exists, use snapshots separated by short, interruptible host waits. Do not queue another browser
-   call behind an outstanding `wait_for`. Canceling a host wait does not prove that its MCP call stopped.
-4. After a user reply, take a fresh snapshot before waiting again. A cleared gate can leave the form awaiting another
-   action. When the gate clears, resume from the same page state. Re-verify the form fields first, because sites clear
-   them.
+3. Allow ten minutes in total unless the user states another response window. For an MCP page gate, use sequential
+   `wait_for` calls on the gated `pageId`, with each `timeout` at most 10000. Each timed-out call returns a short error,
+   and the successful call returns the snapshot you need next. Match text that appears only after the gate clears.
+   Examples are the post-login heading or the next form label. Set `visible: true` when the text can exist hidden before
+   the gate clears. If no distinctive text exists, use snapshots separated by short, interruptible host waits. For a
+   native prompt, use fresh native UI observations with those waits. Do not queue another browser call behind an
+   outstanding `wait_for`. Canceling a host wait does not prove that its MCP call stopped.
+4. After a user reply, inspect the relevant page or native prompt before waiting again. A cleared gate can leave the
+   form awaiting another action. When the gate clears, resume from the same page state. Re-verify the form fields first,
+   without reading secret values, because sites clear them.
 5. End the turn only after the total response window expires. Then report the exact step the user must complete and the
    step that resumes the task.
 
@@ -169,9 +207,9 @@ Use these workflows only when the tools are exposed in the current session.
 
 ## Authority and Privacy
 
-- Read-only inspection of task-relevant authenticated state is allowed when the task calls for it. Submitting forms,
-  changing accounts, installing extensions, making purchases, or causing another external mutation requires the same
-  authority that action would require outside the browser.
+- Read-only inspection of task-relevant authenticated state is allowed when the task calls for it. Website sign-in
+  follows the authorization above. Other form submissions, account changes, extension installation, purchases, and
+  external mutations require the same authority they would require outside the browser.
 - Network-header redaction is an intentional server boundary. Do not bypass it or seek credentials through page or
   process introspection.
 
