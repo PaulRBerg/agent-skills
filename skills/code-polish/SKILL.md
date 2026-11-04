@@ -66,6 +66,8 @@ Select every applicable profile and read it once. Read all selected profiles tog
 | env, config, timeouts, retries, pools, limits                 | `configuration`         |
 | Go behavior, concurrency, context, errors                     | `go`                    |
 | Rust, Cargo/workspaces, async/concurrency, unsafe/FFI         | `rust`                  |
+| Swift, iOS/macOS, SwiftUI/UIKit/AppKit, SwiftPM/Xcode targets | `swift`                 |
+| Kotlin, Android, coroutines/Flow, Compose, Gradle/manifest    | `kotlin`                |
 | TypeScript types, modules, packages, async behavior           | `typescript`            |
 | Python services, scripts, async, packaging, data IO           | `python`                |
 | shell, CI, deploy, installers, quoting                        | `shell`                 |
