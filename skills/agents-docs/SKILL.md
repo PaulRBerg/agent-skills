@@ -89,8 +89,12 @@ When a Codex feature or `config.toml` key is missing from the prose documentatio
    search only the relevant definition or path in the returned file.
 3. Compare the schema with the current prose config reference. Treat schema-only fields as under-documented, not as
    behavior guaranteed by every client.
-4. Validate candidate syntax against the installed client with `codex --strict-config --help`. When needed, use one-off
-   `-c` overrides without persisting changes. Parsing acceptance does not prove runtime behavior.
+4. Check installed help for `codex app-server --strict-config --print-startup-config`. When supported, use that command
+   from a neutral directory to validate configuration without starting a server or inference. Use a temporary
+   `CODEX_HOME` for candidate files or one-off `-c` overrides without changing live settings. Keep validator output
+   private because it can contain configuration values. `--help` alone does not load or validate configuration. Parsing
+   acceptance does not prove runtime behavior: check `codex features list` for removed or ineffective features even when
+   their keys still pass validation.
 5. Report evidence separately as official docs/schema, local observations, or inference. If sources disagree, prefer the
    installed client's observed behavior for the user's environment and disclose the discrepancy.
 
