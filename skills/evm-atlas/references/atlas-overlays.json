@@ -216,7 +216,10 @@
         "https://gwan-ssl.wandevs.org:46891"
       ],
       "routeMesh": true,
-      "etherscan": { "support": "free" },
+      "etherscan": {
+        "support": "free",
+        "notes": "Community endpoints free through 2026-11-30, then require Lite+ from 2026-12-01. Source code and ABI remain free on all plans."
+      },
       "blockscout": {
         "status": "observed",
         "hostedBy": "self",

@@ -311,17 +311,19 @@ RPCs return no `trace_transaction` or `debug_traceTransaction` results. Verified
 ## Exceptional History
 
 For HyperEVM (`999`) exact historical native-balance and nonce reads, do not use public JSON-RPC or RouteMesh. Those
-routes can silently serve latest state for historical selectors. At the verified checkpoint, use:
+routes can silently serve latest state for historical selectors.
+
+From `2026-12-01`, require `paid_chains=true` for HyperEVM community endpoints, including nonce and header reads.
+`balancehistory` still requires `pro_endpoints=true`. At the verified checkpoint, use:
 
 ```sh
 etherscan --chain 999 --output json account balancehistory ADDRESS --blockno CHECKPOINT_NUMBER
 etherscan --chain 999 --output json proxy eth_getTransactionCount ADDRESS --tag CHECKPOINT_HEX
 ```
 
-Require `pro_endpoints=true` for `balancehistory`. Preserve the exact checkpoint and same-route header checks. If the
-CLI cannot serve a required field, use the documented Etherscan direct API exception. For an unavailable or plan-limited
-native-balance read, use the browser fallback below. Keep a missing nonce unknown. Do not fall back to RPC for these
-historical state facts.
+Preserve the exact checkpoint and same-route header checks. If the CLI cannot serve a required field, use the documented
+Etherscan direct API exception. For an unavailable or plan-limited native-balance read, use the browser fallback below.
+Keep a missing nonce unknown. Do not fall back to RPC for these historical state facts.
 
 For bounded HyperEVM (`999`) and Sei (`1329`) balance reads, use `$chromium-browser` with the public Account Balance
 Checker: [HyperEVMScan](https://hyperevmscan.io/balancecheck-tool) or [SeiScan](https://seiscan.io/balancecheck-tool).

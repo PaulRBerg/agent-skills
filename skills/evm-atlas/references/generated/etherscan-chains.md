@@ -13,25 +13,25 @@ depend on a shared community quota; see `references/explorers/etherscan-api.md` 
 
 ## Target Mainnets (Free Tier Available)
 
-| Chain           | Chain ID | Notes                                                                                                                       |
-| --------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Abstract        | `2741`   |                                                                                                                             |
-| Arbitrum        | `42161`  | Shared community Free quota effective 2026-11-01; honor the reset time on quota exhaustion                                  |
-| Berachain       | `80094`  |                                                                                                                             |
-| Celo            | `42220`  | Shared community Free quota since 2026-07-16; honor the reset time on quota exhaustion                                      |
-| Ethereum        | `1`      | Default chain                                                                                                               |
-| Fraxtal         | `252`    |                                                                                                                             |
-| HyperEVM        | `999`    |                                                                                                                             |
-| Linea           | `59144`  | Shared community Free quota since 2026-08-04; honor the reset time on quota exhaustion                                      |
-| Monad           | `143`    |                                                                                                                             |
-| Polygon         | `137`    |                                                                                                                             |
-| Robinhood Chain | `4663`   | Supported since 2026-09-16; community endpoints free through 2026-10-15, then Lite+ from 2026-10-16. Source/ABI remain free |
-| Sei             | `1329`   |                                                                                                                             |
-| Sonic           | `146`    |                                                                                                                             |
-| Taiko           | `167000` |                                                                                                                             |
-| Unichain        | `130`    |                                                                                                                             |
-| World Chain     | `480`    |                                                                                                                             |
-| XDC             | `50`     |                                                                                                                             |
+| Chain           | Chain ID | Notes                                                                                                                          |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Abstract        | `2741`   |                                                                                                                                |
+| Arbitrum        | `42161`  | Shared community Free quota effective 2026-11-01; honor the reset time on quota exhaustion                                     |
+| Berachain       | `80094`  |                                                                                                                                |
+| Celo            | `42220`  | Shared community Free quota since 2026-07-16; honor the reset time on quota exhaustion                                         |
+| Ethereum        | `1`      | Default chain                                                                                                                  |
+| Fraxtal         | `252`    |                                                                                                                                |
+| HyperEVM        | `999`    | Community endpoints free through 2026-11-30, then require Lite+ from 2026-12-01. Source code and ABI remain free on all plans. |
+| Linea           | `59144`  | Shared community Free quota since 2026-08-04; honor the reset time on quota exhaustion                                         |
+| Monad           | `143`    |                                                                                                                                |
+| Polygon         | `137`    |                                                                                                                                |
+| Robinhood Chain | `4663`   | Supported since 2026-09-16; community endpoints free through 2026-10-15, then Lite+ from 2026-10-16. Source/ABI remain free    |
+| Sei             | `1329`   |                                                                                                                                |
+| Sonic           | `146`    |                                                                                                                                |
+| Taiko           | `167000` |                                                                                                                                |
+| Unichain        | `130`    |                                                                                                                                |
+| World Chain     | `480`    |                                                                                                                                |
+| XDC             | `50`     |                                                                                                                                |
 
 ## Target Mainnets (Paid Plan Required)
 
