@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.4] - 2026-11-06
+
+### Changed
+
+- Reduce post-tool Git scans to claimed and written paths, share one inspection, and disable optional index writes ([`7fed9d8`](https://github.com/PaulRBerg/agent-skills/commit/7fed9d8))
+
+### Fixed
+
+- Fix directories and special files forcing per-file Git hash retries across an entire batch ([`7fed9d8`](https://github.com/PaulRBerg/agent-skills/commit/7fed9d8))
+
 ## [1.0.3] - 2026-10-28
 
 ### Fixed
@@ -25,6 +35,7 @@
 
 _First release._
 
+[1.0.4]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.4
 [1.0.3]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.3
 [1.0.2]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.2
 [1.0.1]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.1
