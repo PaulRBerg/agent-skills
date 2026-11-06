@@ -138,6 +138,11 @@ Post-tool hooks put an out-of-scope write warning first in `additionalContext` (
 signal to stop and re-run `ai-coord start`, not as coordination state itself. It covers only visible file-mutating
 tools, not Bash.
 
+Post-tool checks share one literal-pathspec Git status inspection of the current claim and observed outside writes. Git
+dirt inspections disable optional index locks. Keep complete dirty-path sets for snapshot, arbitration, and release
+observations because partial sets would discard observations outside the inspected scope. Exclude directories and
+special files from blob-hash batches so one unhashable path cannot force individual retries for every regular file.
+
 Named drafts (`draft --name NAME` / `bundle draft --name NAME`, submitted with `start --draft NAME` or
 `bundle start --draft NAME`) have no owning session, are never counted as active work by any session, and outlive the
 session that created them. If never promoted, they expire after `DRAFT_TTL` (seven days). Bare `--draft` still means

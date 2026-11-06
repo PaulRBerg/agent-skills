@@ -14,6 +14,10 @@ use crate::{
 };
 use wait_timeout::ChildExt;
 
+mod status;
+
+pub(crate) use status::{git_dirty_paths, git_dirty_paths_in};
+
 pub(crate) const MAX_SCOPE_CHARS: usize = 120;
 pub(crate) const UNHASHABLE_BLOB_HASH: &str = "<deleted-or-unhashable>";
 
@@ -402,43 +406,6 @@ pub(crate) fn overlaps_outside_coverage(requested: &[Scope], contender: &[Scope]
         .collect()
 }
 
-pub(crate) fn git_dirty_paths(root: &Path) -> Result<Vec<String>> {
-    let output = run_output_timeout(
-        Command::new("git").args(["-C"]).arg(root).args(["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
-        GIT_INSPECTION_TIMEOUT,
-    )
-    .map_err(|error| AppError::operational(format!("could not inspect Git dirt: {error}")))?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        let detail = if detail.is_empty() { format!("exit {}", output.status.code().unwrap_or(-1)) } else { detail };
-        return Err(AppError::operational(format!("could not inspect Git dirt: {detail}")));
-    }
-
-    parse_git_dirty_paths(&output.stdout)
-}
-
-fn parse_git_dirty_paths(output: &[u8]) -> Result<Vec<String>> {
-    let parts: Vec<&[u8]> = output.split(|byte| *byte == 0).collect();
-    let mut dirty = Vec::new();
-    let mut index = 0;
-    while index < parts.len() {
-        let entry = parts[index];
-        index += 1;
-        if entry.is_empty() || entry.len() < 4 {
-            continue;
-        }
-        let status = &entry[..2];
-        push_git_path(&mut dirty, &entry[3..])?;
-        if (status.contains(&b'R') || status.contains(&b'C')) &&
-            let Some(other) = parts.get(index)
-        {
-            push_git_path(&mut dirty, other)?;
-            index += 1;
-        }
-    }
-    Ok(dirty)
-}
-
 /// Return the subset of repository-relative `paths` that Git ignores. Tracked
 /// files never match, even under an ignore pattern. Fails open to an empty list.
 pub(crate) fn git_ignored_paths(root: &Path, paths: &[String]) -> Vec<String> {
@@ -482,6 +449,9 @@ pub(crate) fn git_blob_hashes(root: &Path, paths: &[String], write: bool) -> Vec
             }
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 hashes[index] = Some(git_symlink_blob_hash(root, path, write));
+            }
+            Ok(metadata) if !metadata.is_file() => {
+                hashes[index] = Some(UNHASHABLE_BLOB_HASH.to_owned());
             }
             Ok(_) | Err(_) => eligible.push(index),
         }
@@ -605,19 +575,6 @@ pub(crate) fn relevant_dirty(scopes: &[Scope], dirty_paths: &[String]) -> Vec<St
         })
         .cloned()
         .collect()
-}
-
-fn push_git_path(paths: &mut Vec<String>, bytes: &[u8]) -> Result<()> {
-    if bytes.is_empty() {
-        return Ok(());
-    }
-    let path = std::str::from_utf8(bytes)
-        .map_err(|_| AppError::operational("could not inspect Git dirt: non-UTF-8 path in porcelain output"))?
-        .to_owned();
-    if !paths.contains(&path) {
-        paths.push(path);
-    }
-    Ok(())
 }
 
 fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {
@@ -861,7 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn batch_failure_falls_back_without_losing_path_mapping() {
+    fn nonregular_inputs_preserve_hash_path_mapping() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
         assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
@@ -876,6 +833,17 @@ mod tests {
         assert_ne!(hashes[0].1, UNHASHABLE_BLOB_HASH);
         assert_eq!(hashes[1].1, UNHASHABLE_BLOB_HASH);
         assert_ne!(hashes[2].1, UNHASHABLE_BLOB_HASH);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn socket_inputs_are_unhashable_without_entering_git() {
+        let temp = TempDir::new().unwrap();
+        let _socket = std::os::unix::net::UnixListener::bind(temp.path().join("socket")).unwrap();
+        assert_eq!(
+            git_blob_hashes(temp.path(), &["socket".to_owned()], false),
+            vec![("socket".to_owned(), UNHASHABLE_BLOB_HASH.to_owned())]
+        );
     }
 
     #[cfg(unix)]
@@ -977,12 +945,6 @@ mod tests {
         let dirty = git_dirty_paths(root).unwrap();
         assert!(dirty.contains(&"before.txt".to_owned()));
         assert!(dirty.contains(&"after.txt".to_owned()));
-    }
-
-    #[test]
-    fn git_dirt_rejects_non_utf8_porcelain_paths() {
-        let error = parse_git_dirty_paths(b"?? foo\xff.txt\0").unwrap_err();
-        assert_eq!(error.to_string(), "could not inspect Git dirt: non-UTF-8 path in porcelain output");
     }
 
     #[test]

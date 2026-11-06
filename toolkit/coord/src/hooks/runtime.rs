@@ -12,8 +12,8 @@ use crate::{
     domain::{Client, Identity, Outcome, SessionState, WorkState, client_name, sanitize},
     error::{AppError, Result},
     host::{
-        git_blob_hashes, git_dirty_paths, git_ignored_paths, git_root, host_process_reference, normalize_repo_path,
-        relevant_dirty,
+        git_blob_hashes, git_dirty_paths, git_dirty_paths_in, git_ignored_paths, git_root, host_process_reference,
+        normalize_repo_path, relevant_dirty,
     },
     state::SessionUpdate,
 };
@@ -234,23 +234,31 @@ impl<'a> HookRuntime<'a> {
 
         if is_nudge_event(client, event) {
             let mut scope_fragment = None;
+            let mut clean_nudge_root = None;
             if let Some(root) = root.as_deref() {
+                let repo_root = path_text(root)?;
                 let paths = touched_paths(payload, &cwd, root);
+                let claim = store
+                    .work(&identity)?
+                    .filter(|work| work.state == WorkState::Active)
+                    .and_then(|work| work.claim(&repo_root).cloned());
+                let own_scopes = claim.as_ref().map(|claim| claim.scopes.as_slice()).unwrap_or_default();
+                let outside = paths
+                    .iter()
+                    .filter(|path| relevant_dirty(own_scopes, std::slice::from_ref(*path)).is_empty())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let mut inspection_paths = own_scopes.iter().map(|scope| scope.path.clone()).collect::<Vec<_>>();
+                inspection_paths.extend(outside.iter().cloned());
+                inspection_paths.sort();
+                inspection_paths.dedup();
+                let dirty = git_dirty_paths_in(root, &inspection_paths);
                 if !paths.is_empty() {
-                    let repo_root = path_text(root)?;
                     store.record_touched(&identity, &repo_root, &paths, self.coordinator.now())?;
-                    let own_scopes = store
-                        .work(&identity)?
-                        .filter(|work| work.state == WorkState::Active)
-                        .and_then(|work| work.claim(&repo_root).map(|claim| claim.scopes.clone()))
-                        .unwrap_or_default();
-                    let outside = paths
-                        .iter()
-                        .filter(|path| relevant_dirty(&own_scopes, std::slice::from_ref(*path)).is_empty())
+                    let dirty_written = outside
+                        .into_iter()
+                        .filter(|path| dirty.as_ref().is_ok_and(|dirty| dirty.contains(path)))
                         .collect::<Vec<_>>();
-                    let dirty = if outside.is_empty() { Vec::new() } else { git_dirty_paths(root).unwrap_or_default() };
-                    let dirty_written =
-                        outside.into_iter().filter(|path| dirty.contains(path)).cloned().collect::<Vec<_>>();
                     if !dirty_written.is_empty() {
                         let hashes = git_blob_hashes(root, &dirty_written, false);
                         store.record_unclaimed_writes(&identity, &repo_root, &hashes, self.coordinator.now())?;
@@ -259,17 +267,15 @@ impl<'a> HookRuntime<'a> {
                         scope_fragment = scope_watch_fragment(&store, &identity, &repo_root, &paths);
                     }
                 }
+                if let (Some(claim), Ok(dirty)) = (claim, dirty) {
+                    let clean = relevant_dirty(&claim.scopes, &dirty).is_empty();
+                    if store.clean_scope_nudge_pending(&identity, &repo_root, clean).unwrap_or(false) {
+                        clean_nudge_root = Some(repo_root);
+                    }
+                }
             }
             let recommendations = self.coordinator.pending_recommendations(&identity, root.as_deref(), true)?;
             let messages = store.unnotified_messages(&identity)?;
-            let clean_nudge_root = root.as_deref().and_then(|root| {
-                let repo_root = path_text(root).ok()?;
-                let work = store.work(&identity).ok().flatten()?;
-                let claim = work.claim(&repo_root).filter(|_| work.state == WorkState::Active)?;
-                let dirty = git_dirty_paths(Path::new(&claim.repo_root)).ok()?;
-                let clean = relevant_dirty(&claim.scopes, &dirty).is_empty();
-                store.clean_scope_nudge_pending(&identity, &claim.repo_root, clean).ok()?.then_some(repo_root)
-            });
             store.hook_success(client, event, self.coordinator.now())?;
             let mut context = String::new();
             if let Some(fragment) = scope_fragment {
