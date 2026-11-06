@@ -242,6 +242,27 @@ a non-target Chainscout entry. Use `$chromium-browser` for OKLink and Ronin brow
 Browser availability does not establish a supported programmatic API route. Use documented credentials for API access.
 Never extract or reproduce the site's private request-signing headers.
 
+### Core and Blast browser history
+
+For resolved Core DAO (`1116`), inspect `https://scan.coredao.org/address/<address>` in Chromium. Its Transactions,
+Internal Txns, and Token Transfers (ERC-20) tabs load asynchronously. Wait for populated rows or the completed history
+response before interpreting a zero count. Verified on 2026-11-06: an initial empty view later displayed historical
+rows.
+
+The browser uses POST requests to `/api/chain/address_transaction`, `/api/chain/address_internalTxn`, and
+`/api/chain/address_token_transfer`. Preserve the observed request bodies, timestamps, and pagination. Do not infer NFT
+coverage from these three address tabs.
+
+For resolved Blast (`81457`), use `https://blastexplorer.io/address/<address>` when Blastscan is unavailable. This
+Routescan browser source remained available on 2026-11-06 while `blastscan.io` failed DNS. Check Transactions, Internal
+Transactions, Token Transfers (ERC-20), and NFT Transfers. The NFT list identifies ERC721 and ERC1155 separately.
+Internal Transactions includes zero-value and root calls, so its operation count is not a count of incoming transfers.
+
+On both explorers, continue descending pages until the requested lower boundary is crossed or the results are exhausted.
+After pagination, wait for the new page number and loaded rows before capturing evidence. Verify period boundaries and
+material transactions through provider routing. Browser history does not independently prove the provider's indexing
+watermark. Keep unavailable channels explicit.
+
 ### ZKsync official explorer fallback
 
 For resolved ZKsync Era (`324`), a Blockscout plan-gating error does not exhaust historical sources. Inspect
