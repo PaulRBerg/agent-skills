@@ -21,7 +21,7 @@ use crate::{
     domain::{Identity, InventoryResult, OutcomeKind, ProcessLiveness, ProcessProbe, Scope, ScopeKind, WorkState},
     error::Result,
     state::{Store, WorkClaimUpdate, WorkUpdate},
-    work::DIRT_HOLD_SECONDS,
+    work::{DIRT_HOLD_SECONDS, WorkCoordinator},
 };
 
 type Action = Box<dyn FnOnce() + Send>;
@@ -271,6 +271,97 @@ fn incomplete_coverage_at_the_final_recheck_never_grants() {
     assert_eq!(fixture.refreshes_after(1), [100.0, 120.0, 140.0, 160.0, 180.0, 190.0]);
     let work = fixture.store().work(&waiter).unwrap().unwrap();
     assert_eq!((work.state, work.blocked_reason.as_deref()), (WorkState::Queued, Some("coverage")));
+}
+
+/// Queue `peer` behind its own fresh unattributed dirt on `peer.rs` at t=100,
+/// next to an already queued waiter in the same root.
+fn queue_peer_behind_fresh_dirt(fixture: &Fixture, peer: &Identity) {
+    let root = &fixture.roots[0];
+    fs::write(root.join("peer.rs"), "dirty\n").unwrap();
+    let outcome = fixture.coordinator.start_for(peer.clone(), "peer", &[PathBuf::from("peer.rs")], &[], root).unwrap();
+    assert_eq!((outcome.kind, outcome.detail.as_str()), (OutcomeKind::Unknown, "dirty-settling:peer.rs"));
+}
+
+/// Schedule a direct arbitration recheck of `identity`'s queued work at `at`,
+/// as that session's own `wait` loop would run it from another process, and
+/// log the ledger generation delta it caused with its outcome detail.
+fn schedule_recheck(
+    fixture: &Fixture,
+    identity: &Identity,
+    at: f64,
+    complete: bool,
+    log: &Arc<Mutex<Vec<(i64, String)>>>,
+) {
+    let store_path = fixture.store().path().to_owned();
+    let identity = identity.clone();
+    let log = Arc::clone(log);
+    fixture.clock.at(at, move || {
+        let mut store = Store::open(store_path).unwrap();
+        let work = store.work(&identity).unwrap().unwrap();
+        let before = store.generation().unwrap();
+        let inventory = InventoryResult { complete, providers: Vec::new() };
+        let outcome = WorkCoordinator { store: &mut store }.wait_recheck(&identity, &work, &inventory, at).unwrap();
+        let delta = store.generation().unwrap() - before;
+        log.lock().unwrap().push((delta, outcome.detail));
+    });
+}
+
+#[test]
+fn unchanged_wait_rechecks_do_not_bump_the_generation_or_refresh_peers() {
+    let waiter = identity("waiter");
+    let peer = identity("peer");
+    let fixture = fixture(1, &[(&waiter, 0, 320), (&peer, 0, 321)]);
+    queue_behind_fresh_dirt(&fixture, &waiter, &[]);
+    queue_peer_behind_fresh_dirt(&fixture, &peer);
+    let store = fixture.store();
+    let generation = store.generation().unwrap();
+    let before = store.work(&waiter).unwrap().unwrap();
+    let log = Arc::new(Mutex::new(Vec::new()));
+    // Two rechecks of the same still-blocked item while the peer's wait sleeps.
+    schedule_recheck(&fixture, &waiter, 105.0, true, &log);
+    schedule_recheck(&fixture, &waiter, 110.0, true, &log);
+
+    let outcome = fixture.coordinator.wait_for_repo(&peer, &fixture.roots[0], 30, 1.0, false).unwrap();
+
+    assert_eq!(outcome.kind, OutcomeKind::Timeout);
+    let log = log.lock().unwrap().clone();
+    assert_eq!(log, [(0, "dirty-settling:dirty.rs".to_owned()), (0, "dirty-settling:dirty.rs".to_owned())]);
+    // The peer's own rechecks (entry, then the fallback interval) are no-ops
+    // too, so nothing in the ledger changed and no immediate refresh fired.
+    assert_eq!(fixture.refreshes_after(2), [100.0, 120.0]);
+    let store = fixture.store();
+    assert_eq!(store.generation().unwrap(), generation);
+    assert_eq!(store.work(&waiter).unwrap().unwrap(), before);
+    assert_eq!(store.work(&peer).unwrap().unwrap().revision, 1);
+}
+
+#[test]
+fn changed_blocked_reasons_still_bump_the_generation_and_refresh_peers() {
+    let waiter = identity("waiter");
+    let peer = identity("peer");
+    let fixture = fixture(1, &[(&waiter, 0, 322), (&peer, 0, 323)]);
+    queue_behind_fresh_dirt(&fixture, &waiter, &[]);
+    queue_peer_behind_fresh_dirt(&fixture, &peer);
+    let store = fixture.store();
+    let generation = store.generation().unwrap();
+    let before = store.work(&waiter).unwrap().unwrap();
+    let log = Arc::new(Mutex::new(Vec::new()));
+    // Coverage drops, then returns: two real blocked-reason transitions.
+    schedule_recheck(&fixture, &waiter, 105.0, false, &log);
+    schedule_recheck(&fixture, &waiter, 110.0, true, &log);
+
+    let outcome = fixture.coordinator.wait_for_repo(&peer, &fixture.roots[0], 30, 1.0, false).unwrap();
+
+    assert_eq!(outcome.kind, OutcomeKind::Timeout);
+    let log = log.lock().unwrap().clone();
+    assert_eq!(log, [(1, "coverage".to_owned()), (1, "dirty-settling:dirty.rs".to_owned())]);
+    assert_eq!(fixture.refreshes_after(2), [100.0, 105.0, 110.0]);
+    let store = fixture.store();
+    assert_eq!(store.generation().unwrap(), generation + 2);
+    let after = store.work(&waiter).unwrap().unwrap();
+    assert_eq!((after.revision, after.updated_at), (before.revision + 2, 110.0));
+    assert_eq!((after.state, after.blocked_reason.as_deref()), (WorkState::Queued, Some("dirty")));
+    assert_eq!(after.submitted_at, before.submitted_at);
 }
 
 /// A holder active on `roots[1]/shared.rs` and a bundle waiter whose first claim

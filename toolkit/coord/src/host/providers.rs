@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     path::{Path, PathBuf},
     process::Command,
@@ -234,11 +235,22 @@ fn collect_claude_inventory_once(executable: &Path, probe: &dyn ProcessProbe) ->
 }
 
 pub(crate) fn normalize_claude_sessions(payload: &Value, probe: &dyn ProcessProbe) -> ClaudeNormalization {
+    normalize_claude_sessions_with(payload, probe, git_root)
+}
+
+/// `resolve_root` runs once per distinct exact `cwd` within this call, including
+/// when it finds no root. Nothing is remembered across calls.
+fn normalize_claude_sessions_with(
+    payload: &Value,
+    probe: &dyn ProcessProbe,
+    mut resolve_root: impl FnMut(&Path) -> Option<PathBuf>,
+) -> ClaudeNormalization {
     let Some(values) = payload.as_array() else {
         return ClaudeNormalization { sessions: Vec::new(), dropped: 1 };
     };
     let mut sessions = Vec::new();
     let mut dropped = 0;
+    let mut roots = HashMap::<PathBuf, Option<PathBuf>>::new();
     for raw in values {
         let Some(raw) = raw.as_object() else {
             dropped += 1;
@@ -279,9 +291,10 @@ pub(crate) fn normalize_claude_sessions(payload: &Value, probe: &dyn ProcessProb
             .filter(|pid| *pid > 0 && *pid <= u32::MAX as u64)
             .map(|pid| pid as u32);
         let fingerprint = pid.and_then(|pid| probe.fingerprint(pid).ok());
+        let repo_root = roots.entry(cwd.clone()).or_insert_with(|| resolve_root(&cwd)).clone();
         sessions.push(ClaudeSessionObservation {
             identity: Identity { client: Client::Claude, session_id: session_id.to_owned() },
-            repo_root: git_root(&cwd),
+            repo_root,
             cwd,
             state: match state_value.as_str() {
                 "busy" | "working" => SessionState::Working,
@@ -497,6 +510,61 @@ mod tests {
         );
         assert_eq!(normalized.sessions[1].state, SessionState::Unknown);
         assert_eq!(normalized.sessions[1].started_at, 1_785_628_800.0);
+    }
+
+    fn claude_row(id: &str, cwd: &str, pid: u32) -> Value {
+        serde_json::json!({"id": id, "cwd": cwd, "state": "idle", "startedAt": 1, "pid": pid})
+    }
+
+    #[test]
+    fn git_root_is_resolved_once_per_cwd_within_one_normalization() {
+        let payload = Value::Array(vec![
+            claude_row("one", "/repo", 1),
+            claude_row("two", "/repo", 2),
+            claude_row("three", "/plain", 3),
+            claude_row("four", "/plain", 4),
+            claude_row("five", "/repo", 5),
+            serde_json::json!({"id": "dropped", "cwd": "/never", "state": "idle"}),
+        ]);
+        let mut lookups = Vec::new();
+        let normalized = normalize_claude_sessions_with(&payload, &FakeProbe, |cwd| {
+            lookups.push(cwd.to_owned());
+            (cwd == Path::new("/repo")).then(|| PathBuf::from("/repo"))
+        });
+
+        assert_eq!(lookups, [PathBuf::from("/repo"), PathBuf::from("/plain")]);
+        assert_eq!(normalized.dropped, 1);
+        let rows = normalized
+            .sessions
+            .iter()
+            .map(|session| {
+                (
+                    session.identity.session_id.as_str(),
+                    session.repo_root.as_deref(),
+                    session.fingerprint.as_ref().and_then(|fingerprint| fingerprint.start_token.as_deref()),
+                )
+            })
+            .collect::<Vec<_>>();
+        let repo = Some(Path::new("/repo"));
+        assert_eq!(
+            rows,
+            [
+                ("one", repo, Some("token-1")),
+                ("two", repo, Some("token-2")),
+                ("three", None, Some("token-3")),
+                ("four", None, Some("token-4")),
+                ("five", repo, Some("token-5")),
+            ]
+        );
+
+        // The next call looks every cwd up again and sees the fresh answer.
+        let mut lookups = Vec::new();
+        let normalized = normalize_claude_sessions_with(&payload, &FakeProbe, |cwd| {
+            lookups.push(cwd.to_owned());
+            Some(cwd.join("root"))
+        });
+        assert_eq!(lookups, [PathBuf::from("/repo"), PathBuf::from("/plain")]);
+        assert!(normalized.sessions.iter().all(|session| session.repo_root == Some(session.cwd.join("root"))));
     }
 
     #[test]

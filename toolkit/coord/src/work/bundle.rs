@@ -214,7 +214,11 @@ impl WorkCoordinator<'_> {
                     updated_at: current,
                     expected_revision: current_work.as_ref().map(|work| work.revision),
                 };
-                transaction.save_work(&update)?;
+                if !(matches!(submission, Submission::Wait { .. }) &&
+                    unchanged_queued_recheck(current_work.as_ref(), &update))
+                {
+                    transaction.save_work(&update)?;
+                }
                 delete_promoted_drafts(transaction, submission)?;
                 if notify.contains(&true) {
                     notify_contenders(transaction, &update, &claims, &evaluations, &notify, &evidence)?;
@@ -376,6 +380,28 @@ fn claim_notifications(
                 })
         })
         .collect()
+}
+
+/// A wait recheck that leaves a queued item exactly as recorded must not rewrite
+/// it: every save bumps the ledger generation, which forces a full refresh in
+/// every other waiting session. Any difference in reasons, scopes, label, age,
+/// state, or a requested baseline replacement keeps the ordinary save.
+fn unchanged_queued_recheck(current: Option<&WorkRow>, update: &WorkUpdate) -> bool {
+    current.is_some_and(|current| {
+        current.state == WorkState::Queued &&
+            update.state == WorkState::Queued &&
+            current.identity == update.identity &&
+            current.label == update.label &&
+            current.submitted_at == update.submitted_at &&
+            current.blocked_reason == update.blocked_reason &&
+            current.claims.len() == update.claims.len() &&
+            current.claims.iter().zip(&update.claims).all(|(existing, claim)| {
+                claim.baselines.is_none() &&
+                    existing.repo_root == claim.repo_root &&
+                    existing.blocked_reason == claim.blocked_reason &&
+                    existing.scopes == claim.scopes
+            })
+    })
 }
 
 fn requests_from_work(work: &WorkRow) -> Vec<WorkClaimRequest> {
