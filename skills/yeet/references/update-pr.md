@@ -14,8 +14,8 @@ update is the default outcome.
 gh pr view --json number,url,title,body,baseRefName
 ```
 
-If you find no PR, stop with `No PR exists for this branch. Use /yeet create-pr to create one first.` Cache the number,
-URL, title, existing body, and base branch. The existing body is required input: preserve `Closes #X`, `Fixes #X`,
+If you find no PR, stop with `No PR exists for this branch. Run the create-pr workflow first.` Cache the number, URL,
+title, existing body, and base branch. The existing body is required input: preserve `Closes #X`, `Fixes #X`,
 `Resolves #X`, `Related to #X`, and other issue references when regenerating the description. Never regenerate from the
 user's instruction alone.
 
