@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.5] - 2026-11-06
+
+### Changed
+
+- Reduce dirty-settling provider refreshes to the remaining hold time, capped at 20 seconds, while preserving prompt wakes and fresh queued-grant checks ([`5d70af8`](https://github.com/PaulRBerg/agent-skills/commit/5d70af8))
+- Deduplicate Git status paths in linear expected time while preserving their order ([`5d70af8`](https://github.com/PaulRBerg/agent-skills/commit/5d70af8))
+
+### Fixed
+
+- Fix repeated overlap-holder messages when another claim in the same bundle is blocked by settling dirt ([`5d70af8`](https://github.com/PaulRBerg/agent-skills/commit/5d70af8))
+
 ## [1.0.4] - 2026-11-06
 
 ### Changed
@@ -35,6 +46,7 @@
 
 _First release._
 
+[1.0.5]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.5
 [1.0.4]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.4
 [1.0.3]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.3
 [1.0.2]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.2
