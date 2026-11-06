@@ -4,14 +4,15 @@ Known external origins researched on 2026-10-15. These records distinguish whole
 inferred sources, inspiration, and replacements. They are repository-only evidence, not installed skill content. Keep
 only active skill records on `main`. Move each shelved skill's record and index entry to the `shelved` branch.
 
-| Skill                                 | Relationship                                | Update boundary          |
-| ------------------------------------- | ------------------------------------------- | ------------------------ |
-| [codebase-design](codebase-design.md) | Confirmed fork and adaptation               | Mapped skill files       |
-| [html-playground](html-playground.md) | Confirmed fork and adaptation               | Mapped skill files       |
-| [retro](retro.md)                     | Confirmed adaptation                        | Mapped skill entrypoint  |
-| [grill-me](grill-me.md)               | Confirmed adaptation                        | Mapped skill entrypoint  |
-| [agents-brain](agents-brain.md)       | Two component adaptations                   | Mapped references only   |
-| [frontend-design](frontend-design.md) | Inspiration followed by independent rewrite | No mechanical merge base |
+| Skill                                                   | Relationship                                | Update boundary          |
+| ------------------------------------------------------- | ------------------------------------------- | ------------------------ |
+| [codebase-design](codebase-design.md)                   | Confirmed fork and adaptation               | Mapped skill files       |
+| [apple-device-integration](apple-device-integration.md) | Confirmed fork of Apple's Xcode export      | Mapped skill entrypoint  |
+| [html-playground](html-playground.md)                   | Confirmed fork and adaptation               | Mapped skill files       |
+| [retro](retro.md)                                       | Confirmed adaptation                        | Mapped skill entrypoint  |
+| [grill-me](grill-me.md)                                 | Confirmed adaptation                        | Mapped skill entrypoint  |
+| [agents-brain](agents-brain.md)                         | Two component adaptations                   | Mapped references only   |
+| [frontend-design](frontend-design.md)                   | Inspiration followed by independent rewrite | No mechanical merge base |
 
 Circadian's weekly job discovers the union of the README's [Forked Skills table](../../README.md#forked-skills) and
 active `.agents/skill-upstreams/<name>.md` records from fresh `origin/main`. It excludes this index and deduplicates

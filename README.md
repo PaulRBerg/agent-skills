@@ -30,51 +30,52 @@ From a clone, `just toolkit::install-cli` installs the supported CLIs into `~/.l
 
 ## Skills
 
-| Skill                | Category      | Description                                                               |
-| -------------------- | ------------- | ------------------------------------------------------------------------- |
-| agents-brain         | Agent tooling | Maintain repo context and create AGENTS.md files or repo-local skills     |
-| agents-docs          | Agent tooling | Fetch current official Codex and Claude Code docs, including hooks/trust  |
-| agents-introspection | Agent tooling | Assess recurrence risk from Codex/Claude Code transcript history          |
-| agents-system        | Agent tooling | Redesign repo systems for agent understanding, control, and learning      |
-| copy-transcript-path | Agent tooling | Copy the active Claude Code or Codex CLI transcript path                  |
-| orchestration        | Agent tooling | Research, plan, and implement work with Claude or Codex agents            |
-| repo-fanout          | Agent tooling | Run one task or skill across many repositories with per-repo agents       |
-| retro                | Agent tooling | Session retrospectives with transcript-backed environment fixes           |
-| skill-harmonization  | Agent tooling | Harmonize repository and user-installed skill portfolios                  |
-| task-handoff         | Agent tooling | Create one single- or cross-repository Codex task handoff plan            |
-| wrap-up              | Agent tooling | Wind down a session fast: collect subagent wrap-ups and hand off the rest |
-| cli-cast             | Crypto        | Foundry cast CLI guidance                                                 |
-| cli-coingecko        | Crypto        | CoinGecko CLI for prices and market data                                  |
-| evm-atlas            | Crypto        | EVM chain, account, bridge, and DEX evidence lookups                      |
-| pdf                  | Documents     | Exact local PDF reading and manipulation on macOS                         |
-| spreadsheets         | Documents     | Opinionated CSV/TSV/XLSX wrangling on macOS                               |
-| writing-editor       | Documents     | Surgical grammar and phrasing edits that keep writing natural and casual  |
-| cli-just             | Engineering   | Just command runner guidance                                              |
-| code-polish          | Engineering   | Simplify and/or risk-profiled review with autofix                         |
-| codebase-design      | Engineering   | Deep-module vocabulary and agent-legible codebase design                  |
-| effect-ts            | Engineering   | Effect 4 patterns and source-aligned guidance                             |
-| fresh-eyes-sweep     | Engineering   | Whole-repository audit of code, tests, and comments with verified fixes   |
-| large-file-refactor  | Engineering   | Large source-file report and semantic split plans                         |
-| naming-refactor      | Engineering   | Exhaustive behavior-preserving repository naming refactor                 |
-| node-deps-bumper     | Engineering   | Node.js dependency updates via taze                                       |
-| repo-harmonization   | Engineering   | Align interdependent repositories and transfer practices between them     |
-| vitest               | Engineering   | Vitest test writing and debugging                                         |
-| frontend-design      | Frontend      | Distinctive, subject-specific frontend design                             |
-| html-playground      | Frontend      | Interactive single-file HTML playgrounds and task debriefs                |
-| tailwind-css         | Frontend      | Tailwind CSS v4 styling guidance                                          |
-| cli-gh               | Git & GitHub  | GitHub CLI operations                                                     |
-| commit               | Git & GitHub  | Semantic commit messages and branch squashes via ai-commit                |
-| release-bumper       | Git & GitHub  | Release workflow with changelog, tagging                                  |
-| repo-rename          | Git & GitHub  | Rename or relocate repos and preserve agent thread references             |
-| yeet                 | Git & GitHub  | GitHub contribution workflows                                             |
-| ai-prune             | Productivity  | Archive stale .ai files and trash stale .cache entries on macOS           |
-| brainstorm-with-me   | Productivity  | Co-create novel ideas and converge on a testable concept                  |
-| grill-me             | Productivity  | Relentlessly stress-test plans and designs                                |
-| interview-me         | Productivity  | Clarify plans and ideas through a focused, lightweight interview          |
-| social-media         | Productivity  | Prepare social images, cross-post, refresh previews, and find subreddits  |
-| todo-archive         | Productivity  | Archive checked TODO.md tasks into .ai/todos                              |
-| chromium-browser     | Research      | Shared Chromium browsing, DevTools automation, and Wayback research       |
-| tool-finder          | Research      | Find and compare current developer tools                                  |
+| Skill                    | Category      | Description                                                               |
+| ------------------------ | ------------- | ------------------------------------------------------------------------- |
+| agents-brain             | Agent tooling | Maintain repo context and create AGENTS.md files or repo-local skills     |
+| agents-docs              | Agent tooling | Fetch current official Codex and Claude Code docs, including hooks/trust  |
+| agents-introspection     | Agent tooling | Assess recurrence risk from Codex/Claude Code transcript history          |
+| agents-system            | Agent tooling | Redesign repo systems for agent understanding, control, and learning      |
+| copy-transcript-path     | Agent tooling | Copy the active Claude Code or Codex CLI transcript path                  |
+| orchestration            | Agent tooling | Research, plan, and implement work with Claude or Codex agents            |
+| repo-fanout              | Agent tooling | Run one task or skill across many repositories with per-repo agents       |
+| retro                    | Agent tooling | Session retrospectives with transcript-backed environment fixes           |
+| skill-harmonization      | Agent tooling | Harmonize repository and user-installed skill portfolios                  |
+| task-handoff             | Agent tooling | Create one single- or cross-repository Codex task handoff plan            |
+| wrap-up                  | Agent tooling | Wind down a session fast: collect subagent wrap-ups and hand off the rest |
+| cli-cast                 | Crypto        | Foundry cast CLI guidance                                                 |
+| cli-coingecko            | Crypto        | CoinGecko CLI for prices and market data                                  |
+| evm-atlas                | Crypto        | EVM chain, account, bridge, and DEX evidence lookups                      |
+| pdf                      | Documents     | Exact local PDF reading and manipulation on macOS                         |
+| spreadsheets             | Documents     | Opinionated CSV/TSV/XLSX wrangling on macOS                               |
+| writing-editor           | Documents     | Surgical grammar and phrasing edits that keep writing natural and casual  |
+| apple-device-integration | Engineering   | Verify native UI with Apple's Xcode MCP screenshots, hierarchy, and input |
+| cli-just                 | Engineering   | Just command runner guidance                                              |
+| code-polish              | Engineering   | Simplify and/or risk-profiled review with autofix                         |
+| codebase-design          | Engineering   | Deep-module vocabulary and agent-legible codebase design                  |
+| effect-ts                | Engineering   | Effect 4 patterns and source-aligned guidance                             |
+| fresh-eyes-sweep         | Engineering   | Whole-repository audit of code, tests, and comments with verified fixes   |
+| large-file-refactor      | Engineering   | Large source-file report and semantic split plans                         |
+| naming-refactor          | Engineering   | Exhaustive behavior-preserving repository naming refactor                 |
+| node-deps-bumper         | Engineering   | Node.js dependency updates via taze                                       |
+| repo-harmonization       | Engineering   | Align interdependent repositories and transfer practices between them     |
+| vitest                   | Engineering   | Vitest test writing and debugging                                         |
+| frontend-design          | Frontend      | Distinctive, subject-specific frontend design                             |
+| html-playground          | Frontend      | Interactive single-file HTML playgrounds and task debriefs                |
+| tailwind-css             | Frontend      | Tailwind CSS v4 styling guidance                                          |
+| cli-gh                   | Git & GitHub  | GitHub CLI operations                                                     |
+| commit                   | Git & GitHub  | Semantic commit messages and branch squashes via ai-commit                |
+| release-bumper           | Git & GitHub  | Release workflow with changelog, tagging                                  |
+| repo-rename              | Git & GitHub  | Rename or relocate repos and preserve agent thread references             |
+| yeet                     | Git & GitHub  | GitHub contribution workflows                                             |
+| ai-prune                 | Productivity  | Archive stale .ai files and trash stale .cache entries on macOS           |
+| brainstorm-with-me       | Productivity  | Co-create novel ideas and converge on a testable concept                  |
+| grill-me                 | Productivity  | Relentlessly stress-test plans and designs                                |
+| interview-me             | Productivity  | Clarify plans and ideas through a focused, lightweight interview          |
+| social-media             | Productivity  | Prepare social images, cross-post, refresh previews, and find subreddits  |
+| todo-archive             | Productivity  | Archive checked TODO.md tasks into .ai/todos                              |
+| chromium-browser         | Research      | Shared Chromium browsing, DevTools automation, and Wayback research       |
+| tool-finder              | Research      | Find and compare current developer tools                                  |
 
 Some mechanical skills pin `model: sonnet` in their frontmatter so they do not spend a more capable inherited model
 where deterministic tooling already carries the workflow.
@@ -86,12 +87,13 @@ component adaptations, inferred origins, and independent rewrites. Circadian's w
 active per-skill provenance records from fresh `origin/main`. Each record's update boundary controls its review or
 merge.
 
-| Skill           | Source                                                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| codebase-design | [mattpocock/skills: codebase-design](https://github.com/mattpocock/skills/tree/main/skills/engineering/codebase-design)                                |
-| grill-me        | [mattpocock/skills: grilling](https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling)                                             |
-| html-playground | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
-| retro           | [mattpocock/skills: retro](https://github.com/mattpocock/skills/tree/main/skills/engineering/retro)                                                    |
+| Skill                    | Source                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| apple-device-integration | [Apple Xcode: device-interaction (export mirror)](https://github.com/raven/xcode-agent-skills/tree/main/skills/device-interaction)                     |
+| codebase-design          | [mattpocock/skills: codebase-design](https://github.com/mattpocock/skills/tree/main/skills/engineering/codebase-design)                                |
+| grill-me                 | [mattpocock/skills: grilling](https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling)                                             |
+| html-playground          | [anthropics/claude-plugins-official: playground](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/playground/skills/playground) |
+| retro                    | [mattpocock/skills: retro](https://github.com/mattpocock/skills/tree/main/skills/engineering/retro)                                                    |
 
 ## CLIs
 
