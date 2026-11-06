@@ -457,8 +457,7 @@ fn read_line(path: &Path, requested_line: u64) -> Result<String, Error> {
                 path.display()
             )));
         }
-        let consumed =
-            available.iter().position(|byte| *byte == b'\n').map_or_else(|| available.len(), |index| index + 1);
+        let consumed = available.iter().position(|byte| *byte == b'\n').map_or(available.len(), |index| index + 1);
         let complete_line = available[consumed.saturating_sub(1)] == b'\n';
         if current_line == requested_line {
             saw_requested_bytes = true;
