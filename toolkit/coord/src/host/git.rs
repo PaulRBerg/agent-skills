@@ -1,21 +1,20 @@
 use std::{
     collections::BTreeMap,
-    io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, ExitStatus, Stdio},
-    sync::mpsc::{self, Receiver, RecvTimeoutError},
-    thread,
-    time::{Duration, Instant},
+    process::Command,
+    time::Duration,
 };
 
 use crate::{
     domain::{Scope, ScopeKind},
     error::{AppError, Result},
 };
-use wait_timeout::ChildExt;
 
+mod command;
 mod status;
 
+pub(super) use command::run_output_timeout;
+use command::run_output_with_input_timeout;
 pub(crate) use status::{git_dirty_paths, git_dirty_paths_in};
 
 pub(crate) const MAX_SCOPE_CHARS: usize = 120;
@@ -23,110 +22,12 @@ pub(crate) const UNHASHABLE_BLOB_HASH: &str = "<deleted-or-unhashable>";
 
 const GIT_ROOT_TIMEOUT: Duration = Duration::from_secs(5);
 const GIT_INSPECTION_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_COMMAND_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const GIT_BLOB_HASH_BATCH_SIZE: usize = 128;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct WorkClaimRequest {
     pub(crate) repo_root: PathBuf,
     pub(crate) scopes: Vec<Scope>,
-}
-
-#[derive(Debug)]
-pub(super) struct CommandOutput {
-    pub(super) status: ExitStatus,
-    pub(super) stdout: Vec<u8>,
-    pub(super) stderr: Vec<u8>,
-}
-
-/// Run a child with bounded wall time while draining both output pipes.
-pub(super) fn run_output_timeout(command: &mut Command, timeout: Duration) -> std::io::Result<CommandOutput> {
-    run_output_with_input_timeout(command, None, timeout)
-}
-
-fn run_output_with_input_timeout(
-    command: &mut Command,
-    input: Option<&[u8]>,
-    timeout: Duration,
-) -> std::io::Result<CommandOutput> {
-    if input.is_some() {
-        command.stdin(Stdio::piped());
-    }
-    let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-    let mut stdout = child.stdout.take().expect("piped stdout");
-    let mut stderr = child.stderr.take().expect("piped stderr");
-    let readers = (
-        spawn_output_reader(move || read_bounded_output(&mut stdout, MAX_COMMAND_OUTPUT_BYTES)),
-        spawn_output_reader(move || read_bounded_output(&mut stderr, MAX_COMMAND_OUTPUT_BYTES)),
-    );
-    let (stdout_reader, stderr_reader) = match readers {
-        (Ok(stdout), Ok(stderr)) => (stdout, stderr),
-        (Err(error), _) | (_, Err(error)) => {
-            terminate_child(&mut child);
-            return Err(error);
-        }
-    };
-    if let Some(input) = input {
-        let mut stdin = child.stdin.take().expect("piped stdin");
-        cleanup_on_error(stdin.write_all(input), &mut child)?;
-    }
-    let started = Instant::now();
-    let Some(status) = cleanup_on_error(child.wait_timeout(timeout), &mut child)? else {
-        terminate_child(&mut child);
-        return Err(timeout_error(timeout));
-    };
-    let remaining = timeout.saturating_sub(started.elapsed());
-    let stdout = cleanup_on_error(receive_output(&stdout_reader, remaining, timeout), &mut child)?;
-    let remaining = timeout.saturating_sub(started.elapsed());
-    let stderr = cleanup_on_error(receive_output(&stderr_reader, remaining, timeout), &mut child)?;
-    Ok(CommandOutput { status, stdout, stderr })
-}
-
-fn spawn_output_reader(
-    read: impl FnOnce() -> std::io::Result<Vec<u8>> + Send + 'static,
-) -> std::io::Result<Receiver<std::io::Result<Vec<u8>>>> {
-    let (sender, receiver) = mpsc::sync_channel(1);
-    thread::Builder::new().name("ai-coord-output".to_owned()).spawn(move || {
-        let _ = sender.send(read());
-    })?;
-    Ok(receiver)
-}
-
-fn read_bounded_output(reader: &mut impl Read, limit: usize) -> std::io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    reader.take(limit.saturating_add(1) as u64).read_to_end(&mut bytes)?;
-    if bytes.len() > limit {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "command output exceeded size limit"));
-    }
-    Ok(bytes)
-}
-
-fn receive_output(
-    reader: &Receiver<std::io::Result<Vec<u8>>>,
-    remaining: Duration,
-    timeout: Duration,
-) -> std::io::Result<Vec<u8>> {
-    match reader.recv_timeout(remaining) {
-        Ok(result) => result,
-        Err(RecvTimeoutError::Timeout) => Err(timeout_error(timeout)),
-        Err(RecvTimeoutError::Disconnected) => Err(std::io::Error::other("command output reader stopped")),
-    }
-}
-
-fn timeout_error(timeout: Duration) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::TimedOut, format!("command timed out after {} seconds", timeout.as_secs()))
-}
-
-fn terminate_child(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
-fn cleanup_on_error<T>(result: std::io::Result<T>, child: &mut Child) -> std::io::Result<T> {
-    if result.is_err() {
-        terminate_child(child);
-    }
-    result
 }
 
 pub(crate) fn git_root(cwd: &Path) -> Option<PathBuf> {
@@ -594,7 +495,7 @@ fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Cursor};
+    use std::fs;
 
     use tempfile::TempDir;
 
@@ -945,22 +846,5 @@ mod tests {
         let dirty = git_dirty_paths(root).unwrap();
         assert!(dirty.contains(&"before.txt".to_owned()));
         assert!(dirty.contains(&"after.txt".to_owned()));
-    }
-
-    #[test]
-    fn command_output_reader_enforces_its_byte_limit() {
-        let error = read_bounded_output(&mut Cursor::new(b"abcd"), 3).unwrap_err();
-        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn command_timeout_includes_inherited_output_pipes() {
-        let started = Instant::now();
-        let error = run_output_timeout(Command::new("/bin/sh").args(["-c", "sleep 1 &"]), Duration::from_millis(50))
-            .unwrap_err();
-
-        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
-        assert!(started.elapsed() < Duration::from_millis(500));
     }
 }

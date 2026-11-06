@@ -347,6 +347,10 @@ transaction. A concurrent lifecycle change is retried within the original timeou
 work. If `done` releases work while its wait is in flight, that wait returns `RELEASED`. Neither retry nor release
 grants ownership: only a fresh matching foreground start that returns `READY` authorizes editing.
 
+After both revision checks, skip the work-row update when a queued wait recheck changes no work state. Preserve its
+revision and `updated_at`, and do not bump the ledger generation for that recheck. Continue evidence collection and
+arbitration. Real changes still advance the generation so peer waiters and dashboard clients refresh promptly.
+
 For one-claim work, `done` keeps its idempotent current-root behavior. For a bundle, `done` requires a claimed worktree
 and releases all claims atomically. Rejection leaves the bundle intact and supplies a command using one claimed root to
 release the entire bundle. Both forms notify overlapping queued holders that their work may now be ready.
@@ -447,6 +451,14 @@ Repository snapshots include a live session when either its reported root or one
 root, retain the logical work item once, and derive waiting state from the claim in that root. Status, dashboard
 snapshots, and message recipient discovery may reuse complete provider inventory for up to two seconds. `start`, wait
 promotion, and `check` always probe providers freshly before granting work or reporting installation health.
+
+Resolve each exact Claude working directory once per inventory response, including directories with no Git root. Do not
+retain these root results across responses.
+
+Inspection subprocesses use one deadline for stdin delivery, child completion, and output reads. Retain the 8 MiB limit
+per output stream. On Unix, give each subprocess its own process group. On failure or timeout, terminate that group and
+reap the child, even if the child exited before its descendants closed the pipes. Allow at most one extra second for IO
+worker cleanup; never wait indefinitely on inherited pipes.
 
 Session-start registration assigns each session a machine-wide unique callsign. Callsigns contain a letter or number and
 an emoji. They are capped at 40 Unicode code points and normalized for whitespace, case-insensitive uniqueness, and
