@@ -1,5 +1,5 @@
 ---
-compatibility: Requires macOS, Apple's Xcode MCP device-interaction tools, and native subagents in Claude Code or Codex.
+compatibility: Requires macOS and Apple's Xcode MCP device-interaction tools.
 coordination: exempt
 name: apple-device-integration
 description:
@@ -23,35 +23,49 @@ don't affect UI (e.g. comments, refactors, non-UI logic).
 
 ---
 
-# For the Main Agent
+# Verification Scope
 
-Use the host's native subagent tool for runtime verification: `Agent` in Claude Code or `spawn_agent` in Codex. Give one
-subagent exclusive use of each interaction session. The parent owns session creation, installation, and cleanup. After a
-UI change, delegate the relevant runtime checks to that subagent.
+For a small check, verify the changed flow directly in the parent session. Delegate only when an independent or long
+verification task benefits from a separate verifier, or when the user asks for delegation.
 
-Pass the workspace identifier, exact device UUID, simulator flag, session key, requested checks, and repository
-constraints. Include the required interaction instructions in its brief and have it read this skill before input. The
-verification subagent must not change application source, commit, or broaden the authorized device actions.
+Check the changed flow and its affected states. Use one representative task-owned simulator by default, or the specific
+device named in the request. Add device variants only when a concrete risk or user or release requirement calls for
+them.
 
-Use a task-owned simulator with a known UUID for local checks. Verify the session's returned UUID and simulator flag
-before input. Physical-device installation and live-service actions require task authorization. Use fixture launch
-arguments when the repository provides them, and preserve unrelated devices, sessions, and workspaces.
+Keep one controller per device at a time. When you delegate, the parent owns session creation, installation, and
+cleanup. Give the verifier exclusive use of that session and pass the workspace identifier when applicable, exact device
+UUID, simulator flag, session key, requested checks, and repository constraints. Include these interaction instructions
+in its brief before input. The verifier must not change application source, commit, or broaden the authorized device
+actions.
+
+Verify the session's returned UUID and simulator flag before input. Physical-device installation and live-service
+actions require task authorization. Use fixture launch arguments when the repository provides them, and preserve
+unrelated devices, sessions, and workspaces.
+
+Verify after a coherent change, not after each edit. Repeat the selected checks after further relevant code changes or
+observed failures. Stop when the selected checks pass.
 
 ## Session Lifecycle
 
-```
-DeviceInteractionStartWorkspaceSession (workspace-backed; do this early, runs in the background)
-  → DeviceInteractionInstallAndRun (after each code change; includes building)
-    → DeviceInteractionSynthesize (interact + observe, repeatable)
-  → DeviceInteractionEndSession (when done — keeping sessions open is resource-heavy)
-```
+Use the target repository's build and install driver first. Follow its runtime and device ownership rules.
+
+If the repository already built, installed, and launched the app, start a standalone session with
+`DeviceInteractionStartSession` and use the exact task-owned device UUID. Do not rebuild through
+`DeviceInteractionInstallAndRun` when the app is already running and unchanged.
+
+If the repository uses Apple's MCP to build and install, start a workspace session and use
+`DeviceInteractionInstallAndRun` for the initial build and launch. Reuse the running app for interaction checks when its
+code has not changed. Use `DeviceInteractionSynthesize` to interact and observe, then end the session when done.
+
+Preflight the live tool catalog for the capabilities this task needs. Require workspace tools only when the selected
+repository workflow needs them.
 
 There are two ways to start a session:
 
 - **DeviceInteractionStartWorkspaceSession** — bound to a workspace. Required for DeviceInteractionInstallAndRun. Use
-  this when verifying the app you are building.
-- **DeviceInteractionStartSession** — not bound to any workspace. Use this only when interacting with an
-  already-installed app.
+  this when the repository workflow uses Apple's MCP to build and install the app.
+- **DeviceInteractionStartSession** — not bound to any workspace. Use this for an already-installed app, including one
+  built and launched by the repository's own driver.
 
 ## DeviceInteraction(Workspace)StartSession tools
 
@@ -76,7 +90,7 @@ effect on the user's configuration.
 
 ---
 
-# For the Subagent
+# For the Verifier
 
 **ALWAYS** report UI issues that might be caused by code: overlapping or unreadable text, unexpectedly cropped
 image/text, wrong colors etc.
@@ -183,7 +197,7 @@ The `interactionCommand` parameter accepts a command syntax:
 - `"r select"` - tvOS: press Select on the focused element
 - `"r home"` - tvOS: go to the Home screen
 
-## Standard Subagent Workflow
+## Standard Verification Workflow
 
 Before any interaction, always capture and read the hierarchy (and screenshot). After any interaction, capture again and
 verify the result. For complex components (like toggles or switches), look at nested elements (like `Switch` or
