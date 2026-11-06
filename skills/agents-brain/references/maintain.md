@@ -78,6 +78,8 @@ Keep AGENTS.md terse, imperative, repository-specific, and scoped to its directo
   deployment, financial, and recipient-scoped data-handling constraints.
 - Preserve speed traps, flaky checks, shell quirks, migration constraints, and external-system notes that prevent
   observed mistakes.
+- Record the durable fact, not the event that established it. Omit dates, correspondents, status narrative, and warnings
+  copied from a message or chat unless a rule depends on them.
 - Keep AGENTS.md a short map that links to deeper context docs, not an encyclopedia. A long AGENTS.md loads on every
   task and crowds out the task and the code. It also makes every rule look equally important, goes stale, and resists
   mechanical checks. Route depth to the linked context docs, so agents start from a small, stable entry point and learn

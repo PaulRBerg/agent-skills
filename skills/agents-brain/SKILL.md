@@ -20,6 +20,9 @@ In that case, do not invoke this skill again through a skill tool.
 Apply explicit user instructions and established authorization before this skill's defaults. Do not ask again for an
 unchanged decision. Preserve host restrictions and required destructive-action approval.
 
+Read this file and each reference in separate reads, each sized to the whole file. A truncated read drops rules
+silently.
+
 ## Routes
 
 - `maintain [path] [target ...] [flags]`: Maintain context and apply task-backed skill lifecycle changes. Use this route
@@ -64,19 +67,23 @@ model, a model version, or a model-specific default in that prose. Content that 
 model is the exception, for example routing tables, `model:` fields, and API parameters. Preserve README.md as clear
 human-facing documentation.
 
-Before complex, long-running, multi-tool, or orchestration-heavy context work, resolve `scripts/fetch-guidance.sh`
-relative to this skill directory. For that work, run it once for `anthropic` and once for `openai`. The two runs are
-independent, so start both in the same turn, as parallel calls or one shell command. Read both returned files
-completely, in one parallel batch. Run the helper and read the guides only when the task writes or changes prompts,
-skills, or other agent-facing prose. For other edits, do not run the helper or read either guide. In that case, report
-`guides: skipped (no agent-facing prose)`.
+Read the prompting guides before `create-skill`, `create-agents-md`, `--force` regeneration, and `maintain` runs that
+create or rewrite skill instructions, prompt text, or a whole AGENTS.md section. Do not run the helper or read either
+guide for factual corrections, README.md edits, single rule additions or removals, link fixes, moves, or deletions. For
+those runs, report `guides: skipped (<reason>)`.
+
+Before a run that needs the guides, resolve `scripts/fetch-guidance.sh` relative to this skill directory. Run it once
+for `anthropic` and once for `openai`. The two runs are independent, so start both in the same turn. Read each returned
+file in its own read, sized to the whole file. The Anthropic guide exceeds 1,000 lines. List its `##` headings first.
+Read every section that applies to all current models completely. Read a section that covers one capability, one model,
+or migration only when the task targets it. Read the OpenAI guide completely.
 
 The helper retrieves Anthropic's
 [prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
 and OpenAI's [latest-model guide](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices)
 because their recommendations may change. The Anthropic guide covers all current Claude models and links each per-model
 prompting page. The OpenAI guide covers the current GPT model family. Its prompting recommendations come from tests on
-one model in that family. Simple context work does not require either guide.
+one model in that family.
 
 Treat advice that names a model as measured on that model. Apply it to other models only when the cross-model guidance
 supports it. To check such a claim, read the linked per-model page. When the guides give opposite corrections for
@@ -185,29 +192,18 @@ flags. Continue only when they cannot change scope, safety, or write behavior.
 
 ## Repository Guard Rail
 
-For `maintain` and `create-agents-md`, run before discovery or writes:
+For `maintain` and `create-agents-md`, run `scripts/preflight.sh`, resolved relative to this skill directory, from the
+invocation working directory before discovery or writes. It prints one `key=value` line per fact:
 
-```sh
-cwd="$(pwd -P)"
-case "$cwd" in
-  /) printf 'abort: refusing to run at the filesystem root\n' >&2; exit 1 ;;
-esac
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-  printf 'abort: not inside a git repository\n' >&2; exit 1; }
-managed_skill_root=
-case "$repo_root" in
-  /|"$HOME") printf 'abort: unsupported repo root: %s\n' "$repo_root" >&2; exit 1 ;;
-  "$HOME/.agents"|"$HOME/.codex"|"$HOME/.claude") managed_skill_root="$repo_root/skills" ;;
-  "$HOME/.agents/"*|"$HOME/.codex/"*|"$HOME/.claude/"*)
-    printf 'abort: repo root is nested under an agent configuration repository: %s\n' "$repo_root" >&2; exit 1 ;;
-esac
-if [ -n "$managed_skill_root" ]; then
-  case "$cwd" in
-    "$managed_skill_root"|"$managed_skill_root/"*)
-      printf 'abort: installed skills must be edited in their source catalog: %s\n' "$cwd" >&2; exit 1 ;;
-  esac
-fi
-```
+- `repo_root`: the Git repository root.
+- `managed_skill_root`: `<repo_root>/skills` when the repository root is `~/.agents`, `~/.codex`, or `~/.claude`.
+  Otherwise empty.
+- `claude_version`: the installed Claude Code version. Empty when `claude` is missing.
+- `agents_md_native`: `true` when Claude Code 2.1.277 or later is installed. Otherwise `false`.
+
+The helper exits 1 with an `abort:` message on stderr at the filesystem root, outside a Git repository, when the
+repository root is `/` or `$HOME`, when the repository is nested under an agent configuration repository, or when the
+working directory is inside a managed `skills/` tree. On a nonzero exit, stop and report the message exactly.
 
 When `managed_skill_root` is set, allow README.md, AGENTS.md, and CLAUDE.md work elsewhere in that repository. In that
 case, exclude the entire installed `skills/` tree from every workflow. Apply the exclusion before discovery,
@@ -221,17 +217,9 @@ repository boundary in `references/maintain-skills.md` before lifecycle work.
 ## Claude Code Compatibility
 
 Claude Code v2.1.277 and later read `AGENTS.md` directly whenever no `CLAUDE.md`, `.claude/CLAUDE.md`, or
-`CLAUDE.local.md` exists in the working directory or above it, so a CLAUDE.md symlink is no longer needed. Detect the
-installed version once per run before a workflow touches CLAUDE.md:
-
-```sh
-claude_version=$(claude --version 2>/dev/null | head -n 1 | cut -d ' ' -f 1)
-agents_md_native=false
-if [ -n "$claude_version" ] &&
-  [ "$(printf '%s\n' 2.1.277 "$claude_version" | sort -V | head -n 1)" = 2.1.277 ]; then
-  agents_md_native=true
-fi
-```
+`CLAUDE.local.md` exists in the working directory or above it, so a CLAUDE.md symlink is no longer needed. Use the
+`agents_md_native` value that `scripts/preflight.sh` printed. Run the helper once per run before a workflow touches
+CLAUDE.md.
 
 When `agents_md_native=true`:
 

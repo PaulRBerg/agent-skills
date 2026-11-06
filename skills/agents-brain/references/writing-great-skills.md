@@ -32,7 +32,8 @@ references, examples, and agent-facing metadata descriptions. Do not claim offic
 
 Write the smallest interface that makes success checkable:
 
-- **Outcome**: the state or artifact the user should receive.
+- **Outcome**: the state or artifact the user should receive. Default to a report in chat. Write a file only when the
+  user asks for one or a later step reads it.
 - **Invariants**: rules that must hold on every valid path.
 - **Preferred defaults**: opinionated choices that explicit user intent or repository evidence may override.
 - **Authority**: which reads, local writes, external writes, and destructive actions are allowed or gated.
