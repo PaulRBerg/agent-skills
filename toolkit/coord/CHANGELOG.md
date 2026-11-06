@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.6] - 2026-11-06
+
+### Changed
+
+- Resolve each distinct Claude working directory once per inventory response ([`8cd819c`](https://github.com/PaulRBerg/agent-skills/commit/8cd819c))
+
+### Fixed
+
+- Fix unchanged queued rechecks triggering repeated provider and dashboard refreshes through ledger generation updates ([`8cd819c`](https://github.com/PaulRBerg/agent-skills/commit/8cd819c))
+- Fix blocked stdin delivery bypassing inspection command deadlines ([`cb9909e`](https://github.com/PaulRBerg/agent-skills/commit/cb9909e))
+- Fix failed or timed-out inspection commands leaving descendants running with inherited output pipes ([`cb9909e`](https://github.com/PaulRBerg/agent-skills/commit/cb9909e))
+
 ## [1.0.5] - 2026-11-06
 
 ### Changed
@@ -46,6 +58,7 @@
 
 _First release._
 
+[1.0.6]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.6
 [1.0.5]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.5
 [1.0.4]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.4
 [1.0.3]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.3
