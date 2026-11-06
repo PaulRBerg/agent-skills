@@ -203,10 +203,8 @@ impl WorkCoordinator<'_> {
                     &prepared_baselines,
                     state == WorkState::Active,
                 )?;
-                let should_notify = current_work.as_ref().is_none_or(|work| {
-                    work.blocked_reason.as_deref() != Some("overlap") || !same_claim_vector(work, &claims)
-                });
-                transaction.save_work(&WorkUpdate {
+                let notify = claim_notifications(current_work.as_ref(), &claims, &evaluations);
+                let update = WorkUpdate {
                     identity: identity.clone(),
                     label: label.to_owned(),
                     state,
@@ -215,10 +213,11 @@ impl WorkCoordinator<'_> {
                     submitted_at: Some(submitted_at),
                     updated_at: current,
                     expected_revision: current_work.as_ref().map(|work| work.revision),
-                })?;
+                };
+                transaction.save_work(&update)?;
                 delete_promoted_drafts(transaction, submission)?;
-                if should_notify {
-                    notify_contenders(transaction, identity, label, &claims, &evaluations, &evidence, current)?;
+                if notify.contains(&true) {
+                    notify_contenders(transaction, &update, &claims, &evaluations, &notify, &evidence)?;
                 }
                 Ok(ArbitrationStep::Complete(decision))
             })?;
@@ -350,6 +349,33 @@ impl WorkCoordinator<'_> {
             }
         }
     }
+}
+
+/// Which claims notify their overlap contenders: every overlap-blocked claim of a
+/// first submission or a changed claim vector, and otherwise only a claim that was
+/// not already overlap-blocked. A recheck of an unchanged claim that stays
+/// overlap-blocked is silent, even when another claim in the same item is blocked
+/// for a different reason such as settling dirt.
+fn claim_notifications(
+    previous: Option<&WorkRow>,
+    claims: &[WorkClaimRequest],
+    evaluations: &[ClaimEvaluation],
+) -> Vec<bool> {
+    let unchanged = previous.filter(|work| same_claim_vector(work, claims));
+    claims
+        .iter()
+        .zip(evaluations)
+        .map(|(claim, evaluation)| {
+            evaluation.reason.as_deref() == Some("overlap") &&
+                !unchanged.is_some_and(|work| {
+                    claim
+                        .repo_root
+                        .to_str()
+                        .and_then(|root| work.claim(root))
+                        .is_some_and(|existing| existing.blocked_reason.as_deref() == Some("overlap"))
+                })
+        })
+        .collect()
 }
 
 fn requests_from_work(work: &WorkRow) -> Vec<WorkClaimRequest> {

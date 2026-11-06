@@ -17,6 +17,8 @@ use super::{
     inventory::{InventoryObservation, ProviderInventory, StaticInventory},
     normalize_callsign,
 };
+
+mod performance;
 use crate::{
     domain::{
         Client, Identity, InventoryResult, OutcomeKind, ProcessFingerprint, ProcessLiveness, ProcessProbe, Scope,

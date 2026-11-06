@@ -298,6 +298,11 @@ impl Coordinator {
         let started = self.clock.monotonic();
         let mut last_generation = None;
         let mut last_full_check = None;
+        // Unchanged dirt settles by time, so the next full refresh waits for
+        // the reported settle time (clamped to the fallback interval) instead of
+        // rebuilding provider inventory every second. Ledger generation changes
+        // still trigger an immediate refresh.
+        let mut refresh_seconds = FULL_REFRESH_SECONDS;
         let mut observed_valid_work = false;
         loop {
             let mut store = self.store()?;
@@ -345,8 +350,6 @@ impl Coordinator {
 
             let generation = store.generation()?;
             let now = self.clock.monotonic();
-            let refresh_seconds =
-                if work.blocked_reason.as_deref() == Some("dirty") { 1.0 } else { FULL_REFRESH_SECONDS };
             let due =
                 last_full_check.is_none_or(|last| now - last >= refresh_seconds) || last_generation != Some(generation);
             if due {
@@ -373,6 +376,12 @@ impl Coordinator {
                 if outcome.code == 0 || (outcome.code == 2 && !outcome.detail.starts_with("dirty-settling:")) {
                     return Ok(outcome);
                 }
+                refresh_seconds = match outcome.settles_in {
+                    Some(seconds) if outcome.detail.starts_with("dirty-settling:") => {
+                        (seconds as f64).clamp(1.0, FULL_REFRESH_SECONDS)
+                    }
+                    _ => FULL_REFRESH_SECONDS,
+                };
             }
             let elapsed = self.clock.monotonic() - started;
             if elapsed >= timeout_seconds as f64 {

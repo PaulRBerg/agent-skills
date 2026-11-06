@@ -1,4 +1,4 @@
-use std::{path::Path, process::Command};
+use std::{collections::HashSet, path::Path, process::Command};
 
 use crate::error::{AppError, Result};
 
@@ -39,9 +39,12 @@ fn inspect_git_dirt(root: &Path, paths: &[String]) -> Result<Vec<String>> {
     parse_git_dirty_paths(&output.stdout)
 }
 
+/// Distinct paths in first-seen order. A path may repeat across index and
+/// worktree entries or as the other side of a rename or copy.
 fn parse_git_dirty_paths(output: &[u8]) -> Result<Vec<String>> {
     let parts: Vec<&[u8]> = output.split(|byte| *byte == 0).collect();
     let mut dirty = Vec::new();
+    let mut seen = HashSet::new();
     let mut index = 0;
     while index < parts.len() {
         let entry = parts[index];
@@ -50,27 +53,24 @@ fn parse_git_dirty_paths(output: &[u8]) -> Result<Vec<String>> {
             continue;
         }
         let status = &entry[..2];
-        push_git_path(&mut dirty, &entry[3..])?;
+        push_git_path(&mut dirty, &mut seen, &entry[3..])?;
         if (status.contains(&b'R') || status.contains(&b'C')) &&
             let Some(other) = parts.get(index)
         {
-            push_git_path(&mut dirty, other)?;
+            push_git_path(&mut dirty, &mut seen, other)?;
             index += 1;
         }
     }
     Ok(dirty)
 }
 
-fn push_git_path(paths: &mut Vec<String>, bytes: &[u8]) -> Result<()> {
-    if bytes.is_empty() {
+fn push_git_path<'a>(paths: &mut Vec<String>, seen: &mut HashSet<&'a [u8]>, bytes: &'a [u8]) -> Result<()> {
+    if bytes.is_empty() || !seen.insert(bytes) {
         return Ok(());
     }
     let path = std::str::from_utf8(bytes)
-        .map_err(|_| AppError::operational("could not inspect Git dirt: non-UTF-8 path in porcelain output"))?
-        .to_owned();
-    if !paths.contains(&path) {
-        paths.push(path);
-    }
+        .map_err(|_| AppError::operational("could not inspect Git dirt: non-UTF-8 path in porcelain output"))?;
+    paths.push(path.to_owned());
     Ok(())
 }
 
@@ -174,6 +174,27 @@ mod tests {
         assert_eq!(fs::metadata(&index).unwrap().modified().unwrap(), modified);
         git(root, &["status", "--porcelain=v1"]);
         assert_ne!(fs::read(&index).unwrap(), before, "fixture must require an index refresh");
+    }
+
+    #[test]
+    fn porcelain_paths_are_distinct_in_first_seen_order_with_both_rename_sides() {
+        let output =
+            b"?? a.rs\0 M b.rs\0R  old.rs\0new.rs\0C  src.rs\0copy.rs\0?? a.rs\0MM b.rs\0?? new.rs\0 D copy.rs\0";
+        assert_eq!(parse_git_dirty_paths(output).unwrap(), ["a.rs", "b.rs", "old.rs", "new.rs", "src.rs", "copy.rs"]);
+
+        let count = 20_000;
+        let mut large = Vec::new();
+        for index in 0..count {
+            large.extend_from_slice(format!("?? file-{index}.rs\0").as_bytes());
+        }
+        for index in (0..count).rev() {
+            large.extend_from_slice(format!(" M file-{index}.rs\0").as_bytes());
+            large.extend_from_slice(format!("R  file-{index}.rs\0moved-{index}.rs\0").as_bytes());
+        }
+        let parsed = parse_git_dirty_paths(&large).unwrap();
+        assert_eq!(parsed.len(), 2 * count);
+        assert!(parsed[..count].iter().enumerate().all(|(index, path)| *path == format!("file-{index}.rs")));
+        assert!(parsed[count..].iter().zip((0..count).rev()).all(|(path, index)| *path == format!("moved-{index}.rs")));
     }
 
     #[test]

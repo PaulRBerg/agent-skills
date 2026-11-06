@@ -335,10 +335,12 @@ Editing requires the matching `ai-coord start` or `ai-coord bundle start` form t
 `start`, `wait`, and `done` outcome also prints one concise next-step sentence to stderr while preserving the stdout TSV
 contract.
 
-`wait` checks the SQLite generation counter each second. It performs full inventory, Git, and arbitration refreshes when
-coordination state changes, every second while the work is blocked by dirty-settling, or otherwise every 20 seconds as a
-fallback. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3. `UNKNOWN` exits 2. After any such
-wake, inspect the reported state and re-arm with the matching start form as needed.
+`wait` checks process liveness, messages, and the SQLite generation counter each second. It performs full inventory,
+Git, and arbitration refreshes immediately on entry and when coordination state changes. Otherwise, it refreshes at the
+remaining dirty-settling time, bounded to 1–20 seconds, or every 20 seconds without a settling deadline. Each grant
+still requires fresh provider inventory. Manual Git changes without a ledger generation change can take up to 20 seconds
+to be noticed. `MESSAGE`, `RELEASED`, and `TIMEOUT` are non-readiness wakes with exit 3. `UNKNOWN` exits 2. After any
+such wake, inspect the reported state and re-arm with the matching start form as needed.
 
 Each wait recheck pins the observed work-item ID and revision before Git evidence and again in the arbitration
 transaction. A concurrent lifecycle change is retried within the original timeout instead of recreating or overwriting

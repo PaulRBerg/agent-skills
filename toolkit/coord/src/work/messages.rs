@@ -11,7 +11,7 @@ use crate::{
     domain::{Identity, Scope, client_name, sanitize},
     error::Result,
     host::{WorkClaimRequest, overlapping_paths},
-    state::{WorkClaimRow, WorkRow, WorkTransaction},
+    state::{WorkClaimRow, WorkRow, WorkTransaction, WorkUpdate},
 };
 
 pub(crate) const MAX_MESSAGE_CHARS: usize = 240;
@@ -146,19 +146,19 @@ pub(crate) fn bundle_blocked_message(
     Ok(sanitize(&message, MAX_MESSAGE_CHARS))
 }
 
+/// Message each overlap contender of the claims selected by `notify` once.
 pub(crate) fn notify_contenders(
     transaction: &WorkTransaction<'_>,
-    identity: &Identity,
-    label: &str,
+    update: &WorkUpdate,
     claims: &[WorkClaimRequest],
     evaluations: &[ClaimEvaluation],
+    notify: &[bool],
     evidence: &[RepoEvidence],
-    current: f64,
 ) -> Result<()> {
     let qualified = claims.len() > 1;
     let mut notified = Vec::<Identity>::new();
-    for (claim, evaluation) in claims.iter().zip(evaluations) {
-        if evaluation.reason.as_deref() != Some("overlap") {
+    for ((claim, evaluation), notify) in claims.iter().zip(evaluations).zip(notify) {
+        if !notify || evaluation.reason.as_deref() != Some("overlap") {
             continue;
         }
         let repo_root = claim.repo_root.to_str().expect("validated root");
@@ -169,7 +169,7 @@ pub(crate) fn notify_contenders(
             }
             let contender_claim = contender.claim(repo_root).expect("repository contender");
             let message = if qualified {
-                bundle_blocked_message(label, claims, evaluations, contender, transaction, evidence)?
+                bundle_blocked_message(&update.label, claims, evaluations, contender, transaction, evidence)?
             } else {
                 let untouched = soft::untouched_overlap(
                     transaction,
@@ -179,14 +179,14 @@ pub(crate) fn notify_contenders(
                     &contender_claim.scopes,
                     dirty,
                 )?;
-                blocked_message(label, &claim.scopes, contender_claim, &untouched)
+                blocked_message(&update.label, &claim.scopes, contender_claim, &untouched)
             };
             transaction.send_message(
-                identity,
+                &update.identity,
                 &contender.identity,
                 &message,
                 (!qualified).then_some(repo_root),
-                current,
+                update.updated_at,
             )?;
             notified.push(contender.identity.clone());
         }
