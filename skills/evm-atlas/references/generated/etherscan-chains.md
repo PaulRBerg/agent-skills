@@ -5,7 +5,7 @@
 Source: <https://docs.etherscan.io/supported-chains> Access changes: <https://docs.etherscan.io/changelog> Live list:
 <https://api.etherscan.io/v2/chainlist> (returns the provider's authoritative `chainid` set)
 
-Verified against the live `chainlist` endpoint on 2026-11-02 (57 provider chains). This file intentionally lists only
+Verified against the live `chainlist` endpoint on 2026-11-09 (55 provider chains). This file intentionally lists only
 chains from `references/generated/target-mainnets.json`; provider-supported chains outside that list are out of scope
 for this skill. Apply dated notes using the request date: a scheduled paid-plan requirement overrides the table grouping
 once effective. Chainlist membership does not establish plan access or an active explorer UI. Free availability may
