@@ -123,6 +123,10 @@ the brief or a clear function. After the first render, identify other unexamined
   tooltips where appropriate.
 - Motion is optional. When using it, concentrate it where it explains hierarchy or gives useful interaction feedback.
   Respect reduced-motion preferences and ensure the experience remains clear without animation.
+- Tune motion for perceived speed. Use ease-out curves instead of ease-in for feedback to user input, so the change
+  starts at full speed and settles. Keep most interface animations under 300 ms. When an interaction must feel snappy,
+  use a custom `cubic-bezier()` curve instead of the browser's `ease` keyword. Make loading spinners rotate quickly. A
+  slow spinner makes the same wait feel longer.
 - Prevent overlap, clipping, unreadable wrapping, and layout shift at every width in scope. By default, the scope is one
   desktop width. When the user requests responsive behavior, build responsive constraints from content rather than
   device labels, and include narrow and wide widths.
