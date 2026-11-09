@@ -12,9 +12,9 @@ user explicitly requests otherwise. After all content and template rendering, ad
 <sub>Co-signed by LLM_NAME</sub>
 ```
 
-Replace `LLM_NAME` with the assisting model's name from trusted session context, such as `GPT-6-Astra` or
-`Claude Fable 5.2`. These are examples, not defaults. If the exact model is unavailable, use `my AI agent`. Never guess
-a model/version or infer it from the repository being discussed.
+Replace `LLM_NAME` with the assisting model's name from trusted session context, such as `GPT-6-Astra`. This is an
+example, not a default. If the exact model is unavailable, use `my AI agent`. Never guess a model/version or infer it
+from the repository being discussed.
 
 For Codex, resolve the active model before using that fallback. Prefer explicit runtime metadata for the current turn.
 Otherwise, use `CODEX_THREAD_ID` to locate the matching rollout JSONL under `${CODEX_HOME:-$HOME/.codex}/sessions/`.
