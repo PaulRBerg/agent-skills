@@ -75,7 +75,10 @@ the requested result, then close only those tabs unless the user asked to leave 
 
 1. When a fresh page satisfies the task, start with `new_page` and `background: true`. Its response lists every open
    page and marks the created page `[selected]`. Record that page ID as owned by this task. Treat every other listed
-   page as pre-existing. Call `list_pages` first only when the task must act on a pre-existing page.
+   page as pre-existing. Call `list_pages` first only when the task must act on a pre-existing page. When the task
+   changes page-local state, such as local storage, cookies, or a web app's saved progress, pass `isolatedContext` with
+   a task name to `new_page`. Pages in that named context share storage only with each other, so the user's real
+   sessions and data in the default context stay untouched. Close those pages at completion like any other owned page.
 2. When an input action response lists `## Opened pages`, record those page IDs as created by this task. Never infer
    ownership from a later page-list difference.
 3. Pass an explicit `pageId` to every page-scoped tool. Do not rely on selected-page state. Use `select_page` only when
