@@ -8,6 +8,7 @@ mod recommendations;
 mod server;
 mod state;
 mod status;
+mod usage_hint;
 mod work;
 
 use std::{
@@ -49,11 +50,15 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let cli = match Cli::try_parse_from(arguments) {
+    let arguments = arguments.into_iter().map(Into::into).collect::<Vec<OsString>>();
+    let cli = match Cli::try_parse_from(&arguments) {
         Ok(cli) => cli,
         Err(error) => {
             let code = if error.use_stderr() { 2 } else { 0 };
             let _ = error.print();
+            if let Some(hint) = usage_hint::usage_hint(&error, &arguments) {
+                eprintln!("{hint}");
+            }
             return ExitCode::from(code);
         }
     };
