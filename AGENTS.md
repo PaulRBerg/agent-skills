@@ -192,7 +192,9 @@ the instructions change how a helper is used. Markdown changes always follow the
 - Claude Code slash commands under `~/.claude/commands/<skill>/*.md` are thin wrappers over catalog skills (currently
   `agents-brain` and `yeet`). After changing a skill's workflows, argument forms, context requirements, or reference
   file names, update the matching commands in the same session. Argument hints, descriptions, `## Context` reads, and
-  reference paths must match the skill. Every user-facing workflow needs a command. Commit them in `~/.claude`.
+  reference paths must match the skill. Every user-facing workflow needs a command. A preset command may narrow one
+  route's targets or authorize one lifecycle action; keep it when the route still supports that use. Commit them in
+  `~/.claude`.
 - Keep skills self-contained. Do not remove duplicate content across skills by extracting shared references or canonical
   files. Users install skills individually.
 - Keep globally installed skills self-contained. Do not refer to or depend on another repository. Put reusable guidance
