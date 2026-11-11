@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0] - 2026-11-11
+
+### Added
+
+- Add usage-error hints that name a misplaced flag's subcommands, map bare option names to flags, and print the intended subcommand's help ([`c8474da`](https://github.com/PaulRBerg/agent-skills/commit/c8474da))
+
 ## [1.0.6] - 2026-11-06
 
 ### Changed
@@ -58,6 +64,7 @@
 
 _First release._
 
+[1.1.0]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.1.0
 [1.0.6]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.6
 [1.0.5]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.5
 [1.0.4]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.4
