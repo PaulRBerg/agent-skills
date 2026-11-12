@@ -28,6 +28,8 @@ Preserve these local changes:
   services.
 - Native subagent delegation in Claude Code and Codex, with parent-owned session lifecycle and no application-source
   edits by the verification agent.
+- Parent-session fallback when Xcode does not approve a delegated verifier's connection, and verifier reporting that
+  applies to the parent session and to a delegated verifier.
 - `DeviceInteractionSynthesize`, matching the live MCP catalog, instead of the export's `DeviceEventSynthesize`.
 - Safe runtime diagnostics instead of instructions to add temporary print statements.
 - The completion report and the distinction between simulator verification and physical-device installation.

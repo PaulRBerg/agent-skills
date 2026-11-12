@@ -32,11 +32,17 @@ Check the changed flow and its affected states. Use one representative task-owne
 device named in the request. Add device variants only when a concrete risk or user or release requirement calls for
 them.
 
-Keep one controller per device at a time. When you delegate, the parent owns session creation, installation, and
-cleanup. Give the verifier exclusive use of that session and pass the workspace identifier when applicable, exact device
-UUID, simulator flag, session key, requested checks, and repository constraints. Include these interaction instructions
-in its brief before input. The verifier must not change application source, commit, or broaden the authorized device
-actions.
+Keep one controller per device at a time. Delegation is never required to drive the device.
+
+Xcode approves each agent connection separately. In some harnesses, a subagent opens its own connection and receives
+"This agent isn't approved to use Xcode's tools yet". If a delegated verifier receives this error, run the interaction
+in the parent session. A verifier without approval can capture screenshots only through the target repository's own
+tools.
+
+When you delegate, the parent owns session creation, installation, and cleanup. Give the verifier exclusive use of that
+session and pass the workspace identifier when applicable, exact device UUID, simulator flag, session key, requested
+checks, and repository constraints. Include these interaction instructions in its brief before input. The verifier must
+not change application source, commit, or broaden the authorized device actions.
 
 Verify the session's returned UUID and simulator flag before input. Physical-device installation and live-service
 actions require task authorization. Use fixture launch arguments when the repository provides them, and preserve
@@ -91,6 +97,9 @@ effect on the user's configuration.
 ---
 
 # For the Verifier
+
+The verifier is the agent that drives the interaction session. This is the parent session or a delegated verifier. A
+delegated verifier returns its findings to the parent.
 
 **ALWAYS** report UI issues that might be caused by code: overlapping or unreadable text, unexpectedly cropped
 image/text, wrong colors etc.
@@ -201,7 +210,7 @@ The `interactionCommand` parameter accepts a command syntax:
 
 Before any interaction, always capture and read the hierarchy (and screenshot). After any interaction, capture again and
 verify the result. For complex components (like toggles or switches), look at nested elements (like `Switch` or
-`Slider`) — nearby elements might correspond to the actual control. When done, report findings to the main agent.
+`Slider`) — nearby elements might correspond to the actual control. When done, report the findings.
 
 - To capture without interacting, use DeviceInteractionSynthesize with an empty interactionCommand.
 - Never guess positions from screenshots alone — use hierarchy hitPoint coordinates; screenshot estimation is only a
@@ -252,8 +261,8 @@ When verifying, distinguish between these categories:
 
 - If application is not visible, retry once, as this might be caused by a slow device.
 - If tap target unclear, re-read hierarchy data for correct hitPoint coordinates.
-- Inspect runtime logs only within the target repository's privacy rules. Return safe diagnostic evidence to the parent.
-- Report issues back to the main agent with details and suggestions.
+- Inspect runtime logs only within the target repository's privacy rules. Report only safe diagnostic evidence.
+- Report issues with details and suggestions.
 
 ## Completion Report
 
