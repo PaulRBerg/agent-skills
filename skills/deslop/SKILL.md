@@ -92,6 +92,14 @@ a material structural decision, compare the current design with the simplest via
 - Apply the deletion test to pass-through wrappers. If removal spreads complexity across callers, preserve or improve
   the useful abstraction. If complexity disappears, remove the wrapper.
 - Consolidate co-changing cohesive concepts and shared invariants into their existing owner.
+- Compare parallel validators, parsers, normalizers, and defaults against their producer and consumer contracts. Similar
+  names or comments do not prove equivalent behavior. Check malformed but plausible inputs and boundary cases.
+  Centralize a real shared invariant in its existing owner. Preserve useful platform adapters and intentional semantic
+  differences.
+- Inventory closed membership lists repeated across manifests, dispatch logic, runtime code, and documentation. Use the
+  existing owner for shared membership when practical. Preserve consumer-specific capabilities, ports, and validation
+  metadata, along with intentionally independent contracts. Do not add a registry or generator framework to replace
+  trivial duplication.
 - Prefer substantial behavior behind a small interface that callers and tests can use directly.
 - Preserve separation for different meanings, owners, users, lifecycles, or real behavior variations.
 - Treat large files as discovery candidates only. Split for unrelated responsibilities, coupling, ownership,
@@ -114,6 +122,9 @@ unless an authorized migration covers their consumers.
 
 - Retain meaningful rationale, constraints, exceptions, recovery steps, exact commands, formats, licenses, and tool
   directives. Treat behavior-bearing comments as code.
+- Treat schema descriptions, CLI help, fixture descriptions, and generated documentation as claims about behavior and
+  ownership. Trace generated claims back to their producer. Update the authoritative source and regenerate derived
+  artifacts.
 - Remove generic tutorials, obvious narration, stale plans, reports, placeholders, and redundant instructions only when
   evidence establishes that they are unnecessary.
 - Consolidate guidance with the same audience, lifecycle, and authority into its authoritative owner.
@@ -129,10 +140,26 @@ unless an authorized migration covers their consumers.
 For documentation-only work, update existing design documents and plans in place. Keep dependency order and observable
 acceptance checks in proposed implementation steps. Do not present proposed commands or runtime behavior as available.
 
+Treat runtime prompt wording, ordering, and output schemas as behavior. Preserve repetition justified by evaluations.
+Validate edits through the owning evaluation workflow, comparing baseline and candidate on matched inputs and model
+settings. Static string checks prove wiring or required text, not answer quality. Do not run paid inference or
+consequential evaluation without existing authorization. If evaluation is unavailable, leave the runtime prompt
+unchanged and report the exact gap while continuing independent cleanup.
+
 ### Tests
 
 Identify the behavior each affected test protects. Remove tautologies that cannot detect a plausible implementation
 defect. Remove obsolete implementation-only assertions when no supported requirement depends on them.
+
+Inspect which checks each test runner invokes. If a runner repeats enforcement that its own tests already provide,
+consolidate the checks by contract and coverage. For source-text assertions, name the invariant and a plausible failure.
+Replace incidental source or command spelling constraints with behavior checks when they prove the same contract and fit
+the existing authority. Preserve exact-text contracts, independent layer checks, and intentional validation tiers. Do
+not bypass required checks or remove guards to make a suite pass.
+
+Check that successful fixtures can come from the real producer and that mocks do not bypass or copy the invariant under
+test. Keep malformed fixtures that verify rejection. Repair weak fixture or contract assertions instead of deleting
+useful integration tests.
 
 Before deleting a test, prove that its behavior is obsolete or identify the retained test that covers it. Merge
 equivalent cases into the owning suite only while preserving distinct behavioral assertions, input cases, and
@@ -150,6 +177,13 @@ Before deleting source, behavior, or artifacts, inspect their actual consumers a
 - Schemas, generators, generated consumers, fixtures, and documentation links.
 - Public interfaces, persisted formats, external callers, supported compatibility, and migrations.
 - Operational recovery paths and fallback behavior.
+- Supported runtime, host, platform, and test roles. Keep differences that serve a real consumer, such as template
+  platforms, host-only test support, vocabulary differences between client and server layers, and local adapters.
+
+Classify an artifact by its role before removing it: authoritative input, raw evidence, generated derivative, published
+snapshot, fixture, or disposable output. Similar contents or a completed migration do not make provenance, audit, or
+recovery records disposable. Follow the owning lifecycle and preserve original evidence. Generated copies can be
+intentional when separate consumers require them.
 
 Missing text references alone do not prove deadness. If usage remains unknown, retain the candidate until resolved.
 Report the exact uncertainty and the evidence needed to resolve it.
