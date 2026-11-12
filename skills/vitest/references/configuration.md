@@ -29,16 +29,24 @@
   - `VITEST_POOL_ID` and `VITEST_WORKER_ID` are 1-based.
   - Browser locators and `toHaveTextContent` match exactly (partial or regex matching moved to `toMatchTextContent`),
     and `browser.api` moved to top-level `api`.
+  - `toThrow("")` matches any error message. Use `/^$/` to match an empty message.
 
   These now fail loudly: nested `vi.mock`/`vi.unmock`/`vi.hoisted`, unawaited
-  `resolves`/`rejects`/`toMatchFileSnapshot`, late `expect.poll`, removed `sequential` APIs (use
-  `{ concurrent: false }`), module-scope `bench` (now a test-context fixture), and the removed `vitest/coverage`,
+  `resolves`/`rejects`/`toMatchFileSnapshot`, `expect.poll` that times out (it now rejects), removed `sequential` APIs
+  (use `{ concurrent: false }`), module-scope `bench` (now a test-context fixture), and the removed `vitest/coverage`,
   `vitest/reporters` (use `vitest/node`), `vitest/environments`, and `vitest/snapshot` (use `vitest/runtime`) entry
   points. Check the installed version's [migration guide](https://vitest.dev/guide/migration.html) rather than carrying
   shims.
 
+- For Cloudflare Workers tests, `@cloudflare/vitest-pool-workers` is deprecated and renamed to
+  `@cloudflare/vitest-plugin`. Its 1.x releases declare the peer range `vitest ^4.1.0 || ^5.0.0`. Import
+  `cloudflareTest` from `@cloudflare/vitest-plugin` and use `@cloudflare/vitest-plugin/types` in the test tsconfig. The
+  API and Vitest configuration stay the same. Run `npx @cloudflare/codemods vitest:pool-workers-to-vitest-plugin` to
+  migrate. See the [Workers Vitest integration](https://developers.cloudflare.com/workers/testing/vitest-integration/).
+
 Use repository reporter conventions. Otherwise prefer minimal agent-oriented output: Vitest 4.1 introduced
 `--reporter=agent`. Current versions call it `minimal` and retain `agent` as an alias. Use automatic agent detection
 when available, and check the installed version's [reporter documentation](https://vitest.dev/guide/reporters.html)
-before passing a flag. See [configuration](https://vitest.dev/config/file),
-[projects](https://vitest.dev/config/projects), and [aliases](https://vitest.dev/config/alias).
+before passing a flag. To rerun only earlier failures, v5.1 adds `--last-failed`. See
+[configuration](https://vitest.dev/config/file), [projects](https://vitest.dev/config/projects), and
+[aliases](https://vitest.dev/config/alias).

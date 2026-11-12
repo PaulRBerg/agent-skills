@@ -8,9 +8,13 @@
   repository-conventional factories.
 - Install fake timers before code schedules work. Use async advancement when callbacks schedule promises, and always
   restore real timers. Do not combine fake timers with uncontrolled real waits. From v5, fake timers and
-  `vi.setSystemTime` also mock a global `Temporal`.
+  `vi.setSystemTime` also mock a global `Temporal`. Add `'Temporal'` to `toNotFake` to keep it native. From v5.1, they
+  also cover `node:timers` and `node:timers/promises`.
 - From v5, `clearMocks` defaults to `true`: call history is cleared before each test, so assert on calls made inside
   that test unless the repository sets `clearMocks: false`.
+- From v5, class mocks (`vi.fn(Class)`, `vi.spyOn`, `mockImplementation(class ...)`) chain their `prototype` to the
+  implementation, so instances have the class methods and pass `instanceof`. In browser mode, automocked exports return
+  `undefined` unless `{ spy: true }` is set.
 - Restore owned spies, timers, environment stubs, and replaced global property descriptors in local cleanup.
   `vi.restoreAllMocks()` restores `vi.spyOn` implementations but neither clears their history nor restores automocks.
   Reset or reconfigure automocked exports explicitly.
