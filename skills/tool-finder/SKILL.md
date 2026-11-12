@@ -3,14 +3,15 @@ coordination: exempt
 name: tool-finder
 description:
   Use to find, compare, and recommend current tools, packages, libraries, CLIs, VSCode extensions, agent skills,
-  databases, or infrastructure options for a development task.
+  databases, or infrastructure options for a development task, including Swift for iOS/macOS and Kotlin for Android.
 ---
 
 # Tool Finder
 
 This skill is coordination-exempt: skip the ai-coord gate for its declared work.
 
-Recommend the current option that best fits the user's actual constraints, backed by fresh primary evidence.
+Recommend the current option that best fits the user's actual constraints, backed by fresh primary evidence. User
+instructions take precedence over this skill's defaults.
 
 ## Workflow
 
@@ -28,7 +29,10 @@ Recommend the current option that best fits the user's actual constraints, backe
 
 ## Defaults
 
-- With no repository evidence, default to JavaScript/TypeScript and Node.js tooling.
+- Use the ecosystem named in the request or established by repository evidence. Default to JavaScript/TypeScript and
+  Node.js only when neither identifies an ecosystem.
+- For Swift on iOS/macOS or Kotlin on Android, use the native-platform guidance in the reference. Preserve the project's
+  UI framework, deployment targets, and build system.
 - For JavaScript installs, prefer the repository's package manager and otherwise `ni`. For macOS CLIs, prefer an
   official or well-maintained Homebrew formula.
 - Prefer registries, official docs, repositories, changelogs, and security advisories over secondary comparisons. For
@@ -40,8 +44,8 @@ The answer is complete when the recommendation is traceable to current sources, 
 installation guidance matches the user's environment, and uncertainties or disqualifying risks are visible. Use a table
 only when repeated fields make the comparison easier to scan.
 
-Lead with `### 🏆 Pick: <tool>` and the decisive reason. Follow with `### 📦 Install` and the exact command, a compact
-criteria/evidence table only when fields repeat, `### 🥈 Closest alternative` only for a credible material runner-up,
-and `### ⚠️ Caveats` only when material. Use symbols in comparison cells only with text. Never manufacture scores. Keep
-URL targets exact and use descriptive Markdown links for human output. Keep install commands, versions, security
-advisories, and installer-risk wording exact and undecorated.
+Lead with `### 🏆 Pick: <tool>` and the decisive reason. Follow with `### 📦 Install` and the exact command or
+configuration steps, a compact criteria/evidence table only when fields repeat, `### 🥈 Closest alternative` only for a
+credible material runner-up, and `### ⚠️ Caveats` only when material. Use symbols in comparison cells only with text.
+Never manufacture scores. Keep URL targets exact and use descriptive Markdown links for human output. Keep install
+commands, versions, security advisories, and installer-risk wording exact and undecorated.
