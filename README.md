@@ -35,7 +35,6 @@ From a clone, `just toolkit::install-cli` installs the supported CLIs into `~/.l
 | agents-brain             | Agent tooling | Maintain repo context and create AGENTS.md files or repo-local skills     |
 | agents-docs              | Agent tooling | Fetch current official Codex and Claude Code docs, including hooks/trust  |
 | agents-introspection     | Agent tooling | Assess recurrence risk from Codex/Claude Code transcript history          |
-| agents-system            | Agent tooling | Redesign repo systems for agent understanding, control, and learning      |
 | copy-transcript-path     | Agent tooling | Copy the active Claude Code or Codex CLI transcript path                  |
 | orchestration            | Agent tooling | Research, plan, and implement work with Claude or Codex agents            |
 | repo-fanout              | Agent tooling | Run one task or skill across many repositories with per-repo agents       |
@@ -53,6 +52,7 @@ From a clone, `just toolkit::install-cli` installs the supported CLIs into `~/.l
 | cli-just                 | Engineering   | Just command runner guidance                                              |
 | code-polish              | Engineering   | Simplify and/or risk-profiled review with autofix                         |
 | codebase-design          | Engineering   | Deep-module vocabulary and agent-legible codebase design                  |
+| deslop                   | Engineering   | Remove unnecessary material and consolidate related code and guidance     |
 | effect-ts                | Engineering   | Effect 4 patterns and source-aligned guidance                             |
 | fresh-eyes-sweep         | Engineering   | Whole-repository audit of code, tests, and comments with verified fixes   |
 | large-file-refactor      | Engineering   | Large source-file report and semantic split plans                         |
