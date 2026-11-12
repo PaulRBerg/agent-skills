@@ -41,8 +41,9 @@
 - For Cloudflare Workers tests, `@cloudflare/vitest-pool-workers` is deprecated and renamed to
   `@cloudflare/vitest-plugin`. Its 1.x releases declare the peer range `vitest ^4.1.0 || ^5.0.0`. Import
   `cloudflareTest` from `@cloudflare/vitest-plugin` and use `@cloudflare/vitest-plugin/types` in the test tsconfig. The
-  API and Vitest configuration stay the same. Run `npx @cloudflare/codemods vitest:pool-workers-to-vitest-plugin` to
-  migrate. See the [Workers Vitest integration](https://developers.cloudflare.com/workers/testing/vitest-integration/).
+  Vitest configuration stays the same. Plugin 1.6 exports no `fetchMock`. Mock outbound requests with the Miniflare
+  `outboundService` option or with MSW. Run `npx @cloudflare/codemods vitest:pool-workers-to-vitest-plugin` to migrate.
+  See the [Workers Vitest integration](https://developers.cloudflare.com/workers/testing/vitest-integration/).
 
 Use repository reporter conventions. Otherwise prefer minimal agent-oriented output: Vitest 4.1 introduced
 `--reporter=agent`. Current versions call it `minimal` and retain `agent` as an alias. Use automatic agent detection
