@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] - 2026-11-13
+
+### Fixed
+
+- Fix blocked active-scope expansion guidance so agents queue the full scope with `done` and `start` instead of looping on `wait` ([`5c3d66e`](https://github.com/PaulRBerg/agent-skills/commit/5c3d66e))
+
 ## [1.1.0] - 2026-11-11
 
 ### Added
@@ -64,6 +70,7 @@
 
 _First release._
 
+[1.1.1]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.1.1
 [1.1.0]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.1.0
 [1.0.6]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.6
 [1.0.5]: https://github.com/PaulRBerg/agent-skills/releases/tag/ai-coord-v1.0.5
