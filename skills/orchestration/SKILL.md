@@ -305,7 +305,8 @@ not start dependents or polish, and do not silently take over implementation.
 - A `status: blocked` result identifying a related in-repository fix or evidence change outside the worker's scope that
   is necessary for the requested outcome is follow-on work under the Contract's scope-expansion authority. It does not
   require fresh authorization. Let already-started independent agents finish. Gate dependents. Extend the manifest with
-  the smallest sufficient scope. Satisfy repository coordination for that scope.
+  the smallest sufficient scope. Resubmit `ai-coord start` with the complete updated scope union. A `start` that lists
+  only the new paths replaces the existing claim and leaves running agents unclaimed.
 
   Launch a new or reused implementation agent. Repeat until the outcome is complete or a genuine authorization boundary
   is reached.
