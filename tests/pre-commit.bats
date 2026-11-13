@@ -95,14 +95,14 @@ STUB
   [ ! -e "$BUN_ARGS" ]
 }
 
-@test "fully staged files run the original lint-staged command" {
+@test "fully staged files dispatch to the lint-staged package script" {
   printf 'staged\n' >"file with spaces.txt"
   git add -- "file with spaces.txt"
 
   run /bin/sh "$HOOK"
 
   [ "$status" -eq 0 ]
-  printf '%s\n' run lint-staged --no-stash --no-hide-partially-staged >"$BATS_TEST_TMPDIR/expected-args"
+  printf '%s\n' run lint-staged >"$BATS_TEST_TMPDIR/expected-args"
   cmp "$BUN_ARGS" "$BATS_TEST_TMPDIR/expected-args"
 }
 
