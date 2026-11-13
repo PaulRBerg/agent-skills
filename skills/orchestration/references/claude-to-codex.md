@@ -23,8 +23,8 @@ Give each research agent a self-contained prompt containing the open questions, 
 boundary, relevant repository constraints, and stopping rule from the shared prompt contract. Require every field in
 `research-result.schema.json`. Prohibit plans, design decisions, and edits.
 
-Before each new research brief launches, follow [Jev configuration routing](jev-routing.md). Use these research tiers as
-candidates and as the local fallback when Jev cannot provide a sound selection:
+Before each new research brief launches, follow [Jev configuration routing](jev-routing.md) with route `codex-cli`. Use
+these research tiers as the local fallback when Jev cannot provide a sound selection:
 
 | Investigation                          | Model         | Effort   | Baseline timeout |
 | -------------------------------------- | ------------- | -------- | ---------------- |
@@ -52,8 +52,8 @@ Use this exact host-specific table inside the shared `## Orchestration` plan sec
 | `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6.1-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
-Before each new implementation brief launches, follow [Jev configuration routing](jev-routing.md). Use these
-implementation tiers as candidates and as the local fallback:
+Before each new implementation brief launches, follow [Jev configuration routing](jev-routing.md) with route
+`codex-cli`. Use these implementation tiers as the local fallback:
 
 | Work                                                                              | Model         | Effort             | Baseline timeout |
 | --------------------------------------------------------------------------------- | ------------- | ------------------ | ---------------- |

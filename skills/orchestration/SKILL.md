@@ -59,10 +59,10 @@ Adapters specialize runtime mechanics. They cannot weaken the shared contract or
 
 Before launching each new research or implementation brief, follow
 [Jev configuration routing](references/jev-routing.md). Use Jev through Vercel to choose only unconstrained model and
-effort dimensions from the selected adapter's allowed candidates. Keep the adapter's existing task tiers as the local
-fallback. If all dimensions are fixed, skip the network request. Any routing failure, uncertainty, or dubious selection
-uses that fallback without retry, approval, or interruption. Record the selection source and a concise confidence or
-fallback reason in the worker's manifest brief.
+effort dimensions from the selected adapter's allowed candidates. Route all new briefs of a wave in one helper call.
+Keep the adapter's existing task tiers as the local fallback. If all dimensions are fixed, skip the network request. Any
+routing failure, uncertainty, or dubious selection uses that fallback without retry, approval, or interruption. Record
+the selection source and a concise confidence or fallback reason in the worker's manifest brief.
 
 If a requested agent or model cannot run through the available route, report the exact incompatibility. Ask before using
 a different agent or model. Do not change the worker family because a preferred tool is unavailable.

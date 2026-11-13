@@ -11,19 +11,18 @@ report the incompatibility without changing worker family.
 
 ## Configuration and Plan Manifest
 
-Before each new brief launches, follow [Jev configuration routing](jev-routing.md). Honor the user's exact model, custom
-agent, and effort choices. Jev selects only unconstrained dimensions from verified supported pairs. For the local
-fallback, use `sonnet` for bounded research and routine implementation. Use `opus` for involved research or
-implementation with interacting invariants. On fallback, let configured Claude effort apply unless the user specifies an
-effort. For a custom agent, verify `--agent <name>` support and availability. Add that option to the launch without
-overriding its model unless the user requested a model too. Preserve its configured effort unless the user overrides it.
-Record the selection source in each manifest brief.
+Before each new brief launches, follow [Jev configuration routing](jev-routing.md) with route `claude-cli`. Honor the
+user's exact model, custom agent, and effort choices. Jev selects only unconstrained dimensions from verified supported
+pairs. For the local fallback, use `sonnet` for bounded research and routine implementation. Use `opus` for involved
+research or implementation with interacting invariants. On fallback, let configured Claude effort apply unless the user
+specifies an effort. For a custom agent, verify `--agent <name>` support and availability. Add that option to the launch
+without overriding its model unless the user requested a model too. Preserve its configured effort unless the user
+overrides it. Record the selection source in each manifest brief.
 
 Verify `--effort` support before selecting an explicit CLI effort. Supported effort flag values alone do not prove a
-model supports each value. Default routing candidates are Sonnet/medium, Sonnet/high, Opus/medium, Opus/high, and
-verified Opus/xhigh for implementation. Use only verified pairs from [Jev configuration routing](jev-routing.md). On a
-selected or explicit supported effort, add `--effort '<agent-effort>'` to the launch template. If fallback preserves
-configured effort, omit that flag.
+model supports each value. The `claude-cli` route offers Sonnet/medium, Sonnet/high, Opus/medium, Opus/high, and
+Opus/xhigh for implementation. Remove unverified pairs with the routing filters. On a selected or explicit supported
+effort, add `--effort '<agent-effort>'` to the launch template. If fallback preserves configured effort, omit that flag.
 
 Use this table in the shared `## Orchestration` plan section:
 

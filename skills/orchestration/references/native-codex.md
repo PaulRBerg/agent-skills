@@ -9,8 +9,8 @@ own adapter.
 
 ## Native Agent Configuration
 
-Before each new brief launches, follow [Jev configuration routing](jev-routing.md). Use these tiers as allowed
-configurations and as the local fallback when Jev cannot provide a sound selection:
+Before each new brief launches, follow [Jev configuration routing](jev-routing.md) with route `native-codex`. Use these
+tiers as the local fallback when Jev cannot provide a sound selection:
 
 | Work                                                                              | Model         | Effort             |
 | --------------------------------------------------------------------------------- | ------------- | ------------------ |

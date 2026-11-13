@@ -5,8 +5,8 @@ authority, prompts, reconciliation, and completion.
 
 ## Configuration
 
-Before each new brief launches, follow [Jev configuration routing](jev-routing.md). Use these model tiers as candidates
-and as the local fallback when Jev cannot provide a sound selection:
+Before each new brief launches, follow [Jev configuration routing](jev-routing.md) with route `native-claude`. Use these
+model tiers as the local fallback when Jev cannot provide a sound selection:
 
 | Work                                                                 | Model    |
 | -------------------------------------------------------------------- | -------- |
@@ -21,10 +21,10 @@ Report an incompatibility before substituting.
 [Claude Code v2.1.292](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md#21292) added per-call `effort`.
 Inspect the callable Agent schema before selecting effort. For supported non-fork calls, this skill explicitly requests
 passing the accepted Jev effort through that parameter. Use only levels supported by the tool and selected model. On
-local fallback, omit `effort` unless the user specified one. If the tool lacks that parameter, fix candidate effort to
-`inherited`. The parameter is ignored for `subagent_type: "fork"`, which inherits the parent's effort. Preserve a custom
-agent's configured effort unless the user overrides it. Do not create agent files to expose effort. Record the selected
-effort and selection source in each brief.
+local fallback, omit `effort` unless the user specified one. If the tool lacks that parameter, route with
+`inherit_effort: true`. The parameter is ignored for `subagent_type: "fork"`, which inherits the parent's effort.
+Preserve a custom agent's configured effort unless the user overrides it. Do not create agent files to expose effort.
+Record the selected effort and selection source in each brief.
 
 Let Claude Code select foreground or background delivery. Only a terminal result, error, or completion notification
 settles an agent. A launch acknowledgement, task row, quiet period, or permission prompt does not settle it. Reconcile a
