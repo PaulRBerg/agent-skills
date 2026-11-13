@@ -21,6 +21,7 @@ publish_skills_script := "scripts/publish-skills.ts"
 publish_skills_test := "scripts/publish-skills.test.ts"
 orchestration_runner_test := "tests/orchestration/test-run-codex-agent.sh"
 orchestration_wave_test := "tests/orchestration/test-watch-codex-wave.py"
+node_deps_bumper_test := "tests/node-deps-bumper/test_taze_direct.mjs"
 
 # ---------------------------------------------------------------------------- #
 #                                 ENTRYPOINTS                                  #
@@ -108,6 +109,11 @@ alias pw := prettier-write
 @bats-test *paths:
     if [ "$#" -eq 0 ]; then bats --recursive tests; else bats --recursive "$@"; fi
 
+# Run the node-deps-bumper Node tests
+[group("checks")]
+@node-deps-bumper-test:
+    node --test {{ node_deps_bumper_test }}
+
 # Lint repository shell scripts and tests
 [group("checks")]
 [positional-arguments]
@@ -116,7 +122,7 @@ alias pw := prettier-write
 
 # Run every test suite, the Python and TypeScript checks, and the evm-atlas freshness check
 [group("checks")]
-@test: python-check python-test shell-test bats-test publish-skills-test evm-atlas-test typescript-check evm-atlas-check
+@test: python-check python-test shell-test bats-test node-deps-bumper-test publish-skills-test evm-atlas-test typescript-check evm-atlas-check
 
 # Exercise the orchestration Codex runner and wave watcher
 [group("checks")]
