@@ -14,6 +14,7 @@ only active skill records on `main`. Move each shelved skill's record and index 
 | [grill-me](grill-me.md)                                 | Confirmed adaptation                            | Mapped skill entrypoint  |
 | [agents-brain](agents-brain.md)                         | Two component adaptations                       | Mapped references only   |
 | [frontend-design](frontend-design.md)                   | Inspiration followed by independent rewrite     | No mechanical merge base |
+| [llm-finder](llm-finder.md)                             | First-party component extraction and rewrite    | Guidance review only     |
 
 Circadian's weekly job discovers the union of the README's [Forked Skills table](../../README.md#forked-skills) and
 active `.agents/skill-upstreams/<name>.md` records from fresh `origin/main`. It excludes this index and deduplicates

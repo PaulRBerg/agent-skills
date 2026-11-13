@@ -75,6 +75,7 @@ From a clone, `just toolkit::install-cli` installs the supported CLIs into `~/.l
 | social-media             | Productivity  | Prepare social images, cross-post, refresh previews, and find subreddits  |
 | todo-archive             | Productivity  | Archive checked TODO.md tasks into .ai/todos                              |
 | chromium-browser         | Research      | Shared Chromium browsing, DevTools automation, and Wayback research       |
+| llm-finder               | Research      | Research and compare models for tasks, deployment fit, quality, and cost  |
 | tool-finder              | Research      | Find and compare current developer tools                                  |
 
 Some mechanical skills pin `model: sonnet` in their frontmatter so they do not spend a more capable inherited model
