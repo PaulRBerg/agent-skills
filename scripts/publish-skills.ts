@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { type CommittedSkillSource, withCommittedSkillSource } from "./committed-skill-source";
 
 type Command = "apply" | "check" | "plan";
 type InstallTarget = "claude" | "codex" | "shared";
@@ -15,6 +16,7 @@ type NodeKind = "directory" | "file" | "missing" | "other" | "symlink";
 
 type CliOptions = {
   command: Command;
+  committed: boolean;
   expectedHead: string | null;
   json: boolean;
   skills: string[];
@@ -89,9 +91,13 @@ try {
   if (options.command === "apply") {
     process.exitCode = await applyPlan(options);
   } else {
-    const plan = createPlan(options.skills);
-    printPlan(plan, options.json, options.skills);
-    if (options.command === "check" && plan.drifts.length > 0) process.exitCode = 1;
+    const check = (source?: CommittedSkillSource): void => {
+      const plan = createPlan(options.skills, { source });
+      printPlan(plan, options.json, options.skills, source?.head);
+      if (options.command === "check" && plan.drifts.length > 0) process.exitCode = 1;
+    };
+    if (options.committed) withCommittedSkillSource(config.sourceRoot, check);
+    else check();
   }
 } catch (error) {
   console.error(`Error: ${errorMessage(error)}`);
@@ -102,14 +108,25 @@ function parseArgs(args: string[]): CliOptions {
   const command = args.shift();
   if (!command || !["apply", "check", "plan"].includes(command)) {
     throw new Error(
-      "Usage: publish-skills.ts plan|check [--json] [--skill NAME]... | " +
+      "Usage: publish-skills.ts check [--committed] [--json] [--skill NAME]... | plan [--json] [--skill NAME]... | " +
         "apply --expected-head SHA [--skill NAME]...",
     );
   }
 
-  const options: CliOptions = { command: command as Command, expectedHead: null, json: false, skills: [] };
+  const options: CliOptions = {
+    command: command as Command,
+    committed: false,
+    expectedHead: null,
+    json: false,
+    skills: [],
+  };
   while (args.length > 0) {
     const flag = args.shift();
+    if (flag === "--committed") {
+      if (command !== "check") throw new Error("--committed is available only for check.");
+      options.committed = true;
+      continue;
+    }
     if (flag === "--json") {
       if (command === "apply") throw new Error("--json is available only for plan and check.");
       options.json = true;
@@ -137,8 +154,11 @@ function parseArgs(args: string[]): CliOptions {
   return options;
 }
 
-function createPlan(requestedSkills: string[], { emptyMeansAll = true }: { emptyMeansAll?: boolean } = {}): Plan {
-  const sourceSkills = readSourceSkills();
+function createPlan(
+  requestedSkills: string[],
+  { emptyMeansAll = true, source }: { emptyMeansAll?: boolean; source?: CommittedSkillSource } = {},
+): Plan {
+  const sourceSkills = readSourceSkills(source?.root, source?.files);
   const lock = readCliLock();
   const sourceOwnedLockNames = Object.entries(lock.data.skills)
     .filter(([, entry]) => isObject(entry) && entry.source === repository)
@@ -147,7 +167,9 @@ function createPlan(requestedSkills: string[], { emptyMeansAll = true }: { empty
   const selected = requestedSkills.length > 0 ? requestedSkills : emptyMeansAll ? candidateNames : [];
   // A completed deletion leaves no source or lock entry; its name stays valid while source history has it.
   const unknown = selected.filter(
-    (name) => !candidateNames.includes(name) && !git(["log", "-1", "--format=%H", "--", `skills/${name}`]),
+    (name) =>
+      !candidateNames.includes(name) &&
+      !git(["log", "-1", "--format=%H", source?.head ?? "HEAD", "--", `skills/${name}`]),
   );
   if (unknown.length > 0)
     throw new Error(`Unknown source-owned skill${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`);
@@ -202,9 +224,8 @@ function createPlan(requestedSkills: string[], { emptyMeansAll = true }: { empty
   };
 }
 
-function readSourceSkills(): Map<string, SourceSkill> {
-  const skillsRoot = path.join(config.sourceRoot, "skills");
-  const sourceFiles = readSourceFileIndex();
+function readSourceSkills(root = config.sourceRoot, sourceFiles = readSourceFileIndex()): Map<string, SourceSkill> {
+  const skillsRoot = path.join(root, "skills");
   let entries;
   try {
     entries = fs.readdirSync(skillsRoot, { withFileTypes: true });
@@ -857,7 +878,7 @@ function buildRepoClaims(plan: Plan): RepoClaim[] {
   }));
 }
 
-function printPlan(plan: Plan, json: boolean, filters: string[]): void {
+function printPlan(plan: Plan, json: boolean, filters: string[], head?: string): void {
   const driftSkills = [...new Set(plan.drifts.map((drift) => drift.skill))].sort();
   if (json) {
     console.log(
@@ -868,7 +889,7 @@ function printPlan(plan: Plan, json: boolean, filters: string[]): void {
           drifts: plan.drifts,
           filters,
           groups: plan.groups,
-          head: git(["rev-parse", "HEAD"]),
+          head: head ?? git(["rev-parse", "HEAD"]),
           repos: buildRepoClaims(plan),
           selectedCount: plan.selected.length,
           version: 2,
