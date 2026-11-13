@@ -4,8 +4,6 @@ import json
 import select
 import subprocess
 import tempfile
-import threading
-import time
 import unittest
 from pathlib import Path
 
@@ -20,21 +18,7 @@ class WatchCodexWaveTests(unittest.TestCase):
             first = root / "a.progress.jsonl"
             second = root / "b.progress.jsonl"
 
-            def write_progress() -> None:
-                time.sleep(0.08)
-                first.write_text(
-                    '{"type":"item.completed","item":{"type":"command_execution","command":"just test","status":"completed"}}\n'
-                    '{"type":"handoff.completed","elapsed_seconds":1}\n'
-                )
-                time.sleep(0.08)
-                second.write_text(
-                    '{"type":"item.completed","item":{"type":"file_change","status":"completed"}}\n'
-                    '{"type":"handoff.failed","reason":"timeout","elapsed_seconds":2}\n'
-                )
-
-            thread = threading.Thread(target=write_progress)
-            thread.start()
-            result = subprocess.run(
+            with subprocess.Popen(
                 [
                     "bash",
                     str(SCRIPT),
@@ -51,14 +35,31 @@ class WatchCodexWaveTests(unittest.TestCase):
                     "--poll-seconds",
                     "0.01",
                 ],
-                check=False,
                 text=True,
-                capture_output=True,
-                timeout=5,
-            )
-            thread.join()
-            self.assertEqual(result.returncode, 1, result.stderr)
-            records = [json.loads(line) for line in result.stdout.splitlines()]
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ) as process:
+                try:
+                    assert process.stdout is not None
+                    ready, _, _ = select.select([process.stdout], [], [], 2)
+                    self.assertTrue(ready, "watcher did not emit an initial digest")
+                    first_line = process.stdout.readline()
+                    self.assertEqual(json.loads(first_line)["type"], "watcher.digest")
+                    first.write_text(
+                        '{"type":"item.completed","item":{"type":"command_execution","command":"just test","status":"completed"}}\n'
+                        '{"type":"handoff.completed","elapsed_seconds":1}\n'
+                    )
+                    second.write_text(
+                        '{"type":"item.completed","item":{"type":"file_change","status":"completed"}}\n'
+                        '{"type":"handoff.failed","reason":"timeout","elapsed_seconds":2}\n'
+                    )
+                    output, stderr = process.communicate(timeout=5)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate()
+            self.assertEqual(process.returncode, 1, stderr)
+            records = [json.loads(line) for line in (first_line + output).splitlines()]
             self.assertTrue(
                 any(record["type"] == "watcher.digest" and record["noRecentActivity"] for record in records)
             )
@@ -127,17 +128,7 @@ class WatchCodexWaveTests(unittest.TestCase):
             stalled.write_text("")
             healthy.write_text("")
 
-            def write_progress() -> None:
-                time.sleep(0.15)
-                with stalled.open("a") as handle:
-                    handle.write('{"type":"handoff.completed","elapsed_seconds":1}\n')
-                time.sleep(0.15)
-                with healthy.open("a") as handle:
-                    handle.write('{"type":"handoff.completed","elapsed_seconds":2}\n')
-
-            thread = threading.Thread(target=write_progress)
-            thread.start()
-            result = subprocess.run(
+            with subprocess.Popen(
                 [
                     "bash",
                     str(SCRIPT),
@@ -154,14 +145,30 @@ class WatchCodexWaveTests(unittest.TestCase):
                     "--poll-seconds",
                     "0.01",
                 ],
-                check=False,
                 text=True,
-                capture_output=True,
-                timeout=5,
-            )
-            thread.join()
-            self.assertEqual(result.returncode, 1, result.stderr)
-            records = [json.loads(line) for line in result.stdout.splitlines()]
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ) as process:
+                try:
+                    assert process.stdout is not None
+                    ready, _, _ = select.select([process.stdout], [], [], 2)
+                    self.assertTrue(ready, "watcher did not emit a no-sentinel record")
+                    first_line = process.stdout.readline()
+                    first_record = json.loads(first_line)
+                    self.assertEqual(first_record["type"], "watcher.sentinel")
+                    self.assertEqual(first_record["agentId"], "A1")
+                    self.assertEqual(first_record["reason"], "no-sentinel")
+                    with stalled.open("a") as handle:
+                        handle.write('{"type":"handoff.completed","elapsed_seconds":1}\n')
+                    with healthy.open("a") as handle:
+                        handle.write('{"type":"handoff.completed","elapsed_seconds":2}\n')
+                    output, stderr = process.communicate(timeout=5)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate()
+            self.assertEqual(process.returncode, 1, stderr)
+            records = [json.loads(line) for line in (first_line + output).splitlines()]
             self.assertFalse(any(record["type"] == "watcher.failed" for record in records))
             sentinels = [record for record in records if record["type"] == "watcher.sentinel"]
             self.assertEqual([record["agentId"] for record in sentinels], ["A1", "A2"])
