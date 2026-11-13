@@ -17,6 +17,7 @@ prettier_globs := "\"**/*.{md,json,jsonc,yaml,yml}\""
 evm_atlas_generator := "scripts/generate-evm-atlas.ts"
 evm_atlas_generator_test := "scripts/generate-evm-atlas.test.ts"
 debank_collect_test := "tests/evm-atlas/debank-collect.test.ts"
+llm_finder_test := "tests/llm-finder/gateway-models.test.ts"
 publish_skills_script := "scripts/publish-skills.ts"
 publish_skills_test := "scripts/publish-skills.test.ts"
 orchestration_runner_test := "tests/orchestration/test-run-codex-agent.sh"
@@ -122,7 +123,7 @@ alias pw := prettier-write
 
 # Run every test suite, the Python and TypeScript checks, and the evm-atlas freshness check
 [group("checks")]
-@test: python-check python-test shell-test bats-test node-deps-bumper-test publish-skills-test evm-atlas-test typescript-check evm-atlas-check
+@test: python-check python-test shell-test bats-test node-deps-bumper-test publish-skills-test evm-atlas-test llm-finder-test typescript-check evm-atlas-check
 
 # Exercise the orchestration Codex runner and wave watcher
 [group("checks")]
@@ -147,6 +148,11 @@ alias eac := evm-atlas-check
 @evm-atlas-test:
     bun test {{ evm_atlas_generator_test }} {{ debank_collect_test }}
 alias eat := evm-atlas-test
+
+# Exercise the llm-finder Gateway catalog helper against provider fixtures
+[group("checks")]
+@llm-finder-test:
+    bun test {{ llm_finder_test }}
 
 # Refresh atlas-overlays.json routeMesh flags through the routemesh CLI (network call)
 [group("checks")]
