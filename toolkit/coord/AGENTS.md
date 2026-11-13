@@ -320,6 +320,9 @@ coverage is complete, relevant dirt is safe, and no active or queued work inters
 `ACTIVE update-…` leaves the old label, paths, age, baselines, and residual ownership unchanged. Because `wait` only
 rechecks the recorded work, it never re-arbitrates a pending expansion. For `ACTIVE update-unknown:dirty-settling:…`,
 the stderr guidance names the seconds left before the slowest path settles. Re-run the same `start` after that.
+`ACTIVE update-blocked:…` does not queue the expansion, and `wait` returns `READY` for the old scope immediately. To
+queue the full scope, run `done` and then the same `start`. Uncommitted edits keep residual ownership. Clean old scopes
+lose their reservation.
 
 Blocked work retains its paths. Narrowing queued work preserves its original submission age. Expanding or moving it
 receives a new age so stale broad requests cannot reserve unrelated work. This applies to the full bundle claim vector

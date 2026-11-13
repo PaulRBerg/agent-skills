@@ -384,6 +384,8 @@ fn outcome_guidance(outcome: &Outcome, client: Option<Client>) -> String {
                 "ai-coord: The old edit scope remains active; unattributed dirt in the requested expansion settles {window}, so edit only the listed scopes and re-run the same start after that; `ai-coord wait` does not recheck a pending expansion."
             )
         }
+        OutcomeKind::Active if outcome.detail.starts_with("update-blocked:") =>
+            "ai-coord: The old edit scope remains active and the blocked expansion is not queued, so `ai-coord wait` returns for the old scope without waiting for it; edit only the listed scopes, and when you need the expansion run `ai-coord done` and then the same start to queue the full scope (uncommitted edits keep residual ownership).".to_owned(),
         OutcomeKind::Active =>
             "ai-coord: The old edit scope remains active because the requested expansion failed; inspect the result before retrying.".to_owned(),
         OutcomeKind::Message =>
@@ -917,7 +919,8 @@ mod tests {
             (Outcome::new(OutcomeKind::Blocked, 3, "conflict"), Some(Client::Claude)),
             (Outcome::new(OutcomeKind::Unknown, 2, "coverage"), None),
             (Outcome::new(OutcomeKind::Unknown, 2, "dirty-settling:README.md"), None),
-            (Outcome::new(OutcomeKind::Active, 3, "update-blocked"), None),
+            (Outcome::new(OutcomeKind::Active, 3, "update-blocked:holder"), None),
+            (Outcome::new(OutcomeKind::Active, 3, "update-unknown:coverage"), None),
             (Outcome::new(OutcomeKind::Message, 3, "1"), None),
             (Outcome::new(OutcomeKind::Released, 3, ""), None),
             (Outcome::new(OutcomeKind::Timeout, 3, "300"), None),
@@ -948,6 +951,15 @@ mod tests {
         assert!(guidance.contains("settles in about 42 seconds"), "{guidance}");
         assert!(guidance.contains("edit only the listed scopes and re-run the same start"), "{guidance}");
         assert!(guidance.contains("`ai-coord wait` does not recheck a pending expansion"), "{guidance}");
+    }
+
+    #[test]
+    fn blocked_expansion_guidance_routes_to_done_then_start() {
+        let guidance =
+            outcome_guidance(&Outcome::new(OutcomeKind::Active, 3, "update-blocked:holder"), Some(Client::Claude));
+        assert!(guidance.contains("blocked expansion is not queued"), "{guidance}");
+        assert!(guidance.contains("`ai-coord wait` returns for the old scope without waiting for it"), "{guidance}");
+        assert!(guidance.contains("run `ai-coord done` and then the same start"), "{guidance}");
     }
 
     #[test]
