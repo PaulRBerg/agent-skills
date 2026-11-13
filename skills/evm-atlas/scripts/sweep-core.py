@@ -76,7 +76,7 @@ def validate_checkpoint(checkpoint: Any) -> dict[str, Any]:
     return {**checkpoint, "blockHash": checkpoint["blockHash"].lower()}
 
 
-def build_plan(spec: Any) -> dict[str, Any]:
+def build_plan(spec: Any, *, now: dt.datetime | None = None) -> dict[str, Any]:
     if not isinstance(spec, dict):
         raise SweepError("plan input must be an object")
     address = spec.get("address")
@@ -107,6 +107,8 @@ def build_plan(spec: Any) -> dict[str, Any]:
         capabilities = provider.get("capabilities")
         if not isinstance(capabilities, list) or not all(channel in HISTORY_CHANNELS for channel in capabilities):
             raise SweepError(f"provider {provider['id']} has invalid capabilities")
+        if provider.get("kind") == "etherscan":
+            require_etherscan_support(chain["id"], now)
         normalized_providers.append(
             {
                 "id": provider["id"],
@@ -163,6 +165,20 @@ def build_plan(spec: Any) -> dict[str, Any]:
         "providers": normalized_providers,
         "requests": {"state": state_requests, "history": history_requests},
     }
+
+
+def require_etherscan_support(chain_id: int, now: dt.datetime | None) -> None:
+    targets = load_json(Path(__file__).resolve().parents[1] / "references" / "generated" / "target-mainnets.json")
+    target = next((row for row in targets["chains"] if row["chainId"] == chain_id), None)
+    if target is None:
+        raise SweepError(f"chain {chain_id} is not a target mainnet")
+    cutoff = target.get("etherscanApiUnsupportedFrom")
+    if cutoff:
+        execution_time = now if now is not None else dt.datetime.now(dt.UTC)
+        if execution_time.tzinfo is None:
+            raise SweepError("execution time must include a timezone")
+        if execution_time.astimezone(dt.UTC).date() >= dt.date.fromisoformat(cutoff):
+            raise SweepError(f"Etherscan API unsupported for chain {chain_id} from {cutoff}")
 
 
 def parse_quantity(value: Any, context: str) -> int:

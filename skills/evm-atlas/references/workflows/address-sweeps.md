@@ -68,7 +68,8 @@ Create an agent-selected input JSON with:
 - `goal`: `historical-activity` or `bootstrap-discovery`
 - named `profile`
 - `checkpoint`: `requestedAt`, `resolutionKind`, `blockNumber`, `blockHash`, `blockTimestamp`, `observedAt`
-- `providers`: stable ID, provider kind, independent-index group, and supported history-channel names
+- `providers`: stable ID, provider kind, independent-index group, and supported history-channel names. Use kind
+  `etherscan` for the Etherscan service and a separate kind such as `native-explorer` for a compatible native API.
 - `quorum`: positive integer, default `1`.
 
 Then run:
@@ -80,6 +81,10 @@ uv run scripts/sweep-core.py plan --input <spec.json> > <plan.json>
 The credential-free plan has `schemaVersion: 1`, normalized required channels, checkpoint-bound JSON-RPC state requests,
 bounded indexed-history request specifications, and quorum ordering requirements. It does not acquire a checkpoint,
 choose a provider, or construct credential-bearing URLs.
+
+For kind `etherscan`, planning checks the canonical target row's `etherscanApiUnsupportedFrom` against the current UTC
+execution date. A historical checkpoint cannot restore retired API access. Omitting the date from the input does not
+bypass the gate. Evaluation of saved plans and responses does not apply this current-access check.
 
 Execute only the emitted requests through the selected provider's documented adapter. Save responses in this shape:
 

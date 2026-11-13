@@ -7,15 +7,16 @@ Source: <https://docs.etherscan.io/supported-chains> Access changes: <https://do
 
 Verified against the live `chainlist` endpoint on 2026-11-09 (55 provider chains). This file intentionally lists only
 chains from `references/generated/target-mainnets.json`; provider-supported chains outside that list are out of scope
-for this skill. Apply dated notes using the request date: a scheduled paid-plan requirement overrides the table grouping
-once effective. Chainlist membership does not establish plan access or an active explorer UI. Free availability may
-depend on a shared community quota; see `references/explorers/etherscan-api.md` for error handling.
+for this skill. Apply dated notes using the current UTC execution date, not the historical checkpoint. Scheduled
+paid-plan requirements and API retirements override the table grouping when effective. Chainlist membership does not
+establish plan access or an active explorer UI. Free availability may depend on a shared community quota. See
+`references/explorers/etherscan-api.md` for error handling.
 
 ## Target Mainnets (Free Tier Available)
 
 | Chain           | Chain ID | Notes                                                                                                                          |
 | --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Abstract        | `2741`   |                                                                                                                                |
+| Abstract        | `2741`   | Etherscan API unsupported from 2026-11-30 (all plans and actions).                                                             |
 | Arbitrum        | `42161`  | Shared community Free quota effective 2026-11-01; honor the reset time on quota exhaustion                                     |
 | Berachain       | `80094`  |                                                                                                                                |
 | Celo            | `42220`  | Shared community Free quota since 2026-07-16; honor the reset time on quota exhaustion                                         |

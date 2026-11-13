@@ -6,10 +6,12 @@
       "slug": "abstract",
       "category": "zk",
       "accountActivityModel": "native-account-abstraction",
+      "etherscanApiUnsupportedFrom": "2026-11-30",
       "primaryPublicRpc": "https://api.mainnet.abs.xyz",
       "nativeCurrencySymbol": "ETH",
       "explorerUrl": "https://abscan.org",
       "explorerAddressUrl": "https://abscan.org/address/{address}",
+      "explorerApiUrl": "https://block-explorer-api.mainnet.abs.xyz/api",
       "explorerTxUrl": "https://abscan.org/tx/{tx_hash}",
       "routeMesh": true
     },

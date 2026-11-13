@@ -23,13 +23,14 @@ It is not a globally canonical source. Keep a second provider only as a fallback
    avoid those limits.
 2. Otherwise, use Etherscan through the official `etherscan` CLI when the chain is in
    `references/generated/etherscan-chains.md`, the detected plan can query it after dated access notes, and the needed
-   actions accept the fixed cutoff.
+   actions accept the fixed cutoff. Apply access dates to the current UTC execution date, not the historical checkpoint.
 3. Use the other indexed provider as fallback when the authoritative provider is unavailable, malformed, behind the
    cutoff, rate/plan limited, or missing a required action. A valid empty response is a completed negative, not a
    fallback trigger. Move the affected result to the fallback. Do not silently combine two negative responses into one
    complete result.
-4. If neither indexed provider covers the target, use its listed public RPC only for facts that JSON-RPC can prove.
-   Missing indexed history remains unknown, never empty.
+4. When documented below, use the chain's native explorer as a separate indexed fallback with its stated channel limits.
+5. If no indexed provider covers the target, use its listed public RPC only for facts that JSON-RPC can prove. Missing
+   indexed history remains unknown, never empty.
 
 On overlaps, prefer Blockscout if the generated Etherscan table and dated notes require paid access that the detected
 plan lacks. Also prefer Blockscout if its holdings/counters make the requested result more complete.
@@ -41,6 +42,11 @@ cannot restore the pool.
 Do not infer API support or UI availability from an Etherscan-shaped explorer URL. Gnosis (`100`) still has Etherscan
 API access on paid plans after Gnosisscan's UI closure. Use its listed Blockscout instance for browser evidence and
 explorer links.
+
+Abstract (`2741`) loses Etherscan API support from the target row's `etherscanApiUnsupportedFrom` date, on every plan.
+After that date, do not send Etherscan V2 or CLI requests, including ABI/source reads, even for an older checkpoint.
+Preserve the listed Abscan browser links. An Etherscan-compatible native API is a separate service, not Etherscan API
+support or a Blockscout instance. Use the Abstract fallback below for its verified actions.
 
 For Etherscan CLI 1.1.1 commands, plan gating, manual pagination, output validation, and direct API exceptions, see
 `references/explorers/etherscan-api.md`. Pass the resolved numeric `--chain` and `--output json`. CLI stdout is the
@@ -286,6 +292,37 @@ supports native currency, ERC-20, and ERC-721. Do not infer ERC-1155 coverage fr
 When ERC-1155 transfer coverage is required, query standard `TransferSingle` and `TransferBatch` logs through provider
 routing over the verified block range. Filter the wallet separately in indexed `from` and `to` positions (topics 2 and
 3). Preserve any RPC range or provider failures and use the normal public-RPC fallback.
+
+### Abstract native explorer fallback
+
+For resolved Abstract (`2741`), inspect `https://explorer.mainnet.abs.xyz/address/<address>` in Chromium when browser
+evidence is needed. Its native API base is the target row's `explorerApiUrl`:
+`https://block-explorer-api.mainnet.abs.xyz/api`. Use this keyless API directly, independently of the Etherscan CLI.
+Keep it as a separate index source. Do not label it Blockscout or infer broader coverage from compatible action names.
+
+The native [API docs](https://block-explorer-api.mainnet.abs.xyz/docs) and
+[OpenAPI schema](https://block-explorer-api.mainnet.abs.xyz/docs-json) describe these verified account actions:
+`txlist`, `txlistinternal`, `tokentx`, and `tokennfttx`. Supply `address`, `startblock`, `endblock`, `page`, `offset`,
+and `sort`. Use at most 100 rows per page. The API enforces a first-1000-result window, even with later pages. Partition
+inclusive block ranges when a window fills. If one block exceeds that window, report the unresolved coverage gap. Verify
+the fixed checkpoint and successor through RPC before adopting the range.
+
+Nonempty `txlist` and `txlistinternal` responses were verified on public Multicall3
+`0xAa4De41dba0Ca5dCBb288b7cC6b708F3aaC759E7`. Token actions returned valid empty arrays for that address. Those empty
+samples verify the response shape, not complete token history for another address or range.
+
+`txlistinternal` covers native transfers, not general zero-value internal calls. Declare that capability only when the
+profile requires transfer coverage, such as `bootstrap-discovery`. For a general sweep, keep missing internal-call
+coverage explicit. `token1155tx` returned `NOTOK` with an invalid-action error. Do not declare ERC-1155 history support.
+Use verified `TransferSingle` and `TransferBatch` logs with separate indexed sender and recipient filters when required.
+Missing logs or failed range queries leave that channel unknown. Abstract's `native-account-abstraction` model never
+permits the zero-nonce/zero-balance native-history shortcut.
+
+The native API also served `module=block&action=getblocknobytime` with `timestamp` and `closest=before`, and
+`module=contract&action=getsourcecode` with `address`. Treat timestamp results as candidates requiring the checkpoint
+proof above. These actions do not restore Etherscan service access. A scoped `module=logs&action=getLogs` query returned
+`status="0"`, `message="No record found"`, and `result=[]`. Accept that exact empty shape only for the verified log
+query. Arbitrary status `0`, `NOTOK`, errors, or untested actions never establish empty history.
 
 ### OKLink historical fallback
 

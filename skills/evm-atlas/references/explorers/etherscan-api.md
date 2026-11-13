@@ -13,7 +13,16 @@ Keep Blockscout first on covered overlaps. CLI availability does not change prov
 checkpoint proof, quorum, or plan gates. User instructions take precedence over this skill.
 
 The dated access rules reflect the [changelog](https://docs.etherscan.io/changelog) check on 2026-11-09. Apply scheduled
-changes by their effective date. Provider membership alone does not prove plan access.
+changes using the current UTC execution date, not the historical checkpoint or saved observation time. Provider
+membership alone does not prove plan access.
+
+The [supported-chains page](https://docs.etherscan.io/supported-chains) confirms Abstract's retirement date, checked on
+2026-11-13.
+
+Before any Etherscan request, check the target row's optional `etherscanApiUnsupportedFrom` and the generated dated
+notes. From that UTC date, Etherscan API support ends for every plan and action, including ABI/source reads. Abstract
+(`2741`) has this scheduled retirement. Preserve its listed Abscan browser links. For the separate keyless native API
+and its limited action coverage, use `references/workflows/provider-routing.md`.
 
 Sources: [official CLI guide](https://docs.etherscan.io/build-with-ai/cli) and
 [CLI 1.1.1 source](https://github.com/etherscan/etherscan-cli/tree/v1.1.1).

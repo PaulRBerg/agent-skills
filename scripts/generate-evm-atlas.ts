@@ -16,6 +16,7 @@ type RegistryChain = {
   category: ChainCategory;
   chainId: number;
   defunct?: { finalStateBlock?: number; since: string };
+  etherscanApiUnsupportedFrom?: string;
   explorer: { addressUrl: string; apiUrl?: string; txUrl: string };
   name: string;
   nativeCurrency: { symbol: string };
@@ -329,6 +330,7 @@ function targetMainnets(registryChains: RegistryChain[], data: AtlasOverlay) {
       slug: chain.slug,
       category: chain.category,
       accountActivityModel: chain.accountActivityModel,
+      ...(chain.etherscanApiUnsupportedFrom ? { etherscanApiUnsupportedFrom: chain.etherscanApiUnsupportedFrom } : {}),
       primaryPublicRpc: row.primaryPublicRpc,
       nativeCurrencySymbol: chain.nativeCurrency.symbol,
       explorerUrl: explorerBaseUrl(chain),
@@ -393,17 +395,13 @@ function etherscanChainsMarkdown(registryChains: RegistryChain[], data: AtlasOve
     "Live list: <https://api.etherscan.io/v2/chainlist> (returns the provider's authoritative `chainid` set)",
     "",
     `Verified against the live \`chainlist\` endpoint on ${meta.etherscanVerifiedAt} (${meta.etherscanProviderChainCount} provider chains). This file intentionally lists only chains from \`references/generated/target-mainnets.json\`; provider-supported chains outside that list are out of scope for this skill.`,
-    "Apply dated notes using the request date: a scheduled paid-plan requirement overrides the table grouping once effective. Chainlist membership does not establish plan access or an active explorer UI. Free availability may depend on a shared community quota; see `references/explorers/etherscan-api.md` for error handling.",
+    "Apply dated notes using the current UTC execution date, not the historical checkpoint. Scheduled paid-plan requirements and API retirements override the table grouping when effective. Chainlist membership does not establish plan access or an active explorer UI. Free availability may depend on a shared community quota. See `references/explorers/etherscan-api.md` for error handling.",
     "",
     "## Target Mainnets (Free Tier Available)",
     "",
     markdownTable(
       ["Chain", "Chain ID", "Notes"],
-      (rowsBySupport.free ?? []).map((chain) => [
-        chain.name,
-        code(chain.chainId),
-        overlayRow(data, chain).etherscan.notes ?? "",
-      ]),
+      (rowsBySupport.free ?? []).map((chain) => [chain.name, code(chain.chainId), etherscanNotes(chain, data)]),
     ),
     "",
     "## Target Mainnets (Paid Plan Required)",
@@ -412,11 +410,7 @@ function etherscanChainsMarkdown(registryChains: RegistryChain[], data: AtlasOve
     "",
     markdownTable(
       ["Chain", "Chain ID", "Notes"],
-      (rowsBySupport.paid ?? []).map((chain) => [
-        chain.name,
-        code(chain.chainId),
-        overlayRow(data, chain).etherscan.notes ?? "",
-      ]),
+      (rowsBySupport.paid ?? []).map((chain) => [chain.name, code(chain.chainId), etherscanNotes(chain, data)]),
     ),
     "",
     "## Target Mainnets Not on Etherscan V2",
@@ -428,13 +422,25 @@ function etherscanChainsMarkdown(registryChains: RegistryChain[], data: AtlasOve
       (rowsBySupport.unsupported ?? []).map((chain) => [
         chain.name,
         code(chain.chainId),
-        overlayRow(data, chain).etherscan.notes ?? "Not returned by the live chainlist",
+        etherscanNotes(chain, data, "Not returned by the live chainlist"),
       ]),
     ),
     "",
     "Testnets are outside this skill's target list. If the user asks about any non-target chain, ask them to file a feature request in <https://github.com/PaulRBerg/agent-skills>.",
     "",
   ].join("\n");
+}
+
+function etherscanNotes(chain: RegistryChain, data: AtlasOverlay, fallback = ""): string {
+  const notes = overlayRow(data, chain).etherscan.notes ?? fallback;
+  return [
+    notes,
+    chain.etherscanApiUnsupportedFrom
+      ? `Etherscan API unsupported from ${chain.etherscanApiUnsupportedFrom} (all plans and actions).`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function blockscoutChainsMarkdown(registryChains: RegistryChain[], data: AtlasOverlay): string {
@@ -522,6 +528,7 @@ function resolveChainScript(registryChains: RegistryChain[], data: AtlasOverlay)
   });
   const apiOverrides = registryChains.flatMap((chain) => {
     const blockscout = overlayRow(data, chain).blockscout;
+    if (blockscout.status !== "observed") return [];
     const [instance, api] = blockscout.apiUrl
       ? [blockscout.instanceUrl ?? "", blockscout.apiUrl]
       : [`${explorerBaseUrl(chain)}/`, chain.explorer.apiUrl];
