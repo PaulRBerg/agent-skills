@@ -12,7 +12,9 @@ description:
 If a slash or dollar invocation already added these instructions to the conversation, follow them directly. In that
 case, do not invoke this skill again through a skill tool.
 
-Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set before applying a repository rename.
+Review the helper's complete GitHub, Git, filesystem, and agent-continuity mutation set before applying a repository
+rename. Keep user-facing previews and completion reports to affected surfaces and aggregate file and occurrence counts.
+Do not list replacement paths or per-file counts unless the user explicitly requests them.
 
 ## Scope
 
@@ -67,16 +69,17 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
    coverage. Same-name moves use `move:<absolute-source>-><absolute-destination>` tokens. Linked worktrees and external
    Git directories are unsupported.
 
-3. If `--dry-run` was requested, return the preview and stop. A successful dry run must not change the GitHub repo,
-   remote, folder, config, transcripts, or repository files.
+3. If `--dry-run` was requested, summarize the preview as described below and stop. A successful dry run must not change
+   the GitHub repo, remote, folder, config, transcripts, or repository files.
 
-4. Otherwise present the complete preview, then continue in the same turn. Treat the rename request as authorization for
-   the listed mutations. Do not require a separate confirmation message. For a local-only preview, state that no GitHub
-   or `origin` change occurs. Lead with `### 🔎 Rename preview — no changes made`. Show GitHub, folder, origin,
-   replacement counts, and rollback coverage in compact tables, then the exhaustive file/count list. If any preview fact
-   changes, regenerate the preview and continue within the requested scope.
+4. Present a compact preview, then continue in the same turn unless `--dry-run` was requested. Treat the rename request
+   as authorization for the planned mutations. Do not require a separate confirmation message. For a local-only preview,
+   state that no GitHub or `origin` change occurs. Lead with `### 🔎 Rename preview — no changes made`. Summarize
+   GitHub, source and destination folders, origin, aggregate replacement counts, and rollback coverage. Use short prose
+   or a compact table. If any preview fact changes, regenerate the preview and continue within the requested scope.
 
-   For same-name moves, show the unchanged GitHub identity and `origin`, plus each parent directory to create.
+   For same-name moves, show the unchanged GitHub identity and `origin`, and state whether parent directories need
+   creation.
 
 5. Pass the preview's exact token to the helper internally:
 
@@ -97,8 +100,8 @@ Preview the complete GitHub, Git, filesystem, and agent-continuity mutation set 
 
 ## Completion
 
-Dry-run completion is a full mutation preview with zero writes. Apply completion requires the new GitHub identity,
-folder, remote, and listed continuity references to agree, plus a clean verification report. If rollback is incomplete,
-stop and lead with `### ⛔ Rollback incomplete`, then report every failed rollback action before doing anything else. On
-success, use `### ✅ Repository renamed` and a surface/expected/verified table. Keep helper JSON, confirmation tokens,
-commands, paths, URLs, and rollback errors exact and undecorated.
+Dry-run completion is a summarized mutation preview with zero writes. Apply completion requires the new GitHub identity,
+folder, remote, and affected continuity references to agree, plus a clean verification report. If rollback is
+incomplete, stop and lead with `### ⛔ Rollback incomplete`, then report every failed rollback action before doing
+anything else. On success, use `### ✅ Repository renamed` and a surface/expected/verified table. Keep helper JSON,
+confirmation tokens, commands, paths, URLs, and rollback errors exact and undecorated.
