@@ -133,12 +133,26 @@ pub(crate) fn broad_excluded_roots(include_catalog_sources: bool) -> Vec<PathBuf
 mod tests {
     use std::{ffi::OsStr, path::Path};
 
-    use super::{EXCLUDED_DIRECTORY_NAMES, agent_state_path, directory_name_is_excluded};
+    use super::{agent_state_path, directory_name_is_excluded};
 
     #[test]
     fn exclusions_cover_dependency_trees_and_agent_state() {
-        for name in EXCLUDED_DIRECTORY_NAMES {
+        for name in [".git", "node_modules", "vendor", ".venv", "target", "dist", "build", "out", ".next", "coverage"] {
             assert!(directory_name_is_excluded(OsStr::new(name)), "{name}");
+        }
+        for name in [
+            ".github",
+            "node_modules_backup",
+            "vendors",
+            ".venv-old",
+            "targeted",
+            "distribution",
+            "builder",
+            "output",
+            ".nextjs",
+            "coverage-report",
+        ] {
+            assert!(!directory_name_is_excluded(OsStr::new(name)), "{name}");
         }
         for path in [
             ".claude/logs/session.log",
