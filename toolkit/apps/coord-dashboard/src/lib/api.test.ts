@@ -67,6 +67,14 @@ describe("parseSnapshot", () => {
     expect(() => parseSnapshot(malformed)).toThrow("snapshot.work[1].scope_count");
   });
 
+  test("requires a work submission timestamp", () => {
+    const malformed = structuredClone(sampleSnapshot) as Record<string, unknown>;
+    const work = malformed.work as Record<string, unknown>[];
+    delete work[0]?.submitted_at;
+
+    expect(() => parseSnapshot(malformed)).toThrow("snapshot.work[0].submitted_at");
+  });
+
   test("rejects parent scope totals that differ from their claims", () => {
     const malformed = structuredClone(sampleSnapshot) as Record<string, unknown>;
     const work = malformed.work as Record<string, unknown>[];

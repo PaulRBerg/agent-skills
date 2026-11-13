@@ -28,7 +28,7 @@ function ClaimDetail({
   claim: WorkClaimWithQueuePosition;
   state: WorkWithQueuePosition["state"];
 }) {
-  const scopes = claim.scopes ?? [];
+  const scopes = claim.scopes;
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}

@@ -63,9 +63,7 @@ function withQueuePositions(work: Work[]): WorkWithQueuePosition[] {
 
   for (const [repoRoot, queued] of queuedByRepo) {
     const ordered = queued.toSorted(
-      (left, right) =>
-        (left.submitted_at ?? Number.POSITIVE_INFINITY) -
-          (right.submitted_at ?? Number.POSITIVE_INFINITY) || left.id - right.id
+      (left, right) => left.submitted_at - right.submitted_at || left.id - right.id
     );
     for (const [index, item] of ordered.entries()) {
       positions.set(`${item.id}:${repoRoot}`, index + 1);
@@ -186,7 +184,7 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
           .map((session) => session.last_seen),
         ...work
           .filter((item) => item.claims.some((claim) => claim.repo_root === repoRoot))
-          .map((item) => Math.max(item.submitted_at ?? Number.NEGATIVE_INFINITY, item.updated_at)),
+          .map((item) => Math.max(item.submitted_at, item.updated_at)),
         ...snapshot.drafts
           .filter((draft) => draft.claims.some((claim) => claim.repo_root === repoRoot))
           .map((draft) => draft.updated_at),

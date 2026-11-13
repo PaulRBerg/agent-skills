@@ -4,14 +4,8 @@ export function parsePort(rawPort: string | undefined): number {
   if (rawPort === undefined) {
     return DEFAULT_PORT;
   }
-  if (!/^\d+$/u.test(rawPort)) {
-    throw new Error(
-      `AI_COORD_DASHBOARD_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`
-    );
-  }
-
   const port = Number(rawPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+  if (!/^\d+$/u.test(rawPort) || !Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(
       `AI_COORD_DASHBOARD_PORT must be an integer from 1 to 65535; received ${JSON.stringify(rawPort)}`
     );

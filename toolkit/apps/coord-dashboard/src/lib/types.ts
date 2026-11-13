@@ -47,7 +47,7 @@ export type Work = SessionIdentity & {
   state: WorkState;
   blocked_reason?: string | null;
   scope_count: number;
-  submitted_at?: number;
+  submitted_at: number;
   updated_at: number;
   claims: WorkClaim[];
 };
@@ -56,7 +56,7 @@ export type WorkClaim = {
   repo_root: string;
   blocked_reason?: string | null;
   scope_count: number;
-  scopes?: WorkScope[];
+  scopes: WorkScope[];
 };
 
 export type SnapshotDraftClaim = {
