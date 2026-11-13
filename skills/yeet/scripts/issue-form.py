@@ -40,10 +40,6 @@ def normalize_metadata(value: Any, name: str) -> list[str]:
     return list(dict.fromkeys(item.strip() for item in values if item.strip()))
 
 
-def normalize_labels(value: Any) -> list[str]:
-    return normalize_metadata(value, "labels")
-
-
 def normalize_projects(value: Any) -> list[str]:
     projects = normalize_metadata(value, "projects")
     invalid = [project for project in projects if not PROJECT_RE.fullmatch(project)]
@@ -257,7 +253,7 @@ def inspect_form(text: str, repo: str | None = None, template: str | None = None
         "name": document.get("name"),
         "description": document.get("description"),
         "titlePrefix": document.get("title") or "",
-        "labels": normalize_labels(document.get("labels")),
+        "labels": normalize_metadata(document.get("labels"), "labels"),
         "assignees": normalize_metadata(document.get("assignees"), "assignees"),
         "projects": normalize_projects(document.get("projects")),
         "issueType": document.get("type"),
