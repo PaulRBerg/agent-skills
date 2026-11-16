@@ -104,6 +104,8 @@ Use this workflow when the user asks why CI fails or asks to fix a failing run. 
 - `gh auth status` refreshes an expired or near-expiry refreshable token unless you pass `--no-refresh`. With that flag,
   2.103.3+ reports the token as expired, not invalid. To renew it, run the command without the flag. Do not run
   `gh auth refresh` for this case.
+- In 2.104.0+, `gh auth status` prints the underlying rate-limit, server, or network error. Use that error to decide
+  between a GitHub incident and a credential problem. `gh` skips token refresh when its state directory is not writable.
 - `--attach '<file>#<alt>'` on issue/PR create, edit, and comment uploads images or videos. Route those writes through
   `yeet`. Since 2.103.2, GitHub App installation tokens can attach, and the upload endpoint decides permission.
 

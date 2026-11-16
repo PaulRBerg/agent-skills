@@ -40,7 +40,7 @@ selects another available browser integration, follow its tool contract.
   authorization.
 
 For released tool behavior, consult the
-[upstream tool reference](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/chrome-devtools-mcp-v1.12.0/docs/tool-reference.md).
+[upstream tool reference](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/chrome-devtools-mcp-v1.13.0/docs/tool-reference.md).
 The current session's schemas determine which tools and parameters are available.
 
 ## Reference Routing
@@ -205,6 +205,10 @@ Use these workflows only when the tools are exposed in the current session.
   paginated queries for objects or retainers. Use `compare_heapsnapshots` for growth between two snapshots and
   `analyze_heapsnapshot_contexts` for closures that retain dead captured values. Call `close_heapsnapshot` for each
   snapshot this task loaded to release server memory, including during cleanup after a failed task.
+- To trace values without pausing or editing code, use `set_logpoints`, then read the output with
+  `list_console_messages`. Each call replaces the complete logpoint set for that page. Logpoints persist across reloads
+  and navigations. Before completion, clear logpoints this task set on a page that stays open with an empty `logpoints`
+  array.
 - Each server permits one active screencast. Record whether this task started it, then call `screencast_stop` during
   cleanup. Never stop another task's recording to make room.
 

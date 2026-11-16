@@ -8,6 +8,9 @@ values rather than unchecked row shapes. From 4.1.0, import `fromFileSystem` fro
 `effect/sql` barrel no longer exports it. Driver migrators other than `@effect/sql-sqlite-react-native` still re-export
 it.
 
+From 4.1.3, a driver client such as `PgClient` is not a subtype of `SqlClient.SqlClient`. If code that picks between
+driver layers does not typecheck, annotate the result as `Layer.Layer<SqlClient.SqlClient, E>`.
+
 ```ts
 import { SqlClient, SqlSchema } from "effect/sql";
 import { PgClient } from "@effect/sql-pg";
@@ -44,3 +47,6 @@ To retry deadlocks or serialization failures, wrap the outermost `withTransactio
 From 4.0.6, use `sql.afterCommit(effect)` to signal committed changes, such as waking workers or invalidating caches. It
 runs after the outermost commit, or immediately outside a transaction. A rollback or a failed `COMMIT` discards it. If
 the process exits before it runs, the effect is lost. Write required follow-up work to a table in the same transaction.
+
+From 4.1.3, statements from a fiber that outlives the transaction it was forked in fail with `SqlError`. For work after
+the commit, use `afterCommit`. For work outside the transaction, fork with `Context.omit(sql.transactionService)`.

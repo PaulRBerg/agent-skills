@@ -12,7 +12,7 @@ facts, blocks, logs, and contract ABI/source. Preserve the read-only boundary. N
 Keep Blockscout first on covered overlaps. CLI availability does not change provider priority, the target allowlist,
 checkpoint proof, quorum, or plan gates. User instructions take precedence over this skill.
 
-The dated access rules reflect the [changelog](https://docs.etherscan.io/changelog) check on 2026-11-09. Apply scheduled
+The dated access rules reflect the [changelog](https://docs.etherscan.io/changelog) check on 2026-11-16. Apply scheduled
 changes using the current UTC execution date, not the historical checkpoint or saved observation time. Provider
 membership alone does not prove plan access.
 
