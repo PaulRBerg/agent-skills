@@ -37,6 +37,12 @@ Preserve these local changes as part of the local delta:
   replace the upstream usage steps, state and prompt code patterns, and common-mistakes list.
 - `templates/*.md`: STE prose rewrites and Prettier formatting.
 
+## Intentional Exclusions
+
+Upstream added an Apache-2.0 `LICENSE` to `plugins/playground`, outside the mapped skill path and after the recorded
+base. Do not bundle a copy under `skills/html-playground/` and do not map it. PRB decided this on 2026-11-16. Do not
+raise it as `needs-decision` again.
+
 ## Safe Update Boundary
 
 Use the reconciled upstream commit as the base for a three-way merge of the entrypoint and templates. Retain local
