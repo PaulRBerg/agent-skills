@@ -13,7 +13,7 @@ The **first token** is the repo name (without org prefix) → `sablier-labs/{rep
 remaining text is the issue description. Parse `--check` and handle it per
 `posting.md > Error Handling and Idempotency`.
 
-Example: `lockup "Bug in cliff streams"` → `repository = sablier-labs/lockup`
+Example: `evm-monorepo "Bug in cliff streams"` → `repository = sablier-labs/evm-monorepo`
 
 ## Apply Labels
 
@@ -75,13 +75,13 @@ Display the verified URL with the `### 🚀 Issue created` receipt from `SKILL.m
 
 ```bash
 # Bug report
-lockup "Bug in stream creation for cliff durations"
+evm-monorepo "Bug in stream creation for cliff durations"
 
 # Feature request
 command-center "Add dark mode toggle to dashboard"
 
 # With --check flag
-lockup --check "Support dynamic durations"
+evm-monorepo --check "Support dynamic durations"
 
 # Docs update
 docs "Update integration guide for v2.2"
