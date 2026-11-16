@@ -178,7 +178,7 @@ vercel/next.js#12345 "+1, also hitting this in 15.0.3"
 https://github.com/facebook/react/issues/99999 "proposed fix in PR #100000"
 
 # Short +1 (user leaves context empty — generate a minimal acknowledgment)
-sablier-labs/command-center#10
+cli/cli#10
 
 # Edit the last comment
 --edit-last vercel/next.js#12345 "actually, repro is flaky — only fires on cold cache"

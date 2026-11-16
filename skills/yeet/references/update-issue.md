@@ -165,7 +165,7 @@ error (auth, permissions, missing label, locked issue) and next action. Do not r
 vercel/next.js#12345 "label as type: bug, assign me"
 
 # Regenerate the body with new context
-sablier-labs/command-center#10 "rewrite body — root cause is the cache key, not the TTL"
+cli/cli#10 "rewrite body — root cause is the cache key, not the TTL"
 
 # Close as not planned
 https://github.com/facebook/react/issues/99999 "close, not planned"
