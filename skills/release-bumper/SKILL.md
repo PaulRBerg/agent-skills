@@ -1,13 +1,15 @@
 ---
 argument-hint: "[packages...] [version] [--beta] [--dry-run]"
-compatibility: Requires Bun, Git, and uv.
+compatibility:
+  Requires Bun, Git, and uv. Staged npm approval requires the shared Chromium browser with the 1Password extension.
 disable-model-invocation: true
 effort: high
 model: sonnet
 name: release-bumper
 skill-dependencies:
+  - chromium-browser
   - cli-gh
-description: "Cut a release: bump versions, write changelogs, commit, tag."
+description: "Cut a release: bump versions, write changelogs, commit, tag, and approve staged npm publishes."
 ---
 
 # Release Bumper
@@ -21,6 +23,9 @@ A non-dry-run invocation authorizes the repository-local version edits, changelo
 by this workflow. Do not add a generic confirmation gate after the agent derives the release plan. Ask only when an
 unresolved package selection or dependency-range policy changes the release set or approach. GitHub release creation
 remains a separate external write governed below.
+
+A request to push, ship, or publish the release authorizes the tag pushes in step 12. It also authorizes approval of the
+staged npm versions that those pushes create, as step 14 defines. Do not ask the user to approve them by hand.
 
 ## Arguments
 
@@ -97,8 +102,10 @@ tag. It does not judge importance, wording, or semantic category.
     - monorepo commit: `docs: release <package> <version>`.
     - single-package tag: follow observed `v<version>` or bare-semver facts.
     - monorepo tag: follow observed package tag facts, defaulting to `<package-dir>@<version>`.
-12. Do not push. After success, recommend an exact `git push origin <tag>...` command containing only the tags created
-    by this execution. Do not use `--tags`.
+12. Push only when the user's request asks to push, ship, or publish the release. In that case, push the release
+    commits, then push only the tags created by this execution, with at most three tags per command. Otherwise, do not
+    push, and after success recommend an exact `git push origin <tag>...` command containing only the tags created by
+    this execution. Never use `--tags`.
 13. Before the final report, inspect `.github/workflows/` once for both the criteria in this step and the criteria in
     step 14. For this step, look for an active workflow that creates or publishes GitHub releases from pushed tags. A
     filename such as `release.yml` is a hint, not proof. Use `$cli-gh` to run `gh release list` read-only in the same
@@ -120,10 +127,13 @@ tag. It does not judge importance, wording, or semantic category.
     workflow that runs on pushed tags, sets `id-token: write`, and runs `npm stage publish` (staged) or `npm publish`
     (direct). A filename is a hint, not proof. If such a workflow exists:
     - Report that pushing the recommended tags triggers npm publication.
-    - For staged publishing, report that each version stays unpublished until the maintainer approves it with 2FA. The
-      maintainer can run `npm stage approve <stage-id>` or use the Staged Packages tab on npmjs.com.
     - Recommend push commands with at most three tags each, because GitHub creates no tag push events above that
       threshold. See the push-event limits link in step 13.
+    - For staged publishing, each version stays unpublished until someone approves it with 2FA. When this execution
+      pushed the tags, read `references/npm-staged-approval.md` and approve each staged version through
+      `$chromium-browser`. Do not stop to ask the user to approve it.
+    - When the tags are not pushed, report that approval is pending. If the user pushes the tags later in the same
+      session, run the approval workflow then.
     - Never run `npm publish`, `npm stage approve`, or `npm stage reject`.
 
 ## Safety and Completion
@@ -135,7 +145,9 @@ package set is known, and do not infer a tag convention when discovery reports o
 Dry-run completion requires a discovery-backed, agent-reviewed action preview with zero writes. Release completion
 requires validated manifests and stable changelogs, formatting, one commit and annotated tag per package in dependency
 order, and a report of created commits/tags, agent-decided skips, the exact tag-push command or commands, any applicable
-GitHub release proposal, and any CI npm publication notice.
+GitHub release proposal, and any CI npm publication notice. When this execution pushed tags to a staged-publish
+workflow, completion also requires a `npm view` result for each approved version, or the exact human gate that blocks
+it.
 
 Use `### ⛔ Release stopped — working tree is not clean`, `### ⚠️ Release decision required`,
 `### 🔎 Release preview — no files, commits, or tags written`, or `### 🏁 Release complete` as applicable. Keep helper
