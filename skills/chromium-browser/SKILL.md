@@ -142,11 +142,17 @@ restrictions. Do not ask for separate permission for this prerequisite.
 
 1. Open the site's sign-in flow. Verify the destination origin, including any expected identity provider, before using a
    saved login. Never override a domain-mismatch or browser security warning.
-2. Check for a 1Password sign-in prompt or field suggestion. If absent, open 1Password from Chromium's toolbar or
-   Extensions menu. Confirm the extension is signed in and unlocked. Installation alone does not establish readiness.
-3. Use page tools for exposed page controls. Use host computer-use/CUA for the toolbar, extension popup, or suggestions
-   that DevTools cannot reach. Finish outstanding browser calls before switching controllers. Keep the same profile and
-   task tab. An absent DevTools control does not prove that 1Password is unavailable.
+2. Bring the task page to the front with `select_page` and `bringToFront: true`. 1Password shows its inline menu and
+   passkey prompt only on the foreground tab. Pages in an `isolatedContext` run without extensions, so never sign in
+   through one. Then check for a 1Password sign-in prompt or field suggestion. If absent, open 1Password from Chromium's
+   toolbar or Extensions menu. Confirm the extension is signed in and unlocked. Installation alone does not establish
+   readiness.
+3. Use page tools for exposed page controls. 1Password menus and prompts are not in the page's DOM or accessibility
+   tree. Use host computer-use/CUA for the toolbar, extension popup, or suggestions that DevTools cannot reach. Claude
+   Code computer-use grants browsers screenshot-only access, so it cannot click them. Try `click_at` at the control's
+   page coordinates. If the 1Password control does not respond, treat the step as a human gate. Finish outstanding
+   browser calls before switching controllers. Keep the same profile and task tab. An absent DevTools control does not
+   prove that 1Password is unavailable.
 4. Select the saved login that matches the site and intended account. Use task context and visible account labels to
    distinguish multiple matches. If the intended account remains ambiguous, ask the user to choose before filling.
 5. Activate the matching 1Password sign-in or autofill action. The extension can submit automatically, so inspect the
