@@ -9,11 +9,33 @@ review below.
 
 ## Contents
 
+- [Scope](#scope)
 - [Rule profile](#rule-profile)
 - [Meaning and protected content](#meaning-and-protected-content)
 - [Meaning-preserving examples](#meaning-preserving-examples)
 - [Completion review](#completion-review)
 - [Attribution and license](#attribution-and-license)
+
+## Scope
+
+Apply this profile to technical prose that instructs an agent:
+
+- Skill instructions, skill references, and agent-facing skill metadata.
+- AGENTS.md files and other context docs that guide agents.
+- Prompt text that the repository stores for an agent or a model to read.
+
+Do not apply this profile to user-facing content. Write that content in the natural style that its reader and purpose
+need:
+
+- Replies, reports, and summaries that the agent gives to the user.
+- README.md files and other documentation for human readers.
+- Product, interface, marketing, store listing, legal, and support copy.
+- Messages, comments, and contributions that the agent writes for other people.
+- User-facing text inside an agent-facing file, such as sample copy, an output template, or a quoted message. Treat it
+  as protected content and leave its style unchanged.
+
+When a file serves both readers, classify each passage by its reader. If the reader of a passage is not clear, treat the
+passage as user-facing.
 
 ## Rule Profile
 

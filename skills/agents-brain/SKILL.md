@@ -114,9 +114,11 @@ opportunity instead.
 Before writing or changing agent-facing prose, read [references/asd-ste100.md](references/asd-ste100.md) completely.
 Apply its STE-based profile during writing. Complete its meaning and style review before reporting completion. Preserve
 obligation strength, uncertainty, conditions, technical precision, and protected literal content. Honor the target's
-audience and any instructions to preserve accurate user-authored prose. The profile does not establish official ASD
-dictionary compliance. One complete read of that reference during the current run satisfies every later requirement in
-this skill to read it, unless the file changed since.
+audience and any instructions to preserve accurate user-authored prose. The profile applies only to technical prose that
+instructs an agent. It does not apply to user-facing content, such as replies to the user, README.md files, and product
+copy. The reference defines this scope. The profile does not establish official ASD dictionary compliance. One complete
+read of that reference during the current run satisfies every later requirement in this skill to read it, unless the
+file changed since.
 
 ## Maintain Workflow
 
