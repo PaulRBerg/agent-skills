@@ -12,7 +12,7 @@ user explicitly requests otherwise. After all content and template rendering, ad
 <sub>Co-signed by LLM_NAME</sub>
 ```
 
-Replace `LLM_NAME` with the assisting model's name from trusted session context, such as `GPT-6-Astra`. This is an
+Replace `LLM_NAME` with the assisting model's name from trusted session context, such as `GPT-6.2-Astra`. This is an
 example, not a default. If the exact model is unavailable, use `my AI agent`. Never guess a model/version or infer it
 from the repository being discussed.
 
@@ -25,7 +25,7 @@ Do not use another thread, an earlier turn's model, or the `config.toml` default
 Rollout storage is client-specific. If the thread ID, file, or current-turn model is unavailable, use `my AI agent`.
 
 Use the model name alone, without an agent prefix or parentheses. Normalize verified model identifiers to display names,
-preserving the family, version, and variant. For example, format `gpt-6-astra` as `GPT-6-Astra`.
+preserving the family, version, and variant. For example, format `gpt-6.2-astra` as `GPT-6.2-Astra`.
 
 Keep exactly one co-signature footer. On edits, when the model matches, normalize its name without adding another
 attribution. When a different model assists, retain the existing attribution and add the current name once in the same

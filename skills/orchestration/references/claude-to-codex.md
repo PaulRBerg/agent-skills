@@ -26,12 +26,12 @@ boundary, relevant repository constraints, and stopping rule from the shared pro
 Before each new research brief launches, follow [Jev configuration routing](jev-routing.md) with route `codex-cli`. Use
 these research tiers as the local fallback when Jev cannot provide a sound selection:
 
-| Investigation                          | Model         | Effort   | Baseline timeout |
-| -------------------------------------- | ------------- | -------- | ---------------- |
-| Bounded, routine survey                | `gpt-6-luna`  | `high`   | 10 minutes       |
-| Involved survey across unfamiliar code | `gpt-6.1-sol` | `medium` | 15 minutes       |
+| Investigation                          | Model           | Effort   | Baseline timeout |
+| -------------------------------------- | --------------- | -------- | ---------------- |
+| Bounded, routine survey                | `gpt-6.1-terra` | `high`   | 10 minutes       |
+| Involved survey across unfamiliar code | `gpt-6.2-sol`   | `medium` | 15 minutes       |
 
-For local fallback, use Luna for bounded surveys and Sol for involved ones. Under unconstrained routing, Astra is
+For local fallback, use Terra for bounded surveys and Sol for involved ones. Under unconstrained routing, Astra is
 implementation-only. Research gathers evidence. The parent synthesizes it. Without an explicit user override, never
 select `low`, `ultra`, or `max`.
 
@@ -47,20 +47,20 @@ or research-only response. Do not reconcile the working tree.
 Use this exact host-specific table inside the shared `## Orchestration` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                                    | Effort                  | Timeout             | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | ---------------------------------------- | ----------------------- | ------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6.1-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                                         | Effort                  | Timeout             | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | --------------------------------------------- | ----------------------- | ------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6.1-terra\|gpt-6.2-sol\|gpt-6.2-astra>` | `<medium\|high\|xhigh>` | `<minutes> minutes` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
 Before each new implementation brief launches, follow [Jev configuration routing](jev-routing.md) with route
 `codex-cli`. Use these implementation tiers as the local fallback:
 
-| Work                                                                              | Model         | Effort             | Baseline timeout |
-| --------------------------------------------------------------------------------- | ------------- | ------------------ | ---------------- |
-| Bounded, routine implementation                                                   | `gpt-6-luna`  | `high`             | 10 minutes       |
-| Everyday or involved implementation                                               | `gpt-6.1-sol` | `medium` or `high` | 20 minutes       |
-| Semantic or cross-cutting implementation                                          | `gpt-6.1-sol` | `xhigh`            | 40 minutes       |
-| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra` | `xhigh`            | 40 minutes       |
+| Work                                                                              | Model           | Effort             | Baseline timeout |
+| --------------------------------------------------------------------------------- | --------------- | ------------------ | ---------------- |
+| Bounded, routine implementation                                                   | `gpt-6.1-terra` | `high`             | 10 minutes       |
+| Everyday or involved implementation                                               | `gpt-6.2-sol`   | `medium` or `high` | 20 minutes       |
+| Semantic or cross-cutting implementation                                          | `gpt-6.2-sol`   | `xhigh`            | 40 minutes       |
+| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6.2-astra` | `xhigh`            | 40 minutes       |
 
 Preserve explicit model and effort preferences. Jev selects only unconstrained dimensions from supported pairs. On
 routing failure or uncertainty, use the applicable local work tier. Record the selection source in each manifest brief.
@@ -229,9 +229,9 @@ Kickoff, once per wave:
 
 | Agent | Scope               | Model · effort        | Budget | State       |
 | ----- | ------------------- | --------------------- | ------ | ----------- |
-| A1    | `internal/pricing`  | `gpt-6.1-sol` · high  | ≤20m   | 🚀 launched |
-| A2    | `internal/backfill` | `gpt-6.1-sol` · high  | ≤20m   | 🚀 launched |
-| A3    | `internal/evidence` | `gpt-6.1-sol` · xhigh | ≤40m   | 🚀 launched |
+| A1    | `internal/pricing`  | `gpt-6.2-sol` · high  | ≤20m   | 🚀 launched |
+| A2    | `internal/backfill` | `gpt-6.2-sol` · high  | ≤20m   | 🚀 launched |
+| A3    | `internal/evidence` | `gpt-6.2-sol` · xhigh | ≤40m   | 🚀 launched |
 ```
 
 Research waves use 🔎 in their heading and investigation scopes in their rows.
@@ -243,9 +243,9 @@ Wave status, on each digest or completion:
 
 | Agent · model/effort   | Status     | Activity                   |
 | ---------------------- | ---------- | -------------------------- |
-| A1 · gpt-6.1-sol/high  | ⏳ 15m/20m | ran `cargo test`           |
-| A2 · gpt-6.1-sol/high  | ✅ 8m      | done — 3 files, tests pass |
-| A3 · gpt-6.1-sol/xhigh | ⏳ 15m/40m | no recent activity         |
+| A1 · gpt-6.2-sol/high  | ⏳ 15m/20m | ran `cargo test`           |
+| A2 · gpt-6.2-sol/high  | ✅ 8m      | done — 3 files, tests pass |
+| A3 · gpt-6.2-sol/xhigh | ⏳ 15m/40m | no recent activity         |
 ```
 
 At full settlement, use the final watcher settlement record. A wave with failures still reaches 100%. Its heading and

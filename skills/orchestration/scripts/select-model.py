@@ -69,22 +69,22 @@ DEMAND_LEVELS = (
 )
 # Candidate ID -> (model, effort, demand level), cheapest first.
 PAIRS = {
-    "luna_high": ("gpt-6-luna", "high", 0),
-    "sol_medium": ("gpt-6.1-sol", "medium", 1),
-    "sol_high": ("gpt-6.1-sol", "high", 2),
-    "sol_xhigh": ("gpt-6.1-sol", "xhigh", 3),
-    "astra_xhigh": ("gpt-6-astra", "xhigh", 4),
+    "terra_high": ("gpt-6.1-terra", "high", 0),
+    "sol_medium": ("gpt-6.2-sol", "medium", 1),
+    "sol_high": ("gpt-6.2-sol", "high", 2),
+    "sol_xhigh": ("gpt-6.2-sol", "xhigh", 3),
+    "astra_xhigh": ("gpt-6.2-astra", "xhigh", 4),
     "sonnet_medium": ("sonnet", "medium", 0),
     "sonnet_high": ("sonnet", "high", 1),
     "opus_medium": ("opus", "medium", 2),
     "opus_high": ("opus", "high", 3),
     "opus_xhigh": ("opus", "xhigh", 4),
 }
-CODEX_IMPLEMENTATION = ("luna_high", "sol_medium", "sol_high", "sol_xhigh", "astra_xhigh")
+CODEX_IMPLEMENTATION = ("terra_high", "sol_medium", "sol_high", "sol_xhigh", "astra_xhigh")
 CLAUDE_IMPLEMENTATION = ("sonnet_medium", "sonnet_high", "opus_medium", "opus_high", "opus_xhigh")
 ROUTES = {
-    "native-codex": {"research": ("luna_high", "sol_medium", "sol_high"), "implementation": CODEX_IMPLEMENTATION},
-    "codex-cli": {"research": ("luna_high", "sol_medium"), "implementation": CODEX_IMPLEMENTATION},
+    "native-codex": {"research": ("terra_high", "sol_medium", "sol_high"), "implementation": CODEX_IMPLEMENTATION},
+    "codex-cli": {"research": ("terra_high", "sol_medium"), "implementation": CODEX_IMPLEMENTATION},
     "native-claude": {"research": CLAUDE_IMPLEMENTATION[:4], "implementation": CLAUDE_IMPLEMENTATION},
     "claude-cli": {"research": CLAUDE_IMPLEMENTATION[:4], "implementation": CLAUDE_IMPLEMENTATION},
 }

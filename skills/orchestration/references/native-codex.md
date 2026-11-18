@@ -12,15 +12,15 @@ own adapter.
 Before each new brief launches, follow [Jev configuration routing](jev-routing.md) with route `native-codex`. Use these
 tiers as the local fallback when Jev cannot provide a sound selection:
 
-| Work                                                                              | Model         | Effort             |
-| --------------------------------------------------------------------------------- | ------------- | ------------------ |
-| Bounded research or routine implementation                                        | `gpt-6-luna`  | `high`             |
-| Involved research or implementation                                               | `gpt-6.1-sol` | `medium` or `high` |
-| Semantic or cross-cutting implementation                                          | `gpt-6.1-sol` | `xhigh`            |
-| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6-astra` | `xhigh`            |
+| Work                                                                              | Model           | Effort             |
+| --------------------------------------------------------------------------------- | --------------- | ------------------ |
+| Bounded research or routine implementation                                        | `gpt-6.1-terra` | `high`             |
+| Involved research or implementation                                               | `gpt-6.2-sol`   | `medium` or `high` |
+| Semantic or cross-cutting implementation                                          | `gpt-6.2-sol`   | `xhigh`            |
+| Hardest implementation: interacting invariants or difficult algorithmic reasoning | `gpt-6.2-astra` | `xhigh`            |
 
 Under this default selection, Astra at `xhigh` is the ceiling and Astra is implementation-only. Under that selection,
-research agents use Luna or Sol. Research gathers evidence. The parent synthesizes it. Without an explicit user
+research agents use Terra or Sol. Research gathers evidence. The parent synthesizes it. Without an explicit user
 override, never select `low`, `ultra`, or `max`. Keep the highest-tier agent's scope minimal and move deferrable
 validation to the validation owner.
 
@@ -52,9 +52,9 @@ any reported edit as a contract violation.
 Use this exact host-specific table inside the shared `## Orchestration` plan section:
 
 ```markdown
-| Agent | Wave | Depends on | Scope              | Model                                    | Effort                  | Implementation brief                                   | Completion evidence                 |
-| ----- | ---- | ---------- | ------------------ | ---------------------------------------- | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6-luna\|gpt-6.1-sol\|gpt-6-astra>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
+| Agent | Wave | Depends on | Scope              | Model                                         | Effort                  | Implementation brief                                   | Completion evidence                 |
+| ----- | ---- | ---------- | ------------------ | --------------------------------------------- | ----------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `A1`  | `1`  | `none`     | `<files/behavior>` | `<gpt-6.1-terra\|gpt-6.2-sol\|gpt-6.2-astra>` | `<medium\|high\|xhigh>` | `<outcome, edits, constraints, and stopping criteria>` | `<commands and observable results>` |
 ```
 
 Use the accepted Jev configuration or the local tier fallback for every manifest row. Preserve explicit model and effort

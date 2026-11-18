@@ -72,7 +72,7 @@ class SelectModelTests(unittest.TestCase):
                     "id": "A1",
                     "status": "selected",
                     "candidate": "sol_high",
-                    "model": "gpt-6.1-sol",
+                    "model": "gpt-6.2-sol",
                     "effort": "high",
                     "rule": "confidence",
                     "confidence": 0.88,
@@ -89,15 +89,15 @@ class SelectModelTests(unittest.TestCase):
         self.assertEqual(body["state"], BRIEF["task"] + "\n\nContext:\nImplementation. Two files.")
         question = body["questions"]["demand"]
         self.assertEqual((question["type"], question["criteria"]), ("score", list(ROUTER.DEMAND_LEVELS)))
-        self.assertNotRegex(json.dumps(question), r"(?i)gpt|luna|sol\b|astra|sonnet|opus|effort:")
+        self.assertNotRegex(json.dumps(question), r"(?i)gpt|terra|sol\b|astra|sonnet|opus|effort:")
         response.read.assert_called_once_with(ROUTER.MAX_BYTES + 1)
         self.assertEqual(opener.open.call_args.kwargs["timeout"], ROUTER.TIMEOUT_SECONDS)
 
     def test_route_presets_cover_each_adapter_and_kind(self):
         expected = {
-            ("native-codex", "research"): ["luna_high", "sol_medium", "sol_high"],
-            ("native-codex", "implementation"): ["luna_high", "sol_medium", "sol_high", "sol_xhigh", "astra_xhigh"],
-            ("codex-cli", "research"): ["luna_high", "sol_medium"],
+            ("native-codex", "research"): ["terra_high", "sol_medium", "sol_high"],
+            ("native-codex", "implementation"): ["terra_high", "sol_medium", "sol_high", "sol_xhigh", "astra_xhigh"],
+            ("codex-cli", "research"): ["terra_high", "sol_medium"],
             ("native-claude", "research"): ["sonnet_medium", "sonnet_high", "opus_medium", "opus_high"],
             ("claude-cli", "implementation"): [
                 "sonnet_medium",
@@ -163,8 +163,8 @@ class SelectModelTests(unittest.TestCase):
                     {
                         "id": "A1",
                         "status": "fixed",
-                        "candidate": "luna_high",
-                        "model": "gpt-6-luna",
+                        "candidate": "terra_high",
+                        "model": "gpt-6.1-terra",
                         "effort": "high",
                         "record": "selection: fixed",
                     }
@@ -247,7 +247,7 @@ class SelectModelTests(unittest.TestCase):
         # Distributions and confidences observed from Jev's demand rubric, rounded independently to hundredths.
         cases = [
             ([0, 0.02, 0.13, 0.84, 0.01], 0.84, "sol_xhigh", "confidence"),
-            ([0.96, 0.04, 0, 0, 0], 0.97, "luna_high", "confidence"),
+            ([0.96, 0.04, 0, 0, 0], 0.97, "terra_high", "confidence"),
             ([0, 0.42, 0.5, 0.08, 0], 0.58, "sol_high", "adjacent_tiers"),
         ]
         for levels, confidence, expected, rule in cases:

@@ -19,11 +19,11 @@ precedence over this workflow.
 
 | Route                          | Research candidates                                        | Implementation candidates                                                |
 | ------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `native-codex`                 | `luna_high`, `sol_medium`, `sol_high`                      | `luna_high`, `sol_medium`, `sol_high`, `sol_xhigh`, `astra_xhigh`        |
-| `codex-cli`                    | `luna_high`, `sol_medium`                                  | `luna_high`, `sol_medium`, `sol_high`, `sol_xhigh`, `astra_xhigh`        |
+| `native-codex`                 | `terra_high`, `sol_medium`, `sol_high`                     | `terra_high`, `sol_medium`, `sol_high`, `sol_xhigh`, `astra_xhigh`       |
+| `codex-cli`                    | `terra_high`, `sol_medium`                                 | `terra_high`, `sol_medium`, `sol_high`, `sol_xhigh`, `astra_xhigh`       |
 | `native-claude` / `claude-cli` | `sonnet_medium`, `sonnet_high`, `opus_medium`, `opus_high` | `sonnet_medium`, `sonnet_high`, `opus_medium`, `opus_high`, `opus_xhigh` |
 
-The helper returns exact model strings: `gpt-6-luna`, `gpt-6.1-sol`, and `gpt-6-astra` for Codex, and the aliases
+The helper returns exact model strings: `gpt-6.1-terra`, `gpt-6.2-sol`, and `gpt-6.2-astra` for Codex, and the aliases
 `sonnet` and `opus` for Claude. Each candidate serves one demand level. Levels run from 0 (routine) to 4 (hardest), in
 the table order. When filters narrow a ladder, each demand level goes to the nearest remaining candidate. A tie goes to
 the stronger candidate.
