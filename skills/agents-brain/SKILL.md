@@ -62,10 +62,9 @@ Stop after reporting completed or planned changes, validation, and any blockers.
 
 ## Prompting and Context Optimization
 
-Write skills and other agent-facing context for current Claude and GPT agent models, not for one model. Do not name a
-model, a model version, or a model-specific default in that prose. Content that selects, configures, or attributes a
-model is the exception, for example routing tables, `model:` fields, and API parameters. Preserve README.md as clear
-human-facing documentation.
+Write reusable agent-facing context for current Claude and GPT agent models. Reserve model names, versions, and
+model-specific defaults for content that selects, configures, or attributes a model. This includes routing tables,
+`model:` fields, and API parameters. Preserve README.md as clear human-facing documentation.
 
 Read the prompting guides before `create-skill`, `create-agents-md`, `--force` regeneration, and `maintain` runs that
 create or rewrite skill instructions, prompt text, or a whole AGENTS.md section. Do not run the helper or read either
@@ -73,22 +72,27 @@ guide for factual corrections, README.md edits, single rule additions or removal
 those runs, report `guides: skipped (<reason>)`.
 
 Before a run that needs the guides, resolve `scripts/fetch-guidance.sh` relative to this skill directory. Run it once
-for `anthropic` and once for `openai`. The two runs are independent, so start both in the same turn. Read each returned
-file in its own read, sized to the whole file. The Anthropic guide exceeds 1,000 lines. List its `##` headings first.
-Read every section that applies to all current models completely. Read a section that covers one capability, one model,
-or migration only when the task targets it. Read the OpenAI guide completely.
+for `anthropic` and once for `openai`. The two runs are independent, so start both in the same turn. Read the guides
+separately. For the Anthropic guide, list its `##` headings first. Read every section that applies across current models
+completely. Read a section about a capability, a model, or migration only when the task targets it. Read the OpenAI
+guide completely.
 
 The helper retrieves Anthropic's
 [prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
 and OpenAI's [latest-model guide](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices)
-because their recommendations may change. The Anthropic guide covers all current Claude models and links each per-model
-prompting page. The OpenAI guide covers the current GPT model family. Its prompting recommendations come from tests on
-one model in that family.
+because their recommendations may change. The Anthropic guide gives shared guidance and links model-specific pages. The
+OpenAI guide covers the current GPT model family and identifies advice about specific models. For examples of prompt
+structure, see [OpenAI's prompt engineering guide](https://developers.openai.com/api/docs/guides/prompt-engineering) and
+General principles in the Anthropic guide.
 
-Treat advice that names a model as measured on that model. Apply it to other models only when the cross-model guidance
-supports it. To check such a claim, read the linked per-model page. When the guides give opposite corrections for
-different models, state the wanted behavior directly. Do not write a correction to one model's default, such as "be
-brief" or "write more".
+Treat model-specific observations as evidence for the models they name. Check the relevant model-specific section or
+linked page when a task depends on that behavior. Apply the advice to other models only when shared guidance supports
+it. When defaults differ, state the desired behavior directly. For example, tell the agent which facts to include in a
+completion report.
+
+If a workflow needs more or less effort, use documented host controls where available. Check the result on
+representative tasks. Ask for evidence and a brief explanation of material decisions when the reader needs them. Do not
+ask for internal reasoning in the response.
 
 Accept an integrity-valid `cached` guide for 24 hours. Use `--refresh` for explicitly latest or change-sensitive work,
 materially disputed guidance, or conflicts with observed model behavior. Interpret helper diagnostics precisely:

@@ -30,7 +30,8 @@ questions to their relevant source.
 Treat `$imagegen` and Codex image-prompting questions as Codex product questions. This classification applies even when
 detailed supporting model guidance is in OpenAI's API Cookbook.
 
-Treat model prompting for Codex as a Codex product question, with supporting guidance from OpenAI's model docs.
+Treat model prompting for Codex or Claude Code as a product question, with supporting guidance from the provider's model
+docs.
 
 ## Route official sources
 
@@ -38,18 +39,26 @@ Treat model prompting for Codex as a Codex product question, with supporting gui
   directory. Run `fetch-doc.sh codex-manual`. Search the returned path narrowly with `rg`. Read only the matching
   heading range into context. The fixed manual and schema endpoints may redirect to their exact
   `https://learn.chatgpt.com/docs/` counterparts.
-- For model prompting in Codex, read the
+- For model prompting in Codex, first find the current prompting topic in the Codex manual and read it when available.
+  The manual's exact prompting topic on `https://learn.chatgpt.com/guides/` is an allowed direct source. Also read the
   [OpenAI latest-model guide](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices). It
-  covers the current GPT model family. Treat advice that names one model as measured on that model. Before applying API
-  parameters, confirm Codex settings against the product documentation.
+  covers the current GPT model family. Check which models each example covers. Treat model-specific advice as measured
+  on the named model. Confirm API parameters and settings against Codex product documentation before applying them to
+  Codex.
 - For `$imagegen` and Codex image-prompting questions, read the manual's exact
   [Image generation](https://learn.chatgpt.com/docs/image-generation) topic first. When detailed prompting patterns or
   production examples are needed, also read the
   [GPT Image Generation Models Prompting Guide](https://developers.openai.com/cookbook/examples/multimodal/image-gen-models-prompting-guide).
   Apply its prompt-writing guidance to `$imagegen`. Treat model selection, flags, and API parameters as API-only unless
   Codex documentation confirms the built-in skill exposes them.
-- For Claude Code, use only `https://code.claude.com`. Start broad product research at
+- For Claude Code product documentation, use only `https://code.claude.com`. Start broad product research at
   `https://code.claude.com/docs/en/overview.md`.
+- For model prompting in Claude Code, first read the relevant section of the
+  [Claude Code best practices](https://code.claude.com/docs/en/best-practices.md). Also read
+  [Anthropic prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
+  and relevant model-specific prompting pages linked from it. Treat model-specific advice as measured on the named
+  model. Confirm API parameters and settings against Claude Code product documentation before applying them to Claude
+  Code.
 - For Codex, accept a `cached` manual for ordinary product questions. Use `--refresh` for release/change questions,
   materially disputed freshness, schema/config discrepancies, conflicts with observed local behavior, and other
   explicitly unstable cases.
@@ -77,7 +86,7 @@ Interpret helper diagnostics precisely:
   days old. Disclose its validation timestamp and the retrieval failure. Do not describe `cached` or `stale` evidence as
   fetched live.
 
-Follow redirects only within the matching official domain, except for the helper's exact Codex artifact redirects to
+Follow redirects only within the source's official domain, except for the helper's exact Codex artifact redirects to
 `https://learn.chatgpt.com/docs/`. Cite the final page URL reported by the helper or live fetch.
 
 ## Investigate under-documented Codex configuration

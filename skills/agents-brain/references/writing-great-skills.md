@@ -15,6 +15,7 @@ outcome while preserving the contract, not following an identical path.
 - [STE authoring and review](#apply-the-ste-profile)
 - [Self-containment](#keep-independently-installed-skills-self-contained)
 - [Context and invocation](#spend-context-deliberately)
+- [Structure and examples](#structure-instructions-and-examples)
 - [Frontmatter dialect](#frontmatter-dialect)
 - [Representation and routing](#choose-the-smallest-useful-representation)
 - [Execution](#write-for-reliable-execution)
@@ -40,7 +41,8 @@ Write the smallest interface that makes success checkable:
 - **Routing**: prerequisites, tools, scripts, and conditional references needed for each branch.
 - **Stop conditions**: states that require a different workflow, missing authority, or user-owned input.
 - **User communication**: the kickoff, progress, decision, blocker, and completion events worth surfacing, with the
-  smallest useful output shape for each.
+  smallest useful output shape for each. For long interactive work, specify when to announce intent and report observed
+  changes while work continues.
 - **Completion evidence**: the command, inspection, or artifact that proves the outcome.
 
 Let the agent choose the path inside that contract. Prescribe a sequence only when ordering is safety-critical, a
@@ -85,6 +87,17 @@ on every turn.
 Prefer domain-first capability names such as `large-file-refactor`. Keep memorable verb-based exceptions when clearer.
 Use familiar domain terms from the user's prompts, docs, and code. Give a model-facing description one trigger per
 distinct branch, without repeating identity already in the body.
+
+## Structure Instructions and Examples
+
+Use Markdown headings for instructions and lists for steps whose order or completeness matters. If a prompt mixes
+instructions with variable inputs or examples, mark those boundaries with descriptive tags such as `<input>` and
+`<example>`. Explain a constraint's purpose when that helps the agent apply it to an unfamiliar case.
+
+Add a small set of examples when a routing decision, output shape, or tool call is easy to misread. Use realistic inputs
+and vary the details that should change the result. Cover the ordinary path and any consequential exception. When a
+branch requires a tool, state when to call it and which result controls the next step. Show a valid invocation when
+arguments are easy to confuse.
 
 ## Frontmatter Dialect
 
@@ -144,18 +157,37 @@ boundary only when observed behavior still justifies it.
 
 Make authority and follow-through concrete:
 
-- State that explicit user instructions take precedence over skill defaults. Carry established approvals forward.
-  Preserve host restrictions and required approval for destructive or external actions.
+- State that explicit user instructions take precedence over skill defaults. Carry established approvals forward. Define
+  each approval gate by its action and target. Name routine steps that existing authority covers. Preserve host
+  restrictions and required approval for destructive or external actions.
 - Resolve discoverable facts before asking. Use stated assumptions for routine reversible choices. Ask when missing
   user-owned input would change scope, safety, or the intended outcome. Continue independent work.
 - Before requesting approval, prepare the concrete result the user must review within existing authority. When a skill
   rule causes a pause, identify the rule and the action still lacking authorization.
-- Finish authorized work through its required validation. Progress summaries, offers to continue, and milestones do not
-  establish completion. Name real stop conditions, including read-only scope, hard limits, and missing authority.
+- Finish authorized work through its required validation. Diagnose ordinary errors and timeouts. Retry or change the
+  approach within the same authority. Name real stop conditions, including read-only scope, hard limits, and missing
+  authority. Treat progress summaries, offers to continue, and milestones as updates while required work remains.
+- Apply new user directions to the active task. Carry forward completed work and requirements that still apply. Keep
+  one-time decisions scoped to the task. When maintaining durable guidance, remove expired cautions and preserve
+  standing rules.
+
+For example, a migration skill can show how different authority changes the next action.
+
+```text
+<example>
+Input: Prepare and verify the migration locally.
+Action: Write the migration and test it on the local fixture. Report the test result.
+</example>
+<example>
+Input: Prepare and apply the migration to staging. A separate staging approval is required and pending.
+Action: Finish local checks. Ask for approval to run the specific migration on staging.
+</example>
+```
 
 Choose the smallest checks that prove the changed behavior and satisfy repository requirements. Add regression tests for
 meaningful failure modes, not tests that mirror a reversible text or configuration edit. Reuse passing evidence while
-its inputs remain unchanged. Broaden or repeat checks only for new edits, failures, or unresolved risk.
+its inputs remain unchanged. Broaden or repeat checks only for new edits, failures, or unresolved risk. If a required
+check cannot run, report the check and the reason. Credit only the behavior the evidence covers.
 
 Specify delegation when it helps: independent scopes, dependencies, write ownership, and one owner for aggregate checks.
 Use the smallest effective team. Honor the user's delegation preference and host limits. Keep dependent mutations
@@ -179,6 +211,8 @@ their evidence, and the next action.
 
 Lead with the outcome and keep the output shape proportional to the information:
 
+- Make the final report readable on its own. Include the outcome, material assumptions, verification, and unresolved
+  issues when relevant. Use terms the reader can understand without progress updates or tool output.
 - Prefer concise, direct prose for simple results. Add headings, lists, and tables when they clarify the information. Do
   not require a multi-section report for a one-line outcome. Honor the user's requested format.
 - Use `🔎` preview/read-only, `⏳` running, `✅` verified success, `⚠️` caveat/approval/risk, `⛔` blocked/not written,

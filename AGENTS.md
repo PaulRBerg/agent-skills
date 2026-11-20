@@ -15,19 +15,21 @@ orchestration-heavy work. Their recommendations may change.
 - [Anthropic prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices):
   Covers all current Claude models. Its model-specific guidance table links each per-model prompting page.
 - [OpenAI latest-model guide](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices):
-  Covers the current GPT model family. Its prompting recommendations come from tests on one model in that family.
+  Covers the current GPT model family. Check which models each example covers.
 
 Treat advice that names a model as measured on that model. Apply it to other models only when the cross-model guidance
-supports it. When the guides give opposite corrections for different models, state the wanted behavior directly. Do not
+supports it. When guides give opposite corrections for different models, state the wanted behavior directly. Do not
 write a correction to one model's default, such as "be brief" or "write more".
 
 The summaries below remind you of guidance that holds across current models. They do not replace the guides.
 
 - State that user instructions take precedence over skills.
-- Complete authorized work under stated assumptions. Name the premature stops to avoid and the stops that are wanted.
-  Treat text-only turns as reports, not completion.
+- Specify the desired outcome, constraints, and relevant context. Use examples when they clarify the task.
+- Complete authorized work under stated assumptions. Distinguish routine reversible decisions from approval boundaries.
+  Name the premature stops to avoid and the stops that are wanted. Treat text-only turns as reports, not completion.
 - Explore relevant sources before acting.
-- Specify writing style, progress updates, and delegation preferences. Do not rely on model defaults for them.
+- Specify writing style, progress updates, and delegation preferences. Require final deliverables to stand alone without
+  progress updates.
 - Name concrete patterns to avoid instead of giving generic style advice.
 - Keep verification proportional to the change.
 - Calibrate effort instead of prompting for more thinking. Never ask for reasoning in response text.
