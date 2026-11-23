@@ -56,8 +56,16 @@
 - **Mapping:** both source files contribute to `skills/agents-brain/references/asd-ste100.md`.
 - **Known source pin:** `32511c6992ecb5f1971e46a2943f2e6adceedafe`. This identifies the adapted component source, not a
   whole-skill rebase base.
-- **Last reviewed target:** `cd62d297d5ef7cf9f59718cadc233ab2876ea013` on 2026-10-24. The mapped `SKILL.md` and
-  `references/writing-rules.md` are unchanged from the known source pin. No local component update was needed.
+- **Last reviewed target:** `65c8ab6ef5fcb3619c8e6daca43e68627f3d7b4a` on 2026-11-23. Previous review:
+  `cd62d297d5ef7cf9f59718cadc233ab2876ea013`. The mapped `references/writing-rules.md` is unchanged from the known
+  source pin. The mapped `SKILL.md` has three changes. All three are outside the local adaptation, so the local
+  reference did not change.
+
+| Incoming change in `SKILL.md`                                                | Local disposition                                                                                         |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Move `version` under `metadata` in the frontmatter                           | Exclude. Upstream frontmatter is outside the component mapping.                                           |
+| State that `scripts/ste-lint.py` has no STE-flavored mode                    | Exclude. The local profile has no mode selection and does not bundle the linter.                          |
+| Describe `examples/before-after.md` as rule illustrations and agent examples | Exclude. The local profile does not bundle that examples file. It keeps its own meaning-preserving table. |
 
 ## Local Behavior and Safe Update Boundary
 
