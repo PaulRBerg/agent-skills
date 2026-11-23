@@ -21,10 +21,11 @@ Use `Tool.Parameters<T>`, `Tool.ParametersEncoded<T>`, `Tool.ParametersSchema<T>
 `Tool.Failure<T>` rather than reconstructing a tool's types. Use `setParameters` to derive a tool with another parameter
 schema. `failureMode: "error"` (default) fails the calling Effect with the handler error. `"return"` captures failures
 in the tool call result. From 4.0.7, pass `toModelOutput` to `Tool.make` or `Tool.dynamic` to send text, image, or file
-parts to the model instead of the encoded result. The application still receives the typed result. From 4.1.3, tool
-results encode with the success schema's JSON codec. A `Tool.dynamic` tool without a `success` schema must return a JSON
-value, even with `toModelOutput`. Otherwise it fails with `ToolResultEncodingError`. For other values, declare
-`success`, such as `Schema.Date`, or `Schema.Void` for `undefined`.
+parts to the model instead of the encoded result. The application still receives the typed result. From 4.1.5,
+`McpServer` sends those parts as the tool result `content` and keeps the encoded result in `structuredContent`. From
+4.1.3, tool results encode with the success schema's JSON codec. A `Tool.dynamic` tool without a `success` schema must
+return a JSON value, even with `toModelOutput`. Otherwise it fails with `ToolResultEncodingError`. For other values,
+declare `success`, such as `Schema.Date`, or `Schema.Void` for `undefined`.
 
 Group tools with `Toolkit.make(...)`, provide handlers with `toolkit.toLayer({ ... })`, and pass the toolkit to
 `LanguageModel.generateText`, `generateObject`, or `streamText`. AI failures are one `AiError` whose `reason` is tagged

@@ -108,6 +108,11 @@ Use this workflow when the user asks why CI fails or asks to fix a failing run. 
   between a GitHub incident and a credential problem. `gh` skips token refresh when its state directory is not writable.
 - `--attach '<file>#<alt>'` on issue/PR create, edit, and comment uploads images or videos. Route those writes through
   `yeet`. Since 2.103.2, GitHub App installation tokens can attach, and the upload endpoint decides permission.
+- `gh event listen --resource <pr-url> --event <type> --timeout <duration>` (2.105.0+, preview) waits for pull request
+  events instead of polling. It works only on `github.com` for accounts enabled for event subscriptions. It does not
+  replay earlier events. After the attach message, read the current state once. Each check suite sends its own event. To
+  wait for all checks, run `gh pr checks` after each event. Exit status 8 means the timeout came first. If event
+  subscriptions are unavailable, use `gh run watch` or bounded polling.
 
 ## Completion
 

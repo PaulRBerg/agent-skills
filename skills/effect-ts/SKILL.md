@@ -58,9 +58,12 @@ Their modules are also `@stability unstable`.
 
 From 4.0.2, every module and directly importable export declares `@stability`. Check the tag before you depend on an
 API. `stable` follows strict semver. `experimental` modules, such as `effect/graphql` and parts of `effect/net`, may
-break in patch releases. Some root modules are also `unstable`, such as `Arbitrary`, `FileSystem`, and `Path`. From
-4.1.0, the `effect/crypto` modules (`SecureRandom`, `Digest`, ...) replace root `Crypto`. Runtime `*Services` layers no
-longer include them. Provide a platform layer such as `NodeCrypto.layer`.
+break in patch releases. Some root modules are also `unstable`, such as `Arbitrary`, `FileSystem`, and `Path`.
+
+From 4.1.0, the `effect/crypto` modules (`SecureRandom`, `Digest`, ...) replace root `Crypto`. Runtime `*Services`
+layers no longer include them. Provide a platform layer such as `NodeCrypto.layer`. From 4.1.5, store passwords with the
+`effect/crypto/Password` service instead of a hand-written hash. Choose its algorithm explicitly, such as
+`Kdf.argon2id()` with a `Kdf` layer that provides it. After a successful `verify`, check `needsRehash`.
 
 ## Reference Router
 

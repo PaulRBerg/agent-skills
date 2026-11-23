@@ -277,6 +277,17 @@ such as `cast safe create`, `add-delegate`, or `remove-delegate`, the same way. 
 typed data, including `cast erc20-token permit` without `--broadcast`, also requires a review of the exact payload,
 domain, chain binding, and intended use before approval.
 
+Cast 1.10.0+ supports Tempo T14 configurable accounts. Apply these rules to them:
+
+- `cast wallet owners add|remove|threshold` and `cast wallet upgrade` sign and submit. Apply the same phases to them.
+- `cast wallet upgrade` irreversibly converts an EOA into a configurable account, and the key can no longer sign for it.
+  Get explicit user approval of its review, even when execution is otherwise authorized.
+- On a T14 chain, `--account <name>` sends from the configurable account linked to that keystore, not from the key
+  address. To send from the key, pass `--from`, `--sender`, or `--eoa`. Resolve the actual sender before simulation.
+- An owner approval with `cast wallet sign --no-hash` signs a raw digest from `cast mktx --raw-unsigned --tempo.digest`.
+  Before that approval, review the decoded unsigned transaction.
+- `cast wallet assemble` builds the signed transaction from owner signatures. `cast publish` broadcasts it.
+
 Pass the selected fees explicitly. EIP-1559 uses `--gas-price` and `--priority-gas-price`. A fixed legacy policy uses
 `--legacy --gas-price` without `--priority-gas-price`. Under the default Ethereum policy, use the reviewed Rabby Slow
 pair.
