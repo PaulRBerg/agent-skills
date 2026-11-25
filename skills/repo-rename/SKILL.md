@@ -24,9 +24,10 @@ Do not list replacement paths or per-file counts unless the user explicitly requ
 - If the repository has no Git remotes, rename only local state: the folder, continuity references, and repository
   content. The helper then skips the GitHub rename and the `origin` update. A repository with any remote still requires
   a valid GitHub context.
-- Only when the repository has an active Claude Code or Codex transcript, update literal old paths in
-  `~/.claude/projects`, `~/claude/projects` when present, `~/.codex/sessions`, and `~/.codex/config.toml`. This
-  continuity update does not apply to repos with no active transcripts.
+- When the repository has an active Claude Code or Codex transcript, update literal old paths in `~/.claude/projects`,
+  `~/claude/projects` when present, and `~/.codex/config.toml`.
+- Treat Codex rollouts, archives, and SQLite state as read-only. Use active rollout metadata to find threads that can
+  resume from the destination workspace.
 - Update absolute repository paths, exact name fields, whole-line repository names or headings, and GitHub URLs for the
   repository. Preserve other old-name occurrences, including imports, prose, and command selectors. Exclude VCS,
   dependencies (including Python virtual environments), caches, and generated build directories.
@@ -41,16 +42,18 @@ Do not list replacement paths or per-file counts unless the user explicitly requ
 
 ## Workflow
 
-1. Resolve the source repository from the first of two path arguments, or from the current directory for a rename. Check
-   whether it has any active AI chat transcript before treating continuity preservation as in scope:
-   - Claude Code: resolve `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-repo-path>` (the absolute repo path with
-     every non-alphanumeric character replaced by `-`) and check it exists and is non-empty.
-   - Codex: resolve `${CODEX_HOME:-~/.codex}/sessions` and check whether any session file references the exact absolute
-     repo path.
-   - If neither exists, state that the transcript-continuity update does not apply. In that case, the rename may still
-     proceed for the GitHub, git, filesystem, and repository-content changes below.
+1. Resolve the source repository from the first of two path arguments, or from the current directory for a rename. Use
+   the helper's preview to check the continuity scope.
+   - For Claude Code, the helper checks for a nonempty project directory under
+     `${CLAUDE_CONFIG_DIR:-~/.claude}/projects`.
+   - For Codex, the helper reads `session_meta` from `.jsonl` and `.jsonl.zst` rollouts in
+     `${CODEX_HOME:-~/.codex}/sessions`. The saved working directory must be the repository root or a subdirectory. The
+     helper requires a valid thread ID.
+   - If neither store has an active transcript for the repository, continue with the requested rename or move without
+     continuity edits.
 
-2. Resolve the skill directory and run the helper from the repository to produce a read-only preview:
+2. Resolve the skill directory and run the helper from the repository to produce a read-only preview. Use `uv` to select
+   Python 3.14 or later for standard library Zstandard support.
 
    ```sh
    uv run <skill-dir>/scripts/repo-rename.py <new-name> --dry-run
@@ -81,6 +84,9 @@ Do not list replacement paths or per-file counts unless the user explicitly requ
    For same-name moves, show the unchanged GitHub identity and `origin`, and state whether parent directories need
    creation.
 
+   Report the number of Codex thread IDs in `codex_resume`. Keep the IDs and their destination directories in the helper
+   output unless the user requests them.
+
 5. Pass the preview's exact token to the helper internally:
 
    ```sh
@@ -105,3 +111,10 @@ folder, remote, and affected continuity references to agree, plus a clean verifi
 incomplete, stop and lead with `### ⛔ Rollback incomplete`, then report every failed rollback action before doing
 anything else. On success, use `### ✅ Repository renamed` and a surface/expected/verified table. Keep helper JSON,
 confirmation tokens, commands, paths, URLs, and rollback errors exact and undecorated.
+
+Report the number of Codex thread IDs in the apply result. A folder-filtered session list can still use the previous
+working directory. To resume a specific thread from the moved workspace, give the user the
+[Codex resume command](https://learn.chatgpt.com/docs/developer-commands?surface=cli#cli-codex-resume) in the form
+`codex resume -C '<destination-cwd>' '<thread-id>'`. Use the ID and its destination directory from `codex_resume`. If an
+ID has multiple destination directories, use the directory for the workspace the user wants to resume. Shell-quote both
+arguments and verify that the destination directory exists.

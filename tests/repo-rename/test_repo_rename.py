@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.14"
+# dependencies = []
+# ///
 from __future__ import annotations
 
 import contextlib
@@ -5,6 +9,7 @@ import importlib.util
 import json
 import os
 import re
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -13,6 +18,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from compression import zstd
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "skills" / "repo-rename" / "scripts" / "repo-rename.py"
 SPEC = importlib.util.spec_from_file_location("repo_rename", SCRIPT)
@@ -20,6 +27,9 @@ assert SPEC is not None and SPEC.loader is not None
 HELPER = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = HELPER
 SPEC.loader.exec_module(HELPER)
+
+THREAD_ID = "01953a84-42ea-7ae2-a6ad-22ec7dca7000"
+OTHER_THREAD_ID = "01953a84-42ea-7ae2-a6ad-22ec7dca7001"
 
 
 class RepoRenameTests(unittest.TestCase):
@@ -72,6 +82,16 @@ class RepoRenameTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
+
+    def write_rollout(self, path: Path, cwd: Path, thread_id: str = THREAD_ID) -> bytes:
+        header = {"type": "session_meta", "payload": {"id": thread_id, "cwd": str(cwd)}}
+        message = {"type": "response_item", "payload": {"text": f"Worked in {self.repo.resolve()}"}}
+        data = "".join(json.dumps(record) + "\n" for record in (header, message)).encode()
+        if path.suffix == ".zst":
+            data = zstd.compress(data)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return data
 
     def test_dry_run_has_no_mutations(self) -> None:
         before = subprocess.run(
@@ -340,7 +360,7 @@ class RepoRenameTests(unittest.TestCase):
             ),
         )
 
-    def test_continuity_requires_active_transcript_and_only_replaces_paths(self) -> None:
+    def test_compressed_rollout_activates_continuity_without_rewriting_history(self) -> None:
         codex = self.root / "custom-codex"
         codex.mkdir()
         self.env["CODEX_HOME"] = str(codex)
@@ -349,35 +369,76 @@ class RepoRenameTests(unittest.TestCase):
         config.write_text(f'project = "{old_path}"\nother = "old-repo"\n', encoding="utf-8")
         result = self.run_script("new-repo", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
-        files = json.loads(result.stdout)["mutations"][-1]["files"]
-        self.assertEqual(len(files), 1)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["codex_resume"], {})
+        self.assertEqual(len(report["mutations"][-1]["files"]), 1)
 
-        sessions = codex / "sessions"
-        sessions.mkdir()
-        session = sessions / "session.jsonl"
-        session.write_text(json.dumps({"cwd": old_path}) + "\n", encoding="utf-8")
+        session = codex / "sessions" / "2026" / "rollout-compressed.jsonl.zst"
+        (self.repo / "src").mkdir()
+        before = self.write_rollout(session, self.repo.resolve() / "src")
+        new_root = (self.root / "new-repo").resolve()
+        expected = {THREAD_ID: [str(new_root / "src")]}
         result = self.run_script("new-repo", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
-        files = json.loads(result.stdout)["mutations"][-1]["files"]
-        self.assertIn({"path": str(config), "occurrences": 1}, files)
-        self.assertEqual(len(files), 3)
+        report = json.loads(result.stdout)
+        files = report["mutations"][-1]["files"]
+        self.assertEqual(report["codex_resume"], expected)
+        self.assertIn({"path": str(config.resolve()), "occurrences": 1}, files)
+        self.assertEqual(len(files), 2)
+        self.assertEqual(session.read_bytes(), before)
         result = self.run_script("new-repo", "--apply", "--confirm", "owner/old-repo->owner/new-repo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        new_path = str((self.root / "new-repo").resolve())
-        self.assertEqual(config.read_text(), f'project = "{new_path}"\nother = "old-repo"\n')
-        self.assertEqual(json.loads(session.read_text())["cwd"], new_path)
+        self.assertEqual(json.loads(result.stdout)["codex_resume"], expected)
+        self.assertEqual(config.read_text(), f'project = "{new_root}"\nother = "old-repo"\n')
+        self.assertEqual(session.read_bytes(), before)
+
+    def test_resume_reports_stable_ids_and_destination_cwds_for_same_name_move(self) -> None:
+        sessions = Path(self.env["HOME"]) / ".codex" / "sessions"
+        source = self.repo.resolve()
+        (source / "src").mkdir()
+        (source / "docs with spaces").mkdir()
+        plain = sessions / f"{THREAD_ID}_fixture-revision.jsonl"
+        before = self.write_rollout(plain, source)
+        first_message = before.index(b"\n") + 1
+        duplicate = sessions / "rollout-duplicate.jsonl.zst"
+        other_revision = sessions / f"{THREAD_ID}_other-revision.jsonl"
+        other = sessions / "rollout-other.jsonl"
+        snapshots = {
+            duplicate: self.write_rollout(duplicate, source),
+            other_revision: self.write_rollout(other_revision, source / "src"),
+            other: self.write_rollout(other, source / "docs with spaces", OTHER_THREAD_ID),
+        }
+        destination = (self.root / "path with spaces" / source.name).resolve()
+        expected = {
+            THREAD_ID: [str(destination), str(destination / "src")],
+            OTHER_THREAD_ID: [str(destination / "docs with spaces")],
+        }
+        result = self.run_script(str(source), str(destination), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["codex_resume"], expected)
+        result = self.run_script(str(source), str(destination), "--apply", "--confirm", report["confirmation_token"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["codex_resume"], expected)
+        self.assertEqual(plain.read_bytes(), before)
+        with plain.open("rb") as stream:
+            stream.seek(first_message)
+            self.assertEqual(stream.readline(), before[first_message:])
+        for path, original in snapshots.items():
+            self.assertEqual(path.read_bytes(), original)
 
     def continuity_fixture(self) -> tuple[Path, Path]:
         codex = self.root / "prefilter-codex"
-        sessions = codex / "sessions" / "2026"
-        sessions.mkdir(parents=True)
+        project = Path(self.env["HOME"]) / ".claude" / "projects" / "example-project"
+        project.mkdir(parents=True)
+        codex.mkdir()
         old_root = self.repo.resolve()
         needle = str(old_root)
-        (sessions / "hit.jsonl").write_text(f"{needle}\n{needle}/src\n", encoding="utf-8")
-        (sessions / ".hidden.jsonl").write_text(needle, encoding="utf-8")
-        (sessions / "miss.jsonl").write_text("unrelated\n", encoding="utf-8")
-        (sessions / "binary.bin").write_bytes(b"\0" + needle.encode())
-        (sessions / "link.jsonl").symlink_to(sessions / "hit.jsonl")
+        (project / "hit.jsonl").write_text(f"{needle}\n{needle}/src\n", encoding="utf-8")
+        (project / ".hidden.jsonl").write_text(needle, encoding="utf-8")
+        (project / "miss.jsonl").write_text("unrelated\n", encoding="utf-8")
+        (project / "binary.bin").write_bytes(b"\0" + needle.encode())
+        (project / "link.jsonl").symlink_to(project / "hit.jsonl")
         (codex / "config.toml").write_text(f'project = "{needle}"\n', encoding="utf-8")
         return codex, old_root
 
@@ -395,7 +456,7 @@ class RepoRenameTests(unittest.TestCase):
         sessions = codex / "sessions"
         sessions.mkdir(parents=True)
         session = sessions / "session.jsonl"
-        session.write_text(before)
+        session_bytes = self.write_rollout(session, self.repo.resolve())
         config = codex / "config.toml"
         config.write_text("paths = " + before)
         claude = Path(self.env["HOME"]) / ".claude" / "projects" / "another-project"
@@ -406,35 +467,111 @@ class RepoRenameTests(unittest.TestCase):
         result = self.run_script("new-repo", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(len(report["mutations"][-1]["files"]), 4)
+        self.assertEqual(len(report["mutations"][-1]["files"]), 3)
         self.assertEqual({item["occurrences"] for item in report["mutations"][-1]["files"]}, {2})
         result = self.run_script("new-repo", "--apply", "--confirm", report["confirmation_token"])
         self.assertEqual(result.returncode, 0, result.stderr)
         renamed = self.root / "new-repo"
         after = json.dumps([str(renamed.resolve()), str(renamed.resolve()) + "/src", *paths[2:]]) + "\n"
         self.assertEqual((renamed / "README.md").read_text(), after)
-        self.assertEqual(session.read_text(), after)
+        self.assertEqual(session.read_bytes(), session_bytes)
         self.assertEqual(config.read_text(), "paths = " + after)
         self.assertEqual(claude_session.read_text(), after)
 
-    def test_sibling_transcript_does_not_activate_continuity(self) -> None:
+    def test_only_active_rollout_workspaces_activate_continuity(self) -> None:
         codex = Path(self.env["HOME"]) / ".codex"
         sessions = codex / "sessions"
-        sessions.mkdir(parents=True)
-        (sessions / "session.jsonl").write_text(json.dumps({"cwd": str(self.repo.resolve()) + "-qiskit"}))
-        (codex / "config.toml").write_text(f'project = "{self.repo.resolve()}"\n')
+        source = self.repo.resolve()
+        self.write_rollout(sessions / "rollout-sibling.jsonl", source.with_name(source.name + "-sibling"))
+        self.write_rollout(sessions / "rollout-elsewhere.jsonl", source / ".." / "elsewhere")
+        fake_meta = {"type": "session_meta", "payload": {"cwd": str(source), "id": THREAD_ID}}
+        (sessions / f"rollout-{THREAD_ID}.jsonl").write_text(
+            json.dumps({"type": "response_item", "payload": {"text": str(source)}})
+            + "\n"
+            + json.dumps(fake_meta)
+            + "\n"
+        )
+        (sessions / "rollout-invalid-id.jsonl").write_text(
+            json.dumps({"type": "session_meta", "payload": {"cwd": str(source), "id": "not-a-uuid"}}) + "\n"
+        )
+        (sessions / "rollout-corrupt.jsonl.zst").write_bytes(b"not zstd")
+        archived = codex / "archived_sessions" / "rollout-archived.jsonl"
+        archived_bytes = self.write_rollout(archived, source)
+        (sessions / "rollout-link.jsonl").symlink_to(archived)
+        state = codex / "state_5.sqlite"
+        with contextlib.closing(sqlite3.connect(state)) as db, db:
+            db.execute("CREATE TABLE threads (id TEXT, cwd TEXT, rollout_path TEXT, archived INTEGER)")
+            db.execute(
+                "INSERT INTO threads VALUES (?, ?, ?, 0)", (THREAD_ID, str(source), str(sessions / "missing.jsonl"))
+            )
+            db.execute("INSERT INTO threads VALUES (?, ?, ?, 1)", (OTHER_THREAD_ID, str(source), str(archived)))
+        db_bytes = state.read_bytes()
+        config = codex / "config.toml"
+        config_before = f'project = "{source}"\n'
+        config.write_text(config_before)
         result = self.run_script("new-repo", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["codex_resume"], {})
         self.assertEqual(
-            json.loads(result.stdout)["mutations"][-1]["files"],
+            report["mutations"][-1]["files"],
             [{"path": str((self.repo / "README.md").resolve()), "occurrences": 1}],
+        )
+        result = self.run_script("new-repo", "--apply", "--confirm", report["confirmation_token"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["codex_resume"], {})
+        self.assertEqual(config.read_text(), config_before)
+        self.assertEqual(archived.read_bytes(), archived_bytes)
+        self.assertEqual(state.read_bytes(), db_bytes)
+
+    def test_repo_scan_preserves_nested_codex_history(self) -> None:
+        source = self.repo.resolve()
+        codex = source / ".codex"
+        self.env["CODEX_HOME"] = str(codex)
+        active = codex / "sessions" / "rollout-active.jsonl"
+        archived = codex / "archived_sessions" / "rollout-archived.jsonl.zst"
+        history = {
+            active: self.write_rollout(active, source),
+            archived: self.write_rollout(archived, source, OTHER_THREAD_ID),
+        }
+        message = json.dumps({"text": str(source)}) + "\n"
+        for name in ("history.jsonl", "session_index.jsonl", "state_5.sqlite-wal"):
+            path = codex / name
+            history[path] = message.encode()
+            path.write_bytes(history[path])
+        (codex / "config.toml").write_text(f'project = "{source}"\nname = "old-repo"\n')
+        subprocess.run(["git", "add", "-f", ".codex"], cwd=source, check=True)
+        subprocess.run(["git", "commit", "-qm", "nested codex fixture"], cwd=source, check=True)
+
+        result = self.run_script("new-repo", "--dry-run", "--include-local-state")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        destination = source.with_name("new-repo")
+        self.assertEqual(report["codex_resume"], {THREAD_ID: [str(destination)]})
+        self.assertEqual(
+            report["mutations"][-1]["files"],
+            [
+                {"path": str(codex / "config.toml"), "occurrences": 1},
+                {"path": str(source / "README.md"), "occurrences": 1},
+            ],
+        )
+        result = self.run_script(
+            "new-repo", "--apply", "--include-local-state", "--confirm", report["confirmation_token"]
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for original, before in history.items():
+            self.assertEqual((destination / original.relative_to(source)).read_bytes(), before)
+        self.assertEqual(
+            (destination / ".codex/config.toml").read_text(), f'project = "{destination}"\nname = "old-repo"\n'
         )
 
     def collect(self, codex: Path, old_root: Path) -> list[tuple[str, int]]:
-        env = {"HOME": self.env["HOME"], "CODEX_HOME": str(codex), "CLAUDE_CONFIG_DIR": str(self.root / "no-claude")}
-        with patch.dict(os.environ, env):
-            items = HELPER.collect_replacements(old_root, self.root / "new-repo", "old-repo", "new-repo")
-        return [(str(item.path), item.occurrences) for item in items if str(item.path).startswith(str(codex))]
+        env = self.env | {"PATH": os.environ["PATH"], "CODEX_HOME": str(codex)}
+        with patch.dict(os.environ, env, clear=True):
+            items = HELPER.collect_replacements(
+                old_root, self.root / "new-repo", "old-repo", "new-repo", continuity_active=True
+            )
+        return [(str(item.path), item.occurrences) for item in items if not item.path.is_relative_to(old_root)]
 
     def test_prefilter_matches_full_scan(self) -> None:
         codex, old_root = self.continuity_fixture()
@@ -454,8 +591,8 @@ class RepoRenameTests(unittest.TestCase):
         (no_rg / "git").symlink_to(HELPER.shutil.which("git") or "git")
         with patch.dict(os.environ, {"PATH": str(no_rg)}):
             self.assertIsNone(HELPER.shutil.which("rg"))
-            files = [codex / "sessions" / "2026" / "hit.jsonl", codex / "sessions" / "2026" / "miss.jsonl"]
-            self.assertEqual(HELPER.prefilter(files, [codex / "sessions"], ((b"x", b"y"),)), files)
+            files = [codex / "config.toml"]
+            self.assertEqual(HELPER.prefilter(files, [codex], ((b"x", b"y"),)), files)
             fallback = self.collect(codex, old_root)
         names = {Path(path).name: count for path, count in fallback}
         self.assertEqual(names, {"hit.jsonl": 2, ".hidden.jsonl": 1, "config.toml": 1})
@@ -467,9 +604,9 @@ class RepoRenameTests(unittest.TestCase):
         rg = bad / "rg"
         rg.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
         rg.chmod(rg.stat().st_mode | stat.S_IXUSR)
-        files = [codex / "sessions" / "2026" / "miss.jsonl"]
+        files = [codex / "config.toml"]
         with patch.dict(os.environ, {"PATH": f"{bad}:{os.environ['PATH']}"}):
-            self.assertEqual(HELPER.prefilter(files, [codex / "sessions"], ((b"x", b"y"),)), files)
+            self.assertEqual(HELPER.prefilter(files, [codex], ((b"x", b"y"),)), files)
 
     def test_custom_claude_project_is_moved(self) -> None:
         claude = self.root / "custom-claude"

@@ -1,4 +1,8 @@
 #!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = []
+# ///
 """Preview and apply a constrained GitHub or local-only repository rename."""
 
 from __future__ import annotations
@@ -13,6 +17,9 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID
+
+from compression import zstd
 
 EXCLUDED_PARTS = {
     ".git",
@@ -27,6 +34,7 @@ EXCLUDED_PARTS = {
     "coverage",
 }
 PROTECTED_FILES = {"PROMPT.md", "TODO.md"}
+MAX_CODEX_HEADER_BYTES = 4 * 1024 * 1024
 
 
 class RenameError(RuntimeError):
@@ -130,10 +138,46 @@ def prefilter(files: list[Path], roots: list[Path], pairs: tuple[tuple[bytes, by
 
 
 def continuity_paths() -> tuple[Path, Path]:
-    home = Path.home()
+    home = Path.home().resolve()
     return (
-        Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude") / "projects",
-        Path(os.environ.get("CODEX_HOME") or home / ".codex"),
+        Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude").expanduser().resolve() / "projects",
+        Path(os.environ.get("CODEX_HOME") or home / ".codex").expanduser().resolve(),
+    )
+
+
+def codex_resume_cwds(sessions: Path, old_root: Path, new_root: Path) -> dict[str, list[str]]:
+    """Map metadata thread IDs to relocated workspace paths using only active rollout headers."""
+    candidates: dict[str, set[str]] = {}
+    for path in readable_files(sessions):
+        if not path.name.endswith((".jsonl", ".jsonl.zst")):
+            continue
+        opener = zstd.open if path.suffix == ".zst" else Path.open
+        try:
+            with opener(path, "rb") as stream:
+                # Bound reads even if a damaged rollout lacks the first newline.
+                header = json.loads(stream.readline(MAX_CODEX_HEADER_BYTES))
+            if not isinstance(header, dict) or header.get("type") != "session_meta":
+                continue
+            payload = header.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            thread_id, cwd = payload.get("id"), payload.get("cwd")
+            if not isinstance(thread_id, str) or not isinstance(cwd, str) or "\0" in cwd:
+                continue
+            relative = Path(os.path.normpath(cwd)).relative_to(old_root)
+            candidates.setdefault(str(UUID(thread_id)), set()).add(str(new_root / relative))
+        except (OSError, EOFError, ValueError, RecursionError, zstd.ZstdError):
+            continue
+    return {thread_id: sorted(cwds) for thread_id, cwds in candidates.items()}
+
+
+def is_codex_history(path: Path, codex_home: Path) -> bool:
+    if path == codex_home or not path.is_relative_to(codex_home):
+        return False
+    first_part = path.relative_to(codex_home).parts[0]
+    return (
+        first_part in {"sessions", "archived_sessions", "history.jsonl", "session_index.jsonl"}
+        or re.search(r"\.sqlite3?(?:-|$)", first_part) is not None
     )
 
 
@@ -143,6 +187,7 @@ def collect_replacements(
     old_name: str,
     new_name: str,
     *,
+    continuity_active: bool,
     old_repo: str | None = None,
     include_local_state: bool = False,
 ) -> list[Replacement]:
@@ -152,20 +197,17 @@ def collect_replacements(
     path_pattern = re.compile(rb"(" + re.escape(str(old_root).encode()) + rb")(?=$|[/\\\s\"'`<>(){}\[\],;:]|->)")
     path_pair = ((path_pattern, str(new_root).encode()),)
     replacements = []
-    sessions = codex_home / "sessions"
-    for path in prefilter(readable_files(sessions), [sessions], literal_path_pair):
-        occurrences = count_pairs(path, path_pair)
-        if occurrences:
-            replacements.append(Replacement(path, path_pair, occurrences))
-
-    project = claude_projects / claude_project_name(old_root)
-    claude_active = project.is_dir() and next(project.iterdir(), None) is not None
-    if claude_active or replacements:
-        candidates = set()
-        roots = [claude_projects, Path.home() / "claude/projects", codex_home / "config.toml"]
-        for root in roots:
-            candidates.update(readable_files(root))
-        for path in prefilter(list(candidates), roots, literal_path_pair):
+    codex_config = codex_home / "config.toml"
+    if continuity_active:
+        claude_roots = [claude_projects, Path.home().resolve() / "claude/projects"]
+        roots = [*claude_roots, codex_config]
+        candidates = list(
+            {path for root in roots for path in readable_files(root) if not is_codex_history(path, codex_home)}
+        )
+        # A broad search could read rollouts if a custom Codex home overlaps a Claude store.
+        if not any(codex_home.is_relative_to(root) or root.is_relative_to(codex_home) for root in claude_roots):
+            candidates = prefilter(candidates, roots, literal_path_pair)
+        for path in candidates:
             occurrences = count_pairs(path, path_pair)
             if occurrences:
                 replacements.append(Replacement(path, path_pair, occurrences))
@@ -188,6 +230,8 @@ def collect_replacements(
             )
         repo_pairs += tuple((re.compile(pattern), new_name.encode()) for pattern in patterns)
     for path in readable_files(old_root, repo=True, include_local_state=include_local_state):
+        if path == codex_config or is_codex_history(path, codex_home):
+            continue
         occurrences = count_pairs(path, repo_pairs)
         if occurrences:
             replacements.append(Replacement(path, repo_pairs, occurrences))
@@ -253,14 +297,22 @@ def preflight(new_name: str, destination: str | None = None, *, include_local_st
 
     if destination is not None:
         token = f"move:{old_root}->{new_root}"
-    claude_projects, _ = continuity_paths()
+    claude_projects, codex_home = continuity_paths()
     old_claude = claude_projects / claude_project_name(old_root)
     new_claude = claude_projects / claude_project_name(new_root)
     if old_claude.exists() and new_claude.exists():
         raise RenameError(f"target Claude project directory exists: {new_claude}")
 
+    claude_active = old_claude.is_dir() and next(old_claude.iterdir(), None) is not None
+    codex_resume = codex_resume_cwds(codex_home / "sessions", old_root, new_root)
     replacements = collect_replacements(
-        old_root, new_root, old_name, new_name, old_repo=old_repo, include_local_state=include_local_state
+        old_root,
+        new_root,
+        old_name,
+        new_name,
+        continuity_active=claude_active or bool(codex_resume),
+        old_repo=old_repo,
+        include_local_state=include_local_state,
     )
     return {
         "old_root": old_root,
@@ -277,7 +329,8 @@ def preflight(new_name: str, destination: str | None = None, *, include_local_st
         "new_remote": new_remote,
         "old_claude": old_claude,
         "new_claude": new_claude,
-        "move_claude": old_claude.is_dir() and next(old_claude.iterdir(), None) is not None,
+        "move_claude": claude_active,
+        "codex_resume": codex_resume,
         "replacements": replacements,
         "confirm": token,
         "include_local_state": include_local_state,
@@ -307,6 +360,7 @@ def preview(plan: dict[str, object]) -> dict[str, object]:
         "rename_github": plan["rename_github"],
         "confirmation_token": plan["confirm"],
         "include_local_state": plan["include_local_state"],
+        "codex_resume": plan["codex_resume"],
         "mutations": [
             *remote_mutations,
             *[{"kind": "create-parent", "path": str(parent)} for parent in plan["create_parents"]],
@@ -398,6 +452,7 @@ def apply(plan: dict[str, object]) -> dict[str, object]:
             "root": str(new_root),
             "remote": plan["new_remote"],
             "files_updated": len(replacements),
+            "codex_resume": plan["codex_resume"],
         }
     except Exception as error:
         for original, backup in backups.items():
