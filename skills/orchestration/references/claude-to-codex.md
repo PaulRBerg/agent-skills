@@ -128,6 +128,12 @@ CODEX_PROMPT
 background task display. Do not set a Bash-tool timeout. The wrapper's `--timeout-seconds` is the sole timeout
 authority. The wrapper always terminates itself.
 
+The runner uses its Git worktree only as the launch directory and exits 66 outside one. For deliverables outside every
+Git worktree, such as a folder on the Desktop, create an empty throwaway repository in the host scratch directory with
+`git init` and start the runner from it. Give each agent absolute destination paths, and state that the launch directory
+is throwaway and must stay empty. Omit `--coord-identity` and the claim steps above, because non-Git work has no
+coordination claim.
+
 Start sequential agents only after reconciling their dependencies. Start every agent in a parallel wave in the same
 turn. Pass the same `--coord-identity` on every fresh or resumed implementation launch.
 
