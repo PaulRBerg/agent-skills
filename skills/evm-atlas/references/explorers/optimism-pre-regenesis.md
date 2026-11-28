@@ -108,9 +108,8 @@ Never put a private hash, wallet, position identifier, or financial value into t
 
 As of `2026-09-10`, Dune's Free plan is view-only: public dashboards, query source, and data collections remain
 viewable, but exact-hash table lookups and parameterized address-dashboard results require query execution on a paid
-plan. Affected existing accounts received temporary Plus access through `2026-09-24`, with 2,500 trial credits. The
-unsaved browser workflow needs only query execution. Thus, Dune advertises Analyst as sufficient. Plus is not required
-for this route. Never purchase or upgrade without explicit authority.
+plan. The unsaved browser workflow needs only query execution. Thus, Dune advertises Analyst as sufficient. Plus is not
+required for this route. Never purchase or upgrade without explicit authority.
 
 Treat a missing execution entitlement or exhausted credit balance as a provider-plan coverage gap, not historical
 absence. Chromium does not bypass server-side plan enforcement, and viewing or copying a public query does not produce

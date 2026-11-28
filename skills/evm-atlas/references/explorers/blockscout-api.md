@@ -86,8 +86,8 @@ Etherscan (`references/explorers/etherscan-api.md`) or the `primaryPublicRpc` fr
 ## Chain Resolution
 
 Do **not** default to Ethereum Mainnet. Infer the chain from the prompt first (same rules as
-`references/explorers/etherscan-api.md`: explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, testnet
-keywords). If the chain is ambiguous, ask the user.
+`references/explorers/etherscan-api.md`: explicit chain mention, chain-specific tokens like POL→137 / ARB→42161, no
+testnet queries). If the chain is ambiguous, ask the user.
 
 Two-step resolution:
 
