@@ -55,20 +55,9 @@ pub fn execute(repository: &Repository, rebase: bool) -> Result<PushOutcome> {
         return Ok(PushOutcome::SkippedNoRemote { branch });
     };
     repository.head()?;
-    destination.compare_ref = fetch(repository, &destination)?;
-    if destination.set_upstream {
-        destination.new_branch = destination.compare_ref.is_none();
-    }
     let mut rebased = None;
-    if let Some(count) = behind_count(repository, destination.compare_ref.as_deref())? {
-        if !rebase {
-            return Ok(PushOutcome::Behind { branch, count, refusal: None });
-        }
-        let compare_ref = destination.compare_ref.as_deref().expect("behind implies a compare ref");
-        if let Err(refusal) = rebase_onto_upstream(repository, compare_ref)? {
-            return Ok(PushOutcome::Behind { branch, count, refusal: Some(refusal) });
-        }
-        rebased = Some(count);
+    if let Some(outcome) = integrate_upstream(repository, &mut destination, rebase, &mut rebased)? {
+        return Ok(outcome);
     }
 
     let first = attempt(repository, &destination)?;
@@ -79,27 +68,44 @@ pub fn execute(repository: &Repository, rebase: bool) -> Result<PushOutcome> {
         return Err(git_error(first));
     }
 
-    destination.compare_ref = fetch(repository, &destination)?;
-    if destination.set_upstream {
-        destination.new_branch = destination.compare_ref.is_none();
-    }
-    if let Some(count) = behind_count(repository, destination.compare_ref.as_deref())? {
-        if !rebase {
-            return Ok(PushOutcome::Behind { branch, count, refusal: None });
-        }
-        // The remote moved between the rebase and the push: integrate once more before the
-        // final attempt, so the caller sees either a push or an explained refusal.
-        let compare_ref = destination.compare_ref.as_deref().expect("behind implies a compare ref");
-        if let Err(refusal) = rebase_onto_upstream(repository, compare_ref)? {
-            return Ok(PushOutcome::Behind { branch, count, refusal: Some(refusal) });
-        }
-        rebased = Some(rebased.unwrap_or(0) + count);
+    // The remote moved before the push: integrate once more before the final attempt, so the caller
+    // sees either a push or an explained refusal.
+    if let Some(outcome) = integrate_upstream(repository, &mut destination, rebase, &mut rebased)? {
+        return Ok(outcome);
     }
     let second = attempt(repository, &destination)?;
     if !second.status.success() {
         return Err(git_error(second));
     }
     Ok(success_outcome(destination, rebased))
+}
+
+/// Fetches the destination and, when HEAD is behind it, rebases onto the fetched upstream if
+/// `rebase` allows it. Returns the `Behind` outcome that ends the push, or `None` to attempt it.
+/// `rebased` accumulates the commit count of every rebase.
+fn integrate_upstream(
+    repository: &Repository,
+    destination: &mut Destination,
+    rebase: bool,
+    rebased: &mut Option<u64>,
+) -> Result<Option<PushOutcome>> {
+    destination.compare_ref = fetch(repository, destination)?;
+    if destination.set_upstream {
+        destination.new_branch = destination.compare_ref.is_none();
+    }
+    let Some(count) = behind_count(repository, destination.compare_ref.as_deref())? else {
+        return Ok(None);
+    };
+    let branch = destination.branch.clone();
+    if !rebase {
+        return Ok(Some(PushOutcome::Behind { branch, count, refusal: None }));
+    }
+    let compare_ref = destination.compare_ref.as_deref().expect("behind implies a compare ref");
+    if let Err(refusal) = rebase_onto_upstream(repository, compare_ref)? {
+        return Ok(Some(PushOutcome::Behind { branch, count, refusal: Some(refusal) }));
+    }
+    *rebased = Some(rebased.unwrap_or(0) + count);
+    Ok(None)
 }
 
 /// Resolves the push destination from the branch configuration. A configured `branch.<name>.remote`

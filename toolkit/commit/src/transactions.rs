@@ -1,6 +1,5 @@
-use std::{ffi::OsString, fs, path::PathBuf};
-
 use crate::{
+    commit::remove_stale_index_lock,
     error::{AppError, Result},
     git::Repository,
     state::{Store, TransactionStatus, now_seconds},
@@ -62,28 +61,12 @@ pub fn discard(store: &Store, id: &str) -> Result<()> {
             transaction.id
         )));
     }
-    remove_verified_stale_index_lock(&repository, &transaction)?;
+    remove_stale_index_lock(&repository, &transaction)?;
     repository.delete_refs(&transaction.references())?;
     transaction.status = TransactionStatus::Discarded;
     transaction.terminal_at = Some(now_seconds());
-    transaction.pending_commit = None;
     transaction.index_lock_token = None;
     store.save(&transaction)?;
     println!("DISCARDED {}", transaction.id);
-    Ok(())
-}
-
-fn remove_verified_stale_index_lock(repository: &Repository, transaction: &crate::state::Transaction) -> Result<()> {
-    let Some(token) = &transaction.index_lock_token else {
-        return Ok(());
-    };
-    let index = repository.git_path("index")?;
-    let mut lock_name = OsString::from(index.as_os_str());
-    lock_name.push(".lock");
-    let lock = PathBuf::from(lock_name);
-    let marker = format!("ai-commit-index-lock {} {token}\n", transaction.id);
-    if fs::read(&lock).ok().as_deref() == Some(marker.as_bytes()) {
-        fs::remove_file(&lock)?;
-    }
     Ok(())
 }

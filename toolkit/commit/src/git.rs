@@ -35,9 +35,8 @@ impl Repository {
         clear_repository_environment(&mut command);
         let root = command_text(command.arg("-C").arg(&cwd).args(["rev-parse", "--show-toplevel"]))
             .map_err(|_| AppError::usage("current directory is not inside a Git working tree"))?;
-        let root_text = root;
-        let root = PathBuf::from(&root_text).canonicalize().map_err(|error| {
-            AppError::operational(format!("cannot resolve repository root {}: {error}", root_text.trim()))
+        let root = PathBuf::from(&root).canonicalize().map_err(|error| {
+            AppError::operational(format!("cannot resolve repository root {}: {error}", root.trim()))
         })?;
         Ok(Self { root })
     }
@@ -206,11 +205,7 @@ impl Repository {
         if paths.is_empty() {
             return Ok(Vec::new());
         }
-        let mut input = Vec::new();
-        for path in paths {
-            input.extend_from_slice(path.as_bytes());
-            input.push(0);
-        }
+        let input = nul_separated(paths.iter().cloned());
         let mut command = self.command_in_worktree(Some(index), worktree)?;
         command.args(["check-ignore", "-z", "--stdin"]);
         let (output, written) = run_with_input(command, &input)?;
@@ -325,13 +320,7 @@ impl Repository {
         }
         let record = output.split(|byte| *byte == 0).next().unwrap_or_default();
         let metadata = record.split(|byte| *byte == b'\t').next().unwrap_or_default();
-        let metadata =
-            std::str::from_utf8(metadata).map_err(|_| AppError::operational("Git returned a non-UTF-8 tree entry"))?;
-        let mut fields = metadata.split_ascii_whitespace();
-        let mode = fields.next().ok_or_else(|| AppError::operational("malformed Git tree entry"))?.to_owned();
-        let kind = fields.next().ok_or_else(|| AppError::operational("malformed Git tree entry"))?.to_owned();
-        let oid = fields.next().ok_or_else(|| AppError::operational("malformed Git tree entry"))?.to_owned();
-        Ok(Some(TreeEntry { mode, kind, oid }))
+        parse_tree_metadata(metadata).map(Some)
     }
 
     pub fn tree_file_entries(&self, tree: &str, paths: &[String]) -> Result<HashMap<String, TreeEntry>> {
@@ -350,56 +339,55 @@ impl Repository {
                 let Some(tab) = record.iter().position(|byte| *byte == b'\t') else {
                     return Err(AppError::operational("malformed Git tree entry"));
                 };
-                let metadata = std::str::from_utf8(&record[..tab])
-                    .map_err(|_| AppError::operational("Git returned a non-UTF-8 tree entry"))?;
+                let entry = parse_tree_metadata(&record[..tab])?;
                 let path = std::str::from_utf8(&record[tab + 1..])
                     .map_err(|_| AppError::usage("non-UTF-8 repository paths are not supported"))?
                     .to_owned();
                 validate_safe_path_text(&path)?;
-                let mut fields = metadata.split_ascii_whitespace();
-                let mode = fields.next().ok_or_else(|| AppError::operational("malformed Git tree entry"))?.to_owned();
-                let kind = fields.next().ok_or_else(|| AppError::operational("malformed Git tree entry"))?.to_owned();
-                let oid = fields.next().ok_or_else(|| AppError::operational("malformed Git tree entry"))?.to_owned();
-                entries.insert(path, TreeEntry { mode, kind, oid });
+                entries.insert(path, entry);
             }
         }
         Ok(entries)
     }
 
-    pub fn create_refs(&self, refs: &[(&str, &str)]) -> Result<()> {
-        let mut input = String::from("start\n");
-        for (reference, oid) in refs {
-            input.push_str(&format!("create {reference} {oid}\n"));
-        }
-        input.push_str("prepare\ncommit\n");
-        let output = self.with_input(["update-ref", "--stdin"], input.as_bytes(), None)?;
-        if output.status.success() { Ok(()) } else { Err(git_error(output)) }
-    }
-
     pub fn delete_refs(&self, refs: &[String]) -> Result<()> {
-        let mut input = String::from("start\n");
-        for reference in refs {
-            input.push_str(&format!("delete {reference}\n"));
-        }
-        input.push_str("prepare\ncommit\n");
-        let output = self.with_input(["update-ref", "--stdin"], input.as_bytes(), None)?;
-        if output.status.success() { Ok(()) } else { Err(git_error(output)) }
+        self.ref_transaction(refs.iter().map(|reference| format!("delete {reference}\n")))
     }
 
     pub fn update_refs(&self, refs: &[RefUpdate<'_>]) -> Result<()> {
+        self.ref_transaction(refs.iter().map(|update| match update {
+            RefUpdate::Create { reference, new_oid } => format!("create {reference} {new_oid}\n"),
+            RefUpdate::Update { reference, new_oid, old_oid } => format!("update {reference} {new_oid} {old_oid}\n"),
+        }))
+    }
+
+    /// Applies all `update-ref --stdin` commands atomically, or none of them.
+    fn ref_transaction(&self, commands: impl Iterator<Item = String>) -> Result<()> {
         let mut input = String::from("start\n");
-        for update in refs {
-            match update {
-                RefUpdate::Create { reference, new_oid } => input.push_str(&format!("create {reference} {new_oid}\n")),
-                RefUpdate::Update { reference, new_oid, old_oid } => {
-                    input.push_str(&format!("update {reference} {new_oid} {old_oid}\n"));
-                }
-            }
-        }
+        input.extend(commands);
         input.push_str("prepare\ncommit\n");
         let output = self.with_input(["update-ref", "--stdin"], input.as_bytes(), None)?;
         if output.status.success() { Ok(()) } else { Err(git_error(output)) }
     }
+}
+
+/// Parses the `<mode> <type> <oid>` metadata that precedes the tab in an `ls-tree` record.
+fn parse_tree_metadata(metadata: &[u8]) -> Result<TreeEntry> {
+    let metadata =
+        std::str::from_utf8(metadata).map_err(|_| AppError::operational("Git returned a non-UTF-8 tree entry"))?;
+    let mut fields = metadata.split_ascii_whitespace();
+    let mut field =
+        || fields.next().map(str::to_owned).ok_or_else(|| AppError::operational("malformed Git tree entry"));
+    Ok(TreeEntry { mode: field()?, kind: field()?, oid: field()? })
+}
+
+pub fn nul_separated(values: impl Iterator<Item = String>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for value in values {
+        bytes.extend_from_slice(value.as_bytes());
+        bytes.push(0);
+    }
+    bytes
 }
 
 /// Runs `command` with `input` on stdin and returns its output plus the stdin write result.

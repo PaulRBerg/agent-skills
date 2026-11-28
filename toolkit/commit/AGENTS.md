@@ -7,11 +7,13 @@ repository model.
 
 - `src/cli.rs` defines the public command line. `src/error.rs` and `src/main.rs` map failures to stable exit classes.
 - `src/prepare.rs` resolves intended paths, constructs immutable trees in alternate indexes, and records transactions.
-- `src/validation.rs` reapplies immutable prepared deltas, materializes candidates, and runs frozen validation with
+- `src/validation.rs` reapplies immutable prepared deltas, builds candidate indexes, and runs frozen validation with
   drift detection for both `validate` and `commit`.
+- `src/snapshot.rs` materializes a candidate outside the repository for validation and snapshot-check hooks. It projects
+  ignored local directories and matching submodules into that materialization.
 - `src/commit.rs` runs configured validation without the shared index lock, then locks the shared index, re-verifies the
   branch head, runs hooks/signing, CAS-updates refs, and reconciles the shared index.
-- `src/push.rs` implements fetch-first, no-integration pushes.
+- `src/push.rs` implements fetch-first pushes. It integrates the upstream only when the caller passes `--rebase`.
 - `src/coord.rs` is the only `ai-coord` subprocess boundary: bounded advisory `baseline`, `scope`, and `trailer` reads,
   and the explicit `finding resolve` call that `commit --finding` requests.
 - `src/state.rs` owns atomic journal records, receipts, retention, and transaction refs.

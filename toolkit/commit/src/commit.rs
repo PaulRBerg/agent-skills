@@ -75,11 +75,7 @@ fn run_transaction(args: &CommitArgs, store: &Store) -> Result<()> {
         transaction.index_lock_token = Some(format!("{:016x}{:016x}", random::<u64>(), random::<u64>()));
         store.save(&transaction)?;
     }
-    let lock_marker = format!(
-        "ai-commit-index-lock {} {}\n",
-        transaction.id,
-        transaction.index_lock_token.as_deref().expect("index lock token")
-    );
+    let lock_marker = index_lock_marker(&transaction).expect("index lock token");
     let mut index_lock = IndexLock::acquire(&repository, &lock_marker)?;
 
     let needs_recovery = transaction.status == TransactionStatus::Committed || transaction.pending_commit.is_some();
@@ -190,21 +186,7 @@ fn run_transaction(args: &CommitArgs, store: &Store) -> Result<()> {
     store.save(&transaction)?;
     index_lock.ensure_owned()?;
 
-    let branch_ref = format!("refs/heads/{}", transaction.branch);
-    let transaction_ref = transaction.reference();
-    let mut updates = Vec::with_capacity(2);
-    match current_parent.as_deref() {
-        Some(parent) => {
-            updates.push(RefUpdate::Update { reference: &branch_ref, new_oid: &commit_oid, old_oid: parent })
-        }
-        None => updates.push(RefUpdate::Create { reference: &branch_ref, new_oid: &commit_oid }),
-    }
-    updates.push(RefUpdate::Update {
-        reference: &transaction_ref,
-        new_oid: &commit_oid,
-        old_oid: &transaction.prepared_tree,
-    });
-    if let Err(error) = repository.update_refs(&updates) {
+    if let Err(error) = advance_branch(&repository, &transaction, &commit_oid, current_parent.as_deref()) {
         transaction.pending_commit = None;
         store.save(&transaction)?;
         return Err(AppError::retry(format!(
@@ -325,23 +307,7 @@ fn recover_after_ref_update(
     };
     if !exists_on_branch {
         if head.as_deref() == pending.parent.as_deref() {
-            let branch_ref = format!("refs/heads/{}", transaction.branch);
-            let transaction_ref = transaction.reference();
-            let mut updates = Vec::with_capacity(2);
-            match pending.parent.as_deref() {
-                Some(parent) => updates.push(RefUpdate::Update {
-                    reference: &branch_ref,
-                    new_oid: &pending.commit_oid,
-                    old_oid: parent,
-                }),
-                None => updates.push(RefUpdate::Create { reference: &branch_ref, new_oid: &pending.commit_oid }),
-            }
-            updates.push(RefUpdate::Update {
-                reference: &transaction_ref,
-                new_oid: &pending.commit_oid,
-                old_oid: &transaction.prepared_tree,
-            });
-            if repository.update_refs(&updates).is_err() {
+            if advance_branch(repository, transaction, &pending.commit_oid, pending.parent.as_deref()).is_err() {
                 return Err(AppError::retry("pending commit could not be restored because the branch moved"));
             }
             head = Some(pending.commit_oid.clone());
@@ -393,6 +359,26 @@ fn recover_after_ref_update(
         ))
     })?;
     Ok(true)
+}
+
+/// Atomically moves the branch from `parent` (or creates it for a root commit) and the transaction
+/// ref from the prepared tree to `commit_oid`. Either ref having moved fails the whole update.
+fn advance_branch(
+    repository: &Repository,
+    transaction: &Transaction,
+    commit_oid: &str,
+    parent: Option<&str>,
+) -> Result<()> {
+    let branch_ref = format!("refs/heads/{}", transaction.branch);
+    let transaction_ref = transaction.reference();
+    let branch_update = match parent {
+        Some(parent) => RefUpdate::Update { reference: &branch_ref, new_oid: commit_oid, old_oid: parent },
+        None => RefUpdate::Create { reference: &branch_ref, new_oid: commit_oid },
+    };
+    repository.update_refs(&[
+        branch_update,
+        RefUpdate::Update { reference: &transaction_ref, new_oid: commit_oid, old_oid: &transaction.prepared_tree },
+    ])
 }
 
 fn mark_committed(transaction: &mut Transaction, commit_oid: &str) {
@@ -769,11 +755,8 @@ fn disclose_rebased_commit(repository: &Repository, transaction: &Transaction) -
 // commit. Exact entries or a no-op three-way blob merge prove that captured HEAD
 // still carries every committed path's delta, including unrelated same-file edits.
 fn branch_integration(repository: &Repository, transaction: &Transaction, commit_oid: &str) -> Result<Integration> {
-    let ancestry = repository.raw(["merge-base", "--is-ancestor", commit_oid, "HEAD"], None)?;
-    match ancestry.status.code() {
-        Some(0) => return Ok(Integration::Reachable),
-        Some(1) => {}
-        _ => return Err(git_error(ancestry)),
+    if is_ancestor(repository, commit_oid, "HEAD")? {
+        return Ok(Integration::Reachable);
     }
     let head = repository.head()?;
     let mut paths: Vec<String> = transaction.paths.iter().chain(&transaction.hook_added).cloned().collect();
@@ -828,12 +811,36 @@ struct IndexLock {
     file: Option<NamedTempFile>,
 }
 
+/// The persisted contents that identify this transaction's own default index lock, or `None` before
+/// the transaction has recorded a lock token.
+fn index_lock_marker(transaction: &Transaction) -> Option<String> {
+    let token = transaction.index_lock_token.as_deref()?;
+    Some(format!("ai-commit-index-lock {} {token}\n", transaction.id))
+}
+
+fn index_lock_path(index_path: &Path) -> PathBuf {
+    let mut lock_name = index_path.as_os_str().to_os_string();
+    lock_name.push(".lock");
+    PathBuf::from(lock_name)
+}
+
+/// Removes a default index lock left behind by this transaction. A lock with any other contents
+/// belongs to another process and stays in place.
+pub(crate) fn remove_stale_index_lock(repository: &Repository, transaction: &Transaction) -> Result<()> {
+    let Some(marker) = index_lock_marker(transaction) else {
+        return Ok(());
+    };
+    let lock = index_lock_path(&repository.git_path("index")?);
+    if fs::read(&lock).ok().as_deref() == Some(marker.as_bytes()) {
+        fs::remove_file(&lock)?;
+    }
+    Ok(())
+}
+
 impl IndexLock {
     fn acquire(repository: &Repository, marker: &str) -> Result<Self> {
         let index_path = repository.git_path("index")?;
-        let mut lock_name = index_path.as_os_str().to_os_string();
-        lock_name.push(".lock");
-        let lock_path = PathBuf::from(lock_name);
+        let lock_path = index_lock_path(&index_path);
         for attempt in 1..=5 {
             match OpenOptions::new().read(true).write(true).create_new(true).open(&lock_path) {
                 Ok(mut file) => {

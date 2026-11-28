@@ -11,7 +11,10 @@ use crate::{
     cli::{DiffMode, PrepareArgs},
     config, coord,
     error::{AppError, Result},
-    git::{Repository, copy_file, decode_nul_paths, git_error, literal_pathspec, output_text, validate_safe_path_text},
+    git::{
+        RefUpdate, Repository, copy_file, decode_nul_paths, git_error, literal_pathspec, nul_separated, output_text,
+        validate_safe_path_text,
+    },
     rules,
     state::{MessageFormat, Store, Transaction, TransactionStatus, now_seconds},
 };
@@ -148,10 +151,10 @@ pub fn run(args: PrepareArgs, store: &Store) -> Result<()> {
     let transaction_ref = transaction.reference();
     let base_ref = transaction.base_reference();
     let index_ref = transaction.index_reference();
-    repository.create_refs(&[
-        (&transaction_ref, &prepared_tree),
-        (&base_ref, &transaction.base_head),
-        (&index_ref, &transaction.shared_index_tree),
+    repository.update_refs(&[
+        RefUpdate::Create { reference: &transaction_ref, new_oid: &prepared_tree },
+        RefUpdate::Create { reference: &base_ref, new_oid: &transaction.base_head },
+        RefUpdate::Create { reference: &index_ref, new_oid: &transaction.shared_index_tree },
     ])?;
     if let Err(error) = store.save(&transaction) {
         let _ = repository.delete_refs(&transaction.references());
@@ -338,15 +341,6 @@ fn stage_worktree(repository: &Repository, index: &Path, base_head: &str, all: b
     Ok(())
 }
 
-fn nul_separated(values: impl Iterator<Item = String>) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    for value in values {
-        bytes.extend_from_slice(value.as_bytes());
-        bytes.push(0);
-    }
-    bytes
-}
-
 fn pathspec_batches(pathspecs: &[String]) -> Vec<&[String]> {
     if pathspecs.is_empty() { vec![pathspecs] } else { pathspecs.chunks(PATH_BATCH_SIZE).collect() }
 }
@@ -417,18 +411,15 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
         if !seen.insert(path.clone()) {
             return Err(AppError::usage(format!("duplicate baseline path: {path}")));
         }
-        if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(AppError::usage(format!("invalid baseline blob OID for path {path}: {oid}")));
-        }
-        let output = repository.raw(["cat-file", "-t", oid], None)?;
-        if !output.status.success() {
-            return Err(AppError::usage(format!("invalid baseline blob OID for path {path}: {oid}")));
-        }
-        let kind = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        if kind != "blob" {
-            return Err(AppError::usage(format!("baseline OID is not a blob for path {path}: {oid}")));
-        }
-        let oid = repository.text(["rev-parse", "--verify", &format!("{oid}^{{blob}}")], None)?;
+        let oid = match lookup_blob(repository, oid)? {
+            BlobLookup::Blob(oid) => oid,
+            BlobLookup::Invalid => {
+                return Err(AppError::usage(format!("invalid baseline blob OID for path {path}: {oid}")));
+            }
+            BlobLookup::NotBlob => {
+                return Err(AppError::usage(format!("baseline OID is not a blob for path {path}: {oid}")));
+            }
+        };
         baselines.push(Baseline { path, oid, automatic: false, skipped: false });
     }
     if !args.staged && !args.no_auto_baseline {
@@ -442,17 +433,7 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
             if seen.contains(&path) || (!args.all && !intended_paths.contains(&path)) {
                 continue;
             }
-            if !matches!(raw_oid.len(), 40 | 64) || !raw_oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                continue;
-            }
-            let output = match repository.raw(["cat-file", "-t", &raw_oid], None) {
-                Ok(output) if output.status.success() => output,
-                _ => continue,
-            };
-            if String::from_utf8_lossy(&output.stdout).trim() != "blob" {
-                continue;
-            }
-            let Ok(oid) = repository.text(["rev-parse", "--verify", &format!("{raw_oid}^{{blob}}")], None) else {
+            let Ok(BlobLookup::Blob(oid)) = lookup_blob(repository, &raw_oid) else {
                 continue;
             };
             seen.insert(path.clone());
@@ -460,6 +441,27 @@ fn parse_baselines(repository: &Repository, args: &PrepareArgs, intended_paths: 
         }
     }
     Ok(baselines)
+}
+
+enum BlobLookup {
+    Blob(String),
+    NotBlob,
+    Invalid,
+}
+
+/// Resolves a full-length hexadecimal object ID to its canonical blob OID.
+fn lookup_blob(repository: &Repository, oid: &str) -> Result<BlobLookup> {
+    if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Ok(BlobLookup::Invalid);
+    }
+    let output = repository.raw(["cat-file", "-t", oid], None)?;
+    if !output.status.success() {
+        return Ok(BlobLookup::Invalid);
+    }
+    if String::from_utf8_lossy(&output.stdout).trim() != "blob" {
+        return Ok(BlobLookup::NotBlob);
+    }
+    repository.text(["rev-parse", "--verify", &format!("{oid}^{{blob}}")], None).map(BlobLookup::Blob)
 }
 
 /// Advisory: prepared paths outside this session's active ai-coord claim. Empty when ai-coord is
