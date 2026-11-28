@@ -101,9 +101,8 @@ wakes the session. In that case, apply the shared wake handling and never end th
 reconciliation, required polish, and commit. The parent claim authorizes each delegate's assigned writes and is not a
 conflict.
 
-One work item per session requires the full union at the start. When follow-on work expands the scope, expand it only at
-a wave boundary. At that boundary, run `ai-coord done`, then start a fresh item over the enlarged union before launching
-the next wave.
+One work item per session requires the full union at the start. When follow-on work expands the scope, resubmit
+`ai-coord start` with the complete updated scope union, as the shared Failure Classification requires.
 
 For every agent, create separate per-agent artifact paths ending in `<agent-id>.progress.jsonl`,
 `<agent-id>.result.json`, and `<agent-id>.stderr.log` under `${TMPDIR:-/tmp}`. Convert its configured whole-minute

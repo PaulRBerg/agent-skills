@@ -30,7 +30,7 @@ Direct the receiving session to load it from Plan mode and use the handoff as it
 can implement it. Do not rely on bare `$orchestration` discovery.
 
 Task-handoff still creates exactly one file and never launches orchestration itself. Use task-handoff when work
-continues later or elsewhere, and an in-session handoff skill when implementing an approved plan now.
+continues later or elsewhere, and orchestration when implementing requested work now.
 
 ## Select the work
 
@@ -108,7 +108,7 @@ actions still awaiting approval so the receiving session can continue authorized
 questions. A handoff does not itself grant approval or override the receiving host's restrictions.
 
 Add a `## Execution approach` section. For a simple task, direct the receiving session to execute this one isolated
-handoff without invoking an in-session handoff skill. For a complex task, write the resolved absolute directory path of
+handoff without invoking orchestration. For a complex task, write the resolved absolute directory path of
 `~/.agents/skills/orchestration` into the execution approach. Reuse the earlier resolution and readable `SKILL.md`
 check. Resolve and verify it again only if you have not done so or the location changed. Explicitly direct the receiving
 session to enter Plan mode, load the skill from that path, and use this file as the decision-complete task

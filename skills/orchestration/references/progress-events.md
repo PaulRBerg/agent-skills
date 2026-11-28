@@ -5,8 +5,9 @@ line Codex emits under `codex exec --json`, followed by one wrapper-authored sen
 exit nonzero before the stream exists. Those failures write no sentinel. After the run starts, the wrapper writes
 exactly one sentinel.
 
-Tail the stream for real-time watching and post-mortems. Pass `--result-file PATH` separately to keep the final
-structured result in an artifact and leave background-task stdout empty.
+Watch the stream through the wave watcher below. Read the stream directly only for post-mortems. Pass
+`--result-file PATH` separately to keep the final structured result in an artifact and leave background-task stdout
+empty.
 
 Sessions persist. Record the `thread.started` session ID. Then pass `--resume SESSION_ID` to continue that session with
 the same wrapper controls and a new stdin prompt.

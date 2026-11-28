@@ -20,7 +20,7 @@ description:
 
 This skill delegates read-only investigation or plans and implements requested work within the current session.
 Task-handoff writes a decision-complete file for a fresh, separate session. Use it when work continues later or
-elsewhere. Use an in-session handoff skill to implement requested work now.
+elsewhere. Use this skill to implement requested work now.
 
 If a slash or dollar invocation already supplied these instructions in the conversation, follow them directly. In that
 case, do not invoke this skill again through a skill tool.
