@@ -82,11 +82,11 @@ adds shared-target selection, one cross-repository major batch, and per-reposito
    declarations. This mode requires Taze `>=21.3.0 <22` and rejects unsupported project or ancestor configuration before
    writes.
 
-   For repositories without Bun catalogs, omit `--direct-only`:
-
    ```sh
    bash <skill-dir>/scripts/run-taze.sh --write --direct-only --include package-a,package-b
    ```
+
+   For repositories without Bun catalogs, omit `--direct-only`.
 
 7. Run `ni` so the repository's package manager updates its lockfile.
 

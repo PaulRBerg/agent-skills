@@ -50,7 +50,8 @@ Run the single-repository baseline (Workflow step 5) in each repository before i
   `update-bun-catalogs.py` preview and `--write` with that copy.
 - Other direct dependencies: when the target equals the plan's `available`, write with
   `run-taze.sh --write --include <packages>`. Otherwise install the target through the repository's package manager in
-  the same dependency section with the existing range prefix (for example `bun add -d pkg@^x.y.z`).
+  the same dependency section with the existing range prefix (for example `bun add -d pkg@^x.y.z`). In a repository with
+  Bun catalogs, add `--direct-only` to the `run-taze.sh` write.
 - Regenerate the lockfile with the repository's package manager.
 
 ## 6. Validate and Commit Per Repository
