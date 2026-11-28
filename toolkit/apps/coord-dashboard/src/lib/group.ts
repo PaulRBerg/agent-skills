@@ -23,14 +23,18 @@ function sortedFirstRoot(repoRoots: string[]): string {
   return repoRoots.toSorted()[0]!;
 }
 
+function claimHome(session: Session | undefined, claims: { repo_root: string }[]): string {
+  const sessionRoot = session ? sessionRepo(session) : undefined;
+  return sessionRoot && claims.some((claim) => claim.repo_root === sessionRoot)
+    ? sessionRoot
+    : sortedFirstRoot(claims.map((claim) => claim.repo_root));
+}
+
 function draftHome(draft: SnapshotDraft, sessionsByKey: Map<string, Session>): string {
   const ownerSession = draft.owner
     ? sessionsByKey.get(sessionKey(draft.owner.client, draft.owner.session_id))
     : undefined;
-  const ownerRoot = ownerSession ? sessionRepo(ownerSession) : undefined;
-  return ownerRoot && draft.claims.some((claim) => claim.repo_root === ownerRoot)
-    ? ownerRoot
-    : sortedFirstRoot(draft.claims.map((claim) => claim.repo_root));
+  return claimHome(ownerSession, draft.claims);
 }
 
 function draftWho(draft: SnapshotDraft, sessionsByKey: Map<string, Session>): string {
@@ -108,15 +112,10 @@ export function groupSnapshotByRepo(snapshot: Snapshot): RepoLaneModel[] {
     snapshot.sessions.map((session) => [sessionKey(session.client, session.session_id), session])
   );
   const workHome = new Map(
-    work.map((item) => {
-      const session = sessionsByKey.get(sessionKey(item.client, item.session_id));
-      const sessionRoot = session ? sessionRepo(session) : undefined;
-      const home =
-        sessionRoot && item.claims.some((claim) => claim.repo_root === sessionRoot)
-          ? sessionRoot
-          : sortedFirstRoot(item.claims.map((claim) => claim.repo_root));
-      return [item.id, home];
-    })
+    work.map((item) => [
+      item.id,
+      claimHome(sessionsByKey.get(sessionKey(item.client, item.session_id)), item.claims),
+    ])
   );
   const draftHomeById = new Map(
     snapshot.drafts.map((draft) => [draft.id, draftHome(draft, sessionsByKey)])

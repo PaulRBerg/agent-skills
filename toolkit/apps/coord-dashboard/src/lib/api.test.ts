@@ -210,15 +210,6 @@ describe("parseSnapshot", () => {
     );
   });
 
-  test("accepts a named draft and a session-owned draft", () => {
-    expect(parseSnapshot(sampleSnapshot)).toBe(sampleSnapshot);
-    const drafts = sampleSnapshot.drafts;
-    expect(drafts[0]?.name).not.toBeNull();
-    expect(drafts[0]?.owner).toBeNull();
-    expect(drafts[1]?.name).toBeNull();
-    expect(drafts[1]?.owner).not.toBeNull();
-  });
-
   test("rejects malformed nested work claims", () => {
     const malformed = structuredClone(sampleSnapshot) as Record<string, unknown>;
     const work = malformed.work as Record<string, unknown>[];

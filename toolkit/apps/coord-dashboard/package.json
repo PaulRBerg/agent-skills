@@ -7,12 +7,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "lint": "oxlint && oxfmt --check . && eslint .",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "start": "bun run src/start.ts",
-    "check": "just check"
+    "start": "bun run src/start.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

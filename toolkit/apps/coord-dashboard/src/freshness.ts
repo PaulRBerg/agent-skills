@@ -32,10 +32,9 @@ export function isBuildFresh(freshness: BuildFreshness): boolean {
   );
 }
 
-async function mtime(path: string): Promise<number | null> {
+async function statIfPresent(path: string) {
   try {
-    const metadata = await stat(path);
-    return metadata.mtimeMs;
+    return await stat(path);
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return null;
@@ -44,15 +43,15 @@ async function mtime(path: string): Promise<number | null> {
   }
 }
 
+async function mtime(path: string): Promise<number | null> {
+  const metadata = await statIfPresent(path);
+  return metadata?.mtimeMs ?? null;
+}
+
 async function latestTreeMtime(path: string): Promise<number | null> {
-  let metadata;
-  try {
-    metadata = await stat(path);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
+  const metadata = await statIfPresent(path);
+  if (metadata === null) {
+    return null;
   }
 
   let latest = metadata.mtimeMs;

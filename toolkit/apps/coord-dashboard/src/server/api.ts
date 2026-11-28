@@ -41,13 +41,19 @@ function responseBody(method: string, bytes: Uint8Array): BodyInit | null {
   return method === "HEAD" ? null : (bytes as BodyInit);
 }
 
-async function fileResponse(path: string, method: string): Promise<Response | null> {
+async function fileResponse(
+  path: string,
+  method: string,
+  transform?: (content: string) => string
+): Promise<Response | null> {
   try {
     const metadata = await stat(path);
     if (!metadata.isFile()) {
       return null;
     }
-    const bytes = new Uint8Array(await readFile(path));
+    const bytes = transform
+      ? new TextEncoder().encode(transform(await readFile(path, "utf-8")))
+      : new Uint8Array(await readFile(path));
     return new Response(responseBody(method, bytes), {
       headers: {
         "Content-Length": String(bytes.byteLength),
@@ -78,33 +84,6 @@ function injectHomeDirectory(html: string, home: string): string {
   return html.includes("</head>") ? html.replace("</head>", `${meta}</head>`) : `${meta}${html}`;
 }
 
-async function indexResponse(
-  indexPath: string,
-  method: string,
-  home: string
-): Promise<Response | null> {
-  try {
-    const metadata = await stat(indexPath);
-    if (!metadata.isFile()) {
-      return null;
-    }
-    const html = injectHomeDirectory(await readFile(indexPath, "utf-8"), home);
-    const bytes = new TextEncoder().encode(html);
-    return new Response(responseBody(method, bytes), {
-      headers: {
-        "Content-Length": String(bytes.byteLength),
-        "Content-Type": "text/html; charset=utf-8",
-      },
-    });
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-    console.error(`[ai-coord-dashboard] unable to serve ${indexPath}`, error);
-    return new Response("Internal Server Error", { status: 500 });
-  }
-}
-
 export function createRequestHandler(
   options: RequestHandlerOptions
 ): (request: Request) => Promise<Response> {
@@ -113,6 +92,8 @@ export function createRequestHandler(
   const apiOrigin = options.apiOrigin ?? API_ORIGIN;
   const proxyRequest = options.proxyRequest ?? ((request: Request) => fetch(request));
   const homeDirectory = options.homeDirectory ?? homedir();
+  const serveIndex = (method: string) =>
+    fileResponse(indexPath, method, (html) => injectHomeDirectory(html, homeDirectory));
   const loadHandoffs = options.loadHandoffs ?? (() => scanHandoffs());
 
   return async (request: Request): Promise<Response> => {
@@ -169,16 +150,13 @@ export function createRequestHandler(
     if (assetPath === distDirectory || assetPath.startsWith(`${distDirectory}${nodePath.sep}`)) {
       const asset =
         assetPath === indexPath
-          ? await indexResponse(indexPath, request.method, homeDirectory)
+          ? await serveIndex(request.method)
           : await fileResponse(assetPath, request.method);
       if (asset) {
         return asset;
       }
     }
 
-    return (
-      (await indexResponse(indexPath, request.method, homeDirectory)) ??
-      new Response("Not Found", { status: 404 })
-    );
+    return (await serveIndex(request.method)) ?? new Response("Not Found", { status: 404 });
   };
 }
