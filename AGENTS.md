@@ -159,10 +159,6 @@ the instructions change how a helper is used. Markdown changes always follow the
   same change, create `.agents/skill-upstreams/<name>.md` and add its provenance index entry. Follow
   [`@skill-lifecycle`](.agents/internal-skills/skill-lifecycle.md#external-provenance) for required evidence and
   enrollment checks. Track borrowed components and inspiration in provenance without labeling them as whole-skill forks.
-- Circadian's `~/projects/circadian/jobs/rebase-upstream-skills.sh` discovers the union of "Forked Skills" rows and
-  active per-skill provenance records from fresh `origin/main`. It excludes the provenance index and deduplicates skill
-  names. No per-skill scheduler list needs an update. Discovery preserves each record's merge limits and does not
-  authorize a new baseline.
 - Edit or remove installable catalog skills under `skills/` here, regardless of the session's starting repository.
   Installed copies belong to the publish workflow.
 - Changes here are not live until installed into every target declared by the skill. By default, `publish-skills`
@@ -171,23 +167,13 @@ the instructions change how a helper is used. Markdown changes always follow the
 - After validating edits to installable catalog skills, run the `publish-skills` internal skill on the user's behalf,
   including for independent repairs made during a blocked main task. Complete publication unless a concrete blocker
   prevents it. Task complexity and unrelated dirty files are not reasons to leave validated repairs unpublished.
-- Before publication, inspect `ai-coord status --json`. Consider every active work row. Commit and push catalog source
-  changes under the source-repository claim. Then release that claim before acquiring targets. Home-directory targets
-  sort before this source repository. If another agent has a queued claim overlapping any active claim, resolve or wait
-  for that conflict to end before publishing.
-
-  Require `READY` for the complete target claim set in `@publish-skills`. This source-then-target sequence is the
-  documented exception to the global rule that multi-root writes take one `ai-coord bundle start`. The target set itself
-  still uses one bundle when it spans two or more roots.
-
+- For publication, follow the source-then-target coordination sequence in `@publish-skills`. This sequence is the
+  documented exception to the global rule that multi-root writes take one `ai-coord bundle start`.
 - When creating, renaming, deleting, or shelving a catalog or internal skill, follow `@skill-lifecycle`. For catalog
   creation, also follow `@skill-authoring`. `just skill-check` must pass.
 - Before creating or editing `SKILL.md` frontmatter, `agents/openai.yaml`, `metadata.install-targets`, or
   `skill-dependencies`, read `@skill-authoring`. It is the authoritative metadata reference. Do not guess field
   semantics.
-- Internal skills are special repo-private runbooks. Place them under `.agents/internal-skills/<name>.md`, not under
-  `skills/`. Do not add them to `README.md`. Do not create `agents/openai.yaml`. Do not treat them as installable
-  catalog skills.
 - After editing skills that must stay aligned, run the `sync-skills` internal skill to check coupled skills and helper
   data.
 - When an installed CLI outpaces a `cli-*` skill's `references/version.txt`, refresh it with `@refresh-cli-skill`.

@@ -36,8 +36,8 @@ deduplicates names. Do not add a per-skill scheduler list or run a live rebase t
 
 Before committing, verify any whole-skill table row, record, index link, and existing `skills/<name>/SKILL.md` agree.
 After pushing, fetch `origin/main` and inspect its table and provenance record with `git show origin/main:<path>`.
-Confirm that the name still matches its active skill path. The scheduler discovers these inputs without a live rebase.
-Follow `@rebase-skill` for review and merge limits. Enrollment does not approve an unknown base or expand a mapping.
+Confirm that the name still matches its active skill path. Follow `@rebase-skill` for review and merge limits.
+Enrollment does not approve an unknown base or expand a mapping.
 
 ## Rename (Catalog)
 

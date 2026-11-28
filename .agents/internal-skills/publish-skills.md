@@ -28,6 +28,9 @@ ambiguous, stop. An empty scoped selection is a no-op. Never replace it with ful
 
 ## Workflow
 
+Before publication, inspect `ai-coord status --json`. Consider every active work row. If another agent has a queued
+claim that overlaps any active claim, resolve or wait for that conflict to end before publishing.
+
 ### 1. Commit and Push Source
 
 If attributable source changes are uncommitted, run `$commit --push` from the source repository without `--all`. Pass
@@ -47,7 +50,9 @@ Publication requires propagation. If the commit workflow skips a push because no
 global installations. Report the missing destination as a blocker. `PUSH_SKIPPED` does not prove propagation.
 
 Keep this work under the source-repository claim through its commit and push. Then run `ai-coord done` for that claim
-before step 2 acquires the target claims.
+before step 2 acquires the target claims. Home-directory targets sort before this source repository. This
+source-then-target sequence is the documented exception to the global rule that multi-root writes take one
+`ai-coord bundle start`.
 
 ### 2. Plan, Claim, and Apply
 

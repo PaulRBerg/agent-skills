@@ -97,6 +97,7 @@ Files:
 
 - `skills/skill-harmonization/SKILL.md`
 - `skills/agents-brain/references/create-skill.md`
+- `skills/agents-brain/references/maintain-skills.md`
 - `skills/agents-brain/references/writing-great-skills.md`
 
 Wherever a consumer declares an ai-skillet minimum version, keep it at `1.0.0+`. Each consumer must invoke its
@@ -104,9 +105,12 @@ ai-skillet subcommand directly:
 
 - `skill-harmonization` uses `map`, plus optional `doctor` evidence.
 - `agents-brain create-skill` uses `doctor`.
+- `agents-brain maintain` uses `map` as optional evidence, with explicit `--root` and `--skill` filters. When the CLI is
+  unavailable, it uses bounded repository searches.
 
-Do not use a retired Python, uv, ripgrep, helper-resolution, wrapper, or fallback path. `toolkit/skillet/` and the
-workspace version in `toolkit/Cargo.toml` are the producer whose contract the `1.0.0+` minimum tracks.
+Do not use a retired Python, uv, ripgrep, helper-resolution, wrapper, or fallback path to the ai-skillet engine. The
+bounded repository search in `agents-brain maintain` is not such a path. `toolkit/skillet/` and the package version in
+`toolkit/skillet/Cargo.toml` are the producer whose contract the `1.0.0+` minimum tracks.
 
 `toolkit/skillet/AGENTS.md` is authoritative for the extended-dialect contract. Keep the `Frontmatter Dialect` section
 of `writing-great-skills.md` a faithful summary of its field union and cross-field rules. Exit codes, the `--fix-safe`
