@@ -155,7 +155,7 @@ def init_command(args: argparse.Namespace) -> dict[str, Any]:
     if args.ledger.exists():
         raise LedgerError(f"ledger already exists: {args.ledger}")
     root = repo_root(args.root.resolve())
-    scopes = normalize_scopes(root, args.scopes + args.scope)
+    scopes = normalize_scopes(root, args.scopes)
     tracked = set(nul_paths(git(root, "ls-files", "-z")))
     status = preexisting_status(root)
     untracked = {path for path, codes in status.items() if "??" in codes}
@@ -222,7 +222,6 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     init = subparsers.add_parser("init")
     init.add_argument("scopes", nargs="*")
-    init.add_argument("--scope", action="append", default=[])
     init.add_argument("--root", type=Path, default=Path.cwd())
     init.add_argument("--ledger", type=Path, required=True)
     init.set_defaults(handler=init_command)
