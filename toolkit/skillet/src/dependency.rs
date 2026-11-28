@@ -56,6 +56,24 @@ impl fmt::Display for InvalidSkillName {
 
 impl std::error::Error for InvalidSkillName {}
 
+/// Validate repeatable `--skill` filters, reporting every invalid name together.
+pub(crate) fn skill_filter(values: &[String]) -> Result<BTreeSet<String>, crate::error::Error> {
+    let mut selected = BTreeSet::new();
+    let mut invalid = BTreeSet::new();
+    for value in values {
+        if SkillName::parse(value).is_ok() {
+            selected.insert(value.clone());
+        } else {
+            invalid.insert(value.clone());
+        }
+    }
+    if invalid.is_empty() {
+        Ok(selected)
+    } else {
+        Err(crate::error::Error::InvalidSkillFilter(invalid.into_iter().collect()))
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ExternalDependency {
     pub owner: String,

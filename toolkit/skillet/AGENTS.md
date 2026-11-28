@@ -20,9 +20,7 @@ verification.
 
 ### Status
 
-ai-skillet provides synchronous, no-network `map` and `doctor` engines. JSON reports use the clean Rust schema
-version 1. The schema preserves the Python tools' consumer contracts, but output is not byte-compatible with the Python
-implementation.
+ai-skillet provides synchronous, no-network `map` and `doctor` engines. JSON reports use schema version 1.
 
 ### Commands
 
@@ -135,17 +133,8 @@ existing `--fix-safe` boundary.
 | Doctor       | The validator checks the complete supported frontmatter union plus every metadata, dependency, coordination, resource, README, prompt-hygiene, and CLI-version finding family. | YAML and OpenAI policy diagnostics are structural. Safe fixes are isolated and atomic.                               |
 | Dependencies | The validator checks bare and external identifiers, uniqueness, self-reference, resolution, and target-name ordering.                                                          | External owner/repository case is preserved. Repository names ending in `.git` are rejected.                         |
 
-The integration tests in `tests/conformance.rs`, `tests/map.rs`, `tests/doctor.rs`, and `tests/catalog.rs` are the
-executable contract. Python captures are migration evidence, not golden output fixtures.
-
-### Development
-
-The toolkit workspace selects nightly Rust with the minimal profile plus `clippy` and `rustfmt`.
-
-```sh
-cargo test -p ai-skillet --locked
-just rust-check
-```
+The integration tests in `tests/conformance.rs`, `tests/map.rs`, `tests/doctor.rs`, `tests/catalog.rs`, and
+`tests/cli_surface.rs` are the executable contract.
 
 ### License
 

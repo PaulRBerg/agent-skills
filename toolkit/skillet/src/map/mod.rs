@@ -12,7 +12,7 @@ use std::{
 use crate::{
     catalog::{Catalog, Skill, SkillHashes},
     cli::MapArgs,
-    dependency::SkillName,
+    dependency::skill_filter,
     error::Error,
     exclusions::{
         ALWAYS_IGNORED_HOME_PATHS, BROAD_SCAN_CACHE_PATHS, CATALOG_SOURCE_HOME_PATHS, CLAUDE_AGENT_STATE_DIRECTORIES,
@@ -32,7 +32,7 @@ use model::{
 pub use model::{EvidenceRecord, MapReport as Report};
 
 pub fn run(args: MapArgs) -> Result<(), Error> {
-    let selected = selected_names(&args.skill)?;
+    let selected = skill_filter(&args.skill)?;
     let resolved = roots::resolve(&args)?;
     let catalog = Catalog::load(&resolved.requests)?;
     reject_unmappable_diagnostics(&catalog)?;
@@ -103,19 +103,6 @@ pub fn run(args: MapArgs) -> Result<(), Error> {
         .write_all(output.as_bytes())
         .map_err(|error| Error::io("write map to", Path::new("stdout"), error))?;
     Ok(())
-}
-
-fn selected_names(values: &[String]) -> Result<BTreeSet<String>, Error> {
-    let mut selected = BTreeSet::new();
-    let mut invalid = BTreeSet::new();
-    for value in values {
-        if SkillName::parse(value).is_ok() {
-            selected.insert(value.clone());
-        } else {
-            invalid.insert(value.clone());
-        }
-    }
-    if invalid.is_empty() { Ok(selected) } else { Err(Error::InvalidSkillFilter(invalid.into_iter().collect())) }
 }
 
 fn reject_unmappable_diagnostics(catalog: &Catalog) -> Result<(), Error> {

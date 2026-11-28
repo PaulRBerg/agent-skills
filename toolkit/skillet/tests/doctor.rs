@@ -243,7 +243,6 @@ fn fix_safe_leaves_missing_installed_metadata_absent() {
     assert_eq!(report["counts"]["findings"], 0);
     assert_eq!(report["counts"]["fixes"], 0);
     assert!(!agents.exists());
-    assert!(!agents.join("openai.yaml").exists());
 }
 
 #[test]

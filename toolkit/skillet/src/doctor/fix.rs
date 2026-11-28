@@ -30,8 +30,7 @@ fn replace_policy_value(original: &str, expected: bool) -> Option<String> {
     let mut offset = 0usize;
     for line in original.split_inclusive('\n') {
         let content = line.trim_end_matches(['\n', '\r']);
-        let top_level =
-            !content.is_empty() && !content.starts_with([' ', '\t', '#']) && content != "---" && content != "...";
+        let top_level = is_top_level_yaml_line(content);
         if policy_start.is_none() {
             if top_level &&
                 content
@@ -63,6 +62,11 @@ fn replace_policy_value(original: &str, expected: bool) -> Option<String> {
     updated.push_str(if expected { "true" } else { "false" });
     updated.push_str(&original[absolute_end..]);
     Some(updated)
+}
+
+/// Whether a line starts a top-level YAML key, which ends any open `policy:` block.
+pub(super) fn is_top_level_yaml_line(content: &str) -> bool {
+    !content.is_empty() && !content.starts_with([' ', '\t', '#']) && content != "---" && content != "..."
 }
 
 #[derive(Clone, Copy)]

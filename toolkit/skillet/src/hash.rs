@@ -15,17 +15,8 @@ use crate::{
 const COPY_BUFFER_BYTES: usize = 1024 * 1024;
 
 pub fn sha256_file(path: &Path) -> Result<String, Error> {
-    let file = File::open(path).map_err(|error| Error::io("hash", path, error))?;
-    let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file);
     let mut digest = Sha256::new();
-    let mut buffer = vec![0; COPY_BUFFER_BYTES];
-    loop {
-        let read = reader.read(&mut buffer).map_err(|error| Error::io("hash", path, error))?;
-        if read == 0 {
-            break;
-        }
-        digest.update(&buffer[..read]);
-    }
+    update_from_file(&mut digest, path, &mut vec![0; COPY_BUFFER_BYTES])?;
     Ok(finalize_hex(digest))
 }
 
@@ -55,21 +46,25 @@ pub fn sha256_tree(directory: &Path) -> Result<String, Error> {
 
         if file_type.is_file() {
             hash_field(&mut digest, &metadata.len().to_be_bytes());
-            let file = File::open(&path).map_err(|error| Error::io("hash", &path, error))?;
-            let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file);
-            loop {
-                let read = reader.read(&mut buffer).map_err(|error| Error::io("hash", &path, error))?;
-                if read == 0 {
-                    break;
-                }
-                digest.update(&buffer[..read]);
-            }
+            update_from_file(&mut digest, &path, &mut buffer)?;
         } else if file_type.is_symlink() {
             let target = fs::read_link(&path).map_err(|error| Error::io("read symlink while hashing", &path, error))?;
             hash_field(&mut digest, target.as_os_str().as_encoded_bytes());
         }
     }
     Ok(finalize_hex(digest))
+}
+
+fn update_from_file(digest: &mut Sha256, path: &Path, buffer: &mut [u8]) -> Result<(), Error> {
+    let file = File::open(path).map_err(|error| Error::io("hash", path, error))?;
+    let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file);
+    loop {
+        let read = reader.read(buffer).map_err(|error| Error::io("hash", path, error))?;
+        if read == 0 {
+            return Ok(());
+        }
+        digest.update(&buffer[..read]);
+    }
 }
 
 fn finalize_hex(digest: Sha256) -> String {

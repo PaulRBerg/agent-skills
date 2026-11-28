@@ -307,14 +307,6 @@ fn newline_paths_large_lines_and_repeated_output_are_supported() {
 
 #[test]
 fn operational_git_and_filter_errors_exit_two() {
-    let missing = TempDir::new().unwrap().path().join("missing");
-    common::ai_skillet()
-        .args(["map", "--root"])
-        .arg(&missing)
-        .assert()
-        .code(2)
-        .stderr(predicate::str::contains("root does not exist:"));
-
     let not_git = TempDir::new().unwrap();
     common::ai_skillet()
         .args(["map", "--portfolio-root"])

@@ -17,7 +17,7 @@ use crate::{
     RunOutcome,
     catalog::Catalog,
     cli::DoctorArgs,
-    dependency::SkillName,
+    dependency::skill_filter,
     error::Error,
     traversal::{RootRequest, ScanRoot, normalize_roots, recognized_skill_file},
 };
@@ -55,7 +55,7 @@ struct ScopePlan {
 
 impl ScopePlan {
     fn new(args: &DoctorArgs) -> Result<Self, Error> {
-        let selected_names = selected_names(&args.skill)?;
+        let selected_names = skill_filter(&args.skill)?;
         let requested = if args.root.is_empty() {
             vec![RootRequest::explicit(
                 env::current_dir()
@@ -135,17 +135,4 @@ fn conventional_direct_skill(root: &ScanRoot) -> Option<PathBuf> {
     let parent = root.exposure_path.parent()?;
     let skill_path = root.exposure_path.join("SKILL.md");
     (parent.file_name() == Some(OsStr::new("skills")) && skill_path.is_file()).then_some(skill_path)
-}
-
-fn selected_names(values: &[String]) -> Result<BTreeSet<String>, Error> {
-    let mut selected = BTreeSet::new();
-    let mut invalid = BTreeSet::new();
-    for value in values {
-        if SkillName::parse(value).is_ok() {
-            selected.insert(value.clone());
-        } else {
-            invalid.insert(value.clone());
-        }
-    }
-    if invalid.is_empty() { Ok(selected) } else { Err(Error::InvalidSkillFilter(invalid.into_iter().collect())) }
 }

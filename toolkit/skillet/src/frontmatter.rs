@@ -113,7 +113,6 @@ pub struct Frontmatter {
     pub name: Option<Located<String>>,
     pub description: Option<Located<String>>,
     pub compatibility: Option<Located<String>>,
-    pub argument_hint: Option<Located<String>>,
     pub user_invocable: Option<Located<bool>>,
     pub disable_model_invocation: Option<Located<bool>>,
     pub model: Option<Located<String>>,
@@ -280,7 +279,6 @@ fn extract_frontmatter(fields: &[(Spanned<String>, Spanned<YamlValue>)]) -> Fron
             "name" => frontmatter.name = string_value(value, field_location),
             "description" => frontmatter.description = string_value(value, field_location),
             "compatibility" => frontmatter.compatibility = string_value(value, field_location),
-            "argument-hint" => frontmatter.argument_hint = string_value(value, field_location),
             "user-invocable" => frontmatter.user_invocable = bool_value(value, field_location),
             "disable-model-invocation" => {
                 frontmatter.disable_model_invocation = bool_value(value, field_location);

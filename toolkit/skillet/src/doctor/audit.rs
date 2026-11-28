@@ -437,7 +437,7 @@ fn value_finding(skill: &Skill, line: u64, code: &str, message: impl Into<String
 }
 
 fn check_coordination(skill: &Skill, frontmatter: &Frontmatter, source: &str, findings: &mut Vec<Finding>) {
-    let body_start = frontmatter_ranges(source).map_or(0, |(_, body)| body);
+    let body_start = frontmatter_body_start(source).unwrap_or(0);
     let body = &source[body_start..];
     let prose = markdown_prose(body);
     let normalized = prose.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -776,18 +776,17 @@ fn counts(findings: &[Finding], fixes: &[Fix]) -> Counts {
     }
 }
 
-fn frontmatter_ranges(source: &str) -> Option<(std::ops::Range<usize>, usize)> {
+fn frontmatter_body_start(source: &str) -> Option<usize> {
     let mut lines = source.split_inclusive('\n');
     let first = lines.next()?;
     if first.trim_start_matches('\u{feff}').trim_end_matches(['\n', '\r']).trim_end() != "---" {
         return None;
     }
-    let yaml_start = first.len();
-    let mut offset = yaml_start;
+    let mut offset = first.len();
     for line in lines {
         let content = line.trim_end_matches(['\n', '\r']).trim_end();
         if content == "---" {
-            return Some((yaml_start..offset, offset + line.len()));
+            return Some(offset + line.len());
         }
         offset += line.len();
     }
@@ -806,8 +805,7 @@ fn policy_value_line(source: &str) -> Option<u64> {
     let mut in_policy = false;
     for (index, line) in source.lines().enumerate() {
         let content = line.trim_end_matches('\r');
-        let top_level =
-            !content.is_empty() && !content.starts_with([' ', '\t', '#']) && content != "---" && content != "...";
+        let top_level = fix::is_top_level_yaml_line(content);
         if top_level {
             if in_policy {
                 return None;
