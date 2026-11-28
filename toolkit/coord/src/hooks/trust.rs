@@ -3,7 +3,7 @@ use std::{
     env, fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, Command, ExitStatus, Stdio},
+    process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -342,7 +342,8 @@ fn require_codex_minimum_version(output: &str) -> Result<()> {
         .ok_or_else(|| CodexTrustError::new("could not parse `codex --version` output"))?;
     let version = semver::Version::parse(version_text)
         .map_err(|_| CodexTrustError::new("could not parse `codex --version` output"))?;
-    if version < semver::Version::new(0, 146, 0) {
+    let minimum = semver::Version::parse(CODEX_MINIMUM_VERSION_TEXT).expect("minimum Codex version is valid SemVer");
+    if version < minimum {
         return Err(CodexTrustError::new(format!(
             "Codex hook trust requires codex-cli >= {CODEX_MINIMUM_VERSION_TEXT}; found {version_text}"
         )));
@@ -365,7 +366,8 @@ impl Runtime for CodexRuntime {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|error| CodexTrustError::new(format!("could not determine Codex version: {error}")))?;
-        let status = wait_for_child(&mut child, CODEX_TIMEOUT)
+        let status = child
+            .wait_timeout(CODEX_TIMEOUT)
             .map_err(|error| CodexTrustError::new(format!("could not determine Codex version: {error}")))?;
         if status.is_none() {
             let _ = child.kill();
@@ -569,7 +571,7 @@ impl JsonlTransport for ChildTransport {
 impl Drop for ChildTransport {
     fn drop(&mut self) {
         self.stdin.take();
-        if wait_for_child(&mut self.child, CODEX_TIMEOUT).ok().flatten().is_none() {
+        if self.child.wait_timeout(CODEX_TIMEOUT).ok().flatten().is_none() {
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
@@ -636,10 +638,6 @@ fn read_bounded_line<R: BufRead>(reader: &mut R) -> io::Result<Option<Vec<u8>>> 
             return Ok(Some(line));
         }
     }
-}
-
-fn wait_for_child(child: &mut Child, timeout: Duration) -> io::Result<Option<ExitStatus>> {
-    child.wait_timeout(timeout)
 }
 
 fn active_codex_hook_path(path: Option<&Path>) -> Result<PathBuf> {

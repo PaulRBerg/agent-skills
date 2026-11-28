@@ -8,8 +8,8 @@ pub(crate) use identity::*;
 pub(crate) use process::*;
 pub(crate) use providers::*;
 
-fn hex_bytes(bytes: &[u8]) -> String {
-    hex::encode(bytes)
+pub(crate) fn path_text(path: &std::path::Path) -> crate::error::Result<String> {
+    path.to_str().map(str::to_owned).ok_or_else(|| crate::error::AppError::usage("path is not valid UTF-8"))
 }
 
 pub(crate) fn home_dir() -> Option<std::path::PathBuf> {

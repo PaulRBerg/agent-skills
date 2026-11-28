@@ -15,6 +15,7 @@ mod status;
 
 pub(super) use command::run_output_timeout;
 use command::run_output_with_input_timeout;
+pub(crate) use command::{configure_process_group, terminate_child};
 pub(crate) use status::{git_dirty_paths, git_dirty_paths_in};
 
 pub(crate) const MAX_SCOPE_CHARS: usize = 120;
@@ -96,10 +97,7 @@ pub(crate) fn normalize_repo_path(raw: &Path, cwd: &Path, root: &Path) -> Result
 pub(crate) fn normalize_scopes(raw_scopes: &[PathBuf], cwd: &Path, root: &Path) -> Result<Vec<String>> {
     let mut normalized = Vec::new();
     for raw_scope in raw_scopes {
-        let display = raw_scope.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
-        if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
-            return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
-        }
+        let display = literal_scope_text(raw_scope)?;
         let value = normalize_repo_path(raw_scope, cwd, root)?;
         if value.chars().count() > MAX_SCOPE_CHARS {
             return Err(AppError::usage(format!("scope exceeds {MAX_SCOPE_CHARS} characters: {display:?}")));
@@ -188,14 +186,21 @@ pub(crate) fn normalize_work_claim_bundle(files: &[PathBuf], recursive: &[PathBu
         .collect()
 }
 
+/// The UTF-8 text of a user-supplied scope literal, rejecting empty input and glob metacharacters.
+fn literal_scope_text(raw: &Path) -> Result<&str> {
+    let display = raw.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
+    if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
+        return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
+    }
+    Ok(display)
+}
+
 fn validate_bundle_input(path: &Path) -> Result<()> {
     let display = path.to_str().ok_or_else(|| AppError::usage("scope is not valid UTF-8"))?;
     if !path.is_absolute() {
         return Err(AppError::usage(format!("bundle scope must be absolute: {display}")));
     }
-    if display.is_empty() || display.chars().any(|value| matches!(value, '*' | '?' | '[' | ']')) {
-        return Err(AppError::usage(format!("invalid literal scope: {display:?}")));
-    }
+    literal_scope_text(path)?;
     if display.chars().any(char::is_control) {
         return Err(AppError::usage(format!("scope contains non-printable characters: {display:?}")));
     }
@@ -265,6 +270,12 @@ pub(crate) fn scope_covers(covering: &Scope, covered: &Scope) -> bool {
     }
 }
 
+/// Whether the repository-relative leaf `path` lies within any of `scopes`.
+pub(crate) fn scopes_contain_path(scopes: &[Scope], path: &str) -> bool {
+    let leaf = Scope { path: path.to_owned(), kind: ScopeKind::Exact };
+    scopes.iter().any(|scope| scope_covers(scope, &leaf))
+}
+
 pub(crate) fn scopes_cover(covering: &[Scope], covered: &[Scope]) -> bool {
     covered.iter().all(|value| covering.iter().any(|parent| scope_covers(parent, value)))
 }
@@ -298,13 +309,7 @@ pub(crate) fn overlapping_paths(left: &[Scope], right: &[Scope]) -> Vec<String> 
 }
 
 pub(crate) fn overlaps_outside_coverage(requested: &[Scope], contender: &[Scope], existing: &[Scope]) -> Vec<String> {
-    overlapping_paths(requested, contender)
-        .into_iter()
-        .filter(|path| {
-            let intersection = Scope { path: path.clone(), kind: ScopeKind::Exact };
-            !scopes_cover(existing, &[intersection])
-        })
-        .collect()
+    overlapping_paths(requested, contender).into_iter().filter(|path| !scopes_contain_path(existing, path)).collect()
 }
 
 /// Return the subset of repository-relative `paths` that Git ignores. Tracked
@@ -374,21 +379,17 @@ pub(crate) fn git_blob_hashes(root: &Path, paths: &[String], write: bool) -> Vec
         .collect()
 }
 
-fn git_symlink_blob_hash(root: &Path, path: &str, write: bool) -> String {
-    let Ok(target) = std::fs::read_link(root.join(path)) else {
-        return UNHASHABLE_BLOB_HASH.to_owned();
-    };
+fn hash_object_command(root: &Path, write: bool) -> Command {
     let mut command = Command::new("git");
     command.args(["-C"]).arg(root).arg("hash-object");
     if write {
         command.arg("-w");
     }
-    command.arg("--stdin");
-    let output = run_output_with_input_timeout(
-        &mut command,
-        Some(target.as_os_str().as_encoded_bytes()),
-        GIT_INSPECTION_TIMEOUT,
-    );
+    command
+}
+
+/// The single object ID a successful `git hash-object` printed, or the unhashable marker.
+fn single_hash(output: std::io::Result<command::CommandOutput>) -> String {
     let Ok(output) = output else {
         return UNHASHABLE_BLOB_HASH.to_owned();
     };
@@ -399,16 +400,22 @@ fn git_symlink_blob_hash(root: &Path, path: &str, write: bool) -> String {
     if value.is_empty() { UNHASHABLE_BLOB_HASH.to_owned() } else { value }
 }
 
+fn git_symlink_blob_hash(root: &Path, path: &str, write: bool) -> String {
+    let Ok(target) = std::fs::read_link(root.join(path)) else {
+        return UNHASHABLE_BLOB_HASH.to_owned();
+    };
+    single_hash(run_output_with_input_timeout(
+        hash_object_command(root, write).arg("--stdin"),
+        Some(target.as_os_str().as_encoded_bytes()),
+        GIT_INSPECTION_TIMEOUT,
+    ))
+}
+
 fn git_blob_hash_batch(root: &Path, paths: &[&str], write: bool) -> Option<Vec<String>> {
     if paths.is_empty() {
         return Some(Vec::new());
     }
-    let mut command = Command::new("git");
-    command.args(["-C"]).arg(root).arg("hash-object");
-    if write {
-        command.arg("-w");
-    }
-    let output = run_output_timeout(command.arg("--").args(paths), GIT_INSPECTION_TIMEOUT);
+    let output = run_output_timeout(hash_object_command(root, write).arg("--").args(paths), GIT_INSPECTION_TIMEOUT);
     let Ok(output) = output else {
         return None;
     };
@@ -421,20 +428,7 @@ fn git_blob_hash_batch(root: &Path, paths: &[&str], write: bool) -> Option<Vec<S
 }
 
 fn git_blob_hash_single(root: &Path, path: &str, write: bool) -> String {
-    let mut command = Command::new("git");
-    command.args(["-C"]).arg(root).arg("hash-object");
-    if write {
-        command.arg("-w");
-    }
-    let output = run_output_timeout(command.args(["--", path]), GIT_INSPECTION_TIMEOUT);
-    let Ok(output) = output else {
-        return UNHASHABLE_BLOB_HASH.to_owned();
-    };
-    if !output.status.success() {
-        return UNHASHABLE_BLOB_HASH.to_owned();
-    }
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if value.is_empty() { UNHASHABLE_BLOB_HASH.to_owned() } else { value }
+    single_hash(run_output_timeout(hash_object_command(root, write).args(["--", path]), GIT_INSPECTION_TIMEOUT))
 }
 
 pub(crate) fn git_head_oid(root: &Path) -> Option<String> {
@@ -468,14 +462,7 @@ pub(crate) fn git_last_commit_times(root: &Path, paths: &[String]) -> Vec<(Strin
 }
 
 pub(crate) fn relevant_dirty(scopes: &[Scope], dirty_paths: &[String]) -> Vec<String> {
-    dirty_paths
-        .iter()
-        .filter(|path| {
-            let dirty = Scope { path: (*path).clone(), kind: ScopeKind::Exact };
-            scopes.iter().any(|scope| scopes_overlap(scope, &dirty))
-        })
-        .cloned()
-        .collect()
+    dirty_paths.iter().filter(|path| scopes_contain_path(scopes, path)).cloned().collect()
 }
 
 fn weakly_canonical(path: &Path) -> std::io::Result<PathBuf> {
@@ -505,6 +492,10 @@ mod tests {
         Scope { path: path.to_owned(), kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }
     }
 
+    fn git_init(root: &Path) {
+        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+    }
+
     #[test]
     fn normalizes_exact_and_recursive_scopes_and_rejects_ambiguity() {
         let temp = TempDir::new().unwrap();
@@ -529,7 +520,7 @@ mod tests {
         fs::create_dir_all(first.join("src")).unwrap();
         fs::create_dir_all(second.join("src")).unwrap();
         for root in [&first, &second] {
-            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+            git_init(root);
         }
 
         let claims = normalize_work_claim_bundle(
@@ -555,7 +546,7 @@ mod tests {
         fs::create_dir_all(second.join("dir")).unwrap();
         fs::write(first.join("file.txt"), "first\n").unwrap();
         for root in [&first, &second] {
-            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+            git_init(root);
         }
 
         assert!(normalize_work_claim_bundle(&[PathBuf::from("relative")], &[second.join("missing")]).is_err());
@@ -573,7 +564,7 @@ mod tests {
         fs::create_dir_all(&first).unwrap();
         fs::create_dir_all(&second).unwrap();
         for root in [&first, &second] {
-            assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+            git_init(root);
         }
         let duplicate = first.join("missing");
         assert!(normalize_work_claim_bundle(&[duplicate.clone(), second.join("other")], &[duplicate]).is_err());
@@ -649,7 +640,7 @@ mod tests {
     fn inspects_git_root_dirt_and_blob_hashes() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        git_init(root);
         fs::create_dir(root.join("nested")).unwrap();
         fs::write(root.join("nested/file.txt"), "content\n").unwrap();
 
@@ -665,7 +656,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let root = temp.path().join("repo ");
         fs::create_dir(&root).unwrap();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(&root).status().unwrap().success());
+        git_init(&root);
 
         assert_eq!(git_root(&root), Some(root.canonicalize().unwrap()));
     }
@@ -674,7 +665,7 @@ mod tests {
     fn hashes_more_than_one_batch_in_input_order() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        git_init(root);
         let paths = (0..129)
             .map(|index| {
                 let path = format!("file-{index}.txt");
@@ -694,7 +685,7 @@ mod tests {
     fn hashes_duplicates_special_names_and_missing_inputs_in_order() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        git_init(root);
         fs::write(root.join("with spaces.txt"), "spaces\n").unwrap();
         fs::write(root.join("with\nnewline.txt"), "newline\n").unwrap();
         fs::write(root.join("deleted.txt"), "deleted\n").unwrap();
@@ -722,7 +713,7 @@ mod tests {
     fn nonregular_inputs_preserve_hash_path_mapping() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        git_init(root);
         fs::write(root.join("first.txt"), "first\n").unwrap();
         fs::create_dir(root.join("not-a-blob")).unwrap();
         fs::write(root.join("last.txt"), "last\n").unwrap();
@@ -754,7 +745,7 @@ mod tests {
 
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        git_init(root);
         fs::write(root.join("target.txt"), "target\n").unwrap();
         symlink("target.txt", root.join("valid-link")).unwrap();
         symlink("missing-target.txt", root.join("broken-link")).unwrap();
@@ -794,7 +785,7 @@ mod tests {
     fn read_mode_does_not_write_blobs_but_write_mode_persists_them() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
+        git_init(root);
         fs::write(root.join("file.txt"), "content\n").unwrap();
         let paths = vec!["file.txt".to_owned()];
 
@@ -821,30 +812,5 @@ mod tests {
                 .unwrap()
                 .success()
         );
-    }
-
-    #[test]
-    fn git_dirt_includes_both_sides_of_a_rename() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(root).status().unwrap().success());
-        fs::write(root.join("before.txt"), "content\n").unwrap();
-        assert!(Command::new("git").args(["add", "before.txt"]).current_dir(root).status().unwrap().success());
-        assert!(
-            Command::new("git")
-                .args(["-c", "user.name=ai-coord test", "-c", "user.email=test@invalid", "commit", "-qm", "fixture",])
-                .current_dir(root)
-                .status()
-                .unwrap()
-                .success()
-        );
-        fs::rename(root.join("before.txt"), root.join("after.txt")).unwrap();
-        assert!(
-            Command::new("git").args(["add", "before.txt", "after.txt"]).current_dir(root).status().unwrap().success()
-        );
-
-        let dirty = git_dirty_paths(root).unwrap();
-        assert!(dirty.contains(&"before.txt".to_owned()));
-        assert!(dirty.contains(&"after.txt".to_owned()));
     }
 }

@@ -8,7 +8,7 @@ use crate::{
 use super::{
     DraftClaimRow, DraftClaimUpdate, DraftOwner, DraftRow, Store,
     store::{bump_generation, client_name, parse_client},
-    store_work::{parse_scope_kind, scope_kind_name},
+    store_work::{normalize_claim_scopes, parse_scope_kind, scope_kind_name},
 };
 
 impl Store {
@@ -55,18 +55,7 @@ fn save_draft(
     }
     let mut claims = claims.to_vec();
     for claim in &mut claims {
-        if claim.repo_root.is_empty() {
-            return Err(AppError::usage("repository claim root must not be empty"));
-        }
-        if claim.scopes.is_empty() {
-            return Err(AppError::usage(format!("at least one scope is required for {}", claim.repo_root)));
-        }
-        claim.scopes.sort_by(|left, right| {
-            left.path.cmp(&right.path).then_with(|| scope_kind_name(left.kind).cmp(scope_kind_name(right.kind)))
-        });
-        if claim.scopes.windows(2).any(|pair| pair[0].path == pair[1].path) {
-            return Err(AppError::usage(format!("duplicate scope path in {}", claim.repo_root)));
-        }
+        normalize_claim_scopes(&claim.repo_root, &mut claim.scopes)?;
     }
     claims.sort_by(|left, right| left.repo_root.cmp(&right.repo_root));
     if claims.windows(2).any(|pair| pair[0].repo_root == pair[1].repo_root) {

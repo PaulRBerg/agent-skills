@@ -9,7 +9,7 @@ use std::{
 use crate::{
     domain::{Client, Identity, ProcessFingerprint, Scope, ScopeKind, SessionState, WorkState},
     error::{AppError, Result},
-    host::scope_covers,
+    host::scopes_contain_path,
     state::{SessionUpdate, Store, TriageRun, WorkClaimUpdate, WorkUpdate},
 };
 
@@ -62,7 +62,7 @@ impl AdmissionReservation {
                     continue;
                 };
                 for scope in &scopes {
-                    if !claim.scopes.iter().any(|owned| scope_covers(owned, scope)) {
+                    if !scopes_contain_path(&claim.scopes, &scope.path) {
                         continue;
                     }
                     if peer.state == WorkState::Active {
@@ -70,7 +70,7 @@ impl AdmissionReservation {
                             "triage commit changes a path claimed by another session's work",
                         ));
                     }
-                    if !worker_scopes.iter().any(|owned| scope_covers(owned, scope)) {
+                    if !scopes_contain_path(worker_scopes, &scope.path) {
                         return Err(AppError::operational(
                             "triage commit changes a path queued by another session's work",
                         ));
@@ -168,11 +168,7 @@ struct AdmissionChild {
 impl Drop for AdmissionChild {
     fn drop(&mut self) {
         if !self.reaped {
-            if let Ok(group) = i32::try_from(self.child.id()) {
-                let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(-group), nix::sys::signal::Signal::SIGKILL);
-            }
-            let _ = self.child.kill();
-            let _ = self.child.wait();
+            crate::host::terminate_child(&mut self.child);
         }
     }
 }

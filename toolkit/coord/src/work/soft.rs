@@ -10,7 +10,7 @@
 use crate::{
     domain::{Identity, Scope, ScopeKind, SessionState, WorkState, sanitize},
     error::Result,
-    host::{WorkClaimRequest, relevant_dirty, scope_covers, scopes_overlap},
+    host::{WorkClaimRequest, scope_covers, scopes_contain_path, scopes_overlap},
     state::{SessionRow, WorkClaimUpdate, WorkRow, WorkTransaction, WorkUpdate},
 };
 
@@ -125,7 +125,7 @@ fn yield_untouched_scopes(
         let baselines = transaction
             .baselines_in_repo(&contender.identity, repo_root)?
             .into_iter()
-            .filter(|row| !relevant_dirty(&remaining, std::slice::from_ref(&row.path)).is_empty())
+            .filter(|row| scopes_contain_path(&remaining, &row.path))
             .collect();
         claims.push(WorkClaimUpdate {
             repo_root: claim.repo_root.clone(),

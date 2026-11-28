@@ -8,7 +8,7 @@ use std::{
 use rusqlite::{Connection, ErrorCode, Transaction, TransactionBehavior};
 
 use crate::{
-    domain::{Client, SessionState, WorkState},
+    domain::{Client, SessionState, WorkState, parse_client_name},
     error::{AppError, Result},
 };
 
@@ -163,14 +163,10 @@ pub(super) fn bump_generation(transaction: &Transaction<'_>) -> Result<()> {
 }
 
 pub(super) fn parse_client(value: String) -> rusqlite::Result<Client> {
-    match value.as_str() {
-        "codex" => Ok(Client::Codex),
-        "claude" => Ok(Client::Claude),
-        _ => Err(invalid_value(format!("invalid client {value:?}"))),
-    }
+    parse_client_name(&value).ok_or_else(|| invalid_value(format!("invalid client {value:?}")))
 }
 
-pub(super) const fn session_state_name(state: SessionState) -> &'static str {
+pub(crate) const fn session_state_name(state: SessionState) -> &'static str {
     match state {
         SessionState::Idle => "idle",
         SessionState::InFlight => "in_flight",
@@ -215,11 +211,5 @@ pub(super) fn invalid_value(message: String) -> rusqlite::Error {
 }
 
 pub(super) fn new_id() -> String {
-    let bytes = rand::random::<[u8; 8]>();
-    let mut result = String::with_capacity(16);
-    for byte in bytes {
-        use std::fmt::Write;
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
+    hex::encode(rand::random::<[u8; 8]>())
 }

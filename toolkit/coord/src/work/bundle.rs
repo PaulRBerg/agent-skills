@@ -18,7 +18,7 @@ use crate::state::WorkClaimRow;
 use crate::{
     domain::{Identity, InventoryResult, Outcome, OutcomeKind, Scope, WorkState, sanitize},
     error::{AppError, Result},
-    host::{WorkClaimRequest, relevant_dirty},
+    host::{WorkClaimRequest, relevant_dirty, scopes_contain_path},
     state::{
         BaselineRow, DirtObservationRow, DraftRow, ResidualOwnerRow, WorkClaimUpdate, WorkRow, WorkTransaction,
         WorkUpdate,
@@ -665,25 +665,15 @@ fn blocked_outcome(
     let reason = first.1.reason.as_deref().expect("blocked reason");
     let qualified = active.map_or(claims.len() > 1, |(_, qualified)| qualified);
     let prefix = if active.is_some() { "update-unknown:" } else { "" };
+    // An active update keeps the old scope (ACTIVE, exit 3); a submission is UNKNOWN (exit 2).
+    let (unknown_kind, unknown_code) =
+        if active.is_some() { (OutcomeKind::Active, 3) } else { (OutcomeKind::Unknown, 2) };
+    let old_paths = active.map(|(old, _)| work_paths(old, qualified)).unwrap_or_default();
     match reason {
-        "coverage" => {
-            let kind = if active.is_some() { OutcomeKind::Active } else { OutcomeKind::Unknown };
-            let code = if active.is_some() { 3 } else { 2 };
-            let mut outcome = Outcome::new(kind, code, format!("{prefix}coverage"));
-            if let Some((old, _)) = active {
-                outcome.paths = work_paths(old, qualified);
-            }
-            Ok(outcome)
-        }
+        "coverage" => Ok(Outcome::new(unknown_kind, unknown_code, format!("{prefix}coverage")).with_paths(old_paths)),
         "inspection" => {
             let root = claims[first.0].repo_root.to_str().expect("validated root");
-            let kind = if active.is_some() { OutcomeKind::Active } else { OutcomeKind::Unknown };
-            let code = if active.is_some() { 3 } else { 2 };
-            let mut outcome = Outcome::new(kind, code, format!("{prefix}inspection:{root}"));
-            if let Some((old, _)) = active {
-                outcome.paths = work_paths(old, qualified);
-            }
-            Ok(outcome)
+            Ok(Outcome::new(unknown_kind, unknown_code, format!("{prefix}inspection:{root}")).with_paths(old_paths))
         }
         "dirty" => {
             let mut paths = claims
@@ -698,14 +688,11 @@ fn blocked_outcome(
                 paths.dedup();
                 paths.truncate(MAX_BUNDLE_CONFLICT_PATHS);
             }
-            let kind = if active.is_some() { OutcomeKind::Active } else { OutcomeKind::Unknown };
-            let code = if active.is_some() { 3 } else { 2 };
-            let mut outcome = Outcome::new(kind, code, format!("{prefix}dirty-settling:{}", paths.join(",")));
+            let mut outcome =
+                Outcome::new(unknown_kind, unknown_code, format!("{prefix}dirty-settling:{}", paths.join(",")))
+                    .with_paths(old_paths);
             let settles_in = evaluations.iter().map(|evaluation| evaluation.settles_in).fold(0.0, f64::max);
             outcome.settles_in = Some(settles_in.ceil().max(1.0) as u64);
-            if let Some((old, _)) = active {
-                outcome.paths = work_paths(old, qualified);
-            }
             Ok(outcome)
         }
         "residual" | "overlap" | "waiter" => {
@@ -713,12 +700,12 @@ fn blocked_outcome(
             if qualified {
                 paths.truncate(MAX_BUNDLE_CONFLICT_PATHS);
             }
-            if let Some((old, _)) = active {
+            if active.is_some() {
                 Ok(Outcome {
                     kind: OutcomeKind::Active,
                     code: 3,
                     detail: format!("update-blocked:{}", holders.join(",")),
-                    paths: work_paths(old, qualified),
+                    paths: old_paths,
                     holders,
                     broad_paths,
                     settles_in: None,
@@ -756,7 +743,7 @@ fn claim_updates(
                 let mut baselines = transaction
                     .baselines_in_repo(identity, &repo_root)?
                     .into_iter()
-                    .filter(|row| !relevant_dirty(&claim.scopes, std::slice::from_ref(&row.path)).is_empty())
+                    .filter(|row| scopes_contain_path(&claim.scopes, &row.path))
                     .collect::<Vec<_>>();
                 let advisory = evaluation.advisory.iter().collect::<HashSet<_>>();
                 merge_baselines(
@@ -834,10 +821,8 @@ fn released_paths(
                 .find(|claim| claim.repo_root.to_str() == Some(old.repo_root.as_str()))
                 .map(|claim| claim.scopes.as_slice())
                 .unwrap_or_default();
-            let released = old_dirty
-                .into_iter()
-                .filter(|path| relevant_dirty(new_scopes, std::slice::from_ref(path)).is_empty())
-                .collect::<Vec<_>>();
+            let released =
+                old_dirty.into_iter().filter(|path| !scopes_contain_path(new_scopes, path)).collect::<Vec<_>>();
             (!released.is_empty()).then(|| (old.repo_root.clone(), released))
         })
         .collect()

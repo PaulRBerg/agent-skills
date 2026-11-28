@@ -304,7 +304,7 @@ pub(super) fn add_message_with_callsigns(
     Ok(id)
 }
 
-fn callsign(connection: &Connection, identity: &Identity) -> Result<Option<String>> {
+pub(super) fn callsign(connection: &Connection, identity: &Identity) -> Result<Option<String>> {
     Ok(connection
         .query_row(
             "SELECT callsign FROM sessions WHERE client = ?1 AND session_id = ?2",

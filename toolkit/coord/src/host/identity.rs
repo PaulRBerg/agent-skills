@@ -1,18 +1,14 @@
 use std::{env, ffi::OsString};
 
 use crate::{
-    domain::{Client, Identity, ProcessFingerprint},
+    domain::{Client, Identity, ProcessFingerprint, client_name, parse_client_name},
     error::Result,
 };
 
 use super::NativeProcessProbe;
 
 pub(crate) fn identity_key(identity: &Identity) -> String {
-    let client = match identity.client {
-        Client::Codex => "codex",
-        Client::Claude => "claude",
-    };
-    format!("{client}/{}", identity.session_id)
+    format!("{}/{}", client_name(identity.client), identity.session_id)
 }
 
 /// Resolve direct host identity. Explicit test/integration overrides win only
@@ -22,17 +18,14 @@ pub(crate) fn from_environment() -> Option<Identity> {
 }
 
 fn from_environment_with(mut get: impl FnMut(&str) -> Option<OsString>) -> Option<Identity> {
-    let override_client = get("AI_COORD_CLIENT").and_then(|value| value.into_string().ok());
-    let override_session = get("AI_COORD_SESSION_ID").and_then(nonempty_utf8);
-    if let (Some(client), Some(session_id)) = (override_client.as_deref(), override_session) {
-        let client = match client {
-            "codex" => Client::Codex,
-            "claude" => Client::Claude,
-            _ => return host_environment(&mut get),
-        };
-        return Some(Identity { client, session_id });
-    }
-    host_environment(&mut get)
+    override_identity(&mut get).or_else(|| host_environment(&mut get))
+}
+
+/// The explicit `AI_COORD_CLIENT`/`AI_COORD_SESSION_ID` identity, only when both fields are valid.
+fn override_identity(get: &mut impl FnMut(&str) -> Option<OsString>) -> Option<Identity> {
+    let client = get("AI_COORD_CLIENT").and_then(|value| value.into_string().ok());
+    let session_id = get("AI_COORD_SESSION_ID").and_then(nonempty_utf8)?;
+    Some(Identity { client: parse_client_name(client.as_deref()?)?, session_id })
 }
 
 fn host_environment(get: &mut impl FnMut(&str) -> Option<OsString>) -> Option<Identity> {
@@ -73,15 +66,7 @@ pub(crate) fn delegate_signal() -> Option<DelegateSignal> {
 }
 
 fn delegate_signal_with(mut get: impl FnMut(&str) -> Option<OsString>) -> Option<DelegateSignal> {
-    let override_client = get("AI_COORD_CLIENT").and_then(|value| value.into_string().ok());
-    let override_session = get("AI_COORD_SESSION_ID").and_then(nonempty_utf8);
-    let override_identity = match (override_client.as_deref(), override_session) {
-        (Some("codex"), Some(session_id)) => Some(Identity { client: Client::Codex, session_id }),
-        (Some("claude"), Some(session_id)) => Some(Identity { client: Client::Claude, session_id }),
-        _ => None,
-    };
-
-    if let Some(override_identity) = override_identity {
+    if let Some(override_identity) = override_identity(&mut get) {
         return host_environment(&mut get)
             .filter(|host| *host != override_identity)
             .map(|host| DelegateSignal::Override { host });

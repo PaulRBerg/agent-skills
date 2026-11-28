@@ -31,11 +31,12 @@ use crate::{
     error::{AppError, Result},
     host::{
         DelegateSignal, INVENTORY_CACHE_SECONDS, NativeProcessProbe, delegate_signal, from_environment,
-        git_blob_hashes, git_dirty_paths, git_root, host_process_reference, identity_key, process_ancestors,
-        process_sweep,
+        git_blob_hashes, git_dirty_paths, git_root, host_process_reference, identity_key, inventory_result, path_text,
+        process_ancestors, process_sweep,
     },
     server::{SnapshotMessageV1, SnapshotSource},
     state::{DraftRow, MessageRow, ProviderCacheRow, SessionRow, SessionUpdate, Store, WorkRow, callsign_key},
+    work::MAX_MESSAGE_CHARS,
 };
 
 pub(crate) use inventory::{HostInventory, ProviderInventory};
@@ -45,7 +46,6 @@ pub(crate) use inventory::{InventoryObservation, last_codex_hook_error};
 const FULL_REFRESH_SECONDS: f64 = 20.0;
 const MAX_CALLSIGN_CODEPOINTS: usize = 40;
 const MAX_LABEL_CHARS: usize = 80;
-const MAX_MESSAGE_CHARS: usize = 240;
 
 pub(crate) trait Clock: Send + Sync {
     fn wall(&self) -> f64;
@@ -139,13 +139,14 @@ impl Coordinator {
         Ok(self.identity(true)?.expect("required identity"))
     }
 
-    /// Resolves the caller's identity for the eight lifecycle-claim commands
+    /// Resolves the caller's identity for the lifecycle-claim commands
     /// (`start`, `start_bundle`, `draft`, `draft_bundle`, `promote_draft`,
-    /// `promote_bundle_draft`, `wait`, `done`) and rejects callers whose
-    /// environment looks like a delegate of that identity rather than the
-    /// session that should hold its claims (see `DelegateSignal`). Every
-    /// other `required_identity()` caller — messaging, findings, baseline,
-    /// touched — stays unguarded: delegates legitimately use those.
+    /// `promote_bundle_draft`, `wait`, `done`) and the recommendation mutations
+    /// (`send`, `respond`, `withdraw`), rejecting callers whose environment looks
+    /// like a delegate of that identity rather than the session that should hold
+    /// its claims (see `DelegateSignal`). Every other `required_identity()`
+    /// caller — messaging, findings, baseline, touched, recommendation reads —
+    /// stays unguarded: delegates legitimately use those.
     fn lifecycle_identity(&self) -> Result<Identity> {
         let identity = self.required_identity()?;
         self.reject_delegate(&identity)?;
@@ -588,8 +589,8 @@ fn cached_inventory(store: &Store, key: &str, current: f64) -> Result<Option<Inv
             error: None,
         })
         .collect::<Vec<_>>();
-    let complete = providers.iter().all(|row| !row.enabled || (row.ok && row.dropped == 0));
-    Ok(complete.then_some(InventoryResult { complete, providers }))
+    let result = inventory_result(providers);
+    Ok(result.complete.then_some(result))
 }
 
 fn resolve_targets(
@@ -694,9 +695,6 @@ pub(crate) fn normalize_callsign(text: &str) -> Result<String> {
         return Err(AppError::usage("callsign must contain at least one emoji"));
     }
     Ok(value)
-}
-fn path_text(path: &Path) -> Result<String> {
-    path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
 }
 
 fn resolved(path: &Path) -> PathBuf {

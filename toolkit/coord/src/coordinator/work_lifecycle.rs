@@ -15,7 +15,7 @@ use crate::{
         BaselineRow, DraftClaimRow, DraftClaimUpdate, DraftOwner, DraftRow, EndedObservation, Store, TouchedPaths,
         WorkRow, WorkTransaction,
     },
-    work::{WorkCoordinator, require_ordinary_item},
+    work::{WorkCoordinator, qualify_path, require_ordinary_item, work_paths},
 };
 
 use super::{Coordinator, FULL_REFRESH_SECONDS, MAX_LABEL_CHARS, path_text, resolved};
@@ -147,7 +147,12 @@ impl Coordinator {
         };
         self.ensure_session(&mut store, &identity, &cwd, Some(&root))?;
         store.set_coordination_waived(&identity, false)?;
-        store.save_draft(owner, &label, &[draft_claim_update(path_text(&root)?, scopes.clone())], self.clock.wall())?;
+        store.save_draft(
+            owner,
+            &label,
+            &[DraftClaimUpdate { repo_root: path_text(&root)?, scopes: scopes.clone() }],
+            self.clock.wall(),
+        )?;
         Ok(Outcome::new(OutcomeKind::Draft, 0, scopes.len().to_string()))
     }
 
@@ -176,7 +181,7 @@ impl Coordinator {
         let claims = normalize_work_claim_bundle(files, recursive)?;
         let updates = claims
             .iter()
-            .map(|claim| Ok(draft_claim_update(path_text(&claim.repo_root)?, claim.scopes.clone())))
+            .map(|claim| Ok(DraftClaimUpdate { repo_root: path_text(&claim.repo_root)?, scopes: claim.scopes.clone() }))
             .collect::<Result<Vec<_>>>()?;
         let scope_count = updates.iter().map(|claim| claim.scopes.len()).sum::<usize>();
         let mut store = self.store()?;
@@ -498,7 +503,7 @@ impl Coordinator {
                 claim
                     .residual_paths
                     .iter()
-                    .map(|path| if bundle { qualified_path(&claim.repo_root, path) } else { path.clone() })
+                    .map(|path| if bundle { qualify_path(&claim.repo_root, path) } else { path.clone() })
             })
             .collect();
         Ok(outcome)
@@ -647,10 +652,6 @@ fn normalized_label(label: &str) -> Result<String> {
     Ok(label)
 }
 
-fn draft_claim_update(repo_root: String, scopes: Vec<Scope>) -> DraftClaimUpdate {
-    DraftClaimUpdate { repo_root, scopes }
-}
-
 const MAX_DRAFT_NAME_CHARS: usize = 40;
 
 fn normalized_draft_name(name: &str) -> Result<String> {
@@ -714,21 +715,6 @@ fn revalidate_draft(claims: &[DraftClaimRow]) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn work_paths(work: &WorkRow, qualified: bool) -> Vec<String> {
-    work.claims
-        .iter()
-        .flat_map(|claim| {
-            claim.scopes.iter().map(move |scope| {
-                if qualified { qualified_path(&claim.repo_root, &scope.path) } else { scope.path.clone() }
-            })
-        })
-        .collect()
-}
-
-fn qualified_path(repo_root: &str, path: &str) -> String {
-    if path == "." { repo_root.to_owned() } else { Path::new(repo_root).join(path).to_string_lossy().into_owned() }
 }
 
 fn overlapping_waiters(work: &[WorkRow], released: &WorkRow, identity: &Identity) -> Vec<(Identity, String)> {

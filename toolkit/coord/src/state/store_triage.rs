@@ -1,7 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::{
-    domain::{Client, Identity},
+    domain::{Identity, parse_client_name},
     error::Result,
 };
 
@@ -111,46 +111,16 @@ impl Store {
     }
 
     pub(crate) fn active_triage_runs(&self, repo_root: &str) -> Result<Vec<TriageRun>> {
-        let mut statement = self.connection.prepare(
-            "SELECT id, repo_root, origin, started_at, finished_at, outcome
-             FROM triage_runs
-             WHERE repo_root = ?1 AND finished_at IS NULL
-             ORDER BY started_at, id",
-        )?;
-        Ok(statement
-            .query_map([repo_root], |row| {
-                let stored_origin = row.get::<_, String>(2)?;
-                Ok(TriageRun {
-                    id: row.get(0)?,
-                    repo_root: row.get(1)?,
-                    origin: parse_stored_origin(&stored_origin)?,
-                    started_at: row.get(3)?,
-                    finished_at: row.get(4)?,
-                    outcome: row.get(5)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?)
+        let mut statement = self.connection.prepare(&format!(
+            "{TRIAGE_RUN_SELECT} WHERE repo_root = ?1 AND finished_at IS NULL ORDER BY started_at, id"
+        ))?;
+        Ok(statement.query_map([repo_root], triage_run_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     pub(crate) fn triage_run(&self, id: &str) -> Result<Option<TriageRun>> {
         Ok(self
             .connection
-            .query_row(
-                "SELECT id, repo_root, origin, started_at, finished_at, outcome
-                 FROM triage_runs WHERE id = ?1",
-                [id],
-                |row| {
-                    let stored_origin = row.get::<_, String>(2)?;
-                    Ok(TriageRun {
-                        id: row.get(0)?,
-                        repo_root: row.get(1)?,
-                        origin: parse_stored_origin(&stored_origin)?,
-                        started_at: row.get(3)?,
-                        finished_at: row.get(4)?,
-                        outcome: row.get(5)?,
-                    })
-                },
-            )
+            .query_row(&format!("{TRIAGE_RUN_SELECT} WHERE id = ?1"), [id], triage_run_from_row)
             .optional()?)
     }
 
@@ -270,6 +240,20 @@ fn run_is_open(transaction: &Transaction<'_>, run_id: &str) -> Result<bool> {
     )?)
 }
 
+const TRIAGE_RUN_SELECT: &str = "SELECT id, repo_root, origin, started_at, finished_at, outcome FROM triage_runs";
+
+fn triage_run_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TriageRun> {
+    let stored_origin = row.get::<_, String>(2)?;
+    Ok(TriageRun {
+        id: row.get(0)?,
+        repo_root: row.get(1)?,
+        origin: parse_stored_origin(&stored_origin)?,
+        started_at: row.get(3)?,
+        finished_at: row.get(4)?,
+        outcome: row.get(5)?,
+    })
+}
+
 fn parse_stored_origin(value: &str) -> rusqlite::Result<Identity> {
     let value = value.strip_prefix("triage:").ok_or_else(|| invalid_value("missing triage role".to_owned()))?;
     let (client, session_id) =
@@ -277,11 +261,7 @@ fn parse_stored_origin(value: &str) -> rusqlite::Result<Identity> {
     if session_id.is_empty() {
         return Err(invalid_value("empty triage origin session".to_owned()));
     }
-    let client = match client {
-        "codex" => Client::Codex,
-        "claude" => Client::Claude,
-        _ => return Err(invalid_value("invalid triage origin client".to_owned())),
-    };
+    let client = parse_client_name(client).ok_or_else(|| invalid_value("invalid triage origin client".to_owned()))?;
     Ok(Identity { client, session_id: session_id.to_owned() })
 }
 
@@ -290,7 +270,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use crate::{
-        domain::{FindingKind, Identity},
+        domain::{Client, FindingKind, Identity},
         state::{FindingAdd, FindingPathObservation},
     };
 

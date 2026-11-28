@@ -8,6 +8,7 @@ use std::{
 
 use super::{
     Coordinator,
+    findings::is_object_id,
     triage_admission::AdmissionReservation,
     triage_config::main_branch,
     triage_paths::{deterministic_handoff, safe_document_path},
@@ -214,7 +215,7 @@ pub(super) fn commit_for_finding(root: &Path, start: &str, finding_id: &str) -> 
 }
 
 pub(super) fn validate_commit(root: &Path, start: &str, finding_id: &str, oid: &str) -> Result<HashSet<String>> {
-    if oid.len() < 7 || oid.len() > 64 || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if !is_object_id(oid) {
         return Err(AppError::operational("invalid triage commit OID"));
     }
     if !git_success(root, &["merge-base", "--is-ancestor", start, oid])? ||

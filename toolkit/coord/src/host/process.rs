@@ -14,8 +14,6 @@ use crate::{
     error::{AppError, Result},
 };
 
-use super::hex_bytes;
-
 const MAX_ANCESTORS: usize = 16;
 
 #[derive(Clone, Debug)]
@@ -47,11 +45,7 @@ impl DetachedProcessRunner for NativeDetachedProcessRunner {
             .stdin(Stdio::null())
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr));
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            command.process_group(0);
-        }
+        super::configure_process_group(&mut command);
         let mut child = command
             .spawn()
             .map_err(|error| AppError::operational(format!("could not launch detached triage worker: {error}")))?;
@@ -185,7 +179,7 @@ impl NativeProcessProbe {
         digest.update(boot.as_bytes());
         digest.update(b"\0");
         digest.update(process.start_marker.as_bytes());
-        Ok(format!("v1:{}", hex_bytes(&digest.finalize())))
+        Ok(format!("v1:{}", hex::encode(digest.finalize())))
     }
 
     fn fingerprint_process(&self, process: &NativeProcess) -> std::result::Result<ProcessFingerprint, InspectionError> {

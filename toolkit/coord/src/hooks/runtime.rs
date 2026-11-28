@@ -9,11 +9,13 @@ use serde_json::{Value, json};
 
 use crate::{
     coordinator::{Coordinator, normalize_callsign},
-    domain::{Client, Identity, Outcome, SessionState, WorkState, client_name, sanitize},
+    domain::{
+        Client, Identity, Outcome, SessionState, WorkState, client_name, parse_client_name, sanitize, short_identity,
+    },
     error::{AppError, Result},
     host::{
         git_blob_hashes, git_dirty_paths, git_dirty_paths_in, git_ignored_paths, git_root, host_process_reference,
-        normalize_repo_path, relevant_dirty,
+        normalize_repo_path, path_text, relevant_dirty, scopes_contain_path,
     },
     state::SessionUpdate,
 };
@@ -65,7 +67,7 @@ impl<'a> HookRuntime<'a> {
     /// Apply one supported lifecycle event and return only bounded, host-safe stdout.
     pub(crate) fn ingest(&self, client: &str, payload: &Value) -> String {
         let event = payload.get("hook_event_name").and_then(Value::as_str).unwrap_or("unknown");
-        let Some(client_kind) = parse_client(client) else {
+        let Some(client_kind) = parse_client_name(client) else {
             return noop_stdout(client, event);
         };
         let supported = supported_events(client_kind).any(|candidate| candidate == event);
@@ -243,11 +245,8 @@ impl<'a> HookRuntime<'a> {
                     .filter(|work| work.state == WorkState::Active)
                     .and_then(|work| work.claim(&repo_root).cloned());
                 let own_scopes = claim.as_ref().map(|claim| claim.scopes.as_slice()).unwrap_or_default();
-                let outside = paths
-                    .iter()
-                    .filter(|path| relevant_dirty(own_scopes, std::slice::from_ref(*path)).is_empty())
-                    .cloned()
-                    .collect::<Vec<_>>();
+                let outside =
+                    paths.iter().filter(|path| !scopes_contain_path(own_scopes, path)).cloned().collect::<Vec<_>>();
                 let mut inspection_paths = own_scopes.iter().map(|scope| scope.path.clone()).collect::<Vec<_>>();
                 inspection_paths.extend(outside.iter().cloned());
                 inspection_paths.sort();
@@ -478,10 +477,9 @@ fn prompt_context(
         let residual = store.residual_owners(&root)?.into_iter().map(|row| row.path).collect::<HashSet<_>>();
         let unattributed_dirt = dirty.iter().any(|path| {
             !residual.contains(path) &&
-                !work.iter().any(|item| {
-                    item.claim(&root)
-                        .is_some_and(|claim| !relevant_dirty(&claim.scopes, std::slice::from_ref(path)).is_empty())
-                })
+                !work
+                    .iter()
+                    .any(|item| item.claim(&root).is_some_and(|claim| scopes_contain_path(&claim.scopes, path)))
         });
         let gate_needed = unattributed_dirt ||
             work.iter().any(|work| {
@@ -592,12 +590,9 @@ fn scope_watch_fragment(
         .and_then(|work| work.claim(repo_root).cloned());
     let peers = store.works_in_repo(repo_root).ok().unwrap_or_default();
 
-    let covers =
-        |scopes: &[crate::domain::Scope], path: &String| !relevant_dirty(scopes, std::slice::from_ref(path)).is_empty();
-
     let unowned = paths
         .iter()
-        .filter(|path| !own_claim.as_ref().is_some_and(|claim| covers(&claim.scopes, path)))
+        .filter(|path| !own_claim.as_ref().is_some_and(|claim| scopes_contain_path(&claim.scopes, path)))
         .cloned()
         .collect::<Vec<_>>();
     let ignored = git_ignored_paths(Path::new(repo_root), &unowned);
@@ -610,7 +605,7 @@ fn scope_watch_fragment(
         let holder = peers.iter().find(|work| {
             work.identity != *identity &&
                 work.state == WorkState::Active &&
-                work.claim(repo_root).is_some_and(|claim| covers(&claim.scopes, path))
+                work.claim(repo_root).is_some_and(|claim| scopes_contain_path(&claim.scopes, path))
         });
         if let Some(work) = holder {
             peer_offense.get_or_insert((path.as_str(), &work.identity));
@@ -631,9 +626,7 @@ fn scope_watch_fragment(
 }
 
 fn holder_display(store: &crate::state::Store, identity: &Identity) -> String {
-    store.session(identity).ok().flatten().and_then(|row| row.callsign).unwrap_or_else(|| {
-        format!("{}/{}", client_name(identity.client), identity.session_id.chars().take(8).collect::<String>())
-    })
+    store.session(identity).ok().flatten().and_then(|row| row.callsign).unwrap_or_else(|| short_identity(identity))
 }
 
 fn touched_paths(payload: &Value, cwd: &Path, root: &Path) -> Vec<String> {
@@ -695,16 +688,5 @@ fn contains_exact_id(message: &str, id: &str) -> bool {
 fn is_nudge_event(client: Client, event: &str) -> bool {
     matches!((client, event), (Client::Claude, "PostToolBatch") | (Client::Codex, "PostToolUse"))
 }
-fn parse_client(client: &str) -> Option<Client> {
-    match client {
-        "codex" => Some(Client::Codex),
-        "claude" => Some(Client::Claude),
-        _ => None,
-    }
-}
-fn path_text(path: &Path) -> Result<String> {
-    path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
-}
-
 #[cfg(test)]
 mod tests;

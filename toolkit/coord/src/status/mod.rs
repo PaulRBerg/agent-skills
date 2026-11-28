@@ -5,9 +5,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::{
     domain::{
         SessionState, SnapshotDraftV2, SnapshotScopeKindV2, SnapshotSessionV2, SnapshotV2, SnapshotWorkV2, WorkState,
-        client_name, terminal_field,
+        client_name, short_identity, terminal_field,
     },
     error::Result,
+    state::session_state_name,
 };
 
 /// Serialize the public status schema. Keep this separate from dashboard-only
@@ -38,7 +39,7 @@ fn render_status_at(snapshot: &SnapshotV2, now: f64) -> String {
             continue;
         }
 
-        let key = (client_name(session.identity.client), state_name(session.state), session.cwd.as_str());
+        let key = (client_name(session.identity.client), session_state_name(session.state), session.cwd.as_str());
         if let Some(group) = anonymous.iter_mut().find(|group| group.key == key) {
             group.rows.push(session);
         } else {
@@ -194,7 +195,7 @@ fn session_line(
     }
     [
         client_name(session.identity.client).to_owned(),
-        state_name(if work.is_some_and(|work| work.state == WorkState::Queued) {
+        session_state_name(if work.is_some_and(|work| work.state == WorkState::Queued) {
             SessionState::Waiting
         } else {
             session.state
@@ -238,8 +239,7 @@ fn draft_owner_label(draft: &SnapshotDraftV2, sessions: &[SnapshotSessionV2]) ->
     {
         return callsign;
     }
-    let prefix_len = owner.session_id.chars().count().min(8);
-    format!("{}/{}", client_name(owner.client), owner.session_id.chars().take(prefix_len).collect::<String>())
+    short_identity(owner)
 }
 
 fn coverage_label(provider: &crate::domain::ProviderReport) -> &'static str {
@@ -249,16 +249,6 @@ fn coverage_label(provider: &crate::domain::ProviderReport) -> &'static str {
         "ok"
     } else {
         "partial"
-    }
-}
-
-fn state_name(state: SessionState) -> &'static str {
-    match state {
-        SessionState::Idle => "idle",
-        SessionState::InFlight => "in_flight",
-        SessionState::Waiting => "waiting",
-        SessionState::Working => "working",
-        SessionState::Unknown => "unknown",
     }
 }
 

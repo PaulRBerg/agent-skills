@@ -15,7 +15,7 @@ security boundary or an OS file lock.
 Run shared tasks from `toolkit/justfile` (`just <recipe>` inside `toolkit/`, or `just toolkit::<recipe>` from the
 catalog root):
 
-- `cargo test -p ai-coord --locked` runs package tests. `just rust-check` runs the complete Rust workspace gate.
+- `just rust-check` runs the complete Rust workspace gate.
 - `just install-cli` installs every CLI supported on this OS and does not link hooks.
 - `just coord-dashboard-check` and `just coord-dashboard-dev` delegate to the dashboard package.
 
@@ -724,20 +724,6 @@ missed hook, the next fresh coordination probe removes a session as soon as that
 PID reuse is treated as a different process. An ambiguous liveness result for one session retains it as live without
 degrading coverage. Only a probe that cannot establish any process liveness makes coverage unknown. Sessions are never
 deleted merely because they are old.
-
-### Development
-
-The CLI, hooks, SQLite state, and dashboard API are a single Rust crate. The React dashboard is the independent
-`apps/coord-dashboard` Bun package. Common `toolkit/` workflows are:
-
-```sh
-cargo test -p ai-coord --locked
-just rust-check
-just install-cli
-just coord-dashboard-dev
-```
-
-The architecture, validation, and clean-break rules appear above.
 
 ### Dashboard
 

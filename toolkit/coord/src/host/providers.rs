@@ -15,7 +15,7 @@ use crate::domain::{
     Client, Identity, InventoryResult, ProcessFingerprint, ProcessProbe, ProviderReport, SessionState,
 };
 
-use super::{git_root, hex_bytes, home_dir, run_output_timeout};
+use super::{git_root, home_dir, run_output_timeout};
 
 pub(crate) const INVENTORY_CACHE_SECONDS: f64 = 2.0;
 pub(crate) const CLAUDE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -361,7 +361,7 @@ fn provider_context_key(
         }
         digest.update(b"\0");
     }
-    hex_bytes(&digest.finalize())
+    hex::encode(digest.finalize())
 }
 
 fn resolved_context_path(path: &Path) -> PathBuf {

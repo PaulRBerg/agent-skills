@@ -14,7 +14,8 @@ pub(crate) use model::*;
 pub(crate) use schema::SCHEMA_VERSION;
 #[cfg(test)]
 pub(crate) use store::MAX_INBOX_MESSAGES;
-pub(crate) use store::Store;
+pub(crate) use store::{Store, session_state_name};
+pub(crate) use store_findings::{finding_kind_name, finding_state_name};
 pub(crate) use store_recommendations::{MAX_RECOMMENDATION_SCOPES, MAX_RECOMMENDATION_TEXT};
 pub(crate) use store_sessions::callsign_key;
 pub(crate) use store_triage::TriageRun;

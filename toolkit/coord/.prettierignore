@@ -1,8 +1,0 @@
-.ai/
-.serena/
-.pytest_cache/
-.venv/
-**/.pytest_cache/
-**/.venv/
-TODO.md
-target/

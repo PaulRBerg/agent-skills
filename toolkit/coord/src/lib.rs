@@ -27,7 +27,10 @@ use crate::{
         LinkClient,
     },
     coordinator::Coordinator,
-    domain::{Client, FindingKind, FindingState, FindingSummary, Outcome, OutcomeKind, client_name, terminal_field},
+    domain::{
+        Client, FindingKind, FindingState, FindingSummary, Outcome, OutcomeKind, client_name, short_identity,
+        terminal_field,
+    },
     error::{AppError, ErrorKind, Result},
     hooks::{
         config::{ConfigError, default_hook_path, inspect_hooks, link_default_hooks},
@@ -35,7 +38,7 @@ use crate::{
         specs::Client as HookConfigClient,
         trust::{TrustOutcome, inspect_codex_hook_trust, trust_codex_hooks},
     },
-    state::SCHEMA_VERSION,
+    state::{SCHEMA_VERSION, finding_kind_name, finding_state_name},
 };
 
 const MAX_HOOK_INPUT_BYTES: u64 = 1024 * 1024;
@@ -253,9 +256,7 @@ async fn execute(cli: Cli) -> Result<u8> {
             }
             println!("ID\tAGE\tFROM\tTEXT");
             for row in coordinator.inbox(true)? {
-                let sender = row.sender_callsign.unwrap_or_else(|| {
-                    format!("{}/{}", client_name(row.sender.client), short_id(&row.sender.session_id))
-                });
+                let sender = row.sender_callsign.unwrap_or_else(|| short_identity(&row.sender));
                 println!(
                     "{}\t{}\t{}\t{}",
                     row.id,
@@ -556,31 +557,11 @@ fn finding_resolution(value: FindingResolutionArg) -> FindingState {
     }
 }
 
-fn finding_state_name(value: FindingState) -> &'static str {
-    match value {
-        FindingState::Pending => "pending",
-        FindingState::HandedOff => "handed-off",
-        FindingState::Fixed => "fixed",
-        FindingState::Stale => "stale",
-        FindingState::Rejected => "rejected",
-        FindingState::Duplicate => "duplicate",
-    }
-}
-
-fn finding_kind_name(value: Option<FindingKind>) -> &'static str {
-    match value {
-        Some(FindingKind::Bug) => "bug",
-        Some(FindingKind::Docs) => "docs",
-        Some(FindingKind::Improvement) => "improvement",
-        None => "",
-    }
-}
-
 fn finding_line(finding: &FindingSummary) -> String {
     [
         finding.id.clone(),
         finding_state_name(finding.state).to_owned(),
-        finding_kind_name(finding.kind).to_owned(),
+        finding.kind.map_or("", finding_kind_name).to_owned(),
         finding.sighting_count.to_string(),
         finding.paths.join(","),
         terminal_field(&finding.summary),
@@ -676,12 +657,7 @@ fn run_link(client: LinkClient, path: Option<&Path>, dry_run: bool, force: bool)
         } else {
             "OK"
         };
-        println!(
-            "{state}\t{}\t{}\ttrust={}",
-            hook_config_client_name(*selected),
-            result.path.display(),
-            trust_name(trust)
-        );
+        println!("{state}\t{}\t{}\ttrust={}", selected.name(), result.path.display(), trust_name(trust));
     }
     Ok(0)
 }
@@ -704,8 +680,8 @@ fn run_check(as_json: bool) -> Result<u8> {
             let report = inspect_hooks(selected, &path);
             degraded |= !report.ok;
             reports.push(json!({
-                "client": hook_config_client_name(selected),
-                "component": format!("hooks:{}", hook_config_client_name(selected)),
+                "client": selected.name(),
+                "component": format!("hooks:{}", selected.name()),
                 "error": report.error,
                 "missing": report.missing,
                 "ok": report.ok,
@@ -858,18 +834,6 @@ fn config_error(error: ConfigError) -> AppError {
         ConfigError::Io(error) => AppError::operational(error.to_string()),
         error => AppError::usage(error.to_string()),
     }
-}
-
-fn hook_config_client_name(client: HookConfigClient) -> &'static str {
-    match client {
-        HookConfigClient::Codex => "codex",
-        HookConfigClient::Claude => "claude",
-    }
-}
-
-fn short_id(value: &str) -> &str {
-    let end = value.char_indices().nth(8).map_or(value.len(), |(index, _)| index);
-    &value[..end]
 }
 
 #[cfg(test)]

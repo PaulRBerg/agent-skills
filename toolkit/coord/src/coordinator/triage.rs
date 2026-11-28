@@ -15,7 +15,10 @@ use serde::Deserialize;
 use crate::{
     domain::{FindingState, FindingSummary, Identity, OutcomeKind, SessionState},
     error::{AppError, Result},
-    host::{DetachedProcessRunner, DetachedProcessSpec, NativeDetachedProcessRunner, git_head_oid},
+    host::{
+        DetachedProcessRunner, DetachedProcessSpec, NativeDetachedProcessRunner, configure_process_group, git_head_oid,
+        terminate_child,
+    },
     state::{FindingResolution, SessionUpdate, Store, TriageRun},
 };
 
@@ -451,23 +454,13 @@ impl TriageRunner for CodexTriageRunner {
             .stdin(Stdio::piped())
             .stdout(stdout)
             .stderr(stderr);
-        configure_triage_process_group(&mut command);
+        configure_process_group(&mut command);
         let child = command
             .spawn()
             .map_err(|error| AppError::operational(format!("could not launch Codex triager: {error}")))?;
         run_triage_child(child, request.prompt, request.deadline, heartbeat)
     }
 }
-
-#[cfg(unix)]
-fn configure_triage_process_group(command: &mut Command) {
-    use std::os::unix::process::CommandExt;
-
-    command.process_group(0);
-}
-
-#[cfg(not(unix))]
-fn configure_triage_process_group(_: &mut Command) {}
 
 fn run_triage_child(
     child: Child,
@@ -519,18 +512,9 @@ fn run_triage_child_with_limits(
         }
     })();
     if result.is_err() {
-        terminate_triage_child(&mut child);
+        terminate_child(&mut child);
     }
     result
-}
-
-fn terminate_triage_child(child: &mut Child) {
-    #[cfg(unix)]
-    if let Ok(group_id) = i32::try_from(child.id()) {
-        let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(-group_id), nix::sys::signal::Signal::SIGKILL);
-    }
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 fn register_triager_session(

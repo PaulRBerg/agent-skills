@@ -1,4 +1,5 @@
-//! Bounded child-process runner shared by the Git helpers and provider inventory.
+//! Bounded child-process runner shared by the Git helpers and provider inventory,
+//! plus the process-group setup and cleanup that triage children reuse.
 //!
 //! One monotonic deadline covers stdin delivery, child completion, and the
 //! stdout/stderr drain. Every pipe is served by an owned worker thread so the
@@ -212,14 +213,14 @@ fn read_bounded_output(reader: &mut impl Read, limit: usize) -> io::Result<Vec<u
 }
 
 #[cfg(unix)]
-fn configure_process_group(command: &mut Command) {
+pub(crate) fn configure_process_group(command: &mut Command) {
     use std::os::unix::process::CommandExt;
 
     command.process_group(0);
 }
 
 #[cfg(not(unix))]
-fn configure_process_group(_: &mut Command) {}
+pub(crate) fn configure_process_group(_: &mut Command) {}
 
 /// Kill the child and, on Unix, the process group it leads, then reap the child.
 ///
@@ -227,7 +228,7 @@ fn configure_process_group(_: &mut Command) {}
 /// parent's group. The kernel keeps a pid reserved while a process group with
 /// that id has members, so signaling the group after the leader was reaped
 /// still reaches only its descendants.
-fn terminate_child(child: &mut Child) {
+pub(crate) fn terminate_child(child: &mut Child) {
     #[cfg(unix)]
     if let Ok(group_id) = i32::try_from(child.id()) {
         let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(-group_id), nix::sys::signal::Signal::SIGKILL);

@@ -8,7 +8,7 @@ use super::{
     evidence_for, output_path, soft, sorted,
 };
 use crate::{
-    domain::{Identity, Scope, client_name, sanitize},
+    domain::{Identity, Scope, sanitize, short_identity},
     error::Result,
     host::{WorkClaimRequest, overlapping_paths},
     state::{WorkClaimRow, WorkRow, WorkTransaction, WorkUpdate},
@@ -20,8 +20,7 @@ pub(crate) fn identity_display(identity: &Identity, transaction: &WorkTransactio
     if let Some(callsign) = transaction.callsign(identity)? {
         return Ok(callsign);
     }
-    let prefix = identity.session_id.chars().take(8).collect::<String>();
-    Ok(format!("{}/{prefix}", client_name(identity.client)))
+    Ok(short_identity(identity))
 }
 
 pub(crate) fn conflict_detail(

@@ -11,6 +11,19 @@ pub(crate) const fn client_name(client: Client) -> &'static str {
     }
 }
 
+/// The `client/session-prefix` fallback shown when an identity has no callsign.
+pub(crate) fn short_identity(identity: &Identity) -> String {
+    format!("{}/{}", client_name(identity.client), identity.session_id.chars().take(8).collect::<String>())
+}
+
+pub(crate) fn parse_client_name(name: &str) -> Option<Client> {
+    match name {
+        "codex" => Some(Client::Codex),
+        "claude" => Some(Client::Claude),
+        _ => None,
+    }
+}
+
 pub(crate) fn sanitize(text: &str, limit: usize) -> String {
     if limit == 0 {
         return String::new();

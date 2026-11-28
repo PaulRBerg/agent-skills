@@ -25,7 +25,7 @@ impl Coordinator {
         replacement: &str,
         cwd: &Path,
     ) -> Result<RecommendationMutation> {
-        let sender = self.recommendation_identity()?;
+        let sender = self.lifecycle_identity()?;
         self.send_recommendation_for(&sender, target, action, files, recursive, reason, replacement, cwd)
     }
 
@@ -121,7 +121,7 @@ impl Coordinator {
         decision: RecommendationDecision,
         reason: &str,
     ) -> Result<RecommendationMutation> {
-        let recipient = self.recommendation_identity()?;
+        let recipient = self.lifecycle_identity()?;
         self.respond_recommendation_for(&recipient, id, decision, reason)
     }
 
@@ -153,7 +153,7 @@ impl Coordinator {
     }
 
     pub(crate) fn withdraw_recommendation(&self, id: &str, reason: &str) -> Result<RecommendationMutation> {
-        let sender = self.recommendation_identity()?;
+        let sender = self.lifecycle_identity()?;
         self.withdraw_recommendation_for(&sender, id, reason)
     }
 
@@ -187,12 +187,6 @@ impl Coordinator {
     /// Marks only records represented by a successfully rendered hook checkpoint.
     pub(crate) fn mark_recommendations_surfaced(&self, identity: &Identity, ids: &[String]) -> Result<usize> {
         self.store()?.mark_recommendations_surfaced(identity, ids, self.clock.wall())
-    }
-
-    fn recommendation_identity(&self) -> Result<Identity> {
-        let identity = self.required_identity()?;
-        self.reject_delegate(&identity)?;
-        Ok(identity)
     }
 
     fn refresh_recommendation_context(&self, store: &mut Store) -> Result<()> {

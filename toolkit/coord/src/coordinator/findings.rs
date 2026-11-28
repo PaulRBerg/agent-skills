@@ -188,8 +188,13 @@ fn turn_id() -> Option<String> {
         .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
 }
 
+/// Whether `oid` has the shape of an abbreviated or full Git object ID.
+pub(super) fn is_object_id(oid: &str) -> bool {
+    (7..=64).contains(&oid.len()) && oid.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 fn validate_commit_oid(oid: &str) -> Result<()> {
-    if !(7..=64).contains(&oid.len()) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if !is_object_id(oid) {
         return Err(AppError::usage("commit evidence must be a 7-64 character hexadecimal object ID"));
     }
     Ok(())

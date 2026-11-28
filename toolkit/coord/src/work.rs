@@ -15,10 +15,12 @@ use crate::{
     error::{AppError, Result},
     host::{
         UNHASHABLE_BLOB_HASH, WorkClaimRequest, any_overlap, git_blob_hashes, git_dirty_paths, git_last_commit_times,
-        normalize_scopes, overlaps_outside_coverage, relevant_dirty, scopes_cover, scopes_overlap,
+        normalize_scopes, overlaps_outside_coverage, path_text, relevant_dirty, scopes_contain_path, scopes_cover,
     },
     state::{BaselineRow, DirtObservationRow, ResidualOwnerRow, Store, WorkRow},
 };
+
+pub(crate) use messages::MAX_MESSAGE_CHARS;
 
 pub(crate) const DIRT_HOLD_SECONDS: f64 = 90.0;
 
@@ -178,16 +180,9 @@ fn unattributed_dirty(dirty: &[String], work: &[WorkRow], repo_root: &str) -> Ve
         .iter()
         .filter(|work| work.state == WorkState::Active)
         .filter_map(|work| work.claim(repo_root))
-        .flat_map(|claim| claim.scopes.iter())
+        .flat_map(|claim| claim.scopes.iter().cloned())
         .collect::<Vec<_>>();
-    dirty
-        .iter()
-        .filter(|path| {
-            let leaf = Scope { path: (*path).clone(), kind: ScopeKind::Exact };
-            !owned.iter().any(|scope| scopes_overlap(scope, &leaf))
-        })
-        .cloned()
-        .collect()
+    dirty.iter().filter(|path| !scopes_contain_path(&owned, path)).cloned().collect()
 }
 
 fn partition_dirty(
@@ -206,8 +201,7 @@ fn partition_dirty(
         if owner == Some(identity) {
             continue;
         }
-        let leaf = Scope { path: path.clone(), kind: ScopeKind::Exact };
-        let benign = benign.iter().any(|scope| scopes_overlap(scope, &leaf));
+        let benign = scopes_contain_path(benign, path);
         let stale = observations
             .iter()
             .find(|row| row.path == *path)
@@ -230,13 +224,7 @@ fn foreign_residuals(
 ) -> Vec<ResidualOwnerRow> {
     residuals
         .iter()
-        .filter(|row| {
-            row.identity != *identity &&
-                dirty.contains(&row.path) &&
-                !benign
-                    .iter()
-                    .any(|scope| scopes_overlap(scope, &Scope { path: row.path.clone(), kind: ScopeKind::Exact }))
-        })
+        .filter(|row| row.identity != *identity && dirty.contains(&row.path) && !scopes_contain_path(benign, &row.path))
         .cloned()
         .collect()
 }
@@ -363,7 +351,7 @@ fn request_paths(claims: &[WorkClaimRequest], qualified: bool) -> Vec<String> {
         .collect()
 }
 
-fn work_paths(work: &WorkRow, qualified: bool) -> Vec<String> {
+pub(crate) fn work_paths(work: &WorkRow, qualified: bool) -> Vec<String> {
     work.claims
         .iter()
         .flat_map(|claim| {
@@ -378,16 +366,12 @@ fn output_path(claim: &WorkClaimRequest, path: &str, qualified: bool) -> String 
     if qualified { qualify_path(claim.repo_root.to_str().expect("validated root"), path) } else { path.to_owned() }
 }
 
-fn qualify_path(repo_root: &str, path: &str) -> String {
+pub(crate) fn qualify_path(repo_root: &str, path: &str) -> String {
     if path == "." {
         repo_root.to_owned()
     } else {
         Path::new(repo_root).join(path).to_str().expect("validated repository path").to_owned()
     }
-}
-
-fn path_text(path: &Path) -> Result<String> {
-    path.to_str().map(str::to_owned).ok_or_else(|| AppError::usage("path is not valid UTF-8"))
 }
 
 fn sorted(values: HashSet<String>) -> Vec<String> {
@@ -401,6 +385,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::host::scopes_overlap;
 
     fn scope(path: impl Into<String>, recursive: bool) -> Scope {
         Scope { path: path.into(), kind: if recursive { ScopeKind::Recursive } else { ScopeKind::Exact } }

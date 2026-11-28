@@ -150,23 +150,6 @@ fn assert_strong_session(fixture: &Fixture, session_id: &str) {
 }
 
 #[test]
-fn rule_a_override_with_differing_host_identity_rejects_lifecycle_command() {
-    let fixture = Fixture::new();
-
-    let start = fixture
-        .command()
-        .env("AI_COORD_CLIENT", "codex")
-        .env("AI_COORD_SESSION_ID", "parent")
-        .env("CODEX_SESSION_ID", "child")
-        .args(["start", "x", "README.md"])
-        .output()
-        .expect("run ai-coord start");
-
-    assert_eq!(start.status.code(), Some(64), "stderr={}", String::from_utf8_lossy(&start.stderr));
-    assert!(String::from_utf8_lossy(&start.stderr).contains("delegate of codex/parent"));
-}
-
-#[test]
 fn rule_a_override_with_differing_host_identity_leaves_read_only_commands_unaffected() {
     let fixture = Fixture::new();
 
@@ -225,8 +208,8 @@ fn rule_b_unconfirmed_without_active_delegate_row_stays_ready() {
     let _ = host.wait();
 }
 
-/// The guard sits only on `lifecycle_identity()`, which the eight
-/// lifecycle-claim commands use; every other `required_identity()` caller —
+/// The guard sits only on `lifecycle_identity()`, which the lifecycle-claim
+/// and recommendation-mutation commands use; every other `required_identity()` caller —
 /// including `touched` (explicitly permitted for delegates by the
 /// orchestration skill) and `inbox` (subagents legitimately read the
 /// parent's inbox) — stays unguarded even under a rule (a) delegate

@@ -5,14 +5,14 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use crate::{
     domain::{Identity, Scope, ScopeKind, WorkState},
     error::{AppError, Result},
-    host::relevant_dirty,
+    host::scopes_contain_path,
 };
 
 use super::{
     BaselineRow, DirtObservationRow, EndedObservation, ResidualOwnerRow, SessionRow, Store, WorkClaimRow,
     WorkClaimUpdate, WorkRow, WorkUpdate,
     store::{bump_generation, client_name, invalid_value, parse_client, parse_work_state, work_state_name},
-    store_communications::add_message,
+    store_communications::{add_message, callsign},
     store_sessions::{end_session_if_revision, reconcile_ended, session_from_row, session_select},
 };
 
@@ -39,15 +39,7 @@ impl Store {
 
 impl WorkTransaction<'_> {
     pub(crate) fn callsign(&self, identity: &Identity) -> Result<Option<String>> {
-        Ok(self
-            .transaction
-            .query_row(
-                "SELECT callsign FROM sessions WHERE client = ?1 AND session_id = ?2",
-                params![client_name(identity.client), identity.session_id],
-                |row| row.get(0),
-            )
-            .optional()?
-            .flatten())
+        callsign(&self.transaction, identity)
     }
 
     /// Paths this session has observed touched in `repo_root` at or after `since`,
@@ -239,7 +231,7 @@ impl Store {
                 .collect::<Vec<_>>();
             let mut recorded = 0;
             for (path, blob_hash) in blob_hashes {
-                if !relevant_dirty(&claimed, std::slice::from_ref(path)).is_empty() {
+                if scopes_contain_path(&claimed, path) {
                     continue;
                 }
                 transaction.execute(
@@ -390,18 +382,7 @@ fn normalized_claims(claims: &[WorkClaimUpdate]) -> Result<Vec<WorkClaimUpdate>>
     }
     let mut claims = claims.to_vec();
     for claim in &mut claims {
-        if claim.repo_root.is_empty() {
-            return Err(AppError::usage("repository claim root must not be empty"));
-        }
-        if claim.scopes.is_empty() {
-            return Err(AppError::usage(format!("at least one scope is required for {}", claim.repo_root)));
-        }
-        claim.scopes.sort_by(|left, right| {
-            left.path.cmp(&right.path).then_with(|| scope_kind_name(left.kind).cmp(scope_kind_name(right.kind)))
-        });
-        if claim.scopes.windows(2).any(|pair| pair[0].path == pair[1].path) {
-            return Err(AppError::usage(format!("duplicate scope path in {}", claim.repo_root)));
-        }
+        normalize_claim_scopes(&claim.repo_root, &mut claim.scopes)?;
         if let Some(baselines) = &mut claim.baselines {
             baselines.sort_by(|left, right| left.path.cmp(&right.path));
             if baselines.windows(2).any(|pair| pair[0].path == pair[1].path) {
@@ -414,6 +395,24 @@ fn normalized_claims(claims: &[WorkClaimUpdate]) -> Result<Vec<WorkClaimUpdate>>
         return Err(AppError::usage("duplicate repository claim root"));
     }
     Ok(claims)
+}
+
+/// Validate one stored claim and sort its scopes into the canonical stored order.
+/// Work and draft claims share this invariant.
+pub(super) fn normalize_claim_scopes(repo_root: &str, scopes: &mut [Scope]) -> Result<()> {
+    if repo_root.is_empty() {
+        return Err(AppError::usage("repository claim root must not be empty"));
+    }
+    if scopes.is_empty() {
+        return Err(AppError::usage(format!("at least one scope is required for {repo_root}")));
+    }
+    scopes.sort_by(|left, right| {
+        left.path.cmp(&right.path).then_with(|| scope_kind_name(left.kind).cmp(scope_kind_name(right.kind)))
+    });
+    if scopes.windows(2).any(|pair| pair[0].path == pair[1].path) {
+        return Err(AppError::usage(format!("duplicate scope path in {repo_root}")));
+    }
+    Ok(())
 }
 
 fn existing_claim_ids(connection: &Connection, work_id: i64) -> Result<BTreeMap<String, i64>> {

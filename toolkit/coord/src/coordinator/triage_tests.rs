@@ -530,7 +530,7 @@ fn sweep_safe_document_scopes_exclude_tracked_symlinks_to_code() {
 fn sweep_triage_child_is_reaped_when_prompt_delivery_fails() {
     let mut command = Command::new("sh");
     command.args(["-c", "exec 0<&-; exec sleep 30"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
-    configure_triage_process_group(&mut command);
+    configure_process_group(&mut command);
     let child = command.spawn().unwrap();
     let probe = NativeProcessProbe::new();
     let fingerprint = probe.fingerprint(child.id()).unwrap();
@@ -543,7 +543,7 @@ fn sweep_triage_child_is_reaped_when_prompt_delivery_fails() {
 fn sweep_triage_child_preserves_success_after_prompt_delivery() {
     let mut command = Command::new("sh");
     command.args(["-c", "cat >/dev/null"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
-    configure_triage_process_group(&mut command);
+    configure_process_group(&mut command);
     let child = command.spawn().unwrap();
 
     let status = run_triage_child_with_limits(
@@ -562,7 +562,7 @@ fn sweep_triage_child_preserves_success_after_prompt_delivery() {
 fn sweep_triage_deadline_interrupts_blocked_prompt_and_reaps_the_process_group() {
     let mut command = Command::new("sh");
     command.args(["-c", "sleep 30 & wait"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
-    configure_triage_process_group(&mut command);
+    configure_process_group(&mut command);
     let child = command.spawn().unwrap();
     let group_id = i32::try_from(child.id()).unwrap();
     let probe = NativeProcessProbe::new();
