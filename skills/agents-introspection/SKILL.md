@@ -62,10 +62,8 @@ scope in `🗂 Historical coverage`.
 
 1. Run the bundled miner for the current project and each task-relevant local project, unarchived sessions only, with
    the chosen keywords, `--since 60d`, `--excerpts`, and `--max-sessions 8`. Encode synonyms as one OR-group keyword
-   (`--keyword 'a|b'`) rather than separate `--keyword` flags. The miner also matches regular inflections of a
-   plain-word keyword, so `overwrite` matches `overwriting` and `overwritten`. Irregular forms such as `overwrote` still
-   need an OR-group. `--max-excerpt-bytes` (default 8192) limits the total excerpt size. When `excerpts_truncated` is
-   `true`, use the inspector for candidates without excerpts.
+   (`--keyword 'a|b'`) rather than separate `--keyword` flags. The reference defines inflection matching and the excerpt
+   budget. When `excerpts_truncated` is `true`, use the inspector for candidates without excerpts.
 2. Treat source ownership as a miner invariant. The miner assigns every candidate once from source-native cwd,
    directory, and history metadata, never from transcript content. Review `ownership`. Reject a candidate only when
    fallback ownership such as `turn_context.cwd` remains materially ambiguous for the task. The miner excludes
