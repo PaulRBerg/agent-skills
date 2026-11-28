@@ -291,6 +291,11 @@ For each completed agent, require every shared result field. Treat `changed_file
 Confirm reported files exist or were intentionally deleted, stay within scope, and carry verification evidence matching
 the assignment. Pass relevant completed results to dependent agents.
 
+When a brief assigns an audit slice, an agent has not settled that slice if it returns `completed` while its summary
+lists assigned paths that it did not inspect. Use the adapter's same-agent mechanism once. Name the uncovered paths and
+the remaining estimate. This continuation is not a new implementation agent. Report paths that remain uninspected after
+it as an open limitation.
+
 After every implementation wave, reconcile all results with the current manifest and visible working tree without
 folding in unrelated concurrent changes. When the parent owns validation, run the assigned aggregate checks once during
 this reconciliation. Attribute aggregate-check failures before blocking: first rule out effects of the handoff's
