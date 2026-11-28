@@ -4,7 +4,7 @@
 export default {
   "{scripts/generate-evm-atlas.ts,skills/evm-atlas/references/atlas-overlays.json,skills/evm-atlas/references/generated/**,skills/evm-atlas/scripts/resolve-chain.sh,.prettierrc.yml,bun.lock}":
     "bash -c 'just evm-atlas-check' --",
-  "{mcp/*.sh,skills/*/scripts/*.sh,tests/**/*.sh,tests/**/*.bats}": "shellcheck",
+  "{mcp/*.sh,scripts/*.sh,skills/*/scripts/*.sh,tests/**/*.sh,tests/**/*.bats}": "shellcheck",
   "**/*.py": "just python-check",
   "**/*.{md,json,jsonc,yaml,yml}":
     "bunx --no-install prettier --write --cache --cache-location .cache/prettier/.prettier-cache --log-level warn",

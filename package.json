@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "lint-staged": "lint-staged --concurrent false --no-stash --no-hide-partially-staged",
-    "prepare": "husky",
-    "pre-commit": "just pre-commit"
+    "prepare": "husky"
   },
   "devDependencies": {
     "@tsconfig/bun": "^1.0.11",

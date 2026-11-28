@@ -11,7 +11,8 @@ import { type CommittedSkillSource, withCommittedSkillSource } from "./committed
 
 type Command = "apply" | "check" | "plan";
 type InstallTarget = "claude" | "codex" | "shared";
-type DriftTarget = "agents" | "claude" | "codex" | "lock" | "source";
+type TargetRoot = "agents" | "claude" | "codex";
+type DriftTarget = TargetRoot | "lock" | "source";
 type NodeKind = "directory" | "file" | "missing" | "other" | "symlink";
 
 type CliOptions = {
@@ -62,7 +63,7 @@ type Plan = {
 
 type ProcessLock = { owner: string; token: string };
 type GlobalChanges = { lockChanged: boolean; paths: string[] };
-type TargetPaths = Record<"agents" | "claude" | "codex", string>;
+type TargetPaths = Record<TargetRoot, string>;
 type ClaimScope = "file" | "recursive";
 type RepoClaim = { paths: Array<{ path: string; scope: ClaimScope }>; root: string };
 
@@ -85,6 +86,7 @@ const config = {
   ),
   sourceRoot: path.resolve(process.env.PUBLISH_SKILLS_SOURCE_ROOT ?? scriptRoot),
 };
+const targetRoots: TargetPaths = { agents: config.agentsRoot, claude: config.claudeRoot, codex: config.codexRoot };
 
 try {
   const options = parseArgs(process.argv.slice(2));
@@ -391,7 +393,7 @@ function inspectDeletedTargets(name: string, drifts: Drift[]): void {
     addDrift(
       drifts,
       name,
-      target as keyof TargetPaths,
+      target as TargetRoot,
       "deleted-install",
       targetPath,
       "deleted source skill remains installed",
@@ -401,13 +403,13 @@ function inspectDeletedTargets(name: string, drifts: Drift[]): void {
 
 function targetPaths(name: string): TargetPaths {
   return {
-    agents: path.join(config.agentsRoot, "skills", name),
-    claude: path.join(config.claudeRoot, "skills", name),
-    codex: path.join(config.codexRoot, "skills", name),
+    agents: path.join(targetRoots.agents, "skills", name),
+    claude: path.join(targetRoots.claude, "skills", name),
+    codex: path.join(targetRoots.codex, "skills", name),
   };
 }
 
-function compareInstalledDirectory(skill: SourceSkill, targetPath: string, target: DriftTarget, drifts: Drift[]): void {
+function compareInstalledDirectory(skill: SourceSkill, targetPath: string, target: TargetRoot, drifts: Drift[]): void {
   const kind = nodeKind(targetPath);
   if (kind === "missing") {
     addDrift(drifts, skill.name, target, "missing", targetPath, "required installation is missing");
@@ -465,9 +467,8 @@ function compareInstalledDirectory(skill: SourceSkill, targetPath: string, targe
   }
 }
 
-function snapshotInstalledDirectory(targetPath: string, target: DriftTarget): Snapshot {
-  const repositoryRoot =
-    target === "agents" ? config.agentsRoot : target === "claude" ? config.claudeRoot : config.codexRoot;
+function snapshotInstalledDirectory(targetPath: string, target: TargetRoot): Snapshot {
+  const repositoryRoot = targetRoots[target];
   try {
     const relativeRoot = path.relative(repositoryRoot, targetPath);
     const output = execFileSync(
@@ -862,11 +863,10 @@ function buildRepoClaims(plan: Plan): RepoClaim[] {
   for (const name of plan.groups.claude) addPath(config.claudeRoot, `skills/${name}`, "recursive");
   for (const name of plan.groups.codex) addPath(config.agentsRoot, `skills/${name}`, "recursive");
   for (const name of plan.groups.remove) {
-    for (const [target, targetPath] of Object.entries(targetPaths(name)) as Array<[keyof TargetPaths, string]>) {
+    for (const [target, targetPath] of Object.entries(targetPaths(name)) as Array<[TargetRoot, string]>) {
       const kind = nodeKind(targetPath);
       if (kind === "missing") continue;
-      const root = target === "agents" ? config.agentsRoot : target === "claude" ? config.claudeRoot : config.codexRoot;
-      addPath(root, `skills/${name}`, kind === "directory" ? "recursive" : "file");
+      addPath(targetRoots[target], `skills/${name}`, kind === "directory" ? "recursive" : "file");
     }
   }
 

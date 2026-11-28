@@ -1,5 +1,3 @@
-set allow-duplicate-variables
-set allow-duplicate-recipes
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set unstable
 
@@ -119,7 +117,7 @@ alias pw := prettier-write
 [group("checks")]
 [positional-arguments]
 @shell-check *paths:
-    if [ "$#" -eq 0 ]; then shellcheck mcp/*.sh skills/*/scripts/*.sh tests/*/*.sh tests/*/*.bats; else shellcheck "$@"; fi
+    if [ "$#" -eq 0 ]; then shellcheck mcp/*.sh scripts/*.sh skills/*/scripts/*.sh tests/*.bats tests/*/*.sh tests/*/*.bats; else shellcheck "$@"; fi
 
 # Run every test suite, the Python and TypeScript checks, and the evm-atlas freshness check
 [group("checks")]
