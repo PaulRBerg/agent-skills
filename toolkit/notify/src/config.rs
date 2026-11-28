@@ -159,7 +159,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn validate(&self) -> Result<()> {
         if self.cleanup.retention_days == 0 {
-            return Err(AppError::configuration("cleanup.retention_days must be at least 1"));
+            return Err(AppError::operational("cleanup.retention_days must be at least 1"));
         }
         Ok(())
     }

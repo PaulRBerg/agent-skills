@@ -4,8 +4,7 @@ use crate::{config::AppConfig, model::NotificationMode};
 
 /// Applies the duration and case-sensitive prompt-prefix filters.
 pub fn should_send_notification(prompt: &str, duration_seconds: u64, config: &AppConfig) -> bool {
-    duration_seconds >= config.notification.threshold_seconds &&
-        !config.notification.exclude_patterns.iter().any(|pattern| !prompt.is_empty() && prompt.starts_with(pattern))
+    duration_seconds >= config.notification.threshold_seconds && !is_excluded(prompt, config)
 }
 
 /// Completion notifications are only enabled in `all` mode.
@@ -25,9 +24,11 @@ pub fn should_send_failure_notification(config: &AppConfig) -> bool {
 
 /// Codex has no duration; filter internal title requests before applying user preferences.
 pub fn should_send_codex_notification(prompt: &str, config: &AppConfig) -> bool {
-    config.notification.mode == NotificationMode::All &&
-        !is_codex_title_request(prompt) &&
-        !config.notification.exclude_patterns.iter().any(|pattern| !prompt.is_empty() && prompt.starts_with(pattern))
+    config.notification.mode == NotificationMode::All && !is_codex_title_request(prompt) && !is_excluded(prompt, config)
+}
+
+fn is_excluded(prompt: &str, config: &AppConfig) -> bool {
+    !prompt.is_empty() && config.notification.exclude_patterns.iter().any(|pattern| prompt.starts_with(pattern))
 }
 
 fn is_codex_title_request(prompt: &str) -> bool {

@@ -190,12 +190,6 @@ impl SessionStore {
         }
     }
 
-    /// Returns the job number of the newest active turn, if one exists.
-    #[cfg(test)]
-    fn get_active_job_number(&self, session_id: &str) -> Option<i64> {
-        self.query_optional("get active job number", session_id, "job_number")
-    }
-
     /// Returns the prompt of the newest active turn, if one exists.
     pub fn active_prompt(&self, session_id: &str) -> Option<String> {
         let connection = self.connection("get active prompt")?;
@@ -362,25 +356,6 @@ impl SessionStore {
         }
     }
 
-    #[cfg(test)]
-    fn query_optional(&self, operation: &str, session_id: &str, column: &str) -> Option<i64> {
-        let connection = self.connection(operation)?;
-        let query = format!(
-            "SELECT {column} FROM sessions
-             WHERE session_id = ?1 AND stopped_at IS NULL
-             ORDER BY id DESC
-             LIMIT 1"
-        );
-        match connection.query_row(&query, [session_id], |row| row.get(0)) {
-            Ok(value) => value,
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(error) => {
-                tracing::error!(%error, "failed to query active session");
-                None
-            }
-        }
-    }
-
     /// Reads the rows that `cleanup_old_data` is about to delete for the given `-N days` modifier.
     fn read_expired_records(&self, connection: &Connection, modifier: &str) -> rusqlite::Result<Vec<SessionRecord>> {
         let mut statement = connection.prepare(
@@ -479,7 +454,6 @@ mod tests {
         let store = SessionStore::from_database_path(directory.path().join("sessions.db")).unwrap();
 
         store.track_prompt("session-1", "first", "/tmp");
-        assert_eq!(store.get_active_job_number("session-1"), Some(1));
         assert_eq!(store.active_prompt("session-1").as_deref(), Some("first"));
         store.mark_waiting("session-1");
         store.mark_stopped("session-1");

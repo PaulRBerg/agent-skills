@@ -57,7 +57,7 @@ pub fn ensure_codex_hooks(path: &Path, dry_run: bool) -> Result<CodexHooksUpdate
             .cloned()
             .collect::<Vec<_>>();
         if existing.windows(2).any(|pair| pair[0] != pair[1]) {
-            return Err(AppError::integration(format!(
+            return Err(AppError::operational(format!(
                 "{}: conflicting ai-notify definitions for {}; make their command and options identical before rerunning link codex-hooks",
                 path.display(),
                 spec.event
@@ -155,11 +155,11 @@ fn all_tools(matcher: Option<&str>) -> bool {
 fn load_hooks(path: &Path) -> Result<Value> {
     let data = match fs::read_to_string(path) {
         Ok(text) => serde_json::from_str::<Value>(&text)
-            .map_err(|error| AppError::integration(format!("failed to parse {}: {error}", path.display())))?,
+            .map_err(|error| AppError::operational(format!("failed to parse {}: {error}", path.display())))?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(json!({})),
         Err(error) => return Err(error.into()),
     };
-    let invalid = |detail: &str| AppError::integration(format!("{}: {detail}", path.display()));
+    let invalid = |detail: &str| AppError::operational(format!("{}: {detail}", path.display()));
     let root = data.as_object().ok_or_else(|| invalid("must contain a JSON object at the root"))?;
     if let Some(hooks) = root.get("hooks") {
         let hooks = hooks.as_object().ok_or_else(|| invalid("hooks field must be an object"))?;

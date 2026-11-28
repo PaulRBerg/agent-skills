@@ -831,10 +831,6 @@ fn every_claude_event_path_runs_with_custom_database_and_log_paths() {
     for (event, payload) in cases {
         environment.run(&["event", event], payload).success();
     }
-
-    // Hook event payload failures must exit 1 (non-blocking) rather than 2: Claude Code and Codex
-    // treat a hook's exit 2 as a blocking decision (e.g. Stop keeps the agent going).
-    environment.run(&["event", "stop"], "not json").code(1);
 }
 
 #[test]

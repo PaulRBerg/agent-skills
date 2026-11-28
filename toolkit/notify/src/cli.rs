@@ -403,7 +403,7 @@ fn run_link(command: LinkCommand) -> Result<()> {
                     println!("Existing notify: {previous}");
                 }
                 println!("Re-run with --force to replace it.");
-                return Err(AppError::integration("Codex notify conflict"));
+                return Err(AppError::operational("Codex notify conflict"));
             }
             if update.changed {
                 println!("Updated {target} notify in {}", display_path(&update.path));
@@ -514,10 +514,10 @@ fn check_integrations(profile: Option<&str>) -> Result<()> {
     }
 
     if claude.has_errors() {
-        return Err(AppError::integration("Claude Code settings contain parse or schema errors"));
+        return Err(AppError::operational("Claude Code settings contain parse or schema errors"));
     }
     if codex.has_error() {
-        return Err(AppError::integration("Codex configuration inspection failed"));
+        return Err(AppError::operational("Codex configuration inspection failed"));
     }
     Ok(())
 }
@@ -631,5 +631,5 @@ fn home_path(relative: &str) -> Result<PathBuf> {
     env::var_os("HOME")
         .filter(|home| !home.is_empty())
         .map(|home| PathBuf::from(home).join(relative))
-        .ok_or_else(|| AppError::configuration("HOME is not set"))
+        .ok_or_else(|| AppError::operational("HOME is not set"))
 }

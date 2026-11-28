@@ -62,7 +62,7 @@ impl ClaudeHooksReport {
 /// Add missing ai-notify Claude Code hooks while preserving all unrelated JSON data.
 pub fn ensure_claude_hooks(path: &Path, force: bool, dry_run: bool) -> Result<ClaudeHooksUpdate> {
     if let Some(source) = generated_settings_source(path) {
-        return Err(AppError::integration(format!(
+        return Err(AppError::operational(format!(
             "refusing to overwrite generated Claude Code settings {}; update canonical hook source {} and run its normal settings generator to regenerate {}",
             path.display(),
             source.display(),
@@ -75,7 +75,7 @@ pub fn ensure_claude_hooks(path: &Path, force: bool, dry_run: bool) -> Result<Cl
     let hooks = root.entry("hooks").or_insert_with(|| Value::Object(Map::new()));
     let hooks = hooks
         .as_object_mut()
-        .ok_or_else(|| AppError::integration(format!("{}: hooks field must be an object", path.display())))?;
+        .ok_or_else(|| AppError::operational(format!("{}: hooks field must be an object", path.display())))?;
 
     let mut added = Vec::new();
     let mut updated = Vec::new();
@@ -110,7 +110,7 @@ pub fn ensure_claude_hooks(path: &Path, force: bool, dry_run: bool) -> Result<Cl
     let changed = !added.is_empty() || !updated.is_empty();
     if changed && !dry_run {
         let rendered = serde_json::to_string_pretty(&data)
-            .map_err(|error| AppError::integration(format!("failed to render {}: {error}", path.display())))? +
+            .map_err(|error| AppError::operational(format!("failed to render {}: {error}", path.display())))? +
             "\n";
         atomic_write::replace(path, rendered)?;
     }
@@ -207,9 +207,9 @@ fn load_settings(path: &Path) -> Result<Value> {
     }
     let text = fs::read_to_string(path)?;
     let data: Value = serde_json::from_str(&text)
-        .map_err(|error| AppError::integration(format!("failed to parse {}: {error}", path.display())))?;
+        .map_err(|error| AppError::operational(format!("failed to parse {}: {error}", path.display())))?;
     if !data.is_object() {
-        return Err(AppError::integration(format!("{} must contain a JSON object at the root", path.display())));
+        return Err(AppError::operational(format!("{} must contain a JSON object at the root", path.display())));
     }
     Ok(data)
 }

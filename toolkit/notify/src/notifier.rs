@@ -214,7 +214,7 @@ pub fn failure_notification(project: &str, task: &str, error: &str, duration: Op
     }
     Notification::new(
         Client::Claude,
-        if project.is_empty() { "Claude Code" } else { project },
+        notification_title(Client::Claude, project),
         subtitle,
         context_message(task, "Error", error),
     )

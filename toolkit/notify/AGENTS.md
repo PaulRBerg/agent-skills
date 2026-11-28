@@ -85,18 +85,6 @@ cargo install --git https://github.com/PaulRBerg/agent-skills ai-notify --locked
 Re-run the command to update. Installation targets `~/.local/bin`. Configure integrations separately with
 `ai-notify link claude`, `ai-notify link codex-hooks`, or the legacy `ai-notify link codex`.
 
-### Development
-
-Use the locked dependency graph for local commands:
-
-```bash
-cargo build -p ai-notify --locked
-cargo test -p ai-notify --locked
-cargo run -p ai-notify --locked -- --help
-```
-
-Run `just rust-check` from `toolkit/` for the complete Rust workspace gate.
-
 ### Features
 
 - **Smart Notifications**: ai-notify filters Claude Code completion alerts by a configurable duration threshold

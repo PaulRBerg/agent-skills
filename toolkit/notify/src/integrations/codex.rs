@@ -254,7 +254,7 @@ fn load_document(path: &Path) -> Result<DocumentMut> {
         return Ok(DocumentMut::new());
     }
     text.parse::<DocumentMut>()
-        .map_err(|error| AppError::integration(format!("failed to parse {}: {error}", path.display())))
+        .map_err(|error| AppError::operational(format!("failed to parse {}: {error}", path.display())))
 }
 
 fn command_array(command: &[&str]) -> Value {

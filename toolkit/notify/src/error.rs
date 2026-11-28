@@ -7,8 +7,6 @@ pub type Result<T> = std::result::Result<T, AppError>;
 pub enum ErrorKind {
     Operational,
     Usage,
-    Configuration,
-    Integration,
     /// An invalid hook/callback payload. Hook commands read from an external tool's stdin or
     /// argv, and their host (Claude Code, Codex) treats exit 2 as a blocking decision, so these
     /// errors must exit 1 like other runtime failures instead of exit 2 like a CLI usage error.
@@ -16,11 +14,11 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
-    /// Click used exit 2 for command-line usage errors and exit 1 for runtime failures.
+    /// Command-line usage errors exit 2, like clap's own parse errors; runtime failures exit 1.
     pub const fn code(self) -> u8 {
         match self {
             Self::Usage => 2,
-            Self::Operational | Self::Configuration | Self::Integration | Self::HookPayload => 1,
+            Self::Operational | Self::HookPayload => 1,
         }
     }
 }
@@ -44,14 +42,6 @@ impl AppError {
     pub fn hook_payload(message: impl Into<String>) -> Self {
         Self { kind: ErrorKind::HookPayload, message: message.into() }
     }
-
-    pub fn configuration(message: impl Into<String>) -> Self {
-        Self { kind: ErrorKind::Configuration, message: message.into() }
-    }
-
-    pub fn integration(message: impl Into<String>) -> Self {
-        Self { kind: ErrorKind::Integration, message: message.into() }
-    }
 }
 
 impl From<std::io::Error> for AppError {
@@ -74,7 +64,7 @@ impl From<serde_json::Error> for AppError {
 
 impl From<serde_yaml_ng::Error> for AppError {
     fn from(error: serde_yaml_ng::Error) -> Self {
-        Self::configuration(error.to_string())
+        Self::operational(error.to_string())
     }
 }
 
@@ -86,8 +76,6 @@ mod tests {
     fn exit_codes_preserve_cli_usage_and_runtime_conventions() {
         assert_eq!(ErrorKind::Usage.code(), 2);
         assert_eq!(ErrorKind::Operational.code(), 1);
-        assert_eq!(ErrorKind::Configuration.code(), 1);
-        assert_eq!(ErrorKind::Integration.code(), 1);
         assert_eq!(ErrorKind::HookPayload.code(), 1);
     }
 }
